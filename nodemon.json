@@ -1,6 +1,12 @@
 {
   "watch": ["src"],
   "ext": "ts,json",
-  "ignore": ["src/**/*.test.ts"],
-  "exec": "ts-node src/server.ts"
+  "ignore": ["src/**/*.spec.ts", "src/**/*.test.ts"],
+  "exec": "node --max-old-space-size=4096 -r ts-node/register ./src/server.ts",
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "verbose": true,
+  "restartable": "rs",
+  "delay": "1000"
 }
