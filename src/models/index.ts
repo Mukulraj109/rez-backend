@@ -1,0 +1,45 @@
+// Export all MongoDB models
+export { User } from './User';
+export { Category } from './Category';
+export { Store } from './Store';
+export { Product } from './Product';
+export { Cart } from './Cart';
+export { Order } from './Order';
+export { Video } from './Video';
+export { Project } from './Project';
+export { Transaction } from './Transaction';
+export { Notification } from './Notification';
+export { Review } from './Review';
+export { Wishlist } from './Wishlist';
+export { Wallet } from './Wallet';
+export { default as Offer } from './Offer';
+export { VoucherBrand, UserVoucher } from './Voucher';
+export { default as OfferRedemption } from './OfferRedemption';
+export { Address } from './Address';
+export { PaymentMethod } from './PaymentMethod';
+export { UserSettings } from './UserSettings';
+export { UserAchievement } from './Achievement';
+export { Activity } from './Activity';
+
+// Export types for external use
+export type { IUser, IUserProfile, IUserPreferences, IUserWallet, IUserAuth } from './User';
+export type { ICategory, ICategoryMetadata } from './Category';
+export type { IStore, IStoreLocation, IStoreContact, IStoreRatings, IStoreOffers, IStoreOperationalInfo, IStoreAnalytics } from './Store';
+export type { IProduct, IProductVariant, IProductPricing, IProductInventory, IProductRatings, IProductSpecification, IProductSEO, IProductAnalytics } from './Product';
+export type { ICart, ICartItem, ICartTotals, ICartCoupon } from './Cart';
+export type { IOrder, IOrderItem, IOrderTotals, IOrderPayment, IOrderAddress, IOrderDelivery, IOrderTimeline, IOrderAnalytics } from './Order';
+export type { IVideo, IVideoEngagement, IVideoMetadata, IVideoProcessing, IVideoAnalytics } from './Video';
+export type { IProject, IProjectRequirements, IProjectReward, IProjectLimits, IProjectSubmission, IProjectAnalytics } from './Project';
+export type { ITransaction, ITransactionSource, ITransactionStatus } from './Transaction';
+export type { INotification, INotificationData, IPushNotificationSettings, IDeliveryStatus } from './Notification';
+export type { IReview, IReviewMedia, IReviewHelpfulness, IReviewModeration, IReviewVerification } from './Review';
+export type { IWishlist, IWishlistItem, IWishlistSharing, IWishlistAnalytics } from './Wishlist';
+export type { IWallet } from './Wallet';
+export type { IOffer } from './Offer';
+export type { IVoucherBrand, IUserVoucher } from './Voucher';
+export type { IOfferRedemption } from './OfferRedemption';
+export type { IAddress } from './Address';
+export type { IPaymentMethod } from './PaymentMethod';
+export type { IUserSettings, INotificationPreferences, IPrivacySettings, ISecuritySettings, IDeliveryPreferences, IPaymentPreferences, IAppPreferences, IGeneralSettings } from './UserSettings';
+export type { IUserAchievement, IAchievementDefinition } from './Achievement';
+export type { IActivity } from './Activity';

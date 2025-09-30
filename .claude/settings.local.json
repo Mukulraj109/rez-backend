@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node scripts/test-auth-integration.js)",
+      "Bash(curl:*)",
+      "Bash(node:*)",
+      "Bash(npm start)",
+      "Bash(npm run build:*)",
+      "Bash(PORT=5002 npm run dev)",
+      "Bash(PORT=5003 npm run dev)",
+      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app/**)",
+      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\app\\products/**)",
+      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\services\\api/**)",
+      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\services/**)",
+      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\services/**)",
+      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\services/**)",
+      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\config/**)",
+      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\app/**)",
+      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\app\\(dashboard)/**)"
+    ],
+    "deny": [],
+    "ask": [],
+    "additionalDirectories": [
+      "C:\\c\\Users\\Mukul raj\\Downloads\\rez-app"
+    ]
+  }
+}
