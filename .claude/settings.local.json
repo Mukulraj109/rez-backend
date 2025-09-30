@@ -16,7 +16,8 @@
       "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\services/**)",
       "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\config/**)",
       "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\app/**)",
-      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\app\\(dashboard)/**)"
+      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\app\\(dashboard)/**)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": [],

@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "node --max-old-space-size=512 dist/server.js",
+    "start": "node dist/server.js",
+    "start:prod": "node --max-old-space-size=450 dist/server.js",
     "dev": "nodemon src/server.ts",
-    "build": "tsc",
+    "build": "rimraf dist && tsc",
+    "build:prod": "rimraf dist && tsc -p tsconfig.prod.json",
     "seed": "ts-node --max-old-space-size=2048 src/scripts/seedDatabase.ts",
     "seed:all": "ts-node --max-old-space-size=2048 src/scripts/seedAllData.ts",
     "seed:simple": "ts-node --max-old-space-size=2048 src/scripts/seedSimple.ts",
@@ -59,6 +61,7 @@
     "@types/multer": "^2.0.0",
     "@types/node": "^24.6.0",
     "nodemon": "^3.1.10",
+    "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
   }
