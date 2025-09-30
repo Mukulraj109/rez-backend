@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon --max-old-space-size=4096 src/server.ts",
+    "start": "node --max-old-space-size=512 dist/server.js",
+    "dev": "nodemon src/server.ts",
     "build": "tsc",
     "seed": "ts-node --max-old-space-size=2048 src/scripts/seedDatabase.ts",
     "seed:all": "ts-node --max-old-space-size=2048 src/scripts/seedAllData.ts",
