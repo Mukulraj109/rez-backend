@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import reservationService from '../services/reservationService';
 import { CLEANUP_INTERVAL_MINUTES } from '../types/reservation';
 
