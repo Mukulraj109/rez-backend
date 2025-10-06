@@ -5,7 +5,12 @@ import {
   getTrendingStores,
   getCategoryRecommendations,
   getUserRecommendationPreferences,
-  updateUserRecommendationPreferences
+  updateUserRecommendationPreferences,
+  getSimilarProducts,
+  getFrequentlyBoughtTogether,
+  getBundleDeals,
+  getPersonalizedProductRecommendations,
+  trackProductView
 } from '../controllers/recommendationController';
 import { optionalAuth, requireAuth } from '../middleware/auth';
 import { validateQuery, validateParams, validateBody } from '../middleware/validation';
@@ -92,6 +97,65 @@ router.put('/preferences',   // recommendationLimiter,, // Disabled for develop
     })
   })),
   updateUserRecommendationPreferences
+);
+
+// ============================================
+// PRODUCT RECOMMENDATION ROUTES
+// ============================================
+
+// Get similar products for a specific product
+router.get('/products/similar/:productId',   // generalLimiter,, // Disabled for development
+  optionalAuth,
+  validateParams(Joi.object({
+    productId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/) // MongoDB ObjectId
+  })),
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(20).default(6)
+  })),
+  getSimilarProducts
+);
+
+// Get frequently bought together for a product
+router.get('/products/frequently-bought/:productId',   // generalLimiter,, // Disabled for development
+  optionalAuth,
+  validateParams(Joi.object({
+    productId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/) // MongoDB ObjectId
+  })),
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(10).default(4)
+  })),
+  getFrequentlyBoughtTogether
+);
+
+// Get bundle deals for a product
+router.get('/products/bundle/:productId',   // generalLimiter,, // Disabled for development
+  optionalAuth,
+  validateParams(Joi.object({
+    productId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/) // MongoDB ObjectId
+  })),
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(10).default(3)
+  })),
+  getBundleDeals
+);
+
+// Get personalized product recommendations for user
+router.get('/products/personalized',   // recommendationLimiter,, // Disabled for development
+  requireAuth,
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(50).default(10),
+    excludeProducts: Joi.string() // Comma-separated product IDs
+  })),
+  getPersonalizedProductRecommendations
+);
+
+// Track product view
+router.post('/products/:productId/view',   // generalLimiter,, // Disabled for development
+  optionalAuth,
+  validateParams(Joi.object({
+    productId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/) // MongoDB ObjectId
+  })),
+  trackProductView
 );
 
 export default router;

@@ -6,6 +6,7 @@ import { sendSuccess, sendError, sendBadRequest, sendNotFound } from '../utils/r
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import mongoose from 'mongoose';
+import activityService from '../services/activityService';
 
 /**
  * @desc    Get user wallet balance
@@ -243,6 +244,12 @@ export const topupWallet = asyncHandler(async (req: Request, res: Response) => {
     await wallet.addFunds(Number(amount), 'topup');
     console.log('✅ [TOPUP] Funds added, new balance:', wallet.balance.total);
 
+    // Create activity for wallet topup
+    await activityService.wallet.onMoneyAdded(
+      new mongoose.Types.ObjectId(userId),
+      Number(amount)
+    );
+
     sendSuccess(res, {
       transaction,
       wallet: {
@@ -470,6 +477,13 @@ export const processPayment = asyncHandler(async (req: Request, res: Response) =
     console.log('💰 [PAYMENT] Deducting funds from wallet');
     await wallet.deductFunds(Number(amount));
     console.log('✅ [PAYMENT] Funds deducted, new balance:', wallet.balance.total);
+
+    // Create activity for wallet spending
+    await activityService.wallet.onMoneySpent(
+      new mongoose.Types.ObjectId(userId),
+      Number(amount),
+      storeName || 'order'
+    );
 
     sendSuccess(res, {
       transaction,

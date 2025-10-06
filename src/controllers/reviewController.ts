@@ -1,14 +1,16 @@
 import { Request, Response } from 'express';
 import { Review } from '../models/Review';
 import { Store } from '../models/Store';
-import { 
-  sendSuccess, 
-  sendNotFound, 
+import {
+  sendSuccess,
+  sendNotFound,
   sendBadRequest,
-  sendCreated 
+  sendCreated
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+import activityService from '../services/activityService';
+import { Types } from 'mongoose';
 
 // Get reviews for a store
 export const getStoreReviews = asyncHandler(async (req: Request, res: Response) => {
@@ -137,6 +139,13 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
 
     // Populate user info for response
     await review.populate('user', 'profile.name profile.avatar');
+
+    // Create activity for review submission
+    await activityService.review.onReviewSubmitted(
+      new Types.ObjectId(userId),
+      new Types.ObjectId(review._id as any),
+      store.name
+    );
 
     sendCreated(res, {
       review

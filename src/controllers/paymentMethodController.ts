@@ -13,9 +13,16 @@ export const getUserPaymentMethods = asyncHandler(async (req: Request, res: Resp
   const paymentMethods = await PaymentMethod.find({
     user: req.user._id,
     isActive: true
-  }).sort({ isDefault: -1, createdAt: -1 });
+  }).sort({ isDefault: -1, createdAt: -1 }).lean();
 
-  sendSuccess(res, paymentMethods, 'Payment methods retrieved successfully');
+  // Map _id to id for frontend compatibility
+  const mappedPaymentMethods = paymentMethods.map((pm: any) => ({
+    ...pm,
+    id: pm._id.toString(),
+    _id: undefined
+  }));
+
+  sendSuccess(res, mappedPaymentMethods, 'Payment methods retrieved successfully');
 });
 
 // Get single payment method by ID
@@ -26,13 +33,20 @@ export const getPaymentMethodById = asyncHandler(async (req: Request, res: Respo
 
   const { id } = req.params;
 
-  const paymentMethod = await PaymentMethod.findOne({ _id: id, user: req.user._id });
+  const paymentMethod = await PaymentMethod.findOne({ _id: id, user: req.user._id }).lean();
 
   if (!paymentMethod) {
     return sendNotFound(res, 'Payment method not found');
   }
 
-  sendSuccess(res, paymentMethod, 'Payment method retrieved successfully');
+  // Map _id to id for frontend compatibility
+  const mappedPaymentMethod = {
+    ...paymentMethod,
+    id: (paymentMethod as any)._id.toString(),
+    _id: undefined
+  };
+
+  sendSuccess(res, mappedPaymentMethod, 'Payment method retrieved successfully');
 });
 
 // Create new payment method
@@ -61,7 +75,15 @@ export const createPaymentMethod = asyncHandler(async (req: Request, res: Respon
 
   const paymentMethod = await PaymentMethod.create(paymentMethodData);
 
-  sendSuccess(res, paymentMethod, 'Payment method created successfully', 201);
+  // Convert to plain object and map _id to id
+  const paymentMethodObj: any = paymentMethod.toObject();
+  const mappedPaymentMethod = {
+    ...paymentMethodObj,
+    id: paymentMethodObj._id.toString(),
+    _id: undefined
+  };
+
+  sendSuccess(res, mappedPaymentMethod, 'Payment method created successfully', 201);
 });
 
 // Update payment method
@@ -92,7 +114,15 @@ export const updatePaymentMethod = asyncHandler(async (req: Request, res: Respon
   Object.assign(paymentMethod, updates);
   await paymentMethod.save();
 
-  sendSuccess(res, paymentMethod, 'Payment method updated successfully');
+  // Convert to plain object and map _id to id
+  const paymentMethodObj: any = paymentMethod.toObject();
+  const mappedPaymentMethod = {
+    ...paymentMethodObj,
+    id: paymentMethodObj._id.toString(),
+    _id: undefined
+  };
+
+  sendSuccess(res, mappedPaymentMethod, 'Payment method updated successfully');
 });
 
 // Delete payment method (soft delete - set isActive to false)
@@ -103,15 +133,30 @@ export const deletePaymentMethod = asyncHandler(async (req: Request, res: Respon
 
   const { id } = req.params;
 
+  console.log('[DELETE] Request to delete payment method ID:', id);
+  console.log('[DELETE] User ID:', req.user._id);
+
   const paymentMethod = await PaymentMethod.findOne({ _id: id, user: req.user._id });
 
   if (!paymentMethod) {
+    console.log('[DELETE] Payment method not found');
     return sendNotFound(res, 'Payment method not found');
   }
 
+  console.log('[DELETE] Found payment method:', {
+    id: paymentMethod._id,
+    type: paymentMethod.type,
+    isActive: paymentMethod.isActive,
+    isDefault: paymentMethod.isDefault
+  });
+
   // Soft delete
+  console.log('[DELETE] Setting isActive to false...');
   paymentMethod.isActive = false;
   await paymentMethod.save();
+
+  console.log('[DELETE] Payment method soft-deleted successfully');
+  console.log('[DELETE] Verifying update - isActive:', paymentMethod.isActive);
 
   sendSuccess(res, { deletedId: id }, 'Payment method deleted successfully');
 });
@@ -141,5 +186,13 @@ export const setDefaultPaymentMethod = asyncHandler(async (req: Request, res: Re
   paymentMethod.isDefault = true;
   await paymentMethod.save();
 
-  sendSuccess(res, paymentMethod, 'Default payment method updated successfully');
+  // Convert to plain object and map _id to id
+  const paymentMethodObj: any = paymentMethod.toObject();
+  const mappedPaymentMethod = {
+    ...paymentMethodObj,
+    id: paymentMethodObj._id.toString(),
+    _id: undefined
+  };
+
+  sendSuccess(res, mappedPaymentMethod, 'Default payment method updated successfully');
 });

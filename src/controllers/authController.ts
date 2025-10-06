@@ -17,6 +17,9 @@ import {
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+import referralService from '../services/referralService';
+import { Wallet } from '../models/Wallet';
+import { Types } from 'mongoose';
 
 import twilio from "twilio";
 import dotenv from 'dotenv';
@@ -289,19 +292,49 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
     try {
       const referrerUser = await User.findOne({ 'referral.referralCode': user.referral.referredBy });
       if (referrerUser) {
-        // Add this user to referrer's referred users list
+        // Create referral relationship using referral service
+        await referralService.createReferral({
+          referrerId: new Types.ObjectId(String(referrerUser._id)),
+          refereeId: new Types.ObjectId(String(user._id)),
+          referralCode: user.referral.referredBy,
+          signupSource: 'otp_verification',
+        });
+
+        // Add referee discount (₹30) to their wallet for first order
+        let refereeWallet = await Wallet.findOne({ user: user._id });
+        if (!refereeWallet) {
+          // Create wallet if doesn't exist
+          refereeWallet = await Wallet.create({
+            user: user._id,
+            balance: {
+              total: 30,
+              available: 30,
+              pending: 0,
+            },
+            statistics: {
+              totalEarned: 30,
+              totalSpent: 0,
+              totalCashback: 0,
+              totalRefunds: 0,
+              totalTopups: 30,
+              totalWithdrawals: 0,
+            },
+          });
+        } else {
+          // Use addFunds method if available, or update manually
+          refereeWallet.balance.total += 30;
+          refereeWallet.balance.available += 30;
+          refereeWallet.statistics.totalEarned += 30;
+          refereeWallet.statistics.totalTopups += 30;
+          await refereeWallet.save();
+        }
+
+        // Update user referral stats
         referrerUser.referral.referredUsers.push(String(user._id));
         referrerUser.referral.totalReferrals += 1;
-        
-        // Give referral bonus to referrer (you can adjust the amount)
-        const referralBonus = 50; // ₹50 bonus for each successful referral
-        referrerUser.wallet.balance += referralBonus;
-        referrerUser.wallet.totalEarned += referralBonus;
-        referrerUser.referral.referralEarnings += referralBonus;
-        
         await referrerUser.save();
-        
-        console.log(`💰 [REFERRAL] User ${user.phoneNumber} was referred by ${referrerUser.phoneNumber}. Bonus of ₹${referralBonus} credited to referrer.`);
+
+        console.log(`🎁 [REFERRAL] New referral created! Referee ${user.phoneNumber} received ₹30 signup bonus.`);
       }
     } catch (error) {
       console.error('Error processing referral:', error);
@@ -556,6 +589,8 @@ export const getUserStatistics = asyncHandler(async (req: Request, res: Response
     const { Project } = await import('../models/Project');
     const OfferRedemption = (await import('../models/OfferRedemption')).default;
     const { UserVoucher } = await import('../models/Voucher');
+    const { Review } = await import('../models/Review');
+    const { UserAchievement } = await import('../models/Achievement');
 
     // Aggregate statistics from various modules
     const [
@@ -563,11 +598,18 @@ export const getUserStatistics = asyncHandler(async (req: Request, res: Response
       videoStats,
       projectStats,
       offerStats,
-      voucherStats
+      voucherStats,
+      reviewStats,
+      achievementStats
     ] = await Promise.all([
-      // Order statistics
+      // Order statistics (exclude pending_payment orders)
       Order.aggregate([
-        { $match: { user: userId } },
+        {
+          $match: {
+            user: userId,
+            status: { $ne: 'pending_payment' } // Exclude pending payment orders
+          }
+        },
         {
           $group: {
             _id: null,
@@ -635,6 +677,23 @@ export const getUserStatistics = asyncHandler(async (req: Request, res: Response
             }
           }
         }
+      ]),
+
+      // Review statistics
+      Review.countDocuments({ user: userId, isActive: true }),
+
+      // Achievement statistics
+      UserAchievement.aggregate([
+        { $match: { user: userId } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            unlocked: {
+              $sum: { $cond: [{ $eq: ['$unlocked', true] }, 1, 0] }
+            }
+          }
+        }
       ])
     ]);
 
@@ -678,13 +737,21 @@ export const getUserStatistics = asyncHandler(async (req: Request, res: Response
         used: voucherStats[0]?.usedVouchers || 0,
         active: voucherStats[0]?.activeVouchers || 0
       },
+      reviews: {
+        total: reviewStats || 0
+      },
+      achievements: {
+        total: achievementStats[0]?.total || 0,
+        unlocked: achievementStats[0]?.unlocked || 0
+      },
       summary: {
         totalActivity: (
           (orderStats[0]?.totalOrders || 0) +
           (videoStats[0]?.totalVideos || 0) +
           (projectStats[0]?.totalProjects || 0) +
           (offerStats || 0) +
-          (voucherStats[0]?.totalVouchers || 0)
+          (voucherStats[0]?.totalVouchers || 0) +
+          (reviewStats || 0)
         ),
         totalEarnings: (
           (req.user.wallet.totalEarned || 0) +
@@ -702,5 +769,44 @@ export const getUserStatistics = asyncHandler(async (req: Request, res: Response
   } catch (error) {
     console.error('Error fetching user statistics:', error);
     throw new AppError('Failed to fetch user statistics', 500);
+  }
+});
+
+// Upload profile avatar
+export const uploadAvatar = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return sendUnauthorized(res, 'Authentication required');
+  }
+
+  if (!req.file) {
+    return sendBadRequest(res, 'No image file provided');
+  }
+
+  try {
+    // Cloudinary automatically uploads the file via multer middleware
+    // The file URL is available in req.file.path
+    const avatarUrl = (req.file as any).path;
+
+    // Update user profile with new avatar URL
+    req.user.profile.avatar = avatarUrl;
+    await req.user.save();
+
+    const userData = {
+      id: req.user._id,
+      phoneNumber: req.user.phoneNumber,
+      email: req.user.email,
+      profile: req.user.profile,
+      preferences: req.user.preferences,
+      wallet: req.user.wallet,
+      role: req.user.role,
+      isVerified: req.user.auth.isVerified,
+      isOnboarded: req.user.auth.isOnboarded
+    };
+
+    sendSuccess(res, userData, 'Profile picture updated successfully');
+
+  } catch (error) {
+    console.error('Error uploading avatar:', error);
+    throw new AppError('Failed to upload profile picture', 500);
   }
 });

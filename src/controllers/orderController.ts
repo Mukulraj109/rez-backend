@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import mongoose from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import { Order } from '../models/Order';
 import { Cart } from '../models/Cart';
 import { Product } from '../models/Product';
@@ -13,6 +13,12 @@ import {
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import stockSocketService from '../services/stockSocketService';
+import reorderService from '../services/reorderService';
+import activityService from '../services/activityService';
+import referralService from '../services/referralService';
+import cashbackService from '../services/cashbackService';
+import userProductService from '../services/userProductService';
+import couponService from '../services/couponService';
 
 // Create new order from cart
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
@@ -215,7 +221,19 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     const subtotal = cart.totals.subtotal || 0;
     const discount = cart.totals.discount || 0;
     const cashback = cart.totals.cashback || 0;
-    const total = cart.totals.total || 0;
+
+    // Calculate total if cart total is 0 or missing
+    let total = cart.totals.total || 0;
+    if (total === 0) {
+      total = subtotal + tax + deliveryFee - discount;
+      console.log('⚠️ [CREATE ORDER] Cart total was 0, recalculated:', {
+        subtotal,
+        tax,
+        deliveryFee,
+        discount,
+        calculatedTotal: total
+      });
+    }
 
     console.log('📦 [CREATE ORDER] Order totals:', { subtotal, tax, deliveryFee, discount, cashback, total });
 
@@ -282,6 +300,28 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
     console.log('📦 [CREATE ORDER] Order creation complete');
 
+    // Mark coupon as used if one was applied
+    if (cart.coupon?.code) {
+      console.log('🎟️ [CREATE ORDER] Marking coupon as used:', cart.coupon.code);
+      await couponService.markCouponAsUsed(
+        new Types.ObjectId(userId),
+        cart.coupon.code,
+        order._id as Types.ObjectId
+      );
+    }
+
+    // Create activity for order placement
+    if (populatedOrder) {
+      const storeData = populatedOrder.items[0]?.store as any;
+      const storeName = storeData?.name || 'Store';
+      await activityService.order.onOrderPlaced(
+        new Types.ObjectId(userId),
+        populatedOrder._id as Types.ObjectId,
+        storeName,
+        total
+      );
+    }
+
     sendSuccess(res, populatedOrder, 'Order created successfully', 201);
 
   } catch (error: any) {
@@ -316,6 +356,7 @@ export const getUserOrders = asyncHandler(async (req: Request, res: Response) =>
 
     const orders = await Order.find(query)
       .populate('items.product', 'name images basePrice')
+      .populate('items.store', 'name logo')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit))
@@ -525,6 +566,15 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
       }
     }
 
+    // Create activity for order cancellation
+    const storeData = order.items[0]?.store as any;
+    const storeName = storeData?.name || storeData?.toString() || 'Store';
+    await activityService.order.onOrderCancelled(
+      new Types.ObjectId(userId),
+      order._id as Types.ObjectId,
+      storeName
+    );
+
     sendSuccess(res, order, 'Order cancelled successfully');
 
   } catch (error: any) {
@@ -577,7 +627,66 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
 
     const populatedOrder = await Order.findById(order._id)
       .populate('items.product', 'name images')
+      .populate('items.store', 'name')
       .populate('user', 'profile.firstName profile.lastName');
+
+    // Create activity for order delivery
+    if (status === 'delivered' && populatedOrder) {
+      const storeData = populatedOrder.items[0]?.store as any;
+      const storeName = storeData?.name || 'Store';
+      const userIdObj = typeof populatedOrder.user === 'object' ? (populatedOrder.user as any)._id : populatedOrder.user;
+      await activityService.order.onOrderDelivered(
+        userIdObj as Types.ObjectId,
+        populatedOrder._id as Types.ObjectId,
+        storeName
+      );
+
+      // Process referral rewards when order is delivered
+      try {
+        // Check if this is referee's first order (process referral completion)
+        await referralService.processFirstOrder({
+          refereeId: userIdObj as Types.ObjectId,
+          orderId: populatedOrder._id as Types.ObjectId,
+          orderAmount: populatedOrder.totals.total,
+        });
+
+        // Check for milestone bonus (3rd order)
+        const deliveredOrdersCount = await Order.countDocuments({
+          user: userIdObj,
+          status: 'delivered',
+        });
+
+        if (deliveredOrdersCount >= 3) {
+          await referralService.processMilestoneBonus(
+            userIdObj as Types.ObjectId,
+            deliveredOrdersCount
+          );
+        }
+      } catch (error) {
+        console.error('❌ [ORDER] Error processing referral rewards:', error);
+        // Don't fail the order update if referral processing fails
+      }
+
+      // Create cashback for delivered order
+      try {
+        console.log('💰 [ORDER] Creating cashback for delivered order:', populatedOrder._id);
+        await cashbackService.createCashbackFromOrder(populatedOrder._id as Types.ObjectId);
+        console.log('✅ [ORDER] Cashback created successfully');
+      } catch (error) {
+        console.error('❌ [ORDER] Error creating cashback:', error);
+        // Don't fail the order update if cashback creation fails
+      }
+
+      // Create user products for delivered order
+      try {
+        console.log('📦 [ORDER] Creating user products for delivered order:', populatedOrder._id);
+        await userProductService.createUserProductsFromOrder(populatedOrder._id as Types.ObjectId);
+        console.log('✅ [ORDER] User products created successfully');
+      } catch (error) {
+        console.error('❌ [ORDER] Error creating user products:', error);
+        // Don't fail the order update if user product creation fails
+      }
+    }
 
     sendSuccess(res, populatedOrder, 'Order status updated successfully');
 
@@ -745,5 +854,126 @@ export const getOrderStats = asyncHandler(async (req: Request, res: Response) =>
 
   } catch (error) {
     throw new AppError('Failed to fetch order statistics', 500);
+  }
+});
+
+// Re-order full order
+export const reorderFullOrder = asyncHandler(async (req: Request, res: Response) => {
+  const { orderId } = req.params;
+  const userId = req.userId!;
+
+  try {
+    console.log('🔄 [REORDER] Starting full order reorder:', { userId, orderId });
+
+    // Validate and add to cart
+    const result = await reorderService.addToCart(userId, orderId);
+
+    console.log('✅ [REORDER] Full order reorder complete:', {
+      addedItems: result.addedItems.length,
+      skippedItems: result.skippedItems.length
+    });
+
+    sendSuccess(res, result, 'Items added to cart successfully');
+
+  } catch (error: any) {
+    console.error('❌ [REORDER] Full order reorder error:', error);
+    throw error;
+  }
+});
+
+// Re-order selected items
+export const reorderItems = asyncHandler(async (req: Request, res: Response) => {
+  const { orderId } = req.params;
+  const { itemIds } = req.body;
+  const userId = req.userId!;
+
+  try {
+    console.log('🔄 [REORDER] Starting selective reorder:', { userId, orderId, itemIds });
+
+    if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
+      return sendBadRequest(res, 'Item IDs are required');
+    }
+
+    // Validate and add to cart
+    const result = await reorderService.addToCart(userId, orderId, itemIds);
+
+    console.log('✅ [REORDER] Selective reorder complete:', {
+      addedItems: result.addedItems.length,
+      skippedItems: result.skippedItems.length
+    });
+
+    sendSuccess(res, result, 'Selected items added to cart successfully');
+
+  } catch (error: any) {
+    console.error('❌ [REORDER] Selective reorder error:', error);
+    throw error;
+  }
+});
+
+// Validate reorder (check availability and prices)
+export const validateReorder = asyncHandler(async (req: Request, res: Response) => {
+  const { orderId } = req.params;
+  const { itemIds } = req.query;
+  const userId = req.userId!;
+
+  try {
+    console.log('🔍 [REORDER] Validating reorder:', { userId, orderId, itemIds });
+
+    let selectedItemIds: string[] | undefined;
+    if (itemIds) {
+      selectedItemIds = Array.isArray(itemIds) ? itemIds as string[] : [itemIds as string];
+    }
+
+    const validation = await reorderService.validateReorder(userId, orderId, selectedItemIds);
+
+    console.log('✅ [REORDER] Validation complete:', {
+      canReorder: validation.canReorder,
+      itemCount: validation.items.length
+    });
+
+    sendSuccess(res, validation, 'Reorder validation complete');
+
+  } catch (error: any) {
+    console.error('❌ [REORDER] Validation error:', error);
+    throw error;
+  }
+});
+
+// Get frequently ordered items
+export const getFrequentlyOrdered = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.userId!;
+  const { limit = 10 } = req.query;
+
+  try {
+    console.log('📊 [REORDER] Getting frequently ordered items:', { userId, limit });
+
+    const items = await reorderService.getFrequentlyOrdered(userId, Number(limit));
+
+    console.log('✅ [REORDER] Frequently ordered items retrieved:', items.length);
+
+    sendSuccess(res, items, 'Frequently ordered items retrieved successfully');
+
+  } catch (error: any) {
+    console.error('❌ [REORDER] Frequently ordered error:', error);
+    throw error;
+  }
+});
+
+// Get reorder suggestions
+export const getReorderSuggestions = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.userId!;
+
+  try {
+    console.log('💡 [REORDER] Getting reorder suggestions:', { userId });
+
+    const suggestions = await reorderService.getReorderSuggestions(userId);
+
+    console.log('✅ [REORDER] Reorder suggestions retrieved:', suggestions.length);
+
+    sendSuccess(res, suggestions, 'Reorder suggestions retrieved successfully');
+
+  } catch (error: any) {
+    console.error('❌ [REORDER] Suggestions error:', error);
+    throw error;
   }
 });

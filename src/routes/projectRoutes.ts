@@ -5,7 +5,8 @@ import {
   getProjectsByCategory,
   getFeaturedProjects,
   toggleProjectLike,
-  addProjectComment
+  addProjectComment,
+  getMySubmissions
 } from '../controllers/projectController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validate, validateParams, validateQuery, commonSchemas } from '../middleware/validation';
@@ -42,7 +43,7 @@ router.get('/featured',
 );
 
 // Get projects by category
-router.get('/category/:category', 
+router.get('/category/:category',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateParams(Joi.object({
@@ -53,6 +54,18 @@ router.get('/category/:category',
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),
   getProjectsByCategory
+);
+
+// Get user's project submissions (requires authentication)
+router.get('/my-submissions',
+  // generalLimiter,, // Disabled for development
+  authenticate,
+  validateQuery(Joi.object({
+    status: Joi.string().valid('pending', 'approved', 'rejected'),
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(50).default(20)
+  })),
+  getMySubmissions
 );
 
 // Get single project by ID

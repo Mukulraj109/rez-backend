@@ -1,0 +1,11 @@
+import { Request, Response } from 'express';
+export declare const sendOTP: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const verifyOTP: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const refreshToken: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const logout: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getCurrentUser: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const updateProfile: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const completeOnboarding: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const deleteAccount: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getUserStatistics: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const uploadAvatar: (req: Request, res: Response, next: import("express").NextFunction) => void;

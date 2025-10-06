@@ -282,3 +282,83 @@ export const addProjectComment = asyncHandler(async (req: Request, res: Response
     throw new AppError('Failed to add comment', 500);
   }
 });
+
+// Get user's project submissions
+export const getMySubmissions = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.userId!;
+  const { status, page = 1, limit = 20 } = req.query;
+
+  try {
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    // Find all projects that have submissions from this user
+    const projectsWithSubmissions = await Project.find({
+      'submissions.user': userObjectId
+    })
+    .populate('sponsor', 'name logo')
+    .lean();
+
+    // Extract user's submissions from all projects
+    let allSubmissions: any[] = [];
+
+    for (const project of projectsWithSubmissions) {
+      const userSubs = (project as any).submissions.filter((sub: any) =>
+        sub.user.toString() === userObjectId.toString()
+      );
+
+      // Enrich submissions with project info
+      userSubs.forEach((sub: any) => {
+        allSubmissions.push({
+          _id: sub._id || `${project._id}_${sub.submittedAt}`,
+          project: {
+            _id: project._id,
+            title: project.title,
+            description: project.description,
+            category: project.category,
+            reward: project.reward
+          },
+          user: sub.user,
+          submittedAt: sub.submittedAt,
+          content: sub.content,
+          status: sub.status,
+          qualityScore: sub.qualityScore,
+          paidAmount: sub.paidAmount,
+          paidAt: sub.paidAt,
+          feedback: sub.feedback
+        });
+      });
+    }
+
+    // Filter by status if provided
+    if (status) {
+      allSubmissions = allSubmissions.filter(sub => sub.status === status);
+    }
+
+    // Sort by submission date (newest first)
+    allSubmissions.sort((a, b) =>
+      new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
+    );
+
+    // Pagination
+    const total = allSubmissions.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    const paginatedSubmissions = allSubmissions.slice(skip, skip + Number(limit));
+    const totalPages = Math.ceil(total / Number(limit));
+
+    sendSuccess(res, {
+      submissions: paginatedSubmissions,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        totalPages,
+        hasNext: Number(page) < totalPages,
+        hasPrev: Number(page) > 1
+      }
+    }, 'User submissions retrieved successfully');
+
+  } catch (error) {
+    console.error('Error fetching user submissions:', error);
+    throw new AppError('Failed to fetch user submissions', 500);
+  }
+});

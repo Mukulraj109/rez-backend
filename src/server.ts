@@ -44,6 +44,13 @@ import userSettingsRoutes from './routes/userSettingsRoutes';
 import achievementRoutes from './routes/achievementRoutes';
 import activityRoutes from './routes/activityRoutes';
 import paymentRoutes from './routes/paymentRoutes';
+import stockRoutes from './routes/stockRoutes';
+import socialMediaRoutes from './routes/socialMediaRoutes';
+import referralRoutes from './routes/referralRoutes';
+import couponRoutes from './routes/couponRoutes';
+import supportRoutes from './routes/supportRoutes';
+import cashbackRoutes from './routes/cashbackRoutes';
+import userProductRoutes from './routes/userProductRoutes';
 import authRoutes1 from './merchantroutes/auth';  // Temporarily disabled
 import merchantRoutes from './merchantroutes/merchants';  // Temporarily disabled
 import merchantProfileRoutes from './merchantroutes/merchant-profile'; // Disabled due to missing properties
@@ -51,7 +58,7 @@ import productRoutes1 from './merchantroutes/products';  // Temporarily disabled
 import categoryRoutes1 from './merchantroutes/categories';  // Temporarily disabled
 import uploadRoutes from './merchantroutes/uploads';  // Temporarily disabled
 import orderRoutes1 from './merchantroutes/orders';  // Temporarily disabled
-import cashbackRoutes from './merchantroutes/cashback';  // Temporarily disabled
+import merchantCashbackRoutes from './merchantroutes/cashback';  // Temporarily disabled
 import dashboardRoutes from './merchantroutes/dashboard';  // Temporarily disabled
 import { RealTimeService } from './merchantservices/RealTimeService';  // Temporarily disabled
 import { ReportService } from './merchantservices/ReportService';  // Temporarily disabled
@@ -123,8 +130,8 @@ app.get('/health', async (req, res) => {
       version: '1.0.0',
       api: {
         prefix: API_PREFIX,
-        totalEndpoints: 119,
-        modules: 13,
+        totalEndpoints: 145,
+        modules: 15,
         endpoints: {
           auth: `${API_PREFIX}/auth`,
           products: `${API_PREFIX}/products`,
@@ -145,11 +152,15 @@ app.get('/health', async (req, res) => {
           paymentMethods: `${API_PREFIX}/payment-methods`,
           userSettings: `${API_PREFIX}/user-settings`,
           achievements: `${API_PREFIX}/achievements`,
-          activities: `${API_PREFIX}/activities`
+          activities: `${API_PREFIX}/activities`,
+          referral: `${API_PREFIX}/referral`,
+          coupons: `${API_PREFIX}/coupons`,
+          support: `${API_PREFIX}/support`,
+          cashback: `${API_PREFIX}/cashback`
         }
       }
     };
-    
+
     res.status(200).json(health);
   } catch (error) {
     res.status(500).json({
@@ -200,7 +211,11 @@ app.get('/api-info', (req, res) => {
       paymentMethods: `${API_PREFIX}/payment-methods`,
       userSettings: `${API_PREFIX}/user-settings`,
       achievements: `${API_PREFIX}/achievements`,
-      activities: `${API_PREFIX}/activities`
+      activities: `${API_PREFIX}/activities`,
+      referral: `${API_PREFIX}/referral`,
+      coupons: `${API_PREFIX}/coupons`,
+      support: `${API_PREFIX}/support`,
+      cashback: `${API_PREFIX}/cashback`
     },
     features: [
       'User Authentication (OTP-based)',
@@ -222,21 +237,25 @@ app.get('/api-info', (req, res) => {
       'Payment Methods',
       'User Settings & Preferences',
       'Achievement & Badges System',
-      'Activity Feed'
+      'Activity Feed',
+      'Coupon Management System',
+      'Customer Support & Tickets',
+      'User Cashback System'
     ],
     database: {
       models: [
         'User', 'Category', 'Store', 'Product', 'Cart', 'Order',
         'Video', 'Project', 'Transaction', 'Notification', 'Review', 'Wishlist',
         'Wallet', 'Offer', 'VoucherBrand', 'UserVoucher', 'OfferRedemption',
-        'Address', 'PaymentMethod', 'UserSettings', 'UserAchievement', 'Activity'
+        'Address', 'PaymentMethod', 'UserSettings', 'UserAchievement', 'Activity',
+        'Coupon', 'UserCoupon', 'SupportTicket', 'FAQ', 'UserCashback'
       ],
-      totalModels: 22
+      totalModels: 27
     },
     implementation: {
-      completed: ['Authentication', 'Products', 'Cart', 'Categories', 'Stores', 'Orders', 'Videos', 'Projects', 'Notifications', 'Reviews', 'Wishlist', 'Wallet', 'Offers', 'Vouchers', 'Addresses', 'Payment Methods', 'User Settings', 'Achievements', 'Activities'],
-      totalEndpoints: 160,
-      apiModules: 18
+      completed: ['Authentication', 'Products', 'Cart', 'Categories', 'Stores', 'Orders', 'Videos', 'Projects', 'Notifications', 'Reviews', 'Wishlist', 'Wallet', 'Offers', 'Vouchers', 'Addresses', 'Payment Methods', 'User Settings', 'Achievements', 'Activities', 'Coupons', 'Support', 'Cashback'],
+      totalEndpoints: 194,
+      apiModules: 21
     }
   });
 });
@@ -289,6 +308,13 @@ app.use(`${API_PREFIX}/user-settings`, userSettingsRoutes);
 app.use(`${API_PREFIX}/achievements`, achievementRoutes);
 app.use(`${API_PREFIX}/activities`, activityRoutes);
 app.use(`${API_PREFIX}/payment`, paymentRoutes);
+app.use(`${API_PREFIX}/stock`, stockRoutes);
+app.use(`${API_PREFIX}/social-media`, socialMediaRoutes);
+app.use(`${API_PREFIX}/referral`, referralRoutes);
+app.use(`${API_PREFIX}/coupons`, couponRoutes);
+app.use(`${API_PREFIX}/support`, supportRoutes);
+app.use(`${API_PREFIX}/cashback`, cashbackRoutes);
+app.use(`${API_PREFIX}/user-products`, userProductRoutes);
 
 // Merchant API Routes
 app.use('/api/merchant/auth', authRoutes1);  // Merchant auth routes
@@ -298,7 +324,7 @@ app.use('/api/merchant/products', productRoutes1);
 app.use('/api/merchant/profile', merchantProfileRoutes);
 app.use('/api/merchant/uploads', uploadRoutes);
 app.use('/api/merchant/orders', orderRoutes1);
-app.use('/api/merchant/cashback', cashbackRoutes);
+app.use('/api/merchant/cashback', merchantCashbackRoutes);
 app.use('/api/merchant/dashboard', dashboardRoutes);
 
 // // 404 handler
@@ -420,6 +446,8 @@ async function startServer() {
       console.log(`   ⚙️  User Settings: http://localhost:${PORT}${API_PREFIX}/user-settings`);
       console.log(`   🏆 Achievements: http://localhost:${PORT}${API_PREFIX}/achievements`);
       console.log(`   📊 Activities: http://localhost:${PORT}${API_PREFIX}/activities`);
+      console.log(`   🎫 Coupons: http://localhost:${PORT}${API_PREFIX}/coupons`);
+      console.log(`   🆘 Support: http://localhost:${PORT}${API_PREFIX}/support`);
       console.log(`\n🎉 Phase 6 Complete - Profile & Account Management APIs Implemented!`);
       console.log(`   ✅ Authentication APIs (8 endpoints)`);
       console.log(`   ✅ Product APIs (8 endpoints)`);
@@ -440,7 +468,9 @@ async function startServer() {
       console.log(`   ✅ User Settings APIs (8 endpoints)`);
       console.log(`   ✅ Achievement APIs (6 endpoints)`);
       console.log(`   ✅ Activity APIs (7 endpoints)`);
-      console.log(`   🎯 Total Implemented: ~160 endpoints across 18 modules`);
+      console.log(`   ✅ Coupon APIs (9 endpoints)`);
+      console.log(`   ✅ Support APIs (17 endpoints)`);
+      console.log(`   🎯 Total Implemented: ~186 endpoints across 20 modules`);
       console.log(`\n🚀 Phase 6 Complete - Ready for Frontend Integration!`);
     });
 

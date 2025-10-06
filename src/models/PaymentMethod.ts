@@ -29,6 +29,7 @@ export enum BankAccountType {
 
 // Payment Method Interface
 export interface IPaymentMethod extends Document {
+  id: string; // Virtual field for _id
   user: Types.ObjectId;
   type: PaymentMethodType;
 
@@ -174,7 +175,28 @@ const PaymentMethodSchema = new Schema<IPaymentMethod>({
     select: false // Don't expose token in queries
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: {
+    virtuals: true,
+    transform: (_doc: any, ret: any) => {
+      ret.id = ret._id.toString();
+      delete ret._id;
+      delete ret.__v;
+      return ret;
+    }
+  },
+  toObject: {
+    virtuals: true,
+    transform: (_doc: any, ret: any) => {
+      ret.id = ret._id.toString();
+      return ret;
+    }
+  }
+});
+
+// Virtual ID field
+PaymentMethodSchema.virtual('id').get(function(this: any) {
+  return this._id.toString();
 });
 
 // Indexes

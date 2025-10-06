@@ -26,7 +26,9 @@ export const getUserActivities = asyncHandler(async (req: Request, res: Response
     Activity.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit),
+      .limit(limit)
+      .populate('user', 'name phone')
+      .lean(),
     Activity.countDocuments(query)
   ]);
 

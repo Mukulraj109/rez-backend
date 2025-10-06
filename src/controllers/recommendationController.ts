@@ -224,3 +224,127 @@ export const updateUserRecommendationPreferences = asyncHandler(async (req: Requ
     throw new AppError('Failed to update user preferences', 500);
   }
 });
+
+// ============================================
+// PRODUCT RECOMMENDATION CONTROLLERS
+// ============================================
+
+// Get similar products for a specific product
+export const getSimilarProducts = asyncHandler(async (req: Request, res: Response) => {
+  const { productId } = req.params;
+  const { limit = 6 } = req.query;
+
+  try {
+    const similarProducts = await recommendationService.getSimilarProducts(
+      productId,
+      Number(limit)
+    );
+
+    sendSuccess(res, {
+      productId,
+      similarProducts,
+      total: similarProducts.length
+    }, 'Similar products retrieved successfully');
+
+  } catch (error) {
+    console.error('Get similar products error:', error);
+    throw new AppError('Failed to get similar products', 500);
+  }
+});
+
+// Get frequently bought together products
+export const getFrequentlyBoughtTogether = asyncHandler(async (req: Request, res: Response) => {
+  const { productId } = req.params;
+  const { limit = 4 } = req.query;
+
+  try {
+    const bundles = await recommendationService.getFrequentlyBoughtTogether(
+      productId,
+      Number(limit)
+    );
+
+    sendSuccess(res, {
+      productId,
+      bundles,
+      total: bundles.length
+    }, 'Frequently bought together retrieved successfully');
+
+  } catch (error) {
+    console.error('Get frequently bought together error:', error);
+    throw new AppError('Failed to get frequently bought together', 500);
+  }
+});
+
+// Get bundle deals for a product
+export const getBundleDeals = asyncHandler(async (req: Request, res: Response) => {
+  const { productId } = req.params;
+  const { limit = 3 } = req.query;
+
+  try {
+    const bundles = await recommendationService.getBundleDeals(
+      productId,
+      Number(limit)
+    );
+
+    sendSuccess(res, {
+      productId,
+      bundles,
+      total: bundles.length
+    }, 'Bundle deals retrieved successfully');
+
+  } catch (error) {
+    console.error('Get bundle deals error:', error);
+    throw new AppError('Failed to get bundle deals', 500);
+  }
+});
+
+// Get personalized product recommendations for user
+export const getPersonalizedProductRecommendations = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  const { limit = 10, excludeProducts } = req.query;
+
+  if (!userId) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  try {
+    const options = {
+      limit: Number(limit),
+      excludeProducts: excludeProducts ? excludeProducts.toString().split(',') : []
+    };
+
+    const recommendations = await recommendationService.getPersonalizedProductRecommendations(
+      userId,
+      options
+    );
+
+    sendSuccess(res, {
+      recommendations,
+      total: recommendations.length,
+      userId
+    }, 'Personalized product recommendations retrieved successfully');
+
+  } catch (error) {
+    console.error('Get personalized product recommendations error:', error);
+    throw new AppError('Failed to get personalized product recommendations', 500);
+  }
+});
+
+// Track product view
+export const trackProductView = asyncHandler(async (req: Request, res: Response) => {
+  const { productId } = req.params;
+  const userId = req.user?.id;
+
+  try {
+    await recommendationService.trackProductView(productId, userId);
+
+    sendSuccess(res, {
+      productId,
+      tracked: true
+    }, 'Product view tracked successfully');
+
+  } catch (error) {
+    console.error('Track product view error:', error);
+    throw new AppError('Failed to track product view', 500);
+  }
+});

@@ -7,7 +7,12 @@ import {
   updateOrderStatus,
   getOrderTracking,
   rateOrder,
-  getOrderStats
+  getOrderStats,
+  reorderFullOrder,
+  reorderItems,
+  validateReorder,
+  getFrequentlyOrdered,
+  getReorderSuggestions
 } from '../controllers/orderController';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { validate, validateParams, validateQuery, orderSchemas, commonSchemas } from '../middleware/validation';
@@ -20,9 +25,24 @@ const router = Router();
 router.use(authenticate);
 
 // Get user's order statistics
-router.get('/stats', 
+router.get('/stats',
   // generalLimiter,, // Disabled for development
   getOrderStats
+);
+
+// Get reorder suggestions
+router.get('/reorder/suggestions',
+  // generalLimiter,, // Disabled for development
+  getReorderSuggestions
+);
+
+// Get frequently ordered items
+router.get('/reorder/frequently-ordered',
+  // generalLimiter,, // Disabled for development
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(50).default(10)
+  })),
+  getFrequentlyOrdered
 );
 
 // Get user's orders
@@ -74,7 +94,7 @@ router.get('/:orderId/tracking',
 );
 
 // Rate and review order
-router.post('/:orderId/rate', 
+router.post('/:orderId/rate',
   // generalLimiter,, // Disabled for development
   validateParams(Joi.object({
     orderId: commonSchemas.objectId().required()
@@ -84,6 +104,42 @@ router.post('/:orderId/rate',
     review: Joi.string().trim().max(1000)
   })),
   rateOrder
+);
+
+// Validate reorder (check availability and prices)
+router.get('/:orderId/reorder/validate',
+  // generalLimiter,, // Disabled for development
+  validateParams(Joi.object({
+    orderId: commonSchemas.objectId().required()
+  })),
+  validateQuery(Joi.object({
+    itemIds: Joi.alternatives().try(
+      Joi.array().items(commonSchemas.objectId()),
+      commonSchemas.objectId()
+    )
+  })),
+  validateReorder
+);
+
+// Re-order full order
+router.post('/:orderId/reorder',
+  // generalLimiter,, // Disabled for development
+  validateParams(Joi.object({
+    orderId: commonSchemas.objectId().required()
+  })),
+  reorderFullOrder
+);
+
+// Re-order selected items
+router.post('/:orderId/reorder/items',
+  // generalLimiter,, // Disabled for development
+  validateParams(Joi.object({
+    orderId: commonSchemas.objectId().required()
+  })),
+  validate(Joi.object({
+    itemIds: Joi.array().items(commonSchemas.objectId()).min(1).required()
+  })),
+  reorderItems
 );
 
 // Admin/Store Owner Routes

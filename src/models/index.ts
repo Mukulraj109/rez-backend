@@ -13,6 +13,7 @@ export { Review } from './Review';
 export { Wishlist } from './Wishlist';
 export { Wallet } from './Wallet';
 export { default as Offer } from './Offer';
+export { default as FlashSale } from './FlashSale';
 export { VoucherBrand, UserVoucher } from './Voucher';
 export { default as OfferRedemption } from './OfferRedemption';
 export { Address } from './Address';
@@ -20,6 +21,9 @@ export { PaymentMethod } from './PaymentMethod';
 export { UserSettings } from './UserSettings';
 export { UserAchievement } from './Achievement';
 export { Activity } from './Activity';
+export { StockHistory } from './StockHistory';
+export { Coupon } from './Coupon';
+export { UserCoupon } from './UserCoupon';
 
 // Export types for external use
 export type { IUser, IUserProfile, IUserPreferences, IUserWallet, IUserAuth } from './User';
@@ -36,6 +40,7 @@ export type { IReview, IReviewMedia, IReviewHelpfulness, IReviewModeration, IRev
 export type { IWishlist, IWishlistItem, IWishlistSharing, IWishlistAnalytics } from './Wishlist';
 export type { IWallet } from './Wallet';
 export type { IOffer } from './Offer';
+export type { IFlashSale } from './FlashSale';
 export type { IVoucherBrand, IUserVoucher } from './Voucher';
 export type { IOfferRedemption } from './OfferRedemption';
 export type { IAddress } from './Address';
@@ -43,3 +48,6 @@ export type { IPaymentMethod } from './PaymentMethod';
 export type { IUserSettings, INotificationPreferences, IPrivacySettings, ISecuritySettings, IDeliveryPreferences, IPaymentPreferences, IAppPreferences, IGeneralSettings } from './UserSettings';
 export type { IUserAchievement, IAchievementDefinition } from './Achievement';
 export type { IActivity } from './Activity';
+export type { IStockHistory, StockChangeType } from './StockHistory';
+export type { ICoupon, ICouponApplicableTo, ICouponUsageLimit } from './Coupon';
+export type { IUserCoupon, IUserCouponNotifications } from './UserCoupon';

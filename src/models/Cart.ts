@@ -277,7 +277,11 @@ CartSchema.virtual('itemCount').get(function() {
 
 // Virtual for unique stores count
 CartSchema.virtual('storeCount').get(function() {
-  const uniqueStores = new Set(this.items.map((item: ICartItem) => item.store.toString()));
+  const uniqueStores = new Set(
+    this.items
+      .filter((item: ICartItem) => item.store != null)
+      .map((item: ICartItem) => item.store.toString())
+  );
   return uniqueStores.size;
 });
 
@@ -336,6 +340,7 @@ CartSchema.methods.addItem = async function(
   
   // Check if item already exists in cart
   const existingItemIndex = this.items.findIndex((item: ICartItem) => {
+    if (!item.product) return false;
     const productMatch = item.product.toString() === productId;
     const variantMatch = variant
       ? item.variant?.type === variant.type && item.variant?.value === variant.value
@@ -523,8 +528,12 @@ CartSchema.methods.calculateTotals = async function(): Promise<void> {
   
   // Calculate delivery fee (this should be based on store policies and distance)
   let delivery = 0;
-  const uniqueStores = new Set(this.items.map((item: ICartItem) => item.store.toString()));
-  
+  const uniqueStores = new Set(
+    this.items
+      .filter((item: ICartItem) => item.store != null)
+      .map((item: ICartItem) => item.store.toString())
+  );
+
   // Simple delivery calculation - ₹50 per store, free above ₹500
   if (subtotal < 500) {
     delivery = uniqueStores.size * 50;

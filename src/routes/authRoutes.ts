@@ -8,12 +8,14 @@ import {
   updateProfile,
   completeOnboarding,
   deleteAccount,
-  getUserStatistics
+  getUserStatistics,
+  uploadAvatar
 } from '../controllers/authController';
 
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validate } from '../middleware/validation';
 import { authSchemas } from '../middleware/validation';
+import { uploadProfileImage } from '../middleware/upload';
 // import { authLimiter, otpLimiter, securityLimiter } from '../middleware/rateLimiter'; // Disabled for development
 
 const router = Router();
@@ -69,6 +71,12 @@ router.delete('/account',
 router.get('/statistics',
   authenticate,
   getUserStatistics
+);
+
+router.post('/upload-avatar',
+  authenticate,
+  uploadProfileImage.single('avatar'),
+  uploadAvatar
 );
 
 export default router;

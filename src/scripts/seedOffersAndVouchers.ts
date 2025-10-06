@@ -20,7 +20,7 @@ const connectDB = async () => {
 };
 
 // Seed Offers
-const seedOffers = async () => {
+const seedOffers = async (): Promise<void> => {
   try {
     console.log('\n📦 Seeding Offers...');
 
@@ -186,8 +186,6 @@ const seedOffers = async () => {
 
     const offers = await Offer.insertMany(offersData);
     console.log(`✅ Created ${offers.length} offers`);
-
-    return offers;
   } catch (error) {
     console.error('❌ Error seeding offers:', error);
     throw error;
@@ -489,13 +487,13 @@ const seedAll = async () => {
 
     await connectDB();
 
-    const offers = await seedOffers();
-    const voucherBrands = await seedVoucherBrands();
+    await seedOffers();
+    await seedVoucherBrands();
 
     console.log('\n✨ Seeding completed successfully!');
     console.log(`📊 Summary:`);
-    console.log(`   - Offers: ${offers?.length || 0}`);
-    console.log(`   - Voucher Brands: ${voucherBrands?.length || 0}`);
+    console.log(`   - Offers: Complete`);
+    console.log(`   - Voucher Brands: Complete`);
     console.log('\n🎉 Database is ready for Phase 4 testing!');
 
     await mongoose.disconnect();

@@ -132,6 +132,37 @@ export interface IGeneralSettings {
   theme: 'light' | 'dark' | 'auto';
 }
 
+// Courier Preferences
+export interface ICourierPreferences {
+  preferredCourier: 'any' | 'delhivery' | 'bluedart' | 'ekart' | 'dtdc' | 'fedex';
+  deliveryTimePreference: {
+    weekdays: ('MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN')[];
+    preferredTimeSlot: {
+      start: string; // '09:00'
+      end: string;   // '18:00'
+    };
+    avoidWeekends: boolean;
+  };
+  deliveryInstructions: {
+    contactlessDelivery: boolean;
+    leaveAtDoor: boolean;
+    signatureRequired: boolean;
+    callBeforeDelivery: boolean;
+    specificInstructions?: string;
+  };
+  alternateContact?: {
+    name: string;
+    phone: string;
+    relation: string;
+  };
+  courierNotifications: {
+    smsUpdates: boolean;
+    emailUpdates: boolean;
+    whatsappUpdates: boolean;
+    callUpdates: boolean;
+  };
+}
+
 // User Settings Interface
 export interface IUserSettings extends Document {
   user: Types.ObjectId;
@@ -142,6 +173,7 @@ export interface IUserSettings extends Document {
   delivery: IDeliveryPreferences;
   payment: IPaymentPreferences;
   preferences: IAppPreferences;
+  courier: ICourierPreferences;
   lastUpdated: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -334,6 +366,43 @@ const UserSettingsSchema = new Schema<IUserSettings>({
     animations: { type: Boolean, default: true },
     sounds: { type: Boolean, default: true },
     hapticFeedback: { type: Boolean, default: true }
+  },
+  courier: {
+    preferredCourier: {
+      type: String,
+      enum: ['any', 'delhivery', 'bluedart', 'ekart', 'dtdc', 'fedex'],
+      default: 'any'
+    },
+    deliveryTimePreference: {
+      weekdays: [{
+        type: String,
+        enum: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'],
+        default: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+      }],
+      preferredTimeSlot: {
+        start: { type: String, default: '09:00' },
+        end: { type: String, default: '18:00' }
+      },
+      avoidWeekends: { type: Boolean, default: false }
+    },
+    deliveryInstructions: {
+      contactlessDelivery: { type: Boolean, default: true },
+      leaveAtDoor: { type: Boolean, default: false },
+      signatureRequired: { type: Boolean, default: false },
+      callBeforeDelivery: { type: Boolean, default: true },
+      specificInstructions: { type: String, default: '' }
+    },
+    alternateContact: {
+      name: { type: String },
+      phone: { type: String },
+      relation: { type: String }
+    },
+    courierNotifications: {
+      smsUpdates: { type: Boolean, default: true },
+      emailUpdates: { type: Boolean, default: true },
+      whatsappUpdates: { type: Boolean, default: false },
+      callUpdates: { type: Boolean, default: false }
+    }
   },
   lastUpdated: {
     type: Date,

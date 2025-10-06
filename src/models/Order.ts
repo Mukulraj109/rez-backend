@@ -87,6 +87,17 @@ export interface IOrderTimeline {
   timestamp: Date;
   updatedBy?: string;
   metadata?: any;
+  location?: {
+    latitude: number;
+    longitude: number;
+    address?: string;
+  };
+  deliveryPartner?: {
+    name: string;
+    phone: string;
+    vehicleNumber?: string;
+    photo?: string;
+  };
 }
 
 // Order analytics interface
@@ -373,7 +384,18 @@ const OrderSchema = new Schema<IOrder>({
       default: Date.now
     },
     updatedBy: String,
-    metadata: Schema.Types.Mixed
+    metadata: Schema.Types.Mixed,
+    location: {
+      latitude: Number,
+      longitude: Number,
+      address: String
+    },
+    deliveryPartner: {
+      name: String,
+      phone: String,
+      vehicleNumber: String,
+      photo: String
+    }
   }],
   analytics: {
     source: {

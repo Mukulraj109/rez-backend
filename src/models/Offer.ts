@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema, Model } from 'mongoose';
 
 // Instance methods interface
-export interface IOfferMethods {
+interface IOfferMethods {
   isValid(): boolean;
   canUserRedeem(userRedemptionCount: number): boolean;
 }

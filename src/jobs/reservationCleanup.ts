@@ -16,7 +16,7 @@ import { CLEANUP_INTERVAL_MINUTES } from '../types/reservation';
  * This prevents stock from being held indefinitely by abandoned carts.
  */
 
-let cleanupJob: cron.ScheduledTask | null = null;
+let cleanupJob: ReturnType<typeof cron.schedule> | null = null;
 let isRunning = false;
 
 /**

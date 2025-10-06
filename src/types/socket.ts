@@ -77,6 +77,9 @@ export const SocketRoom = {
   // Product-specific rooms
   product: (productId: string) => `product-${productId}`,
 
+  // Order-specific rooms
+  order: (orderId: string) => `order-${orderId}`,
+
   // Global rooms
   allUsers: 'all-users',
   allMerchants: 'all-merchants',

@@ -62,8 +62,16 @@ const extractTokenFromHeader = (authHeader?: string): string | null => {
 export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const token = extractTokenFromHeader(req.headers.authorization);
-    
+
+    console.log('🔐 [AUTH] Authenticating request:', {
+      path: req.path,
+      method: req.method,
+      hasToken: !!token,
+      tokenPreview: token ? token.substring(0, 20) + '...' : 'none'
+    });
+
     if (!token) {
+      console.warn('⚠️ [AUTH] No token provided');
       return res.status(401).json({
         success: false,
         message: 'Access token is required'
@@ -72,16 +80,26 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 
     try {
       const decoded = verifyToken(token);
+      console.log('🔓 [AUTH] Token decoded:', { userId: decoded.userId, role: decoded.role });
+
       const user = await User.findById(decoded.userId).select('-auth.refreshToken');
-      
+
       if (!user) {
+        console.warn('⚠️ [AUTH] User not found:', decoded.userId);
         return res.status(401).json({
           success: false,
           message: 'User not found'
         });
       }
 
+      console.log('✅ [AUTH] User found:', {
+        id: user._id,
+        phone: user.phoneNumber,
+        isActive: user.isActive
+      });
+
       if (!user.isActive) {
+        console.warn('⚠️ [AUTH] Account deactivated:', user._id);
         return res.status(401).json({
           success: false,
           message: 'Account is deactivated'
@@ -89,24 +107,33 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       }
 
       if (user.isAccountLocked()) {
+        console.warn('⚠️ [AUTH] Account locked:', user._id);
         return res.status(423).json({
           success: false,
           message: 'Account is temporarily locked. Please try again later.'
         });
       }
-      
+
       // Attach user to request
       req.user = user;
       req.userId = String(user._id);
-      
+
+      console.log('✅ [AUTH] Authentication successful for user:', user._id);
       next();
-    } catch (tokenError) {
+    } catch (tokenError: any) {
+      console.error('❌ [AUTH] Token verification failed:', {
+        error: tokenError.message,
+        name: tokenError.name,
+        expiredAt: tokenError.expiredAt
+      });
       return res.status(401).json({
         success: false,
-        message: 'Invalid token.'
+        message: 'Invalid token.',
+        error: process.env.NODE_ENV === 'development' ? tokenError.message : undefined
       });
     }
-  } catch (error) {
+  } catch (error: any) {
+    console.error('❌ [AUTH] Authentication error:', error);
     return res.status(500).json({
       success: false,
       message: 'Internal server error during authentication'
