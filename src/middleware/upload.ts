@@ -2,7 +2,7 @@
 // Handles file uploads with multer and cloudinary
 
 import multer from 'multer';
-import { v2 as cloudinary } from 'cloudinary';
+const cloudinary = require('cloudinary');
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import dotenv from 'dotenv';
 
