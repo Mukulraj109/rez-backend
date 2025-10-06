@@ -6,7 +6,7 @@
    "start": "node --max-old-space-size=450 dist/server.js",
     "start:dev": "node dist/server.js",
     "dev": "nodemon src/server.ts",
-    "build": "rimraf dist && tsc",
+    "build": "tsc",
     "build:prod": "rimraf dist && tsc -p tsconfig.prod.json",
     "seed": "ts-node src/scripts/seedDatabase.ts",
     "seed:all": "ts-node src/scripts/seedAllData.ts",
