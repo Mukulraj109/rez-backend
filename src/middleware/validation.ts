@@ -132,6 +132,7 @@ export const authSchemas = {
       lastName: Joi.string().trim().max(50),
       avatar: Joi.string().uri().allow(null, ''),
       bio: Joi.string().trim().max(500),
+      website: Joi.string().uri().allow(null, ''),
       dateOfBirth: Joi.date().iso().max('now'),
       gender: Joi.string().valid('male', 'female', 'other'),
       location: Joi.object({
@@ -145,7 +146,11 @@ export const authSchemas = {
     preferences: Joi.object({
       language: Joi.string().valid('en', 'hi', 'te', 'ta', 'bn'),
       theme: Joi.string().valid('light', 'dark'),
-      notifications: Joi.boolean(),
+      notifications: Joi.object({
+        push: Joi.boolean(),
+        email: Joi.boolean(),
+        sms: Joi.boolean()
+      }),
       emailNotifications: Joi.boolean(),
       pushNotifications: Joi.boolean(),
       smsNotifications: Joi.boolean()
@@ -196,18 +201,24 @@ export const orderSchemas = {
   createOrder: Joi.object({
     deliveryAddress: Joi.object({
       name: Joi.string().trim().max(50).required(),
-      phone: commonSchemas.phoneNumber.required(),
+      phone: Joi.string().trim().min(10).max(15).required(), // More lenient phone validation for placeholders
       addressLine1: Joi.string().trim().max(200).required(),
-      addressLine2: Joi.string().trim().max(200),
+      addressLine2: Joi.string().trim().max(200).allow(''), // Allow empty string
       city: Joi.string().trim().max(50).required(),
       state: Joi.string().trim().max(50).required(),
       pincode: Joi.string().pattern(/^\d{6}$/).required(),
-      landmark: Joi.string().trim().max(100),
+      landmark: Joi.string().trim().max(100).allow(''), // Allow empty string
       addressType: Joi.string().valid('home', 'work', 'other')
     }).required(),
-    paymentMethod: Joi.string().valid('wallet', 'card', 'upi', 'cod').required(),
-    specialInstructions: Joi.string().trim().max(500),
-    couponCode: Joi.string().trim().uppercase()
+    paymentMethod: Joi.string().valid('wallet', 'card', 'upi', 'cod', 'razorpay').required(),
+    specialInstructions: Joi.string().trim().max(500).allow(''), // Allow empty string
+    couponCode: Joi.string().trim().uppercase(),
+    coinsUsed: Joi.object({ // Add coinsUsed validation
+      wasilCoins: Joi.number().min(0).default(0),
+      promoCoins: Joi.number().min(0).default(0),
+      storePromoCoins: Joi.number().min(0).default(0),
+      totalCoinsValue: Joi.number().min(0).default(0)
+    })
   })
 };
 

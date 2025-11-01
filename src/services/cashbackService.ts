@@ -5,6 +5,7 @@ import { Types } from 'mongoose';
 import { UserCashback, IUserCashback } from '../models/UserCashback';
 import { Order } from '../models/Order';
 import { User } from '../models/User';
+import subscriptionBenefitsService from './subscriptionBenefitsService';
 
 interface CreateCashbackData {
   userId: Types.ObjectId;
@@ -37,11 +38,12 @@ class CashbackService {
   /**
    * Calculate cashback for order
    */
-  calculateOrderCashback(
+  async calculateOrderCashback(
     orderAmount: number,
     productCategories: string[],
+    userId?: Types.ObjectId,
     storeId?: Types.ObjectId
-  ): { amount: number; rate: number; description: string } {
+  ): Promise<{ amount: number; rate: number; description: string; multiplier: number }> {
     // Base cashback rate
     let cashbackRate = 2; // 2% base rate
 
@@ -70,12 +72,25 @@ class CashbackService {
       cashbackRate += 0.5; // Extra 0.5% for orders above ₹10000
     }
 
-    const cashbackAmount = Math.round((orderAmount * cashbackRate) / 100);
+    // Apply subscription tier multiplier
+    let tierMultiplier = 1;
+    if (userId) {
+      tierMultiplier = await subscriptionBenefitsService.getCashbackMultiplier(userId);
+    }
+
+    // Calculate final rate and amount
+    const finalRate = cashbackRate * tierMultiplier;
+    const cashbackAmount = Math.round((orderAmount * finalRate) / 100);
+
+    const description = tierMultiplier > 1
+      ? `${finalRate}% cashback (${cashbackRate}% × ${tierMultiplier}x tier bonus) on order of ₹${orderAmount}`
+      : `${cashbackRate}% cashback on order of ₹${orderAmount}`;
 
     return {
       amount: cashbackAmount,
-      rate: cashbackRate,
-      description: `${cashbackRate}% cashback on order of ₹${orderAmount}`,
+      rate: finalRate,
+      description,
+      multiplier: tierMultiplier
     };
   }
 
@@ -144,12 +159,21 @@ class CashbackService {
       // Get store from first item
       const storeId = order.items.length > 0 ? order.items[0].store : undefined;
 
-      // Calculate cashback
-      const { amount, rate, description } = this.calculateOrderCashback(
+      // Calculate cashback with tier multiplier
+      const { amount, rate, description, multiplier } = await this.calculateOrderCashback(
         order.totals.total,
         productCategories,
+        order.user as Types.ObjectId,
         storeId
       );
+
+      // Track cashback earned in subscription
+      if (multiplier > 1) {
+        await subscriptionBenefitsService.trackCashbackEarned(
+          order.user as Types.ObjectId,
+          amount
+        );
+      }
 
       // Create cashback entry
       const cashback = await this.createCashback({
@@ -334,32 +358,38 @@ class CashbackService {
   /**
    * Forecast cashback for cart
    */
-  async forecastCashbackForCart(cartData: {
-    items: Array<{
-      product: any;
-      quantity: number;
-      price: number;
-    }>;
-    subtotal: number;
-  }): Promise<{
+  async forecastCashbackForCart(
+    cartData: {
+      items: Array<{
+        product: any;
+        quantity: number;
+        price: number;
+      }>;
+      subtotal: number;
+    },
+    userId?: Types.ObjectId
+  ): Promise<{
     estimatedCashback: number;
     cashbackRate: number;
     description: string;
+    multiplier: number;
   }> {
     try {
       const categories = cartData.items
         .map(item => item.product?.category)
         .filter(Boolean);
 
-      const { amount, rate, description } = this.calculateOrderCashback(
+      const { amount, rate, description, multiplier } = await this.calculateOrderCashback(
         cartData.subtotal,
-        categories
+        categories,
+        userId
       );
 
       return {
         estimatedCashback: amount,
         cashbackRate: rate,
         description,
+        multiplier
       };
     } catch (error) {
       console.error('❌ [CASHBACK SERVICE] Error forecasting cashback:', error);

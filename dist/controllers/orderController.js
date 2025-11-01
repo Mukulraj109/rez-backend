@@ -1,10 +1,43 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getReorderSuggestions = exports.getFrequentlyOrdered = exports.validateReorder = exports.reorderItems = exports.reorderFullOrder = exports.getOrderStats = exports.rateOrder = exports.getOrderTracking = exports.updateOrderStatus = exports.cancelOrder = exports.getOrderById = exports.getUserOrders = exports.createOrder = void 0;
-const mongoose_1 = __importDefault(require("mongoose"));
+const mongoose_1 = __importStar(require("mongoose"));
 const Order_1 = require("../models/Order");
 const Cart_1 = require("../models/Cart");
 const Product_1 = require("../models/Product");
@@ -13,10 +46,18 @@ const asyncHandler_1 = require("../utils/asyncHandler");
 const errorHandler_1 = require("../middleware/errorHandler");
 const stockSocketService_1 = __importDefault(require("../services/stockSocketService"));
 const reorderService_1 = __importDefault(require("../services/reorderService"));
+const activityService_1 = __importDefault(require("../services/activityService"));
+const referralService_1 = __importDefault(require("../services/referralService"));
+const cashbackService_1 = __importDefault(require("../services/cashbackService"));
+const userProductService_1 = __importDefault(require("../services/userProductService"));
+const couponService_1 = __importDefault(require("../services/couponService"));
+const achievementService_1 = __importDefault(require("../services/achievementService"));
+const StorePromoCoin_1 = require("../models/StorePromoCoin");
+const promoCoins_config_1 = require("../config/promoCoins.config");
 // Create new order from cart
 exports.createOrder = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const userId = req.userId;
-    const { deliveryAddress, paymentMethod, specialInstructions, couponCode } = req.body;
+    const { deliveryAddress, paymentMethod, specialInstructions, couponCode, voucherCode } = req.body;
     // Start a MongoDB session for transaction
     const session = await mongoose_1.default.startSession();
     session.startTransaction();
@@ -175,14 +216,64 @@ exports.createOrder = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         // Note: Stock deduction is now deferred until payment is confirmed
         // This prevents stock being locked for failed payments
         // Stock deduction will happen in paymentService.handlePaymentSuccess()
-        // Use cart totals for order totals
-        const deliveryFee = cart.totals.delivery || 0;
-        const tax = cart.totals.tax || 0;
+        // Get base totals from cart
         const subtotal = cart.totals.subtotal || 0;
-        const discount = cart.totals.discount || 0;
-        const cashback = cart.totals.cashback || 0;
-        const total = cart.totals.total || 0;
-        console.log('📦 [CREATE ORDER] Order totals:', { subtotal, tax, deliveryFee, discount, cashback, total });
+        const tax = cart.totals.tax || 0;
+        const baseDiscount = cart.totals.discount || 0;
+        // Apply partner benefits to order
+        console.log('👥 [PARTNER BENEFITS] Applying partner benefits to order...');
+        const partnerBenefitsService = require('../services/partnerBenefitsService').default;
+        const partnerBenefits = await partnerBenefitsService.applyPartnerBenefits({
+            subtotal,
+            deliveryFee: cart.totals.delivery || 0,
+            userId: userId.toString()
+        });
+        console.log('👥 [PARTNER BENEFITS] Benefits applied:', {
+            cashbackRate: partnerBenefits.cashbackRate,
+            cashbackAmount: partnerBenefits.cashbackAmount,
+            deliveryFee: partnerBenefits.deliveryFee,
+            deliverySavings: partnerBenefits.deliverySavings,
+            birthdayDiscount: partnerBenefits.birthdayDiscount,
+            totalSavings: partnerBenefits.totalSavings,
+            appliedBenefits: partnerBenefits.appliedBenefits
+        });
+        // Use partner-adjusted values
+        const deliveryFee = partnerBenefits.deliveryFee;
+        let discount = baseDiscount + partnerBenefits.birthdayDiscount;
+        const cashback = partnerBenefits.cashbackAmount;
+        // Apply partner voucher if provided (FIXED: Issue #4 - Voucher redemption)
+        let voucherDiscount = 0;
+        let voucherApplied = '';
+        if (voucherCode) {
+            console.log('🎫 [VOUCHER] Attempting to apply voucher:', voucherCode);
+            const partnerService = require('../services/partnerService').default;
+            const voucherResult = await partnerService.applyVoucher(userId.toString(), voucherCode, subtotal);
+            if (voucherResult.valid) {
+                voucherDiscount = voucherResult.discount;
+                voucherApplied = voucherCode;
+                discount += voucherDiscount;
+                console.log(`✅ [VOUCHER] Applied ${voucherResult.offerTitle}: ₹${voucherDiscount} discount`);
+            }
+            else {
+                console.warn(`⚠️ [VOUCHER] Invalid voucher: ${voucherResult.error}`);
+                // Don't fail order creation, just don't apply the voucher
+            }
+        }
+        // Calculate total with partner benefits and voucher
+        let total = subtotal + tax + deliveryFee - discount;
+        if (total < 0)
+            total = 0;
+        console.log('📦 [CREATE ORDER] Order totals (with partner benefits & voucher):', {
+            subtotal,
+            tax,
+            deliveryFee,
+            discount,
+            voucherDiscount,
+            cashback,
+            total,
+            partnerBenefitsApplied: partnerBenefits.appliedBenefits,
+            voucherApplied
+        });
         // Generate order number
         const orderCount = await Order_1.Order.countDocuments().session(session);
         const orderNumber = `ORD${Date.now()}${String(orderCount + 1).padStart(4, '0')}`;
@@ -222,6 +313,32 @@ exports.createOrder = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         });
         await order.save({ session });
         console.log('📦 [CREATE ORDER] Order saved successfully:', order.orderNumber);
+        // Mark voucher as used if one was applied
+        if (voucherApplied) {
+            try {
+                console.log('🎫 [VOUCHER] Marking voucher as used:', voucherApplied);
+                const partnerService = require('../services/partnerService').default;
+                await partnerService.markVoucherUsed(userId.toString(), voucherApplied);
+                console.log('✅ [VOUCHER] Voucher marked as used successfully');
+            }
+            catch (error) {
+                console.error('❌ [VOUCHER] Error marking voucher as used:', error);
+                // Don't fail order creation if voucher marking fails
+            }
+        }
+        // Check for transaction bonus (every 11 orders)
+        // Note: This is checked after order placement, but bonus is only awarded after delivery
+        try {
+            console.log('🎁 [PARTNER BENEFITS] Checking transaction bonus eligibility...');
+            const bonusAmount = await partnerBenefitsService.checkTransactionBonus(userId.toString());
+            if (bonusAmount > 0) {
+                console.log(`✅ [PARTNER BENEFITS] Transaction bonus will be awarded: ₹${bonusAmount}`);
+            }
+        }
+        catch (error) {
+            console.error('❌ [PARTNER BENEFITS] Error checking transaction bonus:', error);
+            // Don't fail order creation if bonus check fails
+        }
         // Note: Cart is NOT cleared here - it will be cleared after successful payment
         // This allows users to retry payment if it fails
         // Commit the transaction
@@ -236,6 +353,24 @@ exports.createOrder = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             .populate('items.store', 'name logo')
             .populate('user', 'profile.firstName profile.lastName profile.phoneNumber');
         console.log('📦 [CREATE ORDER] Order creation complete');
+        // Mark coupon as used if one was applied
+        if (cart.coupon?.code) {
+            console.log('🎟️ [CREATE ORDER] Marking coupon as used:', cart.coupon.code);
+            await couponService_1.default.markCouponAsUsed(new mongoose_1.Types.ObjectId(userId), cart.coupon.code, order._id);
+        }
+        // Create activity for order placement
+        if (populatedOrder) {
+            const storeData = populatedOrder.items[0]?.store;
+            const storeName = storeData?.name || 'Store';
+            await activityService_1.default.order.onOrderPlaced(new mongoose_1.Types.ObjectId(userId), populatedOrder._id, storeName, total);
+        }
+        // Trigger achievement update for order creation
+        try {
+            await achievementService_1.default.triggerAchievementUpdate(userId, 'order_created');
+        }
+        catch (error) {
+            console.error('❌ [ORDER] Error triggering achievement update:', error);
+        }
         (0, response_1.sendSuccess)(res, populatedOrder, 'Order created successfully', 201);
     }
     catch (error) {
@@ -264,6 +399,7 @@ exports.getUserOrders = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         const skip = (Number(page) - 1) * Number(limit);
         const orders = await Order_1.Order.find(query)
             .populate('items.product', 'name images basePrice')
+            .populate('items.store', 'name logo')
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(Number(limit))
@@ -437,6 +573,10 @@ exports.cancelOrder = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
                 console.error('❌ [CANCEL ORDER] Socket emission failed:', socketError);
             }
         }
+        // Create activity for order cancellation
+        const storeData = order.items[0]?.store;
+        const storeName = storeData?.name || storeData?.toString() || 'Store';
+        await activityService_1.default.order.onOrderCancelled(new mongoose_1.Types.ObjectId(userId), order._id, storeName);
         (0, response_1.sendSuccess)(res, order, 'Order cancelled successfully');
     }
     catch (error) {
@@ -479,7 +619,103 @@ exports.updateOrderStatus = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
         await order.save();
         const populatedOrder = await Order_1.Order.findById(order._id)
             .populate('items.product', 'name images')
+            .populate('items.store', 'name')
             .populate('user', 'profile.firstName profile.lastName');
+        // Create activity for order delivery
+        if (status === 'delivered' && populatedOrder) {
+            const storeData = populatedOrder.items[0]?.store;
+            const storeName = storeData?.name || 'Store';
+            const userIdObj = typeof populatedOrder.user === 'object' ? populatedOrder.user._id : populatedOrder.user;
+            await activityService_1.default.order.onOrderDelivered(userIdObj, populatedOrder._id, storeName);
+            // Process referral rewards when order is delivered
+            try {
+                // Check if this is referee's first order (process referral completion)
+                await referralService_1.default.processFirstOrder({
+                    refereeId: userIdObj,
+                    orderId: populatedOrder._id,
+                    orderAmount: populatedOrder.totals.total,
+                });
+                // Check for milestone bonus (3rd order)
+                const deliveredOrdersCount = await Order_1.Order.countDocuments({
+                    user: userIdObj,
+                    status: 'delivered',
+                });
+                if (deliveredOrdersCount >= 3) {
+                    await referralService_1.default.processMilestoneBonus(userIdObj, deliveredOrdersCount);
+                }
+            }
+            catch (error) {
+                console.error('❌ [ORDER] Error processing referral rewards:', error);
+                // Don't fail the order update if referral processing fails
+            }
+            // Create cashback for delivered order
+            try {
+                console.log('💰 [ORDER] Creating cashback for delivered order:', populatedOrder._id);
+                await cashbackService_1.default.createCashbackFromOrder(populatedOrder._id);
+                console.log('✅ [ORDER] Cashback created successfully');
+            }
+            catch (error) {
+                console.error('❌ [ORDER] Error creating cashback:', error);
+                // Don't fail the order update if cashback creation fails
+            }
+            // Create user products for delivered order
+            try {
+                console.log('📦 [ORDER] Creating user products for delivered order:', populatedOrder._id);
+                await userProductService_1.default.createUserProductsFromOrder(populatedOrder._id);
+                console.log('✅ [ORDER] User products created successfully');
+            }
+            catch (error) {
+                console.error('❌ [ORDER] Error creating user products:', error);
+                // Don't fail the order update if user product creation fails
+            }
+            // Award store promo coins for delivered order
+            try {
+                console.log('💎 [ORDER] Awarding store promo coins for delivered order:', populatedOrder._id);
+                // Calculate promo coins to be earned
+                const orderValue = populatedOrder.totals.total;
+                const coinsToEarn = (0, promoCoins_config_1.calculatePromoCoinsEarned)(orderValue);
+                if (coinsToEarn > 0) {
+                    // Get store ID from first item (assuming single store per order)
+                    const firstItem = populatedOrder.items[0];
+                    const storeId = typeof firstItem.store === 'object'
+                        ? firstItem.store._id
+                        : firstItem.store;
+                    if (storeId) {
+                        // Award promo coins
+                        await StorePromoCoin_1.StorePromoCoin.earnCoins(userIdObj, storeId, coinsToEarn, populatedOrder._id);
+                        console.log(`✅ [ORDER] Awarded ${coinsToEarn} promo coins from store ${storeId}`);
+                    }
+                    else {
+                        console.warn('⚠️ [ORDER] Could not determine store ID for promo coins');
+                    }
+                }
+                else {
+                    console.log('ℹ️ [ORDER] Order value too low for promo coins or promo coins disabled');
+                }
+            }
+            catch (error) {
+                console.error('❌ [ORDER] Error awarding promo coins:', error);
+                // Don't fail the order update if promo coin creation fails
+            }
+            // Trigger achievement update for order delivery
+            try {
+                await achievementService_1.default.triggerAchievementUpdate(populatedOrder.user, 'order_delivered');
+            }
+            catch (error) {
+                console.error('❌ [ORDER] Error triggering achievement update:', error);
+            }
+            // Update partner progress for order delivery
+            try {
+                const partnerService = require('../services/partnerService').default;
+                const orderId = populatedOrder._id;
+                await partnerService.updatePartnerProgress(userIdObj.toString(), orderId.toString());
+                console.log('✅ [ORDER] Partner progress updated successfully');
+            }
+            catch (error) {
+                console.error('❌ [ORDER] Error updating partner progress:', error);
+                // Don't fail the order update if partner progress update fails
+            }
+        }
         (0, response_1.sendSuccess)(res, populatedOrder, 'Order status updated successfully');
     }
     catch (error) {
@@ -577,6 +813,28 @@ exports.rateOrder = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             ratedAt: new Date()
         };
         await order.save();
+        // Update partner review task progress
+        try {
+            const partnerService = require('../services/partnerService').default;
+            const Partner = require('../models/Partner').default;
+            const partner = await Partner.findOne({ userId });
+            if (partner) {
+                const reviewTask = partner.tasks.find((t) => t.type === 'review');
+                if (reviewTask && reviewTask.progress.current < reviewTask.progress.target) {
+                    reviewTask.progress.current += 1;
+                    if (reviewTask.progress.current >= reviewTask.progress.target) {
+                        reviewTask.completed = true;
+                        reviewTask.completedAt = new Date();
+                    }
+                    await partner.save();
+                    console.log('✅ [REVIEW] Partner review task updated:', reviewTask.progress.current, '/', reviewTask.progress.target);
+                }
+            }
+        }
+        catch (error) {
+            console.error('❌ [REVIEW] Error updating partner review task:', error);
+            // Don't fail the review if partner update fails
+        }
         (0, response_1.sendSuccess)(res, order, 'Order rated successfully');
     }
     catch (error) {

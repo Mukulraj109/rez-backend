@@ -2,31 +2,53 @@
 // Handles file uploads with multer and cloudinary
 
 import multer from 'multer';
-const cloudinary = require('cloudinary');
+const cloudinary = require('cloudinary').v2;
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Configure Cloudinary
+// Configure Cloudinary with increased timeout
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'your-cloud-name',
-  api_key: process.env.CLOUDINARY_API_KEY || 'your-api-key',
-  api_secret: process.env.CLOUDINARY_API_SECRET || 'your-api-secret',
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true,
+  timeout: 120000, // 120 seconds timeout (increased from 60)
 });
 
-// Create storage engine for profile images
+console.log('☁️  [CLOUDINARY] Configuration loaded:', {
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key_present: !!process.env.CLOUDINARY_API_KEY,
+  api_secret_present: !!process.env.CLOUDINARY_API_SECRET,
+});
+
+// Test Cloudinary connection at startup
+cloudinary.api.ping()
+  .then(() => {
+    console.log('✅ [CLOUDINARY] Connection successful!');
+  })
+  .catch((error: any) => {
+    console.error('❌ [CLOUDINARY] Connection failed:', error.message);
+    if (error.message.includes('Invalid cloud_name')) {
+      console.error('   → Check CLOUDINARY_CLOUD_NAME in .env');
+    } else if (error.message.includes('quota')) {
+      console.error('   → Your Cloudinary storage quota may be full!');
+      console.error('   → Check: https://cloudinary.com/console/usage');
+    }
+  });
+
+// Create storage engine for profile images - MINIMAL CONFIG FOR SPEED
 const profileStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => {
+    console.log(`📤 [CLOUDINARY] Uploading avatar for user: ${req.user?._id}`);
     return {
       folder: 'rez-app/profiles',
-      allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-      transformation: [
-        { width: 500, height: 500, crop: 'fill', gravity: 'face' },
-        { quality: 'auto:good' },
-      ],
+      resource_type: 'auto',
       public_id: `user_${req.user?._id}_${Date.now()}`,
+      // No transformations during upload for maximum speed
+      timeout: 120000,
     };
   },
 });
@@ -45,6 +67,3 @@ export const uploadProfileImage = multer({
     cb(null, true);
   },
 });
-
-// Export cloudinary instance for direct use
-export { cloudinary };

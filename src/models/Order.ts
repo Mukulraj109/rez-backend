@@ -39,6 +39,12 @@ export interface IOrderPayment {
   paidAt?: Date;
   refundId?: string;
   refundedAt?: Date;
+  coinsUsed?: {
+    wasilCoins?: number; // REZ coins used
+    promoCoins?: number; // Promo coins used
+    storePromoCoins?: number; // Store promo coins used
+    totalCoinsValue?: number; // Total value of coins used
+  };
 }
 
 // Delivery address interface
@@ -150,6 +156,7 @@ export interface IOrder extends Document {
   };
   estimatedDeliveryTime?: Date; // Alias for delivery.estimatedTime
   deliveredAt?: Date; // Alias for delivery.deliveredAt
+  totalAmount?: number; // Alias for totals.total (for compatibility with services)
   rating?: {
     score: number;
     review?: string;
@@ -308,7 +315,12 @@ const OrderSchema = new Schema<IOrder>({
     failureReason: String,
     paidAt: Date,
     refundId: String,
-    refundedAt: Date
+    refundedAt: Date,
+    coinsUsed: {
+      wasilCoins: { type: Number, default: 0, min: 0 },
+      promoCoins: { type: Number, default: 0, min: 0 },
+      totalCoinsValue: { type: Number, default: 0, min: 0 }
+    }
   },
   delivery: {
     method: {
@@ -531,6 +543,10 @@ OrderSchema.virtual('estimatedDeliveryTime').get(function() {
 
 OrderSchema.virtual('deliveredAt').get(function() {
   return this.delivery.deliveredAt;
+});
+
+OrderSchema.virtual('totalAmount').get(function() {
+  return this.totals.total;
 });
 
 // Pre-save hook to generate order number and add timeline entry

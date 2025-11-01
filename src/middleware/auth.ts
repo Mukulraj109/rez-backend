@@ -10,16 +10,6 @@ interface JWTPayload {
   exp: number;
 }
 
-// Extend Request interface to include user and userId properties
-declare global {
-  namespace Express {
-    interface Request {
-      user?: any;
-      userId?: string;
-    }
-  }
-}
-
 // Generate JWT token
 export const generateToken = (userId: string, role: string = 'user'): string => {
   const payload = { userId, role };

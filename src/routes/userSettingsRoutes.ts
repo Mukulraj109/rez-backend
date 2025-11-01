@@ -15,7 +15,13 @@ import {
   updatePushNotifications,
   updateEmailNotifications,
   updateSMSNotifications,
-  updateInAppNotifications
+  updateInAppNotifications,
+  enableTwoFactorAuth,
+  disableTwoFactorAuth,
+  verifyTwoFactorCode,
+  generateBackupCodes,
+  updateBiometricSettings,
+  getSecurityStatus
 } from '../controllers/userSettingsController';
 import { authenticate } from '../middleware/auth';
 
@@ -31,6 +37,14 @@ router.put('/notifications', updateNotificationPreferences);
 router.put('/privacy', updatePrivacySettings);
 router.put('/security', updateSecuritySettings);
 router.put('/delivery', updateDeliveryPreferences);
+
+// Security-specific routes
+router.get('/security/status', getSecurityStatus);
+router.post('/security/2fa/enable', enableTwoFactorAuth);
+router.post('/security/2fa/disable', disableTwoFactorAuth);
+router.post('/security/2fa/verify', verifyTwoFactorCode);
+router.post('/security/2fa/backup-codes', generateBackupCodes);
+router.put('/security/biometric', updateBiometricSettings);
 router.put('/payment', updatePaymentPreferences);
 router.put('/preferences', updateAppPreferences);
 router.post('/reset', resetSettings);

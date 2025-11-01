@@ -102,6 +102,15 @@ export interface IStoreAnalytics {
   }[];
 }
 
+// Store video interface
+export interface IStoreVideo {
+  url: string;
+  thumbnail?: string;
+  title?: string;
+  duration?: number; // in seconds
+  uploadedAt?: Date;
+}
+
 // Main Store interface
 export interface IStore extends Document {
   name: string;
@@ -109,6 +118,7 @@ export interface IStore extends Document {
   description?: string;
   logo?: string;
   banner?: string;
+  videos?: IStoreVideo[]; // Store promotional videos
   category: Types.ObjectId;
   subCategories?: Types.ObjectId[];
   location: IStoreLocation;
@@ -162,6 +172,30 @@ const StoreSchema = new Schema<IStore>({
     type: String,
     trim: true
   },
+  videos: [{
+    url: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    thumbnail: {
+      type: String,
+      trim: true
+    },
+    title: {
+      type: String,
+      trim: true,
+      maxlength: 200
+    },
+    duration: {
+      type: Number,
+      min: 0
+    },
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   category: {
     type: Schema.Types.ObjectId,
     ref: 'Category',

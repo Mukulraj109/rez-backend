@@ -17,6 +17,7 @@ export interface IWallet extends Document {
         total: number;
         available: number;
         pending: number;
+        paybill: number;
     };
     coins: ICoinBalance[];
     currency: string;
@@ -27,6 +28,8 @@ export interface IWallet extends Document {
         totalRefunds: number;
         totalTopups: number;
         totalWithdrawals: number;
+        totalPayBill: number;
+        totalPayBillDiscount: number;
     };
     limits: {
         maxBalance: number;
@@ -52,6 +55,11 @@ export interface IWallet extends Document {
     canSpend(amount: number): boolean;
     addFunds(amount: number, type: string): Promise<void>;
     deductFunds(amount: number): Promise<void>;
+    addPayBillBalance(amount: number, discountPercentage?: number): Promise<{
+        finalAmount: number;
+        discount: number;
+    }>;
+    usePayBillBalance(amount: number): Promise<void>;
     freeze(reason: string): Promise<void>;
     unfreeze(): Promise<void>;
     resetDailyLimit(): Promise<void>;

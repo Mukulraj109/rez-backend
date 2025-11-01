@@ -1,0 +1,12 @@
+import { Request, Response } from 'express';
+export declare const getAllEvents: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getEventById: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getEventsByCategory: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const searchEvents: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getFeaturedEvents: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const bookEventSlot: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getUserBookings: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const cancelBooking: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const toggleEventFavorite: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const shareEvent: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getEventAnalytics: (req: Request, res: Response, next: import("express").NextFunction) => void;

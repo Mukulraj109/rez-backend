@@ -16,6 +16,13 @@ router.use(auth_1.authenticate);
  */
 router.get('/balance', walletController_1.getWalletBalance);
 /**
+ * @route   POST /api/wallet/credit-loyalty-points
+ * @desc    Credit loyalty points to wallet as spendable coins
+ * @body    { amount, source }
+ * @access  Private
+ */
+router.post('/credit-loyalty-points', walletController_1.creditLoyaltyPoints);
+/**
  * @route   GET /api/wallet/transactions
  * @desc    Get user transaction history with filters
  * @query   page, limit, type, category, status, dateFrom, dateTo, minAmount, maxAmount
@@ -69,4 +76,70 @@ router.post('/payment', walletController_1.processPayment);
  * @access  Private
  */
 router.put('/settings', walletController_1.updateWalletSettings);
+/**
+ * @route   POST /api/wallet/initiate-payment
+ * @desc    Initiate payment gateway transaction
+ * @body    { amount, currency, paymentMethod, paymentMethodId, userDetails, metadata }
+ * @access  Private
+ */
+router.post('/initiate-payment', walletController_1.initiatePayment);
+/**
+ * @route   GET /api/wallet/payment-status/:paymentId
+ * @desc    Check payment status
+ * @access  Private
+ */
+router.get('/payment-status/:paymentId', walletController_1.checkPaymentStatus);
+/**
+ * @route   GET /api/wallet/payment-methods
+ * @desc    Get available payment methods
+ * @access  Private
+ */
+router.get('/payment-methods', walletController_1.getPaymentMethods);
+/**
+ * @route   POST /api/wallet/webhook/:gateway
+ * @desc    Handle payment gateway webhooks
+ * @access  Public (webhook endpoints)
+ */
+router.post('/webhook/:gateway', walletController_1.handlePaymentWebhook);
+/**
+ * @route   POST /api/wallet/paybill
+ * @desc    Add PayBill balance (prepaid with discount)
+ * @body    { amount, paymentMethod, paymentId, discountPercentage }
+ * @access  Private
+ */
+router.post('/paybill', walletController_1.addPayBillBalance);
+/**
+ * @route   GET /api/wallet/paybill/balance
+ * @desc    Get PayBill balance
+ * @access  Private
+ */
+router.get('/paybill/balance', walletController_1.getPayBillBalance);
+/**
+ * @route   POST /api/wallet/paybill/use
+ * @desc    Use PayBill balance for payment
+ * @body    { amount, orderId, description }
+ * @access  Private
+ */
+router.post('/paybill/use', walletController_1.usePayBillBalance);
+/**
+ * @route   GET /api/wallet/paybill/transactions
+ * @desc    Get PayBill transaction history
+ * @query   page, limit
+ * @access  Private
+ */
+router.get('/paybill/transactions', walletController_1.getPayBillTransactions);
+/**
+ * @route   POST /api/wallet/paybill/create-payment-intent
+ * @desc    Create Stripe Payment Intent for PayBill
+ * @body    { amount, discountPercentage }
+ * @access  Private
+ */
+router.post('/paybill/create-payment-intent', walletController_1.createPayBillPaymentIntent);
+/**
+ * @route   POST /api/wallet/paybill/confirm-payment
+ * @desc    Confirm PayBill payment and add balance
+ * @body    { paymentIntentId }
+ * @access  Private
+ */
+router.post('/paybill/confirm-payment', walletController_1.confirmPayBillPayment);
 exports.default = router;

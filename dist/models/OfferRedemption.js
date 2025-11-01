@@ -51,10 +51,10 @@ const OfferRedemptionSchema = new mongoose_1.Schema({
     // Redemption details
     redemptionCode: {
         type: String,
-        required: true,
         unique: true,
         uppercase: true,
         index: true,
+        sparse: true, // Allow null initially, will be generated in pre-save
     },
     redemptionType: {
         type: String,
@@ -70,8 +70,8 @@ const OfferRedemptionSchema = new mongoose_1.Schema({
     },
     expiryDate: {
         type: Date,
-        required: true,
         index: true,
+        // Will be calculated in pre-save hook if not provided
     },
     validityDays: {
         type: Number,

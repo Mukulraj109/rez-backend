@@ -75,6 +75,20 @@ const storesData = [
       repeatCustomers: 340
     },
     tags: ['fast-food', 'burgers', 'pizza', 'quick-delivery'],
+    videos: [
+      {
+        url: 'https://storage.googleapis.com/sample-videos/store-promo-1.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=400',
+        title: 'Quick Bites Express - Store Tour',
+        duration: 45
+      },
+      {
+        url: 'https://storage.googleapis.com/sample-videos/menu-showcase-1.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=400',
+        title: 'Our Signature Dishes',
+        duration: 30
+      }
+    ],
     isActive: true,
     isFeatured: true,
     isVerified: true
@@ -144,6 +158,20 @@ const storesData = [
       repeatCustomers: 280
     },
     tags: ['pizza', 'italian', 'fast-delivery', 'authentic'],
+    videos: [
+      {
+        url: 'https://storage.googleapis.com/sample-videos/pizza-making-1.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=400',
+        title: 'Fresh Pizza Making Process',
+        duration: 60
+      },
+      {
+        url: 'https://storage.googleapis.com/sample-videos/store-ambience-1.mp4',
+        thumbnail: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=400',
+        title: 'Store Ambience & Kitchen',
+        duration: 40
+      }
+    ],
     isActive: true,
     isFeatured: true,
     isVerified: true

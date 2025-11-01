@@ -16,9 +16,13 @@ const socket_io_1 = require("socket.io");
 const dotenv_1 = __importDefault(require("dotenv"));
 // Import database connection
 const database_1 = require("./config/database");
+// Import utilities
+const cloudinaryUtils_1 = require("./utils/cloudinaryUtils");
+// Import partner level maintenance service
+const partnerLevelMaintenanceService_1 = __importDefault(require("./services/partnerLevelMaintenanceService"));
 // Import middleware
 const errorHandler_1 = require("./middleware/errorHandler");
-// import { generalLimiter } from './middleware/rateLimiter'; // Disabled for development
+const rateLimiter_1 = require("./middleware/rateLimiter");
 // Import routes
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const productRoutes_1 = __importDefault(require("./routes/productRoutes"));
@@ -40,6 +44,8 @@ const syncRoutes_1 = __importDefault(require("./routes/syncRoutes"));
 const locationRoutes_1 = __importDefault(require("./routes/locationRoutes"));
 const walletRoutes_1 = __importDefault(require("./routes/walletRoutes"));
 const offerRoutes_1 = __importDefault(require("./routes/offerRoutes"));
+const offerCategoryRoutes_1 = __importDefault(require("./routes/offerCategoryRoutes"));
+const heroBannerRoutes_1 = __importDefault(require("./routes/heroBannerRoutes"));
 const voucherRoutes_1 = __importDefault(require("./routes/voucherRoutes"));
 const addressRoutes_1 = __importDefault(require("./routes/addressRoutes"));
 const paymentMethodRoutes_1 = __importDefault(require("./routes/paymentMethodRoutes"));
@@ -48,6 +54,26 @@ const achievementRoutes_1 = __importDefault(require("./routes/achievementRoutes"
 const activityRoutes_1 = __importDefault(require("./routes/activityRoutes"));
 const paymentRoutes_1 = __importDefault(require("./routes/paymentRoutes"));
 const stockRoutes_1 = __importDefault(require("./routes/stockRoutes"));
+const socialMediaRoutes_1 = __importDefault(require("./routes/socialMediaRoutes"));
+const eventRoutes_1 = __importDefault(require("./routes/eventRoutes"));
+const referralRoutes_1 = __importDefault(require("./routes/referralRoutes"));
+const profileRoutes_1 = __importDefault(require("./routes/profileRoutes"));
+const scratchCardRoutes_1 = __importDefault(require("./routes/scratchCardRoutes"));
+const couponRoutes_1 = __importDefault(require("./routes/couponRoutes"));
+const storePromoCoinRoutes_1 = __importDefault(require("./routes/storePromoCoinRoutes"));
+const razorpayRoutes_1 = __importDefault(require("./routes/razorpayRoutes"));
+const supportRoutes_1 = __importDefault(require("./routes/supportRoutes"));
+const cashbackRoutes_1 = __importDefault(require("./routes/cashbackRoutes"));
+const userProductRoutes_1 = __importDefault(require("./routes/userProductRoutes"));
+const discountRoutes_1 = __importDefault(require("./routes/discountRoutes"));
+const storeVoucherRoutes_1 = __importDefault(require("./routes/storeVoucherRoutes"));
+const outletRoutes_1 = __importDefault(require("./routes/outletRoutes"));
+const flashSaleRoutes_1 = __importDefault(require("./routes/flashSaleRoutes"));
+const subscriptionRoutes_1 = __importDefault(require("./routes/subscriptionRoutes"));
+const billRoutes_1 = __importDefault(require("./routes/billRoutes"));
+const activityFeedRoutes_1 = __importDefault(require("./routes/activityFeedRoutes"));
+const unifiedGamificationRoutes_1 = __importDefault(require("./routes/unifiedGamificationRoutes"));
+const partnerRoutes_1 = __importDefault(require("./routes/partnerRoutes"));
 const auth_1 = __importDefault(require("./merchantroutes/auth")); // Temporarily disabled
 const merchants_1 = __importDefault(require("./merchantroutes/merchants")); // Temporarily disabled
 const merchant_profile_1 = __importDefault(require("./merchantroutes/merchant-profile")); // Disabled due to missing properties
@@ -57,6 +83,7 @@ const uploads_1 = __importDefault(require("./merchantroutes/uploads")); // Tempo
 const orders_1 = __importDefault(require("./merchantroutes/orders")); // Temporarily disabled
 const cashback_1 = __importDefault(require("./merchantroutes/cashback")); // Temporarily disabled
 const dashboard_1 = __importDefault(require("./merchantroutes/dashboard")); // Temporarily disabled
+const sync_1 = __importDefault(require("./merchantroutes/sync"));
 const RealTimeService_1 = require("./merchantservices/RealTimeService"); // Temporarily disabled
 const ReportService_1 = require("./merchantservices/ReportService"); // Temporarily disabled
 const stockSocketService_1 = __importDefault(require("./services/stockSocketService"));
@@ -102,8 +129,8 @@ if (process.env.NODE_ENV !== 'test') {
     const morganFormat = process.env.NODE_ENV === 'production' ? 'combined' : 'dev';
     app.use((0, morgan_1.default)(morganFormat));
 }
-// Rate limiting
-//app.use(generalLimiter);
+// Rate limiting - Production security
+app.use(rateLimiter_1.generalLimiter);
 // Health check endpoint with API info
 app.get('/health', async (req, res) => {
     try {
@@ -116,8 +143,8 @@ app.get('/health', async (req, res) => {
             version: '1.0.0',
             api: {
                 prefix: API_PREFIX,
-                totalEndpoints: 119,
-                modules: 13,
+                totalEndpoints: 145,
+                modules: 15,
                 endpoints: {
                     auth: `${API_PREFIX}/auth`,
                     products: `${API_PREFIX}/products`,
@@ -138,7 +165,17 @@ app.get('/health', async (req, res) => {
                     paymentMethods: `${API_PREFIX}/payment-methods`,
                     userSettings: `${API_PREFIX}/user-settings`,
                     achievements: `${API_PREFIX}/achievements`,
-                    activities: `${API_PREFIX}/activities`
+                    activities: `${API_PREFIX}/activities`,
+                    referral: `${API_PREFIX}/referral`,
+                    coupons: `${API_PREFIX}/coupons`,
+                    support: `${API_PREFIX}/support`,
+                    cashback: `${API_PREFIX}/cashback`,
+                    discounts: `${API_PREFIX}/discounts`,
+                    storeVouchers: `${API_PREFIX}/store-vouchers`,
+                    outlets: `${API_PREFIX}/outlets`,
+                    flashSales: `${API_PREFIX}/flash-sales`,
+                    bills: `${API_PREFIX}/bills`,
+                    partner: `${API_PREFIX}/partner`
                 }
             }
         };
@@ -189,7 +226,18 @@ app.get('/api-info', (req, res) => {
             paymentMethods: `${API_PREFIX}/payment-methods`,
             userSettings: `${API_PREFIX}/user-settings`,
             achievements: `${API_PREFIX}/achievements`,
-            activities: `${API_PREFIX}/activities`
+            activities: `${API_PREFIX}/activities`,
+            referral: `${API_PREFIX}/referral`,
+            coupons: `${API_PREFIX}/coupons`,
+            support: `${API_PREFIX}/support`,
+            cashback: `${API_PREFIX}/cashback`,
+            discounts: `${API_PREFIX}/discounts`,
+            storeVouchers: `${API_PREFIX}/store-vouchers`,
+            outlets: `${API_PREFIX}/outlets`,
+            flashSales: `${API_PREFIX}/flash-sales`,
+            bills: `${API_PREFIX}/bills`,
+            partner: `${API_PREFIX}/partner`,
+            merchantSync: '/api/merchant/sync'
         },
         features: [
             'User Authentication (OTP-based)',
@@ -211,21 +259,27 @@ app.get('/api-info', (req, res) => {
             'Payment Methods',
             'User Settings & Preferences',
             'Achievement & Badges System',
-            'Activity Feed'
+            'Activity Feed',
+            'Coupon Management System',
+            'Customer Support & Tickets',
+            'User Cashback System',
+            'Flash Sales & Time-limited Offers',
+            'Merchant Data Synchronization'
         ],
         database: {
             models: [
                 'User', 'Category', 'Store', 'Product', 'Cart', 'Order',
                 'Video', 'Project', 'Transaction', 'Notification', 'Review', 'Wishlist',
                 'Wallet', 'Offer', 'VoucherBrand', 'UserVoucher', 'OfferRedemption',
-                'Address', 'PaymentMethod', 'UserSettings', 'UserAchievement', 'Activity'
+                'Address', 'PaymentMethod', 'UserSettings', 'UserAchievement', 'Activity',
+                'Coupon', 'UserCoupon', 'SupportTicket', 'FAQ', 'UserCashback'
             ],
-            totalModels: 22
+            totalModels: 27
         },
         implementation: {
-            completed: ['Authentication', 'Products', 'Cart', 'Categories', 'Stores', 'Orders', 'Videos', 'Projects', 'Notifications', 'Reviews', 'Wishlist', 'Wallet', 'Offers', 'Vouchers', 'Addresses', 'Payment Methods', 'User Settings', 'Achievements', 'Activities'],
-            totalEndpoints: 160,
-            apiModules: 18
+            completed: ['Authentication', 'Products', 'Cart', 'Categories', 'Stores', 'Orders', 'Videos', 'Projects', 'Notifications', 'Reviews', 'Wishlist', 'Wallet', 'Offers', 'Vouchers', 'Addresses', 'Payment Methods', 'User Settings', 'Achievements', 'Activities', 'Coupons', 'Support', 'Cashback'],
+            totalEndpoints: 194,
+            apiModules: 21
         }
     });
 });
@@ -265,6 +319,8 @@ app.use(`${API_PREFIX}/sync`, syncRoutes_1.default);
 app.use(`${API_PREFIX}/location`, locationRoutes_1.default);
 app.use(`${API_PREFIX}/wallet`, walletRoutes_1.default);
 app.use(`${API_PREFIX}/offers`, offerRoutes_1.default);
+app.use(`${API_PREFIX}/offer-categories`, offerCategoryRoutes_1.default);
+app.use(`${API_PREFIX}/hero-banners`, heroBannerRoutes_1.default);
 app.use(`${API_PREFIX}/vouchers`, voucherRoutes_1.default);
 app.use(`${API_PREFIX}/addresses`, addressRoutes_1.default);
 app.use(`${API_PREFIX}/payment-methods`, paymentMethodRoutes_1.default);
@@ -273,6 +329,36 @@ app.use(`${API_PREFIX}/achievements`, achievementRoutes_1.default);
 app.use(`${API_PREFIX}/activities`, activityRoutes_1.default);
 app.use(`${API_PREFIX}/payment`, paymentRoutes_1.default);
 app.use(`${API_PREFIX}/stock`, stockRoutes_1.default);
+app.use(`${API_PREFIX}/social-media`, socialMediaRoutes_1.default);
+app.use(`${API_PREFIX}/events`, eventRoutes_1.default);
+app.use(`${API_PREFIX}/referral`, referralRoutes_1.default);
+app.use(`${API_PREFIX}/user/profile`, profileRoutes_1.default);
+app.use(`${API_PREFIX}/scratch-cards`, scratchCardRoutes_1.default);
+app.use(`${API_PREFIX}/coupons`, couponRoutes_1.default);
+app.use(`${API_PREFIX}/store-promo-coins`, storePromoCoinRoutes_1.default);
+app.use(`${API_PREFIX}/razorpay`, razorpayRoutes_1.default);
+app.use(`${API_PREFIX}/support`, supportRoutes_1.default);
+app.use(`${API_PREFIX}/cashback`, cashbackRoutes_1.default);
+app.use(`${API_PREFIX}/user-products`, userProductRoutes_1.default);
+app.use(`${API_PREFIX}/discounts`, discountRoutes_1.default);
+app.use(`${API_PREFIX}/store-vouchers`, storeVoucherRoutes_1.default);
+app.use(`${API_PREFIX}/outlets`, outletRoutes_1.default);
+// Flash Sales Routes - Time-limited promotional offers
+app.use(`${API_PREFIX}/flash-sales`, flashSaleRoutes_1.default);
+// Subscription Routes - Premium membership tiers
+app.use(`${API_PREFIX}/subscriptions`, subscriptionRoutes_1.default);
+// Bill Upload & Verification Routes - Offline purchase receipts for cashback
+app.use(`${API_PREFIX}/bills`, billRoutes_1.default);
+console.log('✅ Bill routes registered at /api/bills');
+// Unified Gamification Routes - All gamification functionality under one endpoint
+app.use(`${API_PREFIX}/gamification`, unifiedGamificationRoutes_1.default);
+console.log('✅ Unified gamification routes registered at /api/gamification');
+// Social Feed Routes - Activity feed, follow system, likes, comments
+app.use(`${API_PREFIX}/social`, activityFeedRoutes_1.default);
+console.log('✅ Social feed routes registered at /api/social');
+// Partner Program Routes - Partner levels, rewards, milestones, earnings
+app.use(`${API_PREFIX}/partner`, partnerRoutes_1.default);
+console.log('✅ Partner program routes registered at /api/partner');
 // Merchant API Routes
 app.use('/api/merchant/auth', auth_1.default); // Merchant auth routes
 app.use('/api/merchant/categories', categories_1.default);
@@ -283,6 +369,8 @@ app.use('/api/merchant/uploads', uploads_1.default);
 app.use('/api/merchant/orders', orders_1.default);
 app.use('/api/merchant/cashback', cashback_1.default);
 app.use('/api/merchant/dashboard', dashboard_1.default);
+// Merchant Sync Routes - Syncs merchant data to customer app
+app.use('/api/merchant/sync', sync_1.default);
 // // 404 handler
 app.use((req, res) => {
     res.status(404).json({
@@ -322,8 +410,8 @@ global.io = io;
 // Initialize stock socket service
 stockSocketService_1.default.initialize(io);
 // Initialize real-time service
-const realTimeService = RealTimeService_1.RealTimeService.getInstance(io);
-global.realTimeService = realTimeService;
+const realTimeServiceInstance = RealTimeService_1.RealTimeService.getInstance(io);
+global.realTimeService = realTimeServiceInstance;
 // Initialize report service
 ReportService_1.ReportService.initialize();
 // Start server function
@@ -332,6 +420,16 @@ async function startServer() {
         // Connect to database
         console.log('🔄 Connecting to database...');
         await (0, database_1.connectDatabase)();
+        // Validate Cloudinary configuration
+        const cloudinaryConfigured = (0, cloudinaryUtils_1.validateCloudinaryConfig)();
+        if (!cloudinaryConfigured) {
+            console.warn('⚠️  Cloudinary not configured. Bill upload features will not work.');
+            console.warn('   Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET in .env');
+        }
+        // Initialize partner level maintenance cron jobs (FIXED: Issue #2, #4, #5)
+        console.log('🔄 Initializing partner level maintenance...');
+        partnerLevelMaintenanceService_1.default.startAll();
+        console.log('✅ Partner level maintenance cron jobs started');
         // Start HTTP server (with Socket.IO attached)
         server.listen(Number(PORT), '0.0.0.0', () => {
             const os = require('os');
@@ -372,7 +470,14 @@ async function startServer() {
             console.log(`   ⚙️  User Settings: http://localhost:${PORT}${API_PREFIX}/user-settings`);
             console.log(`   🏆 Achievements: http://localhost:${PORT}${API_PREFIX}/achievements`);
             console.log(`   📊 Activities: http://localhost:${PORT}${API_PREFIX}/activities`);
-            console.log(`\n🎉 Phase 6 Complete - Profile & Account Management APIs Implemented!`);
+            console.log(`   🎫 Coupons: http://localhost:${PORT}${API_PREFIX}/coupons`);
+            console.log(`   🆘 Support: http://localhost:${PORT}${API_PREFIX}/support`);
+            console.log(`   💸 Discounts: http://localhost:${PORT}${API_PREFIX}/discounts`);
+            console.log(`   🎟️  Store Vouchers: http://localhost:${PORT}${API_PREFIX}/store-vouchers`);
+            console.log(`   📍 Outlets: http://localhost:${PORT}${API_PREFIX}/outlets`);
+            console.log(`   ⚡ Flash Sales: http://localhost:${PORT}${API_PREFIX}/flash-sales`);
+            console.log(`   🔄 Merchant Sync: http://localhost:${PORT}/api/merchant/sync`);
+            console.log(`\n🎉 Phase 7 Complete - Product Page Features Implemented!`);
             console.log(`   ✅ Authentication APIs (8 endpoints)`);
             console.log(`   ✅ Product APIs (8 endpoints)`);
             console.log(`   ✅ Cart APIs (11 endpoints)`);
@@ -392,8 +497,13 @@ async function startServer() {
             console.log(`   ✅ User Settings APIs (8 endpoints)`);
             console.log(`   ✅ Achievement APIs (6 endpoints)`);
             console.log(`   ✅ Activity APIs (7 endpoints)`);
-            console.log(`   🎯 Total Implemented: ~160 endpoints across 18 modules`);
-            console.log(`\n🚀 Phase 6 Complete - Ready for Frontend Integration!`);
+            console.log(`   ✅ Coupon APIs (9 endpoints)`);
+            console.log(`   ✅ Support APIs (17 endpoints)`);
+            console.log(`   ✅ Discount APIs (8 endpoints)`);
+            console.log(`   ✅ Store Voucher APIs (8 endpoints)`);
+            console.log(`   ✅ Outlet APIs (9 endpoints)`);
+            console.log(`   🎯 Total Implemented: ~211 endpoints across 23 modules`);
+            console.log(`\n🚀 Phase 7 Complete - Product Page Features Ready for Frontend Integration!`);
         });
         // Graceful shutdown handling
         const shutdown = (signal) => {

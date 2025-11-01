@@ -33,6 +33,12 @@ export interface IOrderPayment {
     paidAt?: Date;
     refundId?: string;
     refundedAt?: Date;
+    coinsUsed?: {
+        wasilCoins?: number;
+        promoCoins?: number;
+        storePromoCoins?: number;
+        totalCoinsValue?: number;
+    };
 }
 export interface IOrderAddress {
     name: string;
@@ -132,6 +138,7 @@ export interface IOrder extends Document {
     };
     estimatedDeliveryTime?: Date;
     deliveredAt?: Date;
+    totalAmount?: number;
     rating?: {
         score: number;
         review?: string;

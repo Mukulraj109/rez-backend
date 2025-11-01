@@ -2,7 +2,7 @@ import { Document, Types } from 'mongoose';
 import { Model } from 'mongoose';
 export interface ICartItem {
     product: Types.ObjectId;
-    store: Types.ObjectId;
+    store: Types.ObjectId | null;
     quantity: number;
     variant?: {
         type: string;
@@ -23,6 +23,20 @@ export interface IReservedItem {
     };
     reservedAt: Date;
     expiresAt: Date;
+}
+export interface ILockedItem {
+    product: Types.ObjectId;
+    store: Types.ObjectId;
+    quantity: number;
+    variant?: {
+        type: string;
+        value: string;
+    };
+    lockedPrice: number;
+    originalPrice?: number;
+    lockedAt: Date;
+    expiresAt: Date;
+    notes?: string;
 }
 export interface ICartModel extends Model<ICart> {
     getActiveCart(userId: string): Promise<ICart | null>;
@@ -51,6 +65,7 @@ export interface ICart extends Document {
     user: Types.ObjectId;
     items: ICartItem[];
     reservedItems: IReservedItem[];
+    lockedItems: ILockedItem[];
     totals: ICartTotals;
     coupon?: ICartCoupon;
     deliveryAddress?: Types.ObjectId;
@@ -68,6 +83,9 @@ export interface ICart extends Document {
     removeCoupon(): Promise<void>;
     clearCart(): Promise<void>;
     isExpired(): boolean;
+    lockItem(productId: string, quantity: number, variant?: any, lockDuration?: number): Promise<void>;
+    unlockItem(productId: string, variant?: any): Promise<void>;
+    moveLockedToCart(productId: string, variant?: any): Promise<void>;
     itemCount: number;
     storeCount: number;
 }

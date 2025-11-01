@@ -163,7 +163,12 @@ const OrderSchema = new mongoose_1.Schema({
         failureReason: String,
         paidAt: Date,
         refundId: String,
-        refundedAt: Date
+        refundedAt: Date,
+        coinsUsed: {
+            wasilCoins: { type: Number, default: 0, min: 0 },
+            promoCoins: { type: Number, default: 0, min: 0 },
+            totalCoinsValue: { type: Number, default: 0, min: 0 }
+        }
     },
     delivery: {
         method: {
@@ -377,6 +382,9 @@ OrderSchema.virtual('estimatedDeliveryTime').get(function () {
 });
 OrderSchema.virtual('deliveredAt').get(function () {
     return this.delivery.deliveredAt;
+});
+OrderSchema.virtual('totalAmount').get(function () {
+    return this.totals.total;
 });
 // Pre-save hook to generate order number and add timeline entry
 OrderSchema.pre('save', async function (next) {

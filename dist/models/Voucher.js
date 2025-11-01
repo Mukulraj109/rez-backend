@@ -90,6 +90,12 @@ const VoucherBrandSchema = new mongoose_1.Schema({
         lowercase: true,
         index: true,
     },
+    // Store link (optional - not all vouchers need to be linked to stores)
+    store: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: 'Store',
+        index: true,
+    },
     // Flags
     isNewlyAdded: {
         type: Boolean,
@@ -136,6 +142,7 @@ const VoucherBrandSchema = new mongoose_1.Schema({
 VoucherBrandSchema.index({ category: 1, isActive: 1 });
 VoucherBrandSchema.index({ isFeatured: 1, isActive: 1 });
 VoucherBrandSchema.index({ isNewlyAdded: 1, isActive: 1 });
+VoucherBrandSchema.index({ store: 1, isActive: 1 });
 VoucherBrandSchema.index({ name: 'text', description: 'text' });
 // UserVoucher Schema
 const UserVoucherSchema = new mongoose_1.Schema({

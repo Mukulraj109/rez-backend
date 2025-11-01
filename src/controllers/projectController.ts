@@ -8,6 +8,93 @@ import {
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+import achievementService from '../services/achievementService';
+import { sendCreated } from '../utils/response';
+
+// Submit a project
+export const submitProject = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.userId!;
+  const { 
+    projectId, 
+    content, 
+    contentType = 'text',
+    description,
+    metadata 
+  } = req.body;
+
+  try {
+    console.log('📋 [PROJECT] Submitting project for user:', userId);
+
+    // Validate required fields
+    if (!projectId || !content) {
+      return sendBadRequest(res, 'Project ID and content are required');
+    }
+
+    // Check if project exists
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return sendNotFound(res, 'Project not found');
+    }
+
+    // Check if project is still accepting submissions
+    if (project.status !== 'active') {
+      return sendBadRequest(res, 'Project is no longer accepting submissions');
+    }
+
+    // Check if user has already submitted to this project
+    const existingSubmission = project.submissions.find(
+      sub => sub.user.toString() === userId.toString()
+    );
+
+    if (existingSubmission) {
+      return sendBadRequest(res, 'You have already submitted to this project');
+    }
+
+    // Create submission with proper structure
+    const submission = {
+      user: new mongoose.Types.ObjectId(userId),
+      submittedAt: new Date(),
+      content: {
+        type: contentType,
+        data: content,
+        metadata: metadata || {}
+      },
+      status: 'pending' as const,
+      paidAmount: 0
+    };
+
+    // Add submission to project
+    project.submissions.push(submission);
+    await project.save();
+
+    console.log('✅ [PROJECT] Project submission created successfully');
+
+    // Trigger achievement update for project submission
+    try {
+      await achievementService.triggerAchievementUpdate(userId, 'project_submitted');
+    } catch (error) {
+      console.error('❌ [PROJECT] Error triggering achievement update:', error);
+    }
+
+    // Get the created submission with its generated _id
+    const createdSubmission = project.submissions[project.submissions.length - 1];
+
+    sendCreated(res, {
+      submission: {
+        id: createdSubmission._id,
+        projectId: project._id,
+        projectTitle: project.title,
+        status: createdSubmission.status,
+        submittedAt: createdSubmission.submittedAt,
+        contentType: createdSubmission.content.type
+      }
+    }, 'Project submitted successfully');
+
+  } catch (error) {
+    console.error('❌ [PROJECT] Submit project error:', error);
+    throw new AppError('Failed to submit project', 500);
+  }
+});
 
 // Get all projects with filtering
 export const getProjects = asyncHandler(async (req: Request, res: Response) => {

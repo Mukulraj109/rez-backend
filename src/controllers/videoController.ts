@@ -9,6 +9,115 @@ import {
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+import achievementService from '../services/achievementService';
+import { sendCreated } from '../utils/response';
+
+// Create a new video
+export const createVideo = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.userId!;
+  const { 
+    title, 
+    description, 
+    videoUrl, 
+    thumbnailUrl, 
+    category, 
+    tags, 
+    products, 
+    duration,
+    isPublic = true 
+  } = req.body;
+
+  try {
+    console.log('🎥 [VIDEO] Creating video for user:', userId);
+
+    // Validate required fields
+    if (!title || !videoUrl) {
+      return sendBadRequest(res, 'Title and video URL are required');
+    }
+
+    // Create new video
+    const video = new Video({
+      title,
+      description: description || '',
+      videoUrl,
+      thumbnail: thumbnailUrl || '',
+      creator: userId,
+      category: category || 'general',
+      tags: tags || [],
+      hashtags: tags || [], // Use tags for hashtags as well
+      products: products || [],
+      stores: [], // Empty stores array for now
+      isPublished: isPublic,
+      isApproved: true, // Auto-approve for now
+      isFeatured: false,
+      isTrending: false,
+      isSponsored: false,
+      moderationStatus: 'approved',
+      analytics: {
+        views: 0,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        engagement: 0
+      },
+      engagement: {
+        views: 0,
+        likes: [],
+        shares: 0
+      },
+      metadata: {
+        duration: duration || 0,
+        fileSize: 0,
+        resolution: '1080p',
+        format: 'mp4',
+        uploadedAt: new Date(),
+        lastModified: new Date()
+      },
+      processing: {
+        status: 'completed',
+        progress: 100,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        error: null
+      }
+    });
+
+    await video.save();
+
+    console.log('✅ [VIDEO] Video created successfully:', video._id);
+
+    // Trigger achievement update for video creation
+    try {
+      await achievementService.triggerAchievementUpdate(userId, 'video_created');
+    } catch (error) {
+      console.error('❌ [VIDEO] Error triggering achievement update:', error);
+    }
+
+    // Populate creator info for response
+    await video.populate('creator', 'profile.firstName profile.lastName profile.avatar');
+
+    sendCreated(res, {
+      video: {
+        id: video._id,
+        title: video.title,
+        description: video.description,
+        videoUrl: video.videoUrl,
+        thumbnail: video.thumbnail,
+        category: video.category,
+        tags: video.tags,
+        duration: video.metadata.duration,
+        isPublished: video.isPublished,
+        creator: video.creator,
+        analytics: video.analytics,
+        createdAt: video.createdAt
+      }
+    }, 'Video created successfully');
+
+  } catch (error) {
+    console.error('❌ [VIDEO] Create video error:', error);
+    throw new AppError('Failed to create video', 500);
+  }
+});
 
 // Get all videos with filtering
 export const getVideos = asyncHandler(async (req: Request, res: Response) => {

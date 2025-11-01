@@ -19,9 +19,10 @@ router.post('/refresh-token',
 // authLimiter, // Disabled for development 
 (0, validation_1.validate)(validation_2.authSchemas.refreshToken), authController_1.refreshToken);
 // Protected routes
-router.post('/logout', auth_1.authenticate, authController_1.logout);
+router.post('/logout', authController_1.logout);
 router.get('/me', auth_1.authenticate, authController_1.getCurrentUser);
 router.put('/profile', auth_1.authenticate, (0, validation_1.validate)(validation_2.authSchemas.updateProfile), authController_1.updateProfile);
+router.put('/change-password', auth_1.authenticate, authController_1.changePassword);
 router.post('/complete-onboarding', auth_1.authenticate, (0, validation_1.validate)(validation_2.authSchemas.updateProfile), authController_1.completeOnboarding);
 router.delete('/account', auth_1.authenticate, 
 // securityLimiter, // Disabled for development

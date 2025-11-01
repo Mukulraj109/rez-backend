@@ -1,0 +1,2104 @@
+[
+  {
+    "store": "Alliance Supermart",
+    "productCount": 2,
+    "products": [
+      {
+        "id": "6905afbe5f8c7aa14aa29a18",
+        "name": "Premium Rice 5kg",
+        "sku": "ALLPRE750261",
+        "brand": "GrainSelect",
+        "price": 549,
+        "originalPrice": 699,
+        "discount": 21,
+        "stock": 95,
+        "rating": 4.3,
+        "reviews": 21,
+        "tags": [
+          "rice",
+          "grains",
+          "food",
+          "staples"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:10.618Z"
+      },
+      {
+        "id": "6905afbe5f8c7aa14aa29a16",
+        "name": "Organic Vegetables Pack",
+        "sku": "ALLORG781990",
+        "brand": "FreshFarm",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 205,
+        "rating": 3.5,
+        "reviews": 125,
+        "tags": [
+          "organic",
+          "vegetables",
+          "fresh",
+          "healthy"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:10.581Z"
+      }
+    ]
+  },
+  {
+    "store": "BookWorld",
+    "productCount": 5,
+    "products": [
+      {
+        "id": "68ece1f934b0337d12aaa6e5",
+        "name": "Gourmet Pizza Margherita",
+        "price": 499,
+        "originalPrice": 599,
+        "discount": 17,
+        "stock": 50,
+        "rating": 4.7,
+        "reviews": 89,
+        "tags": [
+          "food",
+          "italian",
+          "pizza",
+          "dining"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-10-13T11:26:49.976Z"
+      },
+      {
+        "id": "6905afbb5f8c7aa14aa2996e",
+        "name": "Mystery Thriller Novel",
+        "sku": "BOOMYS948851",
+        "brand": "PageTurner",
+        "price": 399,
+        "originalPrice": 599,
+        "discount": 33,
+        "stock": 249,
+        "rating": 3.7,
+        "reviews": 36,
+        "tags": [
+          "book",
+          "thriller",
+          "mystery",
+          "fiction"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:07.629Z"
+      },
+      {
+        "id": "6905afbb5f8c7aa14aa29969",
+        "name": "The Art of Programming",
+        "sku": "BOOTHE414590",
+        "brand": "TechBooks",
+        "price": 899,
+        "originalPrice": 1299,
+        "discount": 31,
+        "stock": 214,
+        "rating": 3.4,
+        "reviews": 199,
+        "tags": [
+          "book",
+          "programming",
+          "technology",
+          "education"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:07.580Z"
+      },
+      {
+        "id": "6905afbb5f8c7aa14aa29970",
+        "name": "Self-Help Guide",
+        "sku": "BOOSEL241052",
+        "brand": "MindGrowth",
+        "price": 499,
+        "originalPrice": 699,
+        "discount": 29,
+        "stock": 161,
+        "rating": 3.5,
+        "reviews": 189,
+        "tags": [
+          "book",
+          "self-help",
+          "motivation",
+          "personal-growth"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:07.671Z"
+      },
+      {
+        "id": "68ecdae37084846c4f4f71c4",
+        "name": "Premium Ceramic Mug Set",
+        "sku": "PRE99555007",
+        "brand": "HomeEssentials",
+        "stock": 100,
+        "tags": [
+          "mug",
+          "ceramic",
+          "coffee",
+          "tea",
+          "kitchen"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-10-13T10:56:35.626Z"
+      }
+    ]
+  },
+  {
+    "store": "Budget Boutique",
+    "productCount": 2,
+    "products": [
+      {
+        "id": "6905afbd5f8c7aa14aa299d2",
+        "name": "Designer Handbag",
+        "sku": "BUDDES816071",
+        "brand": "LuxeBags",
+        "price": 5999,
+        "originalPrice": 8999,
+        "discount": 33,
+        "stock": 132,
+        "rating": 4.7,
+        "reviews": 132,
+        "tags": [
+          "handbag",
+          "accessories",
+          "leather",
+          "designer"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.179Z"
+      },
+      {
+        "id": "6905afbd5f8c7aa14aa299d0",
+        "name": "Classic Denim Jacket",
+        "sku": "BUDCLA741670",
+        "brand": "UrbanStyle",
+        "price": 2499,
+        "originalPrice": 3999,
+        "discount": 38,
+        "stock": 195,
+        "rating": 3,
+        "reviews": 32,
+        "tags": [
+          "jacket",
+          "denim",
+          "casual",
+          "fashion"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.141Z"
+      }
+    ]
+  },
+  {
+    "store": "EcoLife Organics",
+    "productCount": 2,
+    "products": [
+      {
+        "id": "6905afbe5f8c7aa14aa299fe",
+        "name": "Organic Tea Leaves",
+        "sku": "ECOORG899111",
+        "brand": "TeaGarden",
+        "price": 349,
+        "originalPrice": 449,
+        "discount": 22,
+        "stock": 115,
+        "rating": 4.6,
+        "reviews": 137,
+        "tags": [
+          "tea",
+          "organic",
+          "beverage",
+          "natural"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:10.101Z"
+      },
+      {
+        "id": "6905afbe5f8c7aa14aa299fc",
+        "name": "Organic Honey 500g",
+        "sku": "ECOORG139780",
+        "brand": "NaturePure",
+        "price": 399,
+        "originalPrice": 499,
+        "discount": 20,
+        "stock": 222,
+        "rating": 4.9,
+        "reviews": 110,
+        "tags": [
+          "honey",
+          "organic",
+          "natural",
+          "healthy"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:10.061Z"
+      }
+    ]
+  },
+  {
+    "store": "EconoBooks & More",
+    "productCount": 2,
+    "products": [
+      {
+        "id": "6905afbd5f8c7aa14aa299d6",
+        "name": "Mystery Thriller Novel",
+        "sku": "ECOMYS489311",
+        "brand": "PageTurner",
+        "price": 399,
+        "originalPrice": 599,
+        "discount": 33,
+        "stock": 179,
+        "rating": 4.9,
+        "reviews": 51,
+        "tags": [
+          "book",
+          "thriller",
+          "mystery",
+          "fiction"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.257Z"
+      },
+      {
+        "id": "6905afbd5f8c7aa14aa299d4",
+        "name": "The Art of Programming",
+        "sku": "ECOTHE940540",
+        "brand": "TechBooks",
+        "price": 899,
+        "originalPrice": 1299,
+        "discount": 31,
+        "stock": 221,
+        "rating": 4.2,
+        "reviews": 132,
+        "tags": [
+          "book",
+          "programming",
+          "technology",
+          "education"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.218Z"
+      }
+    ]
+  },
+  {
+    "store": "Elite Fashion Studio",
+    "productCount": 2,
+    "products": [
+      {
+        "id": "6905afbd5f8c7aa14aa299e0",
+        "name": "Designer Handbag",
+        "sku": "ELIDES882641",
+        "brand": "LuxeBags",
+        "price": 5999,
+        "originalPrice": 8999,
+        "discount": 33,
+        "stock": 174,
+        "rating": 4.3,
+        "reviews": 74,
+        "tags": [
+          "handbag",
+          "accessories",
+          "leather",
+          "designer"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.476Z"
+      },
+      {
+        "id": "6905afbd5f8c7aa14aa299de",
+        "name": "Classic Denim Jacket",
+        "sku": "ELICLA501700",
+        "brand": "UrbanStyle",
+        "price": 2499,
+        "originalPrice": 3999,
+        "discount": 38,
+        "stock": 209,
+        "rating": 3.6,
+        "reviews": 171,
+        "tags": [
+          "jacket",
+          "denim",
+          "casual",
+          "fashion"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.439Z"
+      }
+    ]
+  },
+  {
+    "store": "Entertainment Hub",
+    "productCount": 3,
+    "products": [
+      {
+        "id": "6905afbc5f8c7aa14aa2998f",
+        "name": "Water Bottle 1L",
+        "sku": "ENTWAT309572",
+        "brand": "HydroLife",
+        "price": 499,
+        "originalPrice": 699,
+        "discount": 29,
+        "stock": 107,
+        "rating": 3.3,
+        "reviews": 103,
+        "tags": [
+          "bottle",
+          "water",
+          "hydration",
+          "eco-friendly"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.117Z"
+      },
+      {
+        "id": "6905afbc5f8c7aa14aa2998b",
+        "name": "LED Desk Lamp",
+        "sku": "ENTLED295891",
+        "brand": "BrightLight",
+        "price": 799,
+        "originalPrice": 999,
+        "discount": 20,
+        "stock": 80,
+        "rating": 4.5,
+        "reviews": 71,
+        "tags": [
+          "lamp",
+          "led",
+          "lighting",
+          "desk"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-11-01T06:59:08.069Z"
+      },
+      {
+        "id": "6905afbc5f8c7aa14aa29988",
+        "name": "Multipurpose Storage Box",
+        "sku": "ENTMUL303990",
+        "brand": "HomeOrganize",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 225,
+        "rating": 4.1,
+        "reviews": 84,
+        "tags": [
+          "storage",
+          "organization",
+          "home",
+          "utility"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-11-01T06:59:08.019Z"
+      }
+    ]
+  },
+  {
+    "store": "Fashion Hub",
+    "productCount": 4,
+    "products": [
+      {
+        "id": "6905afbb5f8c7aa14aa2995d",
+        "name": "Designer Handbag",
+        "sku": "FASDES109541",
+        "brand": "LuxeBags",
+        "price": 5999,
+        "originalPrice": 8999,
+        "discount": 33,
+        "stock": 86,
+        "rating": 3.2,
+        "reviews": 54,
+        "tags": [
+          "handbag",
+          "accessories",
+          "leather",
+          "designer"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:07.435Z"
+      },
+      {
+        "id": "6905afbb5f8c7aa14aa2995a",
+        "name": "Classic Denim Jacket",
+        "sku": "FASCLA339160",
+        "brand": "UrbanStyle",
+        "price": 2499,
+        "originalPrice": 3999,
+        "discount": 38,
+        "stock": 58,
+        "rating": 4.8,
+        "reviews": 49,
+        "tags": [
+          "jacket",
+          "denim",
+          "casual",
+          "fashion"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:07.385Z"
+      },
+      {
+        "id": "68ecdae37084846c4f4f71c2",
+        "name": "Classic Denim Jacket",
+        "sku": "CLA99555005",
+        "brand": "UrbanStyle",
+        "stock": 100,
+        "tags": [
+          "jacket",
+          "denim",
+          "vintage",
+          "casual",
+          "outdoor"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-10-13T10:56:35.625Z"
+      },
+      {
+        "id": "68ecdae37084846c4f4f71c1",
+        "name": "Premium Cotton T-Shirt",
+        "sku": "PRE99555004",
+        "brand": "FashionForward",
+        "stock": 100,
+        "tags": [
+          "t-shirt",
+          "cotton",
+          "casual",
+          "comfortable",
+          "everyday"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-10-13T10:56:35.625Z"
+      }
+    ]
+  },
+  {
+    "store": "FlashPharma Plus",
+    "productCount": 2,
+    "products": [
+      {
+        "id": "6905afbc5f8c7aa14aa299ad",
+        "name": "Digital Thermometer",
+        "sku": "FLADIG128731",
+        "brand": "MediCare",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 156,
+        "rating": 3.9,
+        "reviews": 132,
+        "tags": [
+          "thermometer",
+          "medical",
+          "health",
+          "diagnostic"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.525Z"
+      },
+      {
+        "id": "6905afbc5f8c7aa14aa299a9",
+        "name": "Vitamin C Tablets",
+        "sku": "FLAVIT658950",
+        "brand": "HealthPlus",
+        "price": 399,
+        "originalPrice": 499,
+        "discount": 20,
+        "stock": 160,
+        "rating": 5,
+        "reviews": 175,
+        "tags": [
+          "vitamins",
+          "health",
+          "supplements",
+          "immunity"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.479Z"
+      }
+    ]
+  },
+  {
+    "store": "Foodie Paradise",
+    "productCount": 6,
+    "products": [
+      {
+        "id": "6905afbb5f8c7aa14aa29965",
+        "name": "Gourmet Pizza Margherita",
+        "sku": "FOOGOU538151",
+        "brand": "PizzaHaven",
+        "price": 449,
+        "originalPrice": 599,
+        "discount": 25,
+        "stock": 211,
+        "rating": 3.9,
+        "reviews": 59,
+        "tags": [
+          "pizza",
+          "italian",
+          "cheese",
+          "gourmet"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:07.531Z"
+      },
+      {
+        "id": "6905afbb5f8c7aa14aa29962",
+        "name": "Organic Quinoa Bowl",
+        "sku": "FOOORG377020",
+        "brand": "HealthyBites",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 68,
+        "rating": 4,
+        "reviews": 86,
+        "tags": [
+          "healthy",
+          "organic",
+          "quinoa",
+          "bowl"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:07.474Z"
+      },
+      {
+        "id": "68ece2985f7c932f12137c6f",
+        "name": "Sushi Platter Deluxe",
+        "price": 749,
+        "originalPrice": 899,
+        "discount": 17,
+        "stock": 30,
+        "rating": 4.9,
+        "reviews": 45,
+        "tags": [
+          "sushi",
+          "japanese",
+          "seafood",
+          "premium"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-10-13T11:29:28.298Z"
+      },
+      {
+        "id": "68ece2985f7c932f12137c6e",
+        "name": "Artisan Coffee & Pastry",
+        "price": 249,
+        "originalPrice": 299,
+        "discount": 17,
+        "stock": 100,
+        "rating": 4.8,
+        "reviews": 67,
+        "tags": [
+          "coffee",
+          "breakfast",
+          "pastry",
+          "cafe"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-10-13T11:29:28.298Z"
+      },
+      {
+        "id": "68ecdae37084846c4f4f71c8",
+        "name": "Professional Yoga Mat",
+        "sku": "PRO99555011",
+        "brand": "FitnessPro",
+        "stock": 100,
+        "tags": [
+          "yoga",
+          "mat",
+          "fitness",
+          "exercise",
+          "eco-friendly"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-10-13T10:56:35.627Z"
+      },
+      {
+        "id": "68ecdae37084846c4f4f71c7",
+        "name": "Data Science Handbook",
+        "sku": "DAT99555010",
+        "brand": "DataPublish",
+        "stock": 100,
+        "tags": [
+          "book",
+          "data-science",
+          "analytics",
+          "python",
+          "education"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-10-13T10:56:35.627Z"
+      }
+    ]
+  },
+  {
+    "store": "Gourmet Delights Premium",
+    "productCount": 3,
+    "products": [
+      {
+        "id": "6905afbd5f8c7aa14aa299ee",
+        "name": "Gourmet Pizza Margherita",
+        "sku": "GOUGOU918991",
+        "brand": "PizzaHaven",
+        "price": 449,
+        "originalPrice": 599,
+        "discount": 25,
+        "stock": 236,
+        "rating": 3.3,
+        "reviews": 125,
+        "tags": [
+          "pizza",
+          "italian",
+          "cheese",
+          "gourmet"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.774Z"
+      },
+      {
+        "id": "6905afbd5f8c7aa14aa299ec",
+        "name": "Organic Quinoa Bowl",
+        "sku": "GOUORG118560",
+        "brand": "HealthyBites",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 194,
+        "rating": 3.4,
+        "reviews": 195,
+        "tags": [
+          "healthy",
+          "organic",
+          "quinoa",
+          "bowl"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.729Z"
+      },
+      {
+        "id": "6905afbd5f8c7aa14aa299f0",
+        "name": "Fresh Fruit Smoothie",
+        "sku": "GOUFRE230452",
+        "brand": "FreshBlend",
+        "price": 199,
+        "originalPrice": 249,
+        "discount": 20,
+        "stock": 204,
+        "rating": 3.5,
+        "reviews": 67,
+        "tags": [
+          "smoothie",
+          "healthy",
+          "fresh",
+          "drinks"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-11-01T06:59:09.814Z"
+      }
+    ]
+  },
+  {
+    "store": "Grand Galleria",
+    "productCount": 2,
+    "products": [
+      {
+        "id": "6905afbe5f8c7aa14aa29a0e",
+        "name": "LED Desk Lamp",
+        "sku": "GRALED516161",
+        "brand": "BrightLight",
+        "price": 799,
+        "originalPrice": 999,
+        "discount": 20,
+        "stock": 144,
+        "rating": 3.9,
+        "reviews": 123,
+        "tags": [
+          "lamp",
+          "led",
+          "lighting",
+          "desk"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:10.422Z"
+      },
+      {
+        "id": "6905afbe5f8c7aa14aa29a0c",
+        "name": "Multipurpose Storage Box",
+        "sku": "GRAMUL379270",
+        "brand": "HomeOrganize",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 101,
+        "rating": 3.8,
+        "reviews": 191,
+        "tags": [
+          "storage",
+          "organization",
+          "home",
+          "utility"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:10.384Z"
+      }
+    ]
+  },
+  {
+    "store": "GreenHarvest Organic",
+    "productCount": 3,
+    "products": [
+      {
+        "id": "6905afbd5f8c7aa14aa299f6",
+        "name": "Organic Coconut Oil",
+        "sku": "GREORG580422",
+        "brand": "CocoNatural",
+        "price": 449,
+        "originalPrice": 599,
+        "discount": 25,
+        "stock": 91,
+        "rating": 3.5,
+        "reviews": 64,
+        "tags": [
+          "coconut-oil",
+          "organic",
+          "natural",
+          "healthy"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.931Z"
+      },
+      {
+        "id": "6905afbd5f8c7aa14aa299f4",
+        "name": "Organic Tea Leaves",
+        "sku": "GREORG210141",
+        "brand": "TeaGarden",
+        "price": 349,
+        "originalPrice": 449,
+        "discount": 22,
+        "stock": 96,
+        "rating": 3.4,
+        "reviews": 11,
+        "tags": [
+          "tea",
+          "organic",
+          "beverage",
+          "natural"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.893Z"
+      },
+      {
+        "id": "6905afbd5f8c7aa14aa299f2",
+        "name": "Organic Honey 500g",
+        "sku": "GREORG318130",
+        "brand": "NaturePure",
+        "price": 399,
+        "originalPrice": 499,
+        "discount": 20,
+        "stock": 57,
+        "rating": 4.7,
+        "reviews": 202,
+        "tags": [
+          "honey",
+          "organic",
+          "natural",
+          "healthy"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.854Z"
+      }
+    ]
+  },
+  {
+    "store": "Instant Electronics",
+    "productCount": 2,
+    "products": [
+      {
+        "id": "6905afbc5f8c7aa14aa299bb",
+        "name": "Wireless Bluetooth Earbuds",
+        "sku": "INSWIR143231",
+        "brand": "SoundMax",
+        "price": 4999,
+        "originalPrice": 6999,
+        "discount": 29,
+        "stock": 183,
+        "rating": 4.9,
+        "reviews": 22,
+        "tags": [
+          "earbuds",
+          "wireless",
+          "audio",
+          "bluetooth"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.740Z"
+      },
+      {
+        "id": "6905afbc5f8c7aa14aa299b8",
+        "name": "Smart Watch Pro",
+        "sku": "INSSMA209370",
+        "brand": "TechWear",
+        "price": 12999,
+        "originalPrice": 15999,
+        "discount": 19,
+        "stock": 147,
+        "rating": 3.1,
+        "reviews": 159,
+        "tags": [
+          "smartwatch",
+          "fitness",
+          "wearable",
+          "health"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.700Z"
+      }
+    ]
+  },
+  {
+    "store": "LuxeLiving Emporium",
+    "productCount": 3,
+    "products": [
+      {
+        "id": "6905afbd5f8c7aa14aa299dc",
+        "name": "Premium Perfume",
+        "sku": "LUXPRE140802",
+        "brand": "FragranceLux",
+        "price": 6999,
+        "originalPrice": 9999,
+        "discount": 30,
+        "stock": 144,
+        "rating": 4,
+        "reviews": 126,
+        "tags": [
+          "perfume",
+          "fragrance",
+          "luxury",
+          "beauty"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.398Z"
+      },
+      {
+        "id": "6905afbd5f8c7aa14aa299da",
+        "name": "Leather Wallet Premium",
+        "sku": "LUXLEA168791",
+        "brand": "EliteLeather",
+        "price": 2999,
+        "originalPrice": 4999,
+        "discount": 40,
+        "stock": 99,
+        "rating": 4.1,
+        "reviews": 12,
+        "tags": [
+          "wallet",
+          "leather",
+          "luxury",
+          "accessories"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.341Z"
+      },
+      {
+        "id": "6905afbd5f8c7aa14aa299d8",
+        "name": "Designer Sunglasses",
+        "sku": "LUXDES185340",
+        "brand": "LuxeVision",
+        "price": 8999,
+        "originalPrice": 12999,
+        "discount": 31,
+        "stock": 193,
+        "rating": 4.9,
+        "reviews": 186,
+        "tags": [
+          "sunglasses",
+          "luxury",
+          "fashion",
+          "accessories"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.297Z"
+      }
+    ]
+  },
+  {
+    "store": "MegaMall Central",
+    "productCount": 3,
+    "products": [
+      {
+        "id": "6905afbe5f8c7aa14aa29a04",
+        "name": "Water Bottle 1L",
+        "sku": "MEGWAT320592",
+        "brand": "HydroLife",
+        "price": 499,
+        "originalPrice": 699,
+        "discount": 29,
+        "stock": 203,
+        "rating": 5,
+        "reviews": 201,
+        "tags": [
+          "bottle",
+          "water",
+          "hydration",
+          "eco-friendly"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:10.216Z"
+      },
+      {
+        "id": "6905afbe5f8c7aa14aa29a02",
+        "name": "LED Desk Lamp",
+        "sku": "MEGLED381501",
+        "brand": "BrightLight",
+        "price": 799,
+        "originalPrice": 999,
+        "discount": 20,
+        "stock": 114,
+        "rating": 4.8,
+        "reviews": 190,
+        "tags": [
+          "lamp",
+          "led",
+          "lighting",
+          "desk"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-11-01T06:59:10.177Z"
+      },
+      {
+        "id": "6905afbe5f8c7aa14aa29a00",
+        "name": "Multipurpose Storage Box",
+        "sku": "MEGMUL609940",
+        "brand": "HomeOrganize",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 160,
+        "rating": 4.4,
+        "reviews": 68,
+        "tags": [
+          "storage",
+          "organization",
+          "home",
+          "utility"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:10.139Z"
+      }
+    ]
+  },
+  {
+    "store": "Nature's Basket",
+    "productCount": 2,
+    "products": [
+      {
+        "id": "6905afbe5f8c7aa14aa299fa",
+        "name": "Organic Tea Leaves",
+        "sku": "NATORG615011",
+        "brand": "TeaGarden",
+        "price": 349,
+        "originalPrice": 449,
+        "discount": 22,
+        "stock": 158,
+        "rating": 3.6,
+        "reviews": 190,
+        "tags": [
+          "tea",
+          "organic",
+          "beverage",
+          "natural"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:10.015Z"
+      },
+      {
+        "id": "6905afbd5f8c7aa14aa299f8",
+        "name": "Organic Honey 500g",
+        "sku": "NATORG353550",
+        "brand": "NaturePure",
+        "price": 399,
+        "originalPrice": 499,
+        "discount": 20,
+        "stock": 175,
+        "rating": 4.7,
+        "reviews": 164,
+        "tags": [
+          "honey",
+          "organic",
+          "natural",
+          "healthy"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.967Z"
+      }
+    ]
+  },
+  {
+    "store": "One Rupee Wonders",
+    "productCount": 2,
+    "products": [
+      {
+        "id": "6905afbd5f8c7aa14aa299ce",
+        "name": "LED Desk Lamp",
+        "sku": "ONELED449311",
+        "brand": "BrightLight",
+        "price": 799,
+        "originalPrice": 999,
+        "discount": 20,
+        "stock": 208,
+        "rating": 3,
+        "reviews": 72,
+        "tags": [
+          "lamp",
+          "led",
+          "lighting",
+          "desk"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.105Z"
+      },
+      {
+        "id": "6905afbd5f8c7aa14aa299cc",
+        "name": "Multipurpose Storage Box",
+        "sku": "ONEMUL682910",
+        "brand": "HomeOrganize",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 228,
+        "rating": 3.2,
+        "reviews": 197,
+        "tags": [
+          "storage",
+          "organization",
+          "home",
+          "utility"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.064Z"
+      }
+    ]
+  },
+  {
+    "store": "Partner Network Store",
+    "productCount": 3,
+    "products": [
+      {
+        "id": "6905afbe5f8c7aa14aa29a14",
+        "name": "Water Bottle 1L",
+        "sku": "PARWAT304072",
+        "brand": "HydroLife",
+        "price": 499,
+        "originalPrice": 699,
+        "discount": 29,
+        "stock": 82,
+        "rating": 4.8,
+        "reviews": 174,
+        "tags": [
+          "bottle",
+          "water",
+          "hydration",
+          "eco-friendly"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:10.546Z"
+      },
+      {
+        "id": "6905afbe5f8c7aa14aa29a12",
+        "name": "LED Desk Lamp",
+        "sku": "PARLED577031",
+        "brand": "BrightLight",
+        "price": 799,
+        "originalPrice": 999,
+        "discount": 20,
+        "stock": 193,
+        "rating": 3.7,
+        "reviews": 19,
+        "tags": [
+          "lamp",
+          "led",
+          "lighting",
+          "desk"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-11-01T06:59:10.510Z"
+      },
+      {
+        "id": "6905afbe5f8c7aa14aa29a10",
+        "name": "Multipurpose Storage Box",
+        "sku": "PARMUL212810",
+        "brand": "HomeOrganize",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 85,
+        "rating": 4.1,
+        "reviews": 17,
+        "tags": [
+          "storage",
+          "organization",
+          "home",
+          "utility"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-11-01T06:59:10.458Z"
+      }
+    ]
+  },
+  {
+    "store": "PennyWise Bazaar",
+    "productCount": 2,
+    "products": [
+      {
+        "id": "6905afbd5f8c7aa14aa299ca",
+        "name": "Premium Rice 5kg",
+        "sku": "PENPRE644991",
+        "brand": "GrainSelect",
+        "price": 549,
+        "originalPrice": 699,
+        "discount": 21,
+        "stock": 184,
+        "rating": 3,
+        "reviews": 98,
+        "tags": [
+          "rice",
+          "grains",
+          "food",
+          "staples"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.024Z"
+      },
+      {
+        "id": "6905afbc5f8c7aa14aa299c8",
+        "name": "Organic Vegetables Pack",
+        "sku": "PENORG154880",
+        "brand": "FreshFarm",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 246,
+        "rating": 4.6,
+        "reviews": 181,
+        "tags": [
+          "organic",
+          "vegetables",
+          "fresh",
+          "healthy"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-11-01T06:59:08.985Z"
+      }
+    ]
+  },
+  {
+    "store": "Premium Tech Hub",
+    "productCount": 3,
+    "products": [
+      {
+        "id": "6905afbd5f8c7aa14aa299e6",
+        "name": "4K Ultra HD Webcam",
+        "sku": "PRE4KU313682",
+        "brand": "ViewTech",
+        "price": 7999,
+        "originalPrice": 9999,
+        "discount": 20,
+        "stock": 62,
+        "rating": 4.4,
+        "reviews": 188,
+        "tags": [
+          "webcam",
+          "camera",
+          "4k",
+          "streaming"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.598Z"
+      },
+      {
+        "id": "6905afbd5f8c7aa14aa299e4",
+        "name": "Wireless Bluetooth Earbuds",
+        "sku": "PREWIR353571",
+        "brand": "SoundMax",
+        "price": 4999,
+        "originalPrice": 6999,
+        "discount": 29,
+        "stock": 202,
+        "rating": 4.7,
+        "reviews": 86,
+        "tags": [
+          "earbuds",
+          "wireless",
+          "audio",
+          "bluetooth"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-11-01T06:59:09.559Z"
+      },
+      {
+        "id": "6905afbd5f8c7aa14aa299e2",
+        "name": "Smart Watch Pro",
+        "sku": "PRESMA983510",
+        "brand": "TechWear",
+        "price": 12999,
+        "originalPrice": 15999,
+        "discount": 19,
+        "stock": 216,
+        "rating": 3.6,
+        "reviews": 138,
+        "tags": [
+          "smartwatch",
+          "fitness",
+          "wearable",
+          "health"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.513Z"
+      }
+    ]
+  },
+  {
+    "store": "QuickBite Express",
+    "productCount": 2,
+    "products": [
+      {
+        "id": "6905afbc5f8c7aa14aa2999f",
+        "name": "Gourmet Pizza Margherita",
+        "sku": "QUIGOU691771",
+        "brand": "PizzaHaven",
+        "price": 449,
+        "originalPrice": 599,
+        "discount": 25,
+        "stock": 224,
+        "rating": 4.7,
+        "reviews": 64,
+        "tags": [
+          "pizza",
+          "italian",
+          "cheese",
+          "gourmet"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.344Z"
+      },
+      {
+        "id": "6905afbc5f8c7aa14aa2999b",
+        "name": "Organic Quinoa Bowl",
+        "sku": "QUIORG378160",
+        "brand": "HealthyBites",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 217,
+        "rating": 4.7,
+        "reviews": 159,
+        "tags": [
+          "healthy",
+          "organic",
+          "quinoa",
+          "bowl"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.302Z"
+      }
+    ]
+  },
+  {
+    "store": "RapidMart Groceries",
+    "productCount": 2,
+    "products": [
+      {
+        "id": "6905afbc5f8c7aa14aa299a5",
+        "name": "Premium Rice 5kg",
+        "sku": "RAPPRE603781",
+        "brand": "GrainSelect",
+        "price": 549,
+        "originalPrice": 699,
+        "discount": 21,
+        "stock": 202,
+        "rating": 3.2,
+        "reviews": 128,
+        "tags": [
+          "rice",
+          "grains",
+          "food",
+          "staples"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.432Z"
+      },
+      {
+        "id": "6905afbc5f8c7aa14aa299a3",
+        "name": "Organic Vegetables Pack",
+        "sku": "RAPORG275440",
+        "brand": "FreshFarm",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 77,
+        "rating": 3.9,
+        "reviews": 200,
+        "tags": [
+          "organic",
+          "vegetables",
+          "fresh",
+          "healthy"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-11-01T06:59:08.387Z"
+      }
+    ]
+  },
+  {
+    "store": "Royal Jewels Palace",
+    "productCount": 2,
+    "products": [
+      {
+        "id": "6905afbd5f8c7aa14aa299ea",
+        "name": "Diamond Stud Earrings",
+        "sku": "ROYDIA496121",
+        "brand": "SparkleGems",
+        "price": 12999,
+        "originalPrice": 15999,
+        "discount": 19,
+        "stock": 62,
+        "rating": 3.6,
+        "reviews": 25,
+        "tags": [
+          "earrings",
+          "diamond",
+          "jewelry",
+          "luxury"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.687Z"
+      },
+      {
+        "id": "6905afbd5f8c7aa14aa299e8",
+        "name": "Gold Plated Necklace",
+        "sku": "ROYGOL518710",
+        "brand": "RoyalJewels",
+        "price": 4999,
+        "originalPrice": 7999,
+        "discount": 38,
+        "stock": 143,
+        "rating": 4.1,
+        "reviews": 72,
+        "tags": [
+          "necklace",
+          "jewelry",
+          "gold",
+          "fashion"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:09.646Z"
+      }
+    ]
+  },
+  {
+    "store": "ShopperStop Plaza",
+    "productCount": 3,
+    "products": [
+      {
+        "id": "6905afbe5f8c7aa14aa29a08",
+        "name": "LED Desk Lamp",
+        "sku": "SHOLED452891",
+        "brand": "BrightLight",
+        "price": 799,
+        "originalPrice": 999,
+        "discount": 20,
+        "stock": 54,
+        "rating": 4.9,
+        "reviews": 72,
+        "tags": [
+          "lamp",
+          "led",
+          "lighting",
+          "desk"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:10.298Z"
+      },
+      {
+        "id": "6905afbe5f8c7aa14aa29a0a",
+        "name": "Water Bottle 1L",
+        "sku": "SHOWAT316482",
+        "brand": "HydroLife",
+        "price": 499,
+        "originalPrice": 699,
+        "discount": 29,
+        "stock": 168,
+        "rating": 3.3,
+        "reviews": 114,
+        "tags": [
+          "bottle",
+          "water",
+          "hydration",
+          "eco-friendly"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-11-01T06:59:10.340Z"
+      },
+      {
+        "id": "6905afbe5f8c7aa14aa29a06",
+        "name": "Multipurpose Storage Box",
+        "sku": "SHOMUL861090",
+        "brand": "HomeOrganize",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 99,
+        "rating": 4.1,
+        "reviews": 114,
+        "tags": [
+          "storage",
+          "organization",
+          "home",
+          "utility"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:10.258Z"
+      }
+    ]
+  },
+  {
+    "store": "Shopping Mall",
+    "productCount": 3,
+    "products": [
+      {
+        "id": "6905afbb5f8c7aa14aa29985",
+        "name": "Water Bottle 1L",
+        "sku": "SHOWAT187802",
+        "brand": "HydroLife",
+        "price": 499,
+        "originalPrice": 699,
+        "discount": 29,
+        "stock": 110,
+        "rating": 3.6,
+        "reviews": 118,
+        "tags": [
+          "bottle",
+          "water",
+          "hydration",
+          "eco-friendly"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:07.963Z"
+      },
+      {
+        "id": "6905afbb5f8c7aa14aa29981",
+        "name": "LED Desk Lamp",
+        "sku": "SHOLED661781",
+        "brand": "BrightLight",
+        "price": 799,
+        "originalPrice": 999,
+        "discount": 20,
+        "stock": 66,
+        "rating": 3.3,
+        "reviews": 208,
+        "tags": [
+          "lamp",
+          "led",
+          "lighting",
+          "desk"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:07.915Z"
+      },
+      {
+        "id": "6905afbb5f8c7aa14aa2997f",
+        "name": "Multipurpose Storage Box",
+        "sku": "SHOMUL836530",
+        "brand": "HomeOrganize",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 163,
+        "rating": 3.3,
+        "reviews": 24,
+        "tags": [
+          "storage",
+          "organization",
+          "home",
+          "utility"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-11-01T06:59:07.870Z"
+      }
+    ]
+  },
+  {
+    "store": "SpeedySnacks Hub",
+    "productCount": 3,
+    "products": [
+      {
+        "id": "6905afbc5f8c7aa14aa299b6",
+        "name": "Chocolate Cookies",
+        "sku": "SPECHO255872",
+        "brand": "BakeryFresh",
+        "price": 120,
+        "originalPrice": 150,
+        "discount": 20,
+        "stock": 186,
+        "rating": 4.1,
+        "reviews": 77,
+        "tags": [
+          "cookies",
+          "chocolate",
+          "snacks",
+          "sweet"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.658Z"
+      },
+      {
+        "id": "6905afbc5f8c7aa14aa299b3",
+        "name": "Mixed Nuts Pack",
+        "sku": "SPEMIX862321",
+        "brand": "NuttyDelights",
+        "price": 199,
+        "originalPrice": 249,
+        "discount": 20,
+        "stock": 185,
+        "rating": 4.5,
+        "reviews": 124,
+        "tags": [
+          "nuts",
+          "healthy",
+          "snacks",
+          "protein"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.617Z"
+      },
+      {
+        "id": "6905afbc5f8c7aa14aa299af",
+        "name": "Potato Chips Classic",
+        "sku": "SPEPOT382110",
+        "brand": "CrunchTime",
+        "price": 40,
+        "originalPrice": 50,
+        "discount": 20,
+        "stock": 51,
+        "rating": 3.2,
+        "reviews": 48,
+        "tags": [
+          "chips",
+          "snacks",
+          "savory",
+          "crispy"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.568Z"
+      }
+    ]
+  },
+  {
+    "store": "Sports Central",
+    "productCount": 6,
+    "products": [
+      {
+        "id": "68ece2985f7c932f12137c6d",
+        "name": "Premium Burger Combo",
+        "price": 349,
+        "originalPrice": 399,
+        "discount": 13,
+        "stock": 75,
+        "rating": 4.5,
+        "reviews": 134,
+        "tags": [
+          "food",
+          "burger",
+          "fast-food",
+          "combo"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-10-13T11:29:28.298Z"
+      },
+      {
+        "id": "68ecdae37084846c4f4f71c6",
+        "name": "JavaScript: The Complete Guide",
+        "sku": "JAV99555009",
+        "brand": "TechBooks",
+        "stock": 100,
+        "tags": [
+          "book",
+          "programming",
+          "javascript",
+          "education",
+          "coding"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-10-13T10:56:35.626Z"
+      },
+      {
+        "id": "68ecdae37084846c4f4f71c5",
+        "name": "Professional Non-stick Pan",
+        "sku": "PRO99555008",
+        "brand": "ChefMaster",
+        "stock": 100,
+        "tags": [
+          "pan",
+          "non-stick",
+          "cooking",
+          "kitchen",
+          "professional"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-10-13T10:56:35.626Z"
+      },
+      {
+        "id": "6905afbb5f8c7aa14aa2997b",
+        "name": "Running Shoes Pro",
+        "sku": "SPORUN825522",
+        "brand": "SpeedRunner",
+        "price": 3999,
+        "originalPrice": 5999,
+        "discount": 33,
+        "stock": 214,
+        "rating": 3.7,
+        "reviews": 172,
+        "tags": [
+          "shoes",
+          "running",
+          "sports",
+          "fitness"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:07.822Z"
+      },
+      {
+        "id": "6905afbb5f8c7aa14aa29978",
+        "name": "Resistance Bands Set",
+        "sku": "SPORES727971",
+        "brand": "PowerFit",
+        "price": 899,
+        "originalPrice": 1499,
+        "discount": 40,
+        "stock": 100,
+        "rating": 3.2,
+        "reviews": 69,
+        "tags": [
+          "fitness",
+          "resistance",
+          "training",
+          "exercise"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:07.768Z"
+      },
+      {
+        "id": "6905afbb5f8c7aa14aa29975",
+        "name": "Yoga Mat Premium",
+        "sku": "SPOYOG937360",
+        "brand": "FitLife",
+        "price": 1299,
+        "originalPrice": 1999,
+        "discount": 35,
+        "stock": 134,
+        "rating": 4.3,
+        "reviews": 88,
+        "tags": [
+          "yoga",
+          "fitness",
+          "exercise",
+          "mat"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:07.717Z"
+      }
+    ]
+  },
+  {
+    "store": "TechMart Electronics",
+    "productCount": 8,
+    "products": [
+      {
+        "id": "6905afbb5f8c7aa14aa29956",
+        "name": "4K Ultra HD Webcam",
+        "sku": "TEC4KU419182",
+        "brand": "ViewTech",
+        "price": 7999,
+        "originalPrice": 9999,
+        "discount": 20,
+        "stock": 87,
+        "rating": 3.5,
+        "reviews": 113,
+        "tags": [
+          "webcam",
+          "camera",
+          "4k",
+          "streaming"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-11-01T06:59:07.323Z"
+      },
+      {
+        "id": "6905afbb5f8c7aa14aa29953",
+        "name": "Wireless Bluetooth Earbuds",
+        "sku": "TECWIR831481",
+        "brand": "SoundMax",
+        "price": 4999,
+        "originalPrice": 6999,
+        "discount": 29,
+        "stock": 106,
+        "rating": 4.3,
+        "reviews": 167,
+        "tags": [
+          "earbuds",
+          "wireless",
+          "audio",
+          "bluetooth"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:07.281Z"
+      },
+      {
+        "id": "6905afbb5f8c7aa14aa2994e",
+        "name": "Smart Watch Pro",
+        "sku": "TECSMA741150",
+        "brand": "TechWear",
+        "price": 12999,
+        "originalPrice": 15999,
+        "discount": 19,
+        "stock": 168,
+        "rating": 3.9,
+        "reviews": 183,
+        "tags": [
+          "smartwatch",
+          "fitness",
+          "wearable",
+          "health"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:07.181Z"
+      },
+      {
+        "id": "68ecdae37084846c4f4f71c3",
+        "name": "Sport Running Sneakers",
+        "sku": "SPO99555006",
+        "brand": "SportMax",
+        "stock": 100,
+        "tags": [
+          "shoes",
+          "running",
+          "sports",
+          "comfortable",
+          "lightweight"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-10-13T10:56:35.626Z"
+      },
+      {
+        "id": "68ecdae37084846c4f4f71c0",
+        "name": "Sony WH-1000XM5",
+        "sku": "SON99555003",
+        "brand": "Sony",
+        "stock": 100,
+        "tags": [
+          "headphones",
+          "sony",
+          "noise-canceling",
+          "wireless",
+          "audio"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-10-13T10:56:35.625Z"
+      },
+      {
+        "id": "68ecdae37084846c4f4f71bf",
+        "name": "MacBook Air M3",
+        "sku": "MAC99555002",
+        "brand": "Apple",
+        "stock": 100,
+        "tags": [
+          "laptop",
+          "apple",
+          "macbook",
+          "m3",
+          "ultrabook"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-10-13T10:56:35.625Z"
+      },
+      {
+        "id": "68ecdae37084846c4f4f71be",
+        "name": "Samsung Galaxy S24 Ultra",
+        "sku": "SAM99555001",
+        "brand": "Samsung",
+        "stock": 100,
+        "tags": [
+          "smartphone",
+          "samsung",
+          "android",
+          "spen",
+          "camera"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-10-13T10:56:35.624Z"
+      },
+      {
+        "id": "68ecdae37084846c4f4f71bd",
+        "name": "iPhone 15 Pro",
+        "sku": "IPH99555000",
+        "brand": "Apple",
+        "stock": 100,
+        "tags": [
+          "smartphone",
+          "apple",
+          "premium",
+          "camera",
+          "ios"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-10-13T10:56:35.620Z"
+      }
+    ]
+  },
+  {
+    "store": "Travel Express",
+    "productCount": 3,
+    "products": [
+      {
+        "id": "6905afbc5f8c7aa14aa29999",
+        "name": "Water Bottle 1L",
+        "sku": "TRAWAT495052",
+        "brand": "HydroLife",
+        "price": 499,
+        "originalPrice": 699,
+        "discount": 29,
+        "stock": 90,
+        "rating": 4.5,
+        "reviews": 77,
+        "tags": [
+          "bottle",
+          "water",
+          "hydration",
+          "eco-friendly"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.255Z"
+      },
+      {
+        "id": "6905afbc5f8c7aa14aa29995",
+        "name": "LED Desk Lamp",
+        "sku": "TRALED667481",
+        "brand": "BrightLight",
+        "price": 799,
+        "originalPrice": 999,
+        "discount": 20,
+        "stock": 159,
+        "rating": 5,
+        "reviews": 29,
+        "tags": [
+          "lamp",
+          "led",
+          "lighting",
+          "desk"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.215Z"
+      },
+      {
+        "id": "6905afbc5f8c7aa14aa29993",
+        "name": "Multipurpose Storage Box",
+        "sku": "TRAMUL656030",
+        "brand": "HomeOrganize",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 135,
+        "rating": 3,
+        "reviews": 58,
+        "tags": [
+          "storage",
+          "organization",
+          "home",
+          "utility"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.172Z"
+      }
+    ]
+  },
+  {
+    "store": "Trusted Partners Hub",
+    "productCount": 3,
+    "products": [
+      {
+        "id": "6905afbe5f8c7aa14aa29a1e",
+        "name": "Water Bottle 1L",
+        "sku": "TRUWAT633022",
+        "brand": "HydroLife",
+        "price": 499,
+        "originalPrice": 699,
+        "discount": 29,
+        "stock": 106,
+        "rating": 3.4,
+        "reviews": 156,
+        "tags": [
+          "bottle",
+          "water",
+          "hydration",
+          "eco-friendly"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:10.740Z"
+      },
+      {
+        "id": "6905afbe5f8c7aa14aa29a1c",
+        "name": "LED Desk Lamp",
+        "sku": "TRULED176151",
+        "brand": "BrightLight",
+        "price": 799,
+        "originalPrice": 999,
+        "discount": 20,
+        "stock": 121,
+        "rating": 4.6,
+        "reviews": 155,
+        "tags": [
+          "lamp",
+          "led",
+          "lighting",
+          "desk"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:10.702Z"
+      },
+      {
+        "id": "6905afbe5f8c7aa14aa29a1a",
+        "name": "Multipurpose Storage Box",
+        "sku": "TRUMUL449310",
+        "brand": "HomeOrganize",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 233,
+        "rating": 3.5,
+        "reviews": 209,
+        "tags": [
+          "storage",
+          "organization",
+          "home",
+          "utility"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-11-01T06:59:10.667Z"
+      }
+    ]
+  },
+  {
+    "store": "ValueMart Superstore",
+    "productCount": 2,
+    "products": [
+      {
+        "id": "6905afbc5f8c7aa14aa299c6",
+        "name": "Premium Rice 5kg",
+        "sku": "VALPRE683361",
+        "brand": "GrainSelect",
+        "price": 549,
+        "originalPrice": 699,
+        "discount": 21,
+        "stock": 63,
+        "rating": 4.6,
+        "reviews": 193,
+        "tags": [
+          "rice",
+          "grains",
+          "food",
+          "staples"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.945Z"
+      },
+      {
+        "id": "6905afbc5f8c7aa14aa299c4",
+        "name": "Organic Vegetables Pack",
+        "sku": "VALORG925210",
+        "brand": "FreshFarm",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 153,
+        "rating": 4,
+        "reviews": 54,
+        "tags": [
+          "organic",
+          "vegetables",
+          "fresh",
+          "healthy"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.906Z"
+      }
+    ]
+  },
+  {
+    "store": "ZoomMart 24/7",
+    "productCount": 3,
+    "products": [
+      {
+        "id": "6905afbc5f8c7aa14aa299c2",
+        "name": "Fresh Milk 1L",
+        "sku": "ZOOFRE212322",
+        "brand": "DairyFresh",
+        "price": 65,
+        "originalPrice": 75,
+        "discount": 13,
+        "stock": 205,
+        "rating": 4.5,
+        "reviews": 93,
+        "tags": [
+          "milk",
+          "dairy",
+          "fresh",
+          "organic"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.866Z"
+      },
+      {
+        "id": "6905afbc5f8c7aa14aa299c0",
+        "name": "Premium Rice 5kg",
+        "sku": "ZOOPRE662601",
+        "brand": "GrainSelect",
+        "price": 549,
+        "originalPrice": 699,
+        "discount": 21,
+        "stock": 203,
+        "rating": 3.9,
+        "reviews": 195,
+        "tags": [
+          "rice",
+          "grains",
+          "food",
+          "staples"
+        ],
+        "isFeatured": true,
+        "createdAt": "2025-11-01T06:59:08.826Z"
+      },
+      {
+        "id": "6905afbc5f8c7aa14aa299be",
+        "name": "Organic Vegetables Pack",
+        "sku": "ZOOORG613240",
+        "brand": "FreshFarm",
+        "price": 299,
+        "originalPrice": 399,
+        "discount": 25,
+        "stock": 72,
+        "rating": 3.7,
+        "reviews": 132,
+        "tags": [
+          "organic",
+          "vegetables",
+          "fresh",
+          "healthy"
+        ],
+        "isFeatured": false,
+        "createdAt": "2025-11-01T06:59:08.783Z"
+      }
+    ]
+  }
+]

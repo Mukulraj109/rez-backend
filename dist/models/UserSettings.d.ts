@@ -117,6 +117,35 @@ export interface IGeneralSettings {
     timeFormat: '12h' | '24h';
     theme: 'light' | 'dark' | 'auto';
 }
+export interface ICourierPreferences {
+    preferredCourier: 'any' | 'delhivery' | 'bluedart' | 'ekart' | 'dtdc' | 'fedex';
+    deliveryTimePreference: {
+        weekdays: ('MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN')[];
+        preferredTimeSlot: {
+            start: string;
+            end: string;
+        };
+        avoidWeekends: boolean;
+    };
+    deliveryInstructions: {
+        contactlessDelivery: boolean;
+        leaveAtDoor: boolean;
+        signatureRequired: boolean;
+        callBeforeDelivery: boolean;
+        specificInstructions?: string;
+    };
+    alternateContact?: {
+        name: string;
+        phone: string;
+        relation: string;
+    };
+    courierNotifications: {
+        smsUpdates: boolean;
+        emailUpdates: boolean;
+        whatsappUpdates: boolean;
+        callUpdates: boolean;
+    };
+}
 export interface IUserSettings extends Document {
     user: Types.ObjectId;
     general: IGeneralSettings;
@@ -126,6 +155,7 @@ export interface IUserSettings extends Document {
     delivery: IDeliveryPreferences;
     payment: IPaymentPreferences;
     preferences: IAppPreferences;
+    courier: ICourierPreferences;
     lastUpdated: Date;
     createdAt: Date;
     updatedAt: Date;

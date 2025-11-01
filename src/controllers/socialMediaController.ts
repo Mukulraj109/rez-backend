@@ -6,9 +6,11 @@ import mongoose, { Types } from 'mongoose';
 import SocialMediaPost from '../models/SocialMediaPost';
 import { Order } from '../models/Order';
 import { Wallet } from '../models/Wallet';
+import AuditLog from '../models/AuditLog';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { sendSuccess, sendError, sendNotFound } from '../utils/response';
+import achievementService from '../services/achievementService';
 
 // Submit a new social media post
 export const submitPost = asyncHandler(async (req: Request, res: Response) => {
@@ -20,7 +22,7 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
   try {
     // Validate URL format based on platform
     const urlPatterns: Record<string, RegExp> = {
-      instagram: /^https?:\/\/(www\.)?instagram\.com\/p\/[a-zA-Z0-9_-]+\/?/,
+      instagram: /^https?:\/\/(www\.)?instagram\.com\/([\w.]+\/)?(p|reel|instagramreel)\/[a-zA-Z0-9_-]+\/?(\?.*)?$/,
       facebook: /^https?:\/\/(www\.)?facebook\.com\//,
       twitter: /^https?:\/\/(www\.)?(twitter|x)\.com\/.*\/status\/[0-9]+/,
       tiktok: /^https?:\/\/(www\.)?tiktok\.com\//
@@ -30,10 +32,46 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
       return sendError(res, `Invalid ${platform} post URL format`, 400);
     }
 
-    // Check if URL already submitted
+    // FRAUD PREVENTION CHECK 1: Check if URL already submitted
     const existingPost = await SocialMediaPost.findOne({ postUrl });
     if (existingPost) {
+      console.warn('⚠️ [FRAUD] Duplicate URL submission attempt:', { userId, postUrl });
       return sendError(res, 'This post URL has already been submitted', 409);
+    }
+
+    // FRAUD PREVENTION CHECK 2: Check if user already submitted for this order
+    if (orderId) {
+      const existingForOrder = await SocialMediaPost.findOne({
+        user: userId,
+        order: orderId
+      });
+      if (existingForOrder) {
+        console.warn('⚠️ [FRAUD] User tried to submit same order twice:', { userId, orderId });
+        return sendError(res, 'You have already submitted a post for this order', 409);
+      }
+    }
+
+    // FRAUD PREVENTION CHECK 3: Check cooldown period (24 hours)
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentSubmission = await SocialMediaPost.findOne({
+      user: userId,
+      submittedAt: { $gte: twentyFourHoursAgo }
+    });
+    if (recentSubmission) {
+      const hoursRemaining = Math.ceil((recentSubmission.submittedAt.getTime() + 24 * 60 * 60 * 1000 - Date.now()) / (60 * 60 * 1000));
+      console.warn('⚠️ [FRAUD] User in cooldown period:', { userId, hoursRemaining });
+      return sendError(res, `Please wait ${hoursRemaining} hours before submitting another post`, 429);
+    }
+
+    // FRAUD PREVENTION CHECK 4: Check daily limit (3 posts per day)
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const todaySubmissions = await SocialMediaPost.countDocuments({
+      user: userId,
+      submittedAt: { $gte: oneDayAgo }
+    });
+    if (todaySubmissions >= 3) {
+      console.warn('⚠️ [FRAUD] User exceeded daily limit:', { userId, submissions: todaySubmissions });
+      return sendError(res, 'Maximum 3 submissions per day reached. Please try again tomorrow.', 429);
     }
 
     // Calculate cashback amount
@@ -49,6 +87,18 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
       }
     }
 
+    // Capture request metadata for fraud prevention
+    const submissionIp = req.ip || req.socket.remoteAddress || req.headers['x-forwarded-for'];
+    const deviceFingerprint = req.headers['x-device-id'] as string;
+    const userAgent = req.headers['user-agent'];
+
+    console.log('🔒 [FRAUD TRACKING] Submission metadata:', {
+      userId,
+      submissionIp,
+      deviceFingerprint: deviceFingerprint ? 'present' : 'missing',
+      userAgent: userAgent?.substring(0, 50)
+    });
+
     // Create post submission
     const post = new SocialMediaPost({
       user: userId,
@@ -59,6 +109,9 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
       cashbackAmount,
       cashbackPercentage: 5,
       submittedAt: new Date(),
+      submissionIp: typeof submissionIp === 'string' ? submissionIp : submissionIp?.[0],
+      deviceFingerprint,
+      userAgent,
       metadata: {
         orderNumber
       }
@@ -67,6 +120,32 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
     await post.save();
 
     console.log('✅ [SOCIAL MEDIA] Post submitted successfully:', post._id);
+
+    // Audit Log: Track submission
+    await AuditLog.log({
+      userId,
+      action: 'social_media_post_submitted',
+      resource: 'SocialMediaPost',
+      resourceId: post._id as Types.ObjectId,
+      changes: {
+        platform,
+        postUrl: postUrl.substring(0, 50) + '...', // Don't store full URL in logs
+        cashbackAmount,
+        orderId
+      },
+      metadata: {
+        ipAddress: submissionIp,
+        deviceFingerprint,
+        userAgent
+      }
+    });
+
+    // Trigger achievement update for social media post submission
+    try {
+      await achievementService.triggerAchievementUpdate(userId, 'social_media_post_submitted');
+    } catch (error) {
+      console.error('❌ [SOCIAL MEDIA] Error triggering achievement update:', error);
+    }
 
     sendSuccess(res, {
       post: {
@@ -194,8 +273,49 @@ export const updatePostStatus = asyncHandler(async (req: Request, res: Response)
 
     if (status === 'approved') {
       await post.approve(new Types.ObjectId(reviewerId));
+
+      // Audit Log: Track approval
+      await AuditLog.log({
+        userId: reviewerId,
+        action: 'social_media_post_approved',
+        resource: 'SocialMediaPost',
+        resourceId: post._id as Types.ObjectId,
+        changes: {
+          postUser: post.user,
+          platform: post.platform,
+          cashbackAmount: post.cashbackAmount
+        },
+        metadata: {
+          ipAddress: req.ip || req.socket.remoteAddress,
+          userAgent: req.headers['user-agent']
+        }
+      });
+
+      // Trigger achievement update for social media post approval
+      try {
+        await achievementService.triggerAchievementUpdate(post.user, 'social_media_post_approved');
+      } catch (error) {
+        console.error('❌ [SOCIAL MEDIA] Error triggering achievement update for approval:', error);
+      }
     } else if (status === 'rejected') {
       await post.reject(new Types.ObjectId(reviewerId), rejectionReason);
+
+      // Audit Log: Track rejection
+      await AuditLog.log({
+        userId: reviewerId,
+        action: 'social_media_post_rejected',
+        resource: 'SocialMediaPost',
+        resourceId: post._id as Types.ObjectId,
+        changes: {
+          postUser: post.user,
+          platform: post.platform,
+          rejectionReason
+        },
+        metadata: {
+          ipAddress: req.ip || req.socket.remoteAddress,
+          userAgent: req.headers['user-agent']
+        }
+      });
     } else if (status === 'credited') {
       // Credit cashback to user's wallet
       const wallet = await Wallet.findOne({ user: post.user }).session(session);
@@ -211,6 +331,31 @@ export const updatePostStatus = asyncHandler(async (req: Request, res: Response)
       await post.creditCashback();
 
       console.log(`✅ [SOCIAL MEDIA] Credited ₹${post.cashbackAmount} to wallet`);
+
+      // Audit Log: Track cashback crediting
+      await AuditLog.log({
+        userId: reviewerId,
+        action: 'social_media_cashback_credited',
+        resource: 'SocialMediaPost',
+        resourceId: post._id as Types.ObjectId,
+        changes: {
+          postUser: post.user,
+          cashbackAmount: post.cashbackAmount,
+          walletId: wallet._id,
+          newWalletBalance: wallet.balance.total
+        },
+        metadata: {
+          ipAddress: req.ip || req.socket.remoteAddress,
+          userAgent: req.headers['user-agent']
+        }
+      });
+
+      // Trigger achievement update for social media post crediting
+      try {
+        await achievementService.triggerAchievementUpdate(post.user, 'social_media_post_credited');
+      } catch (error) {
+        console.error('❌ [SOCIAL MEDIA] Error triggering achievement update for crediting:', error);
+      }
     }
 
     await session.commitTransaction();

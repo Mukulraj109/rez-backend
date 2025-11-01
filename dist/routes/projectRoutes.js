@@ -7,6 +7,14 @@ const validation_1 = require("../middleware/validation");
 // import { generalLimiter } from '../middleware/rateLimiter'; // Disabled for development
 const validation_2 = require("../middleware/validation");
 const router = (0, express_1.Router)();
+// Submit a project (requires authentication)
+router.post('/submit', auth_1.authenticate, (0, validation_1.validate)(validation_2.Joi.object({
+    projectId: validation_1.commonSchemas.objectId().required(),
+    content: validation_2.Joi.alternatives().try(validation_2.Joi.string().trim().min(1).max(5000), validation_2.Joi.array().items(validation_2.Joi.string().uri())).required(),
+    contentType: validation_2.Joi.string().valid('text', 'image', 'video', 'rating', 'checkin', 'receipt').default('text'),
+    description: validation_2.Joi.string().trim().max(1000).optional(),
+    metadata: validation_2.Joi.object().optional()
+})), projectController_1.submitProject);
 // Get all projects with filtering
 router.get('/', 
 // generalLimiter,, // Disabled for development
@@ -35,6 +43,14 @@ auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
     page: validation_2.Joi.number().integer().min(1).default(1),
     limit: validation_2.Joi.number().integer().min(1).max(50).default(20)
 })), projectController_1.getProjectsByCategory);
+// Get user's project submissions (requires authentication)
+router.get('/my-submissions', 
+// generalLimiter,, // Disabled for development
+auth_1.authenticate, (0, validation_1.validateQuery)(validation_2.Joi.object({
+    status: validation_2.Joi.string().valid('pending', 'approved', 'rejected'),
+    page: validation_2.Joi.number().integer().min(1).default(1),
+    limit: validation_2.Joi.number().integer().min(1).max(50).default(20)
+})), projectController_1.getMySubmissions);
 // Get single project by ID
 router.get('/:projectId', 
 // generalLimiter,, // Disabled for development

@@ -8,7 +8,11 @@ import {
   applyCoupon,
   removeCoupon,
   getCartSummary,
-  validateCart
+  validateCart,
+  lockItem,
+  unlockItem,
+  moveLockedToCart,
+  getLockedItems
 } from '../controllers/cartController';
 import { authenticate } from '../middleware/auth';
 import { validate, validateParams, cartSchemas, commonSchemas } from '../middleware/validation';
@@ -99,9 +103,39 @@ router.post('/coupon',
 );
 
 // Remove coupon
-router.delete('/coupon', 
+router.delete('/coupon',
   // generalLimiter,, // Disabled for development
   removeCoupon
+);
+
+// Lock item at current price
+router.post('/lock',
+  // generalLimiter,, // Disabled for development
+  lockItem
+);
+
+// Get locked items
+router.get('/locked',
+  // generalLimiter,, // Disabled for development
+  getLockedItems
+);
+
+// Unlock item
+router.delete('/lock/:productId',
+  // generalLimiter,, // Disabled for development
+  validateParams(Joi.object({
+    productId: commonSchemas.objectId().required()
+  })),
+  unlockItem
+);
+
+// Move locked item to cart
+router.post('/lock/:productId/move-to-cart',
+  // generalLimiter,, // Disabled for development
+  validateParams(Joi.object({
+    productId: commonSchemas.objectId().required()
+  })),
+  moveLockedToCart
 );
 
 export default router;

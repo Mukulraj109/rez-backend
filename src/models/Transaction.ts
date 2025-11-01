@@ -9,7 +9,7 @@ export interface ITransactionModel extends Model<ITransaction> {
 
 // Transaction source interface
 export interface ITransactionSource {
-  type: 'project' | 'order' | 'referral' | 'cashback' | 'refund' | 'bonus' | 'withdrawal' | 'topup' | 'penalty';
+  type: 'project' | 'order' | 'referral' | 'cashback' | 'refund' | 'bonus' | 'withdrawal' | 'topup' | 'penalty' | 'paybill';
   reference: Types.ObjectId; // Reference to source document (Project, Order, etc.)
   description?: string;
   metadata?: {
@@ -51,7 +51,7 @@ export interface ITransaction extends Document {
   transactionId: string; // Unique transaction identifier
   user: Types.ObjectId;
   type: 'credit' | 'debit';
-  category: 'earning' | 'spending' | 'refund' | 'withdrawal' | 'topup' | 'bonus' | 'penalty' | 'cashback';
+  category: 'earning' | 'spending' | 'refund' | 'withdrawal' | 'topup' | 'bonus' | 'penalty' | 'cashback' | 'paybill';
   amount: number;
   currency: string;
   description: string;
@@ -110,7 +110,7 @@ const TransactionSchema = new Schema<ITransaction>({
   category: {
     type: String,
     required: true,
-    enum: ['earning', 'spending', 'refund', 'withdrawal', 'topup', 'bonus', 'penalty', 'cashback'],
+    enum: ['earning', 'spending', 'refund', 'withdrawal', 'topup', 'bonus', 'penalty', 'cashback', 'paybill'],
     index: true
   },
   amount: {
@@ -133,7 +133,7 @@ const TransactionSchema = new Schema<ITransaction>({
     type: {
       type: String,
       required: true,
-      enum: ['project', 'order', 'referral', 'cashback', 'refund', 'bonus', 'withdrawal', 'topup', 'penalty']
+      enum: ['project', 'order', 'referral', 'cashback', 'refund', 'bonus', 'withdrawal', 'topup', 'penalty', 'paybill']
     },
     reference: {
       type: Schema.Types.ObjectId,

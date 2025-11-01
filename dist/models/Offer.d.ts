@@ -1,67 +1,86 @@
-import mongoose, { Document, Model } from 'mongoose';
-interface IOfferMethods {
-    isValid(): boolean;
-    canUserRedeem(userRedemptionCount: number): boolean;
-}
-interface IOfferModel extends Model<IOffer, {}, IOfferMethods> {
-    getActive(): any;
-    getFeatured(limit: number): any;
-    getTrending(limit: number): any;
-}
-export interface IOffer extends Document, IOfferMethods {
+import { Document, Types, Model } from 'mongoose';
+export interface IOffer extends Document {
+    _id: Types.ObjectId;
     title: string;
-    description: string;
+    subtitle?: string;
+    description?: string;
     image: string;
-    images?: string[];
+    category: 'mega' | 'student' | 'new_arrival' | 'trending' | 'food' | 'fashion' | 'electronics' | 'general';
+    type: 'cashback' | 'discount' | 'voucher' | 'combo' | 'special';
+    cashbackPercentage: number;
     originalPrice?: number;
     discountedPrice?: number;
-    discountPercentage?: number;
-    cashBackPercentage: number;
-    discount?: string;
-    category: mongoose.Types.ObjectId | string;
-    tags: string[];
-    store?: mongoose.Types.ObjectId;
-    product?: mongoose.Types.ObjectId;
-    applicableStores: mongoose.Types.ObjectId[];
-    applicableProducts: mongoose.Types.ObjectId[];
-    location?: {
-        type: string;
+    location: {
+        type: 'Point';
         coordinates: [number, number];
-        address?: string;
-        city?: string;
-        state?: string;
     };
-    distance?: string;
-    startDate: Date;
-    endDate: Date;
-    validUntil?: string;
-    isActive: boolean;
-    redemptionType: 'online' | 'instore' | 'both' | 'voucher';
-    redemptionCode?: string;
-    maxRedemptions?: number;
-    currentRedemptions: number;
-    userRedemptionLimit: number;
-    termsAndConditions: string[];
-    minimumPurchase?: number;
-    maximumDiscount?: number;
-    isNew: boolean;
-    isTrending: boolean;
-    isBestSeller: boolean;
-    isSpecial: boolean;
-    isFeatured: boolean;
-    storeInfo?: {
+    distance?: number;
+    store: {
+        id: Types.ObjectId;
         name: string;
-        rating: number;
-        verified: boolean;
         logo?: string;
+        rating?: number;
+        verified?: boolean;
     };
-    viewCount: number;
-    clickCount: number;
-    redemptionCount: number;
-    favoriteCount: number;
-    createdBy: mongoose.Types.ObjectId;
+    validity: {
+        startDate: Date;
+        endDate: Date;
+        isActive: boolean;
+    };
+    engagement: {
+        likesCount: number;
+        sharesCount: number;
+        viewsCount: number;
+        isLikedByUser?: boolean;
+    };
+    restrictions: {
+        minOrderValue?: number;
+        maxDiscountAmount?: number;
+        applicableOn?: string[];
+        excludedProducts?: Types.ObjectId[];
+        ageRestriction?: {
+            minAge?: number;
+            maxAge?: number;
+        };
+        userTypeRestriction?: 'student' | 'new_user' | 'premium' | 'all';
+        usageLimitPerUser?: number;
+        usageLimit?: number;
+    };
+    metadata: {
+        isNew?: boolean;
+        isTrending?: boolean;
+        isBestSeller?: boolean;
+        isSpecial?: boolean;
+        priority: number;
+        tags: string[];
+        featured?: boolean;
+        flashSale?: {
+            isActive: boolean;
+            endTime?: Date;
+            originalPrice?: number;
+            salePrice?: number;
+        };
+    };
+    createdBy: Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
+    calculateDistance(userLocation: [number, number]): number;
+    isExpired(): boolean;
+    isActiveForUser(userId: Types.ObjectId): Promise<{
+        canUse: boolean;
+        reason?: string;
+    }>;
+    incrementEngagement(action: 'view' | 'like' | 'share'): Promise<void>;
+}
+export interface IOfferModel extends Model<IOffer> {
+    findActiveOffers(): Promise<IOffer[]>;
+    findOffersByCategory(category: string): Promise<IOffer[]>;
+    findNearbyOffers(userLocation: [number, number], maxDistance?: number): Promise<IOffer[]>;
+    findTrendingOffers(limit?: number): Promise<IOffer[]>;
+    findNewArrivals(limit?: number): Promise<IOffer[]>;
+    findStudentOffers(): Promise<IOffer[]>;
+    findMegaOffers(): Promise<IOffer[]>;
+    searchOffers(query: string, filters?: any): Promise<IOffer[]>;
 }
 declare const Offer: IOfferModel;
 export default Offer;

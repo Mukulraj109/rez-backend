@@ -1,15 +1,15 @@
+import { Types } from 'mongoose';
+import { IUser } from '../models/User';
+
 declare global {
   namespace Express {
     interface Request {
       merchantId?: string;
-      user?: {
-        id: string;
-        email?: string;
-        role?: string;
-      };
+      user?: IUser;
+      userId?: string;
     }
   }
-  
+
   // Global services
   var CrossAppSyncService: any;
   var io: any;

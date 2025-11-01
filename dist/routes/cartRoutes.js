@@ -63,4 +63,24 @@ router.post('/coupon',
 router.delete('/coupon', 
 // generalLimiter,, // Disabled for development
 cartController_1.removeCoupon);
+// Lock item at current price
+router.post('/lock', 
+// generalLimiter,, // Disabled for development
+cartController_1.lockItem);
+// Get locked items
+router.get('/locked', 
+// generalLimiter,, // Disabled for development
+cartController_1.getLockedItems);
+// Unlock item
+router.delete('/lock/:productId', 
+// generalLimiter,, // Disabled for development
+(0, validation_1.validateParams)(validation_2.Joi.object({
+    productId: validation_1.commonSchemas.objectId().required()
+})), cartController_1.unlockItem);
+// Move locked item to cart
+router.post('/lock/:productId/move-to-cart', 
+// generalLimiter,, // Disabled for development
+(0, validation_1.validateParams)(validation_2.Joi.object({
+    productId: validation_1.commonSchemas.objectId().required()
+})), cartController_1.moveLockedToCart);
 exports.default = router;

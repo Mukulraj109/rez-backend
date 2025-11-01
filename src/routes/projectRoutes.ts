@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  submitProject,
   getProjects,
   getProjectById,
   getProjectsByCategory,
@@ -14,6 +15,22 @@ import { validate, validateParams, validateQuery, commonSchemas } from '../middl
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+
+// Submit a project (requires authentication)
+router.post('/submit',
+  authenticate,
+  validate(Joi.object({
+    projectId: commonSchemas.objectId().required(),
+    content: Joi.alternatives().try(
+      Joi.string().trim().min(1).max(5000),
+      Joi.array().items(Joi.string().uri())
+    ).required(),
+    contentType: Joi.string().valid('text', 'image', 'video', 'rating', 'checkin', 'receipt').default('text'),
+    description: Joi.string().trim().max(1000).optional(),
+    metadata: Joi.object().optional()
+  })),
+  submitProject
+);
 
 // Get all projects with filtering
 router.get('/', 

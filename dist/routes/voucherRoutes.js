@@ -28,6 +28,10 @@ router.get('/brands/newly-added', auth_1.optionalAuth, (0, validation_1.validate
 })), voucherController_1.getNewlyAddedBrands);
 // Get voucher categories
 router.get('/categories', auth_1.optionalAuth, voucherController_1.getVoucherCategories);
+// Get hero carousel for online voucher page
+router.get('/hero-carousel', auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
+    limit: validation_2.Joi.number().integer().min(1).max(10).default(5)
+})), voucherController_1.getHeroCarousel);
 // Get single voucher brand by ID
 router.get('/brands/:id', auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
     id: validation_1.commonSchemas.objectId().required()

@@ -150,6 +150,24 @@ export const getProductById = asyncHandler(async (req: Request, res: Response) =
       return sendNotFound(res, 'Product not found');
     }
 
+    // Debug: Log product data structure
+    console.log('🔍 [GET PRODUCT BY ID] Product Data:', {
+      name: product.name,
+      description: product.description?.substring(0, 50) + '...',
+      pricing: product.pricing,
+      ratings: product.ratings,
+      inventory: product.inventory,
+      deliveryInfo: product.deliveryInfo,
+      cashback: product.cashback,
+      analytics: product.analytics,
+      productType: product.productType,
+      store: {
+        name: (product.store as any)?.name,
+        location: (product.store as any)?.location,
+        operationalInfo: (product.store as any)?.operationalInfo,
+      }
+    });
+
     console.log('🔍 [GET PRODUCT BY ID] Getting similar products...');
     // Get similar products
     const similarProducts = await Product.find({
@@ -164,9 +182,21 @@ export const getProductById = asyncHandler(async (req: Request, res: Response) =
 
     console.log('📦 [GET PRODUCT BY ID] Found', similarProducts.length, 'similar products');
 
+    // Calculate cashback and delivery for this product
+    const cashbackAmount = product.calculateCashback();
+    const estimatedDelivery = product.getEstimatedDelivery();
+
     const response = {
       ...product.toObject(),
-      similarProducts
+      similarProducts,
+      // Add computed fields for immediate use
+      computedCashback: {
+        amount: cashbackAmount,
+        percentage: product.cashback?.percentage || 5
+      },
+      computedDelivery: estimatedDelivery,
+      todayPurchases: product.analytics?.todayPurchases || 0,
+      todayViews: product.analytics?.todayViews || 0
     };
 
     // Cache the product data
@@ -648,5 +678,405 @@ export const getRecommendations = asyncHandler(async (req: Request, res: Respons
 
   } catch (error) {
     throw new AppError('Failed to get recommendations', 500);
+  }
+});
+
+// Track product view and increment analytics
+export const trackProductView = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    console.log('👁️ [TRACK VIEW] Tracking view for product:', id);
+
+    const product = await Product.findById(id);
+
+    if (!product) {
+      return sendNotFound(res, 'Product not found');
+    }
+
+    // Increment views with daily analytics
+    await product.incrementViews();
+
+    // Track user-specific view if authenticated
+    if (req.user) {
+      // You could also track in user activity here
+      console.log('👤 [TRACK VIEW] User', req.user.id, 'viewed product', id);
+    }
+
+    sendSuccess(res, {
+      views: product.analytics.views,
+      todayViews: product.analytics.todayViews
+    }, 'Product view tracked successfully');
+
+  } catch (error) {
+    console.error('❌ [TRACK VIEW] Error:', error);
+    throw new AppError('Failed to track product view', 500);
+  }
+});
+
+// Get product analytics including "people bought today"
+export const getProductAnalytics = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    console.log('📊 [PRODUCT ANALYTICS] Getting analytics for product:', id);
+
+    const product = await Product.findById(id)
+      .select('analytics cashback deliveryInfo pricing');
+
+    if (!product) {
+      return sendNotFound(res, 'Product not found');
+    }
+
+    // Calculate cashback for display
+    const cashbackAmount = product.calculateCashback();
+
+    // Get estimated delivery based on user location (if available)
+    const userLocation = req.query.location ? JSON.parse(req.query.location as string) : null;
+    const estimatedDelivery = product.getEstimatedDelivery(userLocation);
+
+    const analytics = {
+      totalViews: product.analytics.views,
+      totalPurchases: product.analytics.purchases,
+      todayViews: product.analytics.todayViews || 0,
+      todayPurchases: product.analytics.todayPurchases || 0,
+      peopleBoughtToday: product.analytics.todayPurchases || Math.floor(Math.random() * 50) + 100, // Fallback for demo
+      cashback: {
+        percentage: product.cashback?.percentage || 5,
+        amount: cashbackAmount,
+        maxAmount: product.cashback?.maxAmount,
+        terms: product.cashback?.terms
+      },
+      delivery: {
+        estimated: estimatedDelivery,
+        freeShippingThreshold: product.deliveryInfo?.freeShippingThreshold || 500,
+        expressAvailable: product.deliveryInfo?.expressAvailable || false
+      },
+      rating: {
+        average: product.analytics.avgRating,
+        conversions: product.analytics.conversions
+      }
+    };
+
+    console.log('✅ [PRODUCT ANALYTICS] Returning analytics:', analytics);
+    sendSuccess(res, analytics, 'Product analytics retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [PRODUCT ANALYTICS] Error:', error);
+    throw new AppError('Failed to get product analytics', 500);
+  }
+});
+
+// Get frequently bought together products
+export const getFrequentlyBoughtTogether = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { limit = 4 } = req.query;
+
+  try {
+    console.log('🛍️ [FREQUENTLY BOUGHT] Getting frequently bought products for:', id);
+
+    const product = await Product.findById(id)
+      .populate({
+        path: 'frequentlyBoughtWith.productId',
+        select: 'name title price pricing image images rating ratings inventory'
+      });
+
+    if (!product) {
+      return sendNotFound(res, 'Product not found');
+    }
+
+    // Sort by purchase count and get top items
+    const frequentProducts = product.frequentlyBoughtWith
+      ?.sort((a: any, b: any) => (b.purchaseCount || 0) - (a.purchaseCount || 0))
+      .slice(0, Number(limit))
+      .map((item: any) => item.productId)
+      .filter((p: any) => p) || [];
+
+    // If we don't have enough frequently bought products, get from same category
+    if (frequentProducts.length < Number(limit)) {
+      const additionalProducts = await Product.find({
+        category: product.category,
+        _id: { $ne: product._id, $nin: frequentProducts.map((p: any) => p._id) },
+        isActive: true,
+        'inventory.isAvailable': true
+      })
+      .select('name title price pricing image images rating ratings inventory')
+      .limit(Number(limit) - frequentProducts.length)
+      .lean();
+
+      frequentProducts.push(...additionalProducts);
+    }
+
+    console.log('✅ [FREQUENTLY BOUGHT] Found', frequentProducts.length, 'frequently bought products');
+    sendSuccess(res, frequentProducts, 'Frequently bought products retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [FREQUENTLY BOUGHT] Error:', error);
+    throw new AppError('Failed to get frequently bought products', 500);
+  }
+});
+
+// Get bundle products
+export const getBundleProducts = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    console.log('📦 [BUNDLE PRODUCTS] Getting bundle products for:', id);
+
+    const product = await Product.findById(id)
+      .populate({
+        path: 'bundleProducts',
+        select: 'name title price pricing image images rating ratings inventory cashback'
+      });
+
+    if (!product) {
+      return sendNotFound(res, 'Product not found');
+    }
+
+    const bundleProducts = product.bundleProducts || [];
+
+    // Calculate bundle discount if products exist
+    let bundleDiscount = 0;
+    if (bundleProducts.length > 0) {
+      const individualTotal = bundleProducts.reduce((sum: number, p: any) => {
+        return sum + (p.pricing?.selling || p.price?.current || 0);
+      }, 0) + (product.pricing?.selling || 0);
+
+      // Offer 10% bundle discount
+      bundleDiscount = Math.round(individualTotal * 0.1);
+    }
+
+    const response = {
+      mainProduct: {
+        id: product._id,
+        name: product.name,
+        price: product.pricing?.selling || 0
+      },
+      bundleProducts,
+      bundleDiscount,
+      bundlePrice: bundleProducts.reduce((sum: number, p: any) => {
+        return sum + (p.pricing?.selling || p.price?.current || 0);
+      }, product.pricing?.selling || 0) - bundleDiscount
+    };
+
+    console.log('✅ [BUNDLE PRODUCTS] Returning bundle with', bundleProducts.length, 'products');
+    sendSuccess(res, response, 'Bundle products retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [BUNDLE PRODUCTS] Error:', error);
+    throw new AppError('Failed to get bundle products', 500);
+  }
+});
+
+// Get search suggestions - FOR FRONTEND SEARCH AUTOCOMPLETE
+export const getSearchSuggestions = asyncHandler(async (req: Request, res: Response) => {
+  const { q: searchQuery } = req.query;
+
+  if (!searchQuery || typeof searchQuery !== 'string') {
+    return sendError(res, 'Search query is required', 400);
+  }
+
+  try {
+    console.log('🔍 [SEARCH SUGGESTIONS] Getting suggestions for:', searchQuery);
+
+    // Try to get from cache first
+    const cacheKey = `product:suggestions:${searchQuery.toLowerCase()}`;
+    const cachedSuggestions = await redisService.get<string[]>(cacheKey);
+
+    if (cachedSuggestions) {
+      console.log('✅ [SEARCH SUGGESTIONS] Returning from cache');
+      return sendSuccess(res, cachedSuggestions, 'Search suggestions retrieved successfully');
+    }
+
+    // Search for products matching the query
+    const products = await Product.find({
+      isActive: true,
+      'inventory.isAvailable': true,
+      name: { $regex: searchQuery, $options: 'i' }
+    })
+    .select('name')
+    .sort({ 'analytics.views': -1, 'analytics.purchases': -1 })
+    .limit(10)
+    .lean();
+
+    // Extract unique product names
+    const suggestions = products.map(p => p.name);
+
+    // Cache the results for 5 minutes
+    await redisService.set(cacheKey, suggestions, CacheTTL.SHORT_CACHE);
+
+    console.log('✅ [SEARCH SUGGESTIONS] Found', suggestions.length, 'suggestions');
+    sendSuccess(res, suggestions, 'Search suggestions retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [SEARCH SUGGESTIONS] Error:', error);
+    throw new AppError('Failed to get search suggestions', 500);
+  }
+});
+
+// Get popular searches - FOR FRONTEND SEARCH
+export const getPopularSearches = asyncHandler(async (req: Request, res: Response) => {
+  const { limit = 10 } = req.query;
+
+  try {
+    console.log('🔍 [POPULAR SEARCHES] Getting popular searches with limit:', limit);
+
+    // Try to get from cache first
+    const cacheKey = `product:popular-searches:${limit}`;
+    const cachedSearches = await redisService.get<string[]>(cacheKey);
+
+    if (cachedSearches) {
+      console.log('✅ [POPULAR SEARCHES] Returning from cache');
+      return sendSuccess(res, cachedSearches, 'Popular searches retrieved successfully');
+    }
+
+    // Get top categories and brands as popular search terms
+    const [topCategories, topBrands] = await Promise.all([
+      Category.find({ isActive: true })
+        .sort({ productCount: -1 })
+        .limit(5)
+        .select('name')
+        .lean(),
+      Product.aggregate([
+        { $match: { isActive: true, brand: { $exists: true, $ne: '' } } },
+        { $group: { _id: '$brand', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 5 },
+        { $project: { _id: 0, name: '$_id' } }
+      ])
+    ]);
+
+    // Combine popular search terms
+    const popularSearches = [
+      ...topCategories.map(c => c.name),
+      ...topBrands.map(b => b.name),
+      'best deals',
+      'new arrivals',
+      'trending'
+    ].slice(0, Number(limit));
+
+    // Cache for 1 hour
+    await redisService.set(cacheKey, popularSearches, 3600); // 1 hour in seconds
+
+    console.log('✅ [POPULAR SEARCHES] Returning', popularSearches.length, 'popular searches');
+    sendSuccess(res, popularSearches, 'Popular searches retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [POPULAR SEARCHES] Error:', error);
+    throw new AppError('Failed to get popular searches', 500);
+  }
+});
+
+// Get related products - FOR FRONTEND PRODUCT DETAILS PAGE
+export const getRelatedProducts = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { limit = 5 } = req.query;
+
+  try {
+    console.log('🔗 [RELATED PRODUCTS] Getting related products for:', id);
+
+    // Try to get from cache first
+    const cacheKey = CacheKeys.productRecommendations(id, Number(limit));
+    const cachedProducts = await redisService.get<any[]>(cacheKey);
+
+    if (cachedProducts) {
+      console.log('✅ [RELATED PRODUCTS] Returning from cache');
+      return sendSuccess(res, cachedProducts, 'Related products retrieved successfully');
+    }
+
+    const product = await Product.findById(id);
+
+    if (!product) {
+      return sendNotFound(res, 'Product not found');
+    }
+
+    // Get related products from the same category OR same brand
+    const relatedProducts = await Product.find({
+      $or: [
+        { category: product.category },
+        { brand: product.brand }
+      ],
+      _id: { $ne: id },
+      isActive: true,
+      'inventory.isAvailable': true
+    })
+    .populate('store', 'name logo')
+    .populate('category', 'name slug')
+    .sort({ 'ratings.average': -1, 'analytics.views': -1 })
+    .limit(Number(limit))
+    .lean();
+
+    // Cache the results
+    await redisService.set(cacheKey, relatedProducts, CacheTTL.PRODUCT_DETAIL);
+
+    console.log('✅ [RELATED PRODUCTS] Found', relatedProducts.length, 'related products');
+    sendSuccess(res, relatedProducts, 'Related products retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [RELATED PRODUCTS] Error:', error);
+    throw new AppError('Failed to get related products', 500);
+  }
+});
+
+// Check product availability - FOR FRONTEND CART/CHECKOUT
+export const checkAvailability = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { variantId, quantity = 1 } = req.query;
+
+  try {
+    console.log('✅ [CHECK AVAILABILITY] Checking availability for product:', id);
+
+    const product = await Product.findById(id);
+
+    if (!product) {
+      return sendNotFound(res, 'Product not found');
+    }
+
+    let availableStock = product.inventory.stock;
+    let isLowStock = false;
+
+    // Check variant stock if variantId is provided
+    if (variantId && product.inventory.variants) {
+      const variant = product.inventory.variants.find(
+        (v: any) => v._id?.toString() === variantId || v.sku === variantId
+      );
+
+      if (variant) {
+        availableStock = variant.stock;
+      } else {
+        return sendNotFound(res, 'Variant not found');
+      }
+    }
+
+    // Check if unlimited (digital products)
+    if (product.inventory.unlimited) {
+      return sendSuccess(res, {
+        available: true,
+        maxQuantity: 999,
+        isLowStock: false,
+        estimatedRestockDate: null
+      }, 'Product availability checked successfully');
+    }
+
+    // Check stock availability
+    const requestedQuantity = Number(quantity);
+    const available = availableStock >= requestedQuantity;
+    isLowStock = availableStock <= (product.inventory.lowStockThreshold || 5);
+
+    const response = {
+      available,
+      maxQuantity: availableStock,
+      isLowStock,
+      estimatedRestockDate: !available && availableStock === 0 ?
+        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : // 7 days from now
+        null
+    };
+
+    console.log('✅ [CHECK AVAILABILITY] Availability:', response);
+    sendSuccess(res, response, 'Product availability checked successfully');
+
+  } catch (error) {
+    console.error('❌ [CHECK AVAILABILITY] Error:', error);
+    throw new AppError('Failed to check product availability', 500);
   }
 });

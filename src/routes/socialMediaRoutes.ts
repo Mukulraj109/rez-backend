@@ -11,7 +11,7 @@ import {
   deletePost,
   getPlatformStats
 } from '../controllers/socialMediaController';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireAdmin } from '../middleware/auth';
 import { validateBody, validateParams, validateQuery, commonSchemas } from '../middleware/validation';
 import { Joi } from '../middleware/validation';
 
@@ -58,8 +58,9 @@ router.get('/posts/:postId',
   getPostById
 );
 
-// Update post status (Admin only - should be protected with admin middleware)
+// Update post status (Admin only - PROTECTED)
 router.patch('/posts/:postId/status',
+  requireAdmin, // ✅ Admin verification added
   validateParams(Joi.object({
     postId: commonSchemas.objectId().required()
   })),

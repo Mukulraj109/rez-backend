@@ -31,6 +31,9 @@ export interface IVoucherBrand extends Document {
   // Category
   category: string; // E.g., 'shopping', 'food', 'travel', etc.
 
+  // Store link (optional - not all vouchers need to be linked to stores)
+  store?: mongoose.Types.ObjectId; // Reference to Store
+
   // Flags
   isNewlyAdded: boolean;
   isFeatured: boolean;
@@ -149,6 +152,13 @@ const VoucherBrandSchema = new Schema<IVoucherBrand>(
       index: true,
     },
 
+    // Store link (optional - not all vouchers need to be linked to stores)
+    store: {
+      type: Schema.Types.ObjectId,
+      ref: 'Store',
+      index: true,
+    },
+
     // Flags
     isNewlyAdded: {
       type: Boolean,
@@ -201,6 +211,7 @@ const VoucherBrandSchema = new Schema<IVoucherBrand>(
 VoucherBrandSchema.index({ category: 1, isActive: 1 });
 VoucherBrandSchema.index({ isFeatured: 1, isActive: 1 });
 VoucherBrandSchema.index({ isNewlyAdded: 1, isActive: 1 });
+VoucherBrandSchema.index({ store: 1, isActive: 1 });
 VoucherBrandSchema.index({ name: 'text', description: 'text' });
 
 // UserVoucher Schema

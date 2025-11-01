@@ -166,7 +166,27 @@ const PaymentMethodSchema = new mongoose_1.Schema({
         select: false // Don't expose token in queries
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    toJSON: {
+        virtuals: true,
+        transform: (_doc, ret) => {
+            ret.id = ret._id.toString();
+            delete ret._id;
+            delete ret.__v;
+            return ret;
+        }
+    },
+    toObject: {
+        virtuals: true,
+        transform: (_doc, ret) => {
+            ret.id = ret._id.toString();
+            return ret;
+        }
+    }
+});
+// Virtual ID field
+PaymentMethodSchema.virtual('id').get(function () {
+    return this._id.toString();
 });
 // Indexes
 PaymentMethodSchema.index({ user: 1, isDefault: 1 });

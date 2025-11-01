@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  createVideo,
   getVideos,
   getVideoById,
   getVideosByCategory,
@@ -16,6 +17,23 @@ import { validate, validateParams, validateQuery, videoSchemas, commonSchemas } 
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+
+// Create a new video (requires authentication)
+router.post('/', 
+  authenticate,
+  validate(Joi.object({
+    title: Joi.string().trim().min(1).max(100).required(),
+    description: Joi.string().trim().max(1000).optional(),
+    videoUrl: Joi.string().uri().required(),
+    thumbnailUrl: Joi.string().uri().optional(),
+    category: Joi.string().valid('trending_me', 'trending_her', 'waist', 'article', 'featured', 'challenge', 'tutorial', 'review').default('general'),
+    tags: Joi.array().items(Joi.string().trim().max(50)).max(10).optional(),
+    products: Joi.array().items(commonSchemas.objectId()).max(20).optional(),
+    duration: Joi.number().integer().min(0).optional(),
+    isPublic: Joi.boolean().default(true)
+  })),
+  createVideo
+);
 
 // Get all videos with filtering
 router.get('/', 

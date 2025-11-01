@@ -818,8 +818,17 @@ class RecommendationService {
       const bundles: BundleRecommendation[] = complementaryProducts
         .slice(0, limit)
         .map(product => {
-          const originalCombined = ((sourceProduct as any).pricing.original || (sourceProduct as any).pricing.selling) +
-                                  ((product as any).pricing.original || (product as any).pricing.selling);
+          // Handle both pricing and price field structures
+          const sourcePricing = (sourceProduct as any).pricing || (sourceProduct as any).price || {};
+          const productPricing = (product as any).pricing || (product as any).price || {};
+
+          // Get prices from either structure
+          const sourcePrice = sourcePricing.original || sourcePricing.selling ||
+                              sourcePricing.current || 0;
+          const productPrice = productPricing.original || productPricing.selling ||
+                               productPricing.current || 0;
+
+          const originalCombined = sourcePrice + productPrice;
           const discountPercentage = 10 + Math.random() * 5; // 10-15%
           const combinedPrice = originalCombined * (1 - discountPercentage / 100);
           const savings = originalCombined - combinedPrice;

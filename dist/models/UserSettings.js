@@ -47,10 +47,12 @@ const UserSettingsSchema = new mongoose_1.Schema({
     general: {
         language: {
             type: String,
+            enum: ['en', 'hi', 'te', 'ta', 'bn', 'es', 'fr', 'de', 'zh', 'ja'],
             default: 'en'
         },
         currency: {
             type: String,
+            enum: ['INR', 'USD', 'GBP', 'CAD', 'AUD', 'EUR', 'BRL', 'CNY', 'JPY'],
             default: 'INR'
         },
         timezone: {
@@ -222,6 +224,43 @@ const UserSettingsSchema = new mongoose_1.Schema({
         animations: { type: Boolean, default: true },
         sounds: { type: Boolean, default: true },
         hapticFeedback: { type: Boolean, default: true }
+    },
+    courier: {
+        preferredCourier: {
+            type: String,
+            enum: ['any', 'delhivery', 'bluedart', 'ekart', 'dtdc', 'fedex'],
+            default: 'any'
+        },
+        deliveryTimePreference: {
+            weekdays: [{
+                    type: String,
+                    enum: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'],
+                    default: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+                }],
+            preferredTimeSlot: {
+                start: { type: String, default: '09:00' },
+                end: { type: String, default: '18:00' }
+            },
+            avoidWeekends: { type: Boolean, default: false }
+        },
+        deliveryInstructions: {
+            contactlessDelivery: { type: Boolean, default: true },
+            leaveAtDoor: { type: Boolean, default: false },
+            signatureRequired: { type: Boolean, default: false },
+            callBeforeDelivery: { type: Boolean, default: true },
+            specificInstructions: { type: String, default: '' }
+        },
+        alternateContact: {
+            name: { type: String },
+            phone: { type: String },
+            relation: { type: String }
+        },
+        courierNotifications: {
+            smsUpdates: { type: Boolean, default: true },
+            emailUpdates: { type: Boolean, default: true },
+            whatsappUpdates: { type: Boolean, default: false },
+            callUpdates: { type: Boolean, default: false }
+        }
     },
     lastUpdated: {
         type: Date,

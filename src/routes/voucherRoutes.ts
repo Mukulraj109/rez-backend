@@ -9,7 +9,8 @@ import {
   getUserVouchers,
   getUserVoucherById,
   useVoucher,
-  trackBrandView
+  trackBrandView,
+  getHeroCarousel
 } from '../controllers/voucherController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, validate, commonSchemas } from '../middleware/validation';
@@ -57,6 +58,15 @@ router.get('/brands/newly-added',
 router.get('/categories',
   optionalAuth,
   getVoucherCategories
+);
+
+// Get hero carousel for online voucher page
+router.get('/hero-carousel',
+  optionalAuth,
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(10).default(5)
+  })),
+  getHeroCarousel
 );
 
 // Get single voucher brand by ID

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.trackBrandView = exports.useVoucher = exports.getUserVoucherById = exports.getUserVouchers = exports.purchaseVoucher = exports.getVoucherCategories = exports.getNewlyAddedBrands = exports.getFeaturedBrands = exports.getVoucherBrandById = exports.getVoucherBrands = void 0;
+exports.getHeroCarousel = exports.trackBrandView = exports.useVoucher = exports.getUserVoucherById = exports.getUserVouchers = exports.purchaseVoucher = exports.getVoucherCategories = exports.getNewlyAddedBrands = exports.getFeaturedBrands = exports.getVoucherBrandById = exports.getVoucherBrands = void 0;
 const Voucher_1 = require("../models/Voucher");
 const Wallet_1 = require("../models/Wallet");
 const Transaction_1 = require("../models/Transaction");
@@ -35,6 +35,7 @@ const getVoucherBrands = async (req, res) => {
         const skip = (pageNum - 1) * limitNum;
         const [brands, total] = await Promise.all([
             Voucher_1.VoucherBrand.find(filter)
+                .populate('store', 'name slug logo location.address location.city')
                 .sort(sortOptions)
                 .skip(skip)
                 .limit(limitNum)
@@ -56,7 +57,9 @@ exports.getVoucherBrands = getVoucherBrands;
 const getVoucherBrandById = async (req, res) => {
     try {
         const { id } = req.params;
-        const brand = await Voucher_1.VoucherBrand.findById(id).lean();
+        const brand = await Voucher_1.VoucherBrand.findById(id)
+            .populate('store', 'name slug logo location.address location.city')
+            .lean();
         if (!brand) {
             return (0, response_1.sendError)(res, 'Voucher brand not found', 404);
         }
@@ -79,6 +82,7 @@ const getFeaturedBrands = async (req, res) => {
             isActive: true,
             isFeatured: true,
         })
+            .populate('store', 'name slug logo location.address location.city')
             .sort({ purchaseCount: -1 })
             .limit(Number(limit))
             .lean();
@@ -101,6 +105,7 @@ const getNewlyAddedBrands = async (req, res) => {
             isActive: true,
             isNewlyAdded: true,
         })
+            .populate('store', 'name slug logo location.address location.city')
             .sort({ createdAt: -1 })
             .limit(Number(limit))
             .lean();
@@ -348,3 +353,74 @@ const trackBrandView = async (req, res) => {
     }
 };
 exports.trackBrandView = trackBrandView;
+/**
+ * GET /api/vouchers/hero-carousel
+ * Get hero carousel items for online voucher page
+ */
+const getHeroCarousel = async (req, res) => {
+    try {
+        const { limit = 5 } = req.query;
+        // Get featured brands with highest cashback rates, prioritizing travel brands (like MakeMyTrip) for hero carousel
+        const featuredBrands = await Voucher_1.VoucherBrand.find({
+            isActive: true,
+            $or: [
+                { isFeatured: true },
+                { category: 'travel' }, // Include travel brands in hero carousel
+            ],
+        })
+            .populate('store', 'name slug logo location.address location.city')
+            .sort({
+            // Prioritize travel brands first, then by cashback rate
+            category: 1, // travel comes first alphabetically, but we'll manually sort
+            cashbackRate: -1,
+            purchaseCount: -1
+        })
+            .limit(Number(limit) + 5) // Get extra to filter
+            .lean();
+        // Manually sort: travel brands first, then others
+        featuredBrands.sort((a, b) => {
+            const aIsTravel = a.category === 'travel';
+            const bIsTravel = b.category === 'travel';
+            if (aIsTravel && !bIsTravel)
+                return -1;
+            if (!aIsTravel && bIsTravel)
+                return 1;
+            return b.cashbackRate - a.cashbackRate;
+        });
+        // Limit to requested number
+        const limitedBrands = featuredBrands.slice(0, Number(limit));
+        // Transform to carousel format
+        const carouselItems = limitedBrands.map((brand, index) => {
+            // Special handling for MakeMyTrip to match image format
+            const title = brand.name.toLowerCase() === 'makemytrip'
+                ? 'make my trip'
+                : brand.name;
+            return {
+                id: brand._id.toString(),
+                title,
+                subtitle: `Cashback upto ${brand.cashbackRate}%`,
+                image: brand.logo, // Use logo as image for now
+                backgroundColor: brand.backgroundColor || '#F97316',
+                textColor: brand.logoColor || '#FFFFFF',
+                cashbackRate: brand.cashbackRate,
+                brandId: brand._id.toString(),
+                store: brand.store ? {
+                    id: brand.store._id?.toString(),
+                    name: brand.store.name,
+                    slug: brand.store.slug,
+                    address: brand.store.location?.address,
+                } : null,
+                action: {
+                    type: 'brand',
+                    target: brand._id.toString(),
+                },
+            };
+        });
+        (0, response_1.sendSuccess)(res, carouselItems, 'Hero carousel items fetched successfully');
+    }
+    catch (error) {
+        console.error('Error fetching hero carousel:', error);
+        (0, response_1.sendError)(res, 'Failed to fetch hero carousel', 500);
+    }
+};
+exports.getHeroCarousel = getHeroCarousel;

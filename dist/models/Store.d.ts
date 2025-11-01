@@ -115,12 +115,20 @@ export interface IStoreAnalytics {
         revenue: number;
     }[];
 }
+export interface IStoreVideo {
+    url: string;
+    thumbnail?: string;
+    title?: string;
+    duration?: number;
+    uploadedAt?: Date;
+}
 export interface IStore extends Document {
     name: string;
     slug: string;
     description?: string;
     logo?: string;
     banner?: string;
+    videos?: IStoreVideo[];
     category: Types.ObjectId;
     subCategories?: Types.ObjectId[];
     location: IStoreLocation;

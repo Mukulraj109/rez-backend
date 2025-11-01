@@ -22,7 +22,9 @@ exports.getUserActivities = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
         Activity_1.Activity.find(query)
             .sort({ createdAt: -1 })
             .skip(skip)
-            .limit(limit),
+            .limit(limit)
+            .populate('user', 'name phone')
+            .lean(),
         Activity_1.Activity.countDocuments(query)
     ]);
     const pagination = {

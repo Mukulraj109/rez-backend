@@ -1,0 +1,367 @@
+"use strict";
+/**
+ * Bill Verification Service
+ * Handles bill verification workflow with OCR and fraud detection
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.billVerificationService = void 0;
+const Bill_1 = require("../models/Bill");
+const Merchant_1 = require("../models/Merchant");
+const ocrService_1 = require("./ocrService");
+const fraudDetectionService_1 = require("./fraudDetectionService");
+class BillVerificationService {
+    /**
+     * Process and verify a newly uploaded bill
+     */
+    async processBill(billId, imageUrl, imageHash) {
+        console.log(`🔄 [BILL VERIFICATION] Processing bill ${billId}...`);
+        try {
+            // Get bill document
+            const bill = await Bill_1.Bill.findById(billId).populate('merchant');
+            if (!bill) {
+                return {
+                    success: false,
+                    error: 'Bill not found',
+                };
+            }
+            // Mark as processing
+            bill.verificationStatus = 'processing';
+            await bill.save();
+            // Step 1: Run OCR to extract text
+            console.log('📸 [VERIFICATION] Step 1: Running OCR...');
+            const ocrResult = await ocrService_1.ocrService.extractTextFromBill(imageUrl);
+            if (ocrResult.success && ocrResult.extractedData) {
+                // Save extracted data
+                bill.extractedData = ocrResult.extractedData;
+                bill.metadata.ocrConfidence = ocrResult.confidence;
+                await bill.save();
+                // Validate extracted data against user input
+                const merchant = bill.merchant;
+                const validation = ocrService_1.ocrService.validateExtractedData(ocrResult.extractedData, {
+                    amount: bill.amount,
+                    billDate: bill.billDate,
+                    merchantName: merchant?.name,
+                });
+                if (!validation.isValid) {
+                    console.log('⚠️ [VERIFICATION] OCR validation warnings:', validation.warnings);
+                    // Store warnings but don't reject automatically
+                    bill.metadata.fraudFlags = validation.warnings;
+                }
+            }
+            else {
+                console.log('⚠️ [VERIFICATION] OCR failed, proceeding with manual review');
+            }
+            // Step 2: Run fraud detection
+            console.log('🔍 [VERIFICATION] Step 2: Running fraud detection...');
+            const fraudCheck = await fraudDetectionService_1.fraudDetectionService.checkBillFraud({
+                userId: bill.user,
+                merchantId: bill.merchant,
+                amount: bill.amount,
+                billDate: bill.billDate,
+                billNumber: bill.billNumber,
+                imageUrl,
+                imageHash,
+            });
+            // Save fraud detection results
+            bill.metadata.fraudScore = fraudCheck.fraudScore;
+            bill.metadata.fraudFlags = [...(bill.metadata.fraudFlags || []), ...fraudCheck.flags];
+            await bill.save();
+            // Step 3: Automatic decision making
+            console.log('⚖️ [VERIFICATION] Step 3: Making verification decision...');
+            const decision = await this.makeVerificationDecision(bill, ocrResult.confidence || 0, fraudCheck.fraudScore);
+            console.log(`✅ [VERIFICATION] Decision: ${decision.status}`);
+            return {
+                success: true,
+                billId: bill._id,
+                status: decision.status,
+                message: decision.message,
+                warnings: fraudCheck.warnings,
+            };
+        }
+        catch (error) {
+            console.error('❌ [VERIFICATION] Error processing bill:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Verification failed',
+            };
+        }
+    }
+    /**
+     * Make automatic verification decision
+     */
+    async makeVerificationDecision(bill, ocrConfidence, fraudScore) {
+        // AUTO-REJECT criteria
+        if (fraudScore > 70) {
+            await bill.reject('Bill rejected due to high fraud risk. Please contact support if you believe this is an error.', undefined);
+            return {
+                status: 'rejected',
+                message: 'Bill automatically rejected due to fraud indicators',
+            };
+        }
+        // Check if bill is too old
+        const billAge = (Date.now() - bill.billDate.getTime()) / (1000 * 60 * 60 * 24);
+        if (billAge > 30) {
+            await bill.reject('Bill is older than 30 days. Only bills from the last 30 days are eligible for cashback.', undefined);
+            return {
+                status: 'rejected',
+                message: 'Bill rejected: too old',
+            };
+        }
+        // Check if merchant exists and is active
+        const merchant = await Merchant_1.Merchant.findById(bill.merchant);
+        if (!merchant || !merchant.isActive) {
+            await bill.reject('Merchant not found or inactive. Please contact support.', undefined);
+            return {
+                status: 'rejected',
+                message: 'Bill rejected: merchant inactive',
+            };
+        }
+        // AUTO-APPROVE criteria
+        // - High OCR confidence (>90%)
+        // - Low fraud score (<30)
+        // - Merchant verified
+        // - Amount within reasonable range
+        const isHighConfidence = ocrConfidence >= 90;
+        const isLowFraud = fraudScore < 30;
+        const isReasonableAmount = bill.amount >= 50 && bill.amount <= 10000;
+        if (isHighConfidence && isLowFraud && isReasonableAmount) {
+            await bill.approve(undefined);
+            return {
+                status: 'approved',
+                message: 'Bill automatically approved',
+            };
+        }
+        // MANUAL REVIEW required
+        // - Medium OCR confidence (60-90%)
+        // - Medium fraud score (30-70)
+        // - Any other edge case
+        bill.verificationMethod = 'manual';
+        bill.verificationStatus = 'pending';
+        await bill.save();
+        return {
+            status: 'pending',
+            message: 'Bill queued for manual review',
+        };
+    }
+    /**
+     * Manually approve a bill (admin action)
+     */
+    async manuallyApproveBill(billId, adminId, notes) {
+        try {
+            console.log(`✅ [MANUAL APPROVAL] Admin ${adminId} approving bill ${billId}`);
+            const bill = await Bill_1.Bill.findById(billId);
+            if (!bill) {
+                return {
+                    success: false,
+                    error: 'Bill not found',
+                };
+            }
+            if (bill.verificationStatus === 'approved') {
+                return {
+                    success: false,
+                    error: 'Bill is already approved',
+                };
+            }
+            // Approve the bill
+            await bill.approve(adminId);
+            if (notes) {
+                bill.notes = (bill.notes || '') + `\nAdmin notes: ${notes}`;
+                await bill.save();
+            }
+            console.log('✅ [MANUAL APPROVAL] Bill approved successfully');
+            return {
+                success: true,
+                billId: bill._id,
+                status: 'approved',
+                message: 'Bill manually approved',
+            };
+        }
+        catch (error) {
+            console.error('❌ [MANUAL APPROVAL] Error:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Approval failed',
+            };
+        }
+    }
+    /**
+     * Manually reject a bill (admin action)
+     */
+    async manuallyRejectBill(billId, adminId, reason) {
+        try {
+            console.log(`❌ [MANUAL REJECTION] Admin ${adminId} rejecting bill ${billId}`);
+            const bill = await Bill_1.Bill.findById(billId);
+            if (!bill) {
+                return {
+                    success: false,
+                    error: 'Bill not found',
+                };
+            }
+            if (bill.verificationStatus === 'rejected') {
+                return {
+                    success: false,
+                    error: 'Bill is already rejected',
+                };
+            }
+            // Reject the bill
+            await bill.reject(reason, adminId);
+            console.log('✅ [MANUAL REJECTION] Bill rejected successfully');
+            return {
+                success: true,
+                billId: bill._id,
+                status: 'rejected',
+                message: 'Bill manually rejected',
+            };
+        }
+        catch (error) {
+            console.error('❌ [MANUAL REJECTION] Error:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Rejection failed',
+            };
+        }
+    }
+    /**
+     * Get bills pending manual review
+     */
+    async getPendingReviewBills(limit = 20, page = 1) {
+        try {
+            const skip = (page - 1) * limit;
+            const bills = await Bill_1.Bill.find({
+                verificationStatus: 'pending',
+                verificationMethod: 'manual',
+                isActive: true,
+            })
+                .populate('user', 'phoneNumber profile.firstName profile.lastName')
+                .populate('merchant', 'name logo')
+                .sort({ createdAt: 1 }) // Oldest first (FIFO)
+                .limit(limit)
+                .skip(skip);
+            return bills;
+        }
+        catch (error) {
+            console.error('Error getting pending review bills:', error);
+            return [];
+        }
+    }
+    /**
+     * Get verification statistics
+     */
+    async getVerificationStatistics() {
+        try {
+            const stats = await Bill_1.Bill.aggregate([
+                { $match: { isActive: true } },
+                {
+                    $group: {
+                        _id: null,
+                        totalBills: { $sum: 1 },
+                        pendingReview: {
+                            $sum: {
+                                $cond: [
+                                    { $eq: ['$verificationStatus', 'pending'] },
+                                    1,
+                                    0,
+                                ],
+                            },
+                        },
+                        autoApproved: {
+                            $sum: {
+                                $cond: [
+                                    {
+                                        $and: [
+                                            { $eq: ['$verificationStatus', 'approved'] },
+                                            { $eq: ['$verificationMethod', 'automatic'] },
+                                        ],
+                                    },
+                                    1,
+                                    0,
+                                ],
+                            },
+                        },
+                        autoRejected: {
+                            $sum: {
+                                $cond: [
+                                    {
+                                        $and: [
+                                            { $eq: ['$verificationStatus', 'rejected'] },
+                                            { $eq: ['$verificationMethod', 'automatic'] },
+                                        ],
+                                    },
+                                    1,
+                                    0,
+                                ],
+                            },
+                        },
+                        manuallyReviewed: {
+                            $sum: {
+                                $cond: [
+                                    { $eq: ['$verificationMethod', 'manual'] },
+                                    1,
+                                    0,
+                                ],
+                            },
+                        },
+                        avgProcessingTime: { $avg: '$metadata.processingTime' },
+                        avgOcrConfidence: { $avg: '$metadata.ocrConfidence' },
+                    },
+                },
+            ]);
+            if (stats.length === 0) {
+                return {
+                    totalBills: 0,
+                    pendingReview: 0,
+                    autoApproved: 0,
+                    autoRejected: 0,
+                    manuallyReviewed: 0,
+                    avgProcessingTime: 0,
+                    avgOcrConfidence: 0,
+                };
+            }
+            return stats[0];
+        }
+        catch (error) {
+            console.error('Error getting verification statistics:', error);
+            throw error;
+        }
+    }
+    /**
+     * Reprocess a rejected bill with new image
+     */
+    async reprocessBill(originalBillId, newImageUrl, newImageHash) {
+        try {
+            console.log(`🔄 [REPROCESS] Reprocessing bill ${originalBillId}...`);
+            const originalBill = await Bill_1.Bill.findById(originalBillId);
+            if (!originalBill) {
+                return {
+                    success: false,
+                    error: 'Original bill not found',
+                };
+            }
+            // Update bill image
+            originalBill.billImage.url = newImageUrl;
+            if (newImageHash) {
+                originalBill.billImage.imageHash = newImageHash;
+            }
+            // Reset verification status
+            originalBill.verificationStatus = 'pending';
+            originalBill.verificationMethod = undefined;
+            originalBill.rejectionReason = undefined;
+            originalBill.metadata.fraudScore = 0;
+            originalBill.metadata.fraudFlags = [];
+            originalBill.resubmissionCount = (originalBill.resubmissionCount || 0) + 1;
+            await originalBill.save();
+            // Process the bill again
+            return await this.processBill(originalBill._id, newImageUrl, newImageHash);
+        }
+        catch (error) {
+            console.error('❌ [REPROCESS] Error:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Reprocessing failed',
+            };
+        }
+    }
+}
+// Export singleton instance
+exports.billVerificationService = new BillVerificationService();
+exports.default = exports.billVerificationService;

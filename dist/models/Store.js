@@ -64,6 +64,30 @@ const StoreSchema = new mongoose_1.Schema({
         type: String,
         trim: true
     },
+    videos: [{
+            url: {
+                type: String,
+                required: true,
+                trim: true
+            },
+            thumbnail: {
+                type: String,
+                trim: true
+            },
+            title: {
+                type: String,
+                trim: true,
+                maxlength: 200
+            },
+            duration: {
+                type: Number,
+                min: 0
+            },
+            uploadedAt: {
+                type: Date,
+                default: Date.now
+            }
+        }],
     category: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: 'Category',

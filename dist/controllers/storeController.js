@@ -92,17 +92,22 @@ exports.getStores = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
 exports.getStoreById = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { storeId } = req.params;
     try {
+        console.log('🔍 [GET STORE] Fetching store:', storeId);
         const query = storeId.match(/^[0-9a-fA-F]{24}$/)
             ? { _id: storeId }
             : { slug: storeId };
+        console.log('🔍 [GET STORE] Query:', query);
         const store = await Store_1.Store.findOne({ ...query, isActive: true })
             .populate('category', 'name slug')
-            .populate('owner', 'profile.firstName profile.lastName')
             .lean();
+        console.log('🔍 [GET STORE] Store found:', !!store);
         if (!store) {
+            console.error('❌ [GET STORE] Store not found or not active');
             return (0, response_1.sendNotFound)(res, 'Store not found');
         }
+        console.log('✅ [GET STORE] Store retrieved:', store.name);
         // Get store products
+        console.log('🔍 [GET STORE] Fetching products for store...');
         const products = await Product_1.Product.find({
             store: store._id,
             isActive: true
@@ -111,6 +116,7 @@ exports.getStoreById = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             .limit(20)
             .sort({ createdAt: -1 })
             .lean();
+        console.log('✅ [GET STORE] Found', products.length, 'products');
         // Increment view count (simplified)
         await Store_1.Store.updateOne({ _id: store._id }, { $inc: { 'analytics.views': 1 } });
         (0, response_1.sendSuccess)(res, {
@@ -120,7 +126,9 @@ exports.getStoreById = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         }, 'Store retrieved successfully');
     }
     catch (error) {
-        throw new errorHandler_1.AppError('Failed to fetch store', 500);
+        console.error('❌ [GET STORE] Error:', error.message);
+        console.error('❌ [GET STORE] Stack:', error.stack);
+        throw new errorHandler_1.AppError(`Failed to fetch store: ${error.message}`, 500);
     }
 });
 // Get store products

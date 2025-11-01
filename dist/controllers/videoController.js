@@ -3,13 +3,104 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.searchVideos = exports.getVideoComments = exports.addVideoComment = exports.toggleVideoLike = exports.getVideosByCreator = exports.getTrendingVideos = exports.getVideosByCategory = exports.getVideoById = exports.getVideos = void 0;
+exports.searchVideos = exports.getVideoComments = exports.addVideoComment = exports.toggleVideoLike = exports.getVideosByCreator = exports.getTrendingVideos = exports.getVideosByCategory = exports.getVideoById = exports.getVideos = exports.createVideo = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 const Video_1 = require("../models/Video");
 const User_1 = require("../models/User");
 const response_1 = require("../utils/response");
 const asyncHandler_1 = require("../utils/asyncHandler");
 const errorHandler_1 = require("../middleware/errorHandler");
+const achievementService_1 = __importDefault(require("../services/achievementService"));
+const response_2 = require("../utils/response");
+// Create a new video
+exports.createVideo = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const userId = req.userId;
+    const { title, description, videoUrl, thumbnailUrl, category, tags, products, duration, isPublic = true } = req.body;
+    try {
+        console.log('🎥 [VIDEO] Creating video for user:', userId);
+        // Validate required fields
+        if (!title || !videoUrl) {
+            return (0, response_1.sendBadRequest)(res, 'Title and video URL are required');
+        }
+        // Create new video
+        const video = new Video_1.Video({
+            title,
+            description: description || '',
+            videoUrl,
+            thumbnail: thumbnailUrl || '',
+            creator: userId,
+            category: category || 'general',
+            tags: tags || [],
+            hashtags: tags || [], // Use tags for hashtags as well
+            products: products || [],
+            stores: [], // Empty stores array for now
+            isPublished: isPublic,
+            isApproved: true, // Auto-approve for now
+            isFeatured: false,
+            isTrending: false,
+            isSponsored: false,
+            moderationStatus: 'approved',
+            analytics: {
+                views: 0,
+                likes: 0,
+                comments: 0,
+                shares: 0,
+                engagement: 0
+            },
+            engagement: {
+                views: 0,
+                likes: [],
+                shares: 0
+            },
+            metadata: {
+                duration: duration || 0,
+                fileSize: 0,
+                resolution: '1080p',
+                format: 'mp4',
+                uploadedAt: new Date(),
+                lastModified: new Date()
+            },
+            processing: {
+                status: 'completed',
+                progress: 100,
+                startedAt: new Date(),
+                completedAt: new Date(),
+                error: null
+            }
+        });
+        await video.save();
+        console.log('✅ [VIDEO] Video created successfully:', video._id);
+        // Trigger achievement update for video creation
+        try {
+            await achievementService_1.default.triggerAchievementUpdate(userId, 'video_created');
+        }
+        catch (error) {
+            console.error('❌ [VIDEO] Error triggering achievement update:', error);
+        }
+        // Populate creator info for response
+        await video.populate('creator', 'profile.firstName profile.lastName profile.avatar');
+        (0, response_2.sendCreated)(res, {
+            video: {
+                id: video._id,
+                title: video.title,
+                description: video.description,
+                videoUrl: video.videoUrl,
+                thumbnail: video.thumbnail,
+                category: video.category,
+                tags: video.tags,
+                duration: video.metadata.duration,
+                isPublished: video.isPublished,
+                creator: video.creator,
+                analytics: video.analytics,
+                createdAt: video.createdAt
+            }
+        }, 'Video created successfully');
+    }
+    catch (error) {
+        console.error('❌ [VIDEO] Create video error:', error);
+        throw new errorHandler_1.AppError('Failed to create video', 500);
+    }
+});
 // Get all videos with filtering
 exports.getVideos = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { category, creator, hasProducts, search, sortBy = 'newest', page = 1, limit = 20 } = req.query;

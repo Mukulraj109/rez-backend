@@ -5,7 +5,7 @@ export interface ITransactionModel extends Model<ITransaction> {
     cleanupExpired(): Promise<any>;
 }
 export interface ITransactionSource {
-    type: 'project' | 'order' | 'referral' | 'cashback' | 'refund' | 'bonus' | 'withdrawal' | 'topup' | 'penalty';
+    type: 'project' | 'order' | 'referral' | 'cashback' | 'refund' | 'bonus' | 'withdrawal' | 'topup' | 'penalty' | 'paybill';
     reference: Types.ObjectId;
     description?: string;
     metadata?: {
@@ -43,7 +43,7 @@ export interface ITransaction extends Document {
     transactionId: string;
     user: Types.ObjectId;
     type: 'credit' | 'debit';
-    category: 'earning' | 'spending' | 'refund' | 'withdrawal' | 'topup' | 'bonus' | 'penalty' | 'cashback';
+    category: 'earning' | 'spending' | 'refund' | 'withdrawal' | 'topup' | 'bonus' | 'penalty' | 'cashback' | 'paybill';
     amount: number;
     currency: string;
     description: string;

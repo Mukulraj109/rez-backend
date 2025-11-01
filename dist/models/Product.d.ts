@@ -56,12 +56,36 @@ export interface IProductAnalytics {
     shareCount: number;
     returnRate: number;
     avgRating: number;
+    todayPurchases?: number;
+    todayViews?: number;
+    lastResetDate?: Date;
+}
+export interface IProductCashback {
+    percentage: number;
+    maxAmount?: number;
+    minPurchase?: number;
+    validUntil?: Date;
+    terms?: string;
+}
+export interface IProductDeliveryInfo {
+    estimatedDays?: string;
+    freeShippingThreshold?: number;
+    expressAvailable?: boolean;
+    standardDeliveryTime?: string;
+    expressDeliveryTime?: string;
+    deliveryPartner?: string;
+}
+export interface IFrequentlyBoughtWith {
+    productId: Types.ObjectId;
+    purchaseCount: number;
+    lastUpdated?: Date;
 }
 export interface IProduct {
     name: string;
     slug: string;
     description?: string;
     shortDescription?: string;
+    productType: 'product' | 'service';
     category: Types.ObjectId;
     subCategory?: Types.ObjectId;
     store: Types.ObjectId;
@@ -78,6 +102,10 @@ export interface IProduct {
     tags: string[];
     seo: IProductSEO;
     analytics: IProductAnalytics;
+    cashback?: IProductCashback;
+    deliveryInfo?: IProductDeliveryInfo;
+    bundleProducts?: Types.ObjectId[];
+    frequentlyBoughtWith?: IFrequentlyBoughtWith[];
     isActive: boolean;
     isFeatured: boolean;
     isDigital: boolean;
@@ -102,5 +130,9 @@ export interface IProduct {
     calculateDiscountedPrice(): number;
     updateRatings(): Promise<void>;
     incrementViews(): Promise<void>;
+    incrementTodayPurchases(): Promise<void>;
+    resetDailyAnalytics(): Promise<void>;
+    calculateCashback(purchaseAmount?: number): number;
+    getEstimatedDelivery(userLocation?: any): string;
 }
 export declare const Product: mongoose.Model<any, {}, {}, {}, any, any>;

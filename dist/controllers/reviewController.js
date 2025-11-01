@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.canUserReviewStore = exports.getUserReviews = exports.markReviewHelpful = exports.deleteReview = exports.updateReview = exports.createReview = exports.getStoreReviews = void 0;
 const Review_1 = require("../models/Review");
@@ -6,6 +9,9 @@ const Store_1 = require("../models/Store");
 const response_1 = require("../utils/response");
 const asyncHandler_1 = require("../utils/asyncHandler");
 const errorHandler_1 = require("../middleware/errorHandler");
+const activityService_1 = __importDefault(require("../services/activityService"));
+const achievementService_1 = __importDefault(require("../services/achievementService"));
+const mongoose_1 = require("mongoose");
 // Get reviews for a store
 exports.getStoreReviews = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { storeId } = req.params;
@@ -111,6 +117,15 @@ exports.createReview = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         });
         // Populate user info for response
         await review.populate('user', 'profile.name profile.avatar');
+        // Create activity for review submission
+        await activityService_1.default.review.onReviewSubmitted(new mongoose_1.Types.ObjectId(userId), new mongoose_1.Types.ObjectId(review._id), store.name);
+        // Trigger achievement update for review creation
+        try {
+            await achievementService_1.default.triggerAchievementUpdate(userId, 'review_created');
+        }
+        catch (error) {
+            console.error('❌ [REVIEW] Error triggering achievement update:', error);
+        }
         (0, response_1.sendCreated)(res, {
             review
         }, 'Review created successfully');

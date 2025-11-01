@@ -49,3 +49,8 @@ export declare const useVoucher: (req: Request, res: Response) => Promise<Respon
  * Track brand view (analytics)
  */
 export declare const trackBrandView: (req: Request, res: Response) => Promise<void>;
+/**
+ * GET /api/vouchers/hero-carousel
+ * Get hero carousel items for online voucher page
+ */
+export declare const getHeroCarousel: (req: Request, res: Response) => Promise<void>;

@@ -7,6 +7,18 @@ const validation_1 = require("../middleware/validation");
 // // import { generalLimiter, searchLimiter } from '../middleware/rateLimiter'; // Disabled for development // Disabled for development
 const validation_2 = require("../middleware/validation");
 const router = (0, express_1.Router)();
+// Create a new video (requires authentication)
+router.post('/', auth_1.authenticate, (0, validation_1.validate)(validation_2.Joi.object({
+    title: validation_2.Joi.string().trim().min(1).max(100).required(),
+    description: validation_2.Joi.string().trim().max(1000).optional(),
+    videoUrl: validation_2.Joi.string().uri().required(),
+    thumbnailUrl: validation_2.Joi.string().uri().optional(),
+    category: validation_2.Joi.string().valid('trending_me', 'trending_her', 'waist', 'article', 'featured', 'challenge', 'tutorial', 'review').default('general'),
+    tags: validation_2.Joi.array().items(validation_2.Joi.string().trim().max(50)).max(10).optional(),
+    products: validation_2.Joi.array().items(validation_1.commonSchemas.objectId()).max(20).optional(),
+    duration: validation_2.Joi.number().integer().min(0).optional(),
+    isPublic: validation_2.Joi.boolean().default(true)
+})), videoController_1.createVideo);
 // Get all videos with filtering
 router.get('/', 
 // generalLimiter,, // Disabled for development

@@ -111,6 +111,7 @@ exports.authSchemas = {
             lastName: joi_1.default.string().trim().max(50),
             avatar: joi_1.default.string().uri().allow(null, ''),
             bio: joi_1.default.string().trim().max(500),
+            website: joi_1.default.string().uri().allow(null, ''),
             dateOfBirth: joi_1.default.date().iso().max('now'),
             gender: joi_1.default.string().valid('male', 'female', 'other'),
             location: joi_1.default.object({
@@ -124,7 +125,11 @@ exports.authSchemas = {
         preferences: joi_1.default.object({
             language: joi_1.default.string().valid('en', 'hi', 'te', 'ta', 'bn'),
             theme: joi_1.default.string().valid('light', 'dark'),
-            notifications: joi_1.default.boolean(),
+            notifications: joi_1.default.object({
+                push: joi_1.default.boolean(),
+                email: joi_1.default.boolean(),
+                sms: joi_1.default.boolean()
+            }),
             emailNotifications: joi_1.default.boolean(),
             pushNotifications: joi_1.default.boolean(),
             smsNotifications: joi_1.default.boolean()
@@ -170,18 +175,24 @@ exports.orderSchemas = {
     createOrder: joi_1.default.object({
         deliveryAddress: joi_1.default.object({
             name: joi_1.default.string().trim().max(50).required(),
-            phone: exports.commonSchemas.phoneNumber.required(),
+            phone: joi_1.default.string().trim().min(10).max(15).required(), // More lenient phone validation for placeholders
             addressLine1: joi_1.default.string().trim().max(200).required(),
-            addressLine2: joi_1.default.string().trim().max(200),
+            addressLine2: joi_1.default.string().trim().max(200).allow(''), // Allow empty string
             city: joi_1.default.string().trim().max(50).required(),
             state: joi_1.default.string().trim().max(50).required(),
             pincode: joi_1.default.string().pattern(/^\d{6}$/).required(),
-            landmark: joi_1.default.string().trim().max(100),
+            landmark: joi_1.default.string().trim().max(100).allow(''), // Allow empty string
             addressType: joi_1.default.string().valid('home', 'work', 'other')
         }).required(),
-        paymentMethod: joi_1.default.string().valid('wallet', 'card', 'upi', 'cod').required(),
-        specialInstructions: joi_1.default.string().trim().max(500),
-        couponCode: joi_1.default.string().trim().uppercase()
+        paymentMethod: joi_1.default.string().valid('wallet', 'card', 'upi', 'cod', 'razorpay').required(),
+        specialInstructions: joi_1.default.string().trim().max(500).allow(''), // Allow empty string
+        couponCode: joi_1.default.string().trim().uppercase(),
+        coinsUsed: joi_1.default.object({
+            wasilCoins: joi_1.default.number().min(0).default(0),
+            promoCoins: joi_1.default.number().min(0).default(0),
+            storePromoCoins: joi_1.default.number().min(0).default(0),
+            totalCoinsValue: joi_1.default.number().min(0).default(0)
+        })
     })
 };
 // Review validation schemas

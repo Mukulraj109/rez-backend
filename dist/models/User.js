@@ -81,6 +81,12 @@ const UserSchema = new mongoose_1.Schema({
             trim: true,
             maxlength: 500
         },
+        website: {
+            type: String,
+            trim: true,
+            maxlength: 200,
+            match: [/^https?:\/\/.+/, 'Please enter a valid website URL']
+        },
         dateOfBirth: {
             type: Date
         },
@@ -124,6 +130,24 @@ const UserSchema = new mongoose_1.Schema({
         timezone: {
             type: String,
             default: 'Asia/Kolkata'
+        },
+        ringSize: {
+            type: String,
+            enum: ['4', '4.5', '5', '5.5', '6', '6.5', '7', '7.5', '8', '8.5', '9', '9.5', '10']
+        },
+        jewelryPreferences: {
+            preferredMetals: [{
+                    type: String,
+                    enum: ['gold', 'silver', 'platinum', 'diamond', 'pearl', 'gemstone']
+                }],
+            preferredStones: [{
+                    type: String,
+                    enum: ['diamond', 'ruby', 'emerald', 'sapphire', 'pearl', 'amethyst', 'topaz', 'garnet']
+                }],
+            style: {
+                type: String,
+                enum: ['traditional', 'modern', 'vintage', 'contemporary']
+            }
         }
     },
     preferences: {
@@ -133,8 +157,18 @@ const UserSchema = new mongoose_1.Schema({
             enum: ['en', 'hi', 'te', 'ta', 'bn']
         },
         notifications: {
-            type: Boolean,
-            default: true
+            push: {
+                type: Boolean,
+                default: true
+            },
+            email: {
+                type: Boolean,
+                default: true
+            },
+            sms: {
+                type: Boolean,
+                default: false
+            }
         },
         categories: [{
                 type: mongoose_1.Schema.Types.ObjectId,
@@ -256,10 +290,63 @@ const UserSchema = new mongoose_1.Schema({
     isActive: {
         type: Boolean,
         default: true
-    }
+    },
+    // Convenience fields for direct access
+    walletBalance: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
+    referralCode: {
+        type: String,
+        unique: true,
+        sparse: true,
+        uppercase: true,
+        trim: true
+    },
+    fullName: {
+        type: String,
+        trim: true
+    },
+    username: {
+        type: String,
+        trim: true,
+        unique: true,
+        sparse: true
+    },
+    referralTier: {
+        type: String,
+        enum: ['STARTER', 'BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'],
+        default: 'STARTER'
+    },
+    isPremium: {
+        type: Boolean,
+        default: false
+    },
+    premiumExpiresAt: {
+        type: Date
+    },
+    userType: {
+        type: String,
+        default: 'regular'
+    },
+    age: {
+        type: Number,
+        min: 0,
+        max: 150
+    },
+    location: {
+        type: String,
+        trim: true
+    },
+    interests: [{
+            type: String,
+            trim: true
+        }]
 }, {
     timestamps: true,
     toJSON: {
+        virtuals: true,
         transform: function (doc, ret) {
             delete ret.password;
             if (ret.auth) {
@@ -270,6 +357,9 @@ const UserSchema = new mongoose_1.Schema({
             }
             return ret;
         }
+    },
+    toObject: {
+        virtuals: true
     }
 });
 // Indexes for performance
@@ -281,15 +371,62 @@ UserSchema.index({ 'profile.location.coordinates': '2dsphere' });
 UserSchema.index({ createdAt: -1 });
 UserSchema.index({ 'auth.isVerified': 1 });
 UserSchema.index({ role: 1 });
+UserSchema.index({ referralCode: 1 });
+UserSchema.index({ username: 1 });
+UserSchema.index({ referralTier: 1 });
 // Virtual for account lock status
 UserSchema.virtual('isLocked').get(function () {
     return !!(this.auth.lockUntil && this.auth.lockUntil > new Date());
 });
-// Pre-save hook to generate referral code and hash password
+// Virtual properties for compatibility (aliases for nested properties)
+UserSchema.virtual('phone').get(function () {
+    return this.phoneNumber;
+});
+UserSchema.virtual('lastLogin').get(function () {
+    return this.auth.lastLogin;
+});
+// Pre-save hook to generate referral code, hash password, and sync fields
 UserSchema.pre('save', async function (next) {
     // Generate referral code for new users
-    if (this.isNew && !this.referral.referralCode) {
-        this.referral.referralCode = await generateUniqueReferralCode();
+    if (this.isNew && !this.referral.referralCode && !this.referralCode) {
+        const code = await generateUniqueReferralCode();
+        this.referral.referralCode = code;
+        this.referralCode = code;
+    }
+    // Sync referralCode between nested and top-level
+    if (this.isModified('referral.referralCode') && this.referral.referralCode) {
+        this.referralCode = this.referral.referralCode;
+    }
+    else if (this.isModified('referralCode') && this.referralCode) {
+        this.referral.referralCode = this.referralCode;
+    }
+    // Compute fullName from firstName and lastName
+    if (this.isModified('profile.firstName') || this.isModified('profile.lastName')) {
+        const firstName = this.profile?.firstName || '';
+        const lastName = this.profile?.lastName || '';
+        this.fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || undefined;
+    }
+    // Compute age from dateOfBirth
+    if (this.isModified('profile.dateOfBirth') && this.profile?.dateOfBirth) {
+        const today = new Date();
+        const birthDate = new Date(this.profile.dateOfBirth);
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        this.age = age > 0 ? age : undefined;
+    }
+    // Sync location from profile.location
+    if (this.isModified('profile.location')) {
+        this.location = this.profile?.location?.city || this.profile?.location?.address || undefined;
+    }
+    // Sync walletBalance with wallet.balance
+    if (this.isModified('wallet.balance')) {
+        this.walletBalance = this.wallet.balance;
+    }
+    else if (this.isModified('walletBalance') && this.walletBalance !== undefined) {
+        this.wallet.balance = this.walletBalance;
     }
     // Only hash the password if it has been modified (or is new)
     if (this.isModified('password') && this.password) {

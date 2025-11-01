@@ -114,28 +114,39 @@ export const getStoreById = asyncHandler(async (req: Request, res: Response) => 
   const { storeId } = req.params;
 
   try {
-    const query = storeId.match(/^[0-9a-fA-F]{24}$/) 
-      ? { _id: storeId } 
+    console.log('🔍 [GET STORE] Fetching store:', storeId);
+
+    const query = storeId.match(/^[0-9a-fA-F]{24}$/)
+      ? { _id: storeId }
       : { slug: storeId };
+
+    console.log('🔍 [GET STORE] Query:', query);
 
     const store = await Store.findOne({ ...query, isActive: true })
       .populate('category', 'name slug')
-      .populate('owner', 'profile.firstName profile.lastName')
       .lean();
 
+    console.log('🔍 [GET STORE] Store found:', !!store);
+
     if (!store) {
+      console.error('❌ [GET STORE] Store not found or not active');
       return sendNotFound(res, 'Store not found');
     }
 
+    console.log('✅ [GET STORE] Store retrieved:', store.name);
+
     // Get store products
-    const products = await Product.find({ 
-      store: store._id, 
-      isActive: true 
+    console.log('🔍 [GET STORE] Fetching products for store...');
+    const products = await Product.find({
+      store: store._id,
+      isActive: true
     })
     .populate('category', 'name slug')
     .limit(20)
     .sort({ createdAt: -1 })
     .lean();
+
+    console.log('✅ [GET STORE] Found', products.length, 'products');
 
     // Increment view count (simplified)
     await Store.updateOne({ _id: store._id }, { $inc: { 'analytics.views': 1 } });
@@ -146,8 +157,10 @@ export const getStoreById = asyncHandler(async (req: Request, res: Response) => 
       productsCount: await Product.countDocuments({ store: store._id, isActive: true })
     }, 'Store retrieved successfully');
 
-  } catch (error) {
-    throw new AppError('Failed to fetch store', 500);
+  } catch (error: any) {
+    console.error('❌ [GET STORE] Error:', error.message);
+    console.error('❌ [GET STORE] Stack:', error.stack);
+    throw new AppError(`Failed to fetch store: ${error.message}`, 500);
   }
 });
 
@@ -464,7 +477,7 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
 
     // First check if there are any stores matching the query
     const total = await Store.countDocuments(query);
-    
+
     let stores: any[] = [];
     if (total > 0) {
       stores = await Store.find(query)
@@ -473,6 +486,19 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
         .skip(skip)
         .limit(Number(limit))
         .lean();
+
+      // Populate products for each store
+      for (const store of stores) {
+        const products = await Product.find({
+          store: store._id,
+          isActive: true
+        })
+        .select('name title price image rating inventory tags')
+        .limit(4) // Limit to 4 products per store
+        .lean();
+
+        store.products = products;
+      }
     }
 
     // Calculate distance for each store if location is provided

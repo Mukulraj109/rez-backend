@@ -37,6 +37,18 @@ auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
     inStock: validation_2.Joi.boolean(),
     ...validation_1.commonSchemas.pagination()
 })), productController_1.searchProducts);
+// Get search suggestions - FOR FRONTEND SEARCH AUTOCOMPLETE
+router.get('/suggestions', 
+// searchLimiter,, // Disabled for development
+auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
+    q: validation_2.Joi.string().required().trim().min(1).max(100)
+})), productController_1.getSearchSuggestions);
+// Get popular searches - FOR FRONTEND SEARCH
+router.get('/popular-searches', 
+// generalLimiter,, // Disabled for development
+auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
+    limit: validation_2.Joi.number().integer().min(1).max(20).default(10)
+})), productController_1.getPopularSearches);
 // Get single product by ID
 router.get('/:id', 
 // generalLimiter,, // Disabled for development
@@ -75,4 +87,49 @@ auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
     sortBy: validation_2.Joi.string().valid('price_low', 'price_high', 'rating', 'newest'),
     ...validation_1.commonSchemas.pagination
 })), productController_1.getProductsByStore);
+// Track product view
+router.post('/:id/track-view', 
+// generalLimiter,, // Disabled for development
+auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
+    id: validation_1.commonSchemas.objectId().required()
+})), productController_1.trackProductView);
+// Get product analytics
+router.get('/:id/analytics', 
+// generalLimiter,, // Disabled for development
+auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
+    id: validation_1.commonSchemas.objectId().required()
+})), (0, validation_1.validateQuery)(validation_2.Joi.object({
+    location: validation_2.Joi.string() // JSON stringified location object
+})), productController_1.getProductAnalytics);
+// Get frequently bought together products
+router.get('/:id/frequently-bought', 
+// generalLimiter,, // Disabled for development
+auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
+    id: validation_1.commonSchemas.objectId().required()
+})), (0, validation_1.validateQuery)(validation_2.Joi.object({
+    limit: validation_2.Joi.number().integer().min(1).max(10).default(4)
+})), productController_1.getFrequentlyBoughtTogether);
+// Get bundle products
+router.get('/:id/bundles', 
+// generalLimiter,, // Disabled for development
+auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
+    id: validation_1.commonSchemas.objectId().required()
+})), productController_1.getBundleProducts);
+// Get related products - FOR FRONTEND PRODUCT DETAILS PAGE
+router.get('/:id/related', 
+// generalLimiter,, // Disabled for development
+auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
+    id: validation_1.commonSchemas.objectId().required()
+})), (0, validation_1.validateQuery)(validation_2.Joi.object({
+    limit: validation_2.Joi.number().integer().min(1).max(20).default(5)
+})), productController_1.getRelatedProducts);
+// Check product availability - FOR FRONTEND CART/CHECKOUT
+router.get('/:id/availability', 
+// generalLimiter,, // Disabled for development
+auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
+    id: validation_1.commonSchemas.objectId().required()
+})), (0, validation_1.validateQuery)(validation_2.Joi.object({
+    variantId: validation_2.Joi.string(),
+    quantity: validation_2.Joi.number().integer().min(1).default(1)
+})), productController_1.checkAvailability);
 exports.default = router;

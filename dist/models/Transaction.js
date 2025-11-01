@@ -58,7 +58,7 @@ const TransactionSchema = new mongoose_1.Schema({
     category: {
         type: String,
         required: true,
-        enum: ['earning', 'spending', 'refund', 'withdrawal', 'topup', 'bonus', 'penalty', 'cashback'],
+        enum: ['earning', 'spending', 'refund', 'withdrawal', 'topup', 'bonus', 'penalty', 'cashback', 'paybill'],
         index: true
     },
     amount: {
@@ -81,7 +81,7 @@ const TransactionSchema = new mongoose_1.Schema({
         type: {
             type: String,
             required: true,
-            enum: ['project', 'order', 'referral', 'cashback', 'refund', 'bonus', 'withdrawal', 'topup', 'penalty']
+            enum: ['project', 'order', 'referral', 'cashback', 'refund', 'bonus', 'withdrawal', 'topup', 'penalty', 'paybill']
         },
         reference: {
             type: mongoose_1.Schema.Types.ObjectId,

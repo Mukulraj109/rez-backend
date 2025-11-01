@@ -16,6 +16,12 @@ export interface ISocialMediaPost extends Document {
   creditedAt?: Date;
   reviewedBy?: Types.ObjectId;
   rejectionReason?: string;
+
+  // Fraud Prevention Fields
+  submissionIp?: string;
+  deviceFingerprint?: string;
+  userAgent?: string;
+
   metadata: {
     postId?: string;
     thumbnailUrl?: string;
@@ -123,6 +129,21 @@ const SocialMediaPostSchema = new Schema<ISocialMediaPost>({
     trim: true,
     maxlength: [500, 'Rejection reason cannot exceed 500 characters']
   },
+  // Fraud Prevention Fields
+  submissionIp: {
+    type: String,
+    trim: true,
+    index: true
+  },
+  deviceFingerprint: {
+    type: String,
+    trim: true,
+    index: true
+  },
+  userAgent: {
+    type: String,
+    trim: true
+  },
   metadata: {
     postId: {
       type: String,
@@ -151,6 +172,10 @@ SocialMediaPostSchema.index({ user: 1, createdAt: -1 });
 SocialMediaPostSchema.index({ user: 1, status: 1 });
 SocialMediaPostSchema.index({ status: 1, submittedAt: 1 });
 SocialMediaPostSchema.index({ platform: 1, status: 1 });
+// Fraud prevention indexes
+SocialMediaPostSchema.index({ user: 1, order: 1 }); // Prevent duplicate order submissions
+SocialMediaPostSchema.index({ submissionIp: 1, submittedAt: -1 }); // Track IP submissions
+SocialMediaPostSchema.index({ user: 1, submittedAt: -1 }); // Track user submission frequency
 
 // Pre-save middleware
 SocialMediaPostSchema.pre('save', function(next) {

@@ -13,9 +13,18 @@ import dotenv from 'dotenv';
 // Import database connection
 import { connectDatabase, database } from './config/database';
 
+// Import utilities
+import { validateCloudinaryConfig } from './utils/cloudinaryUtils';
+
+// Import partner level maintenance service
+import partnerLevelMaintenanceService from './services/partnerLevelMaintenanceService';
+
+// Import trial expiry notification job
+import { initializeTrialExpiryJob } from './jobs/trialExpiryNotification';
+
 // Import middleware
 import { globalErrorHandler, notFoundHandler } from './middleware/errorHandler';
-// import { generalLimiter } from './middleware/rateLimiter'; // Disabled for development
+import { generalLimiter } from './middleware/rateLimiter';
 // Import routes
 import authRoutes from './routes/authRoutes';
 import productRoutes from './routes/productRoutes';
@@ -37,6 +46,8 @@ import syncRoutes from './routes/syncRoutes';
 import locationRoutes from './routes/locationRoutes';
 import walletRoutes from './routes/walletRoutes';
 import offerRoutes from './routes/offerRoutes';
+import offerCategoryRoutes from './routes/offerCategoryRoutes';
+import heroBannerRoutes from './routes/heroBannerRoutes';
 import voucherRoutes from './routes/voucherRoutes';
 import addressRoutes from './routes/addressRoutes';
 import paymentMethodRoutes from './routes/paymentMethodRoutes';
@@ -46,11 +57,26 @@ import activityRoutes from './routes/activityRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import stockRoutes from './routes/stockRoutes';
 import socialMediaRoutes from './routes/socialMediaRoutes';
+import eventRoutes from './routes/eventRoutes';
 import referralRoutes from './routes/referralRoutes';
+import profileRoutes from './routes/profileRoutes';
+import scratchCardRoutes from './routes/scratchCardRoutes';
 import couponRoutes from './routes/couponRoutes';
+import storePromoCoinRoutes from './routes/storePromoCoinRoutes';
+import razorpayRoutes from './routes/razorpayRoutes';
 import supportRoutes from './routes/supportRoutes';
 import cashbackRoutes from './routes/cashbackRoutes';
 import userProductRoutes from './routes/userProductRoutes';
+import discountRoutes from './routes/discountRoutes';
+import storeVoucherRoutes from './routes/storeVoucherRoutes';
+import outletRoutes from './routes/outletRoutes';
+import flashSaleRoutes from './routes/flashSaleRoutes';
+import subscriptionRoutes from './routes/subscriptionRoutes';
+import billRoutes from './routes/billRoutes';
+import billingRoutes from './routes/billingRoutes';
+import activityFeedRoutes from './routes/activityFeedRoutes';
+import unifiedGamificationRoutes from './routes/unifiedGamificationRoutes';
+import partnerRoutes from './routes/partnerRoutes';
 import authRoutes1 from './merchantroutes/auth';  // Temporarily disabled
 import merchantRoutes from './merchantroutes/merchants';  // Temporarily disabled
 import merchantProfileRoutes from './merchantroutes/merchant-profile'; // Disabled due to missing properties
@@ -60,6 +86,7 @@ import uploadRoutes from './merchantroutes/uploads';  // Temporarily disabled
 import orderRoutes1 from './merchantroutes/orders';  // Temporarily disabled
 import merchantCashbackRoutes from './merchantroutes/cashback';  // Temporarily disabled
 import dashboardRoutes from './merchantroutes/dashboard';  // Temporarily disabled
+import merchantSyncRoutes from './merchantroutes/sync';
 import { RealTimeService } from './merchantservices/RealTimeService';  // Temporarily disabled
 import { ReportService } from './merchantservices/ReportService';  // Temporarily disabled
 import stockSocketService from './services/stockSocketService';
@@ -115,8 +142,8 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(morgan(morganFormat));
 }
 
-// Rate limiting
-//app.use(generalLimiter);
+// Rate limiting - Production security
+app.use(generalLimiter);
 
 // Health check endpoint with API info
 app.get('/health', async (req, res) => {
@@ -156,7 +183,13 @@ app.get('/health', async (req, res) => {
           referral: `${API_PREFIX}/referral`,
           coupons: `${API_PREFIX}/coupons`,
           support: `${API_PREFIX}/support`,
-          cashback: `${API_PREFIX}/cashback`
+          cashback: `${API_PREFIX}/cashback`,
+          discounts: `${API_PREFIX}/discounts`,
+          storeVouchers: `${API_PREFIX}/store-vouchers`,
+          outlets: `${API_PREFIX}/outlets`,
+          flashSales: `${API_PREFIX}/flash-sales`,
+          bills: `${API_PREFIX}/bills`,
+          partner: `${API_PREFIX}/partner`
         }
       }
     };
@@ -215,7 +248,14 @@ app.get('/api-info', (req, res) => {
       referral: `${API_PREFIX}/referral`,
       coupons: `${API_PREFIX}/coupons`,
       support: `${API_PREFIX}/support`,
-      cashback: `${API_PREFIX}/cashback`
+      cashback: `${API_PREFIX}/cashback`,
+      discounts: `${API_PREFIX}/discounts`,
+      storeVouchers: `${API_PREFIX}/store-vouchers`,
+      outlets: `${API_PREFIX}/outlets`,
+      flashSales: `${API_PREFIX}/flash-sales`,
+      bills: `${API_PREFIX}/bills`,
+      partner: `${API_PREFIX}/partner`,
+      merchantSync: '/api/merchant/sync'
     },
     features: [
       'User Authentication (OTP-based)',
@@ -240,7 +280,9 @@ app.get('/api-info', (req, res) => {
       'Activity Feed',
       'Coupon Management System',
       'Customer Support & Tickets',
-      'User Cashback System'
+      'User Cashback System',
+      'Flash Sales & Time-limited Offers',
+      'Merchant Data Synchronization'
     ],
     database: {
       models: [
@@ -301,6 +343,8 @@ app.use(`${API_PREFIX}/sync`, syncRoutes);
 app.use(`${API_PREFIX}/location`, locationRoutes);
 app.use(`${API_PREFIX}/wallet`, walletRoutes);
 app.use(`${API_PREFIX}/offers`, offerRoutes);
+app.use(`${API_PREFIX}/offer-categories`, offerCategoryRoutes);
+app.use(`${API_PREFIX}/hero-banners`, heroBannerRoutes);
 app.use(`${API_PREFIX}/vouchers`, voucherRoutes);
 app.use(`${API_PREFIX}/addresses`, addressRoutes);
 app.use(`${API_PREFIX}/payment-methods`, paymentMethodRoutes);
@@ -310,11 +354,45 @@ app.use(`${API_PREFIX}/activities`, activityRoutes);
 app.use(`${API_PREFIX}/payment`, paymentRoutes);
 app.use(`${API_PREFIX}/stock`, stockRoutes);
 app.use(`${API_PREFIX}/social-media`, socialMediaRoutes);
+app.use(`${API_PREFIX}/events`, eventRoutes);
 app.use(`${API_PREFIX}/referral`, referralRoutes);
+app.use(`${API_PREFIX}/user/profile`, profileRoutes);
+app.use(`${API_PREFIX}/scratch-cards`, scratchCardRoutes);
 app.use(`${API_PREFIX}/coupons`, couponRoutes);
+app.use(`${API_PREFIX}/store-promo-coins`, storePromoCoinRoutes);
+app.use(`${API_PREFIX}/razorpay`, razorpayRoutes);
 app.use(`${API_PREFIX}/support`, supportRoutes);
 app.use(`${API_PREFIX}/cashback`, cashbackRoutes);
 app.use(`${API_PREFIX}/user-products`, userProductRoutes);
+app.use(`${API_PREFIX}/discounts`, discountRoutes);
+app.use(`${API_PREFIX}/store-vouchers`, storeVoucherRoutes);
+app.use(`${API_PREFIX}/outlets`, outletRoutes);
+
+// Flash Sales Routes - Time-limited promotional offers
+app.use(`${API_PREFIX}/flash-sales`, flashSaleRoutes);
+
+// Subscription Routes - Premium membership tiers
+app.use(`${API_PREFIX}/subscriptions`, subscriptionRoutes);
+
+// Billing History Routes - Transaction history and invoices for subscriptions
+app.use(`${API_PREFIX}/billing`, billingRoutes);
+console.log('✅ Billing routes registered at /api/billing');
+
+// Bill Upload & Verification Routes - Offline purchase receipts for cashback
+app.use(`${API_PREFIX}/bills`, billRoutes);
+console.log('✅ Bill routes registered at /api/bills');
+
+// Unified Gamification Routes - All gamification functionality under one endpoint
+app.use(`${API_PREFIX}/gamification`, unifiedGamificationRoutes);
+console.log('✅ Unified gamification routes registered at /api/gamification');
+
+// Social Feed Routes - Activity feed, follow system, likes, comments
+app.use(`${API_PREFIX}/social`, activityFeedRoutes);
+console.log('✅ Social feed routes registered at /api/social');
+
+// Partner Program Routes - Partner levels, rewards, milestones, earnings
+app.use(`${API_PREFIX}/partner`, partnerRoutes);
+console.log('✅ Partner program routes registered at /api/partner');
 
 // Merchant API Routes
 app.use('/api/merchant/auth', authRoutes1);  // Merchant auth routes
@@ -326,6 +404,9 @@ app.use('/api/merchant/uploads', uploadRoutes);
 app.use('/api/merchant/orders', orderRoutes1);
 app.use('/api/merchant/cashback', merchantCashbackRoutes);
 app.use('/api/merchant/dashboard', dashboardRoutes);
+
+// Merchant Sync Routes - Syncs merchant data to customer app
+app.use('/api/merchant/sync', merchantSyncRoutes);
 
 // // 404 handler
 app.use((req, res) => {
@@ -375,8 +456,8 @@ io.on('connection', (socket) => {
 
 
 declare global {
-  var io: SocketIOServer;
-  var realTimeService: RealTimeService;
+  var io: any;
+  var realTimeService: any;
 }
 global.io = io;
 
@@ -384,8 +465,8 @@ global.io = io;
 stockSocketService.initialize(io);
 
 // Initialize real-time service
-const realTimeService = RealTimeService.getInstance(io);
-global.realTimeService = realTimeService;
+const realTimeServiceInstance = RealTimeService.getInstance(io);
+global.realTimeService = realTimeServiceInstance;
 
 
 
@@ -402,7 +483,24 @@ async function startServer() {
     // Connect to database
     console.log('🔄 Connecting to database...');
     await connectDatabase();
-    
+
+    // Validate Cloudinary configuration
+    const cloudinaryConfigured = validateCloudinaryConfig();
+    if (!cloudinaryConfigured) {
+      console.warn('⚠️  Cloudinary not configured. Bill upload features will not work.');
+      console.warn('   Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET in .env');
+    }
+
+    // Initialize partner level maintenance cron jobs (FIXED: Issue #2, #4, #5)
+    console.log('🔄 Initializing partner level maintenance...');
+    partnerLevelMaintenanceService.startAll();
+    console.log('✅ Partner level maintenance cron jobs started');
+
+    // Initialize trial expiry notification job
+    console.log('🔄 Initializing trial expiry notification job...');
+    initializeTrialExpiryJob();
+    console.log('✅ Trial expiry notification job started');
+
     // Start HTTP server (with Socket.IO attached)
     server.listen(Number(PORT), '0.0.0.0', () => {
 
@@ -448,7 +546,12 @@ async function startServer() {
       console.log(`   📊 Activities: http://localhost:${PORT}${API_PREFIX}/activities`);
       console.log(`   🎫 Coupons: http://localhost:${PORT}${API_PREFIX}/coupons`);
       console.log(`   🆘 Support: http://localhost:${PORT}${API_PREFIX}/support`);
-      console.log(`\n🎉 Phase 6 Complete - Profile & Account Management APIs Implemented!`);
+      console.log(`   💸 Discounts: http://localhost:${PORT}${API_PREFIX}/discounts`);
+      console.log(`   🎟️  Store Vouchers: http://localhost:${PORT}${API_PREFIX}/store-vouchers`);
+      console.log(`   📍 Outlets: http://localhost:${PORT}${API_PREFIX}/outlets`);
+      console.log(`   ⚡ Flash Sales: http://localhost:${PORT}${API_PREFIX}/flash-sales`);
+      console.log(`   🔄 Merchant Sync: http://localhost:${PORT}/api/merchant/sync`);
+      console.log(`\n🎉 Phase 7 Complete - Product Page Features Implemented!`);
       console.log(`   ✅ Authentication APIs (8 endpoints)`);
       console.log(`   ✅ Product APIs (8 endpoints)`);
       console.log(`   ✅ Cart APIs (11 endpoints)`);
@@ -470,8 +573,11 @@ async function startServer() {
       console.log(`   ✅ Activity APIs (7 endpoints)`);
       console.log(`   ✅ Coupon APIs (9 endpoints)`);
       console.log(`   ✅ Support APIs (17 endpoints)`);
-      console.log(`   🎯 Total Implemented: ~186 endpoints across 20 modules`);
-      console.log(`\n🚀 Phase 6 Complete - Ready for Frontend Integration!`);
+      console.log(`   ✅ Discount APIs (8 endpoints)`);
+      console.log(`   ✅ Store Voucher APIs (8 endpoints)`);
+      console.log(`   ✅ Outlet APIs (9 endpoints)`);
+      console.log(`   🎯 Total Implemented: ~211 endpoints across 23 modules`);
+      console.log(`\n🚀 Phase 7 Complete - Product Page Features Ready for Frontend Integration!`);
     });
 
     // Graceful shutdown handling

@@ -8,3 +8,7 @@ export declare const applyCoupon: (req: Request, res: Response, next: import("ex
 export declare const removeCoupon: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const getCartSummary: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const validateCart: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const lockItem: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const unlockItem: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const moveLockedToCart: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getLockedItems: (req: Request, res: Response, next: import("express").NextFunction) => void;

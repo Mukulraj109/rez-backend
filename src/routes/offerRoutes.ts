@@ -14,7 +14,16 @@ import {
   getUserFavoriteOffers,
   trackOfferView,
   trackOfferClick,
-  getRecommendedOffers
+  getRecommendedOffers,
+  getMegaOffers,
+  getStudentOffers,
+  getNewArrivalOffers,
+  getNearbyOffers,
+  getOffersPageData,
+  toggleOfferLike,
+  shareOffer,
+  getOfferCategories,
+  getHeroBanners
 } from '../controllers/offerController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, validate, commonSchemas } from '../middleware/validation';
@@ -109,14 +118,6 @@ router.get('/store/:storeId',
   getOffersByStore
 );
 
-// Get single offer by ID
-router.get('/:id',
-  optionalAuth,
-  validateParams(Joi.object({
-    id: commonSchemas.objectId().required()
-  })),
-  getOfferById
-);
 
 // Get recommended offers based on user preferences
 router.get('/user/recommendations',
@@ -202,6 +203,104 @@ router.post('/:id/click',
     id: commonSchemas.objectId().required()
   })),
   trackOfferClick
+);
+
+// New offers page specific routes
+
+// Get complete offers page data
+router.get('/page-data',
+  optionalAuth,
+  validateQuery(Joi.object({
+    lat: Joi.number().min(-90).max(90),
+    lng: Joi.number().min(-180).max(180)
+  })),
+  getOffersPageData
+);
+
+// Get mega offers
+router.get('/mega',
+  optionalAuth,
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(50).default(10)
+  })),
+  getMegaOffers
+);
+
+// Get student offers
+router.get('/students',
+  optionalAuth,
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(50).default(10)
+  })),
+  getStudentOffers
+);
+
+// Get new arrival offers
+router.get('/new-arrivals',
+  optionalAuth,
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(50).default(10)
+  })),
+  getNewArrivalOffers
+);
+
+// Get nearby offers
+router.get('/nearby',
+  optionalAuth,
+  validateQuery(Joi.object({
+    lat: Joi.number().min(-90).max(90).required(),
+    lng: Joi.number().min(-180).max(180).required(),
+    maxDistance: Joi.number().min(1).max(100).default(10),
+    limit: Joi.number().integer().min(1).max(50).default(20)
+  })),
+  getNearbyOffers
+);
+
+// Like/unlike an offer
+router.post('/:id/like',
+  authenticate,
+  validateParams(Joi.object({
+    id: commonSchemas.objectId().required()
+  })),
+  toggleOfferLike
+);
+
+// Share an offer
+router.post('/:id/share',
+  optionalAuth,
+  validateParams(Joi.object({
+    id: commonSchemas.objectId().required()
+  })),
+  validate(Joi.object({
+    platform: Joi.string().valid('facebook', 'twitter', 'instagram', 'whatsapp', 'telegram', 'copy_link').optional(),
+    message: Joi.string().max(500).optional()
+  })),
+  shareOffer
+);
+
+// Get offer categories
+router.get('/categories',
+  optionalAuth,
+  getOfferCategories
+);
+
+// Get hero banners
+router.get('/hero-banners',
+  optionalAuth,
+  validateQuery(Joi.object({
+    page: Joi.string().valid('offers', 'home', 'category', 'product', 'all').default('offers'),
+    position: Joi.string().valid('top', 'middle', 'bottom').default('top')
+  })),
+  getHeroBanners
+);
+
+// Get single offer by ID (must be last to avoid conflicts with specific routes)
+router.get('/:id',
+  optionalAuth,
+  validateParams(Joi.object({
+    id: commonSchemas.objectId().required()
+  })),
+  getOfferById
 );
 
 export default router;

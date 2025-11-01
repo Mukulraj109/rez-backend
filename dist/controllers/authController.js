@@ -36,12 +36,16 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.uploadAvatar = exports.getUserStatistics = exports.deleteAccount = exports.completeOnboarding = exports.updateProfile = exports.getCurrentUser = exports.logout = exports.refreshToken = exports.verifyOTP = exports.sendOTP = void 0;
+exports.uploadAvatar = exports.getUserStatistics = exports.deleteAccount = exports.changePassword = exports.completeOnboarding = exports.updateProfile = exports.getCurrentUser = exports.logout = exports.refreshToken = exports.verifyOTP = exports.sendOTP = void 0;
 const User_1 = require("../models/User");
 const auth_1 = require("../middleware/auth");
 const response_1 = require("../utils/response");
 const asyncHandler_1 = require("../utils/asyncHandler");
 const errorHandler_1 = require("../middleware/errorHandler");
+const referralService_1 = __importDefault(require("../services/referralService"));
+const Wallet_1 = require("../models/Wallet");
+const mongoose_1 = require("mongoose");
+const achievementService_1 = __importDefault(require("../services/achievementService"));
 const twilio_1 = __importDefault(require("twilio"));
 const dotenv_1 = __importDefault(require("dotenv"));
 // Ensure dotenv is loaded
@@ -158,6 +162,14 @@ exports.sendOTP = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
                     referralEarnings: 0
                 }
             });
+            // Initialize achievements for new user
+            try {
+                await achievementService_1.default.initializeUserAchievements(String(user._id));
+            }
+            catch (error) {
+                console.error('❌ [AUTH] Error initializing achievements for new user:', error);
+                // Don't fail user creation if achievement initialization fails
+            }
         }
         else if (user && user.isActive && email) {
             // If user exists and is active, and email is provided (signup attempt)
@@ -224,7 +236,11 @@ exports.sendOTP = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         }, 'OTP sent to your phone number');
     }
     catch (error) {
-        throw new errorHandler_1.AppError('Failed to send OTP', 500);
+        console.error('❌ [SEND_OTP] Error details:', error);
+        if (error instanceof errorHandler_1.AppError) {
+            throw error;
+        }
+        throw new errorHandler_1.AppError(`Failed to send OTP: ${error instanceof Error ? error.message : String(error)}`, 500);
     }
 });
 // Verify OTP and login
@@ -277,16 +293,67 @@ exports.verifyOTP = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         try {
             const referrerUser = await User_1.User.findOne({ 'referral.referralCode': user.referral.referredBy });
             if (referrerUser) {
-                // Add this user to referrer's referred users list
+                // Create referral relationship using referral service
+                await referralService_1.default.createReferral({
+                    referrerId: new mongoose_1.Types.ObjectId(String(referrerUser._id)),
+                    refereeId: new mongoose_1.Types.ObjectId(String(user._id)),
+                    referralCode: user.referral.referredBy,
+                    signupSource: 'otp_verification',
+                });
+                // Add referee discount (₹30) to their wallet for first order
+                let refereeWallet = await Wallet_1.Wallet.findOne({ user: user._id });
+                if (!refereeWallet) {
+                    // Create wallet if doesn't exist
+                    refereeWallet = await Wallet_1.Wallet.create({
+                        user: user._id,
+                        balance: {
+                            total: 30,
+                            available: 30,
+                            pending: 0,
+                        },
+                        statistics: {
+                            totalEarned: 30,
+                            totalSpent: 0,
+                            totalCashback: 0,
+                            totalRefunds: 0,
+                            totalTopups: 30,
+                            totalWithdrawals: 0,
+                        },
+                    });
+                }
+                else {
+                    // Use addFunds method if available, or update manually
+                    refereeWallet.balance.total += 30;
+                    refereeWallet.balance.available += 30;
+                    refereeWallet.statistics.totalEarned += 30;
+                    refereeWallet.statistics.totalTopups += 30;
+                    await refereeWallet.save();
+                }
+                // Update user referral stats
                 referrerUser.referral.referredUsers.push(String(user._id));
                 referrerUser.referral.totalReferrals += 1;
-                // Give referral bonus to referrer (you can adjust the amount)
-                const referralBonus = 50; // ₹50 bonus for each successful referral
-                referrerUser.wallet.balance += referralBonus;
-                referrerUser.wallet.totalEarned += referralBonus;
-                referrerUser.referral.referralEarnings += referralBonus;
                 await referrerUser.save();
-                console.log(`💰 [REFERRAL] User ${user.phoneNumber} was referred by ${referrerUser.phoneNumber}. Bonus of ₹${referralBonus} credited to referrer.`);
+                // Update referrer's partner referral task progress
+                try {
+                    const Partner = require('../models/Partner').default;
+                    const partner = await Partner.findOne({ userId: referrerUser._id });
+                    if (partner) {
+                        const referralTask = partner.tasks.find((t) => t.type === 'referral');
+                        if (referralTask && referralTask.progress.current < referralTask.progress.target) {
+                            referralTask.progress.current += 1;
+                            if (referralTask.progress.current >= referralTask.progress.target) {
+                                referralTask.completed = true;
+                                referralTask.completedAt = new Date();
+                            }
+                            await partner.save();
+                            console.log('✅ [REFERRAL] Partner referral task updated:', referralTask.progress.current, '/', referralTask.progress.target);
+                        }
+                    }
+                }
+                catch (error) {
+                    console.error('❌ [REFERRAL] Error updating partner referral task:', error);
+                }
+                console.log(`🎁 [REFERRAL] New referral created! Referee ${user.phoneNumber} received ₹30 signup bonus.`);
             }
         }
         catch (error) {
@@ -360,12 +427,33 @@ exports.refreshToken = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
 });
 // Logout
 exports.logout = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
-    if (req.user) {
-        // Clear refresh token
-        req.user.auth.refreshToken = undefined;
-        await req.user.save();
+    try {
+        // Try to get user from token if available
+        const token = req.headers.authorization?.replace('Bearer ', '');
+        if (token) {
+            try {
+                const decoded = (0, auth_1.verifyToken)(token);
+                const user = await User_1.User.findById(decoded.userId);
+                if (user) {
+                    // Clear refresh token if user exists
+                    user.auth.refreshToken = undefined;
+                    await user.save();
+                    console.log('✅ [LOGOUT] User refresh token cleared:', user._id);
+                }
+            }
+            catch (tokenError) {
+                // Token is invalid/expired, but that's okay for logout
+                console.log('⚠️ [LOGOUT] Invalid token during logout (this is expected):', tokenError instanceof Error ? tokenError.message : String(tokenError));
+            }
+        }
+        console.log('✅ [LOGOUT] Logout successful');
+        (0, response_1.sendSuccess)(res, null, 'Logged out successfully');
     }
-    (0, response_1.sendSuccess)(res, null, 'Logged out successfully');
+    catch (error) {
+        // Even if there's an error, logout should succeed
+        console.warn('⚠️ [LOGOUT] Error during logout, but proceeding:', error instanceof Error ? error.message : String(error));
+        (0, response_1.sendSuccess)(res, null, 'Logged out successfully');
+    }
 });
 // Get current user profile
 exports.getCurrentUser = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
@@ -411,6 +499,16 @@ exports.updateProfile = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             });
         }
         await req.user.save();
+        // Sync with partner profile to update completion percentage
+        try {
+            const partnerService = require('../services/partnerService').default;
+            const userId = req.user._id.toString();
+            await partnerService.syncProfileCompletion(userId);
+        }
+        catch (error) {
+            console.error('Error syncing partner profile:', error);
+            // Don't fail the profile update if partner sync fails
+        }
         const userData = {
             id: req.user._id,
             phoneNumber: req.user.phoneNumber,
@@ -470,7 +568,41 @@ exports.completeOnboarding = (0, asyncHandler_1.asyncHandler)(async (req, res) =
         (0, response_1.sendSuccess)(res, userData, 'Onboarding completed successfully');
     }
     catch (error) {
-        throw new errorHandler_1.AppError('Failed to complete onboarding', 500);
+        console.error('❌ [COMPLETE_ONBOARDING] Error details:', error);
+        if (error instanceof errorHandler_1.AppError) {
+            throw error;
+        }
+        throw new errorHandler_1.AppError(`Failed to complete onboarding: ${error instanceof Error ? error.message : String(error)}`, 500);
+    }
+});
+// Change password
+exports.changePassword = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    if (!req.user) {
+        return (0, response_1.sendUnauthorized)(res, 'Authentication required');
+    }
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+        throw new errorHandler_1.AppError('Current password and new password are required', 400);
+    }
+    if (newPassword.length < 6) {
+        throw new errorHandler_1.AppError('New password must be at least 6 characters long', 400);
+    }
+    try {
+        // Verify current password
+        const isCurrentPasswordValid = await req.user.comparePassword(currentPassword);
+        if (!isCurrentPasswordValid) {
+            throw new errorHandler_1.AppError('Current password is incorrect', 400);
+        }
+        // Update password
+        req.user.password = newPassword;
+        await req.user.save();
+        (0, response_1.sendSuccess)(res, null, 'Password changed successfully');
+    }
+    catch (error) {
+        if (error instanceof errorHandler_1.AppError) {
+            throw error;
+        }
+        throw new errorHandler_1.AppError('Failed to change password', 500);
     }
 });
 // Delete account (soft delete)
@@ -506,9 +638,14 @@ exports.getUserStatistics = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
         const { UserAchievement } = await Promise.resolve().then(() => __importStar(require('../models/Achievement')));
         // Aggregate statistics from various modules
         const [orderStats, videoStats, projectStats, offerStats, voucherStats, reviewStats, achievementStats] = await Promise.all([
-            // Order statistics
+            // Order statistics (exclude pending_payment orders)
             Order.aggregate([
-                { $match: { user: userId } },
+                {
+                    $match: {
+                        user: userId,
+                        status: { $ne: 'pending_payment' } // Exclude pending payment orders
+                    }
+                },
                 {
                     $group: {
                         _id: null,
@@ -659,19 +796,43 @@ exports.getUserStatistics = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
 });
 // Upload profile avatar
 exports.uploadAvatar = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const startTime = Date.now();
+    console.log('📸 [AVATAR UPLOAD] Started for user:', req.user?._id);
     if (!req.user) {
         return (0, response_1.sendUnauthorized)(res, 'Authentication required');
     }
     if (!req.file) {
+        console.error('❌ [AVATAR UPLOAD] No file provided');
         return (0, response_1.sendBadRequest)(res, 'No image file provided');
     }
     try {
         // Cloudinary automatically uploads the file via multer middleware
         // The file URL is available in req.file.path
         const avatarUrl = req.file.path;
+        if (!avatarUrl) {
+            console.error('❌ [AVATAR UPLOAD] No URL returned from Cloudinary');
+            throw new errorHandler_1.AppError('Failed to upload image to Cloudinary', 500);
+        }
+        console.log('✅ [AVATAR UPLOAD] Cloudinary upload successful:', avatarUrl);
         // Update user profile with new avatar URL
         req.user.profile.avatar = avatarUrl;
         await req.user.save();
+        console.log('💾 [AVATAR UPLOAD] User profile updated');
+        // Sync with partner profile to update avatar AND completion percentage
+        try {
+            const partnerService = require('../services/partnerService').default;
+            const userId = req.user._id.toString();
+            // Update partner avatar
+            const Partner = require('../models/Partner').default;
+            await Partner.findOneAndUpdate({ userId: userId }, { avatar: avatarUrl });
+            console.log('✅ [AVATAR UPLOAD] Partner profile avatar synced');
+            // Update profile completion
+            await partnerService.syncProfileCompletion(userId);
+        }
+        catch (error) {
+            console.error('Error syncing partner profile:', error);
+            // Don't fail the avatar upload if partner sync fails
+        }
         const userData = {
             id: req.user._id,
             phoneNumber: req.user.phoneNumber,
@@ -683,10 +844,13 @@ exports.uploadAvatar = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             isVerified: req.user.auth.isVerified,
             isOnboarded: req.user.auth.isOnboarded
         };
+        const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        console.log(`⏱️ [AVATAR UPLOAD] Completed in ${uploadTime} seconds`);
         (0, response_1.sendSuccess)(res, userData, 'Profile picture updated successfully');
     }
     catch (error) {
-        console.error('Error uploading avatar:', error);
+        const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        console.error(`❌ [AVATAR UPLOAD] Failed after ${uploadTime} seconds:`, error);
         throw new errorHandler_1.AppError('Failed to upload profile picture', 500);
     }
 });

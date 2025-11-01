@@ -13,8 +13,14 @@ exports.getUserPaymentMethods = (0, asyncHandler_1.asyncHandler)(async (req, res
     const paymentMethods = await PaymentMethod_1.PaymentMethod.find({
         user: req.user._id,
         isActive: true
-    }).sort({ isDefault: -1, createdAt: -1 });
-    (0, response_1.sendSuccess)(res, paymentMethods, 'Payment methods retrieved successfully');
+    }).sort({ isDefault: -1, createdAt: -1 }).lean();
+    // Map _id to id for frontend compatibility
+    const mappedPaymentMethods = paymentMethods.map((pm) => ({
+        ...pm,
+        id: pm._id.toString(),
+        _id: undefined
+    }));
+    (0, response_1.sendSuccess)(res, mappedPaymentMethods, 'Payment methods retrieved successfully');
 });
 // Get single payment method by ID
 exports.getPaymentMethodById = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
@@ -22,11 +28,17 @@ exports.getPaymentMethodById = (0, asyncHandler_1.asyncHandler)(async (req, res)
         throw new errorHandler_1.AppError('Authentication required', 401);
     }
     const { id } = req.params;
-    const paymentMethod = await PaymentMethod_1.PaymentMethod.findOne({ _id: id, user: req.user._id });
+    const paymentMethod = await PaymentMethod_1.PaymentMethod.findOne({ _id: id, user: req.user._id }).lean();
     if (!paymentMethod) {
         return (0, response_1.sendNotFound)(res, 'Payment method not found');
     }
-    (0, response_1.sendSuccess)(res, paymentMethod, 'Payment method retrieved successfully');
+    // Map _id to id for frontend compatibility
+    const mappedPaymentMethod = {
+        ...paymentMethod,
+        id: paymentMethod._id.toString(),
+        _id: undefined
+    };
+    (0, response_1.sendSuccess)(res, mappedPaymentMethod, 'Payment method retrieved successfully');
 });
 // Create new payment method
 exports.createPaymentMethod = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
@@ -48,7 +60,14 @@ exports.createPaymentMethod = (0, asyncHandler_1.asyncHandler)(async (req, res) 
         throw new errorHandler_1.AppError('UPI details are required', 400);
     }
     const paymentMethod = await PaymentMethod_1.PaymentMethod.create(paymentMethodData);
-    (0, response_1.sendSuccess)(res, paymentMethod, 'Payment method created successfully', 201);
+    // Convert to plain object and map _id to id
+    const paymentMethodObj = paymentMethod.toObject();
+    const mappedPaymentMethod = {
+        ...paymentMethodObj,
+        id: paymentMethodObj._id.toString(),
+        _id: undefined
+    };
+    (0, response_1.sendSuccess)(res, mappedPaymentMethod, 'Payment method created successfully', 201);
 });
 // Update payment method
 exports.updatePaymentMethod = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
@@ -71,7 +90,14 @@ exports.updatePaymentMethod = (0, asyncHandler_1.asyncHandler)(async (req, res) 
     }
     Object.assign(paymentMethod, updates);
     await paymentMethod.save();
-    (0, response_1.sendSuccess)(res, paymentMethod, 'Payment method updated successfully');
+    // Convert to plain object and map _id to id
+    const paymentMethodObj = paymentMethod.toObject();
+    const mappedPaymentMethod = {
+        ...paymentMethodObj,
+        id: paymentMethodObj._id.toString(),
+        _id: undefined
+    };
+    (0, response_1.sendSuccess)(res, mappedPaymentMethod, 'Payment method updated successfully');
 });
 // Delete payment method (soft delete - set isActive to false)
 exports.deletePaymentMethod = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
@@ -79,13 +105,25 @@ exports.deletePaymentMethod = (0, asyncHandler_1.asyncHandler)(async (req, res) 
         throw new errorHandler_1.AppError('Authentication required', 401);
     }
     const { id } = req.params;
+    console.log('[DELETE] Request to delete payment method ID:', id);
+    console.log('[DELETE] User ID:', req.user._id);
     const paymentMethod = await PaymentMethod_1.PaymentMethod.findOne({ _id: id, user: req.user._id });
     if (!paymentMethod) {
+        console.log('[DELETE] Payment method not found');
         return (0, response_1.sendNotFound)(res, 'Payment method not found');
     }
+    console.log('[DELETE] Found payment method:', {
+        id: paymentMethod._id,
+        type: paymentMethod.type,
+        isActive: paymentMethod.isActive,
+        isDefault: paymentMethod.isDefault
+    });
     // Soft delete
+    console.log('[DELETE] Setting isActive to false...');
     paymentMethod.isActive = false;
     await paymentMethod.save();
+    console.log('[DELETE] Payment method soft-deleted successfully');
+    console.log('[DELETE] Verifying update - isActive:', paymentMethod.isActive);
     (0, response_1.sendSuccess)(res, { deletedId: id }, 'Payment method deleted successfully');
 });
 // Set default payment method
@@ -104,5 +142,12 @@ exports.setDefaultPaymentMethod = (0, asyncHandler_1.asyncHandler)(async (req, r
     // Set this payment method as default
     paymentMethod.isDefault = true;
     await paymentMethod.save();
-    (0, response_1.sendSuccess)(res, paymentMethod, 'Default payment method updated successfully');
+    // Convert to plain object and map _id to id
+    const paymentMethodObj = paymentMethod.toObject();
+    const mappedPaymentMethod = {
+        ...paymentMethodObj,
+        id: paymentMethodObj._id.toString(),
+        _id: undefined
+    };
+    (0, response_1.sendSuccess)(res, mappedPaymentMethod, 'Default payment method updated successfully');
 });

@@ -19,11 +19,14 @@ import referralService from '../services/referralService';
 import cashbackService from '../services/cashbackService';
 import userProductService from '../services/userProductService';
 import couponService from '../services/couponService';
+import achievementService from '../services/achievementService';
+import { StorePromoCoin } from '../models/StorePromoCoin';
+import { calculatePromoCoinsEarned, getCoinsExpiryDate } from '../config/promoCoins.config';
 
 // Create new order from cart
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
-  const { deliveryAddress, paymentMethod, specialInstructions, couponCode } = req.body;
+  const { deliveryAddress, paymentMethod, specialInstructions, couponCode, voucherCode } = req.body;
 
   // Start a MongoDB session for transaction
   const session = await mongoose.startSession();
@@ -215,27 +218,73 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     // This prevents stock being locked for failed payments
     // Stock deduction will happen in paymentService.handlePaymentSuccess()
 
-    // Use cart totals for order totals
-    const deliveryFee = cart.totals.delivery || 0;
-    const tax = cart.totals.tax || 0;
+    // Get base totals from cart
     const subtotal = cart.totals.subtotal || 0;
-    const discount = cart.totals.discount || 0;
-    const cashback = cart.totals.cashback || 0;
-
-    // Calculate total if cart total is 0 or missing
-    let total = cart.totals.total || 0;
-    if (total === 0) {
-      total = subtotal + tax + deliveryFee - discount;
-      console.log('⚠️ [CREATE ORDER] Cart total was 0, recalculated:', {
-        subtotal,
-        tax,
-        deliveryFee,
-        discount,
-        calculatedTotal: total
-      });
+    const tax = cart.totals.tax || 0;
+    const baseDiscount = cart.totals.discount || 0;
+    
+    // Apply partner benefits to order
+    console.log('👥 [PARTNER BENEFITS] Applying partner benefits to order...');
+    const partnerBenefitsService = require('../services/partnerBenefitsService').default;
+    const partnerBenefits = await partnerBenefitsService.applyPartnerBenefits({
+      subtotal,
+      deliveryFee: cart.totals.delivery || 0,
+      userId: userId.toString()
+    });
+    
+    console.log('👥 [PARTNER BENEFITS] Benefits applied:', {
+      cashbackRate: partnerBenefits.cashbackRate,
+      cashbackAmount: partnerBenefits.cashbackAmount,
+      deliveryFee: partnerBenefits.deliveryFee,
+      deliverySavings: partnerBenefits.deliverySavings,
+      birthdayDiscount: partnerBenefits.birthdayDiscount,
+      totalSavings: partnerBenefits.totalSavings,
+      appliedBenefits: partnerBenefits.appliedBenefits
+    });
+    
+    // Use partner-adjusted values
+    const deliveryFee = partnerBenefits.deliveryFee;
+    let discount = baseDiscount + partnerBenefits.birthdayDiscount;
+    const cashback = partnerBenefits.cashbackAmount;
+    
+    // Apply partner voucher if provided (FIXED: Issue #4 - Voucher redemption)
+    let voucherDiscount = 0;
+    let voucherApplied = '';
+    if (voucherCode) {
+      console.log('🎫 [VOUCHER] Attempting to apply voucher:', voucherCode);
+      const partnerService = require('../services/partnerService').default;
+      const voucherResult = await partnerService.applyVoucher(
+        userId.toString(), 
+        voucherCode, 
+        subtotal
+      );
+      
+      if (voucherResult.valid) {
+        voucherDiscount = voucherResult.discount;
+        voucherApplied = voucherCode;
+        discount += voucherDiscount;
+        console.log(`✅ [VOUCHER] Applied ${voucherResult.offerTitle}: ₹${voucherDiscount} discount`);
+      } else {
+        console.warn(`⚠️ [VOUCHER] Invalid voucher: ${voucherResult.error}`);
+        // Don't fail order creation, just don't apply the voucher
+      }
     }
 
-    console.log('📦 [CREATE ORDER] Order totals:', { subtotal, tax, deliveryFee, discount, cashback, total });
+    // Calculate total with partner benefits and voucher
+    let total = subtotal + tax + deliveryFee - discount;
+    if (total < 0) total = 0;
+    
+    console.log('📦 [CREATE ORDER] Order totals (with partner benefits & voucher):', { 
+      subtotal, 
+      tax, 
+      deliveryFee, 
+      discount, 
+      voucherDiscount,
+      cashback, 
+      total,
+      partnerBenefitsApplied: partnerBenefits.appliedBenefits,
+      voucherApplied
+    });
 
     // Generate order number
     const orderCount = await Order.countDocuments().session(session);
@@ -280,6 +329,32 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     await order.save({ session });
 
     console.log('📦 [CREATE ORDER] Order saved successfully:', order.orderNumber);
+    
+    // Mark voucher as used if one was applied
+    if (voucherApplied) {
+      try {
+        console.log('🎫 [VOUCHER] Marking voucher as used:', voucherApplied);
+        const partnerService = require('../services/partnerService').default;
+        await partnerService.markVoucherUsed(userId.toString(), voucherApplied);
+        console.log('✅ [VOUCHER] Voucher marked as used successfully');
+      } catch (error) {
+        console.error('❌ [VOUCHER] Error marking voucher as used:', error);
+        // Don't fail order creation if voucher marking fails
+      }
+    }
+    
+    // Check for transaction bonus (every 11 orders)
+    // Note: This is checked after order placement, but bonus is only awarded after delivery
+    try {
+      console.log('🎁 [PARTNER BENEFITS] Checking transaction bonus eligibility...');
+      const bonusAmount = await partnerBenefitsService.checkTransactionBonus(userId.toString());
+      if (bonusAmount > 0) {
+        console.log(`✅ [PARTNER BENEFITS] Transaction bonus will be awarded: ₹${bonusAmount}`);
+      }
+    } catch (error) {
+      console.error('❌ [PARTNER BENEFITS] Error checking transaction bonus:', error);
+      // Don't fail order creation if bonus check fails
+    }
 
     // Note: Cart is NOT cleared here - it will be cleared after successful payment
     // This allows users to retry payment if it fails
@@ -320,6 +395,13 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         storeName,
         total
       );
+    }
+
+    // Trigger achievement update for order creation
+    try {
+      await achievementService.triggerAchievementUpdate(userId, 'order_created');
+    } catch (error) {
+      console.error('❌ [ORDER] Error triggering achievement update:', error);
     }
 
     sendSuccess(res, populatedOrder, 'Order created successfully', 201);
@@ -686,6 +768,63 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         console.error('❌ [ORDER] Error creating user products:', error);
         // Don't fail the order update if user product creation fails
       }
+
+      // Award store promo coins for delivered order
+      try {
+        console.log('💎 [ORDER] Awarding store promo coins for delivered order:', populatedOrder._id);
+        
+        // Calculate promo coins to be earned
+        const orderValue = populatedOrder.totals.total;
+        const coinsToEarn = calculatePromoCoinsEarned(orderValue);
+        
+        if (coinsToEarn > 0) {
+          // Get store ID from first item (assuming single store per order)
+          const firstItem = populatedOrder.items[0];
+          const storeId = typeof firstItem.store === 'object' 
+            ? (firstItem.store as any)._id 
+            : firstItem.store;
+          
+          if (storeId) {
+            // Award promo coins
+            await StorePromoCoin.earnCoins(
+              userIdObj as Types.ObjectId,
+              storeId as Types.ObjectId,
+              coinsToEarn,
+              populatedOrder._id as Types.ObjectId
+            );
+            
+            console.log(`✅ [ORDER] Awarded ${coinsToEarn} promo coins from store ${storeId}`);
+          } else {
+            console.warn('⚠️ [ORDER] Could not determine store ID for promo coins');
+          }
+        } else {
+          console.log('ℹ️ [ORDER] Order value too low for promo coins or promo coins disabled');
+        }
+      } catch (error) {
+        console.error('❌ [ORDER] Error awarding promo coins:', error);
+        // Don't fail the order update if promo coin creation fails
+      }
+
+      // Trigger achievement update for order delivery
+      try {
+        await achievementService.triggerAchievementUpdate(populatedOrder.user, 'order_delivered');
+      } catch (error) {
+        console.error('❌ [ORDER] Error triggering achievement update:', error);
+      }
+
+      // Update partner progress for order delivery
+      try {
+        const partnerService = require('../services/partnerService').default;
+        const orderId = populatedOrder._id as Types.ObjectId;
+        await partnerService.updatePartnerProgress(
+          userIdObj.toString(),
+          orderId.toString()
+        );
+        console.log('✅ [ORDER] Partner progress updated successfully');
+      } catch (error) {
+        console.error('❌ [ORDER] Error updating partner progress:', error);
+        // Don't fail the order update if partner progress update fails
+      }
     }
 
     sendSuccess(res, populatedOrder, 'Order status updated successfully');
@@ -797,6 +936,31 @@ export const rateOrder = asyncHandler(async (req: Request, res: Response) => {
     };
 
     await order.save();
+
+    // Update partner review task progress
+    try {
+      const partnerService = require('../services/partnerService').default;
+      const Partner = require('../models/Partner').default;
+      
+      const partner = await Partner.findOne({ userId });
+      if (partner) {
+        const reviewTask = partner.tasks.find((t: any) => t.type === 'review');
+        if (reviewTask && reviewTask.progress.current < reviewTask.progress.target) {
+          reviewTask.progress.current += 1;
+          
+          if (reviewTask.progress.current >= reviewTask.progress.target) {
+            reviewTask.completed = true;
+            reviewTask.completedAt = new Date();
+          }
+          
+          await partner.save();
+          console.log('✅ [REVIEW] Partner review task updated:', reviewTask.progress.current, '/', reviewTask.progress.target);
+        }
+      }
+    } catch (error) {
+      console.error('❌ [REVIEW] Error updating partner review task:', error);
+      // Don't fail the review if partner update fails
+    }
 
     sendSuccess(res, order, 'Order rated successfully');
 

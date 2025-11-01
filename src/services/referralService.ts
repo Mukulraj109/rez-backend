@@ -127,19 +127,20 @@ class ReferralService {
     // Credit referrer's reward if not already done
     if (!referral.referrerRewarded) {
       const referrerWallet = await Wallet.findOne({ user: referral.referrer });
+      const rewards = referral.rewards as any;
 
       if (referrerWallet) {
         // Add reward amount to wallet
-        referrerWallet.balance.total += referral.rewards.referrerAmount;
-        referrerWallet.balance.available += referral.rewards.referrerAmount;
-        referrerWallet.statistics.totalEarned += referral.rewards.referrerAmount;
+        referrerWallet.balance.total += rewards.referrerAmount || 0;
+        referrerWallet.balance.available += rewards.referrerAmount || 0;
+        referrerWallet.statistics.totalEarned += rewards.referrerAmount || 0;
         await referrerWallet.save();
 
         // Create transaction record
         await Transaction.create({
           user: referral.referrer,
           type: 'credit',
-          amount: referral.rewards.referrerAmount,
+          amount: rewards.referrerAmount || 0,
           description: 'Referral reward - Friend completed first order',
           status: 'success',
           source: {
@@ -155,7 +156,7 @@ class ReferralService {
         await activityService.referral.onReferralCompleted(
           referral.referrer as Types.ObjectId,
           referral._id as Types.ObjectId,
-          `Friend completed first order! ₹${referral.rewards.referrerAmount} earned`
+          `Friend completed first order! ₹${rewards.referrerAmount || 0} earned`
         );
 
         referral.referrerRewarded = true;
@@ -196,7 +197,8 @@ class ReferralService {
       return;
     }
 
-    const bonusAmount = referral.rewards.milestoneBonus || 20;
+    const rewards = referral.rewards as any;
+    const bonusAmount = rewards.milestoneBonus || 20;
 
     // Credit bonus to referrer's wallet
     const referrerWallet = await Wallet.findOne({ user: referral.referrer });
@@ -255,20 +257,21 @@ class ReferralService {
     const stats = referrals.reduce(
       (acc, ref) => {
         acc.totalReferrals++;
+        const rewards = ref.rewards as any;
 
         if (ref.status === ReferralStatus.PENDING) acc.pendingReferrals++;
         if (ref.status === ReferralStatus.ACTIVE) acc.activeReferrals++;
         if (ref.status === ReferralStatus.COMPLETED) acc.completedReferrals++;
 
         if (ref.referrerRewarded) {
-          acc.totalEarnings += ref.rewards.referrerAmount;
+          acc.totalEarnings += rewards.referrerAmount || 0;
         } else if (ref.status !== ReferralStatus.EXPIRED) {
-          acc.pendingEarnings += ref.rewards.referrerAmount;
+          acc.pendingEarnings += rewards.referrerAmount || 0;
         }
 
         if (ref.milestoneRewarded) {
-          acc.milestoneEarnings += ref.rewards.milestoneBonus || 0;
-          acc.totalEarnings += ref.rewards.milestoneBonus || 0;
+          acc.milestoneEarnings += rewards.milestoneBonus || 0;
+          acc.totalEarnings += rewards.milestoneBonus || 0;
         }
 
         return acc;
@@ -295,10 +298,11 @@ class ReferralService {
     const referrals = await Referral.find({ referrer: userId })
       .populate('referee', 'phoneNumber profile.firstName')
       .sort({ createdAt: -1 })
-      .lean();
+      .lean() as any[];
 
     return referrals.map(ref => {
       const referee = ref.referee as any;
+      const rewards = ref.rewards as any;
       return {
         _id: ref._id,
         referee: {
@@ -308,8 +312,8 @@ class ReferralService {
         },
         status: ref.status,
         rewards: {
-          referrerAmount: ref.rewards.referrerAmount,
-          milestoneBonus: ref.rewards.milestoneBonus,
+          referrerAmount: rewards.referrerAmount || 0,
+          milestoneBonus: rewards.milestoneBonus || 0,
         },
         referrerRewarded: ref.referrerRewarded,
         milestoneRewarded: ref.milestoneRewarded,

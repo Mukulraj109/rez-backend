@@ -24,6 +24,10 @@ export { Activity } from './Activity';
 export { StockHistory } from './StockHistory';
 export { Coupon } from './Coupon';
 export { UserCoupon } from './UserCoupon';
+export { default as Event } from './Event';
+export { default as EventBooking } from './EventBooking';
+export { Subscription } from './Subscription';
+export { StorePromoCoin } from './StorePromoCoin';
 
 // Export types for external use
 export type { IUser, IUserProfile, IUserPreferences, IUserWallet, IUserAuth } from './User';
@@ -51,3 +55,7 @@ export type { IActivity } from './Activity';
 export type { IStockHistory, StockChangeType } from './StockHistory';
 export type { ICoupon, ICouponApplicableTo, ICouponUsageLimit } from './Coupon';
 export type { IUserCoupon, IUserCouponNotifications } from './UserCoupon';
+export type { IEvent, IEventSlot, IEventLocation, IEventOrganizer, IEventPrice, IEventAnalytics } from './Event';
+export type { IEventBooking } from './EventBooking';
+export type { ISubscription, ISubscriptionBenefits, ISubscriptionUsage, SubscriptionTier, SubscriptionStatus, BillingCycle } from './Subscription';
+export type { IStorePromoCoin } from './StorePromoCoin';

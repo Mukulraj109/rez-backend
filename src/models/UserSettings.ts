@@ -191,10 +191,12 @@ const UserSettingsSchema = new Schema<IUserSettings>({
   general: {
     language: {
       type: String,
+      enum: ['en', 'hi', 'te', 'ta', 'bn', 'es', 'fr', 'de', 'zh', 'ja'],
       default: 'en'
     },
     currency: {
       type: String,
+      enum: ['INR', 'USD', 'GBP', 'CAD', 'AUD', 'EUR', 'BRL', 'CNY', 'JPY'],
       default: 'INR'
     },
     timezone: {

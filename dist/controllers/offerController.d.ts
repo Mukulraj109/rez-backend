@@ -74,3 +74,48 @@ export declare const trackOfferClick: (req: Request, res: Response) => Promise<v
  * Get personalized offer recommendations (optional auth)
  */
 export declare const getRecommendedOffers: (req: Request, res: Response) => Promise<void>;
+/**
+ * GET /api/offers/mega
+ * Get mega offers
+ */
+export declare const getMegaOffers: (req: Request, res: Response) => Promise<void>;
+/**
+ * GET /api/offers/students
+ * Get student offers
+ */
+export declare const getStudentOffers: (req: Request, res: Response) => Promise<void>;
+/**
+ * GET /api/offers/new-arrivals
+ * Get new arrival offers
+ */
+export declare const getNewArrivalOffers: (req: Request, res: Response) => Promise<void>;
+/**
+ * GET /api/offers/nearby
+ * Get nearby offers based on user location
+ */
+export declare const getNearbyOffers: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+/**
+ * GET /api/offers/page-data
+ * Get complete offers page data (hero banner, sections, etc.)
+ */
+export declare const getOffersPageData: (req: Request, res: Response) => Promise<void>;
+/**
+ * POST /api/offers/:id/like
+ * Like/unlike an offer
+ */
+export declare const toggleOfferLike: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+/**
+ * POST /api/offers/:id/share
+ * Share an offer
+ */
+export declare const shareOffer: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+/**
+ * GET /api/offer-categories
+ * Get all offer categories
+ */
+export declare const getOfferCategories: (req: Request, res: Response) => Promise<void>;
+/**
+ * GET /api/hero-banners
+ * Get active hero banners
+ */
+export declare const getHeroBanners: (req: Request, res: Response) => Promise<void>;

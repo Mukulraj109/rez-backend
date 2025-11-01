@@ -7,3 +7,11 @@ export declare const getFeaturedProducts: (req: Request, res: Response, next: im
 export declare const getNewArrivals: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const searchProducts: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const getRecommendations: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const trackProductView: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getProductAnalytics: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getFrequentlyBoughtTogether: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getBundleProducts: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getSearchSuggestions: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getPopularSearches: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getRelatedProducts: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const checkAvailability: (req: Request, res: Response, next: import("express").NextFunction) => void;

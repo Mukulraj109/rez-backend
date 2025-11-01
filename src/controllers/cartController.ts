@@ -6,7 +6,8 @@ import {
   sendNotFound,
   sendError,
   sendUnauthorized,
-  sendConflict
+  sendConflict,
+  sendBadRequest
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
@@ -65,6 +66,14 @@ export const getCart = asyncHandler(async (req: Request, res: Response) => {
       console.log('🛒 [GET CART] Cart expired, clearing...');
       await cart.clearCart();
       await cart.save();
+    }
+
+    // BUGFIX: Recalculate totals if total is 0 but subtotal > 0 (stale data)
+    if (cart.items.length > 0 && cart.totals.subtotal > 0 && cart.totals.total === 0) {
+      console.log('🛒 [GET CART] Detected stale totals (total=0 but subtotal>0), recalculating...');
+      await cart.calculateTotals();
+      await cart.save();
+      console.log('🛒 [GET CART] Totals recalculated:', cart.totals);
     }
 
     // Cache the cart data
@@ -377,36 +386,63 @@ export const updateCartItem = asyncHandler(async (req: Request, res: Response) =
 
 // Remove item from cart
 export const removeFromCart = asyncHandler(async (req: Request, res: Response) => {
+  console.log('🗑️ [REMOVE FROM CART] Starting remove item process');
+  console.log('🗑️ [REMOVE FROM CART] User ID:', req.userId);
+  console.log('🗑️ [REMOVE FROM CART] Request params:', req.params);
+
   if (!req.userId) {
     return sendUnauthorized(res, 'Authentication required');
   }
 
   const { productId, variant } = req.params;
+  console.log('🗑️ [REMOVE FROM CART] Product ID:', productId);
+  console.log('🗑️ [REMOVE FROM CART] Variant (raw):', variant);
 
   try {
     const cart = await Cart.getActiveCart(req.userId);
-    
+
     if (!cart) {
+      console.error('❌ [REMOVE FROM CART] Cart not found for user:', req.userId);
       return sendNotFound(res, 'Cart not found');
     }
+
+    console.log('🗑️ [REMOVE FROM CART] Cart found:', cart._id);
+    console.log('🗑️ [REMOVE FROM CART] Current cart items count:', cart.items.length);
+    console.log('🗑️ [REMOVE FROM CART] Cart items:', cart.items.map((item: any) => ({
+      id: item._id,
+      product: item.product,
+      hasProduct: !!item.product
+    })));
 
     // Parse variant from query params
     let variantObj;
     if (variant && variant !== 'null') {
       try {
         variantObj = JSON.parse(variant);
+        console.log('🗑️ [REMOVE FROM CART] Parsed variant:', variantObj);
       } catch (e) {
+        console.error('❌ [REMOVE FROM CART] Invalid variant format:', e);
         return sendError(res, 'Invalid variant format', 400);
       }
     }
 
+    console.log('🗑️ [REMOVE FROM CART] Calling cart.removeItem with:', { productId, variant: variantObj });
     await cart.removeItem(productId, variantObj);
+
+    console.log('🗑️ [REMOVE FROM CART] Item removed, items count now:', cart.items.length);
+
     await cart.calculateTotals();
     await cart.save();
 
+    console.log('✅ [REMOVE FROM CART] Cart saved successfully');
+
     // Release stock reservation
     console.log('🔓 [REMOVE FROM CART] Releasing stock reservation...');
-    await reservationService.releaseStock((cart as any)._id.toString(), productId, variantObj);
+    try {
+      await reservationService.releaseStock((cart as any)._id.toString(), productId, variantObj);
+    } catch (stockError) {
+      console.warn('⚠️ [REMOVE FROM CART] Stock release failed (non-critical):', stockError);
+    }
 
     // Invalidate cart cache after update
     await CacheInvalidator.invalidateCart(req.userId);
@@ -414,6 +450,7 @@ export const removeFromCart = asyncHandler(async (req: Request, res: Response) =
     sendSuccess(res, cart, 'Item removed from cart successfully');
 
   } catch (error) {
+    console.error('❌ [REMOVE FROM CART] Error:', error);
     throw new AppError('Failed to remove item from cart', 500);
   }
 });
@@ -559,6 +596,14 @@ export const validateCart = asyncHandler(async (req: Request, res: Response) => 
       return sendError(res, 'Cart is empty', 400);
     }
 
+    // BUGFIX: Recalculate totals if total is 0 but subtotal > 0 (stale data)
+    if (cart.items.length > 0 && cart.totals.subtotal > 0 && cart.totals.total === 0) {
+      console.log('✅ [VALIDATE CART] Detected stale totals, recalculating...');
+      await cart.calculateTotals();
+      await cart.save();
+      console.log('✅ [VALIDATE CART] Totals recalculated:', cart.totals);
+    }
+
     const validationErrors: string[] = [];
     const unavailableItems: any[] = [];
 
@@ -682,5 +727,235 @@ export const validateCart = asyncHandler(async (req: Request, res: Response) => 
 
   } catch (error) {
     throw new AppError('Failed to validate cart', 500);
+  }
+});
+
+// Lock item at current price
+export const lockItem = asyncHandler(async (req: Request, res: Response) => {
+  console.log('🔒 [LOCK ITEM] Starting lock process');
+  console.log('🔒 [LOCK ITEM] User ID:', req.userId);
+  console.log('🔒 [LOCK ITEM] Request body:', req.body);
+
+  if (!req.userId) {
+    console.error('❌ [LOCK ITEM] No user ID provided');
+    return sendUnauthorized(res, 'Authentication required');
+  }
+
+  const { productId, quantity = 1, variant, lockDurationHours = 24 } = req.body;
+
+  if (!productId) {
+    console.error('❌ [LOCK ITEM] No product ID provided');
+    return sendBadRequest(res, 'Product ID is required');
+  }
+
+  try {
+    console.log('🔒 [LOCK ITEM] Finding cart for user:', req.userId);
+    let cart = await Cart.getActiveCart(req.userId);
+
+    if (!cart) {
+      console.log('🔒 [LOCK ITEM] No cart found, creating new cart');
+      // Create new cart if not exists
+      cart = await Cart.create({
+        user: req.userId,
+        items: [],
+        lockedItems: [],
+        totals: {
+          subtotal: 0,
+          tax: 0,
+          delivery: 0,
+          discount: 0,
+          cashback: 0,
+          total: 0,
+          savings: 0
+        },
+        isActive: true,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+      });
+      console.log('🔒 [LOCK ITEM] New cart created:', cart._id);
+    } else {
+      console.log('🔒 [LOCK ITEM] Found existing cart:', cart._id);
+      console.log('🔒 [LOCK ITEM] Current locked items count:', cart.lockedItems?.length || 0);
+    }
+
+    console.log('🔒 [LOCK ITEM] Locking product:', productId, 'with quantity:', quantity);
+    await cart.lockItem(productId, quantity, variant, lockDurationHours);
+
+    console.log('🔒 [LOCK ITEM] Item locked successfully');
+    console.log('🔒 [LOCK ITEM] New locked items count:', cart.lockedItems?.length || 0);
+
+    // Reload cart with populated fields
+    const populatedCart = await Cart.findById(cart._id)
+      .populate({
+        path: 'lockedItems.product',
+        select: 'name images pricing store category'
+      })
+      .populate({
+        path: 'lockedItems.store',
+        select: 'name logo location'
+      });
+
+    sendSuccess(res, { cart: populatedCart, message: 'Item locked successfully' }, 'Item locked successfully');
+
+  } catch (error) {
+    console.error('❌ [LOCK ITEM] Error:', error);
+    throw new AppError(error instanceof Error ? error.message : 'Failed to lock item', 500);
+  }
+});
+
+// Unlock item
+export const unlockItem = asyncHandler(async (req: Request, res: Response) => {
+  console.log('🔓 [UNLOCK ITEM] Starting unlock process');
+  console.log('🔓 [UNLOCK ITEM] User ID:', req.userId);
+  console.log('🔓 [UNLOCK ITEM] Product ID:', req.params.productId);
+  console.log('🔓 [UNLOCK ITEM] Request body:', req.body);
+
+  if (!req.userId) {
+    console.error('❌ [UNLOCK ITEM] No user ID provided');
+    return sendUnauthorized(res, 'Authentication required');
+  }
+
+  const { productId } = req.params;
+  const { variant } = req.body || {}; // Handle undefined body for DELETE requests
+
+  if (!productId) {
+    console.error('❌ [UNLOCK ITEM] No product ID provided');
+    return sendBadRequest(res, 'Product ID is required');
+  }
+
+  try {
+    const cart = await Cart.getActiveCart(req.userId);
+
+    if (!cart) {
+      console.error('❌ [UNLOCK ITEM] Cart not found for user:', req.userId);
+      return sendNotFound(res, 'Cart not found');
+    }
+
+    console.log('🔓 [UNLOCK ITEM] Cart found, locked items count:', cart.lockedItems?.length || 0);
+    console.log('🔓 [UNLOCK ITEM] Locked items:', cart.lockedItems?.map((item: any) => ({
+      productId: item.product?.toString(),
+      variant: item.variant
+    })));
+
+    await cart.unlockItem(productId, variant);
+
+    console.log('✅ [UNLOCK ITEM] Item unlocked successfully');
+    console.log('✅ [UNLOCK ITEM] Remaining locked items:', cart.lockedItems?.length || 0);
+
+    sendSuccess(res, cart, 'Item unlocked successfully');
+
+  } catch (error) {
+    console.error('❌ [UNLOCK ITEM] Error:', error);
+    console.error('❌ [UNLOCK ITEM] Error stack:', error instanceof Error ? error.stack : 'No stack');
+    throw new AppError('Failed to unlock item', 500);
+  }
+});
+
+// Move locked item to cart
+export const moveLockedToCart = asyncHandler(async (req: Request, res: Response) => {
+  console.log('➡️ [MOVE TO CART] Starting move locked to cart');
+  console.log('➡️ [MOVE TO CART] User ID:', req.userId);
+  console.log('➡️ [MOVE TO CART] Product ID:', req.params.productId);
+  console.log('➡️ [MOVE TO CART] Request body:', req.body);
+
+  if (!req.userId) {
+    return sendUnauthorized(res, 'Authentication required');
+  }
+
+  const { productId } = req.params;
+  const { variant } = req.body || {}; // Handle undefined body safely
+
+  if (!productId) {
+    return sendBadRequest(res, 'Product ID is required');
+  }
+
+  try {
+    const cart = await Cart.getActiveCart(req.userId);
+
+    if (!cart) {
+      console.error('❌ [MOVE TO CART] Cart not found');
+      return sendNotFound(res, 'Cart not found');
+    }
+
+    console.log('➡️ [MOVE TO CART] Cart found with locked items:', cart.lockedItems?.length || 0);
+    console.log('➡️ [MOVE TO CART] Locked items:', cart.lockedItems?.map((item: any) => ({
+      itemId: item._id,
+      productId: typeof item.product === 'object' ? item.product._id : item.product,
+      productString: item.product?.toString()
+    })));
+
+    await cart.moveLockedToCart(productId, variant);
+
+    console.log('✅ [MOVE TO CART] Item moved successfully');
+    sendSuccess(res, cart, 'Item moved to cart successfully');
+
+  } catch (error) {
+    console.error('❌ [MOVE TO CART] Error:', error);
+    console.error('❌ [MOVE TO CART] Error message:', error instanceof Error ? error.message : 'Unknown error');
+    throw new AppError(error instanceof Error ? error.message : 'Failed to move item to cart', 500);
+  }
+});
+
+// Get locked items
+export const getLockedItems = asyncHandler(async (req: Request, res: Response) => {
+  console.log('🔒 [GET LOCKED] Starting get locked items');
+  console.log('🔒 [GET LOCKED] User ID:', req.userId);
+
+  if (!req.userId) {
+    return sendUnauthorized(res, 'Authentication required');
+  }
+
+  try {
+    const cart = await Cart.findOne({ user: req.userId, isActive: true })
+      .populate({
+        path: 'lockedItems.product',
+        select: 'name images pricing store category'
+      })
+      .populate({
+        path: 'lockedItems.store',
+        select: 'name logo location'
+      });
+
+    console.log('🔒 [GET LOCKED] Cart found:', !!cart);
+    console.log('🔒 [GET LOCKED] Total locked items in cart:', cart?.lockedItems?.length || 0);
+
+    if (!cart) {
+      console.log('🔒 [GET LOCKED] No cart found, returning empty array');
+      return sendSuccess(res, { lockedItems: [] }, 'No locked items found');
+    }
+
+    // Log all locked items with their expiration
+    const now = new Date();
+    console.log('🔒 [GET LOCKED] Current time:', now.toISOString());
+    cart.lockedItems.forEach((item: any, index: number) => {
+      console.log(`🔒 [GET LOCKED] Item ${index + 1}:`, {
+        id: item._id,
+        productId: item.product?._id || item.product,
+        expiresAt: item.expiresAt,
+        expiresAtISO: new Date(item.expiresAt).toISOString(),
+        isExpired: item.expiresAt <= now,
+        timeUntilExpiry: item.expiresAt > now ? Math.round((item.expiresAt - now.getTime()) / 1000 / 60) + ' minutes' : 'EXPIRED'
+      });
+    });
+
+    // Filter out expired locked items
+    const validLockedItems = cart.lockedItems.filter((item: any) =>
+      item.expiresAt > now
+    );
+
+    console.log('🔒 [GET LOCKED] Found', validLockedItems.length, 'valid locked items out of', cart.lockedItems.length, 'total');
+    if (validLockedItems.length > 0) {
+      const firstItem = validLockedItems[0] as any;
+      console.log('🔒 [GET LOCKED] First valid item:', {
+        id: firstItem._id,
+        productId: firstItem.product?._id || firstItem.product,
+        productName: firstItem.product?.name || 'N/A'
+      });
+    }
+
+    sendSuccess(res, { lockedItems: validLockedItems }, 'Locked items retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [GET LOCKED] Error:', error);
+    throw new AppError('Failed to get locked items', 500);
   }
 });

@@ -4,6 +4,7 @@ export interface IUserProfile {
     lastName?: string;
     avatar?: string;
     bio?: string;
+    website?: string;
     dateOfBirth?: Date;
     gender?: 'male' | 'female' | 'other';
     location?: {
@@ -21,10 +22,27 @@ export interface IUserProfile {
         source: 'manual' | 'gps' | 'ip';
     }>;
     timezone?: string;
+    ringSize?: string;
+    jewelryPreferences?: {
+        preferredMetals?: string[];
+        preferredStones?: string[];
+        style?: 'traditional' | 'modern' | 'vintage' | 'contemporary';
+    };
+    verificationStatus?: 'pending' | 'approved' | 'rejected';
+    verificationDocuments?: {
+        documentType: string;
+        documentNumber: string;
+        documentImage: string;
+        submittedAt: Date;
+    };
 }
 export interface IUserPreferences {
     language?: string;
-    notifications?: boolean;
+    notifications?: {
+        push?: boolean;
+        email?: boolean;
+        sms?: boolean;
+    };
     categories?: Types.ObjectId[];
     theme?: 'light' | 'dark';
     emailNotifications?: boolean;
@@ -72,6 +90,19 @@ export interface IUser extends Document {
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
+    walletBalance?: number;
+    referralCode?: string;
+    fullName?: string;
+    username?: string;
+    referralTier?: 'STARTER' | 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'DIAMOND';
+    isPremium?: boolean;
+    premiumExpiresAt?: Date;
+    userType?: string;
+    age?: number;
+    location?: string;
+    interests?: string[];
+    phone?: string;
+    lastLogin?: Date;
     comparePassword(candidatePassword: string): Promise<boolean>;
     generateOTP(): string;
     verifyOTP(otp: string): boolean;

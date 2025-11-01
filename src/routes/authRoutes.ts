@@ -7,6 +7,7 @@ import {
   getCurrentUser,
   updateProfile,
   completeOnboarding,
+  changePassword,
   deleteAccount,
   getUserStatistics,
   uploadAvatar
@@ -41,7 +42,6 @@ router.post('/refresh-token',
 
 // Protected routes
 router.post('/logout', 
-  authenticate, 
   logout
 );
 
@@ -54,6 +54,11 @@ router.put('/profile',
   authenticate, 
   validate(authSchemas.updateProfile), 
   updateProfile
+);
+
+router.put('/change-password',
+  authenticate,
+  changePassword
 );
 
 router.post('/complete-onboarding', 

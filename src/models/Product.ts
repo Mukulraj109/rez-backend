@@ -68,6 +68,35 @@ export interface IProductAnalytics {
   shareCount: number;
   returnRate: number;
   avgRating: number;
+  todayPurchases?: number;
+  todayViews?: number;
+  lastResetDate?: Date;
+}
+
+// Product cashback interface
+export interface IProductCashback {
+  percentage: number;
+  maxAmount?: number;
+  minPurchase?: number;
+  validUntil?: Date;
+  terms?: string;
+}
+
+// Product delivery info interface
+export interface IProductDeliveryInfo {
+  estimatedDays?: string;
+  freeShippingThreshold?: number;
+  expressAvailable?: boolean;
+  standardDeliveryTime?: string;
+  expressDeliveryTime?: string;
+  deliveryPartner?: string;
+}
+
+// Frequently bought together interface
+export interface IFrequentlyBoughtWith {
+  productId: Types.ObjectId;
+  purchaseCount: number;
+  lastUpdated?: Date;
 }
 
 // Main Product interface
@@ -76,6 +105,7 @@ export interface IProduct {
   slug: string;
   description?: string;
   shortDescription?: string;
+  productType: 'product' | 'service'; // Type: physical product or service
   category: Types.ObjectId;
   subCategory?: Types.ObjectId;
   store: Types.ObjectId;
@@ -92,6 +122,10 @@ export interface IProduct {
   tags: string[];
   seo: IProductSEO;
   analytics: IProductAnalytics;
+  cashback?: IProductCashback;
+  deliveryInfo?: IProductDeliveryInfo;
+  bundleProducts?: Types.ObjectId[];
+  frequentlyBoughtWith?: IFrequentlyBoughtWith[];
   isActive: boolean;
   isFeatured: boolean;
   isDigital: boolean;
@@ -118,6 +152,10 @@ export interface IProduct {
   calculateDiscountedPrice(): number;
   updateRatings(): Promise<void>;
   incrementViews(): Promise<void>;
+  incrementTodayPurchases(): Promise<void>;
+  resetDailyAnalytics(): Promise<void>;
+  calculateCashback(purchaseAmount?: number): number;
+  getEstimatedDelivery(userLocation?: any): string;
 }
 
 // Product Schema
@@ -145,6 +183,12 @@ const ProductSchema = new Schema<IProduct>({
     type: String,
     trim: true,
     maxlength: 300
+  },
+  productType: {
+    type: String,
+    enum: ['product', 'service'],
+    default: 'product',
+    required: true
   },
   category: {
     type: Schema.Types.ObjectId,
@@ -351,8 +395,83 @@ const ProductSchema = new Schema<IProduct>({
       default: 0,
       min: 0,
       max: 5
+    },
+    todayPurchases: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    todayViews: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    lastResetDate: {
+      type: Date,
+      default: Date.now
     }
   },
+  cashback: {
+    percentage: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 5
+    },
+    maxAmount: {
+      type: Number,
+      min: 0
+    },
+    minPurchase: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
+    validUntil: Date,
+    terms: String
+  },
+  deliveryInfo: {
+    estimatedDays: {
+      type: String,
+      default: '2-3 days'
+    },
+    freeShippingThreshold: {
+      type: Number,
+      default: 500
+    },
+    expressAvailable: {
+      type: Boolean,
+      default: false
+    },
+    standardDeliveryTime: {
+      type: String,
+      default: '2-3 days'
+    },
+    expressDeliveryTime: {
+      type: String,
+      default: 'Under 30min'
+    },
+    deliveryPartner: String
+  },
+  bundleProducts: [{
+    type: Schema.Types.ObjectId,
+    ref: 'Product'
+  }],
+  frequentlyBoughtWith: [{
+    productId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Product'
+    },
+    purchaseCount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    lastUpdated: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   isActive: {
     type: Boolean,
     default: true
@@ -536,8 +655,116 @@ ProductSchema.methods.updateRatings = async function(): Promise<void> {
 
 // Method to increment views
 ProductSchema.methods.incrementViews = async function(): Promise<void> {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const lastReset = new Date(this.analytics.lastResetDate || Date.now());
+  lastReset.setHours(0, 0, 0, 0);
+
+  const updateData: any = {
+    $inc: { 'analytics.views': 1 }
+  };
+
+  // Check if we need to reset daily analytics (if it's a new day)
+  if (today.getTime() > lastReset.getTime()) {
+    updateData.$set = {
+      'analytics.todayViews': 1,
+      'analytics.todayPurchases': 0,
+      'analytics.lastResetDate': today
+    };
+  } else {
+    updateData.$inc['analytics.todayViews'] = 1;
+  }
+
+  // Update directly without triggering full validation
+  await (this.constructor as mongoose.Model<IProduct>).findByIdAndUpdate(this._id, updateData);
+
+  // Update the local instance
   this.analytics.views += 1;
+  if (today.getTime() > lastReset.getTime()) {
+    this.analytics.todayViews = 1;
+    this.analytics.todayPurchases = 0;
+    this.analytics.lastResetDate = today;
+  } else {
+    this.analytics.todayViews = (this.analytics.todayViews || 0) + 1;
+  }
+};
+
+// Method to increment today's purchases
+ProductSchema.methods.incrementTodayPurchases = async function(): Promise<void> {
+  this.analytics.purchases += 1;
+  this.analytics.todayPurchases = (this.analytics.todayPurchases || 0) + 1;
+
+  // Check if we need to reset daily analytics
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const lastReset = new Date(this.analytics.lastResetDate || Date.now());
+  lastReset.setHours(0, 0, 0, 0);
+
+  if (today.getTime() > lastReset.getTime()) {
+    this.analytics.todayPurchases = 1;
+    this.analytics.todayViews = 0;
+    this.analytics.lastResetDate = today;
+  }
+
   await this.save();
+};
+
+// Method to reset daily analytics
+ProductSchema.methods.resetDailyAnalytics = async function(): Promise<void> {
+  this.analytics.todayPurchases = 0;
+  this.analytics.todayViews = 0;
+  this.analytics.lastResetDate = new Date();
+  await this.save();
+};
+
+// Method to calculate cashback
+ProductSchema.methods.calculateCashback = function(purchaseAmount?: number): number {
+  // Handle both pricing and price field structures
+  const amount = purchaseAmount ||
+                 this.pricing?.selling || this.pricing?.original ||
+                 this.price?.current || this.price?.original || 0;
+
+  // If amount is 0 or invalid, return 0
+  if (!amount || amount <= 0 || isNaN(amount)) {
+    return 0;
+  }
+
+  // Check if purchase meets minimum requirement
+  if (this.cashback?.minPurchase && amount < this.cashback.minPurchase) {
+    return 0;
+  }
+
+  // Check if cashback is still valid
+  if (this.cashback?.validUntil && new Date() > new Date(this.cashback.validUntil)) {
+    return 0;
+  }
+
+  // Calculate cashback amount
+  const percentage = this.cashback?.percentage || 5; // Default 5% if not specified
+  let cashbackAmount = (amount * percentage) / 100;
+
+  // Apply max amount limit if specified
+  if (this.cashback?.maxAmount && cashbackAmount > this.cashback.maxAmount) {
+    cashbackAmount = this.cashback.maxAmount;
+  }
+
+  return Math.round(cashbackAmount);
+};
+
+// Method to get estimated delivery time
+ProductSchema.methods.getEstimatedDelivery = function(userLocation?: any): string {
+  // If express is available and user is in same city
+  if (this.deliveryInfo?.expressAvailable && userLocation?.city === this.store?.location?.city) {
+    return this.deliveryInfo.expressDeliveryTime || 'Under 30min';
+  }
+
+  // Check stock levels for delivery estimation
+  if (this.inventory.stock < 5 && !this.inventory.unlimited) {
+    return '3-5 days'; // Longer for low stock
+  }
+
+  // Return standard delivery time
+  return this.deliveryInfo?.standardDeliveryTime || this.deliveryInfo?.estimatedDays || '2-3 days';
 };
 
 // Static method to search products

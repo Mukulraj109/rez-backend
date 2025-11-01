@@ -10,6 +10,7 @@ import {
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import activityService from '../services/activityService';
+import achievementService from '../services/achievementService';
 import { Types } from 'mongoose';
 
 // Get reviews for a store
@@ -146,6 +147,13 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
       new Types.ObjectId(review._id as any),
       store.name
     );
+
+    // Trigger achievement update for review creation
+    try {
+      await achievementService.triggerAchievementUpdate(userId, 'review_created');
+    } catch (error) {
+      console.error('❌ [REVIEW] Error triggering achievement update:', error);
+    }
 
     sendCreated(res, {
       review

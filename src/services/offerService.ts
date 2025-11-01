@@ -205,25 +205,25 @@ class OfferService {
       });
 
       return exclusiveOffers.map(offer => {
-        const discountPercentage = offer.discountPercentage || 0;
+        const discountPercentage = offer.cashbackPercentage || 0;
         const savings = (cartTotal * discountPercentage) / 100;
-        const cappedSavings = offer.maximumDiscount
-          ? Math.min(savings, offer.maximumDiscount)
+        const cappedSavings = offer.restrictions.maxDiscountAmount
+          ? Math.min(savings, offer.restrictions.maxDiscountAmount)
           : savings;
 
-        const applicable = !offer.minimumPurchase || cartTotal >= offer.minimumPurchase;
+        const applicable = !offer.restrictions.minOrderValue || cartTotal >= offer.restrictions.minOrderValue;
 
         return {
           offerId: (offer as any)._id.toString(),
           offerType: 'exclusive',
           title: offer.title,
-          description: offer.description,
+          description: offer.description || '',
           priority: this.OFFER_PRIORITY.exclusive,
           savings: cappedSavings,
           finalPrice: cartTotal - cappedSavings,
           discountPercentage,
           applicable,
-          reason: applicable ? undefined : `Minimum purchase of ₹${offer.minimumPurchase} required`,
+          reason: applicable ? undefined : `Minimum purchase of ₹${offer.restrictions.minOrderValue} required`,
         };
       });
     } catch (error) {
@@ -256,25 +256,25 @@ class OfferService {
       });
 
       return categoryOffers.map(offer => {
-        const discountPercentage = offer.discountPercentage || 0;
+        const discountPercentage = offer.cashbackPercentage || 0;
         const savings = (cartTotal * discountPercentage) / 100;
-        const cappedSavings = offer.maximumDiscount
-          ? Math.min(savings, offer.maximumDiscount)
+        const cappedSavings = offer.restrictions.maxDiscountAmount
+          ? Math.min(savings, offer.restrictions.maxDiscountAmount)
           : savings;
 
-        const applicable = !offer.minimumPurchase || cartTotal >= offer.minimumPurchase;
+        const applicable = !offer.restrictions.minOrderValue || cartTotal >= offer.restrictions.minOrderValue;
 
         return {
           offerId: (offer as any)._id.toString(),
           offerType: 'category',
           title: offer.title,
-          description: offer.description,
+          description: offer.description || '',
           priority: this.OFFER_PRIORITY.category,
           savings: cappedSavings,
           finalPrice: cartTotal - cappedSavings,
           discountPercentage,
           applicable,
-          reason: applicable ? undefined : `Minimum purchase of ₹${offer.minimumPurchase} required`,
+          reason: applicable ? undefined : `Minimum purchase of ₹${offer.restrictions.minOrderValue} required`,
         };
       });
     } catch (error) {
@@ -310,25 +310,25 @@ class OfferService {
       });
 
       return storeOffers.map(offer => {
-        const discountPercentage = offer.discountPercentage || 0;
+        const discountPercentage = offer.cashbackPercentage || 0;
         const savings = (cartTotal * discountPercentage) / 100;
-        const cappedSavings = offer.maximumDiscount
-          ? Math.min(savings, offer.maximumDiscount)
+        const cappedSavings = offer.restrictions.maxDiscountAmount
+          ? Math.min(savings, offer.restrictions.maxDiscountAmount)
           : savings;
 
-        const applicable = !offer.minimumPurchase || cartTotal >= offer.minimumPurchase;
+        const applicable = !offer.restrictions.minOrderValue || cartTotal >= offer.restrictions.minOrderValue;
 
         return {
           offerId: (offer as any)._id.toString(),
           offerType: 'store',
           title: offer.title,
-          description: offer.description,
+          description: offer.description || '',
           priority: this.OFFER_PRIORITY.store,
           savings: cappedSavings,
           finalPrice: cartTotal - cappedSavings,
           discountPercentage,
           applicable,
-          reason: applicable ? undefined : `Minimum purchase of ₹${offer.minimumPurchase} required`,
+          reason: applicable ? undefined : `Minimum purchase of ₹${offer.restrictions.minOrderValue} required`,
         };
       });
     } catch (error) {
@@ -358,25 +358,25 @@ class OfferService {
       });
 
       return generalOffers.map(offer => {
-        const discountPercentage = offer.discountPercentage || 0;
+        const discountPercentage = offer.cashbackPercentage || 0;
         const savings = (cartTotal * discountPercentage) / 100;
-        const cappedSavings = offer.maximumDiscount
-          ? Math.min(savings, offer.maximumDiscount)
+        const cappedSavings = offer.restrictions.maxDiscountAmount
+          ? Math.min(savings, offer.restrictions.maxDiscountAmount)
           : savings;
 
-        const applicable = !offer.minimumPurchase || cartTotal >= offer.minimumPurchase;
+        const applicable = !offer.restrictions.minOrderValue || cartTotal >= offer.restrictions.minOrderValue;
 
         return {
           offerId: (offer as any)._id.toString(),
           offerType: 'general',
           title: offer.title,
-          description: offer.description,
+          description: offer.description || '',
           priority: this.OFFER_PRIORITY.general,
           savings: cappedSavings,
           finalPrice: cartTotal - cappedSavings,
           discountPercentage,
           applicable,
-          reason: applicable ? undefined : `Minimum purchase of ₹${offer.minimumPurchase} required`,
+          reason: applicable ? undefined : `Minimum purchase of ₹${offer.restrictions.minOrderValue} required`,
         };
       });
     } catch (error) {
@@ -503,19 +503,19 @@ class OfferService {
         };
       }
 
-      const applicable = !offer.minimumPurchase || cartTotal >= offer.minimumPurchase;
+      const applicable = !offer.restrictions.minOrderValue || cartTotal >= offer.restrictions.minOrderValue;
 
       if (!applicable) {
         return {
           valid: false,
-          message: `Minimum purchase of ₹${offer.minimumPurchase} required`,
+          message: `Minimum purchase of ₹${offer.restrictions.minOrderValue} required`,
         };
       }
 
-      const discountPercentage = offer.discountPercentage || 0;
+      const discountPercentage = offer.cashbackPercentage || 0;
       const savings = (cartTotal * discountPercentage) / 100;
-      const cappedSavings = offer.maximumDiscount
-        ? Math.min(savings, offer.maximumDiscount)
+      const cappedSavings = offer.restrictions.maxDiscountAmount
+        ? Math.min(savings, offer.restrictions.maxDiscountAmount)
         : savings;
 
       return {

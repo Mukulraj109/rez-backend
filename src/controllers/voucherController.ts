@@ -51,6 +51,7 @@ export const getVoucherBrands = async (req: Request, res: Response) => {
 
     const [brands, total] = await Promise.all([
       VoucherBrand.find(filter)
+        .populate('store', 'name slug logo location.address location.city')
         .sort(sortOptions)
         .skip(skip)
         .limit(limitNum)
@@ -73,7 +74,9 @@ export const getVoucherBrandById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const brand = await VoucherBrand.findById(id).lean();
+    const brand = await VoucherBrand.findById(id)
+      .populate('store', 'name slug logo location.address location.city')
+      .lean();
 
     if (!brand) {
       return sendError(res, 'Voucher brand not found', 404);
@@ -98,6 +101,7 @@ export const getFeaturedBrands = async (req: Request, res: Response) => {
       isActive: true,
       isFeatured: true,
     })
+      .populate('store', 'name slug logo location.address location.city')
       .sort({ purchaseCount: -1 })
       .limit(Number(limit))
       .lean();
@@ -121,6 +125,7 @@ export const getNewlyAddedBrands = async (req: Request, res: Response) => {
       isActive: true,
       isNewlyAdded: true,
     })
+      .populate('store', 'name slug logo location.address location.city')
       .sort({ createdAt: -1 })
       .limit(Number(limit))
       .lean();
@@ -201,13 +206,25 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
       return sendError(res, 'Insufficient wallet balance', 400);
     }
 
+    // Generate voucher code
+    const brandPrefix = brandId.toString().substring(0, 6).toUpperCase();
+    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const voucherCode = `${brandPrefix}-${denomination}-${random}`;
+
+    // Calculate expiry date (365 days from now)
+    const purchaseDate = new Date();
+    const expiryDate = new Date(purchaseDate);
+    expiryDate.setDate(expiryDate.getDate() + 365);
+
     // Create voucher
     const userVoucher = new UserVoucher({
       user: userId,
       brand: brandId,
+      voucherCode,
       denomination: Number(denomination),
       purchasePrice,
-      purchaseDate: new Date(),
+      purchaseDate,
+      expiryDate,
       validityDays: 365, // 1 year
       status: 'active',
       deliveryMethod: 'app',
@@ -237,29 +254,30 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
       type: 'debit',
       amount: purchasePrice,
       currency: wallet.currency,
-      category: 'voucher_purchase',
-      description: `Purchased ${brand.name} voucher - ${denomination}`,
+      category: 'spending',
+      description: `Purchased ${brand.name} voucher - ₹${denomination}`,
       status: {
         current: 'completed',
         history: [{
           status: 'completed',
           timestamp: new Date(),
-          message: 'Voucher purchased successfully',
+          reason: 'Voucher purchased successfully',
         }],
       },
       source: {
-        type: 'voucher',
-        id: String(userVoucher._id),
+        type: 'order',
+        reference: userVoucher._id as any,
+        description: `Voucher purchase - ${brand.name}`,
         metadata: {
-          brandId: String(brand._id),
-          brandName: brand.name,
-          denomination,
+          orderNumber: `VOUCHR-${String(userVoucher._id).substring(0, 8)}`,
+          storeInfo: brand.store ? {
+            name: brand.name,
+            id: brand.store as any,
+          } : undefined,
         },
       },
-      balance: {
-        before: wallet.balance.total + purchasePrice,
-        after: wallet.balance.total,
-      },
+      balanceBefore: wallet.balance.total + purchasePrice,
+      balanceAfter: wallet.balance.total,
     });
 
     await transaction.save();
@@ -404,5 +422,79 @@ export const trackBrandView = async (req: Request, res: Response) => {
     console.error('Error tracking brand view:', error);
     // Don't return error for analytics
     res.status(200).json({ success: true });
+  }
+};
+
+/**
+ * GET /api/vouchers/hero-carousel
+ * Get hero carousel items for online voucher page
+ */
+export const getHeroCarousel = async (req: Request, res: Response) => {
+  try {
+    const { limit = 5 } = req.query;
+
+    // Get featured brands with highest cashback rates, prioritizing travel brands (like MakeMyTrip) for hero carousel
+    const featuredBrands = await VoucherBrand.find({
+      isActive: true,
+      $or: [
+        { isFeatured: true },
+        { category: 'travel' }, // Include travel brands in hero carousel
+      ],
+    })
+      .populate('store', 'name slug logo location.address location.city')
+      .sort({ 
+        // Prioritize travel brands first, then by cashback rate
+        category: 1, // travel comes first alphabetically, but we'll manually sort
+        cashbackRate: -1, 
+        purchaseCount: -1 
+      })
+      .limit(Number(limit) + 5) // Get extra to filter
+      .lean();
+
+    // Manually sort: travel brands first, then others
+    featuredBrands.sort((a, b) => {
+      const aIsTravel = a.category === 'travel';
+      const bIsTravel = b.category === 'travel';
+      if (aIsTravel && !bIsTravel) return -1;
+      if (!aIsTravel && bIsTravel) return 1;
+      return b.cashbackRate - a.cashbackRate;
+    });
+
+    // Limit to requested number
+    const limitedBrands = featuredBrands.slice(0, Number(limit));
+
+    // Transform to carousel format
+    const carouselItems = limitedBrands.map((brand, index) => {
+      // Special handling for MakeMyTrip to match image format
+      const title = brand.name.toLowerCase() === 'makemytrip' 
+        ? 'make my trip' 
+        : brand.name;
+
+      return {
+        id: brand._id.toString(),
+        title,
+        subtitle: `Cashback upto ${brand.cashbackRate}%`,
+        image: brand.logo, // Use logo as image for now
+        backgroundColor: brand.backgroundColor || '#F97316',
+        textColor: brand.logoColor || '#FFFFFF',
+        cashbackRate: brand.cashbackRate,
+        brandId: brand._id.toString(),
+        store: brand.store ? {
+          id: (brand.store as any)._id?.toString(),
+          name: (brand.store as any).name,
+          slug: (brand.store as any).slug,
+          address: (brand.store as any).location?.address,
+        } : null,
+        action: {
+          type: 'brand' as const,
+          target: brand._id.toString(),
+        },
+      };
+    });
+
+    sendSuccess(res, carouselItems, 'Hero carousel items fetched successfully');
+  } catch (error) {
+    console.error('Error fetching hero carousel:', error);
+    sendError(res, 'Failed to fetch hero carousel', 500);
   }
 };

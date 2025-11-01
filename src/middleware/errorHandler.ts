@@ -21,8 +21,14 @@ const handleValidationError = (error: any) => {
     field: err.path,
     message: err.message
   }));
-  
-  return new AppError('Validation failed', 400);
+
+  console.error('❌ Validation Error Details:', JSON.stringify(errors, null, 2));
+
+  const message = errors.length > 0
+    ? `Validation failed: ${errors.map((e: any) => `${e.field} - ${e.message}`).join(', ')}`
+    : 'Validation failed';
+
+  return new AppError(message, 400);
 };
 
 // Handle Mongoose duplicate key errors

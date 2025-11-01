@@ -79,11 +79,11 @@ export declare class OrderModel {
             priority?: "normal" | "high" | "urgent" | undefined;
             customerName: string;
             shipping: number;
+            internalNotes?: string | undefined;
             customerId: string;
             customerEmail: string;
             shippingAddress: import("../types/shared").Address;
             billingAddress: import("../types/shared").Address;
-            internalNotes?: string | undefined;
             confirmedAt?: Date | undefined;
             fulfilledAt?: Date | undefined;
             fulfillmentStatus?: string | undefined;

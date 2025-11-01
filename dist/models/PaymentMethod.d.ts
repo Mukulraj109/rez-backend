@@ -22,6 +22,7 @@ export declare enum BankAccountType {
     CURRENT = "CURRENT"
 }
 export interface IPaymentMethod extends Document {
+    id: string;
     user: Types.ObjectId;
     type: PaymentMethodType;
     card?: {

@@ -60,10 +60,6 @@ router.get('/store/:storeId', auth_1.optionalAuth, (0, validation_1.validatePara
     page: validation_2.Joi.number().integer().min(1).default(1),
     limit: validation_2.Joi.number().integer().min(1).max(50).default(20)
 })), offerController_1.getOffersByStore);
-// Get single offer by ID
-router.get('/:id', auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
-    id: validation_1.commonSchemas.objectId().required()
-})), offerController_1.getOfferById);
 // Get recommended offers based on user preferences
 router.get('/user/recommendations', auth_1.authenticate, (0, validation_1.validateQuery)(validation_2.Joi.object({
     limit: validation_2.Joi.number().integer().min(1).max(50).default(10)
@@ -107,4 +103,51 @@ router.post('/:id/view', auth_1.optionalAuth, (0, validation_1.validateParams)(v
 router.post('/:id/click', auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
     id: validation_1.commonSchemas.objectId().required()
 })), offerController_1.trackOfferClick);
+// New offers page specific routes
+// Get complete offers page data
+router.get('/page-data', auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
+    lat: validation_2.Joi.number().min(-90).max(90),
+    lng: validation_2.Joi.number().min(-180).max(180)
+})), offerController_1.getOffersPageData);
+// Get mega offers
+router.get('/mega', auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
+    limit: validation_2.Joi.number().integer().min(1).max(50).default(10)
+})), offerController_1.getMegaOffers);
+// Get student offers
+router.get('/students', auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
+    limit: validation_2.Joi.number().integer().min(1).max(50).default(10)
+})), offerController_1.getStudentOffers);
+// Get new arrival offers
+router.get('/new-arrivals', auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
+    limit: validation_2.Joi.number().integer().min(1).max(50).default(10)
+})), offerController_1.getNewArrivalOffers);
+// Get nearby offers
+router.get('/nearby', auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
+    lat: validation_2.Joi.number().min(-90).max(90).required(),
+    lng: validation_2.Joi.number().min(-180).max(180).required(),
+    maxDistance: validation_2.Joi.number().min(1).max(100).default(10),
+    limit: validation_2.Joi.number().integer().min(1).max(50).default(20)
+})), offerController_1.getNearbyOffers);
+// Like/unlike an offer
+router.post('/:id/like', auth_1.authenticate, (0, validation_1.validateParams)(validation_2.Joi.object({
+    id: validation_1.commonSchemas.objectId().required()
+})), offerController_1.toggleOfferLike);
+// Share an offer
+router.post('/:id/share', auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
+    id: validation_1.commonSchemas.objectId().required()
+})), (0, validation_1.validate)(validation_2.Joi.object({
+    platform: validation_2.Joi.string().valid('facebook', 'twitter', 'instagram', 'whatsapp', 'telegram', 'copy_link').optional(),
+    message: validation_2.Joi.string().max(500).optional()
+})), offerController_1.shareOffer);
+// Get offer categories
+router.get('/categories', auth_1.optionalAuth, offerController_1.getOfferCategories);
+// Get hero banners
+router.get('/hero-banners', auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
+    page: validation_2.Joi.string().valid('offers', 'home', 'category', 'product', 'all').default('offers'),
+    position: validation_2.Joi.string().valid('top', 'middle', 'bottom').default('top')
+})), offerController_1.getHeroBanners);
+// Get single offer by ID (must be last to avoid conflicts with specific routes)
+router.get('/:id', auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
+    id: validation_1.commonSchemas.objectId().required()
+})), offerController_1.getOfferById);
 exports.default = router;

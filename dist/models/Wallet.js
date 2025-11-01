@@ -61,6 +61,12 @@ const WalletSchema = new mongoose_1.Schema({
             required: true,
             default: 0,
             min: 0
+        },
+        paybill: {
+            type: Number,
+            required: true,
+            default: 0,
+            min: 0
         }
     },
     coins: [{
@@ -115,6 +121,16 @@ const WalletSchema = new mongoose_1.Schema({
             min: 0
         },
         totalWithdrawals: {
+            type: Number,
+            default: 0,
+            min: 0
+        },
+        totalPayBill: {
+            type: Number,
+            default: 0,
+            min: 0
+        },
+        totalPayBillDiscount: {
             type: Number,
             default: 0,
             min: 0
@@ -207,8 +223,8 @@ WalletSchema.virtual('formattedBalance').get(function () {
 });
 // Pre-save hook to validate balances
 WalletSchema.pre('save', function (next) {
-    // Ensure total = available + pending
-    const calculatedTotal = this.balance.available + this.balance.pending;
+    // Ensure total = available + pending + paybill
+    const calculatedTotal = this.balance.available + this.balance.pending + this.balance.paybill;
     // Allow small rounding differences
     if (Math.abs(this.balance.total - calculatedTotal) > 0.01) {
         this.balance.total = calculatedTotal;
@@ -306,6 +322,56 @@ WalletSchema.methods.deductFunds = async function (amount) {
         console.log(`Auto-topup triggered for user ${this.user}`);
         // Implement auto-topup logic here
     }
+};
+// Method to add PayBill balance with discount
+WalletSchema.methods.addPayBillBalance = async function (amount, discountPercentage = 20) {
+    if (!this.isActive) {
+        throw new Error('Wallet is not active');
+    }
+    if (this.isFrozen) {
+        throw new Error('Wallet is frozen');
+    }
+    // Calculate discount
+    const discount = Math.round((amount * discountPercentage) / 100);
+    const finalAmount = amount + discount;
+    // Check max balance limit
+    if (this.balance.total + finalAmount > this.limits.maxBalance) {
+        throw new Error(`Maximum wallet balance (${this.limits.maxBalance}) would be exceeded`);
+    }
+    // Add to paybill balance
+    this.balance.paybill += finalAmount;
+    this.balance.total += finalAmount;
+    // Update statistics
+    this.statistics.totalPayBill += amount;
+    this.statistics.totalPayBillDiscount += discount;
+    this.statistics.totalEarned += discount;
+    this.lastTransactionAt = new Date();
+    await this.save();
+    // Sync with User model
+    await this.syncWithUser();
+    console.log(`✅ PayBill added: ${amount} + ${discount} discount = ${finalAmount} total`);
+    return { finalAmount, discount };
+};
+// Method to use PayBill balance
+WalletSchema.methods.usePayBillBalance = async function (amount) {
+    if (!this.isActive) {
+        throw new Error('Wallet is not active');
+    }
+    if (this.isFrozen) {
+        throw new Error('Wallet is frozen');
+    }
+    if (this.balance.paybill < amount) {
+        throw new Error('Insufficient PayBill balance');
+    }
+    // Deduct from paybill balance
+    this.balance.paybill -= amount;
+    this.balance.total -= amount;
+    // Update statistics
+    this.statistics.totalSpent += amount;
+    this.lastTransactionAt = new Date();
+    await this.save();
+    // Sync with User model
+    await this.syncWithUser();
 };
 // Method to freeze wallet
 WalletSchema.methods.freeze = async function (reason) {

@@ -66,9 +66,9 @@ export declare class CashbackModel {
             order: CashbackOrder;
             orderId: string;
             cashbackRate: number;
+            requestNumber: string;
             customerId: string;
             customer: CashbackCustomer;
-            requestNumber: string;
             requestedAmount: number;
             approvedAmount?: number | undefined;
             calculationBreakdown: CashbackCalculation[];

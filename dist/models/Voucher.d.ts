@@ -17,6 +17,7 @@ export interface IVoucherBrand extends Document {
     rating?: number;
     ratingCount?: number;
     category: string;
+    store?: mongoose.Types.ObjectId;
     isNewlyAdded: boolean;
     isFeatured: boolean;
     isActive: boolean;
