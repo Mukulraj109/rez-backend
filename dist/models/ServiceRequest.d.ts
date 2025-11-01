@@ -1,4 +1,4 @@
-import mongoose, { Document, Types } from 'mongoose';
+import { Document, Types } from 'mongoose';
 export interface ITechnician {
     id?: Types.ObjectId;
     name: string;
@@ -44,8 +44,4 @@ export interface IServiceRequest extends Document {
     daysUntilScheduled?: number;
     isOverdue?: boolean;
 }
-export declare const ServiceRequest: mongoose.Model<IServiceRequest, {}, {}, {}, mongoose.Document<unknown, {}, IServiceRequest, {}, {}> & IServiceRequest & Required<{
-    _id: Types.ObjectId;
-}> & {
-    __v: number;
-}, any>;
+export declare const ServiceRequest: any;

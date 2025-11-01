@@ -1,4 +1,4 @@
-import mongoose, { Document, Types } from 'mongoose';
+import { Document, Types } from 'mongoose';
 export interface IProjectRequirements {
     minWords?: number;
     minDuration?: number;
@@ -162,8 +162,4 @@ export interface IProject extends Document {
     isActive(): boolean;
     getRemainingBudget(): number;
 }
-export declare const Project: mongoose.Model<IProject, {}, {}, {}, mongoose.Document<unknown, {}, IProject, {}, {}> & IProject & Required<{
-    _id: unknown;
-}> & {
-    __v: number;
-}, any>;
+export declare const Project: any;

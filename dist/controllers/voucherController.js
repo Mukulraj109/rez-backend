@@ -171,13 +171,23 @@ const purchaseVoucher = async (req, res) => {
         if (wallet.balance.available < purchasePrice) {
             return (0, response_1.sendError)(res, 'Insufficient wallet balance', 400);
         }
+        // Generate voucher code
+        const brandPrefix = brandId.toString().substring(0, 6).toUpperCase();
+        const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const voucherCode = `${brandPrefix}-${denomination}-${random}`;
+        // Calculate expiry date (365 days from now)
+        const purchaseDate = new Date();
+        const expiryDate = new Date(purchaseDate);
+        expiryDate.setDate(expiryDate.getDate() + 365);
         // Create voucher
         const userVoucher = new Voucher_1.UserVoucher({
             user: userId,
             brand: brandId,
+            voucherCode,
             denomination: Number(denomination),
             purchasePrice,
-            purchaseDate: new Date(),
+            purchaseDate,
+            expiryDate,
             validityDays: 365, // 1 year
             status: 'active',
             deliveryMethod: 'app',
@@ -202,29 +212,30 @@ const purchaseVoucher = async (req, res) => {
             type: 'debit',
             amount: purchasePrice,
             currency: wallet.currency,
-            category: 'voucher_purchase',
-            description: `Purchased ${brand.name} voucher - ${denomination}`,
+            category: 'spending',
+            description: `Purchased ${brand.name} voucher - ₹${denomination}`,
             status: {
                 current: 'completed',
                 history: [{
                         status: 'completed',
                         timestamp: new Date(),
-                        message: 'Voucher purchased successfully',
+                        reason: 'Voucher purchased successfully',
                     }],
             },
             source: {
-                type: 'voucher',
-                id: String(userVoucher._id),
+                type: 'order',
+                reference: userVoucher._id,
+                description: `Voucher purchase - ${brand.name}`,
                 metadata: {
-                    brandId: String(brand._id),
-                    brandName: brand.name,
-                    denomination,
+                    orderNumber: `VOUCHR-${String(userVoucher._id).substring(0, 8)}`,
+                    storeInfo: brand.store ? {
+                        name: brand.name,
+                        id: brand.store,
+                    } : undefined,
                 },
             },
-            balance: {
-                before: wallet.balance.total + purchasePrice,
-                after: wallet.balance.total,
-            },
+            balanceBefore: wallet.balance.total + purchasePrice,
+            balanceAfter: wallet.balance.total,
         });
         await transaction.save();
         // Update brand purchase count

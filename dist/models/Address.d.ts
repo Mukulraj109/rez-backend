@@ -1,4 +1,4 @@
-import mongoose, { Document, Types } from 'mongoose';
+import { Document, Types } from 'mongoose';
 export declare enum AddressType {
     HOME = "HOME",
     OFFICE = "OFFICE",
@@ -23,8 +23,4 @@ export interface IAddress extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-export declare const Address: mongoose.Model<IAddress, {}, {}, {}, mongoose.Document<unknown, {}, IAddress, {}, {}> & IAddress & Required<{
-    _id: unknown;
-}> & {
-    __v: number;
-}, any>;
+export declare const Address: any;

@@ -1,2 +1,1 @@
-import multer from 'multer';
-export declare const uploadProfileImage: multer.Multer;
+export declare const uploadProfileImage: any;

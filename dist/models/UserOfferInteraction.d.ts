@@ -27,5 +27,5 @@ export interface IUserOfferInteractionModel extends Model<IUserOfferInteraction>
     getInteractionStats(offerId: Types.ObjectId): Promise<any>;
     getUserEngagementStats(userId: Types.ObjectId): Promise<any>;
 }
-declare const UserOfferInteraction: IUserOfferInteractionModel;
+declare const UserOfferInteraction: any;
 export default UserOfferInteraction;

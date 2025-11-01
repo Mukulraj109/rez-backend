@@ -22,9 +22,5 @@ export interface IUserAchievement extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-declare const _default: mongoose.Model<IUserAchievement, {}, {}, {}, mongoose.Document<unknown, {}, IUserAchievement, {}, {}> & IUserAchievement & Required<{
-    _id: unknown;
-}> & {
-    __v: number;
-}, any>;
+declare const _default: any;
 export default _default;

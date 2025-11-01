@@ -51,5 +51,5 @@ export interface IReviewVerification {
     verifiedAt?: Date;
     verificationMethod: 'automatic' | 'manual' | 'purchase_verified';
 }
-export declare const Review: IReviewModel;
+export declare const Review: any;
 export default Review;

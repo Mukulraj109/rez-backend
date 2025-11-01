@@ -1,4 +1,4 @@
-import mongoose, { Document, Types } from 'mongoose';
+import { Document, Types } from 'mongoose';
 export interface IVideoEngagement {
     views: number;
     likes: Types.ObjectId[];
@@ -120,8 +120,4 @@ export interface IVideo extends Document {
     updateAnalytics(): Promise<void>;
     isViewableBy(userId?: string): boolean;
 }
-export declare const Video: mongoose.Model<IVideo, {}, {}, {}, mongoose.Document<unknown, {}, IVideo, {}, {}> & IVideo & Required<{
-    _id: unknown;
-}> & {
-    __v: number;
-}, any>;
+export declare const Video: any;

@@ -2,31 +2,31 @@ import { Request, Response, NextFunction } from 'express';
 /**
  * Middleware to check validation results
  */
-export declare const handleValidationErrors: (req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
+export declare const handleValidationErrors: (req: Request, res: Response, next: NextFunction) => any;
 /**
  * Validation for claiming milestone rewards
  */
-export declare const validateClaimMilestone: (((req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined) | import("express-validator").ValidationChain)[];
+export declare const validateClaimMilestone: any[];
 /**
  * Validation for claiming task rewards
  */
-export declare const validateClaimTask: (((req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined) | import("express-validator").ValidationChain)[];
+export declare const validateClaimTask: any[];
 /**
  * Validation for claiming jackpot rewards
  */
-export declare const validateClaimJackpot: (((req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined) | import("express-validator").ValidationChain)[];
+export declare const validateClaimJackpot: any[];
 /**
  * Validation for updating task progress
  */
-export declare const validateUpdateTaskProgress: (((req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined) | import("express-validator").ValidationChain)[];
+export declare const validateUpdateTaskProgress: any[];
 /**
  * Validation for claiming partner offers
  */
-export declare const validateClaimOffer: (((req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined) | import("express-validator").ValidationChain)[];
+export declare const validateClaimOffer: any[];
 /**
  * Validation for requesting payout
  */
-export declare const validateRequestPayout: (((req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined) | import("express-validator").ValidationChain)[];
+export declare const validateRequestPayout: any[];
 /**
  * Sanitize string input (remove HTML, scripts, etc.)
  */

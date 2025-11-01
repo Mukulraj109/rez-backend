@@ -42,5 +42,5 @@ export interface IStoreVoucherModel extends Model<IStoreVoucher> {
     generateUniqueCode(prefix?: string): Promise<string>;
     findAvailableForStore(storeId: Types.ObjectId, userId?: Types.ObjectId): Promise<IStoreVoucher[]>;
 }
-declare const StoreVoucher: IStoreVoucherModel;
+declare const StoreVoucher: any;
 export default StoreVoucher;

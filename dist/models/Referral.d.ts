@@ -1,4 +1,4 @@
-import mongoose, { Document, Types } from 'mongoose';
+import { Document, Types } from 'mongoose';
 export declare enum ReferralStatus {
     PENDING = "pending",// Referee signed up, no order yet
     REGISTERED = "registered",// Referee registered
@@ -58,9 +58,5 @@ export interface IReferral extends Document {
     updatedAt: Date;
     isExpired(): boolean;
 }
-declare const Referral: mongoose.Model<IReferral, {}, {}, {}, mongoose.Document<unknown, {}, IReferral, {}, {}> & IReferral & Required<{
-    _id: unknown;
-}> & {
-    __v: number;
-}, any>;
+declare const Referral: any;
 export default Referral;

@@ -24,5 +24,5 @@ export interface IDiscountUsageModel extends Model<IDiscountUsage> {
         avgOrderValue: number;
     }>;
 }
-declare const DiscountUsage: IDiscountUsageModel;
+declare const DiscountUsage: any;
 export default DiscountUsage;

@@ -65,4 +65,4 @@ export interface IWallet extends Document {
     resetDailyLimit(): Promise<void>;
     getFormattedBalance(): string;
 }
-export declare const Wallet: IWalletModel;
+export declare const Wallet: any;

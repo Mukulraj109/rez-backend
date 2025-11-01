@@ -1,4 +1,4 @@
-import mongoose, { Types } from 'mongoose';
+import { Types } from 'mongoose';
 export interface IProductVariant {
     type: string;
     value: string;
@@ -135,4 +135,4 @@ export interface IProduct {
     calculateCashback(purchaseAmount?: number): number;
     getEstimatedDelivery(userLocation?: any): string;
 }
-export declare const Product: mongoose.Model<any, {}, {}, {}, any, any>;
+export declare const Product: any;

@@ -34,5 +34,5 @@ export interface IPayment extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-export declare const Payment: IPaymentModel;
+export declare const Payment: any;
 export default Payment;

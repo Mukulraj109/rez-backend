@@ -1,4 +1,4 @@
-import mongoose, { Document, Types } from 'mongoose';
+import { Document, Types } from 'mongoose';
 export interface IFAQ extends Document {
     category: string;
     subcategory?: string;
@@ -20,8 +20,4 @@ export interface IFAQ extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-export declare const FAQ: mongoose.Model<IFAQ, {}, {}, {}, mongoose.Document<unknown, {}, IFAQ, {}, {}> & IFAQ & Required<{
-    _id: unknown;
-}> & {
-    __v: number;
-}, any>;
+export declare const FAQ: any;

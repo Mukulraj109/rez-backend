@@ -20,9 +20,5 @@ export interface IUserChallengeProgress extends Document {
     addProgress(amount: number, source?: string): Promise<IUserChallengeProgress>;
     claimRewards(): Promise<IUserChallengeProgress>;
 }
-declare const _default: mongoose.Model<IUserChallengeProgress, {}, {}, {}, mongoose.Document<unknown, {}, IUserChallengeProgress, {}, {}> & IUserChallengeProgress & Required<{
-    _id: unknown;
-}> & {
-    __v: number;
-}, any>;
+declare const _default: any;
 export default _default;

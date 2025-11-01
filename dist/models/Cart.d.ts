@@ -89,4 +89,4 @@ export interface ICart extends Document {
     itemCount: number;
     storeCount: number;
 }
-export declare const Cart: ICartModel;
+export declare const Cart: any;

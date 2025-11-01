@@ -25,5 +25,5 @@ export interface IStoreComparisonModel extends Model<IStoreComparison> {
         mostComparedStore: any;
     }>;
 }
-export declare const StoreComparison: IStoreComparisonModel;
+export declare const StoreComparison: any;
 export default StoreComparison;

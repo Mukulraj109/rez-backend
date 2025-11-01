@@ -45,8 +45,4 @@ export interface IMiniGame extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-export declare const MiniGame: mongoose.Model<IMiniGame, {}, {}, {}, mongoose.Document<unknown, {}, IMiniGame, {}, {}> & IMiniGame & Required<{
-    _id: unknown;
-}> & {
-    __v: number;
-}, any>;
+export declare const MiniGame: any;

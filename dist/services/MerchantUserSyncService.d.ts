@@ -20,18 +20,18 @@ export declare class MerchantUserSyncService {
      */
     static getSyncStatus(): Promise<{
         merchants: {
-            total: number;
-            withStores: number;
+            total: any;
+            withStores: any;
             withoutStores: number;
         };
         stores: {
-            total: number;
-            syncedFromMerchants: number;
+            total: any;
+            syncedFromMerchants: any;
         };
         products: {
-            merchantSide: number;
-            userSide: number;
-            synced: number;
+            merchantSide: any;
+            userSide: any;
+            synced: any;
             needsSync: number;
         };
         syncHealth: {

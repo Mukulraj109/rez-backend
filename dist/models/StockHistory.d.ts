@@ -1,4 +1,4 @@
-import mongoose, { Document, Types } from 'mongoose';
+import { Document, Types } from 'mongoose';
 export type StockChangeType = 'purchase' | 'return' | 'adjustment' | 'restock' | 'reservation' | 'reservation_release' | 'cancellation' | 'damage' | 'expired' | 'theft' | 'correction';
 export interface IStockHistory extends Document {
     product: Types.ObjectId;
@@ -29,12 +29,4 @@ export interface IStockHistory extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-interface IStockHistoryModel extends mongoose.Model<IStockHistory> {
-    logStockChange(data: any): Promise<IStockHistory>;
-    getProductHistory(productId: string, options?: any): Promise<IStockHistory[]>;
-    getStockSnapshot(productId: string, date?: Date): Promise<any>;
-    detectAnomalies(productId: string, threshold?: number): Promise<any[]>;
-    generateStockReport(startDate: Date, endDate: Date, productIds?: string[]): Promise<any[]>;
-}
-export declare const StockHistory: IStockHistoryModel;
-export {};
+export declare const StockHistory: any;

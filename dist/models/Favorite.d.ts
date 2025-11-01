@@ -19,5 +19,5 @@ export interface IFavoriteModel extends Model<IFavorite> {
         };
     }>;
 }
-export declare const Favorite: IFavoriteModel;
+export declare const Favorite: any;
 export default Favorite;

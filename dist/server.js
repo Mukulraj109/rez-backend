@@ -20,6 +20,8 @@ const database_1 = require("./config/database");
 const cloudinaryUtils_1 = require("./utils/cloudinaryUtils");
 // Import partner level maintenance service
 const partnerLevelMaintenanceService_1 = __importDefault(require("./services/partnerLevelMaintenanceService"));
+// Import trial expiry notification job
+const trialExpiryNotification_1 = require("./jobs/trialExpiryNotification");
 // Import middleware
 const errorHandler_1 = require("./middleware/errorHandler");
 const rateLimiter_1 = require("./middleware/rateLimiter");
@@ -71,6 +73,7 @@ const outletRoutes_1 = __importDefault(require("./routes/outletRoutes"));
 const flashSaleRoutes_1 = __importDefault(require("./routes/flashSaleRoutes"));
 const subscriptionRoutes_1 = __importDefault(require("./routes/subscriptionRoutes"));
 const billRoutes_1 = __importDefault(require("./routes/billRoutes"));
+const billingRoutes_1 = __importDefault(require("./routes/billingRoutes"));
 const activityFeedRoutes_1 = __importDefault(require("./routes/activityFeedRoutes"));
 const unifiedGamificationRoutes_1 = __importDefault(require("./routes/unifiedGamificationRoutes"));
 const partnerRoutes_1 = __importDefault(require("./routes/partnerRoutes"));
@@ -347,6 +350,9 @@ app.use(`${API_PREFIX}/outlets`, outletRoutes_1.default);
 app.use(`${API_PREFIX}/flash-sales`, flashSaleRoutes_1.default);
 // Subscription Routes - Premium membership tiers
 app.use(`${API_PREFIX}/subscriptions`, subscriptionRoutes_1.default);
+// Billing History Routes - Transaction history and invoices for subscriptions
+app.use(`${API_PREFIX}/billing`, billingRoutes_1.default);
+console.log('✅ Billing routes registered at /api/billing');
 // Bill Upload & Verification Routes - Offline purchase receipts for cashback
 app.use(`${API_PREFIX}/bills`, billRoutes_1.default);
 console.log('✅ Bill routes registered at /api/bills');
@@ -430,6 +436,10 @@ async function startServer() {
         console.log('🔄 Initializing partner level maintenance...');
         partnerLevelMaintenanceService_1.default.startAll();
         console.log('✅ Partner level maintenance cron jobs started');
+        // Initialize trial expiry notification job
+        console.log('🔄 Initializing trial expiry notification job...');
+        (0, trialExpiryNotification_1.initializeTrialExpiryJob)();
+        console.log('✅ Trial expiry notification job started');
         // Start HTTP server (with Socket.IO attached)
         server.listen(Number(PORT), '0.0.0.0', () => {
             const os = require('os');

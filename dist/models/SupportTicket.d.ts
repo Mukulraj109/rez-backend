@@ -1,4 +1,4 @@
-import mongoose, { Document, Types } from 'mongoose';
+import { Document, Types } from 'mongoose';
 export interface ITicketMessage {
     sender: Types.ObjectId;
     senderType: 'user' | 'agent' | 'system';
@@ -38,8 +38,4 @@ export interface ISupportTicket extends Document {
     responseTime?: number;
     resolutionTime?: number;
 }
-export declare const SupportTicket: mongoose.Model<ISupportTicket, {}, {}, {}, mongoose.Document<unknown, {}, ISupportTicket, {}, {}> & ISupportTicket & Required<{
-    _id: unknown;
-}> & {
-    __v: number;
-}, any>;
+export declare const SupportTicket: any;

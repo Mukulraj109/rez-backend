@@ -1,4 +1,4 @@
-import mongoose, { Document, Types } from 'mongoose';
+import { Document, Types } from 'mongoose';
 export interface INotificationData {
     orderId?: string;
     projectId?: string;
@@ -111,8 +111,4 @@ export interface INotification extends Document {
     canBeDelivered(): boolean;
     getFormattedMessage(): string;
 }
-export declare const Notification: mongoose.Model<INotification, {}, {}, {}, mongoose.Document<unknown, {}, INotification, {}, {}> & INotification & Required<{
-    _id: unknown;
-}> & {
-    __v: number;
-}, any>;
+export declare const Notification: any;

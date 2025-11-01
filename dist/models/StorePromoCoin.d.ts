@@ -26,4 +26,4 @@ export interface IStorePromoCoinModel extends Model<IStorePromoCoin> {
     useCoins(userId: Types.ObjectId, storeId: Types.ObjectId, amount: number, orderId: Types.ObjectId): Promise<IStorePromoCoin>;
     getAvailableCoins(userId: Types.ObjectId, storeId: Types.ObjectId): Promise<number>;
 }
-export declare const StorePromoCoin: IStorePromoCoinModel;
+export declare const StorePromoCoin: any;

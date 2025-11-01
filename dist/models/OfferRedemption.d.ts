@@ -1,15 +1,9 @@
-import mongoose, { Document, Model } from 'mongoose';
+import mongoose, { Document } from 'mongoose';
 interface IOfferRedemptionMethods {
     isValid(): boolean;
     markAsUsed(orderId?: string, amount?: number, storeId?: string): Promise<any>;
     cancel(reason?: string): Promise<any>;
     verify(verifiedByUserId: string): Promise<any>;
-}
-interface IOfferRedemptionModel extends Model<IOfferRedemption, {}, IOfferRedemptionMethods> {
-    updateExpired(): Promise<any>;
-    getUserRedemptions(userId: string, status?: string, limit?: number): any;
-    countUserOfferRedemptions(userId: string, offerId: string): Promise<number>;
-    canUserRedeem(userId: string, offerId: string, userLimit: number): Promise<boolean>;
 }
 export interface IOfferRedemption extends Document, IOfferRedemptionMethods {
     user: mongoose.Types.ObjectId;
@@ -40,5 +34,5 @@ export interface IOfferRedemption extends Document, IOfferRedemptionMethods {
     createdAt: Date;
     updatedAt: Date;
 }
-declare const OfferRedemption: IOfferRedemptionModel;
+declare const OfferRedemption: any;
 export default OfferRedemption;

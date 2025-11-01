@@ -1,4 +1,4 @@
-import mongoose, { Document, Types } from 'mongoose';
+import { Document, Types } from 'mongoose';
 export interface IWishlistItem {
     _id?: Types.ObjectId;
     itemType: 'Product' | 'Store' | 'Video';
@@ -68,8 +68,4 @@ export interface IWishlist extends Document {
     checkPriceChanges(): Promise<void>;
     getRecommendations(): Promise<any[]>;
 }
-export declare const Wishlist: mongoose.Model<IWishlist, {}, {}, {}, mongoose.Document<unknown, {}, IWishlist, {}, {}> & IWishlist & Required<{
-    _id: unknown;
-}> & {
-    __v: number;
-}, any>;
+export declare const Wishlist: any;

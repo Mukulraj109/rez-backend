@@ -1,4 +1,4 @@
-import mongoose, { Document, Model } from 'mongoose';
+import mongoose, { Document } from 'mongoose';
 interface IFlashSaleMethods {
     isActive(): boolean;
     isExpiring(minutes: number): boolean;
@@ -7,12 +7,6 @@ interface IFlashSaleMethods {
     canPurchase(quantity: number): boolean;
     getAvailableQuantity(): number;
     getProgress(): number;
-}
-interface IFlashSaleModel extends Model<IFlashSale, {}, IFlashSaleMethods> {
-    getActive(): any;
-    getUpcoming(): any;
-    getExpiringSoon(minutes: number): any;
-    getLowStock(threshold: number): any;
 }
 export interface IFlashSale extends Document, IFlashSaleMethods {
     title: string;
@@ -51,5 +45,5 @@ export interface IFlashSale extends Document, IFlashSaleMethods {
     createdAt: Date;
     updatedAt: Date;
 }
-declare const FlashSale: IFlashSaleModel;
+declare const FlashSale: any;
 export default FlashSale;

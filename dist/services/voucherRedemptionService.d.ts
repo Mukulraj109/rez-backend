@@ -27,9 +27,9 @@ export declare class VoucherRedemptionService {
      */
     claimVoucher(userId: string | Types.ObjectId, referralId: string | Types.ObjectId): Promise<{
         success: boolean;
-        voucherCode: string;
-        voucherType: string | undefined;
-        description: string | undefined;
+        voucherCode: any;
+        voucherType: any;
+        description: any;
         message: string;
     }>;
     /**
@@ -48,22 +48,22 @@ export declare class VoucherRedemptionService {
      * Get all claimable vouchers for user
      */
     getClaimableVouchers(userId: string | Types.ObjectId): Promise<{
-        referralId: unknown;
-        voucherCode: string;
-        voucherType: string | undefined;
-        expiresAt: Date;
-        description: string | undefined;
+        referralId: any;
+        voucherCode: any;
+        voucherType: any;
+        expiresAt: any;
+        description: any;
     }[]>;
     /**
      * Get claimed vouchers history
      */
     getClaimedVouchers(userId: string | Types.ObjectId): Promise<{
-        voucherCode: string;
-        voucherType: string | undefined;
-        expiresAt: Date;
-        description: string | undefined;
-        referralId: unknown;
-        createdAt: Date;
+        voucherCode: any;
+        voucherType: any;
+        expiresAt: any;
+        description: any;
+        referralId: any;
+        createdAt: any;
     }[]>;
 }
 declare const _default: VoucherRedemptionService;

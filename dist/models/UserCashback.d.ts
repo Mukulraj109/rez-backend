@@ -1,4 +1,4 @@
-import mongoose, { Document, Types } from 'mongoose';
+import { Document, Types } from 'mongoose';
 export interface ICashbackMetadata {
     orderAmount: number;
     productCategories: string[];
@@ -27,8 +27,4 @@ export interface IUserCashback extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-export declare const UserCashback: mongoose.Model<IUserCashback, {}, {}, {}, mongoose.Document<unknown, {}, IUserCashback, {}, {}> & IUserCashback & Required<{
-    _id: unknown;
-}> & {
-    __v: number;
-}, any>;
+export declare const UserCashback: any;

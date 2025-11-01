@@ -86,7 +86,7 @@ export interface IProduct extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-export declare const MProduct: mongoose.Model<any, {}, {}, {}, any, any>;
+export declare const MProduct: any;
 export declare class ProductModel {
     static findByMerchantId(merchantId: string | Types.ObjectId): Promise<IProduct[]>;
     static countByMerchant(merchantId: string | Types.ObjectId): Promise<number>;
@@ -106,8 +106,8 @@ export declare class ProductModel {
         page?: number;
         limit?: number;
     }): Promise<{
-        products: any[];
-        totalCount: number;
+        products: any;
+        totalCount: any;
         page: number;
         limit: number;
         hasNext: boolean;

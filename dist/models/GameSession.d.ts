@@ -24,5 +24,5 @@ export interface IGameSession extends Document {
 export interface IGameSessionModel extends mongoose.Model<IGameSession> {
     expireSessions(): Promise<any>;
 }
-declare const _default: IGameSessionModel;
+declare const _default: any;
 export default _default;

@@ -1,4 +1,4 @@
-import mongoose, { Document } from 'mongoose';
+import { Document } from 'mongoose';
 export interface IMerchant extends Document {
     businessName: string;
     ownerName: string;
@@ -75,9 +75,5 @@ export interface IMerchant extends Document {
     allowCustomerMessages?: boolean;
     showPromotions?: boolean;
 }
-export declare const Merchant: mongoose.Model<IMerchant, {}, {}, {}, mongoose.Document<unknown, {}, IMerchant, {}, {}> & IMerchant & Required<{
-    _id: unknown;
-}> & {
-    __v: number;
-}, any>;
+export declare const Merchant: any;
 export { Merchant as MerchantModel };

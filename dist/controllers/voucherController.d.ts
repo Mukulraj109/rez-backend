@@ -8,7 +8,7 @@ export declare const getVoucherBrands: (req: Request, res: Response) => Promise<
  * GET /api/vouchers/brands/:id
  * Get single voucher brand by ID
  */
-export declare const getVoucherBrandById: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const getVoucherBrandById: (req: Request, res: Response) => Promise<any>;
 /**
  * GET /api/vouchers/brands/featured
  * Get featured voucher brands
@@ -28,7 +28,7 @@ export declare const getVoucherCategories: (req: Request, res: Response) => Prom
  * POST /api/vouchers/purchase
  * Purchase a voucher (authenticated users only)
  */
-export declare const purchaseVoucher: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const purchaseVoucher: (req: Request, res: Response) => Promise<any>;
 /**
  * GET /api/vouchers/my-vouchers
  * Get user's purchased vouchers
@@ -38,12 +38,12 @@ export declare const getUserVouchers: (req: Request, res: Response) => Promise<v
  * GET /api/vouchers/my-vouchers/:id
  * Get single user voucher by ID
  */
-export declare const getUserVoucherById: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const getUserVoucherById: (req: Request, res: Response) => Promise<any>;
 /**
  * POST /api/vouchers/:id/use
  * Mark voucher as used
  */
-export declare const useVoucher: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const useVoucher: (req: Request, res: Response) => Promise<any>;
 /**
  * POST /api/vouchers/brands/:id/track-view
  * Track brand view (analytics)

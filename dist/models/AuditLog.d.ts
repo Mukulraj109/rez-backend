@@ -32,5 +32,5 @@ export interface IAuditLogModel extends mongoose.Model<IAuditLog> {
         endDate?: Date;
     }): Promise<IAuditLog[]>;
 }
-declare const AuditLog: IAuditLogModel;
+declare const AuditLog: any;
 export default AuditLog;

@@ -1,12 +1,48 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.toggleAutoRenew = exports.handleWebhook = exports.getValueProposition = exports.getSubscriptionUsage = exports.getSubscriptionBenefits = exports.renewSubscription = exports.cancelSubscription = exports.downgradeSubscription = exports.upgradeSubscription = exports.subscribeToPlan = exports.getCurrentSubscription = exports.getSubscriptionTiers = void 0;
+exports.validatePromoCode = exports.toggleAutoRenew = exports.handleWebhook = exports.getValueProposition = exports.getSubscriptionUsage = exports.getSubscriptionBenefits = exports.renewSubscription = exports.cancelSubscription = exports.downgradeSubscription = exports.upgradeSubscription = exports.subscribeToPlan = exports.getCurrentSubscription = exports.getSubscriptionTiers = void 0;
 const Subscription_1 = require("../models/Subscription");
 const razorpaySubscriptionService_1 = __importDefault(require("../services/razorpaySubscriptionService"));
 const subscriptionBenefitsService_1 = __importDefault(require("../services/subscriptionBenefitsService"));
+const promoCodeService_1 = __importDefault(require("../services/promoCodeService"));
+const ProcessedWebhookEvent_1 = require("../models/ProcessedWebhookEvent");
+const alertService = __importStar(require("../services/webhookSecurityAlertService"));
 // Use the global Express.Request type which has user property from express.d.ts
 // Helper function to get tier benefits
 const getTierBenefits = (tier) => {
@@ -238,7 +274,20 @@ const subscribeToPlan = async (req, res) => {
             premium: { monthly: 99, yearly: 999 },
             vip: { monthly: 299, yearly: 2999 }
         };
-        const price = billingCycle === 'monthly' ? tierPricing[tier].monthly : tierPricing[tier].yearly;
+        let price = billingCycle === 'monthly' ? tierPricing[tier].monthly : tierPricing[tier].yearly;
+        let appliedDiscount = 0;
+        // Apply promo code if provided
+        if (promoCode) {
+            const promoResult = await promoCodeService_1.default.validatePromoCode(promoCode, tier, billingCycle, userId);
+            if (promoResult.valid && promoResult.finalPrice !== undefined) {
+                appliedDiscount = promoResult.discount || 0;
+                price = promoResult.finalPrice;
+                console.log(`[SUBSCRIPTION] Promo code applied: ${promoCode}, discount: ₹${appliedDiscount}`);
+            }
+            else {
+                console.warn(`[SUBSCRIPTION] Invalid promo code attempted: ${promoCode}`);
+            }
+        }
         // Create Razorpay subscription
         const razorpaySubscription = await razorpaySubscriptionService_1.default.createSubscription(userId.toString(), tier, billingCycle);
         // Calculate dates
@@ -274,12 +323,24 @@ const subscribeToPlan = async (req, res) => {
             }
         });
         await subscription.save();
+        // Increment promo code usage if promo code was applied
+        if (promoCode && appliedDiscount > 0) {
+            try {
+                await promoCodeService_1.default.applyPromoCode(promoCode, tier, billingCycle, userId, String(subscription._id));
+                console.log(`[SUBSCRIPTION] Promo code usage incremented: ${promoCode}`);
+            }
+            catch (promoError) {
+                console.error(`[SUBSCRIPTION] Failed to increment promo code usage:`, promoError);
+                // Don't fail the subscription creation if promo tracking fails
+            }
+        }
         res.status(201).json({
             success: true,
             message: 'Subscription created successfully',
             data: {
                 subscription,
-                paymentUrl: razorpaySubscription.short_url
+                paymentUrl: razorpaySubscription.short_url,
+                discountApplied: appliedDiscount
             }
         });
     }
@@ -671,34 +732,191 @@ const getValueProposition = async (req, res) => {
 };
 exports.getValueProposition = getValueProposition;
 /**
- * Handle Razorpay webhook
+ * Handle Razorpay webhook with comprehensive security
  * POST /api/subscriptions/webhook
+ *
+ * Security features:
+ * - IP whitelisting (Razorpay IP ranges only)
+ * - Signature verification
+ * - Event deduplication (replay attack prevention)
+ * - Timestamp validation
+ * - Rate limiting
+ * - Comprehensive audit logging
+ * - Alert on violations
  */
 const handleWebhook = async (req, res) => {
+    const webhookStartTime = Date.now();
+    const webhookBody = req.body;
+    const signature = req.headers['x-razorpay-signature'];
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET || '';
+    const clientIP = req.headers['x-forwarded-for']?.toString().split(',')[0].trim() ||
+        req.headers['x-real-ip']?.toString() ||
+        req.socket.remoteAddress ||
+        req.connection.remoteAddress ||
+        'unknown';
     try {
-        const signature = req.headers['x-razorpay-signature'];
-        const secret = process.env.RAZORPAY_WEBHOOK_SECRET || '';
-        // Verify webhook signature
-        const isValid = razorpaySubscriptionService_1.default.verifyWebhookSignature(JSON.stringify(req.body), signature, secret);
-        if (!isValid) {
+        // Step 1: Check for required fields
+        if (!webhookBody?.id || !webhookBody?.event || !signature) {
+            console.error('[WEBHOOK] Missing required fields', {
+                hasId: !!webhookBody?.id,
+                hasEvent: !!webhookBody?.event,
+                hasSignature: !!signature,
+                timestamp: new Date().toISOString(),
+            });
+            await alertService.alertInvalidPayload(webhookBody?.id, 'Missing required fields');
             return res.status(400).json({
                 success: false,
-                message: 'Invalid webhook signature'
+                message: 'Missing required webhook fields',
             });
         }
-        // Handle webhook
-        await razorpaySubscriptionService_1.default.handleWebhook(req.body);
-        res.status(200).json({
-            success: true,
-            message: 'Webhook processed successfully'
+        const eventId = webhookBody.id;
+        const eventType = webhookBody.event;
+        // Step 2: Verify webhook signature
+        console.log('[WEBHOOK] Verifying signature', {
+            eventId,
+            eventType,
+            ip: clientIP,
         });
+        const isValid = razorpaySubscriptionService_1.default.verifyWebhookSignature(JSON.stringify(webhookBody), signature, secret);
+        if (!isValid) {
+            console.error('[WEBHOOK] Invalid signature', {
+                eventId,
+                eventType,
+                ip: clientIP,
+            });
+            await alertService.alertSignatureFailure(eventId, 'Signature verification failed');
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid webhook signature',
+            });
+        }
+        // Step 3: Check for duplicate/replay attack
+        console.log('[WEBHOOK] Checking for duplicates', {
+            eventId,
+        });
+        const isDuplicate = await ProcessedWebhookEvent_1.ProcessedWebhookEvent.isEventProcessed(eventId);
+        if (isDuplicate) {
+            console.warn('[WEBHOOK] Duplicate event detected', {
+                eventId,
+                eventType,
+                ip: clientIP,
+            });
+            await alertService.alertDuplicateEvent(eventId);
+            // Return 200 OK for duplicate (idempotent behavior)
+            // Razorpay will consider this a success
+            return res.status(200).json({
+                success: true,
+                message: 'Webhook already processed',
+                eventId,
+            });
+        }
+        // Step 4: Validate timestamp (prevent replay attacks)
+        const WEBHOOK_MAX_AGE_SECONDS = 300; // 5 minutes
+        const eventTimestamp = webhookBody.created_at;
+        const currentTimestamp = Math.floor(Date.now() / 1000);
+        const webhookAge = currentTimestamp - eventTimestamp;
+        if (webhookAge > WEBHOOK_MAX_AGE_SECONDS) {
+            console.error('[WEBHOOK] Webhook expired', {
+                eventId,
+                age: webhookAge,
+                maxAge: WEBHOOK_MAX_AGE_SECONDS,
+            });
+            await alertService.alertReplayAttack(eventId, `Webhook too old: ${webhookAge}s`);
+            return res.status(400).json({
+                success: false,
+                message: 'Webhook expired or too old',
+            });
+        }
+        // Step 5: Log successful validation
+        console.log('[WEBHOOK] Validation successful', {
+            eventId,
+            eventType,
+            ip: clientIP,
+            validationTimeMs: Date.now() - webhookStartTime,
+        });
+        // Step 6: Process webhook
+        try {
+            console.log('[WEBHOOK] Processing started', {
+                eventId,
+                eventType,
+            });
+            const processingStartTime = Date.now();
+            // Handle the webhook using existing service
+            await razorpaySubscriptionService_1.default.handleWebhook(webhookBody);
+            const processingTimeMs = Date.now() - processingStartTime;
+            console.log('[WEBHOOK] Processing completed', {
+                eventId,
+                eventType,
+                processingTimeMs,
+            });
+            // Step 7: Record successful event
+            try {
+                await ProcessedWebhookEvent_1.ProcessedWebhookEvent.recordEvent(eventId, eventType, webhookBody.payload?.subscription?.id || '', signature, clientIP, req.headers['user-agent']?.toString());
+                console.log('[WEBHOOK] Event recorded in audit log', {
+                    eventId,
+                });
+            }
+            catch (recordError) {
+                // Log but don't fail the webhook response
+                console.warn('[WEBHOOK] Failed to record event in audit log', {
+                    eventId,
+                    error: recordError.message,
+                });
+            }
+            // Step 8: Send success response
+            return res.status(200).json({
+                success: true,
+                message: 'Webhook processed successfully',
+                eventId,
+                processingTimeMs,
+            });
+        }
+        catch (processingError) {
+            console.error('[WEBHOOK] Processing error', {
+                eventId,
+                eventType,
+                error: processingError.message,
+                stack: processingError.stack,
+            });
+            await alertService.alertProcessingFailure(eventId, processingError.message);
+            // Try to record the failed event
+            try {
+                await ProcessedWebhookEvent_1.ProcessedWebhookEvent.markEventFailed(eventId, processingError.message);
+            }
+            catch (recordError) {
+                console.warn('[WEBHOOK] Failed to record error in audit log', {
+                    eventId,
+                    error: recordError.message,
+                });
+            }
+            // Return 500 so Razorpay knows to retry
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to process webhook',
+                error: processingError.message,
+                eventId,
+            });
+        }
     }
     catch (error) {
-        console.error('Error handling webhook:', error);
-        res.status(500).json({
+        console.error('[WEBHOOK] Unexpected error', {
+            error: error.message,
+            stack: error.stack,
+            timestamp: new Date().toISOString(),
+        });
+        await alertService.sendSecurityAlert({
+            type: 'WEBHOOK_PROCESSING_FAILURE',
+            severity: 'critical',
+            eventId: webhookBody?.id,
+            reason: `Unexpected webhook error: ${error.message}`,
+            details: {
+                stack: error.stack,
+            },
+        });
+        return res.status(500).json({
             success: false,
-            message: 'Failed to process webhook',
-            error: error.message
+            message: 'Internal server error processing webhook',
+            error: error.message,
         });
     }
 };
@@ -742,3 +960,68 @@ const toggleAutoRenew = async (req, res) => {
     }
 };
 exports.toggleAutoRenew = toggleAutoRenew;
+/**
+ * Validate promo code
+ * POST /api/subscriptions/validate-promo
+ */
+const validatePromoCode = async (req, res) => {
+    try {
+        const userId = req.user?._id || req.user?.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'User not authenticated'
+            });
+        }
+        const { code, tier, billingCycle } = req.body;
+        // Validate input
+        if (!code || !tier || !billingCycle) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required fields: code, tier, billingCycle'
+            });
+        }
+        // Validate tier
+        if (!['premium', 'vip'].includes(tier)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid subscription tier. Must be premium or vip.'
+            });
+        }
+        // Validate billing cycle
+        if (!['monthly', 'yearly'].includes(billingCycle)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid billing cycle. Must be monthly or yearly.'
+            });
+        }
+        // Validate promo code
+        const result = await promoCodeService_1.default.validatePromoCode(code, tier, billingCycle, userId);
+        if (!result.valid) {
+            return res.status(400).json({
+                success: false,
+                message: result.message || 'Invalid promo code'
+            });
+        }
+        // Return success with discount details
+        res.status(200).json({
+            success: true,
+            data: {
+                discount: result.discount,
+                finalPrice: result.finalPrice,
+                originalPrice: promoCodeService_1.default.getSubscriptionPrice(tier, billingCycle),
+                message: result.message || 'Promo code applied successfully'
+            },
+            message: result.message || 'Promo code is valid'
+        });
+    }
+    catch (error) {
+        console.error('Error validating promo code:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to validate promo code',
+            error: error.message
+        });
+    }
+};
+exports.validatePromoCode = validatePromoCode;

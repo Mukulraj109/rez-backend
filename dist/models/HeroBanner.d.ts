@@ -50,5 +50,5 @@ export interface IHeroBannerModel extends Model<IHeroBanner> {
     findExpiredBanners(): Promise<IHeroBanner[]>;
     findUpcomingBanners(): Promise<IHeroBanner[]>;
 }
-declare const HeroBanner: IHeroBannerModel;
+declare const HeroBanner: any;
 export default HeroBanner;

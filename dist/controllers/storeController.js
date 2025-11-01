@@ -400,6 +400,17 @@ exports.searchStoresByCategory = (0, asyncHandler_1.asyncHandler)(async (req, re
                 .skip(skip)
                 .limit(Number(limit))
                 .lean();
+            // Populate products for each store
+            for (const store of stores) {
+                const products = await Product_1.Product.find({
+                    store: store._id,
+                    isActive: true
+                })
+                    .select('name title price image rating inventory tags')
+                    .limit(4) // Limit to 4 products per store
+                    .lean();
+                store.products = products;
+            }
         }
         // Calculate distance for each store if location is provided
         let storesWithDistance = stores;

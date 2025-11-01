@@ -39,10 +39,18 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const subscriptionController = __importStar(require("../controllers/subscriptionController"));
 const auth_1 = require("../middleware/auth");
+const webhookSecurity_1 = require("../middleware/webhookSecurity");
 const router = express_1.default.Router();
 // Public routes
 router.get('/tiers', subscriptionController.getSubscriptionTiers);
-router.post('/webhook', subscriptionController.handleWebhook);
+// Webhook endpoint with comprehensive security middleware stack
+// Order matters: IP whitelist -> rate limit -> payload validation -> logging -> controller
+router.post('/webhook', webhookSecurity_1.razorpayIPWhitelist, // Check IP is from Razorpay
+webhookSecurity_1.webhookRateLimiter, // Rate limiting
+webhookSecurity_1.validateWebhookPayload, // Validate payload structure
+webhookSecurity_1.logWebhookSecurityEvent, // Audit logging
+subscriptionController.handleWebhook // Main handler with replay attack prevention
+);
 // Protected routes (require authentication)
 router.use(auth_1.authenticate);
 router.get('/current', subscriptionController.getCurrentSubscription);
@@ -50,6 +58,7 @@ router.get('/benefits', subscriptionController.getSubscriptionBenefits);
 router.get('/usage', subscriptionController.getSubscriptionUsage);
 router.get('/value-proposition/:tier', subscriptionController.getValueProposition);
 router.post('/subscribe', subscriptionController.subscribeToPlan);
+router.post('/validate-promo', subscriptionController.validatePromoCode);
 router.post('/upgrade', subscriptionController.upgradeSubscription);
 router.post('/downgrade', subscriptionController.downgradeSubscription);
 router.post('/cancel', subscriptionController.cancelSubscription);

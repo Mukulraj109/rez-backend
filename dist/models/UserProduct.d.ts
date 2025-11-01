@@ -1,4 +1,4 @@
-import mongoose, { Document, Types } from 'mongoose';
+import { Document, Types } from 'mongoose';
 export interface IWarranty {
     hasWarranty: boolean;
     startDate?: Date;
@@ -54,8 +54,4 @@ export interface IUserProduct extends Document {
     amcDaysRemaining?: number;
     isAMCExpiringSoon?: boolean;
 }
-export declare const UserProduct: mongoose.Model<IUserProduct, {}, {}, {}, mongoose.Document<unknown, {}, IUserProduct, {}, {}> & IUserProduct & Required<{
-    _id: Types.ObjectId;
-}> & {
-    __v: number;
-}, any>;
+export declare const UserProduct: any;

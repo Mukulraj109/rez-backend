@@ -4,71 +4,71 @@ import { Request, Response } from 'express';
  * @route   GET /api/referral/tier
  * @access  Private
  */
-export declare const getTier: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getTier: (req: Request, res: Response, next: Request) => void;
 /**
  * @desc    Get claimable rewards
  * @route   GET /api/referral/rewards
  * @access  Private
  */
-export declare const getRewards: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getRewards: (req: Request, res: Response, next: Request) => void;
 /**
  * @desc    Claim specific reward
  * @route   POST /api/referral/claim-reward/:rewardId
  * @access  Private
  */
-export declare const claimReward: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const claimReward: (req: Request, res: Response, next: Request) => void;
 /**
  * @desc    Get referral leaderboard
  * @route   GET /api/referral/leaderboard
  * @access  Private
  */
-export declare const getLeaderboard: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getLeaderboard: (req: Request, res: Response, next: Request) => void;
 /**
  * @desc    Generate QR code for referral
  * @route   POST /api/referral/generate-qr
  * @access  Private
  */
-export declare const generateQR: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const generateQR: (req: Request, res: Response, next: Request) => void;
 /**
  * @desc    Get milestone progress
  * @route   GET /api/referral/milestones
  * @access  Private
  */
-export declare const getMilestones: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getMilestones: (req: Request, res: Response, next: Request) => void;
 /**
  * @desc    Get referral analytics
  * @route   GET /api/referral/analytics
  * @access  Private (Admin)
  */
-export declare const getAnalytics: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getAnalytics: (req: Request, res: Response, next: Request) => void;
 /**
  * @desc    Check tier upgrade eligibility
  * @route   GET /api/referral/check-upgrade
  * @access  Private
  */
-export declare const checkUpgrade: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const checkUpgrade: (req: Request, res: Response, next: Request) => void;
 /**
  * @desc    Validate referral code
  * @route   POST /api/referral/validate-code
  * @access  Public
  */
-export declare const validateCode: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const validateCode: (req: Request, res: Response, next: Request) => void;
 /**
  * @desc    Apply referral code during registration
  * @route   POST /api/referral/apply-code
  * @access  Private
  */
-export declare const applyCode: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const applyCode: (req: Request, res: Response, next: Request) => void;
 declare const _default: {
-    getTier: (req: Request, res: Response, next: import("express").NextFunction) => void;
-    getRewards: (req: Request, res: Response, next: import("express").NextFunction) => void;
-    claimReward: (req: Request, res: Response, next: import("express").NextFunction) => void;
-    getLeaderboard: (req: Request, res: Response, next: import("express").NextFunction) => void;
-    generateQR: (req: Request, res: Response, next: import("express").NextFunction) => void;
-    getMilestones: (req: Request, res: Response, next: import("express").NextFunction) => void;
-    getAnalytics: (req: Request, res: Response, next: import("express").NextFunction) => void;
-    checkUpgrade: (req: Request, res: Response, next: import("express").NextFunction) => void;
-    validateCode: (req: Request, res: Response, next: import("express").NextFunction) => void;
-    applyCode: (req: Request, res: Response, next: import("express").NextFunction) => void;
+    getTier: (req: Request, res: Response, next: Request) => void;
+    getRewards: (req: Request, res: Response, next: Request) => void;
+    claimReward: (req: Request, res: Response, next: Request) => void;
+    getLeaderboard: (req: Request, res: Response, next: Request) => void;
+    generateQR: (req: Request, res: Response, next: Request) => void;
+    getMilestones: (req: Request, res: Response, next: Request) => void;
+    getAnalytics: (req: Request, res: Response, next: Request) => void;
+    checkUpgrade: (req: Request, res: Response, next: Request) => void;
+    validateCode: (req: Request, res: Response, next: Request) => void;
+    applyCode: (req: Request, res: Response, next: Request) => void;
 };
 export default _default;

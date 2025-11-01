@@ -48,5 +48,5 @@ export interface IStoreAnalyticsModel extends Model<IStoreAnalytics> {
         eventType?: string;
     }): Promise<any[]>;
 }
-export declare const StoreAnalytics: IStoreAnalyticsModel;
+export declare const StoreAnalytics: any;
 export default StoreAnalytics;

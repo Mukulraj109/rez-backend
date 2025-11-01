@@ -1,4 +1,4 @@
-import mongoose, { Document, Types } from 'mongoose';
+import { Document, Types } from 'mongoose';
 export interface ICategoryMetadata {
     color?: string;
     tags?: string[];
@@ -28,8 +28,4 @@ export interface ICategory extends Document {
     getFullPath(): Promise<string>;
     getAllChildren(): Promise<ICategory[]>;
 }
-export declare const Category: mongoose.Model<ICategory, {}, {}, {}, mongoose.Document<unknown, {}, ICategory, {}, {}> & ICategory & Required<{
-    _id: unknown;
-}> & {
-    __v: number;
-}, any>;
+export declare const Category: any;

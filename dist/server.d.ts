@@ -1,7 +1,7 @@
-declare const app: import("express-serve-static-core").Express;
+declare const app: any;
 declare global {
     var io: any;
     var realTimeService: any;
 }
-declare function startServer(): Promise<import("http").Server<typeof import("http").IncomingMessage, typeof import("http").ServerResponse>>;
+declare function startServer(): Promise<any>;
 export { app, startServer };

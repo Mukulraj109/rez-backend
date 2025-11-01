@@ -18,7 +18,7 @@ export declare const getParentCategories: (req: Request, res: Response) => Promi
  * GET /api/offer-categories/:slug
  * Get category by slug
  */
-export declare const getOfferCategoryBySlug: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const getOfferCategoryBySlug: (req: Request, res: Response) => Promise<any>;
 /**
  * GET /api/offer-categories/:parentId/subcategories
  * Get subcategories of a parent category
@@ -28,4 +28,4 @@ export declare const getSubcategories: (req: Request, res: Response) => Promise<
  * GET /api/offer-categories/:slug/offers
  * Get offers by category slug
  */
-export declare const getOffersByCategorySlug: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+export declare const getOffersByCategorySlug: (req: Request, res: Response) => Promise<any>;
