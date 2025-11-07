@@ -8,8 +8,8 @@ exports.seedUserProgress = seedUserProgress;
 const mongoose_1 = __importDefault(require("mongoose"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const path_1 = __importDefault(require("path"));
-const Challenge_1 = require("../models/Challenge");
-const UserProgress_1 = require("../models/UserProgress");
+const Challenge_1 = __importDefault(require("../models/Challenge"));
+const UserChallengeProgress_1 = __importDefault(require("../models/UserChallengeProgress"));
 const challengeTemplates_1 = require("../config/challengeTemplates");
 // Load environment variables
 dotenv_1.default.config({ path: path_1.default.resolve(__dirname, '../../.env') });
@@ -29,8 +29,8 @@ async function seedChallenges(options = {}) {
         // Clear existing data if requested
         if (clearExisting) {
             console.log('🗑️  Clearing existing challenges...');
-            await Challenge_1.Challenge.deleteMany({});
-            await UserProgress_1.UserProgress.deleteMany({});
+            await Challenge_1.default.deleteMany({});
+            await UserChallengeProgress_1.default.deleteMany({});
             console.log('✅ Existing data cleared');
         }
         // Generate challenges based on options
@@ -54,9 +54,8 @@ async function seedChallenges(options = {}) {
                     difficulty: template.difficulty,
                     startDate,
                     endDate,
-                    isActive: true,
+                    active: true,
                     maxParticipants: 10000,
-                    order: index,
                 });
             });
             console.log(`✨ Generated ${selectedDaily.length} daily challenges`);
@@ -79,9 +78,8 @@ async function seedChallenges(options = {}) {
                     difficulty: template.difficulty,
                     startDate,
                     endDate,
-                    isActive: true,
+                    active: true,
                     maxParticipants: 10000,
-                    order: index,
                 });
             });
             console.log(`✨ Generated ${selectedWeekly.length} weekly challenges`);
@@ -104,9 +102,8 @@ async function seedChallenges(options = {}) {
                     difficulty: template.difficulty,
                     startDate,
                     endDate,
-                    isActive: true,
+                    active: true,
                     maxParticipants: 10000,
-                    order: index,
                 });
             });
             console.log(`✨ Generated ${selectedMonthly.length} monthly challenges`);
@@ -130,9 +127,8 @@ async function seedChallenges(options = {}) {
                         difficulty: template.difficulty,
                         startDate,
                         endDate,
-                        isActive: true,
+                        active: true,
                         maxParticipants: 10000,
-                        order: index,
                     });
                 });
                 console.log(`✨ Generated ${selectedSpecial.length} special challenges`);
@@ -141,7 +137,7 @@ async function seedChallenges(options = {}) {
         // Insert all challenges
         if (challengesToCreate.length > 0) {
             console.log(`💾 Inserting ${challengesToCreate.length} challenges...`);
-            const createdChallenges = await Challenge_1.Challenge.insertMany(challengesToCreate);
+            const createdChallenges = await Challenge_1.default.insertMany(challengesToCreate);
             console.log(`✅ Successfully created ${createdChallenges.length} challenges`);
             // Display summary
             console.log('\n📊 Challenges Summary:');
@@ -204,7 +200,7 @@ async function seedUserProgress(userIds, challengeIds) {
             });
         });
         if (progressToCreate.length > 0) {
-            await UserProgress_1.UserProgress.insertMany(progressToCreate);
+            await UserChallengeProgress_1.default.insertMany(progressToCreate);
             console.log(`✅ Created ${progressToCreate.length} user progress records`);
         }
     }

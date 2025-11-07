@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.uploadProfileImage = void 0;
+exports.uploadProjectFile = exports.uploadProfileImage = void 0;
 const multer_1 = __importDefault(require("multer"));
 const cloudinary = require('cloudinary').v2;
 const multer_storage_cloudinary_1 = require("multer-storage-cloudinary");
@@ -53,6 +53,20 @@ const profileStorage = new multer_storage_cloudinary_1.CloudinaryStorage({
         };
     },
 });
+// Create storage engine for project files (images/videos)
+const projectStorage = new multer_storage_cloudinary_1.CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: async (req, file) => {
+        console.log(`📤 [CLOUDINARY] Uploading project file for user: ${req.user?._id}`);
+        const resourceType = file.mimetype.startsWith('video/') ? 'video' : 'image';
+        return {
+            folder: 'rez-app/projects',
+            resource_type: resourceType,
+            public_id: `project_${req.user?._id}_${Date.now()}`,
+            timeout: 120000,
+        };
+    },
+});
 // Create multer upload instance for profile images
 exports.uploadProfileImage = (0, multer_1.default)({
     storage: profileStorage,
@@ -63,6 +77,20 @@ exports.uploadProfileImage = (0, multer_1.default)({
         // Accept images only
         if (!file.mimetype.startsWith('image/')) {
             return cb(new Error('Only image files are allowed!'), false);
+        }
+        cb(null, true);
+    },
+});
+// Create multer upload instance for project files (images/videos)
+exports.uploadProjectFile = (0, multer_1.default)({
+    storage: projectStorage,
+    limits: {
+        fileSize: 50 * 1024 * 1024, // 50MB limit for videos
+    },
+    fileFilter: (req, file, cb) => {
+        // Accept images and videos
+        if (!file.mimetype.startsWith('image/') && !file.mimetype.startsWith('video/')) {
+            return cb(new Error('Only image and video files are allowed!'), false);
         }
         cb(null, true);
     },

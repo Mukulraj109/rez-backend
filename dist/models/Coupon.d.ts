@@ -34,6 +34,15 @@ export interface ICoupon extends Document {
     viewCount: number;
     claimCount: number;
     usageCount: number;
+    metadata?: {
+        source?: string;
+        isProductSpecific?: boolean;
+        storeName?: string;
+        storeId?: string;
+        productName?: string | null;
+        productId?: string | null;
+        productImage?: string | null;
+    };
     createdAt: Date;
     updatedAt: Date;
 }

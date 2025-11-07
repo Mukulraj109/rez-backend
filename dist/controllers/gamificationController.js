@@ -288,7 +288,19 @@ exports.spinWheel = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             prize: {
                 type: spinResult.type,
                 value: spinResult.value,
-                label: spinResult.prize
+                label: spinResult.prize,
+                // ✅ NEW: Include coupon details for frontend display
+                couponDetails: spinResult.couponMetadata ? {
+                    storeName: spinResult.couponMetadata.storeName,
+                    storeId: spinResult.couponMetadata.storeId,
+                    productName: spinResult.couponMetadata.productName || null,
+                    productId: spinResult.couponMetadata.productId || null,
+                    productImage: spinResult.couponMetadata.productImage || null,
+                    isProductSpecific: spinResult.couponMetadata.isProductSpecific,
+                    applicableOn: spinResult.couponMetadata.isProductSpecific
+                        ? `${spinResult.couponMetadata.productName} from ${spinResult.couponMetadata.storeName}`
+                        : `Any product from ${spinResult.couponMetadata.storeName}`
+                } : null
             }
         },
         coinsAdded: spinResult.type === 'coins' ? spinResult.value : 0,
@@ -347,7 +359,8 @@ exports.getSpinWheelData = (0, asyncHandler_1.asyncHandler)(async (req, res) => 
             type: 'coins',
             icon: 'star'
         })),
-        spinsRemaining // ✅ Now correctly reflects daily usage
+        spinsRemaining, // ✅ Now correctly reflects daily usage
+        stats // ✅ Include stats (totalCoinsWon, totalSpins, etc.) for earnings calculation
     };
     console.log('✅ [SPIN_WHEEL] Spin wheel data retrieved');
     (0, response_1.sendSuccess)(res, data, 'Spin wheel data retrieved successfully');

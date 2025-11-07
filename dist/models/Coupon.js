@@ -165,6 +165,10 @@ const CouponSchema = new mongoose_1.Schema({
         type: Number,
         default: 0,
     },
+    metadata: {
+        type: mongoose_1.Schema.Types.Mixed,
+        default: null,
+    },
 }, {
     timestamps: true,
 });

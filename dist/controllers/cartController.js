@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -6,6 +39,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getLockedItems = exports.moveLockedToCart = exports.unlockItem = exports.lockItem = exports.validateCart = exports.getCartSummary = exports.removeCoupon = exports.applyCoupon = exports.clearCart = exports.removeFromCart = exports.updateCartItem = exports.addToCart = exports.getCart = void 0;
 const Cart_1 = require("../models/Cart");
 const Product_1 = require("../models/Product");
+const Event_1 = __importDefault(require("../models/Event"));
 const response_1 = require("../utils/response");
 const asyncHandler_1 = require("../utils/asyncHandler");
 const errorHandler_1 = require("../middleware/errorHandler");
@@ -81,65 +115,86 @@ exports.addToCart = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     if (!req.userId) {
         return (0, response_1.sendUnauthorized)(res, 'Authentication required');
     }
-    const { productId, quantity, variant } = req.body;
+    const { productId, quantity, variant, metadata } = req.body;
     try {
         console.log('🛒 [ADD TO CART] Starting add to cart for user:', req.userId);
-        console.log('🛒 [ADD TO CART] Request data:', { productId, quantity, variant });
+        console.log('🛒 [ADD TO CART] Request data:', { productId, quantity, variant, metadata });
         // Verify product exists and is available
         console.log('🛒 [ADD TO CART] Finding product:', productId);
-        const product = await Product_1.Product.findById(productId).populate('store');
+        let product = await Product_1.Product.findById(productId).populate('store');
+        let event = null;
+        let isEvent = false;
+        // If product not found, check if it's an event
         if (!product) {
-            console.log('❌ [ADD TO CART] Product not found:', productId);
-            return (0, response_1.sendNotFound)(res, 'Product not found');
-        }
-        console.log('✅ [ADD TO CART] Product found:', product.name);
-        console.log('🛒 [ADD TO CART] Product status:', {
-            isActive: product.isActive,
-            inventoryAvailable: product.inventory?.isAvailable,
-            stock: product.inventory?.stock
-        });
-        if (!product.isActive || !product.inventory.isAvailable) {
-            console.log('❌ [ADD TO CART] Product not available');
-            return (0, response_1.sendNotFound)(res, 'Product not available');
-        }
-        // Check stock availability with comprehensive validation
-        let availableStock = product.inventory.stock;
-        const lowStockThreshold = product.inventory.lowStockThreshold || 5;
-        let variantInfo = '';
-        console.log('🛒 [ADD TO CART] Available stock:', availableStock);
-        console.log('🛒 [ADD TO CART] Low stock threshold:', lowStockThreshold);
-        // Handle variant stock checking
-        if (variant && product.inventory.variants) {
-            console.log('🛒 [ADD TO CART] Checking variant:', variant);
-            const variantObj = product.getVariantByType(variant.type, variant.value);
-            if (!variantObj) {
-                console.log('❌ [ADD TO CART] Product variant not found');
-                return (0, response_1.sendError)(res, `Product variant "${variant.value}" is not available`, 400);
+            console.log('🛒 [ADD TO CART] Product not found, checking if it\'s an event:', productId);
+            event = await Event_1.default.findById(productId);
+            if (event) {
+                console.log('✅ [ADD TO CART] Event found:', event.title);
+                isEvent = true;
+                // Validate event is published and available
+                if (event.status !== 'published') {
+                    console.log('❌ [ADD TO CART] Event not available:', event.status);
+                    return (0, response_1.sendNotFound)(res, 'Event not available');
+                }
             }
-            availableStock = variantObj.stock;
-            variantInfo = ` (${variant.type}: ${variant.value})`;
-            console.log('🛒 [ADD TO CART] Variant stock:', availableStock);
+            else {
+                console.log('❌ [ADD TO CART] Product/Event not found:', productId);
+                return (0, response_1.sendNotFound)(res, 'Product not found');
+            }
         }
-        // Stock validation with detailed error messages
-        if (!product.inventory.unlimited) {
-            // Check if product is completely out of stock
-            if (availableStock === 0) {
-                console.log('❌ [ADD TO CART] Product out of stock');
-                return (0, response_1.sendError)(res, `${product.name}${variantInfo} is currently out of stock`, 400);
+        // Handle product-specific validation
+        if (!isEvent && product) {
+            console.log('✅ [ADD TO CART] Product found:', product.name);
+            console.log('🛒 [ADD TO CART] Product status:', {
+                isActive: product.isActive,
+                inventoryAvailable: product.inventory?.isAvailable,
+                stock: product.inventory?.stock
+            });
+            if (!product.isActive || !product.inventory.isAvailable) {
+                console.log('❌ [ADD TO CART] Product not available');
+                return (0, response_1.sendNotFound)(res, 'Product not available');
             }
-            // Check if requested quantity exceeds available stock
-            if (availableStock < quantity) {
-                console.log('❌ [ADD TO CART] Insufficient stock. Available:', availableStock, 'Requested:', quantity);
-                // Provide helpful message about available quantity
-                const message = availableStock === 1
-                    ? `Only 1 item of ${product.name}${variantInfo} is remaining in stock`
-                    : `Only ${availableStock} items of ${product.name}${variantInfo} are remaining in stock`;
-                return (0, response_1.sendError)(res, message, 400);
+        }
+        // Check stock availability with comprehensive validation (only for products)
+        if (!isEvent && product) {
+            let availableStock = product.inventory.stock;
+            const lowStockThreshold = product.inventory.lowStockThreshold || 5;
+            let variantInfo = '';
+            console.log('🛒 [ADD TO CART] Available stock:', availableStock);
+            console.log('🛒 [ADD TO CART] Low stock threshold:', lowStockThreshold);
+            // Handle variant stock checking
+            if (variant && product.inventory.variants) {
+                console.log('🛒 [ADD TO CART] Checking variant:', variant);
+                const variantObj = product.getVariantByType(variant.type, variant.value);
+                if (!variantObj) {
+                    console.log('❌ [ADD TO CART] Product variant not found');
+                    return (0, response_1.sendError)(res, `Product variant "${variant.value}" is not available`, 400);
+                }
+                availableStock = variantObj.stock;
+                variantInfo = ` (${variant.type}: ${variant.value})`;
+                console.log('🛒 [ADD TO CART] Variant stock:', availableStock);
             }
-            // Check for low stock warning (this doesn't prevent adding to cart, just logs)
-            if (availableStock <= lowStockThreshold) {
-                console.log('⚠️ [ADD TO CART] Low stock warning. Available:', availableStock, 'Threshold:', lowStockThreshold);
-                // Note: This is just a warning, we still allow the add to cart
+            // Stock validation with detailed error messages
+            if (!product.inventory.unlimited) {
+                // Check if product is completely out of stock
+                if (availableStock === 0) {
+                    console.log('❌ [ADD TO CART] Product out of stock');
+                    return (0, response_1.sendError)(res, `${product.name}${variantInfo} is currently out of stock`, 400);
+                }
+                // Check if requested quantity exceeds available stock
+                if (availableStock < quantity) {
+                    console.log('❌ [ADD TO CART] Insufficient stock. Available:', availableStock, 'Requested:', quantity);
+                    // Provide helpful message about available quantity
+                    const message = availableStock === 1
+                        ? `Only 1 item of ${product.name}${variantInfo} is remaining in stock`
+                        : `Only ${availableStock} items of ${product.name}${variantInfo} are remaining in stock`;
+                    return (0, response_1.sendError)(res, message, 400);
+                }
+                // Check for low stock warning (this doesn't prevent adding to cart, just logs)
+                if (availableStock <= lowStockThreshold) {
+                    console.log('⚠️ [ADD TO CART] Low stock warning. Available:', availableStock, 'Threshold:', lowStockThreshold);
+                    // Note: This is just a warning, we still allow the add to cart
+                }
             }
         }
         // Get or create cart
@@ -166,22 +221,53 @@ exports.addToCart = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         }
         // Add item to cart
         console.log('🛒 [ADD TO CART] Adding item to cart...');
-        await cart.addItem(productId, quantity, variant);
+        if (isEvent && event) {
+            // Handle events - add directly to cart items
+            const eventPrice = event.price?.amount || 0;
+            const eventOriginalPrice = event.price?.originalPrice || eventPrice;
+            // Check if event already exists in cart
+            const existingItemIndex = cart.items.findIndex((item) => item.event && item.event.toString() === productId);
+            if (existingItemIndex >= 0) {
+                // Update quantity if item already exists
+                cart.items[existingItemIndex].quantity += quantity;
+                cart.items[existingItemIndex].addedAt = new Date();
+            }
+            else {
+                // Add new event item
+                const cartItem = {
+                    event: event._id,
+                    store: null, // Events don't have stores
+                    quantity,
+                    price: eventPrice,
+                    originalPrice: eventOriginalPrice,
+                    discount: eventOriginalPrice - eventPrice,
+                    addedAt: new Date(),
+                    metadata: metadata || {} // Store event metadata (slotId, etc.)
+                };
+                cart.items.push(cartItem);
+            }
+        }
+        else if (product) {
+            // Handle products - use existing addItem method
+            await cart.addItem(productId, quantity, variant);
+        }
         // Recalculate totals
         console.log('🛒 [ADD TO CART] Calculating totals...');
         await cart.calculateTotals();
         console.log('🛒 [ADD TO CART] Saving cart...');
         await cart.save();
-        // Reserve stock for the added item
-        console.log('🔒 [ADD TO CART] Reserving stock...');
-        const reservationResult = await reservationService_1.default.reserveStock(cart._id.toString(), productId, quantity, variant);
-        if (!reservationResult.success) {
-            console.error('❌ [ADD TO CART] Stock reservation failed:', reservationResult.message);
-            // Note: We don't fail the cart operation, but log the issue
-            // The stock validation will catch this at checkout
-        }
-        else {
-            console.log('✅ [ADD TO CART] Stock reserved successfully');
+        // Reserve stock for the added item (only for products)
+        if (!isEvent && product) {
+            console.log('🔒 [ADD TO CART] Reserving stock...');
+            const reservationResult = await reservationService_1.default.reserveStock(cart._id.toString(), productId, quantity, variant);
+            if (!reservationResult.success) {
+                console.error('❌ [ADD TO CART] Stock reservation failed:', reservationResult.message);
+                // Note: We don't fail the cart operation, but log the issue
+                // The stock validation will catch this at checkout
+            }
+            else {
+                console.log('✅ [ADD TO CART] Stock reserved successfully');
+            }
         }
         // Invalidate cart cache after update
         await cacheHelper_1.CacheInvalidator.invalidateCart(req.userId);
@@ -387,8 +473,11 @@ exports.applyCoupon = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     if (!req.userId) {
         return (0, response_1.sendUnauthorized)(res, 'Authentication required');
     }
-    const { couponCode } = req.body;
+    const { couponCode, couponId } = req.body;
     try {
+        console.log('🎟️ [APPLY COUPON] Starting coupon application');
+        console.log('🎟️ [APPLY COUPON] Coupon code:', couponCode);
+        console.log('🎟️ [APPLY COUPON] Coupon ID:', couponId);
         const cart = await Cart_1.Cart.getActiveCart(req.userId);
         if (!cart) {
             return (0, response_1.sendNotFound)(res, 'Cart not found');
@@ -396,15 +485,63 @@ exports.applyCoupon = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         if (cart.items.length === 0) {
             return (0, response_1.sendError)(res, 'Cannot apply coupon to empty cart', 400);
         }
-        const couponApplied = await cart.applyCoupon(couponCode);
+        // Find coupon by code or ID
+        const { Coupon } = await Promise.resolve().then(() => __importStar(require('../models/Coupon')));
+        let coupon;
+        if (couponId) {
+            coupon = await Coupon.findById(couponId);
+        }
+        else if (couponCode) {
+            coupon = await Coupon.findOne({ couponCode: couponCode.toUpperCase() });
+        }
+        if (!coupon) {
+            return (0, response_1.sendError)(res, 'Coupon not found', 400);
+        }
+        console.log('✅ [APPLY COUPON] Coupon found:', coupon.title);
+        // Build validation context from cart items
+        const cartItems = await Promise.all(cart.items.map(async (item) => {
+            const product = await Product_1.Product.findById(item.product);
+            return {
+                productId: item.product.toString(),
+                storeId: product?.store?.toString() || '',
+                quantity: item.quantity,
+                price: item.price
+            };
+        }));
+        // Validate coupon using validation service
+        const { validateCouponForCart } = await Promise.resolve().then(() => __importStar(require('../services/couponValidationService')));
+        const validationResult = await validateCouponForCart(coupon._id.toString(), {
+            cartItems,
+            userId: req.userId
+        });
+        console.log('🎟️ [APPLY COUPON] Validation result:', validationResult);
+        if (!validationResult.isValid) {
+            console.log('❌ [APPLY COUPON] Validation failed:', validationResult.error);
+            return (0, response_1.sendError)(res, validationResult.error || 'Coupon is not valid', 400);
+        }
+        // Apply coupon to cart (existing method)
+        const couponApplied = await cart.applyCoupon(couponCode || coupon.couponCode);
         if (!couponApplied) {
-            return (0, response_1.sendError)(res, 'Invalid or expired coupon code', 400);
+            return (0, response_1.sendError)(res, 'Failed to apply coupon', 400);
         }
         await cart.calculateTotals();
         await cart.save();
-        (0, response_1.sendSuccess)(res, cart, 'Coupon applied successfully');
+        // Invalidate cart cache
+        await cacheHelper_1.CacheInvalidator.invalidateCart(req.userId);
+        console.log('✅ [APPLY COUPON] Coupon applied successfully');
+        (0, response_1.sendSuccess)(res, {
+            cart,
+            couponDetails: {
+                code: coupon.couponCode,
+                title: coupon.title,
+                discountAmount: validationResult.discountAmount,
+                applicableItems: validationResult.applicableItems,
+                metadata: coupon.metadata
+            }
+        }, 'Coupon applied successfully');
     }
     catch (error) {
+        console.error('❌ [APPLY COUPON] Error:', error);
         if (error instanceof errorHandler_1.AppError) {
             return (0, response_1.sendError)(res, error.message, 400);
         }

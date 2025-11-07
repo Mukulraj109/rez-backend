@@ -37,6 +37,7 @@ const storeRoutes_1 = __importDefault(require("./routes/storeRoutes"));
 const orderRoutes_1 = __importDefault(require("./routes/orderRoutes"));
 const videoRoutes_1 = __importDefault(require("./routes/videoRoutes"));
 const projectRoutes_1 = __importDefault(require("./routes/projectRoutes"));
+const earningProjectsRoutes_1 = __importDefault(require("./routes/earningProjectsRoutes"));
 const notificationRoutes_1 = __importDefault(require("./routes/notificationRoutes"));
 const stockNotificationRoutes_1 = __importDefault(require("./routes/stockNotificationRoutes"));
 const reviewRoutes_1 = __importDefault(require("./routes/reviewRoutes"));
@@ -80,6 +81,7 @@ const billingRoutes_1 = __importDefault(require("./routes/billingRoutes"));
 const activityFeedRoutes_1 = __importDefault(require("./routes/activityFeedRoutes"));
 const unifiedGamificationRoutes_1 = __importDefault(require("./routes/unifiedGamificationRoutes"));
 const partnerRoutes_1 = __importDefault(require("./routes/partnerRoutes"));
+const earningsRoutes_1 = __importDefault(require("./routes/earningsRoutes"));
 const auth_1 = __importDefault(require("./merchantroutes/auth")); // Temporarily disabled
 const merchants_1 = __importDefault(require("./merchantroutes/merchants")); // Temporarily disabled
 const merchant_profile_1 = __importDefault(require("./merchantroutes/merchant-profile")); // Disabled due to missing properties
@@ -93,6 +95,7 @@ const sync_1 = __importDefault(require("./merchantroutes/sync"));
 const RealTimeService_1 = require("./merchantservices/RealTimeService"); // Temporarily disabled
 const ReportService_1 = require("./merchantservices/ReportService"); // Temporarily disabled
 const stockSocketService_1 = __importDefault(require("./services/stockSocketService"));
+const earningsSocketService_1 = __importDefault(require("./services/earningsSocketService"));
 // Load environment variables
 dotenv_1.default.config();
 // Create Express application
@@ -313,6 +316,7 @@ app.use(`${API_PREFIX}/stores`, storeRoutes_1.default);
 app.use(`${API_PREFIX}/orders`, orderRoutes_1.default);
 app.use(`${API_PREFIX}/videos`, videoRoutes_1.default);
 app.use(`${API_PREFIX}/projects`, projectRoutes_1.default);
+app.use(`${API_PREFIX}/earning-projects`, earningProjectsRoutes_1.default);
 app.use(`${API_PREFIX}/notifications`, notificationRoutes_1.default);
 app.use(`${API_PREFIX}/stock-notifications`, stockNotificationRoutes_1.default);
 app.use(`${API_PREFIX}/reviews`, reviewRoutes_1.default);
@@ -368,6 +372,9 @@ console.log('✅ Social feed routes registered at /api/social');
 // Partner Program Routes - Partner levels, rewards, milestones, earnings
 app.use(`${API_PREFIX}/partner`, partnerRoutes_1.default);
 console.log('✅ Partner program routes registered at /api/partner');
+// Earnings Routes - User earnings summary with breakdown
+app.use(`${API_PREFIX}/earnings`, earningsRoutes_1.default);
+console.log('✅ Earnings routes registered at /api/earnings');
 // Merchant API Routes
 app.use('/api/merchant/auth', auth_1.default); // Merchant auth routes
 app.use('/api/merchant/categories', categories_1.default);
@@ -418,6 +425,8 @@ io.on('connection', (socket) => {
 global.io = io;
 // Initialize stock socket service
 stockSocketService_1.default.initialize(io);
+// Initialize earnings socket service
+earningsSocketService_1.default.initialize(io);
 // Initialize real-time service
 const realTimeServiceInstance = RealTimeService_1.RealTimeService.getInstance(io);
 global.realTimeService = realTimeServiceInstance;

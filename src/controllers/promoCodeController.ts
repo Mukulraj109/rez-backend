@@ -69,7 +69,7 @@ export const validatePromoCode = async (req: Request, res: Response) => {
           userId: new Types.ObjectId(userId.toString()),
           action: 'PROMO_CODE_VALIDATION',
           resource: 'PromoCode',
-          resourceId: validation.promoCode?._id,
+          resourceId: validation.promoCode?._id as Types.ObjectId | undefined,
           status: validation.valid ? 'success' : 'failed',
           metadata: {
             code: PromoCode.sanitizeCode(code),
@@ -246,7 +246,7 @@ export const createPromoCode = async (req: Request, res: Response) => {
         userId: new Types.ObjectId(userId.toString()),
         action: 'PROMO_CODE_CREATED',
         resource: 'PromoCode',
-        resourceId: promoCode._id,
+        resourceId: promoCode._id as Types.ObjectId,
         status: 'success',
         metadata: {
           code: promoCode.code,
@@ -422,7 +422,7 @@ export const updatePromoCode = async (req: Request, res: Response) => {
         userId: new Types.ObjectId(userId!.toString()),
         action: 'PROMO_CODE_UPDATED',
         resource: 'PromoCode',
-        resourceId: promoCode._id,
+        resourceId: promoCode._id as Types.ObjectId,
         status: 'success',
         metadata: {
           code: promoCode.code,
@@ -482,7 +482,7 @@ export const deactivatePromoCode = async (req: Request, res: Response) => {
         userId: new Types.ObjectId(userId!.toString()),
         action: 'PROMO_CODE_DEACTIVATED',
         resource: 'PromoCode',
-        resourceId: promoCode._id,
+        resourceId: promoCode._id as Types.ObjectId,
         status: 'success',
         metadata: {
           code: promoCode.code

@@ -28,7 +28,7 @@ class ReorderService {
             // Filter items if specific items selected
             let itemsToReorder = order.items;
             if (selectedItemIds && selectedItemIds.length > 0) {
-                itemsToReorder = order.items.filter(item => selectedItemIds.includes(item.product._id?.toString() || ''));
+                itemsToReorder = order.items.filter(item => item.product && selectedItemIds.includes(item.product._id?.toString() || ''));
             }
             const reorderItems = [];
             const unavailableItems = [];
@@ -207,11 +207,12 @@ class ReorderService {
                     continue;
                 }
                 // Find original order item
-                const originalItem = order.items.find(item => item.product._id?.toString() === validItem.productId);
+                const originalItem = order.items.find(item => item.product && item.product._id?.toString() === validItem.productId);
                 if (!originalItem)
                     continue;
-                // Check if item already in cart
-                const existingCartItem = cart.items.find(item => item.product.toString() === validItem.productId &&
+                // Check if item already in cart (only check product items, not events)
+                const existingCartItem = cart.items.find(item => item.product &&
+                    item.product.toString() === validItem.productId &&
                     JSON.stringify(item.variant) === JSON.stringify(originalItem.variant));
                 const quantityToAdd = Math.min(validItem.quantity, validItem.availableStock);
                 if (existingCartItem) {
@@ -356,6 +357,9 @@ class ReorderService {
             const productOrders = new Map();
             for (const order of orders) {
                 for (const item of order.items) {
+                    // Skip event items - only process product items
+                    if (!item.product)
+                        continue;
                     const productId = item.product._id?.toString() || '';
                     if (!productOrders.has(productId)) {
                         productOrders.set(productId, []);

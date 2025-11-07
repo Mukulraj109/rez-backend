@@ -47,7 +47,12 @@ const CartSchema = new mongoose_1.Schema({
             product: {
                 type: mongoose_1.Schema.Types.ObjectId,
                 ref: 'Product',
-                required: true
+                required: false // Optional - for products
+            },
+            event: {
+                type: mongoose_1.Schema.Types.ObjectId,
+                ref: 'Event',
+                required: false // Optional - for events
             },
             store: {
                 type: mongoose_1.Schema.Types.ObjectId,
@@ -92,6 +97,10 @@ const CartSchema = new mongoose_1.Schema({
                 type: String,
                 trim: true,
                 maxlength: 500
+            },
+            metadata: {
+                type: mongoose_1.Schema.Types.Mixed, // For storing event-specific metadata (slotId, etc.)
+                required: false
             }
         }],
     reservedItems: [{
@@ -283,6 +292,18 @@ CartSchema.virtual('storeCount').get(function () {
 // Virtual for expired status
 CartSchema.virtual('isExpired').get(function () {
     return this.expiresAt < new Date();
+});
+// Pre-save validation: ensure each item has either product or event
+CartSchema.pre('save', function (next) {
+    for (const item of this.items) {
+        if (!item.product && !item.event) {
+            return next(new Error('Cart item must have either a product or an event'));
+        }
+        if (item.product && item.event) {
+            return next(new Error('Cart item cannot have both a product and an event'));
+        }
+    }
+    next();
 });
 // Pre-save hook to calculate totals
 CartSchema.pre('save', async function (next) {

@@ -162,8 +162,8 @@ async function spin(sessionId) {
     const result = await selectPrize();
     // Find segment number
     const prizeConfig = SPIN_WHEEL_PRIZES.find(p => p.prize === result.prize);
-    // Award prize
-    await awardSpinPrize(session.user.toString(), result);
+    // Award prize and get coupon metadata (if applicable)
+    const couponMetadata = await awardSpinPrize(session.user.toString(), result);
     // Update session
     session.status = 'completed';
     session.completedAt = new Date();
@@ -173,7 +173,9 @@ async function spin(sessionId) {
     session.metadata = {
         ...session.metadata,
         segment: prizeConfig?.segment || 1,
-        prize: result.prize
+        prize: result.prize,
+        // ✅ NEW: Store coupon metadata in session for history
+        couponMetadata: couponMetadata || null
     };
     await session.save();
     return {
@@ -182,11 +184,14 @@ async function spin(sessionId) {
         segment: prizeConfig?.segment || 1,
         type: result.type,
         value: result.value,
-        reward: session.reward
+        reward: session.reward,
+        // ✅ NEW: Include coupon metadata for frontend display
+        couponMetadata: couponMetadata || null
     };
 }
 /**
  * Award the spin prize to user
+ * Returns coupon metadata for frontend display (or null for coins)
  */
 async function awardSpinPrize(userId, prize) {
     if (prize.type === 'coins') {
@@ -224,42 +229,61 @@ async function awardSpinPrize(userId, prize) {
         else {
             console.warn(`⚠️ [SPIN_WHEEL] Wallet not found for user ${userId}, skipping wallet update`);
         }
+        // Coins don't have coupon metadata
+        return null;
     }
     else if (prize.type === 'cashback') {
-        // Award cashback by creating a coupon with cashback value
+        // ✅ NEW: Award cashback with smart store assignment (always store-wide for better UX)
         const { Coupon } = await Promise.resolve().then(() => __importStar(require('../models/Coupon')));
         const { UserCoupon } = await Promise.resolve().then(() => __importStar(require('../models/UserCoupon')));
+        const { getCouponApplicability, generateCouponTitle, generateCouponDescription, generateApplicabilityText } = await Promise.resolve().then(() => __importStar(require('./spinWheelCouponAssignment')));
         const expiryDate = new Date();
         expiryDate.setDate(expiryDate.getDate() + 30); // 30 days validity
         const validFrom = new Date();
-        // Create a cashback coupon
+        // Get random store (always store-wide for cashback)
+        const applicability = await getCouponApplicability(true); // Force store-wide
+        // Generate coupon details
+        const title = generateCouponTitle({
+            type: 'cashback',
+            value: prize.value,
+            applicability
+        });
+        const description = generateCouponDescription({
+            type: 'cashback',
+            value: prize.value,
+            applicability
+        });
+        const applicabilityText = generateApplicabilityText(applicability);
+        // Create cashback coupon with store assignment
         const coupon = await Coupon.create({
             couponCode: `SPIN_CB_${Date.now()}_${Math.random().toString(36).substring(7).toUpperCase()}`,
-            title: `${prize.value}% Cashback from Spin Wheel`,
-            description: `You won ${prize.value}% cashback! Apply this on your next order.`,
+            title,
+            description,
             discountType: 'PERCENTAGE',
             discountValue: prize.value,
             minOrderValue: 100, // Minimum ₹100 order
-            maxDiscountCap: prize.value === 5 ? 50 : prize.value === 10 ? 100 : 200, // Cap based on percentage
+            maxDiscountCap: prize.value === 5 ? 50 : prize.value === 10 ? 100 : 200,
             validFrom,
             validTo: expiryDate,
             usageLimit: {
-                totalUsage: 1, // Single use
+                totalUsage: 1,
                 perUser: 1,
                 usedCount: 0
             },
             applicableTo: {
                 categories: [],
                 products: [],
-                stores: [],
+                stores: applicability.storeId !== 'generic' ? [applicability.storeId] : [],
                 userTiers: ['all']
             },
             autoApply: false,
             autoApplyPriority: 0,
             status: 'active',
             termsAndConditions: [
-                `Valid for ${30} days from date of winning`,
-                'Applicable on minimum order value of ₹100',
+                `Valid for 30 days from date of winning`,
+                applicabilityText,
+                'Minimum order value of ₹100',
+                'Cashback will be credited to wallet after delivery',
                 'Cannot be combined with other offers',
                 'Single use only'
             ],
@@ -269,7 +293,17 @@ async function awardSpinPrize(userId, prize) {
             isFeatured: false,
             viewCount: 0,
             claimCount: 1,
-            usageCount: 0
+            usageCount: 0,
+            // ✅ NEW: Store metadata for UI display
+            metadata: {
+                source: 'spin_wheel',
+                isProductSpecific: false, // Cashback is always store-wide
+                storeName: applicability.storeName,
+                storeId: applicability.storeId,
+                productName: null,
+                productId: null,
+                productImage: null
+            }
         });
         // Assign coupon to user
         await UserCoupon.create({
@@ -285,43 +319,63 @@ async function awardSpinPrize(userId, prize) {
                 expiryReminderSent: null
             }
         });
-        console.log(`✅ [SPIN_WHEEL] Awarded ${prize.value}% cashback coupon to user ${userId}: ${coupon.couponCode}`);
+        console.log(`✅ [SPIN_WHEEL] Awarded ${prize.value}% cashback coupon to user ${userId}`);
+        console.log(`   📍 ${applicabilityText}`);
+        console.log(`   🎫 Code: ${coupon.couponCode}`);
+        // Return coupon metadata for frontend display
+        return coupon.metadata;
     }
     else if (prize.type === 'discount') {
-        // Award discount by creating a discount coupon
+        // ✅ NEW: Award discount with smart store/product assignment
         const { Coupon } = await Promise.resolve().then(() => __importStar(require('../models/Coupon')));
         const { UserCoupon } = await Promise.resolve().then(() => __importStar(require('../models/UserCoupon')));
+        const { getCouponApplicability, generateCouponTitle, generateCouponDescription, generateApplicabilityText } = await Promise.resolve().then(() => __importStar(require('./spinWheelCouponAssignment')));
         const expiryDate = new Date();
         expiryDate.setDate(expiryDate.getDate() + 30); // 30 days validity
         const validFrom = new Date();
-        // Create a discount coupon
+        // Get random store/product assignment
+        const applicability = await getCouponApplicability(false); // Allow product-specific
+        // Generate coupon details
+        const title = generateCouponTitle({
+            type: 'discount',
+            value: prize.value,
+            applicability
+        });
+        const description = generateCouponDescription({
+            type: 'discount',
+            value: prize.value,
+            applicability
+        });
+        const applicabilityText = generateApplicabilityText(applicability);
+        // Create discount coupon with proper assignment
         const coupon = await Coupon.create({
             couponCode: `SPIN_${prize.value}OFF_${Date.now()}_${Math.random().toString(36).substring(7).toUpperCase()}`,
-            title: `${prize.value}% OFF from Spin Wheel`,
-            description: `You won ${prize.value}% discount! Use this code on your next purchase.`,
+            title,
+            description,
             discountType: 'PERCENTAGE',
             discountValue: prize.value,
-            minOrderValue: 200, // Minimum ₹200 order
-            maxDiscountCap: prize.value === 10 ? 100 : prize.value === 15 ? 150 : 250, // Cap based on percentage
+            minOrderValue: applicability.isProductSpecific ? 0 : 200, // No minimum for product-specific
+            maxDiscountCap: prize.value === 10 ? 100 : prize.value === 15 ? 150 : 250,
             validFrom,
             validTo: expiryDate,
             usageLimit: {
-                totalUsage: 1, // Single use
+                totalUsage: 1,
                 perUser: 1,
                 usedCount: 0
             },
             applicableTo: {
                 categories: [],
-                products: [],
-                stores: [],
+                products: applicability.isProductSpecific && applicability.productId ? [applicability.productId] : [],
+                stores: applicability.storeId !== 'generic' ? [applicability.storeId] : [],
                 userTiers: ['all']
             },
             autoApply: false,
             autoApplyPriority: 0,
             status: 'active',
             termsAndConditions: [
-                `Valid for ${30} days from date of winning`,
-                'Applicable on minimum order value of ₹200',
+                `Valid for 30 days from date of winning`,
+                applicabilityText,
+                applicability.isProductSpecific ? 'Valid only on the specified product' : `Minimum order value of ₹200`,
                 'Cannot be combined with other offers',
                 'Single use only'
             ],
@@ -331,7 +385,17 @@ async function awardSpinPrize(userId, prize) {
             isFeatured: false,
             viewCount: 0,
             claimCount: 1,
-            usageCount: 0
+            usageCount: 0,
+            // ✅ NEW: Store metadata for UI display
+            metadata: {
+                source: 'spin_wheel',
+                isProductSpecific: applicability.isProductSpecific,
+                storeName: applicability.storeName,
+                storeId: applicability.storeId,
+                productName: applicability.productName || null,
+                productId: applicability.productId || null,
+                productImage: applicability.productImage || null
+            }
         });
         // Assign coupon to user
         await UserCoupon.create({
@@ -347,20 +411,39 @@ async function awardSpinPrize(userId, prize) {
                 expiryReminderSent: null
             }
         });
-        console.log(`✅ [SPIN_WHEEL] Awarded ${prize.value}% discount coupon to user ${userId}: ${coupon.couponCode}`);
+        console.log(`✅ [SPIN_WHEEL] Awarded ${prize.value}% discount coupon to user ${userId}`);
+        console.log(`   📍 ${applicabilityText}`);
+        console.log(`   🎫 Code: ${coupon.couponCode}`);
+        // Return coupon metadata for frontend display
+        return coupon.metadata;
     }
     else if (prize.type === 'voucher') {
-        // Award voucher by creating a fixed-value coupon
+        // ✅ NEW: Award voucher with smart store assignment (always store-wide)
         const { Coupon } = await Promise.resolve().then(() => __importStar(require('../models/Coupon')));
         const { UserCoupon } = await Promise.resolve().then(() => __importStar(require('../models/UserCoupon')));
+        const { getCouponApplicability, generateCouponTitle, generateCouponDescription, generateApplicabilityText } = await Promise.resolve().then(() => __importStar(require('./spinWheelCouponAssignment')));
         const expiryDate = new Date();
         expiryDate.setDate(expiryDate.getDate() + 60); // 60 days validity for vouchers
         const validFrom = new Date();
-        // Create a voucher (fixed amount coupon)
+        // Get random store (always store-wide for vouchers)
+        const applicability = await getCouponApplicability(true); // Force store-wide
+        // Generate coupon details
+        const title = generateCouponTitle({
+            type: 'voucher',
+            value: prize.value,
+            applicability
+        });
+        const description = generateCouponDescription({
+            type: 'voucher',
+            value: prize.value,
+            applicability
+        });
+        const applicabilityText = generateApplicabilityText(applicability);
+        // Create voucher with store assignment
         const coupon = await Coupon.create({
             couponCode: `SPIN_VCH${prize.value}_${Date.now()}_${Math.random().toString(36).substring(7).toUpperCase()}`,
-            title: `₹${prize.value} Voucher from Spin Wheel`,
-            description: `You won a ₹${prize.value} voucher! Use this on any purchase.`,
+            title,
+            description,
             discountType: 'FIXED',
             discountValue: prize.value,
             minOrderValue: prize.value * 2, // Minimum 2x voucher value
@@ -368,22 +451,23 @@ async function awardSpinPrize(userId, prize) {
             validFrom,
             validTo: expiryDate,
             usageLimit: {
-                totalUsage: 1, // Single use
+                totalUsage: 1,
                 perUser: 1,
                 usedCount: 0
             },
             applicableTo: {
                 categories: [],
                 products: [],
-                stores: [],
+                stores: applicability.storeId !== 'generic' ? [applicability.storeId] : [],
                 userTiers: ['all']
             },
             autoApply: false,
             autoApplyPriority: 10, // Higher priority for vouchers
             status: 'active',
             termsAndConditions: [
-                `Valid for ${60} days from date of winning`,
-                `Applicable on minimum order value of ₹${prize.value * 2}`,
+                `Valid for 60 days from date of winning`,
+                applicabilityText,
+                `Minimum order value of ₹${prize.value * 2}`,
                 'Cannot be combined with other vouchers',
                 'Single use only'
             ],
@@ -393,7 +477,17 @@ async function awardSpinPrize(userId, prize) {
             isFeatured: true,
             viewCount: 0,
             claimCount: 1,
-            usageCount: 0
+            usageCount: 0,
+            // ✅ NEW: Store metadata for UI display
+            metadata: {
+                source: 'spin_wheel',
+                isProductSpecific: false, // Vouchers are always store-wide
+                storeName: applicability.storeName,
+                storeId: applicability.storeId,
+                productName: null,
+                productId: null,
+                productImage: null
+            }
         });
         // Assign voucher to user
         await UserCoupon.create({
@@ -409,8 +503,14 @@ async function awardSpinPrize(userId, prize) {
                 expiryReminderSent: null
             }
         });
-        console.log(`✅ [SPIN_WHEEL] Awarded ₹${prize.value} voucher to user ${userId}: ${coupon.couponCode}`);
+        console.log(`✅ [SPIN_WHEEL] Awarded ₹${prize.value} voucher to user ${userId}`);
+        console.log(`   📍 ${applicabilityText}`);
+        console.log(`   🎫 Code: ${coupon.couponCode}`);
+        // Return coupon metadata for frontend display
+        return coupon.metadata;
     }
+    // Fallback - should never reach here
+    return null;
 }
 /**
  * Get user's spin wheel history

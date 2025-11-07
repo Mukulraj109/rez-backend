@@ -16,12 +16,14 @@ jest.mock('../services/referralService');
 describe('Referral Controller', () => {
     let mockReq;
     let mockRes;
+    let mockNext;
     let mockJson;
     let mockStatus;
     beforeEach(() => {
         jest.clearAllMocks();
         mockJson = jest.fn();
         mockStatus = jest.fn().mockReturnThis();
+        mockNext = jest.fn();
         mockReq = {
             userId: 'user123',
             body: {},
@@ -44,7 +46,7 @@ describe('Referral Controller', () => {
             User_1.User.findById.mockReturnValue({
                 select: jest.fn().mockResolvedValue(mockUser),
             });
-            await (0, referralController_1.getReferralCode)(mockReq, mockRes);
+            await (0, referralController_1.getReferralCode)(mockReq, mockRes, mockNext);
             expect(mockStatus).toHaveBeenCalledWith(200);
             expect(mockJson).toHaveBeenCalledWith(expect.objectContaining({
                 success: true,
@@ -70,27 +72,27 @@ describe('Referral Controller', () => {
             User_1.User.findById.mockReturnValue({
                 select: jest.fn().mockResolvedValue(mockUser),
             });
-            await (0, referralController_1.getReferralCode)(mockReq, mockRes);
+            await (0, referralController_1.getReferralCode)(mockReq, mockRes, mockNext);
             expect(mockUser.save).toHaveBeenCalled();
             expect(mockStatus).toHaveBeenCalledWith(200);
         });
         it('should return 401 if user not authenticated', async () => {
             mockReq.userId = undefined;
-            await (0, referralController_1.getReferralCode)(mockReq, mockRes);
+            await (0, referralController_1.getReferralCode)(mockReq, mockRes, mockNext);
             expect(mockStatus).toHaveBeenCalledWith(401);
         });
         it('should return 404 if user not found', async () => {
             User_1.User.findById.mockReturnValue({
                 select: jest.fn().mockResolvedValue(null),
             });
-            await (0, referralController_1.getReferralCode)(mockReq, mockRes);
+            await (0, referralController_1.getReferralCode)(mockReq, mockRes, mockNext);
             expect(mockStatus).toHaveBeenCalledWith(404);
         });
     });
     describe('shareReferralLink', () => {
         it('should validate platform parameter', async () => {
             mockReq.body = { platform: 'invalid' };
-            await (0, referralController_1.shareReferralLink)(mockReq, mockRes);
+            await (0, referralController_1.shareReferralLink)(mockReq, mockRes, mockNext);
             expect(mockStatus).toHaveBeenCalledWith(400);
             expect(mockJson).toHaveBeenCalledWith(expect.objectContaining({
                 success: false,
@@ -106,13 +108,13 @@ describe('Referral Controller', () => {
                 };
                 User_1.User.findById.mockResolvedValue(mockUser);
                 mockReq.body = { platform };
-                await (0, referralController_1.shareReferralLink)(mockReq, mockRes);
+                await (0, referralController_1.shareReferralLink)(mockReq, mockRes, mockNext);
                 expect(mockStatus).toHaveBeenCalledWith(200);
             }
         });
         it('should reject non-string platform', async () => {
             mockReq.body = { platform: 123 };
-            await (0, referralController_1.shareReferralLink)(mockReq, mockRes);
+            await (0, referralController_1.shareReferralLink)(mockReq, mockRes, mockNext);
             expect(mockStatus).toHaveBeenCalledWith(400);
         });
     });
@@ -141,7 +143,7 @@ describe('Referral Controller', () => {
             });
             User_1.User.countDocuments.mockResolvedValue(5);
             referralService_1.default.getReferralStats.mockResolvedValue(mockStats);
-            await (0, referralController_1.getReferralStats)(mockReq, mockRes);
+            await (0, referralController_1.getReferralStats)(mockReq, mockRes, mockNext);
             expect(mockStatus).toHaveBeenCalledWith(200);
             expect(mockJson).toHaveBeenCalledWith(expect.objectContaining({
                 success: true,
@@ -162,7 +164,7 @@ describe('Referral Controller', () => {
             };
             User_1.User.findById.mockResolvedValue(mockUser);
             mockReq.body = { platform: 'whatsapp' };
-            await (0, referralController_1.shareReferralLink)(mockReq, mockRes);
+            await (0, referralController_1.shareReferralLink)(mockReq, mockRes, mockNext);
             // Check that logs don't contain full email or phone
             const logs = consoleSpy.mock.calls.map(call => call.join(' '));
             logs.forEach(log => {
@@ -179,7 +181,7 @@ describe('Referral Controller', () => {
             User_1.User.findById.mockResolvedValue(mockUser);
             mockReq.userId = '1234567890abcdef';
             mockReq.body = { platform: 'whatsapp' };
-            await (0, referralController_1.shareReferralLink)(mockReq, mockRes);
+            await (0, referralController_1.shareReferralLink)(mockReq, mockRes, mockNext);
             // Check that logs only contain last 4 chars of userId
             const logs = consoleSpy.mock.calls.map(call => call.join(' '));
             const hasFullUserId = logs.some(log => log.includes('1234567890abcdef'));
@@ -207,7 +209,9 @@ describe('Referral Controller', () => {
                     select: jest.fn().mockResolvedValue(mockUser),
                 });
                 await mockUser.save();
-                codes.add(mockUser.referral.referralCode);
+                if (mockUser.referral) {
+                    codes.add(mockUser.referral.referralCode);
+                }
             }
             // All codes should be unique
             expect(codes.size).toBe(100);

@@ -2,11 +2,18 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const projectController_1 = require("../controllers/projectController");
+const uploadController_1 = require("../controllers/uploadController");
+const upload_1 = require("../middleware/upload");
 const auth_1 = require("../middleware/auth");
 const validation_1 = require("../middleware/validation");
 // import { generalLimiter } from '../middleware/rateLimiter'; // Disabled for development
 const validation_2 = require("../middleware/validation");
 const router = (0, express_1.Router)();
+// Upload project file (image or video) to Cloudinary
+router.post('/upload', auth_1.authenticate, upload_1.uploadProjectFile.single('file'), uploadController_1.uploadProjectFile);
+// Upload multiple project files (images/videos) to Cloudinary
+router.post('/upload-multiple', auth_1.authenticate, upload_1.uploadProjectFile.array('files', 10), // Max 10 files
+uploadController_1.uploadMultipleProjectFiles);
 // Submit a project (requires authentication)
 router.post('/submit', auth_1.authenticate, (0, validation_1.validate)(validation_2.Joi.object({
     projectId: validation_1.commonSchemas.objectId().required(),
@@ -19,14 +26,15 @@ router.post('/submit', auth_1.authenticate, (0, validation_1.validate)(validatio
 router.get('/', 
 // generalLimiter,, // Disabled for development
 auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
-    category: validation_2.Joi.string().valid('beauty', 'fashion', 'lifestyle', 'tutorial', 'diy', 'fitness'),
-    difficulty: validation_2.Joi.string().valid('beginner', 'intermediate', 'advanced'),
+    category: validation_2.Joi.string().valid('review', 'social_share', 'ugc_content', 'store_visit', 'survey', 'photo', 'video', 'data_collection', 'mystery_shopping', 'referral'),
+    difficulty: validation_2.Joi.string().valid('easy', 'medium', 'hard'),
     creator: validation_1.commonSchemas.objectId(),
     status: validation_2.Joi.string().valid('active', 'completed'),
     search: validation_2.Joi.string().trim().max(100),
     sortBy: validation_2.Joi.string().valid('newest', 'popular', 'trending', 'difficulty_easy', 'difficulty_hard').default('newest'),
     page: validation_2.Joi.number().integer().min(1).default(1),
-    limit: validation_2.Joi.number().integer().min(1).max(50).default(20)
+    limit: validation_2.Joi.number().integer().min(1).max(50).default(20),
+    excludeUserSubmissions: validation_2.Joi.alternatives().try(validation_2.Joi.boolean(), validation_2.Joi.string().valid('true', 'false')).optional()
 })), projectController_1.getProjects);
 // Get featured projects
 router.get('/featured', 
@@ -38,16 +46,21 @@ auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
 router.get('/category/:category', 
 // generalLimiter,, // Disabled for development
 auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
-    category: validation_2.Joi.string().valid('beauty', 'fashion', 'lifestyle', 'tutorial', 'diy', 'fitness').required()
+    category: validation_2.Joi.string().valid('review', 'social_share', 'ugc_content', 'store_visit', 'survey', 'photo', 'video', 'data_collection', 'mystery_shopping', 'referral').required()
 })), (0, validation_1.validateQuery)(validation_2.Joi.object({
     page: validation_2.Joi.number().integer().min(1).default(1),
     limit: validation_2.Joi.number().integer().min(1).max(50).default(20)
 })), projectController_1.getProjectsByCategory);
+// Get earning project categories (public endpoint)
+router.get('/categories', 
+// generalLimiter,, // Disabled for development
+auth_1.optionalAuth, projectController_1.getEarningCategories);
 // Get user's project submissions (requires authentication)
 router.get('/my-submissions', 
 // generalLimiter,, // Disabled for development
 auth_1.authenticate, (0, validation_1.validateQuery)(validation_2.Joi.object({
     status: validation_2.Joi.string().valid('pending', 'approved', 'rejected'),
+    sortBy: validation_2.Joi.string().valid('newest', 'oldest', 'status').default('newest'),
     page: validation_2.Joi.number().integer().min(1).default(1),
     limit: validation_2.Joi.number().integer().min(1).max(50).default(20)
 })), projectController_1.getMySubmissions);

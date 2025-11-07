@@ -8,7 +8,7 @@ const asyncHandler_1 = require("../utils/asyncHandler");
 const errorHandler_1 = require("../middleware/errorHandler");
 // Get all stores with filtering and pagination
 exports.getStores = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
-    const { category, location, radius = 10, rating, isOpen, search, sortBy = 'rating', page = 1, limit = 20 } = req.query;
+    const { category, location, radius = 10, rating, isOpen, search, tags, isFeatured, sortBy = 'rating', page = 1, limit = 20 } = req.query;
     try {
         const query = { isActive: true };
         // Apply filters
@@ -16,6 +16,20 @@ exports.getStores = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             query.category = category;
         if (rating)
             query['ratings.average'] = { $gte: Number(rating) };
+        // Filter by tags
+        if (tags) {
+            // tags can be a string or array - handle both
+            const tagArray = Array.isArray(tags) ? tags : [tags];
+            query.tags = { $in: tagArray.map(tag => new RegExp(tag, 'i')) };
+        }
+        // Filter by featured status
+        if (isFeatured !== undefined) {
+            // Convert query parameter to boolean
+            const isFeaturedValue = typeof isFeatured === 'string'
+                ? isFeatured.toLowerCase() === 'true'
+                : Boolean(isFeatured);
+            query.isFeatured = isFeaturedValue;
+        }
         if (search) {
             query.$or = [
                 { name: { $regex: search, $options: 'i' } },
@@ -366,9 +380,12 @@ exports.searchStoresByCategory = (0, asyncHandler_1.asyncHandler)(async (req, re
     const { location, radius = 10, page = 1, limit = 20, sortBy = 'rating' } = req.query;
     try {
         const query = {
-            isActive: true,
-            [`deliveryCategories.${category}`]: true
+            isActive: true
         };
+        // Only add delivery category filter if category is not 'all'
+        if (category && category !== 'all') {
+            query[`deliveryCategories.${category}`] = true;
+        }
         // Add location filtering - use a simpler approach for now
         // Note: We'll calculate distances after fetching stores to avoid $nearSphere pagination issues
         // Sorting options

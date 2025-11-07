@@ -9,6 +9,7 @@ declare class ChallengeService {
     claimRewards(userId: string, progressId: string): Promise<{
         progress: IUserChallengeProgress;
         rewards: any;
+        walletBalance?: number;
     }>;
     createChallengeFromTemplate(templateIndex: number, startDate?: Date, featured?: boolean): Promise<IChallenge>;
     generateDailyChallenges(): Promise<IChallenge[]>;

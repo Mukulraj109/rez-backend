@@ -1,7 +1,8 @@
 import { Document, Types } from 'mongoose';
 import { Model } from 'mongoose';
 export interface ICartItem {
-    product: Types.ObjectId;
+    product?: Types.ObjectId;
+    event?: Types.ObjectId;
     store: Types.ObjectId | null;
     quantity: number;
     variant?: {
@@ -13,6 +14,7 @@ export interface ICartItem {
     discount?: number;
     addedAt: Date;
     notes?: string;
+    metadata?: any;
 }
 export interface IReservedItem {
     productId: Types.ObjectId;

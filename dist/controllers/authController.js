@@ -46,6 +46,7 @@ const referralService_1 = __importDefault(require("../services/referralService")
 const Wallet_1 = require("../models/Wallet");
 const mongoose_1 = require("mongoose");
 const achievementService_1 = __importDefault(require("../services/achievementService"));
+const gamificationIntegrationService_1 = __importDefault(require("../services/gamificationIntegrationService"));
 const twilio_1 = __importDefault(require("twilio"));
 const dotenv_1 = __importDefault(require("dotenv"));
 // Ensure dotenv is loaded
@@ -363,6 +364,15 @@ exports.verifyOTP = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     }
     // Update last login
     user.auth.lastLogin = new Date();
+    // Trigger gamification events for login
+    try {
+        await gamificationIntegrationService_1.default.onUserLogin(String(user._id));
+        console.log(`✅ [GAMIFICATION] Login tracking completed for user: ${user._id}`);
+    }
+    catch (gamificationError) {
+        // Don't fail login if gamification fails
+        console.error(`❌ [GAMIFICATION] Error tracking login:`, gamificationError);
+    }
     // Generate tokens
     const accessToken = (0, auth_1.generateToken)(String(user._id), user.role);
     const refreshToken = (0, auth_1.generateRefreshToken)(String(user._id));

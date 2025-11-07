@@ -17,6 +17,8 @@ auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
     rating: validation_2.Joi.number().min(1).max(5),
     isOpen: validation_2.Joi.boolean(),
     search: validation_2.Joi.string().trim().max(100),
+    tags: validation_2.Joi.alternatives().try(validation_2.Joi.string().trim().max(100), validation_2.Joi.array().items(validation_2.Joi.string().trim().max(100))),
+    isFeatured: validation_2.Joi.alternatives().try(validation_2.Joi.boolean(), validation_2.Joi.string().valid('true', 'false')),
     sortBy: validation_2.Joi.string().valid('rating', 'distance', 'name', 'newest').default('rating'),
     page: validation_2.Joi.number().integer().min(1).default(1),
     limit: validation_2.Joi.number().integer().min(1).max(50).default(20)
@@ -103,7 +105,7 @@ auth_1.optionalAuth, storeController_1.getStoreCategories);
 router.get('/search-by-category/:category', 
 // generalLimiter, // Disabled for development
 auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
-    category: validation_2.Joi.string().valid('fastDelivery', 'budgetFriendly', 'oneRupeeStore', 'ninetyNineStore', 'premium', 'organic', 'alliance', 'lowestPrice', 'mall', 'cashStore').required()
+    category: validation_2.Joi.string().valid('all', 'fastDelivery', 'budgetFriendly', 'oneRupeeStore', 'ninetyNineStore', 'premium', 'organic', 'alliance', 'lowestPrice', 'mall', 'cashStore').required()
 })), (0, validation_1.validateQuery)(validation_2.Joi.object({
     location: validation_2.Joi.string(), // "lng,lat" format
     radius: validation_2.Joi.number().min(0.1).max(50).default(10),

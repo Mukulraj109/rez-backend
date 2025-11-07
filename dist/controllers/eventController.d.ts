@@ -6,7 +6,10 @@ export declare const searchEvents: (req: Request, res: Response, next: import("e
 export declare const getFeaturedEvents: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const bookEventSlot: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const getUserBookings: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const confirmBooking: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const cancelBooking: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const toggleEventFavorite: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getRelatedEvents: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const shareEvent: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const getEventAnalytics: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const trackEventAnalytics: (req: Request, res: Response, next: import("express").NextFunction) => void;

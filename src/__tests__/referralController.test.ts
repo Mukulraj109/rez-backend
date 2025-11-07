@@ -3,7 +3,7 @@
  * Tests for referral API endpoints
  */
 
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import {
   getReferralCode,
   getReferralStats,
@@ -20,6 +20,7 @@ jest.mock('../services/referralService');
 describe('Referral Controller', () => {
   let mockReq: Partial<Request>;
   let mockRes: Partial<Response>;
+  let mockNext: jest.Mock<NextFunction>;
   let mockJson: jest.Mock;
   let mockStatus: jest.Mock;
 
@@ -28,6 +29,7 @@ describe('Referral Controller', () => {
 
     mockJson = jest.fn();
     mockStatus = jest.fn().mockReturnThis();
+    mockNext = jest.fn();
 
     mockReq = {
       userId: 'user123',
@@ -55,7 +57,7 @@ describe('Referral Controller', () => {
         select: jest.fn().mockResolvedValue(mockUser),
       });
 
-      await getReferralCode(mockReq as Request, mockRes as Response);
+      await getReferralCode(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockStatus).toHaveBeenCalledWith(200);
       expect(mockJson).toHaveBeenCalledWith(
@@ -87,7 +89,7 @@ describe('Referral Controller', () => {
         select: jest.fn().mockResolvedValue(mockUser),
       });
 
-      await getReferralCode(mockReq as Request, mockRes as Response);
+      await getReferralCode(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockUser.save).toHaveBeenCalled();
       expect(mockStatus).toHaveBeenCalledWith(200);
@@ -96,7 +98,7 @@ describe('Referral Controller', () => {
     it('should return 401 if user not authenticated', async () => {
       mockReq.userId = undefined;
 
-      await getReferralCode(mockReq as Request, mockRes as Response);
+      await getReferralCode(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockStatus).toHaveBeenCalledWith(401);
     });
@@ -106,7 +108,7 @@ describe('Referral Controller', () => {
         select: jest.fn().mockResolvedValue(null),
       });
 
-      await getReferralCode(mockReq as Request, mockRes as Response);
+      await getReferralCode(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockStatus).toHaveBeenCalledWith(404);
     });
@@ -116,7 +118,7 @@ describe('Referral Controller', () => {
     it('should validate platform parameter', async () => {
       mockReq.body = { platform: 'invalid' };
 
-      await shareReferralLink(mockReq as Request, mockRes as Response);
+      await shareReferralLink(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockStatus).toHaveBeenCalledWith(400);
       expect(mockJson).toHaveBeenCalledWith(
@@ -141,7 +143,7 @@ describe('Referral Controller', () => {
 
         mockReq.body = { platform };
 
-        await shareReferralLink(mockReq as Request, mockRes as Response);
+        await shareReferralLink(mockReq as Request, mockRes as Response, mockNext);
 
         expect(mockStatus).toHaveBeenCalledWith(200);
       }
@@ -150,7 +152,7 @@ describe('Referral Controller', () => {
     it('should reject non-string platform', async () => {
       mockReq.body = { platform: 123 };
 
-      await shareReferralLink(mockReq as Request, mockRes as Response);
+      await shareReferralLink(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockStatus).toHaveBeenCalledWith(400);
     });
@@ -185,7 +187,7 @@ describe('Referral Controller', () => {
       (User.countDocuments as jest.Mock).mockResolvedValue(5);
       (referralService.getReferralStats as jest.Mock).mockResolvedValue(mockStats);
 
-      await getReferralStats(mockReq as Request, mockRes as Response);
+      await getReferralStats(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockStatus).toHaveBeenCalledWith(200);
       expect(mockJson).toHaveBeenCalledWith(
@@ -214,7 +216,7 @@ describe('Referral Controller', () => {
 
       mockReq.body = { platform: 'whatsapp' };
 
-      await shareReferralLink(mockReq as Request, mockRes as Response);
+      await shareReferralLink(mockReq as Request, mockRes as Response, mockNext);
 
       // Check that logs don't contain full email or phone
       const logs = consoleSpy.mock.calls.map(call => call.join(' '));
@@ -238,7 +240,7 @@ describe('Referral Controller', () => {
       mockReq.userId = '1234567890abcdef';
       mockReq.body = { platform: 'whatsapp' };
 
-      await shareReferralLink(mockReq as Request, mockRes as Response);
+      await shareReferralLink(mockReq as Request, mockRes as Response, mockNext);
 
       // Check that logs only contain last 4 chars of userId
       const logs = consoleSpy.mock.calls.map(call => call.join(' '));
@@ -255,10 +257,10 @@ describe('Referral Controller', () => {
 
       // Generate multiple codes
       for (let i = 0; i < 100; i++) {
-        const mockUser = {
+        const mockUser: any = {
           _id: `user${i}`,
           referral: null,
-          save: jest.fn().mockImplementation(function() {
+          save: jest.fn().mockImplementation(function(this: any) {
             // Simulate code generation
             const crypto = require('crypto');
             const randomHex = crypto.randomBytes(4).toString('hex').toUpperCase();
@@ -272,7 +274,9 @@ describe('Referral Controller', () => {
         });
 
         await mockUser.save();
-        codes.add(mockUser.referral.referralCode);
+        if (mockUser.referral) {
+          codes.add(mockUser.referral.referralCode);
+        }
       }
 
       // All codes should be unique

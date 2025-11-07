@@ -122,6 +122,10 @@ declare class PaymentGatewayService {
      */
     private updatePaymentFromWebhook;
     /**
+     * Update booking status from payment intent
+     */
+    private updateBookingStatusFromPayment;
+    /**
      * Save payment record to database
      */
     private savePaymentRecord;

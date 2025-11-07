@@ -17,6 +17,15 @@ export interface IMiniGame extends Document {
     metadata?: {
         segment?: number;
         prize?: string;
+        couponMetadata?: {
+            source?: string;
+            isProductSpecific?: boolean;
+            storeName?: string;
+            storeId?: string;
+            productName?: string | null;
+            productId?: string | null;
+            productImage?: string | null;
+        } | null;
         grid?: Array<{
             index: number;
             prize: string;

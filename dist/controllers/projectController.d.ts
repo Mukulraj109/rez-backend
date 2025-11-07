@@ -6,4 +6,5 @@ export declare const getProjectsByCategory: (req: Request, res: Response, next: 
 export declare const getFeaturedProjects: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const toggleProjectLike: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const addProjectComment: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getEarningCategories: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const getMySubmissions: (req: Request, res: Response, next: import("express").NextFunction) => void;

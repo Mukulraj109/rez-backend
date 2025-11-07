@@ -28,8 +28,9 @@ export declare function selectPrize(): Promise<SpinResult>;
 export declare function spin(sessionId: string): Promise<any>;
 /**
  * Award the spin prize to user
+ * Returns coupon metadata for frontend display (or null for coins)
  */
-export declare function awardSpinPrize(userId: string, prize: SpinResult): Promise<void>;
+export declare function awardSpinPrize(userId: string, prize: SpinResult): Promise<any | null>;
 /**
  * Get user's spin wheel history
  */

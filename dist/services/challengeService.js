@@ -6,6 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const Challenge_1 = __importDefault(require("../models/Challenge"));
 const UserChallengeProgress_1 = __importDefault(require("../models/UserChallengeProgress"));
 const challengeTemplates_1 = __importDefault(require("../config/challengeTemplates"));
+const Wallet_1 = require("../models/Wallet");
+const Transaction_1 = require("../models/Transaction");
 const mongoose_1 = __importDefault(require("mongoose"));
 class ChallengeService {
     // Get active challenges
@@ -147,13 +149,93 @@ class ChallengeService {
         await progress.claimRewards();
         // Get challenge rewards
         const challenge = progress.challenge;
+        const coinsReward = challenge.rewards.coins || 0;
         const rewards = {
-            coins: challenge.rewards.coins,
+            coins: coinsReward,
             badges: challenge.rewards.badges || [],
             exclusiveDeals: challenge.rewards.exclusiveDeals || [],
             multiplier: challenge.rewards.multiplier
         };
-        return { progress, rewards };
+        // Credit coins to wallet
+        let newWalletBalance;
+        if (coinsReward > 0) {
+            try {
+                console.log(`💰 [CHALLENGE SERVICE] Crediting ${coinsReward} coins to user ${userId} for challenge ${challenge.title}`);
+                // Get or create wallet
+                let wallet = await Wallet_1.Wallet.findOne({ user: userId });
+                if (!wallet) {
+                    wallet = await Wallet_1.Wallet.createForUser(new mongoose_1.default.Types.ObjectId(userId));
+                }
+                if (wallet) {
+                    // Add to wasil coins (REZ coins)
+                    const wasilCoin = wallet.coins.find((c) => c.type === 'wasil');
+                    if (wasilCoin) {
+                        wasilCoin.amount += coinsReward;
+                        wasilCoin.lastUsed = new Date();
+                    }
+                    else {
+                        // If wasil coin doesn't exist, create it
+                        wallet.coins.push({
+                            type: 'wasil',
+                            amount: coinsReward,
+                            isActive: true,
+                            earnedDate: new Date(),
+                            lastUsed: new Date()
+                        });
+                    }
+                    // Update balances
+                    wallet.balance.available += coinsReward;
+                    wallet.balance.total += coinsReward;
+                    wallet.statistics.totalEarned += coinsReward;
+                    await wallet.save();
+                    newWalletBalance = wallet.balance.available;
+                    console.log(`✅ [CHALLENGE SERVICE] Coins credited successfully. New balance: ${newWalletBalance}`);
+                    // Create transaction record
+                    try {
+                        await Transaction_1.Transaction.create({
+                            user: userId,
+                            type: 'credit',
+                            category: 'earning',
+                            amount: coinsReward,
+                            currency: 'RC',
+                            description: `Challenge reward: ${challenge.title}`,
+                            source: {
+                                type: 'bonus',
+                                reference: challenge._id,
+                                description: `Earned ${coinsReward} coins from completing challenge: ${challenge.title}`,
+                                metadata: {
+                                    challengeId: String(challenge._id),
+                                    challengeTitle: challenge.title,
+                                    progressId: String(progress._id)
+                                }
+                            },
+                            status: {
+                                current: 'completed',
+                                history: [{
+                                        status: 'completed',
+                                        timestamp: new Date(),
+                                        reason: 'Challenge reward credited successfully'
+                                    }]
+                            },
+                            balanceBefore: wallet.balance.available - coinsReward,
+                            balanceAfter: wallet.balance.available,
+                            netAmount: coinsReward,
+                            isReversible: false
+                        });
+                        console.log('✅ [CHALLENGE SERVICE] Transaction record created');
+                    }
+                    catch (txError) {
+                        console.error('❌ [CHALLENGE SERVICE] Failed to create transaction:', txError);
+                        // Don't fail the whole operation if transaction creation fails
+                    }
+                }
+            }
+            catch (walletError) {
+                console.error('❌ [CHALLENGE SERVICE] Error crediting coins to wallet:', walletError);
+                // Don't fail the claim if wallet credit fails - user can contact support
+            }
+        }
+        return { progress, rewards, walletBalance: newWalletBalance };
     }
     // Create challenge from template
     async createChallengeFromTemplate(templateIndex, startDate, featured = false) {
