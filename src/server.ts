@@ -22,6 +22,10 @@ import partnerLevelMaintenanceService from './services/partnerLevelMaintenanceSe
 // Import trial expiry notification job
 import { initializeTrialExpiryJob } from './jobs/trialExpiryNotification';
 
+// Import new cron jobs
+import { initializeSessionCleanupJob } from './jobs/cleanupExpiredSessions';
+import { initializeCoinExpiryJob } from './jobs/expireCoins';
+
 // Import middleware
 import { globalErrorHandler, notFoundHandler } from './middleware/errorHandler';
 import { generalLimiter } from './middleware/rateLimiter';
@@ -34,6 +38,7 @@ import storeRoutes from './routes/storeRoutes';
 import orderRoutes from './routes/orderRoutes';
 import videoRoutes from './routes/videoRoutes';
 import projectRoutes from './routes/projectRoutes';
+import earningProjectsRoutes from './routes/earningProjectsRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import stockNotificationRoutes from './routes/stockNotificationRoutes';
 import reviewRoutes from './routes/reviewRoutes';
@@ -77,6 +82,7 @@ import billingRoutes from './routes/billingRoutes';
 import activityFeedRoutes from './routes/activityFeedRoutes';
 import unifiedGamificationRoutes from './routes/unifiedGamificationRoutes';
 import partnerRoutes from './routes/partnerRoutes';
+import earningsRoutes from './routes/earningsRoutes';
 import authRoutes1 from './merchantroutes/auth';  // Temporarily disabled
 import merchantRoutes from './merchantroutes/merchants';  // Temporarily disabled
 import merchantProfileRoutes from './merchantroutes/merchant-profile'; // Disabled due to missing properties
@@ -90,6 +96,7 @@ import merchantSyncRoutes from './merchantroutes/sync';
 import { RealTimeService } from './merchantservices/RealTimeService';  // Temporarily disabled
 import { ReportService } from './merchantservices/ReportService';  // Temporarily disabled
 import stockSocketService from './services/stockSocketService';
+import earningsSocketService from './services/earningsSocketService';
 
 // Load environment variables
 dotenv.config();
@@ -331,6 +338,7 @@ app.use(`${API_PREFIX}/stores`, storeRoutes);
 app.use(`${API_PREFIX}/orders`, orderRoutes);
 app.use(`${API_PREFIX}/videos`, videoRoutes);
 app.use(`${API_PREFIX}/projects`, projectRoutes);
+app.use(`${API_PREFIX}/earning-projects`, earningProjectsRoutes);
 app.use(`${API_PREFIX}/notifications`, notificationRoutes);
 app.use(`${API_PREFIX}/stock-notifications`, stockNotificationRoutes);
 app.use(`${API_PREFIX}/reviews`, reviewRoutes);
@@ -393,6 +401,10 @@ console.log('✅ Social feed routes registered at /api/social');
 // Partner Program Routes - Partner levels, rewards, milestones, earnings
 app.use(`${API_PREFIX}/partner`, partnerRoutes);
 console.log('✅ Partner program routes registered at /api/partner');
+
+// Earnings Routes - User earnings summary with breakdown
+app.use(`${API_PREFIX}/earnings`, earningsRoutes);
+console.log('✅ Earnings routes registered at /api/earnings');
 
 // Merchant API Routes
 app.use('/api/merchant/auth', authRoutes1);  // Merchant auth routes
@@ -464,6 +476,9 @@ global.io = io;
 // Initialize stock socket service
 stockSocketService.initialize(io);
 
+// Initialize earnings socket service
+earningsSocketService.initialize(io);
+
 // Initialize real-time service
 const realTimeServiceInstance = RealTimeService.getInstance(io);
 global.realTimeService = realTimeServiceInstance;
@@ -500,6 +515,16 @@ async function startServer() {
     console.log('🔄 Initializing trial expiry notification job...');
     initializeTrialExpiryJob();
     console.log('✅ Trial expiry notification job started');
+
+    // Initialize session cleanup job
+    console.log('🔄 Initializing session cleanup job...');
+    initializeSessionCleanupJob();
+    console.log('✅ Session cleanup job started (runs daily at midnight)');
+
+    // Initialize coin expiry job
+    console.log('🔄 Initializing coin expiry job...');
+    initializeCoinExpiryJob();
+    console.log('✅ Coin expiry job started (runs daily at 1:00 AM)');
 
     // Start HTTP server (with Socket.IO attached)
     server.listen(Number(PORT), '0.0.0.0', () => {

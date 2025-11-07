@@ -1,4 +1,4 @@
-import { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 export interface IProductAnalytics extends Document {
     product: Types.ObjectId;
     user?: Types.ObjectId;
@@ -27,4 +27,4 @@ export interface IProductAnalytics extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-export declare const ProductAnalytics: any;
+export declare const ProductAnalytics: mongoose.Model<any, {}, {}, {}, any, any>;

@@ -70,7 +70,8 @@ class ReferralService {
         });
         // Create activity for referrer
         await activityService_1.default.referral.onReferralSignup(referrerId, referral._id, 'New user signed up with your code!');
-        console.log(`✅ [REFERRAL] Created referral relationship: ${referrerId} -> ${refereeId}`);
+        // Log without PII - only sanitized IDs
+        console.log(`✅ [REFERRAL] Created referral relationship: ${referrerId.toString().slice(-6)} -> ${refereeId.toString().slice(-6)}`);
         return referral;
     }
     /**
@@ -87,7 +88,8 @@ class ReferralService {
             status: Referral_1.ReferralStatus.PENDING,
         }).populate('referrer', 'phoneNumber profile.firstName');
         if (!referral) {
-            console.log(`ℹ️ [REFERRAL] No pending referral found for referee ${refereeId}`);
+            // Log without PII - only sanitized ID
+            console.log(`ℹ️ [REFERRAL] No pending referral found for referee ID: ${refereeId.toString().slice(-6)}`);
             return;
         }
         // Update referral status to ACTIVE
@@ -137,7 +139,8 @@ class ReferralService {
         await referral.save();
         // Update user referral stats
         await this.updateUserReferralStats(referral.referrer);
-        console.log(`✅ [REFERRAL] Processed first order for referral ${referral._id}`);
+        // Log without PII - only sanitized referral ID
+        console.log(`✅ [REFERRAL] Processed first order for referral ID: ${referral._id.toString().slice(-6)}`);
     }
     /**
      * Process milestone bonus (after referee's 3rd order)
@@ -191,7 +194,8 @@ class ReferralService {
             await referral.save();
             // Update user referral stats
             await this.updateUserReferralStats(referral.referrer);
-            console.log(`✅ [REFERRAL] Processed milestone bonus for referral ${referral._id}`);
+            // Log without PII - only sanitized referral ID
+            console.log(`✅ [REFERRAL] Processed milestone bonus for referral ID: ${referral._id.toString().slice(-6)}`);
         }
     }
     /**
@@ -266,8 +270,8 @@ class ReferralService {
      * Track referral share event
      */
     async trackShare(userId, shareMethod) {
-        // Log share event (could be stored in a separate collection if needed)
-        console.log(`📤 [REFERRAL] User ${userId} shared via ${shareMethod}`);
+        // Log share event without PII - only sanitized user ID
+        console.log(`📤 [REFERRAL] User ID: ${userId.toString().slice(-6)} shared via ${shareMethod}`);
         // Optional: Create activity for sharing
         // await activityService.referral.onReferralShared(userId, shareMethod);
     }

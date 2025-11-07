@@ -12,8 +12,8 @@
  * RAZORPAY_KEY_SECRET=xxxxxxxxxxxxx
  */
 export declare const razorpayConfig: {
-    keyId: any;
-    keySecret: any;
+    keyId: string;
+    keySecret: string;
     currency: string;
     receiptPrefix: string;
     enabledPaymentMethods: {

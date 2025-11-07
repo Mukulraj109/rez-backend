@@ -1,4 +1,4 @@
-import { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 export interface INotificationPreferences {
     push: {
         enabled: boolean;
@@ -160,4 +160,8 @@ export interface IUserSettings extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-export declare const UserSettings: any;
+export declare const UserSettings: mongoose.Model<IUserSettings, {}, {}, {}, mongoose.Document<unknown, {}, IUserSettings, {}, {}> & IUserSettings & Required<{
+    _id: unknown;
+}> & {
+    __v: number;
+}, any>;

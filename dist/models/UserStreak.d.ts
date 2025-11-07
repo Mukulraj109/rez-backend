@@ -20,5 +20,9 @@ export interface IUserStreak extends Document {
     freezeStreak(days?: number): Promise<IUserStreak>;
     claimMilestone(day: number): Promise<IUserStreak>;
 }
-declare const _default: any;
+declare const _default: mongoose.Model<IUserStreak, {}, {}, {}, mongoose.Document<unknown, {}, IUserStreak, {}, {}> & IUserStreak & Required<{
+    _id: unknown;
+}> & {
+    __v: number;
+}, any>;
 export default _default;

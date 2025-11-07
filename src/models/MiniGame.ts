@@ -19,6 +19,15 @@ export interface IMiniGame extends Document {
     // Spin Wheel
     segment?: number;
     prize?: string;
+    couponMetadata?: {
+      source?: string;
+      isProductSpecific?: boolean;
+      storeName?: string;
+      storeId?: string;
+      productName?: string | null;
+      productId?: string | null;
+      productImage?: string | null;
+    } | null;
 
     // Scratch Card
     grid?: Array<{

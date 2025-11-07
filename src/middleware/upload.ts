@@ -53,6 +53,21 @@ const profileStorage = new CloudinaryStorage({
   },
 });
 
+// Create storage engine for project files (images/videos)
+const projectStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: async (req, file) => {
+    console.log(`📤 [CLOUDINARY] Uploading project file for user: ${req.user?._id}`);
+    const resourceType = file.mimetype.startsWith('video/') ? 'video' : 'image';
+    return {
+      folder: 'rez-app/projects',
+      resource_type: resourceType,
+      public_id: `project_${req.user?._id}_${Date.now()}`,
+      timeout: 120000,
+    };
+  },
+});
+
 // Create multer upload instance for profile images
 export const uploadProfileImage = multer({
   storage: profileStorage,
@@ -63,6 +78,21 @@ export const uploadProfileImage = multer({
     // Accept images only
     if (!file.mimetype.startsWith('image/')) {
       return cb(new Error('Only image files are allowed!') as any, false);
+    }
+    cb(null, true);
+  },
+});
+
+// Create multer upload instance for project files (images/videos)
+export const uploadProjectFile = multer({
+  storage: projectStorage,
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB limit for videos
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept images and videos
+    if (!file.mimetype.startsWith('image/') && !file.mimetype.startsWith('video/')) {
+      return cb(new Error('Only image and video files are allowed!') as any, false);
     }
     cb(null, true);
   },

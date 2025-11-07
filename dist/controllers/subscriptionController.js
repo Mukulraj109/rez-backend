@@ -229,46 +229,80 @@ exports.getCurrentSubscription = getCurrentSubscription;
  */
 const subscribeToPlan = async (req, res) => {
     try {
+        console.log('🔷 [SUBSCRIBE] ========== NEW SUBSCRIPTION REQUEST ==========');
+        console.log('🔷 [SUBSCRIBE] Request body:', req.body);
+        console.log('🔷 [SUBSCRIBE] User ID from token:', req.user?._id || req.user?.id);
         const userId = req.user?._id || req.user?.id;
         if (!userId) {
+            console.error('❌ [SUBSCRIBE] No user ID found - user not authenticated');
             return res.status(401).json({
                 success: false,
                 message: 'User not authenticated'
             });
         }
-        // Check if Razorpay is configured
-        if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET ||
-            process.env.RAZORPAY_KEY_ID === 'rzp_test_your_razorpay_key_id' ||
-            process.env.RAZORPAY_KEY_SECRET === 'your_razorpay_key_secret') {
-            return res.status(503).json({
-                success: false,
-                message: 'Payment gateway is not configured. Please contact support.',
-                error: 'Razorpay credentials not configured'
-            });
-        }
+        console.log('✅ [SUBSCRIBE] User authenticated:', userId);
         const { tier, billingCycle, paymentMethod, promoCode, source } = req.body;
+        console.log('🔷 [SUBSCRIBE] Payment method requested:', paymentMethod || 'not specified');
+        // Determine payment gateway based on paymentMethod parameter
+        const useStripe = paymentMethod === 'stripe';
+        const useRazorpay = paymentMethod === 'razorpay' || !paymentMethod;
+        console.log('🔷 [SUBSCRIBE] Using payment gateway:', useStripe ? 'STRIPE' : 'RAZORPAY');
+        // Check if the requested payment gateway is configured
+        if (useRazorpay) {
+            console.log('🔷 [SUBSCRIBE] Checking Razorpay configuration...');
+            if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET ||
+                process.env.RAZORPAY_KEY_ID === 'rzp_test_your_razorpay_key_id' ||
+                process.env.RAZORPAY_KEY_SECRET === 'your_razorpay_key_secret') {
+                console.error('❌ [SUBSCRIBE] Razorpay not configured properly');
+                return res.status(503).json({
+                    success: false,
+                    message: 'Razorpay payment gateway is not configured. Please use Stripe or contact support.',
+                    error: 'Razorpay credentials not configured'
+                });
+            }
+            console.log('✅ [SUBSCRIBE] Razorpay is configured');
+        }
+        else if (useStripe) {
+            console.log('🔷 [SUBSCRIBE] Checking Stripe configuration...');
+            if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.includes('your_stripe')) {
+                console.error('❌ [SUBSCRIBE] Stripe not configured properly');
+                return res.status(503).json({
+                    success: false,
+                    message: 'Stripe payment gateway is not configured. Please contact support.',
+                    error: 'Stripe credentials not configured'
+                });
+            }
+            console.log('✅ [SUBSCRIBE] Stripe is configured');
+        }
         // Validate tier
+        console.log('🔷 [SUBSCRIBE] Validating tier:', tier);
         if (!['premium', 'vip'].includes(tier)) {
+            console.error('❌ [SUBSCRIBE] Invalid tier:', tier);
             return res.status(400).json({
                 success: false,
                 message: 'Invalid subscription tier'
             });
         }
         // Validate billing cycle
+        console.log('🔷 [SUBSCRIBE] Validating billing cycle:', billingCycle);
         if (!['monthly', 'yearly'].includes(billingCycle)) {
+            console.error('❌ [SUBSCRIBE] Invalid billing cycle:', billingCycle);
             return res.status(400).json({
                 success: false,
                 message: 'Invalid billing cycle'
             });
         }
         // Check if user already has an active subscription
+        console.log('🔷 [SUBSCRIBE] Checking for existing subscription...');
         const existingSubscription = await subscriptionBenefitsService_1.default.getUserSubscription(userId);
         if (existingSubscription && existingSubscription.isActive()) {
+            console.warn('⚠️ [SUBSCRIBE] User already has active subscription:', existingSubscription.tier);
             return res.status(400).json({
                 success: false,
                 message: 'User already has an active subscription. Please upgrade or downgrade instead.'
             });
         }
+        console.log('✅ [SUBSCRIBE] No existing active subscription');
         // Get tier pricing
         const tierPricing = {
             premium: { monthly: 99, yearly: 999 },
@@ -276,21 +310,38 @@ const subscribeToPlan = async (req, res) => {
         };
         let price = billingCycle === 'monthly' ? tierPricing[tier].monthly : tierPricing[tier].yearly;
         let appliedDiscount = 0;
+        console.log('🔷 [SUBSCRIBE] Base price:', price, 'INR');
         // Apply promo code if provided
         if (promoCode) {
+            console.log('🔷 [SUBSCRIBE] Validating promo code:', promoCode);
             const promoResult = await promoCodeService_1.default.validatePromoCode(promoCode, tier, billingCycle, userId);
             if (promoResult.valid && promoResult.finalPrice !== undefined) {
                 appliedDiscount = promoResult.discount || 0;
                 price = promoResult.finalPrice;
-                console.log(`[SUBSCRIPTION] Promo code applied: ${promoCode}, discount: ₹${appliedDiscount}`);
+                console.log(`✅ [SUBSCRIBE] Promo code applied: ${promoCode}, discount: ₹${appliedDiscount}, final price: ₹${price}`);
             }
             else {
-                console.warn(`[SUBSCRIPTION] Invalid promo code attempted: ${promoCode}`);
+                console.warn(`⚠️ [SUBSCRIBE] Invalid promo code attempted: ${promoCode}`);
             }
         }
-        // Create Razorpay subscription
-        const razorpaySubscription = await razorpaySubscriptionService_1.default.createSubscription(userId.toString(), tier, billingCycle);
+        // Create payment gateway subscription based on selected method
+        let paymentGatewaySubscription = null;
+        if (useRazorpay) {
+            console.log('🔷 [SUBSCRIBE] Creating Razorpay subscription...');
+            paymentGatewaySubscription = await razorpaySubscriptionService_1.default.createSubscription(userId.toString(), tier, billingCycle);
+            console.log('✅ [SUBSCRIBE] Razorpay subscription created:', paymentGatewaySubscription.id);
+        }
+        else if (useStripe) {
+            console.log('✅ [SUBSCRIBE] Stripe selected - will create payment intent on frontend');
+            // For Stripe, we don't create subscription here
+            // The frontend will create a Stripe Checkout session or Payment Intent
+            paymentGatewaySubscription = {
+                id: 'stripe_pending_' + Date.now(),
+                status: 'pending'
+            };
+        }
         // Calculate dates
+        console.log('🔷 [SUBSCRIBE] Calculating subscription dates...');
         const startDate = new Date();
         const trialEndDate = new Date();
         trialEndDate.setDate(trialEndDate.getDate() + 7); // 7-day trial
@@ -301,8 +352,12 @@ const subscribeToPlan = async (req, res) => {
         else {
             endDate.setFullYear(endDate.getFullYear() + 1);
         }
+        console.log('🔷 [SUBSCRIBE] Start date:', startDate);
+        console.log('🔷 [SUBSCRIBE] Trial end date:', trialEndDate);
+        console.log('🔷 [SUBSCRIBE] End date:', endDate);
         // Create subscription in database
-        const subscription = new Subscription_1.Subscription({
+        console.log('🔷 [SUBSCRIBE] Creating subscription in database...');
+        const subscriptionData = {
             user: userId,
             tier,
             status: 'trial',
@@ -312,17 +367,26 @@ const subscribeToPlan = async (req, res) => {
             endDate,
             trialEndDate,
             autoRenew: true,
-            paymentMethod,
-            razorpaySubscriptionId: razorpaySubscription.id,
-            razorpayPlanId: razorpaySubscription.plan_id,
-            razorpayCustomerId: razorpaySubscription.customer_id,
+            paymentMethod: useStripe ? 'stripe' : 'razorpay',
             benefits: getTierBenefits(tier),
             metadata: {
                 source: source || 'app',
                 promoCode
             }
-        });
+        };
+        // Add gateway-specific IDs
+        if (useRazorpay && paymentGatewaySubscription) {
+            subscriptionData.razorpaySubscriptionId = paymentGatewaySubscription.id;
+            subscriptionData.razorpayPlanId = paymentGatewaySubscription.plan_id;
+            subscriptionData.razorpayCustomerId = paymentGatewaySubscription.customer_id;
+        }
+        else if (useStripe && paymentGatewaySubscription) {
+            subscriptionData.stripeSubscriptionId = paymentGatewaySubscription.id;
+        }
+        const subscription = new Subscription_1.Subscription(subscriptionData);
+        console.log('🔷 [SUBSCRIBE] Saving subscription to database...');
         await subscription.save();
+        console.log('✅ [SUBSCRIBE] Subscription saved successfully:', subscription._id);
         // Increment promo code usage if promo code was applied
         if (promoCode && appliedDiscount > 0) {
             try {
@@ -334,18 +398,36 @@ const subscribeToPlan = async (req, res) => {
                 // Don't fail the subscription creation if promo tracking fails
             }
         }
-        res.status(201).json({
+        console.log('🔷 [SUBSCRIBE] Preparing response...');
+        const response = {
             success: true,
             message: 'Subscription created successfully',
             data: {
                 subscription,
-                paymentUrl: razorpaySubscription.short_url,
                 discountApplied: appliedDiscount
             }
-        });
+        };
+        // Add payment URL for Razorpay, for Stripe frontend will handle payment
+        if (useRazorpay && paymentGatewaySubscription?.short_url) {
+            response.data.paymentUrl = paymentGatewaySubscription.short_url;
+            console.log('🔷 [SUBSCRIBE] Payment URL (Razorpay):', paymentGatewaySubscription.short_url);
+        }
+        else if (useStripe) {
+            // For Stripe, frontend will create the checkout session
+            response.data.paymentUrl = null;
+            console.log('🔷 [SUBSCRIBE] Using Stripe - frontend will handle checkout');
+        }
+        console.log('✅ [SUBSCRIBE] ========== SUBSCRIPTION CREATED SUCCESSFULLY ==========');
+        console.log('✅ [SUBSCRIBE] Subscription ID:', subscription._id);
+        console.log('✅ [SUBSCRIBE] Tier:', subscription.tier);
+        console.log('✅ [SUBSCRIBE] Price:', subscription.price, 'INR');
+        console.log('✅ [SUBSCRIBE] Payment Method:', subscription.paymentMethod);
+        res.status(201).json(response);
     }
     catch (error) {
-        console.error('Error subscribing to plan:', error);
+        console.error('❌ [SUBSCRIBE] ========== SUBSCRIPTION FAILED ==========');
+        console.error('❌ [SUBSCRIBE] Error:', error.message);
+        console.error('❌ [SUBSCRIBE] Stack:', error.stack);
         res.status(500).json({
             success: false,
             message: 'Failed to subscribe to plan',

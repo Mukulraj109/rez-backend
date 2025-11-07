@@ -25,4 +25,4 @@ export interface ICoinTransactionModel extends Model<ICoinTransaction> {
     createTransaction(userId: string, type: string, amount: number, source: string, description: string, metadata?: any): Promise<ICoinTransaction>;
     expireOldCoins(userId: string, daysToExpire?: number): Promise<number>;
 }
-export declare const CoinTransaction: any;
+export declare const CoinTransaction: ICoinTransactionModel;

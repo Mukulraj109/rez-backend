@@ -194,6 +194,40 @@ export const recommendationLimiter = isRateLimitDisabled
       legacyHeaders: false
     });
 
+// Referral rate limiter (prevent abuse of referral system)
+export const referralLimiter = isRateLimitDisabled
+  ? passthroughMiddleware
+  : rateLimit({
+      windowMs: 60 * 60 * 1000, // 1 hour
+      max: 50, // 50 referral operations per hour (viewing, sharing, etc.)
+      message: (req: Request, res: Response) => {
+        res.status(429).json({
+          success: false,
+          message: 'Referral activity limit exceeded. Please try again later.',
+          retryAfter: Math.round(Date.now() / 1000) + 3600
+        });
+      },
+      standardHeaders: true,
+      legacyHeaders: false
+    });
+
+// Referral share rate limiter (stricter to prevent spam)
+export const referralShareLimiter = isRateLimitDisabled
+  ? passthroughMiddleware
+  : rateLimit({
+      windowMs: 60 * 1000, // 1 minute
+      max: 5, // 5 shares per minute
+      message: (req: Request, res: Response) => {
+        res.status(429).json({
+          success: false,
+          message: 'Too many share requests. Please wait before sharing again.',
+          retryAfter: 60
+        });
+      },
+      standardHeaders: true,
+      legacyHeaders: false
+    });
+
 // Create custom rate limiter
 export const createRateLimiter = (options: {
   windowMs?: number;

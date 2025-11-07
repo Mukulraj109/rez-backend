@@ -14,11 +14,15 @@ import {
   getReferralStats
 } from '../controllers/referralController';
 import { authenticate } from '../middleware/auth';
+import { referralLimiter, referralShareLimiter } from '../middleware/rateLimiter';
 
 const router = express.Router();
 
 // All referral routes require authentication
 router.use(authenticate);
+
+// ✅ Apply rate limiting to all referral routes to prevent abuse
+router.use(referralLimiter);
 
 /**
  * @route   GET /api/referral/data
@@ -52,8 +56,9 @@ router.post('/generate-link', generateReferralLink);
  * @route   POST /api/referral/share
  * @desc    Share referral link
  * @access  Private
+ * @note    Additional strict rate limiting to prevent spam
  */
-router.post('/share', shareReferralLink);
+router.post('/share', referralShareLimiter, shareReferralLink);
 
 /**
  * @route   POST /api/referral/claim-rewards

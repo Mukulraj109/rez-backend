@@ -17,12 +17,20 @@ class PushNotificationService {
         // Initialize Twilio client if credentials are available
         const accountSid = process.env.TWILIO_ACCOUNT_SID;
         const authToken = process.env.TWILIO_AUTH_TOKEN;
-        if (accountSid && authToken) {
-            this.twilioClient = (0, twilio_1.default)(accountSid, authToken);
-            console.log('✅ Twilio SMS client initialized');
+        // Validate Twilio credentials format
+        if (accountSid && authToken && accountSid.startsWith('AC') && authToken.length > 10) {
+            try {
+                this.twilioClient = (0, twilio_1.default)(accountSid, authToken);
+                console.log('✅ Twilio SMS client initialized');
+            }
+            catch (error) {
+                console.error('❌ Failed to initialize Twilio client:', error.message);
+                console.warn('⚠️ SMS notifications will be disabled.');
+            }
         }
         else {
-            console.warn('⚠️ Twilio credentials not found. SMS notifications will be disabled.');
+            console.warn('⚠️ Twilio credentials not found or invalid. SMS notifications will be disabled.');
+            console.warn('   Tip: TWILIO_ACCOUNT_SID should start with "AC" and TWILIO_AUTH_TOKEN should be set.');
         }
     }
     /**

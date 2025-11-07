@@ -1,5 +1,13 @@
-import { CashbackRequest, CashbackStatus, RiskFactor, CashbackMetrics, CashbackAnalytics } from '../types/shared';
-declare const CashbackMongoModel: any;
+import mongoose, { Schema, Document } from 'mongoose';
+import { CashbackRequest, CashbackStatus, RiskFactor, CashbackMetrics, CashbackCustomer, CashbackOrder, CashbackCalculation, CashbackAnalytics } from '../types/shared';
+interface CashbackDocument extends Document, Omit<CashbackRequest, 'id'> {
+    _id: string;
+}
+declare const CashbackMongoModel: mongoose.Model<CashbackDocument, {}, {}, {}, mongoose.Document<unknown, {}, CashbackDocument, {}, {}> & CashbackDocument & Required<{
+    _id: string;
+}> & {
+    __v: number;
+}, any>;
 export { CashbackMongoModel };
 export declare class CashbackModel {
     static generateRequestNumber(): string;
@@ -25,8 +33,53 @@ export declare class CashbackModel {
         page?: number;
         limit?: number;
     }): Promise<{
-        requests: any;
-        totalCount: any;
+        requests: {
+            createdAt: Date;
+            updatedAt: Date;
+            _id: string;
+            $locals: Record<string, unknown>;
+            $op: "save" | "validate" | "remove" | null;
+            $where: Record<string, unknown>;
+            baseModelName?: string;
+            collection: mongoose.Collection;
+            db: mongoose.Connection;
+            errors?: mongoose.Error.ValidationError;
+            id: any;
+            isNew: boolean;
+            schema: Schema;
+            merchantId: string;
+            expiresAt: Date;
+            timeline: Array<{
+                status: CashbackStatus;
+                timestamp: Date;
+                notes?: string;
+                by?: string;
+            }>;
+            status: CashbackStatus;
+            paidAmount?: number | undefined;
+            paidAt?: Date | undefined;
+            priority: "normal" | "high" | "urgent";
+            paymentMethod?: "wallet" | "bank_transfer" | "check" | undefined;
+            reviewedBy?: string | undefined;
+            reviewedAt?: Date | undefined;
+            rejectionReason?: string | undefined;
+            order: CashbackOrder;
+            orderId: string;
+            cashbackRate: number;
+            requestNumber: string;
+            customerId: string;
+            customer: CashbackCustomer;
+            requestedAmount: number;
+            approvedAmount?: number | undefined;
+            calculationBreakdown: CashbackCalculation[];
+            riskScore: number;
+            riskFactors: RiskFactor[];
+            flaggedForReview: boolean;
+            approvalNotes?: string | undefined;
+            paymentReference?: string | undefined;
+            __v: number;
+        }[];
+        totalCount: number;
         page: number;
         limit: number;
         hasNext: boolean;

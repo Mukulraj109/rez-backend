@@ -41,5 +41,5 @@ export interface ISocialMediaPostModel extends mongoose.Model<ISocialMediaPost> 
         approvalRate: number;
     }>;
 }
-declare const SocialMediaPost: any;
+declare const SocialMediaPost: ISocialMediaPostModel;
 export default SocialMediaPost;

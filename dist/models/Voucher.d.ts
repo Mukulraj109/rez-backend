@@ -1,7 +1,11 @@
-import mongoose, { Document } from 'mongoose';
+import mongoose, { Document, Model } from 'mongoose';
 interface IUserVoucherMethods {
     isValid(): boolean;
     markAsUsed(usageLocation?: string): Promise<any>;
+}
+interface IUserVoucherModel extends Model<IUserVoucher, {}, IUserVoucherMethods> {
+    updateExpiredVouchers(): Promise<any>;
+    getUserActiveVouchers(userId: string): any;
 }
 export interface IVoucherBrand extends Document {
     name: string;
@@ -45,7 +49,11 @@ export interface IUserVoucher extends Document, IUserVoucherMethods {
     createdAt: Date;
     updatedAt: Date;
 }
-declare const VoucherBrand: any;
-declare const UserVoucher: any;
+declare const VoucherBrand: mongoose.Model<IVoucherBrand, {}, {}, {}, mongoose.Document<unknown, {}, IVoucherBrand, {}, {}> & IVoucherBrand & Required<{
+    _id: unknown;
+}> & {
+    __v: number;
+}, any>;
+declare const UserVoucher: IUserVoucherModel;
 export { VoucherBrand, UserVoucher };
 export default VoucherBrand;

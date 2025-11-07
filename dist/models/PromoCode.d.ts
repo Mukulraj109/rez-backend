@@ -49,4 +49,4 @@ export interface IPromoCodeModel extends mongoose.Model<IPromoCode> {
     getActivePromoCodes(tier?: SubscriptionTier, billingCycle?: BillingCycle): Promise<IPromoCode[]>;
     sanitizeCode(code: string): string;
 }
-export declare const PromoCode: any;
+export declare const PromoCode: IPromoCodeModel;

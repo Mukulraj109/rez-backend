@@ -1,4 +1,4 @@
-import { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 export interface IUserProfile {
     firstName?: string;
     lastName?: string;
@@ -110,4 +110,8 @@ export interface IUser extends Document {
     incrementLoginAttempts(): Promise<void>;
     resetLoginAttempts(): Promise<void>;
 }
-export declare const User: any;
+export declare const User: mongoose.Model<IUser, {}, {}, {}, mongoose.Document<unknown, {}, IUser, {}, {}> & IUser & Required<{
+    _id: unknown;
+}> & {
+    __v: number;
+}, any>;

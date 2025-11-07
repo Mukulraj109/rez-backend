@@ -13,9 +13,9 @@ export declare class Database {
     getConnectionStatus(): boolean;
     getConnectionStats(): {
         readyState: string;
-        host: any;
-        port: any;
-        name: any;
+        host: string;
+        port: number;
+        name: string;
         collections: number;
         models: number;
     };

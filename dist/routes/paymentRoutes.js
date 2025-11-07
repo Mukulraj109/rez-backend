@@ -19,4 +19,6 @@ router.post('/verify', auth_1.authenticate, paymentController_1.verifyPayment);
 router.post('/webhook', paymentController_1.handleWebhook);
 // Get payment status for an order (requires authentication)
 router.get('/status/:orderId', auth_1.authenticate, paymentController_1.getPaymentStatus);
+// Create Stripe Checkout Session for subscription (requires authentication)
+router.post('/create-checkout-session', auth_1.authenticate, paymentController_1.createCheckoutSession);
 exports.default = router;

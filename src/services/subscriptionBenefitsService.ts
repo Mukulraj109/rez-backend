@@ -9,14 +9,28 @@ class SubscriptionBenefitsService {
    */
   async getUserSubscription(userId: string | Types.ObjectId): Promise<ISubscription | null> {
     try {
+      console.log('🔍 [SUBSCRIPTION SERVICE] Getting subscription for user:', userId);
+
       const subscription = await Subscription.findOne({
         user: userId,
         status: { $in: ['active', 'trial', 'grace_period'] }
-      }).sort({ endDate: -1 });
+      }).sort({ createdAt: -1 }); // FIXED: Sort by most recently created instead of end date
+
+      if (subscription) {
+        console.log('📊 [SUBSCRIPTION SERVICE] Found subscription:', {
+          id: subscription._id,
+          tier: subscription.tier,
+          price: subscription.price,
+          status: subscription.status,
+          createdAt: subscription.createdAt,
+        });
+      } else {
+        console.log('⚠️ [SUBSCRIPTION SERVICE] No active subscription found for user');
+      }
 
       return subscription;
     } catch (error) {
-      console.error('Error fetching user subscription:', error);
+      console.error('❌ [SUBSCRIPTION SERVICE] Error fetching user subscription:', error);
       return null;
     }
   }

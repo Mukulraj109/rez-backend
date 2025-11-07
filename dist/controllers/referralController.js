@@ -139,21 +139,33 @@ exports.generateReferralLink = (0, asyncHandler_1.asyncHandler)(async (req, res)
         return (0, response_1.sendError)(res, 'Authentication required', 401);
     }
     try {
-        const user = await User_1.User.findById(userId);
+        const user = await User_1.User.findById(userId).select('referral referralCode');
         if (!user) {
             return (0, response_1.sendNotFound)(res, 'User not found');
         }
-        // Generate referral code if not exists
-        if (!user.referral?.referralCode) {
-            const referralCode = `REF${userId.toString().slice(-6).toUpperCase()}`;
-            user.referral = user.referral || {};
-            user.referral.referralCode = referralCode;
-            await user.save();
+        // Initialize referral object if missing
+        if (!user.referral) {
+            user.referral = {
+                referralCode: '',
+                referredUsers: [],
+                totalReferrals: 0,
+                referralEarnings: 0
+            };
         }
-        const referralLink = `${process.env.FRONTEND_URL || 'https://app.rez.com'}/invite/${user.referral.referralCode}`;
+        // Generate referral code if not exists (will be auto-generated on save via pre-save hook)
+        if (!user.referral.referralCode && !user.referralCode) {
+            await user.save(); // This triggers the pre-save hook that generates the code
+            await user.populate('referral'); // Refresh to get the generated code
+        }
+        // Use either nested or top-level referral code
+        const referralCode = user.referral?.referralCode || user.referralCode || '';
+        if (!referralCode) {
+            throw new errorHandler_1.AppError('Failed to generate referral code', 500);
+        }
+        const referralLink = `${process.env.FRONTEND_URL || 'https://app.rez.com'}/invite/${referralCode}`;
         (0, response_1.sendSuccess)(res, {
             referralLink,
-            referralCode: user.referral.referralCode
+            referralCode
         }, 'Referral link generated successfully');
     }
     catch (error) {
@@ -171,8 +183,14 @@ exports.shareReferralLink = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
     if (!userId) {
         return (0, response_1.sendError)(res, 'Authentication required', 401);
     }
-    if (!platform || !['whatsapp', 'telegram', 'email', 'sms'].includes(platform)) {
-        return (0, response_1.sendBadRequest)(res, 'Invalid platform. Must be one of: whatsapp, telegram, email, sms');
+    // ✅ Input validation: platform must be a valid string
+    if (!platform || typeof platform !== 'string') {
+        return (0, response_1.sendBadRequest)(res, 'Platform is required and must be a string');
+    }
+    // ✅ Input validation: platform must be one of allowed values
+    const allowedPlatforms = ['whatsapp', 'telegram', 'email', 'sms', 'facebook', 'twitter', 'copy'];
+    if (!allowedPlatforms.includes(platform.toLowerCase())) {
+        return (0, response_1.sendBadRequest)(res, `Invalid platform. Must be one of: ${allowedPlatforms.join(', ')}`);
     }
     try {
         const user = await User_1.User.findById(userId);
@@ -182,7 +200,8 @@ exports.shareReferralLink = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
         const referralLink = `${process.env.FRONTEND_URL || 'https://app.rez.com'}/invite/${user.referral.referralCode}`;
         // In a real application, you would integrate with the respective platform APIs
         // For now, we'll just return success
-        console.log(`📱 [REFERRAL] Sharing link via ${platform}:`, referralLink);
+        // Note: Logging without PII - only platform type and userId (sanitized)
+        console.log(`📱 [REFERRAL] User shared link via ${platform} - UserID: ${userId.toString().slice(-4)}`);
         (0, response_1.sendSuccess)(res, { success: true }, 'Referral link shared successfully');
     }
     catch (error) {
@@ -344,22 +363,34 @@ exports.getReferralCode = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         return (0, response_1.sendError)(res, 'Authentication required', 401);
     }
     try {
-        const user = await User_1.User.findById(userId).select('referral');
+        const user = await User_1.User.findById(userId).select('referral referralCode');
         if (!user) {
             return (0, response_1.sendNotFound)(res, 'User not found');
         }
-        // Generate referral code if not exists
-        if (!user.referral?.referralCode) {
-            const referralCode = `REF${userId.toString().slice(-6).toUpperCase()}`;
-            user.referral = user.referral || {};
-            user.referral.referralCode = referralCode;
-            await user.save();
+        // Initialize referral object if missing
+        if (!user.referral) {
+            user.referral = {
+                referralCode: '',
+                referredUsers: [],
+                totalReferrals: 0,
+                referralEarnings: 0
+            };
         }
-        const referralLink = `${process.env.FRONTEND_URL || 'https://app.rez.com'}/invite/${user.referral.referralCode}`;
+        // Generate referral code if not exists (will be auto-generated on save via pre-save hook)
+        if (!user.referral.referralCode && !user.referralCode) {
+            await user.save(); // This triggers the pre-save hook that generates the code
+            await user.populate('referral'); // Refresh to get the generated code
+        }
+        // Use either nested or top-level referral code
+        const referralCode = user.referral?.referralCode || user.referralCode || '';
+        if (!referralCode) {
+            throw new errorHandler_1.AppError('Failed to generate referral code', 500);
+        }
+        const referralLink = `${process.env.FRONTEND_URL || 'https://app.rez.com'}/invite/${referralCode}`;
         (0, response_1.sendSuccess)(res, {
-            referralCode: user.referral.referralCode,
+            referralCode,
             referralLink,
-            shareMessage: `Join Rez using my referral code ${user.referral.referralCode} and get exclusive rewards!`
+            shareMessage: `Join Rez using my referral code ${referralCode} and get exclusive rewards!`
         }, 'Referral code retrieved successfully');
     }
     catch (error) {

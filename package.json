@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "node dist/server.js",
     "dev": "nodemon src/server.ts",
     "build": "tsc",
     "test": "jest",
@@ -37,7 +36,8 @@
     "seed:critical": "ts-node scripts/seedCriticalData.ts",
     "seed:vouchers": "ts-node src/scripts/seedVouchersWithStores.ts",
     "verify:voucher-stores": "ts-node src/scripts/verifyAndLinkVoucherStores.ts",
-    "test:events": "node scripts/test-event-system.js"
+    "test:events": "node scripts/test-event-system.js",
+    "seed:challenges": "ts-node src/scripts/seedChallenges.ts"
   },
   "keywords": [],
   "author": "",
@@ -70,7 +70,8 @@
     "redis": "^4.7.1",
     "socket.io": "^4.8.1",
     "stripe": "^19.1.0",
-    "twilio": "^5.8.0"
+    "twilio": "^5.8.0",
+    "uuid": "^8.3.2"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -85,6 +86,7 @@
     "@types/node": "^24.6.0",
     "@types/node-cron": "^3.0.11",
     "@types/supertest": "^6.0.3",
+    "@types/uuid": "^10.0.0",
     "jest": "^30.2.0",
     "mongodb-memory-server": "^10.2.3",
     "nodemon": "^3.1.10",

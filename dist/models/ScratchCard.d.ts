@@ -25,5 +25,5 @@ export interface IScratchCardModel extends Model<IScratchCard> {
     claimPrize(scratchCardId: string, userId: string): Promise<IScratchCard>;
     isEligibleForScratchCard(userId: string): Promise<boolean>;
 }
-export declare const ScratchCard: any;
+export declare const ScratchCard: IScratchCardModel;
 export default ScratchCard;

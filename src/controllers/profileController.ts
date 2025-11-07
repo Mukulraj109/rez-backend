@@ -46,12 +46,16 @@ export const getProfile = asyncHandler(async (req: Request, res: Response) => {
  */
 export const updateProfile = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
-  
+
   if (!userId) {
     return sendError(res, 'Authentication required', 401);
   }
 
-  const { firstName, lastName, email, phone } = req.body;
+  console.log('🔄 [PROFILE_UPDATE] Update request received for user:', userId);
+  console.log('📥 [PROFILE_UPDATE] Request body:', JSON.stringify(req.body, null, 2));
+
+  // Extract from nested profile object (frontend sends { profile: { ... }, preferences: { ... }, email: ... })
+  const { profile, preferences, email } = req.body;
 
   try {
     const user = await User.findById(userId);
@@ -59,17 +63,12 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
       return sendNotFound(res, 'User not found');
     }
 
-    // Update profile fields
-    if (firstName !== undefined) {
-      user.profile = user.profile || {};
-      user.profile.firstName = firstName;
+    // Initialize profile object if it doesn't exist
+    if (!user.profile) {
+      user.profile = {} as any;
     }
 
-    if (lastName !== undefined) {
-      user.profile = user.profile || {};
-      user.profile.lastName = lastName;
-    }
-
+    // Update email if provided
     if (email !== undefined && email !== user.email) {
       // Check if email already exists
       const existingUser = await User.findOne({ email, _id: { $ne: user._id } });
@@ -77,18 +76,108 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
         return sendBadRequest(res, 'Email is already in use');
       }
       user.email = email;
+      console.log('✅ [PROFILE_UPDATE] Email updated to:', email);
     }
 
-    if (phone !== undefined && phone !== user.phoneNumber) {
-      // Check if phone already exists
-      const existingUser = await User.findOne({ phoneNumber: phone, _id: { $ne: user._id } });
-      if (existingUser) {
-        return sendBadRequest(res, 'Phone number is already in use');
+    // Update profile fields
+    if (profile) {
+      if (profile.firstName !== undefined) {
+        user.profile.firstName = profile.firstName;
       }
-      user.phoneNumber = phone;
+
+      if (profile.lastName !== undefined) {
+        user.profile.lastName = profile.lastName;
+      }
+
+      if (profile.bio !== undefined) {
+        user.profile.bio = profile.bio;
+        console.log('✅ [PROFILE_UPDATE] Bio updated to:', profile.bio);
+      }
+
+      if (profile.website !== undefined) {
+        user.profile.website = profile.website;
+        console.log('✅ [PROFILE_UPDATE] Website updated to:', profile.website);
+      }
+
+      if (profile.dateOfBirth !== undefined) {
+        user.profile.dateOfBirth = new Date(profile.dateOfBirth);
+        console.log('✅ [PROFILE_UPDATE] Date of Birth updated to:', profile.dateOfBirth);
+      }
+
+      if (profile.gender !== undefined) {
+        user.profile.gender = profile.gender;
+        console.log('✅ [PROFILE_UPDATE] Gender updated to:', profile.gender);
+      }
+
+      if (profile.location !== undefined) {
+        // Initialize location object if it doesn't exist
+        if (!user.profile.location) {
+          user.profile.location = {} as any;
+        }
+
+        if (profile.location.address !== undefined) {
+          user.profile.location!.address = profile.location.address;
+          console.log('✅ [PROFILE_UPDATE] Location updated to:', profile.location.address);
+        }
+        if (profile.location.city !== undefined) {
+          user.profile.location!.city = profile.location.city;
+        }
+        if (profile.location.state !== undefined) {
+          user.profile.location!.state = profile.location.state;
+        }
+        if (profile.location.pincode !== undefined) {
+          user.profile.location!.pincode = profile.location.pincode;
+        }
+      }
+
+      if (profile.avatar !== undefined) {
+        user.profile.avatar = profile.avatar;
+      }
     }
+
+    // Update preferences
+    if (preferences) {
+      if (!user.preferences) {
+        user.preferences = {} as any;
+      }
+
+      if (preferences.theme !== undefined) {
+        user.preferences.theme = preferences.theme;
+      }
+
+      if (preferences.language !== undefined) {
+        user.preferences.language = preferences.language;
+      }
+
+      if (preferences.emailNotifications !== undefined) {
+        user.preferences.emailNotifications = preferences.emailNotifications;
+      }
+
+      if (preferences.pushNotifications !== undefined) {
+        user.preferences.pushNotifications = preferences.pushNotifications;
+      }
+
+      if (preferences.smsNotifications !== undefined) {
+        user.preferences.smsNotifications = preferences.smsNotifications;
+      }
+    }
+
+    // Mark modified paths for Mongoose to detect changes
+    user.markModified('profile');
+    user.markModified('preferences');
+
+    console.log('💾 [PROFILE_UPDATE] Saving user to database...');
+    console.log('📝 [PROFILE_UPDATE] Profile data to save:', {
+      bio: user.profile.bio,
+      website: user.profile.website,
+      location: user.profile.location?.address,
+      gender: user.profile.gender,
+      dateOfBirth: user.profile.dateOfBirth
+    });
 
     await user.save();
+
+    console.log('✅ [PROFILE_UPDATE] Profile saved successfully');
 
     const updatedProfile = {
       id: (user._id as any).toString(),
@@ -96,12 +185,18 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
       email: user.email,
       phone: user.phoneNumber,
       profilePicture: user.profile?.avatar || '',
+      bio: user.profile?.bio || '',
+      website: user.profile?.website || '',
+      location: user.profile?.location?.address || '',
+      dateOfBirth: user.profile?.dateOfBirth,
+      gender: user.profile?.gender,
       isVerified: user.auth?.isVerified || false,
       updatedAt: user.updatedAt
     };
 
     sendSuccess(res, updatedProfile, 'Profile updated successfully');
   } catch (error) {
+    console.error('❌ [PROFILE_UPDATE] Error:', error);
     throw new AppError('Failed to update profile', 500);
   }
 });

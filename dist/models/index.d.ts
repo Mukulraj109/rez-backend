@@ -27,6 +27,10 @@ export { default as Event } from './Event';
 export { default as EventBooking } from './EventBooking';
 export { Subscription } from './Subscription';
 export { StorePromoCoin } from './StorePromoCoin';
+export { QuizQuestion } from './QuizQuestion';
+export { TriviaQuestion } from './TriviaQuestion';
+export { CoinTransaction } from './CoinTransaction';
+export { default as GameSession } from './GameSession';
 export type { IUser, IUserProfile, IUserPreferences, IUserWallet, IUserAuth } from './User';
 export type { ICategory, ICategoryMetadata } from './Category';
 export type { IStore, IStoreLocation, IStoreContact, IStoreRatings, IStoreOffers, IStoreOperationalInfo, IStoreAnalytics } from './Store';
@@ -56,3 +60,7 @@ export type { IEvent, IEventSlot, IEventLocation, IEventOrganizer, IEventPrice, 
 export type { IEventBooking } from './EventBooking';
 export type { ISubscription, ISubscriptionBenefits, ISubscriptionUsage, SubscriptionTier, SubscriptionStatus, BillingCycle } from './Subscription';
 export type { IStorePromoCoin } from './StorePromoCoin';
+export type { IQuizQuestion, IQuizQuestionModel } from './QuizQuestion';
+export type { ITriviaQuestion, ITriviaQuestionModel } from './TriviaQuestion';
+export type { ICoinTransaction, ICoinTransactionModel } from './CoinTransaction';
+export type { IGameSession, IGameSessionModel } from './GameSession';

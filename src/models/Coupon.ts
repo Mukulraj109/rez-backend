@@ -40,6 +40,15 @@ export interface ICoupon extends Document {
   viewCount: number;       // Analytics
   claimCount: number;      // How many users claimed
   usageCount: number;      // How many times used
+  metadata?: {             // Metadata for spin wheel coupons
+    source?: string;       // 'spin_wheel', 'scratch_card', etc.
+    isProductSpecific?: boolean;
+    storeName?: string;
+    storeId?: string;
+    productName?: string | null;
+    productId?: string | null;
+    productImage?: string | null;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -172,6 +181,10 @@ const CouponSchema = new Schema<ICoupon>(
     usageCount: {
       type: Number,
       default: 0,
+    },
+    metadata: {
+      type: Schema.Types.Mixed,
+      default: null,
     },
   },
   {

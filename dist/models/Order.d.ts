@@ -1,4 +1,4 @@
-import { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 export interface IOrderItem {
     product: Types.ObjectId;
     store: Types.ObjectId;
@@ -164,4 +164,8 @@ export interface IOrder extends Document {
     generateInvoice(): Promise<string>;
     sendStatusUpdate(): Promise<void>;
 }
-export declare const Order: any;
+export declare const Order: mongoose.Model<IOrder, {}, {}, {}, mongoose.Document<unknown, {}, IOrder, {}, {}> & IOrder & Required<{
+    _id: unknown;
+}> & {
+    __v: number;
+}, any>;

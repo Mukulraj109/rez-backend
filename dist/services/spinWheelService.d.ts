@@ -13,6 +13,9 @@ export declare function checkEligibility(userId: string): Promise<{
 }>;
 /**
  * Create a new spin wheel session
+ *
+ * ✅ FIX: Removed cooldown check - daily limit is now checked in spinWheel endpoint
+ * This function just creates a session record. Eligibility is checked by the caller.
  */
 export declare function createSpinSession(userId: string): Promise<any>;
 /**

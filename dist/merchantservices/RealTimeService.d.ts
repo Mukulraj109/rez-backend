@@ -28,8 +28,8 @@ export declare class RealTimeService {
     }): void;
     sendLiveChartData(merchantId: string, period?: number): Promise<void>;
     getConnectionStats(): {
-        totalConnections: any;
-        totalRooms: any;
+        totalConnections: number;
+        totalRooms: number;
         merchantDashboards: number;
         activeSubscriptions: {
             metrics: number;

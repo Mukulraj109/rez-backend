@@ -1,5 +1,13 @@
-import { Order, OrderStatus, PaymentStatus } from '../types/shared';
-declare const OrderMongoModel: any;
+import mongoose, { Schema, Document } from 'mongoose';
+import { Order, OrderStatus, PaymentStatus, OrderItem } from '../types/shared';
+interface OrderDocument extends Document, Omit<Order, 'id'> {
+    _id: string;
+}
+declare const OrderMongoModel: mongoose.Model<OrderDocument, {}, {}, {}, mongoose.Document<unknown, {}, OrderDocument, {}, {}> & OrderDocument & Required<{
+    _id: string;
+}> & {
+    __v: number;
+}, any>;
 export { OrderMongoModel };
 export declare class OrderModel {
     private static orderCounter;
@@ -26,8 +34,63 @@ export declare class OrderModel {
         page?: number;
         limit?: number;
     }): Promise<{
-        orders: any;
-        totalCount: any;
+        orders: {
+            createdAt: Date;
+            updatedAt: Date;
+            _id: string;
+            $locals: Record<string, unknown>;
+            $op: "save" | "validate" | "remove" | null;
+            $where: Record<string, unknown>;
+            baseModelName?: string;
+            collection: mongoose.Collection;
+            db: mongoose.Connection;
+            errors?: mongoose.Error.ValidationError;
+            id: any;
+            isNew: boolean;
+            schema: Schema;
+            source?: any;
+            merchantId: string;
+            cashback?: any;
+            pricing?: any;
+            items: OrderItem[];
+            deliveryAddress?: import("../types/shared").Address | undefined;
+            subtotal: number;
+            tax: number;
+            delivery?: any;
+            total: number;
+            orderNumber: string;
+            payment?: any;
+            timeline?: Array<{
+                status: OrderStatus;
+                timestamp: Date;
+                notes?: string;
+                by?: string;
+            }> | undefined;
+            status: OrderStatus;
+            cancelledAt?: Date | undefined;
+            paymentStatus: PaymentStatus;
+            tracking?: {
+                trackingNumber?: string;
+                carrier?: string;
+                status?: string;
+            } | undefined;
+            deliveredAt?: Date | undefined;
+            estimatedDelivery?: Date | undefined;
+            priority?: "normal" | "high" | "urgent" | undefined;
+            customerName: string;
+            shipping: number;
+            customerEmail: string;
+            internalNotes?: string | undefined;
+            customerId: string;
+            shippingAddress: import("../types/shared").Address;
+            billingAddress: import("../types/shared").Address;
+            confirmedAt?: Date | undefined;
+            fulfilledAt?: Date | undefined;
+            fulfillmentStatus?: string | undefined;
+            customer?: any;
+            __v: number;
+        }[];
+        totalCount: number;
         page: number;
         limit: number;
         hasNext: boolean;
@@ -37,8 +100,8 @@ export declare class OrderModel {
         start: Date;
         end: Date;
     }): Promise<{
-        totalOrders: any;
-        pendingOrders: any;
+        totalOrders: number;
+        pendingOrders: number;
         averageOrderValue: number;
         averageProcessingTime: number;
         orderCompletionRate: number;

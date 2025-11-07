@@ -69,7 +69,7 @@ const PaymentSchema = new Schema<IPayment>({
   paymentMethod: {
     type: String,
     required: true,
-    enum: ['upi', 'card', 'wallet', 'netbanking']
+    enum: ['upi', 'card', 'wallet', 'netbanking', 'stripe', 'razorpay', 'paypal']
   },
   paymentMethodId: {
     type: String,

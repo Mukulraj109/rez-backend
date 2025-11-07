@@ -34,7 +34,7 @@ notes?: Record<string, any>): Promise<import("razorpay/dist/types/refunds").Refu
  * (Only sends safe, public information)
  */
 export declare function getRazorpayConfigForFrontend(): {
-    keyId: any;
+    keyId: string;
     currency: string;
     checkout: {
         name: string;

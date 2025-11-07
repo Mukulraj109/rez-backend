@@ -3,7 +3,8 @@ import {
   createPaymentOrder,
   verifyPayment,
   handleWebhook,
-  getPaymentStatus
+  getPaymentStatus,
+  createCheckoutSession
 } from '../controllers/paymentController';
 import { authenticate } from '../middleware/auth';
 
@@ -25,5 +26,8 @@ router.post('/webhook', handleWebhook);
 
 // Get payment status for an order (requires authentication)
 router.get('/status/:orderId', authenticate, getPaymentStatus);
+
+// Create Stripe Checkout Session for subscription (requires authentication)
+router.post('/create-checkout-session', authenticate, createCheckoutSession);
 
 export default router;

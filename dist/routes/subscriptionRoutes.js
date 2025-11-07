@@ -41,6 +41,17 @@ const subscriptionController = __importStar(require("../controllers/subscription
 const auth_1 = require("../middleware/auth");
 const webhookSecurity_1 = require("../middleware/webhookSecurity");
 const router = express_1.default.Router();
+// Logging middleware for all subscription routes
+router.use((req, res, next) => {
+    console.log('📡 [SUBSCRIPTION ROUTE] Incoming request:', {
+        method: req.method,
+        path: req.path,
+        fullUrl: req.originalUrl,
+        hasAuth: !!req.headers.authorization,
+        body: req.method === 'POST' ? req.body : undefined
+    });
+    next();
+});
 // Public routes
 router.get('/tiers', subscriptionController.getSubscriptionTiers);
 // Webhook endpoint with comprehensive security middleware stack
@@ -52,6 +63,11 @@ webhookSecurity_1.logWebhookSecurityEvent, // Audit logging
 subscriptionController.handleWebhook // Main handler with replay attack prevention
 );
 // Protected routes (require authentication)
+console.log('🔒 [SUBSCRIPTION ROUTES] Setting up protected routes with authentication');
+router.use((req, res, next) => {
+    console.log('🔒 [SUBSCRIPTION ROUTE] Attempting authentication for:', req.path);
+    next();
+});
 router.use(auth_1.authenticate);
 router.get('/current', subscriptionController.getCurrentSubscription);
 router.get('/benefits', subscriptionController.getSubscriptionBenefits);

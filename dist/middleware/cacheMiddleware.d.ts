@@ -20,7 +20,7 @@ interface CacheOptions {
  * @param options - Cache configuration options
  * @returns Express middleware function
  */
-export declare function cacheMiddleware(options?: CacheOptions): (req: Request, res: Response, next: NextFunction) => Promise<any>;
+export declare function cacheMiddleware(options?: CacheOptions): (req: Request, res: Response, next: NextFunction) => Promise<void | Response<any, Record<string, any>>>;
 /**
  * Middleware to add Cache-Control headers for client-side caching
  */
@@ -37,7 +37,7 @@ export declare function createKeyGenerator(...params: string[]): (req: Request) 
  * Cache invalidation middleware
  * Automatically invalidate cache on write operations (POST, PUT, DELETE, PATCH)
  */
-export declare function cacheInvalidationMiddleware(patternGenerator: (req: Request) => string | string[]): (req: Request, res: Response, next: NextFunction) => Promise<any>;
+export declare function cacheInvalidationMiddleware(patternGenerator: (req: Request) => string | string[]): (req: Request, res: Response, next: NextFunction) => Promise<void>;
 declare const _default: {
     cacheMiddleware: typeof cacheMiddleware;
     cacheControlMiddleware: typeof cacheControlMiddleware;

@@ -535,8 +535,13 @@ class ReservationService {
       const issues: string[] = [];
       const now = new Date();
 
-      // Check each cart item has a valid reservation
+      // Check each cart item has a valid reservation (only for products, not events)
       for (const item of cart.items) {
+        // Skip event items - they don't need stock reservations
+        if (!item.product || item.event) {
+          continue;
+        }
+
         const productId = item.product.toString();
         const variant = item.variant;
 

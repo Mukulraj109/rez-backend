@@ -18,25 +18,29 @@ export declare class ReferralAnalyticsService {
     /**
      * Get leaderboard of top referrers
      */
-    getLeaderboard(limit?: number): Promise<any>;
+    getLeaderboard(limit?: number): Promise<any[]>;
     /**
      * Get user's rank in leaderboard
      */
     getUserRank(userId: string | Types.ObjectId): Promise<{
         rank: any;
-        totalReferrals: any;
+        totalReferrals: number;
     }>;
     /**
      * Track referral attribution
      */
-    trackAttribution(referralId: string | Types.ObjectId, event: string, metadata?: any): Promise<any>;
+    trackAttribution(referralId: string | Types.ObjectId, event: string, metadata?: any): Promise<import("mongoose").Document<unknown, {}, import("../models/Referral").IReferral, {}, {}> & import("../models/Referral").IReferral & Required<{
+        _id: unknown;
+    }> & {
+        __v: number;
+    }>;
     /**
      * Get referral conversion funnel
      */
     getConversionFunnel(dateFilter?: any): Promise<{
         stages: {
             name: string;
-            count: any;
+            count: number;
             percentage: number;
         }[];
         overallConversion: number;
@@ -44,7 +48,7 @@ export declare class ReferralAnalyticsService {
     /**
      * Get referral source performance
      */
-    getSourcePerformance(dateFilter?: any): Promise<any>;
+    getSourcePerformance(dateFilter?: any): Promise<any[]>;
     /**
      * Calculate viral coefficient (K-factor)
      */

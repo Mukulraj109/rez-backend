@@ -31,5 +31,5 @@ export interface IOfferCategoryModel extends Model<IOfferCategory> {
     findParentCategories(): Promise<IOfferCategory[]>;
     findSubcategories(parentId: Types.ObjectId): Promise<IOfferCategory[]>;
 }
-declare const OfferCategory: any;
+declare const OfferCategory: IOfferCategoryModel;
 export default OfferCategory;

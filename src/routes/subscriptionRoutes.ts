@@ -10,6 +10,18 @@ import {
 
 const router = express.Router();
 
+// Logging middleware for all subscription routes
+router.use((req, res, next) => {
+  console.log('📡 [SUBSCRIPTION ROUTE] Incoming request:', {
+    method: req.method,
+    path: req.path,
+    fullUrl: req.originalUrl,
+    hasAuth: !!req.headers.authorization,
+    body: req.method === 'POST' ? req.body : undefined
+  });
+  next();
+});
+
 // Public routes
 router.get('/tiers', subscriptionController.getSubscriptionTiers);
 
@@ -25,6 +37,11 @@ router.post(
 );
 
 // Protected routes (require authentication)
+console.log('🔒 [SUBSCRIPTION ROUTES] Setting up protected routes with authentication');
+router.use((req, res, next) => {
+  console.log('🔒 [SUBSCRIPTION ROUTE] Attempting authentication for:', req.path);
+  next();
+});
 router.use(authenticate);
 
 router.get('/current', subscriptionController.getCurrentSubscription);

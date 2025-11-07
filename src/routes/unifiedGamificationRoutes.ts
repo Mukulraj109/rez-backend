@@ -22,14 +22,21 @@ import {
   createSpinWheel,
   spinWheel,
   getSpinWheelEligibility,
+  getSpinWheelData,
+  getSpinWheelHistory,
   createScratchCard,
   scratchCard,
   claimScratchCard,
   startQuiz,
   submitQuizAnswer,
   getQuizProgress,
-  completeQuiz
+  completeQuiz,
+  getMyChallengeProgress,
+  getGamificationStats
 } from '../controllers/gamificationController';
+
+// Import streak controller
+import streakController from '../controllers/streakController';
 
 const router = express.Router();
 
@@ -41,6 +48,7 @@ router.use(authenticate);
 // ========================================
 router.get('/challenges', getChallenges);
 router.get('/challenges/active', getActiveChallenge);
+router.get('/challenges/my-progress', getMyChallengeProgress);
 router.post('/challenges/:id/claim', claimChallengeReward);
 
 // ========================================
@@ -78,6 +86,8 @@ router.post('/coins/deduct', deductCoins);
 // ========================================
 router.get('/streak/:userId', getDailyStreak);
 router.post('/streak/increment', incrementStreak);
+// New endpoint: Get current user's streak (JWT-based, no userId param)
+router.get('/streaks', streakController.getCurrentUserStreak.bind(streakController));
 
 // ========================================
 // MINI-GAMES
@@ -87,6 +97,8 @@ router.post('/streak/increment', incrementStreak);
 router.post('/spin-wheel/create', createSpinWheel);
 router.post('/spin-wheel/spin', spinWheel);
 router.get('/spin-wheel/eligibility', getSpinWheelEligibility);
+router.get('/spin-wheel/data', getSpinWheelData);
+router.get('/spin-wheel/history', getSpinWheelHistory);
 
 // Scratch Card
 router.post('/scratch-card/create', createScratchCard);
@@ -98,5 +110,11 @@ router.post('/quiz/start', startQuiz);
 router.post('/quiz/:quizId/answer', submitQuizAnswer);
 router.get('/quiz/:quizId/progress', getQuizProgress);
 router.post('/quiz/:quizId/complete', completeQuiz);
+
+// ========================================
+// GAMIFICATION STATS
+// ========================================
+// Get complete user gamification statistics
+router.get('/stats', getGamificationStats);
 
 export default router;

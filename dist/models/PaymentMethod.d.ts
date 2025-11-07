@@ -1,4 +1,4 @@
-import { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 export declare enum PaymentMethodType {
     CARD = "CARD",
     BANK_ACCOUNT = "BANK_ACCOUNT",
@@ -53,4 +53,8 @@ export interface IPaymentMethod extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-export declare const PaymentMethod: any;
+export declare const PaymentMethod: mongoose.Model<IPaymentMethod, {}, {}, {}, mongoose.Document<unknown, {}, IPaymentMethod, {}, {}> & IPaymentMethod & Required<{
+    _id: unknown;
+}> & {
+    __v: number;
+}, any>;

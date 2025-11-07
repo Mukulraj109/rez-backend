@@ -6,5 +6,5 @@ declare global {
         }
     }
 }
-declare const router: any;
+declare const router: import("express-serve-static-core").Router;
 export default router;

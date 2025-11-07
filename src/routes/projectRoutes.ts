@@ -7,14 +7,31 @@ import {
   getFeaturedProjects,
   toggleProjectLike,
   addProjectComment,
-  getMySubmissions
+  getMySubmissions,
+  getEarningCategories
 } from '../controllers/projectController';
+import { uploadProjectFile, uploadMultipleProjectFiles } from '../controllers/uploadController';
+import { uploadProjectFile as uploadMiddleware } from '../middleware/upload';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validate, validateParams, validateQuery, commonSchemas } from '../middleware/validation';
 // import { generalLimiter } from '../middleware/rateLimiter'; // Disabled for development
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+
+// Upload project file (image or video) to Cloudinary
+router.post('/upload',
+  authenticate,
+  uploadMiddleware.single('file'),
+  uploadProjectFile
+);
+
+// Upload multiple project files (images/videos) to Cloudinary
+router.post('/upload-multiple',
+  authenticate,
+  uploadMiddleware.array('files', 10), // Max 10 files
+  uploadMultipleProjectFiles
+);
 
 // Submit a project (requires authentication)
 router.post('/submit',
@@ -37,14 +54,18 @@ router.get('/',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateQuery(Joi.object({
-    category: Joi.string().valid('beauty', 'fashion', 'lifestyle', 'tutorial', 'diy', 'fitness'),
-    difficulty: Joi.string().valid('beginner', 'intermediate', 'advanced'),
+    category: Joi.string().valid('review', 'social_share', 'ugc_content', 'store_visit', 'survey', 'photo', 'video', 'data_collection', 'mystery_shopping', 'referral'),
+    difficulty: Joi.string().valid('easy', 'medium', 'hard'),
     creator: commonSchemas.objectId(),
     status: Joi.string().valid('active', 'completed'),
     search: Joi.string().trim().max(100),
     sortBy: Joi.string().valid('newest', 'popular', 'trending', 'difficulty_easy', 'difficulty_hard').default('newest'),
     page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(50).default(20)
+    limit: Joi.number().integer().min(1).max(50).default(20),
+    excludeUserSubmissions: Joi.alternatives().try(
+      Joi.boolean(),
+      Joi.string().valid('true', 'false')
+    ).optional()
   })),
   getProjects
 );
@@ -64,7 +85,7 @@ router.get('/category/:category',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateParams(Joi.object({
-    category: Joi.string().valid('beauty', 'fashion', 'lifestyle', 'tutorial', 'diy', 'fitness').required()
+    category: Joi.string().valid('review', 'social_share', 'ugc_content', 'store_visit', 'survey', 'photo', 'video', 'data_collection', 'mystery_shopping', 'referral').required()
   })),
   validateQuery(Joi.object({
     page: Joi.number().integer().min(1).default(1),
@@ -73,12 +94,20 @@ router.get('/category/:category',
   getProjectsByCategory
 );
 
+// Get earning project categories (public endpoint)
+router.get('/categories',
+  // generalLimiter,, // Disabled for development
+  optionalAuth,
+  getEarningCategories
+);
+
 // Get user's project submissions (requires authentication)
 router.get('/my-submissions',
   // generalLimiter,, // Disabled for development
   authenticate,
   validateQuery(Joi.object({
     status: Joi.string().valid('pending', 'approved', 'rejected'),
+    sortBy: Joi.string().valid('newest', 'oldest', 'status').default('newest'),
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),

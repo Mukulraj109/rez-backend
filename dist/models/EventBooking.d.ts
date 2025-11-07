@@ -1,4 +1,4 @@
-import { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 export interface IEventBooking extends Document {
     _id: Types.ObjectId;
     eventId: Types.ObjectId;
@@ -28,5 +28,9 @@ export interface IEventBooking extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-declare const EventBooking: any;
+declare const EventBooking: mongoose.Model<IEventBooking, {}, {}, {}, mongoose.Document<unknown, {}, IEventBooking, {}, {}> & IEventBooking & Required<{
+    _id: Types.ObjectId;
+}> & {
+    __v: number;
+}, any>;
 export default EventBooking;

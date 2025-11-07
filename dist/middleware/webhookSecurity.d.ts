@@ -8,7 +8,7 @@ export declare const razorpayIPWhitelist: (req: Request, res: Response, next: Ne
  * Rate limiter for webhook endpoint
  * Allows max 100 webhook requests per minute per IP
  */
-export declare const webhookRateLimiter: any;
+export declare const webhookRateLimiter: import("express-rate-limit").RateLimitRequestHandler;
 /**
  * Middleware to validate webhook payload structure
  * Ensures all required fields are present and event type is valid

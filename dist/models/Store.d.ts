@@ -1,4 +1,4 @@
-import { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 export interface IStoreLocation {
     address: string;
     city: string;
@@ -150,4 +150,8 @@ export interface IStore extends Document {
     isEligibleForDelivery(userCoordinates: [number, number]): boolean;
     updateRatings(): Promise<void>;
 }
-export declare const Store: any;
+export declare const Store: mongoose.Model<IStore, {}, {}, {}, mongoose.Document<unknown, {}, IStore, {}, {}> & IStore & Required<{
+    _id: unknown;
+}> & {
+    __v: number;
+}, any>;

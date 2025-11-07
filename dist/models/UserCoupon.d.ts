@@ -1,4 +1,4 @@
-import { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 export interface IUserCouponNotifications {
     expiryReminder: boolean;
     expiryReminderSent: Date | null;
@@ -15,4 +15,8 @@ export interface IUserCoupon extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-export declare const UserCoupon: any;
+export declare const UserCoupon: mongoose.Model<IUserCoupon, {}, {}, {}, mongoose.Document<unknown, {}, IUserCoupon, {}, {}> & IUserCoupon & Required<{
+    _id: unknown;
+}> & {
+    __v: number;
+}, any>;

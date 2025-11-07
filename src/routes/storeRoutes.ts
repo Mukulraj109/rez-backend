@@ -31,6 +31,14 @@ router.get('/',
     rating: Joi.number().min(1).max(5),
     isOpen: Joi.boolean(),
     search: Joi.string().trim().max(100),
+    tags: Joi.alternatives().try(
+      Joi.string().trim().max(100),
+      Joi.array().items(Joi.string().trim().max(100))
+    ),
+    isFeatured: Joi.alternatives().try(
+      Joi.boolean(),
+      Joi.string().valid('true', 'false')
+    ),
     sortBy: Joi.string().valid('rating', 'distance', 'name', 'newest').default('rating'),
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20)
@@ -158,7 +166,7 @@ router.get('/search-by-category/:category',
   // generalLimiter, // Disabled for development
   optionalAuth,
   validateParams(Joi.object({
-    category: Joi.string().valid('fastDelivery', 'budgetFriendly', 'oneRupeeStore', 'ninetyNineStore', 'premium', 'organic', 'alliance', 'lowestPrice', 'mall', 'cashStore').required()
+    category: Joi.string().valid('all', 'fastDelivery', 'budgetFriendly', 'oneRupeeStore', 'ninetyNineStore', 'premium', 'organic', 'alliance', 'lowestPrice', 'mall', 'cashStore').required()
   })),
   validateQuery(Joi.object({
     location: Joi.string(), // "lng,lat" format

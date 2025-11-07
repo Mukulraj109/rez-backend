@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.StorePromoCoin = exports.Subscription = exports.EventBooking = exports.Event = exports.UserCoupon = exports.Coupon = exports.StockHistory = exports.Activity = exports.UserAchievement = exports.UserSettings = exports.PaymentMethod = exports.Address = exports.OfferRedemption = exports.UserVoucher = exports.VoucherBrand = exports.FlashSale = exports.Offer = exports.Wallet = exports.Wishlist = exports.Review = exports.Notification = exports.Transaction = exports.Project = exports.Video = exports.Order = exports.Cart = exports.Product = exports.Store = exports.Category = exports.User = void 0;
+exports.GameSession = exports.CoinTransaction = exports.TriviaQuestion = exports.QuizQuestion = exports.StorePromoCoin = exports.Subscription = exports.EventBooking = exports.Event = exports.UserCoupon = exports.Coupon = exports.StockHistory = exports.Activity = exports.UserAchievement = exports.UserSettings = exports.PaymentMethod = exports.Address = exports.OfferRedemption = exports.UserVoucher = exports.VoucherBrand = exports.FlashSale = exports.Offer = exports.Wallet = exports.Wishlist = exports.Review = exports.Notification = exports.Transaction = exports.Project = exports.Video = exports.Order = exports.Cart = exports.Product = exports.Store = exports.Category = exports.User = void 0;
 // Export all MongoDB models
 var User_1 = require("./User");
 Object.defineProperty(exports, "User", { enumerable: true, get: function () { return User_1.User; } });
@@ -64,3 +64,11 @@ var Subscription_1 = require("./Subscription");
 Object.defineProperty(exports, "Subscription", { enumerable: true, get: function () { return Subscription_1.Subscription; } });
 var StorePromoCoin_1 = require("./StorePromoCoin");
 Object.defineProperty(exports, "StorePromoCoin", { enumerable: true, get: function () { return StorePromoCoin_1.StorePromoCoin; } });
+var QuizQuestion_1 = require("./QuizQuestion");
+Object.defineProperty(exports, "QuizQuestion", { enumerable: true, get: function () { return QuizQuestion_1.QuizQuestion; } });
+var TriviaQuestion_1 = require("./TriviaQuestion");
+Object.defineProperty(exports, "TriviaQuestion", { enumerable: true, get: function () { return TriviaQuestion_1.TriviaQuestion; } });
+var CoinTransaction_1 = require("./CoinTransaction");
+Object.defineProperty(exports, "CoinTransaction", { enumerable: true, get: function () { return CoinTransaction_1.CoinTransaction; } });
+var GameSession_1 = require("./GameSession");
+Object.defineProperty(exports, "GameSession", { enumerable: true, get: function () { return __importDefault(GameSession_1).default; } });

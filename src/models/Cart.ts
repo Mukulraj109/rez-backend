@@ -2,7 +2,8 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 import { Model } from 'mongoose';
 
 export interface ICartItem {
-  product: Types.ObjectId; // <-- added
+  product?: Types.ObjectId; // Optional - for products
+  event?: Types.ObjectId; // Optional - for events
   store: Types.ObjectId | null; // Allow null for products without store
   quantity: number;
   variant?: {
@@ -14,6 +15,7 @@ export interface ICartItem {
   discount?: number;
   addedAt: Date;
   notes?: string;
+  metadata?: any; // For storing event-specific metadata (slotId, etc.)
 }
 
 // Reserved item interface for stock reservation
@@ -118,7 +120,12 @@ const CartSchema = new Schema<ICart>({
     product: {
       type: Schema.Types.ObjectId,
       ref: 'Product',
-      required: true
+      required: false // Optional - for products
+    },
+    event: {
+      type: Schema.Types.ObjectId,
+      ref: 'Event',
+      required: false // Optional - for events
     },
     store: {
       type: Schema.Types.ObjectId,
@@ -163,6 +170,10 @@ const CartSchema = new Schema<ICart>({
       type: String,
       trim: true,
       maxlength: 500
+    },
+    metadata: {
+      type: Schema.Types.Mixed, // For storing event-specific metadata (slotId, etc.)
+      required: false
     }
   }],
   reservedItems: [{
@@ -360,6 +371,19 @@ CartSchema.virtual('storeCount').get(function() {
 // Virtual for expired status
 CartSchema.virtual('isExpired').get(function() {
   return this.expiresAt < new Date();
+});
+
+// Pre-save validation: ensure each item has either product or event
+CartSchema.pre('save', function(next) {
+  for (const item of this.items) {
+    if (!item.product && !item.event) {
+      return next(new Error('Cart item must have either a product or an event'));
+    }
+    if (item.product && item.event) {
+      return next(new Error('Cart item cannot have both a product and an event'));
+    }
+  }
+  next();
 });
 
 // Pre-save hook to calculate totals

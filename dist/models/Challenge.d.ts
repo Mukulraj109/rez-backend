@@ -30,5 +30,9 @@ export interface IChallenge extends Document {
     isActive(): boolean;
     canJoin(): boolean;
 }
-declare const _default: any;
+declare const _default: mongoose.Model<IChallenge, {}, {}, {}, mongoose.Document<unknown, {}, IChallenge, {}, {}> & IChallenge & Required<{
+    _id: unknown;
+}> & {
+    __v: number;
+}, any>;
 export default _default;

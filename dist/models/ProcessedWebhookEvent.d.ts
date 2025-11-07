@@ -39,4 +39,4 @@ export interface IProcessedWebhookEventModel extends mongoose.Model<IProcessedWe
         pending: number;
     }>;
 }
-export declare const ProcessedWebhookEvent: any;
+export declare const ProcessedWebhookEvent: IProcessedWebhookEventModel;

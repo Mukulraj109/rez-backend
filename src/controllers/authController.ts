@@ -1,15 +1,15 @@
 import { Request, Response } from 'express';
 import { User } from '../models/User';
-import { 
-  generateToken, 
-  generateRefreshToken, 
+import {
+  generateToken,
+  generateRefreshToken,
   verifyRefreshToken,
   verifyToken
 } from '../middleware/auth';
-import { 
-  sendSuccess, 
-  sendError, 
-  sendCreated, 
+import {
+  sendSuccess,
+  sendError,
+  sendCreated,
   sendUnauthorized,
   sendNotFound,
   sendConflict,
@@ -22,6 +22,7 @@ import referralService from '../services/referralService';
 import { Wallet } from '../models/Wallet';
 import { Types } from 'mongoose';
 import achievementService from '../services/achievementService';
+import gamificationIntegrationService from '../services/gamificationIntegrationService';
 
 import twilio from "twilio";
 import dotenv from 'dotenv';
@@ -137,7 +138,7 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
         }
       }
 
-      user = new User({ 
+      user = new User({
         phoneNumber,
         email,
         role: 'user',
@@ -145,12 +146,12 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
           isVerified: false,
           isOnboarded: false
         },
-        referral: {
-          referredBy: referralCode || undefined,
+        referral: referralCode ? {
+          referredBy: referralCode,
           referredUsers: [],
           totalReferrals: 0,
           referralEarnings: 0
-        }
+        } : undefined
       });
 
       // Initialize achievements for new user
@@ -378,14 +379,23 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
       // Don't fail the OTP verification if referral processing fails
     }
   }
-  
+
   // Update last login
   user.auth.lastLogin = new Date();
-  
+
+  // Trigger gamification events for login
+  try {
+    await gamificationIntegrationService.onUserLogin(String(user._id));
+    console.log(`✅ [GAMIFICATION] Login tracking completed for user: ${user._id}`);
+  } catch (gamificationError) {
+    // Don't fail login if gamification fails
+    console.error(`❌ [GAMIFICATION] Error tracking login:`, gamificationError);
+  }
+
   // Generate tokens
   const accessToken = generateToken(String(user._id), user.role);
   const refreshToken = generateRefreshToken(String(user._id));
-  
+
   // Save refresh token
   user.auth.refreshToken = refreshToken;
   await user.save();

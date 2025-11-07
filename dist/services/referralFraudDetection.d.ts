@@ -42,26 +42,30 @@ export declare class ReferralFraudDetection {
     /**
      * Mark referral as fraudulent
      */
-    markAsFraud(referralId: string | Types.ObjectId, reason: string): Promise<any>;
+    markAsFraud(referralId: string | Types.ObjectId, reason: string): Promise<import("mongoose").Document<unknown, {}, import("../models/Referral").IReferral, {}, {}> & import("../models/Referral").IReferral & Required<{
+        _id: unknown;
+    }> & {
+        __v: number;
+    }>;
     /**
      * Get fraud statistics
      */
     getFraudStats(): Promise<{
-        total: any;
-        blocked: any;
-        underReview: any;
+        total: number;
+        blocked: number;
+        underReview: number;
         fraudRate: number;
     }>;
     /**
      * Run fraud detection on existing referrals
      */
     scanExistingReferrals(): Promise<({
-        referralId: any;
+        referralId: unknown;
         action: string;
         reasons: string[];
         riskScore?: undefined;
     } | {
-        referralId: any;
+        referralId: unknown;
         action: string;
         riskScore: number;
         reasons: string[];

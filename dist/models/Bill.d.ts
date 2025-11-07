@@ -1,4 +1,4 @@
-import { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 export interface IBillImage {
     url: string;
     thumbnailUrl?: string;
@@ -56,4 +56,8 @@ export interface IBill extends Document {
     reject(reason: string, verifiedBy?: Types.ObjectId): Promise<void>;
     markAsProcessing(): Promise<void>;
 }
-export declare const Bill: any;
+export declare const Bill: mongoose.Model<IBill, {}, {}, {}, mongoose.Document<unknown, {}, IBill, {}, {}> & IBill & Required<{
+    _id: unknown;
+}> & {
+    __v: number;
+}, any>;

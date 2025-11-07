@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Order } from '../models/Order';
 import paymentService from '../services/paymentService';
+import stripeService from '../services/stripeService';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import {
@@ -319,3 +320,82 @@ async function handleOrderPaid(event: IRazorpayWebhookEvent) {
     console.error('❌ [WEBHOOK] Error handling order.paid:', error);
   }
 }
+
+/**
+ * Create Stripe Checkout Session for subscription payment
+ * POST /api/payment/create-checkout-session
+ */
+export const createCheckoutSession = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.userId!;
+  const {
+    subscriptionId,
+    tier,
+    amount,
+    billingCycle,
+    successUrl,
+    cancelUrl,
+    customerEmail
+  } = req.body;
+
+  console.log('💳 [PAYMENT CONTROLLER] Creating Stripe checkout session:', {
+    subscriptionId,
+    tier,
+    amount,
+    billingCycle,
+    userId
+  });
+
+  // Validate request
+  if (!subscriptionId || !tier || !amount || !billingCycle || !successUrl || !cancelUrl) {
+    return sendBadRequest(res, 'Missing required parameters: subscriptionId, tier, amount, billingCycle, successUrl, cancelUrl');
+  }
+
+  // Validate amount
+  if (typeof amount !== 'number' || amount <= 0) {
+    return sendBadRequest(res, 'Invalid amount');
+  }
+
+  // Validate tier
+  if (!['premium', 'vip'].includes(tier.toLowerCase())) {
+    return sendBadRequest(res, 'Invalid tier. Must be premium or vip');
+  }
+
+  // Validate billing cycle
+  if (!['monthly', 'yearly'].includes(billingCycle.toLowerCase())) {
+    return sendBadRequest(res, 'Invalid billing cycle. Must be monthly or yearly');
+  }
+
+  try {
+    // Check if Stripe is configured
+    if (!stripeService.isStripeConfigured()) {
+      return sendBadRequest(res, 'Stripe is not configured on the server');
+    }
+
+    // Create Stripe checkout session
+    const session = await stripeService.createCheckoutSession({
+      subscriptionId,
+      tier,
+      amount,
+      billingCycle,
+      successUrl,
+      cancelUrl,
+      customerEmail,
+      metadata: {
+        userId: userId.toString(),
+      }
+    });
+
+    console.log('✅ [PAYMENT CONTROLLER] Stripe checkout session created successfully');
+
+    const response = {
+      success: true,
+      sessionId: session.id,
+      url: session.url,
+    };
+
+    sendSuccess(res, response, 'Stripe checkout session created successfully', 201);
+  } catch (error: any) {
+    console.error('❌ [PAYMENT CONTROLLER] Error creating Stripe checkout session:', error);
+    throw new AppError(`Failed to create Stripe checkout session: ${error.message}`, 500);
+  }
+});

@@ -4,5 +4,5 @@ export declare class AppError extends Error {
     isOperational: boolean;
     constructor(message: string, statusCode: number);
 }
-export declare const globalErrorHandler: (error: any, req: Request, res: Response, next: NextFunction) => any;
+export declare const globalErrorHandler: (error: any, req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>>;
 export declare const notFoundHandler: (req: Request, res: Response, next: NextFunction) => void;

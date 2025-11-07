@@ -13,7 +13,7 @@ export declare function getUserActivities(req: Request, res: Response): Promise<
  * Create a new activity
  * POST /api/social/activities
  */
-export declare function createActivity(req: Request, res: Response): Promise<any>;
+export declare function createActivity(req: Request, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Like/Unlike an activity
  * POST /api/social/activities/:activityId/like
@@ -28,12 +28,12 @@ export declare function getComments(req: Request, res: Response): Promise<void>;
  * Comment on an activity
  * POST /api/social/activities/:activityId/comment
  */
-export declare function commentOnActivity(req: Request, res: Response): Promise<any>;
+export declare function commentOnActivity(req: Request, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Follow/Unfollow a user
  * POST /api/social/users/:userId/follow
  */
-export declare function followUser(req: Request, res: Response): Promise<any>;
+export declare function followUser(req: Request, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Check if following a user
  * GET /api/social/users/:userId/is-following

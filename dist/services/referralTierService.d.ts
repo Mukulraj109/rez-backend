@@ -6,7 +6,7 @@ export declare class ReferralTierService {
     getUserTier(userId: string | Types.ObjectId): Promise<{
         current: string;
         data: import("../types/referral.types").ReferralTier;
-        qualifiedReferrals: any;
+        qualifiedReferrals: number;
     }>;
     /**
      * Calculate progress to next tier
@@ -16,7 +16,7 @@ export declare class ReferralTierService {
         nextTier: null;
         progress: number;
         referralsNeeded: number;
-        qualifiedReferrals: any;
+        qualifiedReferrals: number;
         nextTierData?: undefined;
     } | {
         currentTier: string;
@@ -24,21 +24,21 @@ export declare class ReferralTierService {
         nextTierData: import("../types/referral.types").ReferralTier;
         progress: number;
         referralsNeeded: number;
-        qualifiedReferrals: any;
+        qualifiedReferrals: number;
     }>;
     /**
      * Check if user qualified for tier upgrade
      */
     checkTierUpgrade(userId: string | Types.ObjectId): Promise<{
         upgraded: boolean;
-        oldTier: any;
+        oldTier: "STARTER" | "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "DIAMOND";
         newTier: string;
-        qualifiedReferrals: any;
+        qualifiedReferrals: number;
         currentTier?: undefined;
     } | {
         upgraded: boolean;
-        currentTier: string;
-        qualifiedReferrals: any;
+        currentTier: "STARTER" | "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "DIAMOND";
+        qualifiedReferrals: number;
         oldTier?: undefined;
         newTier?: undefined;
     }>;
@@ -104,10 +104,10 @@ export declare class ReferralTierService {
      * Get referral statistics for user
      */
     getReferralStats(userId: string | Types.ObjectId): Promise<{
-        totalReferrals: any;
-        qualifiedReferrals: any;
-        pendingReferrals: any;
-        lifetimeEarnings: any;
+        totalReferrals: number;
+        qualifiedReferrals: number;
+        pendingReferrals: number;
+        lifetimeEarnings: number;
         currentTier: string;
         currentTierData: import("../types/referral.types").ReferralTier;
         nextTier: string | null;

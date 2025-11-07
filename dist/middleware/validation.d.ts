@@ -1,55 +1,55 @@
 import { Request, Response, NextFunction } from 'express';
 import Joi from 'joi';
-export declare const validate: (schema: Joi.ObjectSchema) => (req: Request, res: Response, next: NextFunction) => any;
-export declare const validateQuery: (schema: Joi.ObjectSchema) => (req: Request, res: Response, next: NextFunction) => any;
-export declare const validateParams: (schema: Joi.ObjectSchema) => (req: Request, res: Response, next: NextFunction) => any;
+export declare const validate: (schema: Joi.ObjectSchema) => (req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
+export declare const validateQuery: (schema: Joi.ObjectSchema) => (req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
+export declare const validateParams: (schema: Joi.ObjectSchema) => (req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
 export declare const commonSchemas: {
-    objectId: () => any;
+    objectId: () => Joi.StringSchema<string>;
     pagination: () => {
-        page: any;
-        limit: any;
-        sort: any;
-        search: any;
+        page: Joi.NumberSchema<number>;
+        limit: Joi.NumberSchema<number>;
+        sort: Joi.StringSchema<string>;
+        search: Joi.StringSchema<string>;
     };
-    phoneNumber: any;
-    email: any;
-    otp: any;
-    password: any;
-    coordinates: any;
-    rating: any;
-    price: any;
-    quantity: any;
+    phoneNumber: Joi.StringSchema<string>;
+    email: Joi.StringSchema<string>;
+    otp: Joi.StringSchema<string>;
+    password: Joi.StringSchema<string>;
+    coordinates: Joi.ArraySchema<number[]>;
+    rating: Joi.NumberSchema<number>;
+    price: Joi.NumberSchema<number>;
+    quantity: Joi.NumberSchema<number>;
 };
 export declare const authSchemas: {
-    sendOTP: any;
-    verifyOTP: any;
-    refreshToken: any;
-    updateProfile: any;
+    sendOTP: Joi.ObjectSchema<any>;
+    verifyOTP: Joi.ObjectSchema<any>;
+    refreshToken: Joi.ObjectSchema<any>;
+    updateProfile: Joi.ObjectSchema<any>;
 };
 export declare const productSchemas: {
-    getProducts: any;
+    getProducts: Joi.ObjectSchema<any>;
 };
 export declare const cartSchemas: {
-    addToCart: any;
-    updateCartItem: any;
-    applyCoupon: any;
+    addToCart: Joi.ObjectSchema<any>;
+    updateCartItem: Joi.ObjectSchema<any>;
+    applyCoupon: Joi.ObjectSchema<any>;
 };
 export declare const orderSchemas: {
-    createOrder: any;
+    createOrder: Joi.ObjectSchema<any>;
 };
 export declare const reviewSchemas: {
-    createReview: any;
-    replyToReview: any;
+    createReview: Joi.ObjectSchema<any>;
+    replyToReview: Joi.ObjectSchema<any>;
 };
 export declare const notificationSchemas: {
-    markAsRead: any;
+    markAsRead: Joi.ObjectSchema<any>;
 };
 export declare const wishlistSchemas: {
-    createWishlist: any;
-    addToWishlist: any;
+    createWishlist: Joi.ObjectSchema<any>;
+    addToWishlist: Joi.ObjectSchema<any>;
 };
 export declare const videoSchemas: {
-    getVideos: any;
+    getVideos: Joi.ObjectSchema<any>;
 };
-export declare const validateBody: (schema: Joi.ObjectSchema) => (req: Request, res: Response, next: NextFunction) => any;
+export declare const validateBody: (schema: Joi.ObjectSchema) => (req: Request, res: Response, next: NextFunction) => Response<any, Record<string, any>> | undefined;
 export { Joi };

@@ -22,6 +22,9 @@ const cloudinaryUtils_1 = require("./utils/cloudinaryUtils");
 const partnerLevelMaintenanceService_1 = __importDefault(require("./services/partnerLevelMaintenanceService"));
 // Import trial expiry notification job
 const trialExpiryNotification_1 = require("./jobs/trialExpiryNotification");
+// Import new cron jobs
+const cleanupExpiredSessions_1 = require("./jobs/cleanupExpiredSessions");
+const expireCoins_1 = require("./jobs/expireCoins");
 // Import middleware
 const errorHandler_1 = require("./middleware/errorHandler");
 const rateLimiter_1 = require("./middleware/rateLimiter");
@@ -440,6 +443,14 @@ async function startServer() {
         console.log('🔄 Initializing trial expiry notification job...');
         (0, trialExpiryNotification_1.initializeTrialExpiryJob)();
         console.log('✅ Trial expiry notification job started');
+        // Initialize session cleanup job
+        console.log('🔄 Initializing session cleanup job...');
+        (0, cleanupExpiredSessions_1.initializeSessionCleanupJob)();
+        console.log('✅ Session cleanup job started (runs daily at midnight)');
+        // Initialize coin expiry job
+        console.log('🔄 Initializing coin expiry job...');
+        (0, expireCoins_1.initializeCoinExpiryJob)();
+        console.log('✅ Coin expiry job started (runs daily at 1:00 AM)');
         // Start HTTP server (with Socket.IO attached)
         server.listen(Number(PORT), '0.0.0.0', () => {
             const os = require('os');

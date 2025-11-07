@@ -4,19 +4,19 @@ import { Request, Response } from 'express';
  * POST /api/promo-codes/validate
  * Public endpoint (requires authentication)
  */
-export declare const validatePromoCode: (req: Request, res: Response) => Promise<any>;
+export declare const validatePromoCode: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Get available promo codes for current user
  * GET /api/promo-codes/available
  * Protected endpoint
  */
-export declare const getAvailablePromoCodes: (req: Request, res: Response) => Promise<any>;
+export declare const getAvailablePromoCodes: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Create a new promo code
  * POST /api/promo-codes
  * Admin only
  */
-export declare const createPromoCode: (req: Request, res: Response) => Promise<any>;
+export declare const createPromoCode: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Get all promo codes
  * GET /api/promo-codes
@@ -28,25 +28,25 @@ export declare const getAllPromoCodes: (req: Request, res: Response) => Promise<
  * GET /api/promo-codes/:id
  * Admin only
  */
-export declare const getPromoCode: (req: Request, res: Response) => Promise<any>;
+export declare const getPromoCode: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Update promo code
  * PATCH /api/promo-codes/:id
  * Admin only
  */
-export declare const updatePromoCode: (req: Request, res: Response) => Promise<any>;
+export declare const updatePromoCode: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Deactivate promo code
  * DELETE /api/promo-codes/:id
  * Admin only
  */
-export declare const deactivatePromoCode: (req: Request, res: Response) => Promise<any>;
+export declare const deactivatePromoCode: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Get promo code usage statistics
  * GET /api/promo-codes/:id/usage
  * Admin only
  */
-export declare const getPromoCodeUsage: (req: Request, res: Response) => Promise<any>;
+export declare const getPromoCodeUsage: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 /**
  * Get promo code analytics
  * GET /api/promo-codes/analytics/overview

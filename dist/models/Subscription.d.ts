@@ -84,4 +84,4 @@ export interface ISubscriptionModel extends mongoose.Model<ISubscription> {
     };
     calculateProratedAmount(currentTier: SubscriptionTier, newTier: SubscriptionTier, endDate: Date, billingCycle: BillingCycle): number;
 }
-export declare const Subscription: any;
+export declare const Subscription: ISubscriptionModel;

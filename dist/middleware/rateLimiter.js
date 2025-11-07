@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createRateLimiter = exports.recommendationLimiter = exports.favoriteLimiter = exports.comparisonLimiter = exports.analyticsLimiter = exports.reviewLimiter = exports.strictLimiter = exports.searchLimiter = exports.uploadLimiter = exports.securityLimiter = exports.otpLimiter = exports.authLimiter = exports.generalLimiter = void 0;
+exports.createRateLimiter = exports.referralShareLimiter = exports.referralLimiter = exports.recommendationLimiter = exports.favoriteLimiter = exports.comparisonLimiter = exports.analyticsLimiter = exports.reviewLimiter = exports.strictLimiter = exports.searchLimiter = exports.uploadLimiter = exports.securityLimiter = exports.otpLimiter = exports.authLimiter = exports.generalLimiter = void 0;
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 // Check if rate limiting is disabled
 const isRateLimitDisabled = process.env.DISABLE_RATE_LIMIT === 'true';
@@ -165,6 +165,38 @@ exports.recommendationLimiter = isRateLimitDisabled
         windowMs: 60 * 1000, // 1 minute
         max: 15, // 15 recommendation requests per minute
         message: rateLimitErrorResponse,
+        standardHeaders: true,
+        legacyHeaders: false
+    });
+// Referral rate limiter (prevent abuse of referral system)
+exports.referralLimiter = isRateLimitDisabled
+    ? passthroughMiddleware
+    : (0, express_rate_limit_1.default)({
+        windowMs: 60 * 60 * 1000, // 1 hour
+        max: 50, // 50 referral operations per hour (viewing, sharing, etc.)
+        message: (req, res) => {
+            res.status(429).json({
+                success: false,
+                message: 'Referral activity limit exceeded. Please try again later.',
+                retryAfter: Math.round(Date.now() / 1000) + 3600
+            });
+        },
+        standardHeaders: true,
+        legacyHeaders: false
+    });
+// Referral share rate limiter (stricter to prevent spam)
+exports.referralShareLimiter = isRateLimitDisabled
+    ? passthroughMiddleware
+    : (0, express_rate_limit_1.default)({
+        windowMs: 60 * 1000, // 1 minute
+        max: 5, // 5 shares per minute
+        message: (req, res) => {
+            res.status(429).json({
+                success: false,
+                message: 'Too many share requests. Please wait before sharing again.',
+                retryAfter: 60
+            });
+        },
         standardHeaders: true,
         legacyHeaders: false
     });

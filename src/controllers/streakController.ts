@@ -104,6 +104,52 @@ class StreakController {
       });
     }
   }
+
+  /**
+   * Get current user's login streak (JWT-based, no userId param)
+   * GET /api/gamification/streaks
+   * @returns User's login streak data with lastLogin timestamp
+   */
+  async getCurrentUserStreak(req: Request, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Authentication required'
+        });
+      }
+
+      const userId = req.user.id || (req.user._id as any)?.toString();
+
+      // Get login streak specifically
+      const loginStreak = await streakService.getOrCreateStreak(userId, 'login');
+
+      // Format response to match expected structure
+      const streakData = {
+        streak: loginStreak.currentStreak || 0,
+        lastLogin: loginStreak.lastActivityDate,
+        type: 'login',
+        // Additional useful information
+        longestStreak: loginStreak.longestStreak || 0,
+        totalDays: loginStreak.totalDays || 0,
+        frozen: loginStreak.frozen || false,
+        freezeExpiresAt: loginStreak.freezeExpiresAt || null,
+        streakStartDate: loginStreak.streakStartDate || loginStreak.lastActivityDate
+      };
+
+      res.json({
+        success: true,
+        data: streakData,
+        message: 'Login streak retrieved successfully'
+      });
+    } catch (error: any) {
+      console.error('Error fetching user streak:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Failed to fetch streak data'
+      });
+    }
+  }
 }
 
 export default new StreakController();

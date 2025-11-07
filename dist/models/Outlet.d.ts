@@ -1,4 +1,4 @@
-import { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 export interface IOutlet extends Document {
     store: Types.ObjectId;
     name: string;
@@ -24,5 +24,9 @@ export interface IOutlet extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-declare const Outlet: any;
+declare const Outlet: mongoose.Model<IOutlet, {}, {}, {}, mongoose.Document<unknown, {}, IOutlet, {}, {}> & IOutlet & Required<{
+    _id: unknown;
+}> & {
+    __v: number;
+}, any>;
 export default Outlet;

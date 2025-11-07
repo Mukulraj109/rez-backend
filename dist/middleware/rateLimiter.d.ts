@@ -1,3 +1,4 @@
+import { Request, Response, NextFunction } from 'express';
 declare global {
     namespace Express {
         interface Request {
@@ -10,21 +11,23 @@ declare global {
         }
     }
 }
-export declare const generalLimiter: any;
-export declare const authLimiter: any;
-export declare const otpLimiter: any;
-export declare const securityLimiter: any;
-export declare const uploadLimiter: any;
-export declare const searchLimiter: any;
-export declare const strictLimiter: any;
-export declare const reviewLimiter: any;
-export declare const analyticsLimiter: any;
-export declare const comparisonLimiter: any;
-export declare const favoriteLimiter: any;
-export declare const recommendationLimiter: any;
+export declare const generalLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const authLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const otpLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const securityLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const uploadLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const searchLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const strictLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const reviewLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const analyticsLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const comparisonLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const favoriteLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const recommendationLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const referralLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const referralShareLimiter: (req: Request, res: Response, next: NextFunction) => void;
 export declare const createRateLimiter: (options: {
     windowMs?: number;
     max?: number;
     message?: string;
     skipSuccessfulRequests?: boolean;
-}) => any;
+}) => (req: Request, res: Response, next: NextFunction) => void;

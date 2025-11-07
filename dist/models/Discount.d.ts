@@ -45,5 +45,5 @@ export interface IDiscount extends Document {
 export interface IDiscountModel extends Model<IDiscount> {
     findAvailableForUser(userId: Types.ObjectId, orderValue: number, productIds?: Types.ObjectId[], categoryIds?: Types.ObjectId[]): Promise<IDiscount[]>;
 }
-declare const Discount: any;
+declare const Discount: IDiscountModel;
 export default Discount;

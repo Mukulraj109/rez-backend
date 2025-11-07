@@ -82,5 +82,5 @@ export interface IOfferModel extends Model<IOffer> {
     findMegaOffers(): Promise<IOffer[]>;
     searchOffers(query: string, filters?: any): Promise<IOffer[]>;
 }
-declare const Offer: any;
+declare const Offer: IOfferModel;
 export default Offer;

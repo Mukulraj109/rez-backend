@@ -6,5 +6,9 @@ export interface IActivityInteraction extends Document {
     comment?: string;
     createdAt: Date;
 }
-declare const _default: any;
+declare const _default: mongoose.Model<IActivityInteraction, {}, {}, {}, mongoose.Document<unknown, {}, IActivityInteraction, {}, {}> & IActivityInteraction & Required<{
+    _id: unknown;
+}> & {
+    __v: number;
+}, any>;
 export default _default;

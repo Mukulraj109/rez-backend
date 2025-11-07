@@ -170,5 +170,8 @@ export interface IPartner extends Document {
     isLevelExpired(): boolean;
     handleLevelExpiry(): void;
 }
-declare const _default: any;
+interface IPartnerModel extends mongoose.Model<IPartner> {
+    createDefaultPartner(userId: string, name: string, email: string, avatar?: string): Promise<IPartner>;
+}
+declare const _default: IPartnerModel;
 export default _default;

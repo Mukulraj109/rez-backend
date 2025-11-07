@@ -3,9 +3,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getPaymentStatus = exports.handleWebhook = exports.verifyPayment = exports.createPaymentOrder = void 0;
+exports.createCheckoutSession = exports.getPaymentStatus = exports.handleWebhook = exports.verifyPayment = exports.createPaymentOrder = void 0;
 const Order_1 = require("../models/Order");
 const paymentService_1 = __importDefault(require("../services/paymentService"));
+const stripeService_1 = __importDefault(require("../services/stripeService"));
 const asyncHandler_1 = require("../utils/asyncHandler");
 const errorHandler_1 = require("../middleware/errorHandler");
 const response_1 = require("../utils/response");
@@ -251,3 +252,64 @@ async function handleOrderPaid(event) {
         console.error('❌ [WEBHOOK] Error handling order.paid:', error);
     }
 }
+/**
+ * Create Stripe Checkout Session for subscription payment
+ * POST /api/payment/create-checkout-session
+ */
+exports.createCheckoutSession = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const userId = req.userId;
+    const { subscriptionId, tier, amount, billingCycle, successUrl, cancelUrl, customerEmail } = req.body;
+    console.log('💳 [PAYMENT CONTROLLER] Creating Stripe checkout session:', {
+        subscriptionId,
+        tier,
+        amount,
+        billingCycle,
+        userId
+    });
+    // Validate request
+    if (!subscriptionId || !tier || !amount || !billingCycle || !successUrl || !cancelUrl) {
+        return (0, response_1.sendBadRequest)(res, 'Missing required parameters: subscriptionId, tier, amount, billingCycle, successUrl, cancelUrl');
+    }
+    // Validate amount
+    if (typeof amount !== 'number' || amount <= 0) {
+        return (0, response_1.sendBadRequest)(res, 'Invalid amount');
+    }
+    // Validate tier
+    if (!['premium', 'vip'].includes(tier.toLowerCase())) {
+        return (0, response_1.sendBadRequest)(res, 'Invalid tier. Must be premium or vip');
+    }
+    // Validate billing cycle
+    if (!['monthly', 'yearly'].includes(billingCycle.toLowerCase())) {
+        return (0, response_1.sendBadRequest)(res, 'Invalid billing cycle. Must be monthly or yearly');
+    }
+    try {
+        // Check if Stripe is configured
+        if (!stripeService_1.default.isStripeConfigured()) {
+            return (0, response_1.sendBadRequest)(res, 'Stripe is not configured on the server');
+        }
+        // Create Stripe checkout session
+        const session = await stripeService_1.default.createCheckoutSession({
+            subscriptionId,
+            tier,
+            amount,
+            billingCycle,
+            successUrl,
+            cancelUrl,
+            customerEmail,
+            metadata: {
+                userId: userId.toString(),
+            }
+        });
+        console.log('✅ [PAYMENT CONTROLLER] Stripe checkout session created successfully');
+        const response = {
+            success: true,
+            sessionId: session.id,
+            url: session.url,
+        };
+        (0, response_1.sendSuccess)(res, response, 'Stripe checkout session created successfully', 201);
+    }
+    catch (error) {
+        console.error('❌ [PAYMENT CONTROLLER] Error creating Stripe checkout session:', error);
+        throw new errorHandler_1.AppError(`Failed to create Stripe checkout session: ${error.message}`, 500);
+    }
+});

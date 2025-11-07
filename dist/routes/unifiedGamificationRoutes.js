@@ -7,6 +7,8 @@ const express_1 = __importDefault(require("express"));
 const auth_1 = require("../middleware/auth");
 // Import all gamification controllers
 const gamificationController_1 = require("../controllers/gamificationController");
+// Import streak controller
+const streakController_1 = __importDefault(require("../controllers/streakController"));
 const router = express_1.default.Router();
 // All routes require authentication
 router.use(auth_1.authenticate);
@@ -15,6 +17,7 @@ router.use(auth_1.authenticate);
 // ========================================
 router.get('/challenges', gamificationController_1.getChallenges);
 router.get('/challenges/active', gamificationController_1.getActiveChallenge);
+router.get('/challenges/my-progress', gamificationController_1.getMyChallengeProgress);
 router.post('/challenges/:id/claim', gamificationController_1.claimChallengeReward);
 // ========================================
 // ACHIEVEMENTS
@@ -47,6 +50,8 @@ router.post('/coins/deduct', gamificationController_1.deductCoins);
 // ========================================
 router.get('/streak/:userId', gamificationController_1.getDailyStreak);
 router.post('/streak/increment', gamificationController_1.incrementStreak);
+// New endpoint: Get current user's streak (JWT-based, no userId param)
+router.get('/streaks', streakController_1.default.getCurrentUserStreak.bind(streakController_1.default));
 // ========================================
 // MINI-GAMES
 // ========================================
@@ -54,6 +59,8 @@ router.post('/streak/increment', gamificationController_1.incrementStreak);
 router.post('/spin-wheel/create', gamificationController_1.createSpinWheel);
 router.post('/spin-wheel/spin', gamificationController_1.spinWheel);
 router.get('/spin-wheel/eligibility', gamificationController_1.getSpinWheelEligibility);
+router.get('/spin-wheel/data', gamificationController_1.getSpinWheelData);
+router.get('/spin-wheel/history', gamificationController_1.getSpinWheelHistory);
 // Scratch Card
 router.post('/scratch-card/create', gamificationController_1.createScratchCard);
 router.post('/scratch-card/scratch', gamificationController_1.scratchCard);
@@ -63,4 +70,9 @@ router.post('/quiz/start', gamificationController_1.startQuiz);
 router.post('/quiz/:quizId/answer', gamificationController_1.submitQuizAnswer);
 router.get('/quiz/:quizId/progress', gamificationController_1.getQuizProgress);
 router.post('/quiz/:quizId/complete', gamificationController_1.completeQuiz);
+// ========================================
+// GAMIFICATION STATS
+// ========================================
+// Get complete user gamification statistics
+router.get('/stats', gamificationController_1.getGamificationStats);
 exports.default = router;

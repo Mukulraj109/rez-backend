@@ -1,4 +1,4 @@
-import { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 export declare enum ActivityType {
     ORDER = "ORDER",
     CASHBACK = "CASHBACK",
@@ -31,4 +31,8 @@ export declare const getActivityTypeDefaults: (type: ActivityType) => {
     icon: string;
     color: string;
 };
-export declare const Activity: any;
+export declare const Activity: mongoose.Model<IActivity, {}, {}, {}, mongoose.Document<unknown, {}, IActivity, {}, {}> & IActivity & Required<{
+    _id: unknown;
+}> & {
+    __v: number;
+}, any>;

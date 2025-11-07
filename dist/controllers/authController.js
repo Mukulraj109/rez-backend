@@ -155,12 +155,12 @@ exports.sendOTP = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
                     isVerified: false,
                     isOnboarded: false
                 },
-                referral: {
-                    referredBy: referralCode || undefined,
+                referral: referralCode ? {
+                    referredBy: referralCode,
                     referredUsers: [],
                     totalReferrals: 0,
                     referralEarnings: 0
-                }
+                } : undefined
             });
             // Initialize achievements for new user
             try {

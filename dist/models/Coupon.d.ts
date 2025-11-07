@@ -1,4 +1,4 @@
-import { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 export interface ICouponApplicableTo {
     categories: Types.ObjectId[];
     products: Types.ObjectId[];
@@ -37,4 +37,8 @@ export interface ICoupon extends Document {
     createdAt: Date;
     updatedAt: Date;
 }
-export declare const Coupon: any;
+export declare const Coupon: mongoose.Model<ICoupon, {}, {}, {}, mongoose.Document<unknown, {}, ICoupon, {}, {}> & ICoupon & Required<{
+    _id: unknown;
+}> & {
+    __v: number;
+}, any>;

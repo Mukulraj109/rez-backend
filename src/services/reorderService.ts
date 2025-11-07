@@ -88,7 +88,7 @@ class ReorderService {
       let itemsToReorder = order.items;
       if (selectedItemIds && selectedItemIds.length > 0) {
         itemsToReorder = order.items.filter(item =>
-          selectedItemIds.includes(item.product._id?.toString() || '')
+          item.product && selectedItemIds.includes(item.product._id?.toString() || '')
         );
       }
 
@@ -300,14 +300,15 @@ class ReorderService {
 
         // Find original order item
         const originalItem = order.items.find(
-          item => item.product._id?.toString() === validItem.productId
+          item => item.product && item.product._id?.toString() === validItem.productId
         );
 
         if (!originalItem) continue;
 
-        // Check if item already in cart
+        // Check if item already in cart (only check product items, not events)
         const existingCartItem = cart.items.find(
-          item => item.product.toString() === validItem.productId &&
+          item => item.product && 
+                  item.product.toString() === validItem.productId &&
                   JSON.stringify(item.variant) === JSON.stringify(originalItem.variant)
         );
 
@@ -469,6 +470,9 @@ class ReorderService {
 
       for (const order of orders) {
         for (const item of order.items) {
+          // Skip event items - only process product items
+          if (!item.product) continue;
+          
           const productId = item.product._id?.toString() || '';
           if (!productOrders.has(productId)) {
             productOrders.set(productId, []);

@@ -76,4 +76,4 @@ export interface ITransaction extends Document {
     canBeReversed(): boolean;
     getFormattedAmount(): string;
 }
-export declare const Transaction: any;
+export declare const Transaction: ITransactionModel;

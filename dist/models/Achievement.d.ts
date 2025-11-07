@@ -1,4 +1,4 @@
-import { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 export declare enum AchievementType {
     FIRST_ORDER = "FIRST_ORDER",
     ORDERS_10 = "ORDERS_10",
@@ -81,4 +81,8 @@ export interface IUserAchievement extends Document {
     updatedAt: Date;
 }
 export declare const ACHIEVEMENT_DEFINITIONS: IAchievementDefinition[];
-export declare const UserAchievement: any;
+export declare const UserAchievement: mongoose.Model<IUserAchievement, {}, {}, {}, mongoose.Document<unknown, {}, IUserAchievement, {}, {}> & IUserAchievement & Required<{
+    _id: unknown;
+}> & {
+    __v: number;
+}, any>;

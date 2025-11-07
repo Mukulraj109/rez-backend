@@ -1,4 +1,4 @@
-import { Document, Types } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 export interface IEventSlot {
     id: string;
     time: string;
@@ -81,5 +81,9 @@ export interface IEvent extends Document {
     incrementShares(): Promise<IEvent>;
     incrementFavorites(): Promise<IEvent>;
 }
-declare const Event: any;
+declare const Event: mongoose.Model<IEvent, {}, {}, {}, mongoose.Document<unknown, {}, IEvent, {}, {}> & IEvent & Required<{
+    _id: Types.ObjectId;
+}> & {
+    __v: number;
+}, any>;
 export default Event;

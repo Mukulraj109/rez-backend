@@ -17,7 +17,9 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
     radius = 10, 
     rating, 
     isOpen, 
-    search, 
+    search,
+    tags,
+    isFeatured,
     sortBy = 'rating', 
     page = 1, 
     limit = 20 
@@ -29,6 +31,23 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
     // Apply filters
     if (category) query.category = category;
     if (rating) query['ratings.average'] = { $gte: Number(rating) };
+    
+    // Filter by tags
+    if (tags) {
+      // tags can be a string or array - handle both
+      const tagArray = Array.isArray(tags) ? tags : [tags];
+      query.tags = { $in: tagArray.map(tag => new RegExp(tag as string, 'i')) };
+    }
+    
+    // Filter by featured status
+    if (isFeatured !== undefined) {
+      // Convert query parameter to boolean
+      const isFeaturedValue = typeof isFeatured === 'string' 
+        ? isFeatured.toLowerCase() === 'true'
+        : Boolean(isFeatured);
+      query.isFeatured = isFeaturedValue;
+    }
+    
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -447,9 +466,13 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
 
   try {
     const query: any = { 
-      isActive: true,
-      [`deliveryCategories.${category}`]: true 
+      isActive: true
     };
+    
+    // Only add delivery category filter if category is not 'all'
+    if (category && category !== 'all') {
+      query[`deliveryCategories.${category}`] = true;
+    }
     
     // Add location filtering - use a simpler approach for now
     // Note: We'll calculate distances after fetching stores to avoid $nearSphere pagination issues

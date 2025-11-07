@@ -8,9 +8,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const referralController_1 = require("../controllers/referralController");
 const auth_1 = require("../middleware/auth");
+const rateLimiter_1 = require("../middleware/rateLimiter");
 const router = express_1.default.Router();
 // All referral routes require authentication
 router.use(auth_1.authenticate);
+// ✅ Apply rate limiting to all referral routes to prevent abuse
+router.use(rateLimiter_1.referralLimiter);
 /**
  * @route   GET /api/referral/data
  * @desc    Get referral data
@@ -39,8 +42,9 @@ router.post('/generate-link', referralController_1.generateReferralLink);
  * @route   POST /api/referral/share
  * @desc    Share referral link
  * @access  Private
+ * @note    Additional strict rate limiting to prevent spam
  */
-router.post('/share', referralController_1.shareReferralLink);
+router.post('/share', rateLimiter_1.referralShareLimiter, referralController_1.shareReferralLink);
 /**
  * @route   POST /api/referral/claim-rewards
  * @desc    Claim referral rewards

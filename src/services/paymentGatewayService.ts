@@ -5,6 +5,7 @@ import Stripe from 'stripe';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import { Payment } from '../models/Payment';
+import { EventBooking } from '../models';
 import { sendSuccess, sendError } from '../utils/response';
 
 // Payment Gateway Types
@@ -86,6 +87,9 @@ class PaymentGatewayService {
     // Initialize Stripe
     if (this.config.stripe.secretKey) {
       this.stripe = new Stripe(this.config.stripe.secretKey);
+      console.log('✅ [PAYMENT GATEWAY] Stripe initialized');
+    } else {
+      console.warn('⚠️ [PAYMENT GATEWAY] Stripe secret key not found. Stripe payments will not work.');
     }
 
     // Initialize Razorpay
@@ -147,7 +151,8 @@ class PaymentGatewayService {
     userId: string
   ): Promise<PaymentResponseData> {
     if (!this.stripe) {
-      throw new Error('Stripe is not configured');
+      console.error('❌ [STRIPE] Stripe instance not initialized. Check STRIPE_SECRET_KEY environment variable.');
+      throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY environment variable.');
     }
 
     try {
@@ -482,6 +487,8 @@ class PaymentGatewayService {
     switch (event.type) {
       case 'payment_intent.succeeded':
         await this.updatePaymentFromWebhook(event.data.object.id, 'completed', 'stripe');
+        // Update associated booking status
+        await this.updateBookingStatusFromPayment(event.data.object.id, 'confirmed');
         break;
       case 'payment_intent.payment_failed':
         await this.updatePaymentFromWebhook(event.data.object.id, 'failed', 'stripe');
@@ -541,6 +548,55 @@ class PaymentGatewayService {
       }
     } catch (error) {
       console.error('❌ [PAYMENT GATEWAY] Failed to update payment from webhook:', error);
+    }
+  }
+
+  /**
+   * Update booking status from payment intent
+   */
+  private async updateBookingStatusFromPayment(
+    paymentIntentId: string,
+    bookingStatus: 'confirmed' | 'cancelled'
+  ): Promise<void> {
+    try {
+      // Find payment by payment intent ID
+      // The paymentId is set to paymentIntent.id when creating the payment
+      const payment = await Payment.findOne({ 
+        $or: [
+          { paymentId: paymentIntentId },
+          { 'gatewayResponse.paymentIntentId': paymentIntentId },
+          { 'gatewayResponse.transactionId': paymentIntentId }
+        ]
+      });
+
+      if (!payment) {
+        console.warn('⚠️ [PAYMENT GATEWAY] Payment not found for payment intent:', paymentIntentId);
+        return;
+      }
+
+      // Get booking ID from payment metadata
+      const bookingId = payment.metadata?.bookingId;
+      if (!bookingId) {
+        console.warn('⚠️ [PAYMENT GATEWAY] Booking ID not found in payment metadata');
+        return;
+      }
+
+      // Update booking status
+      const booking = await EventBooking.findById(bookingId);
+      
+      if (booking) {
+        booking.status = bookingStatus;
+        await booking.save();
+        console.log('✅ [PAYMENT GATEWAY] Booking status updated:', {
+          bookingId,
+          status: bookingStatus,
+          paymentIntentId
+        });
+      } else {
+        console.warn('⚠️ [PAYMENT GATEWAY] Booking not found:', bookingId);
+      }
+    } catch (error) {
+      console.error('❌ [PAYMENT GATEWAY] Failed to update booking status from payment:', error);
     }
   }
 
