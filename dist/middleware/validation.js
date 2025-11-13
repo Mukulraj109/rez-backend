@@ -241,6 +241,7 @@ exports.wishlistSchemas = {
 exports.videoSchemas = {
     getVideos: joi_1.default.object({
         category: joi_1.default.string().valid('trending_me', 'trending_her', 'waist', 'article', 'featured', 'challenge', 'tutorial', 'review'),
+        contentType: joi_1.default.string().valid('merchant', 'ugc', 'article_video'),
         creator: exports.commonSchemas.objectId,
         hasProducts: joi_1.default.boolean(),
         search: joi_1.default.string().trim().max(100),

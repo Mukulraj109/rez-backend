@@ -4,8 +4,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon src/server.ts",
-      "start": "node dist/server.js",
     "build": "tsc",
+    "start": "node dist/server.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -15,6 +15,7 @@
     "seed:carts": "ts-node src/scripts/seedCarts.ts",
     "seed:orders": "ts-node src/scripts/seedOrders.ts",
     "seed:videos": "ts-node src/scripts/seedVideos.ts",
+    "seed:ugc-videos": "ts-node src/scripts/seedUGCVideos.ts",
     "seed:reviews": "ts-node src/scripts/seedReviews.ts",
     "seed:wishlists": "ts-node src/scripts/seedWishlists.ts",
     "seed:notifications": "ts-node src/scripts/seedNotifications.ts",
@@ -38,7 +39,8 @@
     "seed:vouchers": "ts-node src/scripts/seedVouchersWithStores.ts",
     "verify:voucher-stores": "ts-node src/scripts/verifyAndLinkVoucherStores.ts",
     "test:events": "node scripts/test-event-system.js",
-    "seed:challenges": "ts-node src/scripts/seedChallenges.ts"
+    "seed:challenges": "ts-node src/scripts/seedChallenges.ts",
+    "seed:creators": "ts-node src/scripts/seed-user-creators.ts"
   },
   "keywords": [],
   "author": "",

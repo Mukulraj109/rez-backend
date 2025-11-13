@@ -13,7 +13,13 @@ import {
   getStoreCategories,
   advancedStoreSearch
 } from '../controllers/storeController';
-import { optionalAuth } from '../middleware/auth';
+import {
+  scheduleStoreVisit,
+  getQueueNumber,
+  getCurrentQueueStatus,
+  checkStoreAvailability
+} from '../controllers/storeVisitController';
+import { authenticate, optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, commonSchemas } from '../middleware/validation';
 // import { generalLimiter, searchLimiter } from '../middleware/rateLimiter'; // Disabled for development
 import { Joi } from '../middleware/validation';
@@ -179,7 +185,7 @@ router.get('/search-by-category/:category',
 );
 
 // Search stores by delivery time range
-router.get('/search-by-delivery-time', 
+router.get('/search-by-delivery-time',
   // generalLimiter, // Disabled for development
   optionalAuth,
   validateQuery(Joi.object({
@@ -191,6 +197,54 @@ router.get('/search-by-delivery-time',
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),
   searchStoresByDeliveryTime
+);
+
+// ============================================
+// Store Visit Routes (nested under /stores/:storeId)
+// ============================================
+
+// Schedule a store visit
+router.post('/:storeId/visits/schedule',
+  authenticate,
+  validateParams(Joi.object({
+    storeId: commonSchemas.objectId().required()
+  })),
+  (req, res, next) => {
+    // Inject storeId from URL params into request body
+    req.body.storeId = req.params.storeId;
+    next();
+  },
+  scheduleStoreVisit
+);
+
+// Get queue number for walk-in
+router.post('/:storeId/queue',
+  optionalAuth,
+  validateParams(Joi.object({
+    storeId: commonSchemas.objectId().required()
+  })),
+  (req, res, next) => {
+    // Inject storeId from URL params into request body
+    req.body.storeId = req.params.storeId;
+    next();
+  },
+  getQueueNumber
+);
+
+// Get current queue status (public)
+router.get('/:storeId/queue/status',
+  validateParams(Joi.object({
+    storeId: commonSchemas.objectId().required()
+  })),
+  getCurrentQueueStatus
+);
+
+// Check store availability / crowd status (public)
+router.get('/:storeId/availability',
+  validateParams(Joi.object({
+    storeId: commonSchemas.objectId().required()
+  })),
+  checkStoreAvailability
 );
 
 export default router;

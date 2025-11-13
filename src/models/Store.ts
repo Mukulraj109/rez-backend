@@ -133,6 +133,34 @@ export interface IStore extends Document {
   isFeatured: boolean;
   isVerified: boolean;
   merchantId?: Types.ObjectId; // Reference to merchant/owner
+
+  // Menu fields
+  hasMenu?: boolean; // Indicates if store has a menu (for restaurants/food stores)
+  menuCategories?: string[]; // Quick reference to menu categories
+
+  // Booking & Store Visit fields
+  bookingType?: 'RESTAURANT' | 'SERVICE' | 'CONSULTATION' | 'RETAIL' | 'HYBRID';
+  bookingConfig?: {
+    enabled: boolean;
+    requiresAdvanceBooking: boolean; // true for restaurants/salons
+    allowWalkIn: boolean; // true for retail "store visit"
+    slotDuration: number; // minutes
+    advanceBookingDays: number; // how many days in advance
+    workingHours?: {
+      start: string; // e.g., "09:00"
+      end: string; // e.g., "21:00"
+    };
+  };
+  storeVisitConfig?: {
+    // For RETAIL stores - plan store visit
+    enabled: boolean;
+    features: ('queue_system' | 'visit_scheduling' | 'live_availability')[];
+    maxVisitorsPerSlot?: number;
+    averageVisitDuration?: number; // minutes
+  };
+  serviceTypes?: string[]; // For SERVICE stores: ['haircut', 'massage', 'facial']
+  consultationTypes?: string[]; // For CONSULTATION stores: ['general', 'dental', 'eye']
+
   createdAt: Date;
   updatedAt: Date;
 
@@ -471,7 +499,52 @@ const StoreSchema = new Schema<IStore>({
   merchantId: {
     type: Schema.Types.ObjectId,
     ref: 'User'
-  }
+  },
+
+  // Menu fields
+  hasMenu: {
+    type: Boolean,
+    default: false
+  },
+  menuCategories: [{
+    type: String,
+    trim: true
+  }],
+
+  // Booking & Store Visit fields
+  bookingType: {
+    type: String,
+    enum: ['RESTAURANT', 'SERVICE', 'CONSULTATION', 'RETAIL', 'HYBRID'],
+    default: 'RETAIL'
+  },
+  bookingConfig: {
+    enabled: { type: Boolean, default: false },
+    requiresAdvanceBooking: { type: Boolean, default: false },
+    allowWalkIn: { type: Boolean, default: true },
+    slotDuration: { type: Number, default: 30 }, // minutes
+    advanceBookingDays: { type: Number, default: 7 }, // days
+    workingHours: {
+      start: { type: String, default: '09:00' },
+      end: { type: String, default: '21:00' }
+    }
+  },
+  storeVisitConfig: {
+    enabled: { type: Boolean, default: false },
+    features: [{
+      type: String,
+      enum: ['queue_system', 'visit_scheduling', 'live_availability']
+    }],
+    maxVisitorsPerSlot: { type: Number, default: 10 },
+    averageVisitDuration: { type: Number, default: 30 } // minutes
+  },
+  serviceTypes: [{
+    type: String,
+    trim: true
+  }],
+  consultationTypes: [{
+    type: String,
+    trim: true
+  }]
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -489,6 +562,8 @@ StoreSchema.index({ isFeatured: 1, isActive: 1 });
 StoreSchema.index({ 'offers.isPartner': 1, isActive: 1 });
 StoreSchema.index({ tags: 1, isActive: 1 });
 StoreSchema.index({ createdAt: -1 });
+StoreSchema.index({ hasMenu: 1, isActive: 1 }); // Menu index
+StoreSchema.index({ bookingType: 1, isActive: 1 }); // Booking type index
 
 // Delivery category indexes
 StoreSchema.index({ 'deliveryCategories.fastDelivery': 1, isActive: 1 });

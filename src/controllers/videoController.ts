@@ -15,16 +15,18 @@ import { sendCreated } from '../utils/response';
 // Create a new video
 export const createVideo = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
-  const { 
-    title, 
-    description, 
-    videoUrl, 
-    thumbnailUrl, 
-    category, 
-    tags, 
-    products, 
+  const {
+    title,
+    description,
+    videoUrl,
+    thumbnailUrl,
+    category,
+    contentType,
+    associatedArticle,
+    tags,
+    products,
     duration,
-    isPublic = true 
+    isPublic = true
   } = req.body;
 
   try {
@@ -42,7 +44,9 @@ export const createVideo = asyncHandler(async (req: Request, res: Response) => {
       videoUrl,
       thumbnail: thumbnailUrl || '',
       creator: userId,
+      contentType: contentType || 'ugc',
       category: category || 'general',
+      associatedArticle: associatedArticle || undefined,
       tags: tags || [],
       hashtags: tags || [], // Use tags for hashtags as well
       products: products || [],
@@ -121,14 +125,15 @@ export const createVideo = asyncHandler(async (req: Request, res: Response) => {
 
 // Get all videos with filtering
 export const getVideos = asyncHandler(async (req: Request, res: Response) => {
-  const { 
-    category, 
-    creator, 
-    hasProducts, 
-    search, 
-    sortBy = 'newest', 
-    page = 1, 
-    limit = 20 
+  const {
+    category,
+    creator,
+    contentType,
+    hasProducts,
+    search,
+    sortBy = 'newest',
+    page = 1,
+    limit = 20
   } = req.query;
 
   try {
@@ -137,10 +142,11 @@ export const getVideos = asyncHandler(async (req: Request, res: Response) => {
       isApproved: true,
       moderationStatus: 'approved'
     };
-    
+
     // Apply filters
     if (category) query.category = category;
     if (creator) query.creator = creator;
+    if (contentType) query.contentType = contentType;
     if (hasProducts === 'true') {
       query['products.0'] = { $exists: true };
     }
@@ -175,7 +181,14 @@ export const getVideos = asyncHandler(async (req: Request, res: Response) => {
 
     const videos = await Video.find(query)
       .populate('creator', 'profile.firstName profile.lastName profile.avatar')
-      .populate('products', 'name basePrice images')
+      .populate({
+        path: 'products',
+        select: 'name images description price inventory rating category store',
+        populate: {
+          path: 'store',
+          select: 'name slug logo'
+        }
+      })
       .sort(sortOptions)
       .skip(skip)
       .limit(Number(limit))
@@ -209,8 +222,14 @@ export const getVideoById = asyncHandler(async (req: Request, res: Response) => 
   try {
     const video = await Video.findOne({ _id: videoId, isPublished: true, isApproved: true })
       .populate('creator', 'profile.firstName profile.lastName profile.avatar profile.bio')
-      .populate('products', 'name basePrice salePrice images description store')
-      .populate('products.store', 'name slug')
+      .populate({
+        path: 'products',
+        select: 'name images description price pricing inventory rating category store',
+        populate: {
+          path: 'store',
+          select: 'name slug logo'
+        }
+      })
       .lean();
 
     if (!video) {
@@ -275,7 +294,14 @@ export const getVideosByCategory = asyncHandler(async (req: Request, res: Respon
 
     const videos = await Video.find(query)
       .populate('creator', 'profile.firstName profile.lastName profile.avatar')
-      .populate('products', 'name basePrice images')
+      .populate({
+        path: 'products',
+        select: 'name images description price inventory rating category store',
+        populate: {
+          path: 'store',
+          select: 'name slug logo'
+        }
+      })
       .sort(sortOptions)
       .skip(skip)
       .limit(Number(limit))
@@ -317,8 +343,15 @@ export const getTrendingVideos = asyncHandler(async (req: Request, res: Response
       createdAt: { $gte: sinceDate }
     })
     .populate('creator', 'profile.firstName profile.lastName profile.avatar')
-    .populate('products', 'name basePrice images')
-    .sort({ 
+    .populate({
+      path: 'products',
+      select: 'name images description pricing inventory rating category store',
+      populate: {
+        path: 'store',
+        select: 'name slug logo'
+      }
+    })
+    .sort({
       'analytics.engagement': -1,
       'analytics.views': -1,
       createdAt: -1
@@ -354,7 +387,14 @@ export const getVideosByCreator = asyncHandler(async (req: Request, res: Respons
 
     const videos = await Video.find(query)
       .populate('creator', 'profile.firstName profile.lastName profile.avatar')
-      .populate('products', 'name basePrice images')
+      .populate({
+        path: 'products',
+        select: 'name images description price inventory rating category store',
+        populate: {
+          path: 'store',
+          select: 'name slug logo'
+        }
+      })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit))
@@ -579,5 +619,130 @@ export const searchVideos = asyncHandler(async (req: Request, res: Response) => 
 
   } catch (error) {
     throw new AppError('Failed to search videos', 500);
+  }
+});
+
+// Get videos by store
+export const getVideosByStore = asyncHandler(async (req: Request, res: Response) => {
+  const { storeId } = req.params;
+  const { type, limit = 20, offset = 0 } = req.query;
+
+  try {
+    console.log('🎥 [VIDEO] Fetching videos for store:', storeId);
+
+    // Check if storeId is a valid ObjectId format (24 hex characters)
+    // If not, return empty results immediately since stores field only accepts ObjectIds
+    if (!mongoose.Types.ObjectId.isValid(storeId) || !/^[0-9a-fA-F]{24}$/.test(storeId)) {
+      console.log(`ℹ️ [VIDEO] Store ID "${storeId}" is not a valid ObjectId format, returning empty array`);
+      return sendSuccess(res, {
+        content: [],
+        total: 0
+      }, 'Videos retrieved successfully');
+    }
+
+    // Build query with valid ObjectId
+    const query: any = {
+      isPublished: true,
+      isApproved: true,
+      moderationStatus: 'approved',
+      stores: new mongoose.Types.ObjectId(storeId)
+    };
+
+    // Filter by type if specified
+    if (type === 'video') {
+      query.contentType = { $in: ['ugc', 'merchant'] };
+    }
+
+    const videos = await Video.find(query)
+      .populate('creator', 'profile.firstName profile.lastName profile.avatar')
+      .populate({
+        path: 'products',
+        select: 'name images description price inventory rating category store',
+        populate: {
+          path: 'store',
+          select: 'name slug logo'
+        }
+      })
+      .sort({ createdAt: -1 })
+      .skip(Number(offset))
+      .limit(Number(limit))
+      .lean();
+
+    const total = await Video.countDocuments(query);
+
+    console.log(`✅ [VIDEO] Found ${videos.length} videos for store ${storeId}`);
+
+    // Return empty array if no videos found (not an error)
+    if (videos.length === 0) {
+      console.log(`ℹ️ [VIDEO] No videos found for store ${storeId}, returning empty array`);
+    }
+
+    // Transform videos to match UGC API format
+    const content = videos.map((video: any) => ({
+      _id: video._id,
+      userId: video.creator?._id || video.creator,
+      user: {
+        _id: video.creator?._id || video.creator,
+        profile: video.creator?.profile || { firstName: '', lastName: '', avatar: '' }
+      },
+      type: 'video',
+      url: video.videoUrl,
+      thumbnail: video.thumbnail,
+      caption: video.description,
+      tags: video.tags || [],
+      relatedProduct: video.products?.[0] || null,
+      relatedStore: video.stores?.[0] ? {
+        _id: video.stores[0],
+        name: '',
+        logo: ''
+      } : null,
+      likes: video.analytics?.likes || video.engagement?.likes?.length || 0,
+      comments: video.analytics?.comments || video.engagement?.comments || 0,
+      shares: video.analytics?.shares || video.engagement?.shares || 0,
+      views: video.analytics?.totalViews || video.analytics?.views || video.engagement?.views || 0,
+      isLiked: false,
+      isBookmarked: false,
+      createdAt: video.createdAt,
+      updatedAt: video.updatedAt
+    }));
+
+    sendSuccess(res, {
+      content,
+      total
+    }, 'Videos retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [VIDEO] Get videos by store error:', error);
+    throw new AppError('Failed to fetch store videos', 500);
+  }
+});
+
+// Report video
+export const reportVideo = asyncHandler(async (req: Request, res: Response) => {
+  const { videoId } = req.params;
+  const { reason, details } = req.body;
+  const userId = req.userId!;
+
+  try {
+    const video = await Video.findById(videoId);
+
+    if (!video) {
+      return sendNotFound(res, 'Video not found');
+    }
+
+    // Use the reportVideo method from the model
+    await video.reportVideo(userId, reason, details);
+
+    console.log(`✅ [VIDEO] Video ${videoId} reported by user ${userId} for reason: ${reason}`);
+
+    sendSuccess(res, {
+      videoId: video._id,
+      reportCount: video.reportCount,
+      isReported: video.isReported
+    }, 'Video reported successfully. Thank you for helping keep our community safe.');
+
+  } catch (error) {
+    console.error('❌ [VIDEO] Report video error:', error);
+    throw new AppError('Failed to report video', 500);
   }
 });

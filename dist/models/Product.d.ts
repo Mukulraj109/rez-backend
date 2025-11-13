@@ -23,6 +23,8 @@ export interface IProductInventory {
     lowStockThreshold?: number;
     variants?: IProductVariant[];
     unlimited: boolean;
+    estimatedRestockDate?: Date;
+    allowBackorder?: boolean;
 }
 export interface IProductRatings {
     average: number;

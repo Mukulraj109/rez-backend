@@ -36,10 +36,13 @@ const categoryRoutes_1 = __importDefault(require("./routes/categoryRoutes"));
 const storeRoutes_1 = __importDefault(require("./routes/storeRoutes"));
 const orderRoutes_1 = __importDefault(require("./routes/orderRoutes"));
 const videoRoutes_1 = __importDefault(require("./routes/videoRoutes"));
+const ugcRoutes_1 = __importDefault(require("./routes/ugcRoutes"));
+const articleRoutes_1 = __importDefault(require("./routes/articleRoutes"));
 const projectRoutes_1 = __importDefault(require("./routes/projectRoutes"));
 const earningProjectsRoutes_1 = __importDefault(require("./routes/earningProjectsRoutes"));
 const notificationRoutes_1 = __importDefault(require("./routes/notificationRoutes"));
 const stockNotificationRoutes_1 = __importDefault(require("./routes/stockNotificationRoutes"));
+const priceTrackingRoutes_1 = __importDefault(require("./routes/priceTrackingRoutes"));
 const reviewRoutes_1 = __importDefault(require("./routes/reviewRoutes"));
 const favoriteRoutes_1 = __importDefault(require("./routes/favoriteRoutes"));
 const comparisonRoutes_1 = __importDefault(require("./routes/comparisonRoutes"));
@@ -82,6 +85,11 @@ const activityFeedRoutes_1 = __importDefault(require("./routes/activityFeedRoute
 const unifiedGamificationRoutes_1 = __importDefault(require("./routes/unifiedGamificationRoutes"));
 const partnerRoutes_1 = __importDefault(require("./routes/partnerRoutes"));
 const earningsRoutes_1 = __importDefault(require("./routes/earningsRoutes"));
+const menuRoutes_1 = __importDefault(require("./routes/menuRoutes"));
+const tableBookingRoutes_1 = __importDefault(require("./routes/tableBookingRoutes"));
+const consultationRoutes_1 = __importDefault(require("./routes/consultationRoutes"));
+const serviceAppointmentRoutes_1 = __importDefault(require("./routes/serviceAppointmentRoutes"));
+const storeVisitRoutes_1 = __importDefault(require("./routes/storeVisitRoutes"));
 const auth_1 = __importDefault(require("./merchantroutes/auth")); // Temporarily disabled
 const merchants_1 = __importDefault(require("./merchantroutes/merchants")); // Temporarily disabled
 const merchant_profile_1 = __importDefault(require("./merchantroutes/merchant-profile")); // Disabled due to missing properties
@@ -152,8 +160,8 @@ app.get('/health', async (req, res) => {
             version: '1.0.0',
             api: {
                 prefix: API_PREFIX,
-                totalEndpoints: 145,
-                modules: 15,
+                totalEndpoints: 159,
+                modules: 17,
                 endpoints: {
                     auth: `${API_PREFIX}/auth`,
                     products: `${API_PREFIX}/products`,
@@ -162,6 +170,8 @@ app.get('/health', async (req, res) => {
                     stores: `${API_PREFIX}/stores`,
                     orders: `${API_PREFIX}/orders`,
                     videos: `${API_PREFIX}/videos`,
+                    ugc: `${API_PREFIX}/ugc`,
+                    articles: `${API_PREFIX}/articles`,
                     projects: `${API_PREFIX}/projects`,
                     notifications: `${API_PREFIX}/notifications`,
                     reviews: `${API_PREFIX}/reviews`,
@@ -184,7 +194,11 @@ app.get('/health', async (req, res) => {
                     outlets: `${API_PREFIX}/outlets`,
                     flashSales: `${API_PREFIX}/flash-sales`,
                     bills: `${API_PREFIX}/bills`,
-                    partner: `${API_PREFIX}/partner`
+                    partner: `${API_PREFIX}/partner`,
+                    menu: `${API_PREFIX}/menu`,
+                    tableBookings: `${API_PREFIX}/table-bookings`,
+                    consultations: `${API_PREFIX}/consultations`,
+                    storeVisits: `${API_PREFIX}/store-visits`
                 }
             }
         };
@@ -224,6 +238,8 @@ app.get('/api-info', (req, res) => {
             stores: `${API_PREFIX}/stores`,
             orders: `${API_PREFIX}/orders`,
             videos: `${API_PREFIX}/videos`,
+            ugc: `${API_PREFIX}/ugc`,
+            articles: `${API_PREFIX}/articles`,
             projects: `${API_PREFIX}/projects`,
             notifications: `${API_PREFIX}/notifications`,
             reviews: `${API_PREFIX}/reviews`,
@@ -246,6 +262,7 @@ app.get('/api-info', (req, res) => {
             flashSales: `${API_PREFIX}/flash-sales`,
             bills: `${API_PREFIX}/bills`,
             partner: `${API_PREFIX}/partner`,
+            storeVisits: `${API_PREFIX}/store-visits`,
             merchantSync: '/api/merchant/sync'
         },
         features: [
@@ -278,7 +295,7 @@ app.get('/api-info', (req, res) => {
         database: {
             models: [
                 'User', 'Category', 'Store', 'Product', 'Cart', 'Order',
-                'Video', 'Project', 'Transaction', 'Notification', 'Review', 'Wishlist',
+                'Video', 'Article', 'Project', 'Transaction', 'Notification', 'Review', 'Wishlist',
                 'Wallet', 'Offer', 'VoucherBrand', 'UserVoucher', 'OfferRedemption',
                 'Address', 'PaymentMethod', 'UserSettings', 'UserAchievement', 'Activity',
                 'Coupon', 'UserCoupon', 'SupportTicket', 'FAQ', 'UserCashback'
@@ -315,10 +332,13 @@ app.use(`${API_PREFIX}/categories`, categoryRoutes_1.default);
 app.use(`${API_PREFIX}/stores`, storeRoutes_1.default);
 app.use(`${API_PREFIX}/orders`, orderRoutes_1.default);
 app.use(`${API_PREFIX}/videos`, videoRoutes_1.default);
+app.use(`${API_PREFIX}/ugc`, ugcRoutes_1.default);
+app.use(`${API_PREFIX}/articles`, articleRoutes_1.default);
 app.use(`${API_PREFIX}/projects`, projectRoutes_1.default);
 app.use(`${API_PREFIX}/earning-projects`, earningProjectsRoutes_1.default);
 app.use(`${API_PREFIX}/notifications`, notificationRoutes_1.default);
 app.use(`${API_PREFIX}/stock-notifications`, stockNotificationRoutes_1.default);
+app.use(`${API_PREFIX}/price-tracking`, priceTrackingRoutes_1.default);
 app.use(`${API_PREFIX}/reviews`, reviewRoutes_1.default);
 app.use(`${API_PREFIX}/favorites`, favoriteRoutes_1.default);
 app.use(`${API_PREFIX}/comparisons`, comparisonRoutes_1.default);
@@ -375,6 +395,21 @@ console.log('✅ Partner program routes registered at /api/partner');
 // Earnings Routes - User earnings summary with breakdown
 app.use(`${API_PREFIX}/earnings`, earningsRoutes_1.default);
 console.log('✅ Earnings routes registered at /api/earnings');
+// Menu Routes - Restaurant/Store menus and pre-orders
+app.use(`${API_PREFIX}/menu`, menuRoutes_1.default);
+console.log('✅ Menu routes registered at /api/menu');
+// Table Booking Routes - Restaurant table reservations
+app.use(`${API_PREFIX}/table-bookings`, tableBookingRoutes_1.default);
+console.log('✅ Table booking routes registered at /api/table-bookings');
+// Service Appointment Routes - Service appointments for salons, spas, consultations
+app.use(`${API_PREFIX}/service-appointments`, serviceAppointmentRoutes_1.default);
+console.log('✅ Service appointment routes registered at /api/service-appointments');
+// Consultation Routes - Medical/Professional consultation bookings
+app.use(`${API_PREFIX}/consultations`, consultationRoutes_1.default);
+console.log('✅ Consultation routes registered at /api/consultations');
+// Store Visit Routes - Retail store visits and queue system
+app.use(`${API_PREFIX}/store-visits`, storeVisitRoutes_1.default);
+console.log('✅ Store visit routes registered at /api/store-visits');
 // Merchant API Routes
 app.use('/api/merchant/auth', auth_1.default); // Merchant auth routes
 app.use('/api/merchant/categories', categories_1.default);
@@ -487,6 +522,7 @@ async function startServer() {
             console.log(`   🏪 Stores: http://localhost:${PORT}${API_PREFIX}/stores`);
             console.log(`   📦 Orders: http://localhost:${PORT}${API_PREFIX}/orders`);
             console.log(`   🎥 Videos: http://localhost:${PORT}${API_PREFIX}/videos`);
+            console.log(`   📸 UGC: http://localhost:${PORT}${API_PREFIX}/ugc`);
             console.log(`   📋 Projects: http://localhost:${PORT}${API_PREFIX}/projects`);
             console.log(`   🔔 Notifications: http://localhost:${PORT}${API_PREFIX}/notifications`);
             console.log(`   ⭐ Reviews: http://localhost:${PORT}${API_PREFIX}/reviews`);
@@ -506,6 +542,9 @@ async function startServer() {
             console.log(`   🎟️  Store Vouchers: http://localhost:${PORT}${API_PREFIX}/store-vouchers`);
             console.log(`   📍 Outlets: http://localhost:${PORT}${API_PREFIX}/outlets`);
             console.log(`   ⚡ Flash Sales: http://localhost:${PORT}${API_PREFIX}/flash-sales`);
+            console.log(`   🍽️  Menu & Pre-orders: http://localhost:${PORT}${API_PREFIX}/menu`);
+            console.log(`   🩺 Consultations: http://localhost:${PORT}${API_PREFIX}/consultations`);
+            console.log(`   📅 Service Appointments: http://localhost:${PORT}${API_PREFIX}/service-appointments`);
             console.log(`   🔄 Merchant Sync: http://localhost:${PORT}/api/merchant/sync`);
             console.log(`\n🎉 Phase 7 Complete - Product Page Features Implemented!`);
             console.log(`   ✅ Authentication APIs (8 endpoints)`);

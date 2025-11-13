@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.checkAvailability = exports.getRelatedProducts = exports.getPopularSearches = exports.getSearchSuggestions = exports.getBundleProducts = exports.getFrequentlyBoughtTogether = exports.getProductAnalytics = exports.trackProductView = exports.getRecommendations = exports.searchProducts = exports.getNewArrivals = exports.getFeaturedProducts = exports.getProductsByStore = exports.getProductsByCategory = exports.getProductById = exports.getProducts = void 0;
+const mongoose_1 = __importDefault(require("mongoose"));
 const Product_1 = require("../models/Product");
 const Category_1 = require("../models/Category");
 const Store_1 = require("../models/Store");
@@ -257,9 +258,15 @@ exports.getProductsByStore = (0, asyncHandler_1.asyncHandler)(async (req, res) =
     const { storeId } = req.params;
     const { category, minPrice, maxPrice, sortBy = 'createdAt', page = 1, limit = 20 } = req.query;
     try {
+        // Check if storeId is a valid ObjectId format (24 hex characters)
+        // If not, return empty results immediately since store field only accepts ObjectIds
+        if (!mongoose_1.default.Types.ObjectId.isValid(storeId) || !/^[0-9a-fA-F]{24}$/.test(storeId)) {
+            console.log(`ℹ️ [PRODUCTS] Store ID "${storeId}" is not a valid ObjectId format, returning empty array`);
+            return (0, response_1.sendPaginated)(res, [], Number(page), Number(limit), 0);
+        }
         // Verify store exists
         const store = await Store_1.Store.findOne({
-            _id: storeId,
+            _id: new mongoose_1.default.Types.ObjectId(storeId),
             isActive: true
         });
         if (!store) {
@@ -267,7 +274,7 @@ exports.getProductsByStore = (0, asyncHandler_1.asyncHandler)(async (req, res) =
         }
         // Build query
         const query = {
-            store: storeId,
+            store: new mongoose_1.default.Types.ObjectId(storeId),
             isActive: true,
             'inventory.isAvailable': true
         };

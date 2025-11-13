@@ -59,7 +59,19 @@ declare class PushNotificationService {
      * Send general order update notification
      */
     sendOrderUpdate(orderNumber: string, phone: string, title: string, message: string): Promise<void>;
+    /**
+     * Send queue number assigned notification
+     */
+    sendQueueNumberAssigned(storeName: string, queueNumber: number, visitNumber: string, phone: string, estimatedWaitTime?: string, currentQueueSize?: number): Promise<void>;
+    /**
+     * Send visit scheduled notification
+     */
+    sendVisitScheduled(storeName: string, visitNumber: string, visitDate: Date, visitTime: string, phone: string, storeAddress?: string): Promise<void>;
+    /**
+     * Send visit cancelled notification
+     */
+    sendVisitCancelled(storeName: string, visitNumber: string, phone: string, reason?: string): Promise<void>;
 }
 declare const pushNotificationService: PushNotificationService;
 export default pushNotificationService;
-export declare const sendOrderConfirmed: (data: OrderNotificationData, phone: string) => Promise<void>, sendOrderOutForDelivery: (data: OrderNotificationData, phone: string) => Promise<void>, sendOrderDelivered: (data: OrderNotificationData, phone: string) => Promise<void>, sendOrderCancelled: (data: OrderNotificationData, phone: string, reason?: string) => Promise<void>, sendOrderRefunded: (data: OrderNotificationData, phone: string, refundAmount: number) => Promise<void>, sendDeliveryPartnerAssigned: (data: OrderNotificationData, phone: string) => Promise<void>, sendOrderUpdate: (orderNumber: string, phone: string, title: string, message: string) => Promise<void>;
+export declare const sendOrderConfirmed: (data: OrderNotificationData, phone: string) => Promise<void>, sendOrderOutForDelivery: (data: OrderNotificationData, phone: string) => Promise<void>, sendOrderDelivered: (data: OrderNotificationData, phone: string) => Promise<void>, sendOrderCancelled: (data: OrderNotificationData, phone: string, reason?: string) => Promise<void>, sendOrderRefunded: (data: OrderNotificationData, phone: string, refundAmount: number) => Promise<void>, sendDeliveryPartnerAssigned: (data: OrderNotificationData, phone: string) => Promise<void>, sendOrderUpdate: (orderNumber: string, phone: string, title: string, message: string) => Promise<void>, sendQueueNumberAssigned: (storeName: string, queueNumber: number, visitNumber: string, phone: string, estimatedWaitTime?: string, currentQueueSize?: number) => Promise<void>, sendVisitScheduled: (storeName: string, visitNumber: string, visitDate: Date, visitTime: string, phone: string, storeAddress?: string) => Promise<void>, sendVisitCancelled: (storeName: string, visitNumber: string, phone: string, reason?: string) => Promise<void>;

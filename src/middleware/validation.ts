@@ -273,6 +273,7 @@ export const wishlistSchemas = {
 export const videoSchemas = {
   getVideos: Joi.object({
     category: Joi.string().valid('trending_me', 'trending_her', 'waist', 'article', 'featured', 'challenge', 'tutorial', 'review'),
+    contentType: Joi.string().valid('merchant', 'ugc', 'article_video'),
     creator: commonSchemas.objectId,
     hasProducts: Joi.boolean(),
     search: Joi.string().trim().max(100),

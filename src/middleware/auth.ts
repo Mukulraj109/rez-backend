@@ -186,3 +186,6 @@ export const requireStoreOwnerOrAdmin = authorize('store_owner', 'admin');
 
 // Alias for authenticate (commonly used name)
 export const requireAuth = authenticate;
+
+// Alias for authenticate (commonly used in routes)
+export const protect = authenticate;

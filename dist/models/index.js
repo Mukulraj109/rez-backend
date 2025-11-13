@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.GameSession = exports.CoinTransaction = exports.TriviaQuestion = exports.QuizQuestion = exports.StorePromoCoin = exports.Subscription = exports.EventBooking = exports.Event = exports.UserCoupon = exports.Coupon = exports.StockHistory = exports.Activity = exports.UserAchievement = exports.UserSettings = exports.PaymentMethod = exports.Address = exports.OfferRedemption = exports.UserVoucher = exports.VoucherBrand = exports.FlashSale = exports.Offer = exports.Wallet = exports.Wishlist = exports.Review = exports.Notification = exports.Transaction = exports.Project = exports.Video = exports.Order = exports.Cart = exports.Product = exports.Store = exports.Category = exports.User = void 0;
+exports.GameSession = exports.CoinTransaction = exports.TriviaQuestion = exports.QuizQuestion = exports.StorePromoCoin = exports.Subscription = exports.Consultation = exports.EventBooking = exports.Event = exports.UserCoupon = exports.Coupon = exports.StockHistory = exports.Activity = exports.UserAchievement = exports.UserSettings = exports.PaymentMethod = exports.Address = exports.OfferRedemption = exports.UserVoucher = exports.VoucherBrand = exports.FlashSale = exports.Offer = exports.Wallet = exports.Wishlist = exports.Review = exports.Notification = exports.Transaction = exports.Project = exports.Article = exports.Video = exports.Order = exports.Cart = exports.Product = exports.Store = exports.Category = exports.User = void 0;
 // Export all MongoDB models
 var User_1 = require("./User");
 Object.defineProperty(exports, "User", { enumerable: true, get: function () { return User_1.User; } });
@@ -19,6 +19,8 @@ var Order_1 = require("./Order");
 Object.defineProperty(exports, "Order", { enumerable: true, get: function () { return Order_1.Order; } });
 var Video_1 = require("./Video");
 Object.defineProperty(exports, "Video", { enumerable: true, get: function () { return Video_1.Video; } });
+var Article_1 = require("./Article");
+Object.defineProperty(exports, "Article", { enumerable: true, get: function () { return Article_1.Article; } });
 var Project_1 = require("./Project");
 Object.defineProperty(exports, "Project", { enumerable: true, get: function () { return Project_1.Project; } });
 var Transaction_1 = require("./Transaction");
@@ -60,6 +62,8 @@ var Event_1 = require("./Event");
 Object.defineProperty(exports, "Event", { enumerable: true, get: function () { return __importDefault(Event_1).default; } });
 var EventBooking_1 = require("./EventBooking");
 Object.defineProperty(exports, "EventBooking", { enumerable: true, get: function () { return __importDefault(EventBooking_1).default; } });
+var Consultation_1 = require("./Consultation");
+Object.defineProperty(exports, "Consultation", { enumerable: true, get: function () { return __importDefault(Consultation_1).default; } });
 var Subscription_1 = require("./Subscription");
 Object.defineProperty(exports, "Subscription", { enumerable: true, get: function () { return Subscription_1.Subscription; } });
 var StorePromoCoin_1 = require("./StorePromoCoin");

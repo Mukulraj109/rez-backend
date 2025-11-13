@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.requireAuth = exports.requireStoreOwnerOrAdmin = exports.requireAdmin = exports.authorize = exports.optionalAuth = exports.authenticate = exports.verifyRefreshToken = exports.verifyToken = exports.generateRefreshToken = exports.generateToken = void 0;
+exports.protect = exports.requireAuth = exports.requireStoreOwnerOrAdmin = exports.requireAdmin = exports.authorize = exports.optionalAuth = exports.authenticate = exports.verifyRefreshToken = exports.verifyToken = exports.generateRefreshToken = exports.generateToken = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const User_1 = require("../models/User");
 // Generate JWT token
@@ -166,3 +166,5 @@ exports.requireAdmin = (0, exports.authorize)('admin');
 exports.requireStoreOwnerOrAdmin = (0, exports.authorize)('store_owner', 'admin');
 // Alias for authenticate (commonly used name)
 exports.requireAuth = exports.authenticate;
+// Alias for authenticate (commonly used in routes)
+exports.protect = exports.authenticate;

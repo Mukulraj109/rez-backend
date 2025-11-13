@@ -9,3 +9,5 @@ export declare const toggleVideoLike: (req: Request, res: Response, next: import
 export declare const addVideoComment: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const getVideoComments: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const searchVideos: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getVideosByStore: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const reportVideo: (req: Request, res: Response, next: import("express").NextFunction) => void;

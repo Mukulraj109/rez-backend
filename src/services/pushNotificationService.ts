@@ -221,6 +221,87 @@ class PushNotificationService {
 
     console.log(`📦 [Notification] Order update sent for ${orderNumber}`);
   }
+
+  /**
+   * Send queue number assigned notification
+   */
+  public async sendQueueNumberAssigned(
+    storeName: string,
+    queueNumber: number,
+    visitNumber: string,
+    phone: string,
+    estimatedWaitTime?: string,
+    currentQueueSize?: number
+  ): Promise<void> {
+    let message = `🎫 Queue Number Assigned!\n\nStore: ${storeName}\nYour Queue #: ${queueNumber}\nVisit #: ${visitNumber}`;
+
+    if (estimatedWaitTime) {
+      message += `\nEstimated Wait: ${estimatedWaitTime}`;
+    }
+
+    if (currentQueueSize) {
+      message += `\nCurrent Queue Size: ${currentQueueSize}`;
+    }
+
+    message += `\n\nWe'll notify you when it's your turn. Thank you for using REZ!`;
+
+    await this.sendSMS(phone, message);
+
+    console.log(`🎫 [Notification] Queue number sent for ${visitNumber}`);
+  }
+
+  /**
+   * Send visit scheduled notification
+   */
+  public async sendVisitScheduled(
+    storeName: string,
+    visitNumber: string,
+    visitDate: Date,
+    visitTime: string,
+    phone: string,
+    storeAddress?: string
+  ): Promise<void> {
+    const dateStr = new Date(visitDate).toLocaleDateString('en-IN', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    let message = `📅 Visit Scheduled Successfully!\n\nStore: ${storeName}\nVisit #: ${visitNumber}\nDate: ${dateStr}\nTime: ${visitTime}`;
+
+    if (storeAddress) {
+      message += `\nAddress: ${storeAddress}`;
+    }
+
+    message += `\n\nWe look forward to seeing you! Open REZ app to manage your visit.`;
+
+    await this.sendSMS(phone, message);
+
+    console.log(`📅 [Notification] Visit scheduled notification sent for ${visitNumber}`);
+  }
+
+  /**
+   * Send visit cancelled notification
+   */
+  public async sendVisitCancelled(
+    storeName: string,
+    visitNumber: string,
+    phone: string,
+    reason?: string
+  ): Promise<void> {
+    let message = `❌ Visit Cancelled\n\nStore: ${storeName}\nVisit #: ${visitNumber} has been cancelled.`;
+
+    if (reason) {
+      message += `\nReason: ${reason}`;
+    }
+
+    message += `\n\nYou can reschedule anytime through the REZ app.`;
+
+    await this.sendSMS(phone, message);
+
+    console.log(`❌ [Notification] Visit cancellation sent for ${visitNumber}`);
+  }
 }
 
 // Export singleton instance
@@ -237,4 +318,7 @@ export const {
   sendOrderRefunded,
   sendDeliveryPartnerAssigned,
   sendOrderUpdate,
+  sendQueueNumberAssigned,
+  sendVisitScheduled,
+  sendVisitCancelled,
 } = pushNotificationService;

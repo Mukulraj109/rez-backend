@@ -79,7 +79,8 @@ auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
 router.get('/store/:storeId', 
 // generalLimiter,, // Disabled for development
 auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
-    storeId: validation_1.commonSchemas.objectId().required()
+    // Accept both ObjectId format and string IDs (for mock data compatibility)
+    storeId: validation_2.Joi.string().trim().min(1).required()
 })), (0, validation_1.validateQuery)(validation_2.Joi.object({
     category: validation_1.commonSchemas.objectId,
     minPrice: validation_2.Joi.number().min(0),

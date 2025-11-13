@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { Product } from '../models/Product';
 import { Category } from '../models/Category';
 import { Store } from '../models/Store';
@@ -316,10 +317,17 @@ export const getProductsByStore = asyncHandler(async (req: Request, res: Respons
   } = req.query;
 
   try {
+    // Check if storeId is a valid ObjectId format (24 hex characters)
+    // If not, return empty results immediately since store field only accepts ObjectIds
+    if (!mongoose.Types.ObjectId.isValid(storeId) || !/^[0-9a-fA-F]{24}$/.test(storeId)) {
+      console.log(`ℹ️ [PRODUCTS] Store ID "${storeId}" is not a valid ObjectId format, returning empty array`);
+      return sendPaginated(res, [], Number(page), Number(limit), 0);
+    }
+
     // Verify store exists
-    const store = await Store.findOne({ 
-      _id: storeId, 
-      isActive: true 
+    const store = await Store.findOne({
+      _id: new mongoose.Types.ObjectId(storeId),
+      isActive: true
     });
 
     if (!store) {
@@ -328,7 +336,7 @@ export const getProductsByStore = asyncHandler(async (req: Request, res: Respons
 
     // Build query
     const query: any = {
-      store: storeId,
+      store: new mongoose.Types.ObjectId(storeId),
       isActive: true,
       'inventory.isAvailable': true
     };

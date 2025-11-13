@@ -6,10 +6,12 @@ import {
   getVideosByCategory,
   getTrendingVideos,
   getVideosByCreator,
+  getVideosByStore,
   toggleVideoLike,
   addVideoComment,
   getVideoComments,
-  searchVideos
+  searchVideos,
+  reportVideo
 } from '../controllers/videoController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validate, validateParams, validateQuery, videoSchemas, commonSchemas } from '../middleware/validation';
@@ -19,14 +21,16 @@ import { Joi } from '../middleware/validation';
 const router = Router();
 
 // Create a new video (requires authentication)
-router.post('/', 
+router.post('/',
   authenticate,
   validate(Joi.object({
     title: Joi.string().trim().min(1).max(100).required(),
     description: Joi.string().trim().max(1000).optional(),
+    contentType: Joi.string().valid('merchant', 'ugc', 'article_video').default('ugc'),
     videoUrl: Joi.string().uri().required(),
     thumbnailUrl: Joi.string().uri().optional(),
     category: Joi.string().valid('trending_me', 'trending_her', 'waist', 'article', 'featured', 'challenge', 'tutorial', 'review').default('general'),
+    associatedArticle: commonSchemas.objectId().optional(),
     tags: Joi.array().items(Joi.string().trim().max(50)).max(10).optional(),
     products: Joi.array().items(commonSchemas.objectId()).max(20).optional(),
     duration: Joi.number().integer().min(0).optional(),
@@ -84,7 +88,7 @@ router.get('/category/:category',
 );
 
 // Get videos by creator
-router.get('/creator/:creatorId', 
+router.get('/creator/:creatorId',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateParams(Joi.object({
@@ -97,12 +101,29 @@ router.get('/creator/:creatorId',
   getVideosByCreator
 );
 
-// Get single video by ID
-router.get('/:videoId', 
+// Get videos by store
+router.get('/store/:storeId',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateParams(Joi.object({
-    videoId: commonSchemas.objectId().required()
+    // Accept both ObjectId format and string IDs (for mock data compatibility)
+    storeId: Joi.string().trim().min(1).required()
+  })),
+  validateQuery(Joi.object({
+    type: Joi.string().valid('photo', 'video').optional(),
+    limit: Joi.number().integer().min(1).max(50).default(20),
+    offset: Joi.number().integer().min(0).default(0)
+  })),
+  getVideosByStore
+);
+
+// Get single video by ID
+router.get('/:videoId',
+  // generalLimiter,, // Disabled for development
+  optionalAuth,
+  validateParams(Joi.object({
+    // Accept both ObjectId format and string IDs (for mock data compatibility)
+    videoId: Joi.string().trim().min(1).required()
   })),
   getVideoById
 );
@@ -131,7 +152,7 @@ router.post('/:videoId/comments',
 );
 
 // Get video comments
-router.get('/:videoId/comments', 
+router.get('/:videoId/comments',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateParams(Joi.object({
@@ -142,6 +163,20 @@ router.get('/:videoId/comments',
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),
   getVideoComments
+);
+
+// Report video (requires authentication)
+router.post('/:videoId/report',
+  // generalLimiter,, // Disabled for development
+  authenticate,
+  validateParams(Joi.object({
+    videoId: commonSchemas.objectId().required()
+  })),
+  validate(Joi.object({
+    reason: Joi.string().valid('inappropriate', 'misleading', 'spam', 'copyright', 'other').required(),
+    details: Joi.string().trim().max(500).optional()
+  })),
+  reportVideo
 );
 
 export default router;

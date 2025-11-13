@@ -78,13 +78,13 @@ export declare class OrderModel {
             estimatedDelivery?: Date | undefined;
             priority?: "normal" | "high" | "urgent" | undefined;
             customerName: string;
-            shipping: number;
             customerEmail: string;
+            shipping: number;
             internalNotes?: string | undefined;
+            confirmedAt?: Date | undefined;
             customerId: string;
             shippingAddress: import("../types/shared").Address;
             billingAddress: import("../types/shared").Address;
-            confirmedAt?: Date | undefined;
             fulfilledAt?: Date | undefined;
             fulfillmentStatus?: string | undefined;
             customer?: any;

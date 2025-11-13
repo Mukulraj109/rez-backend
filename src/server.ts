@@ -37,10 +37,13 @@ import categoryRoutes from './routes/categoryRoutes';
 import storeRoutes from './routes/storeRoutes';
 import orderRoutes from './routes/orderRoutes';
 import videoRoutes from './routes/videoRoutes';
+import ugcRoutes from './routes/ugcRoutes';
+import articleRoutes from './routes/articleRoutes';
 import projectRoutes from './routes/projectRoutes';
 import earningProjectsRoutes from './routes/earningProjectsRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import stockNotificationRoutes from './routes/stockNotificationRoutes';
+import priceTrackingRoutes from './routes/priceTrackingRoutes';
 import reviewRoutes from './routes/reviewRoutes';
 import favoriteRoutes from './routes/favoriteRoutes';
 import comparisonRoutes from './routes/comparisonRoutes';
@@ -70,6 +73,7 @@ import couponRoutes from './routes/couponRoutes';
 import storePromoCoinRoutes from './routes/storePromoCoinRoutes';
 import razorpayRoutes from './routes/razorpayRoutes';
 import supportRoutes from './routes/supportRoutes';
+import messageRoutes from './routes/messageRoutes';
 import cashbackRoutes from './routes/cashbackRoutes';
 import userProductRoutes from './routes/userProductRoutes';
 import discountRoutes from './routes/discountRoutes';
@@ -83,6 +87,11 @@ import activityFeedRoutes from './routes/activityFeedRoutes';
 import unifiedGamificationRoutes from './routes/unifiedGamificationRoutes';
 import partnerRoutes from './routes/partnerRoutes';
 import earningsRoutes from './routes/earningsRoutes';
+import menuRoutes from './routes/menuRoutes';
+import tableBookingRoutes from './routes/tableBookingRoutes';
+import consultationRoutes from './routes/consultationRoutes';
+import serviceAppointmentRoutes from './routes/serviceAppointmentRoutes';
+import storeVisitRoutes from './routes/storeVisitRoutes';
 import authRoutes1 from './merchantroutes/auth';  // Temporarily disabled
 import merchantRoutes from './merchantroutes/merchants';  // Temporarily disabled
 import merchantProfileRoutes from './merchantroutes/merchant-profile'; // Disabled due to missing properties
@@ -164,8 +173,8 @@ app.get('/health', async (req, res) => {
       version: '1.0.0',
       api: {
         prefix: API_PREFIX,
-        totalEndpoints: 145,
-        modules: 15,
+        totalEndpoints: 159,
+        modules: 17,
         endpoints: {
           auth: `${API_PREFIX}/auth`,
           products: `${API_PREFIX}/products`,
@@ -174,6 +183,8 @@ app.get('/health', async (req, res) => {
           stores: `${API_PREFIX}/stores`,
           orders: `${API_PREFIX}/orders`,
           videos: `${API_PREFIX}/videos`,
+          ugc: `${API_PREFIX}/ugc`,
+          articles: `${API_PREFIX}/articles`,
           projects: `${API_PREFIX}/projects`,
           notifications: `${API_PREFIX}/notifications`,
           reviews: `${API_PREFIX}/reviews`,
@@ -196,7 +207,11 @@ app.get('/health', async (req, res) => {
           outlets: `${API_PREFIX}/outlets`,
           flashSales: `${API_PREFIX}/flash-sales`,
           bills: `${API_PREFIX}/bills`,
-          partner: `${API_PREFIX}/partner`
+          partner: `${API_PREFIX}/partner`,
+          menu: `${API_PREFIX}/menu`,
+          tableBookings: `${API_PREFIX}/table-bookings`,
+          consultations: `${API_PREFIX}/consultations`,
+          storeVisits: `${API_PREFIX}/store-visits`
         }
       }
     };
@@ -240,6 +255,8 @@ app.get('/api-info', (req, res) => {
       stores: `${API_PREFIX}/stores`,
       orders: `${API_PREFIX}/orders`,
       videos: `${API_PREFIX}/videos`,
+      ugc: `${API_PREFIX}/ugc`,
+      articles: `${API_PREFIX}/articles`,
       projects: `${API_PREFIX}/projects`,
       notifications: `${API_PREFIX}/notifications`,
       reviews: `${API_PREFIX}/reviews`,
@@ -262,6 +279,7 @@ app.get('/api-info', (req, res) => {
       flashSales: `${API_PREFIX}/flash-sales`,
       bills: `${API_PREFIX}/bills`,
       partner: `${API_PREFIX}/partner`,
+      storeVisits: `${API_PREFIX}/store-visits`,
       merchantSync: '/api/merchant/sync'
     },
     features: [
@@ -294,7 +312,7 @@ app.get('/api-info', (req, res) => {
     database: {
       models: [
         'User', 'Category', 'Store', 'Product', 'Cart', 'Order',
-        'Video', 'Project', 'Transaction', 'Notification', 'Review', 'Wishlist',
+        'Video', 'Article', 'Project', 'Transaction', 'Notification', 'Review', 'Wishlist',
         'Wallet', 'Offer', 'VoucherBrand', 'UserVoucher', 'OfferRedemption',
         'Address', 'PaymentMethod', 'UserSettings', 'UserAchievement', 'Activity',
         'Coupon', 'UserCoupon', 'SupportTicket', 'FAQ', 'UserCashback'
@@ -337,10 +355,13 @@ app.use(`${API_PREFIX}/categories`, categoryRoutes);
 app.use(`${API_PREFIX}/stores`, storeRoutes);
 app.use(`${API_PREFIX}/orders`, orderRoutes);
 app.use(`${API_PREFIX}/videos`, videoRoutes);
+app.use(`${API_PREFIX}/ugc`, ugcRoutes);
+app.use(`${API_PREFIX}/articles`, articleRoutes);
 app.use(`${API_PREFIX}/projects`, projectRoutes);
 app.use(`${API_PREFIX}/earning-projects`, earningProjectsRoutes);
 app.use(`${API_PREFIX}/notifications`, notificationRoutes);
 app.use(`${API_PREFIX}/stock-notifications`, stockNotificationRoutes);
+app.use(`${API_PREFIX}/price-tracking`, priceTrackingRoutes);
 app.use(`${API_PREFIX}/reviews`, reviewRoutes);
 app.use(`${API_PREFIX}/favorites`, favoriteRoutes);
 app.use(`${API_PREFIX}/comparisons`, comparisonRoutes);
@@ -370,6 +391,8 @@ app.use(`${API_PREFIX}/coupons`, couponRoutes);
 app.use(`${API_PREFIX}/store-promo-coins`, storePromoCoinRoutes);
 app.use(`${API_PREFIX}/razorpay`, razorpayRoutes);
 app.use(`${API_PREFIX}/support`, supportRoutes);
+app.use(`${API_PREFIX}/messages`, messageRoutes);
+console.log('✅ Messaging routes registered at /api/messages');
 app.use(`${API_PREFIX}/cashback`, cashbackRoutes);
 app.use(`${API_PREFIX}/user-products`, userProductRoutes);
 app.use(`${API_PREFIX}/discounts`, discountRoutes);
@@ -405,6 +428,26 @@ console.log('✅ Partner program routes registered at /api/partner');
 // Earnings Routes - User earnings summary with breakdown
 app.use(`${API_PREFIX}/earnings`, earningsRoutes);
 console.log('✅ Earnings routes registered at /api/earnings');
+
+// Menu Routes - Restaurant/Store menus and pre-orders
+app.use(`${API_PREFIX}/menu`, menuRoutes);
+console.log('✅ Menu routes registered at /api/menu');
+
+// Table Booking Routes - Restaurant table reservations
+app.use(`${API_PREFIX}/table-bookings`, tableBookingRoutes);
+console.log('✅ Table booking routes registered at /api/table-bookings');
+
+// Service Appointment Routes - Service appointments for salons, spas, consultations
+app.use(`${API_PREFIX}/service-appointments`, serviceAppointmentRoutes);
+console.log('✅ Service appointment routes registered at /api/service-appointments');
+
+// Consultation Routes - Medical/Professional consultation bookings
+app.use(`${API_PREFIX}/consultations`, consultationRoutes);
+console.log('✅ Consultation routes registered at /api/consultations');
+
+// Store Visit Routes - Retail store visits and queue system
+app.use(`${API_PREFIX}/store-visits`, storeVisitRoutes);
+console.log('✅ Store visit routes registered at /api/store-visits');
 
 // Merchant API Routes
 app.use('/api/merchant/auth', authRoutes1);  // Merchant auth routes
@@ -556,6 +599,7 @@ async function startServer() {
       console.log(`   🏪 Stores: http://localhost:${PORT}${API_PREFIX}/stores`);
       console.log(`   📦 Orders: http://localhost:${PORT}${API_PREFIX}/orders`);
       console.log(`   🎥 Videos: http://localhost:${PORT}${API_PREFIX}/videos`);
+      console.log(`   📸 UGC: http://localhost:${PORT}${API_PREFIX}/ugc`);
       console.log(`   📋 Projects: http://localhost:${PORT}${API_PREFIX}/projects`);
       console.log(`   🔔 Notifications: http://localhost:${PORT}${API_PREFIX}/notifications`);
       console.log(`   ⭐ Reviews: http://localhost:${PORT}${API_PREFIX}/reviews`);
@@ -575,6 +619,9 @@ async function startServer() {
       console.log(`   🎟️  Store Vouchers: http://localhost:${PORT}${API_PREFIX}/store-vouchers`);
       console.log(`   📍 Outlets: http://localhost:${PORT}${API_PREFIX}/outlets`);
       console.log(`   ⚡ Flash Sales: http://localhost:${PORT}${API_PREFIX}/flash-sales`);
+      console.log(`   🍽️  Menu & Pre-orders: http://localhost:${PORT}${API_PREFIX}/menu`);
+      console.log(`   🩺 Consultations: http://localhost:${PORT}${API_PREFIX}/consultations`);
+      console.log(`   📅 Service Appointments: http://localhost:${PORT}${API_PREFIX}/service-appointments`);
       console.log(`   🔄 Merchant Sync: http://localhost:${PORT}/api/merchant/sync`);
       console.log(`\n🎉 Phase 7 Complete - Product Page Features Implemented!`);
       console.log(`   ✅ Authentication APIs (8 endpoints)`);

@@ -9,7 +9,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendOrderUpdate = exports.sendDeliveryPartnerAssigned = exports.sendOrderRefunded = exports.sendOrderCancelled = exports.sendOrderDelivered = exports.sendOrderOutForDelivery = exports.sendOrderConfirmed = void 0;
+exports.sendVisitCancelled = exports.sendVisitScheduled = exports.sendQueueNumberAssigned = exports.sendOrderUpdate = exports.sendDeliveryPartnerAssigned = exports.sendOrderRefunded = exports.sendOrderCancelled = exports.sendOrderDelivered = exports.sendOrderOutForDelivery = exports.sendOrderConfirmed = void 0;
 const twilio_1 = __importDefault(require("twilio"));
 class PushNotificationService {
     constructor() {
@@ -154,9 +154,54 @@ class PushNotificationService {
         await this.sendSMS(phone, fullMessage);
         console.log(`📦 [Notification] Order update sent for ${orderNumber}`);
     }
+    /**
+     * Send queue number assigned notification
+     */
+    async sendQueueNumberAssigned(storeName, queueNumber, visitNumber, phone, estimatedWaitTime, currentQueueSize) {
+        let message = `🎫 Queue Number Assigned!\n\nStore: ${storeName}\nYour Queue #: ${queueNumber}\nVisit #: ${visitNumber}`;
+        if (estimatedWaitTime) {
+            message += `\nEstimated Wait: ${estimatedWaitTime}`;
+        }
+        if (currentQueueSize) {
+            message += `\nCurrent Queue Size: ${currentQueueSize}`;
+        }
+        message += `\n\nWe'll notify you when it's your turn. Thank you for using REZ!`;
+        await this.sendSMS(phone, message);
+        console.log(`🎫 [Notification] Queue number sent for ${visitNumber}`);
+    }
+    /**
+     * Send visit scheduled notification
+     */
+    async sendVisitScheduled(storeName, visitNumber, visitDate, visitTime, phone, storeAddress) {
+        const dateStr = new Date(visitDate).toLocaleDateString('en-IN', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+        });
+        let message = `📅 Visit Scheduled Successfully!\n\nStore: ${storeName}\nVisit #: ${visitNumber}\nDate: ${dateStr}\nTime: ${visitTime}`;
+        if (storeAddress) {
+            message += `\nAddress: ${storeAddress}`;
+        }
+        message += `\n\nWe look forward to seeing you! Open REZ app to manage your visit.`;
+        await this.sendSMS(phone, message);
+        console.log(`📅 [Notification] Visit scheduled notification sent for ${visitNumber}`);
+    }
+    /**
+     * Send visit cancelled notification
+     */
+    async sendVisitCancelled(storeName, visitNumber, phone, reason) {
+        let message = `❌ Visit Cancelled\n\nStore: ${storeName}\nVisit #: ${visitNumber} has been cancelled.`;
+        if (reason) {
+            message += `\nReason: ${reason}`;
+        }
+        message += `\n\nYou can reschedule anytime through the REZ app.`;
+        await this.sendSMS(phone, message);
+        console.log(`❌ [Notification] Visit cancellation sent for ${visitNumber}`);
+    }
 }
 // Export singleton instance
 const pushNotificationService = PushNotificationService.getInstance();
 exports.default = pushNotificationService;
 // Export individual functions for easier use
-exports.sendOrderConfirmed = pushNotificationService.sendOrderConfirmed, exports.sendOrderOutForDelivery = pushNotificationService.sendOrderOutForDelivery, exports.sendOrderDelivered = pushNotificationService.sendOrderDelivered, exports.sendOrderCancelled = pushNotificationService.sendOrderCancelled, exports.sendOrderRefunded = pushNotificationService.sendOrderRefunded, exports.sendDeliveryPartnerAssigned = pushNotificationService.sendDeliveryPartnerAssigned, exports.sendOrderUpdate = pushNotificationService.sendOrderUpdate;
+exports.sendOrderConfirmed = pushNotificationService.sendOrderConfirmed, exports.sendOrderOutForDelivery = pushNotificationService.sendOrderOutForDelivery, exports.sendOrderDelivered = pushNotificationService.sendOrderDelivered, exports.sendOrderCancelled = pushNotificationService.sendOrderCancelled, exports.sendOrderRefunded = pushNotificationService.sendOrderRefunded, exports.sendDeliveryPartnerAssigned = pushNotificationService.sendDeliveryPartnerAssigned, exports.sendOrderUpdate = pushNotificationService.sendOrderUpdate, exports.sendQueueNumberAssigned = pushNotificationService.sendQueueNumberAssigned, exports.sendVisitScheduled = pushNotificationService.sendVisitScheduled, exports.sendVisitCancelled = pushNotificationService.sendVisitCancelled;

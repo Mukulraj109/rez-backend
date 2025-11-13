@@ -29,6 +29,8 @@ export interface IProductInventory {
   lowStockThreshold?: number;
   variants?: IProductVariant[];
   unlimited: boolean; // For digital products
+  estimatedRestockDate?: Date; // When product will be back in stock
+  allowBackorder?: boolean; // Allow orders when out of stock
 }
 
 // Product ratings interface
@@ -296,6 +298,13 @@ const ProductSchema = new Schema<IProduct>({
       image: String
     }],
     unlimited: {
+      type: Boolean,
+      default: false
+    },
+    estimatedRestockDate: {
+      type: Date
+    },
+    allowBackorder: {
       type: Boolean,
       default: false
     }

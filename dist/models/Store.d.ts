@@ -143,6 +143,28 @@ export interface IStore extends Document {
     isFeatured: boolean;
     isVerified: boolean;
     merchantId?: Types.ObjectId;
+    hasMenu?: boolean;
+    menuCategories?: string[];
+    bookingType?: 'RESTAURANT' | 'SERVICE' | 'CONSULTATION' | 'RETAIL' | 'HYBRID';
+    bookingConfig?: {
+        enabled: boolean;
+        requiresAdvanceBooking: boolean;
+        allowWalkIn: boolean;
+        slotDuration: number;
+        advanceBookingDays: number;
+        workingHours?: {
+            start: string;
+            end: string;
+        };
+    };
+    storeVisitConfig?: {
+        enabled: boolean;
+        features: ('queue_system' | 'visit_scheduling' | 'live_availability')[];
+        maxVisitorsPerSlot?: number;
+        averageVisitDuration?: number;
+    };
+    serviceTypes?: string[];
+    consultationTypes?: string[];
     createdAt: Date;
     updatedAt: Date;
     isOpen(): boolean;

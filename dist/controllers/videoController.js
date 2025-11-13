@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.searchVideos = exports.getVideoComments = exports.addVideoComment = exports.toggleVideoLike = exports.getVideosByCreator = exports.getTrendingVideos = exports.getVideosByCategory = exports.getVideoById = exports.getVideos = exports.createVideo = void 0;
+exports.reportVideo = exports.getVideosByStore = exports.searchVideos = exports.getVideoComments = exports.addVideoComment = exports.toggleVideoLike = exports.getVideosByCreator = exports.getTrendingVideos = exports.getVideosByCategory = exports.getVideoById = exports.getVideos = exports.createVideo = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 const Video_1 = require("../models/Video");
 const User_1 = require("../models/User");
@@ -15,7 +15,7 @@ const response_2 = require("../utils/response");
 // Create a new video
 exports.createVideo = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const userId = req.userId;
-    const { title, description, videoUrl, thumbnailUrl, category, tags, products, duration, isPublic = true } = req.body;
+    const { title, description, videoUrl, thumbnailUrl, category, contentType, associatedArticle, tags, products, duration, isPublic = true } = req.body;
     try {
         console.log('🎥 [VIDEO] Creating video for user:', userId);
         // Validate required fields
@@ -29,7 +29,9 @@ exports.createVideo = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             videoUrl,
             thumbnail: thumbnailUrl || '',
             creator: userId,
+            contentType: contentType || 'ugc',
             category: category || 'general',
+            associatedArticle: associatedArticle || undefined,
             tags: tags || [],
             hashtags: tags || [], // Use tags for hashtags as well
             products: products || [],
@@ -103,7 +105,7 @@ exports.createVideo = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
 });
 // Get all videos with filtering
 exports.getVideos = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
-    const { category, creator, hasProducts, search, sortBy = 'newest', page = 1, limit = 20 } = req.query;
+    const { category, creator, contentType, hasProducts, search, sortBy = 'newest', page = 1, limit = 20 } = req.query;
     try {
         const query = {
             isPublished: true,
@@ -115,6 +117,8 @@ exports.getVideos = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             query.category = category;
         if (creator)
             query.creator = creator;
+        if (contentType)
+            query.contentType = contentType;
         if (hasProducts === 'true') {
             query['products.0'] = { $exists: true };
         }
@@ -146,7 +150,14 @@ exports.getVideos = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         const skip = (Number(page) - 1) * Number(limit);
         const videos = await Video_1.Video.find(query)
             .populate('creator', 'profile.firstName profile.lastName profile.avatar')
-            .populate('products', 'name basePrice images')
+            .populate({
+            path: 'products',
+            select: 'name images description price inventory rating category store',
+            populate: {
+                path: 'store',
+                select: 'name slug logo'
+            }
+        })
             .sort(sortOptions)
             .skip(skip)
             .limit(Number(limit))
@@ -176,8 +187,14 @@ exports.getVideoById = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     try {
         const video = await Video_1.Video.findOne({ _id: videoId, isPublished: true, isApproved: true })
             .populate('creator', 'profile.firstName profile.lastName profile.avatar profile.bio')
-            .populate('products', 'name basePrice salePrice images description store')
-            .populate('products.store', 'name slug')
+            .populate({
+            path: 'products',
+            select: 'name images description price pricing inventory rating category store',
+            populate: {
+                path: 'store',
+                select: 'name slug logo'
+            }
+        })
             .lean();
         if (!video) {
             return (0, response_1.sendNotFound)(res, 'Video not found');
@@ -233,7 +250,14 @@ exports.getVideosByCategory = (0, asyncHandler_1.asyncHandler)(async (req, res) 
         const skip = (Number(page) - 1) * Number(limit);
         const videos = await Video_1.Video.find(query)
             .populate('creator', 'profile.firstName profile.lastName profile.avatar')
-            .populate('products', 'name basePrice images')
+            .populate({
+            path: 'products',
+            select: 'name images description price inventory rating category store',
+            populate: {
+                path: 'store',
+                select: 'name slug logo'
+            }
+        })
             .sort(sortOptions)
             .skip(skip)
             .limit(Number(limit))
@@ -270,7 +294,14 @@ exports.getTrendingVideos = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
             createdAt: { $gte: sinceDate }
         })
             .populate('creator', 'profile.firstName profile.lastName profile.avatar')
-            .populate('products', 'name basePrice images')
+            .populate({
+            path: 'products',
+            select: 'name images description pricing inventory rating category store',
+            populate: {
+                path: 'store',
+                select: 'name slug logo'
+            }
+        })
             .sort({
             'analytics.engagement': -1,
             'analytics.views': -1,
@@ -300,7 +331,14 @@ exports.getVideosByCreator = (0, asyncHandler_1.asyncHandler)(async (req, res) =
         const skip = (Number(page) - 1) * Number(limit);
         const videos = await Video_1.Video.find(query)
             .populate('creator', 'profile.firstName profile.lastName profile.avatar')
-            .populate('products', 'name basePrice images')
+            .populate({
+            path: 'products',
+            select: 'name images description price inventory rating category store',
+            populate: {
+                path: 'store',
+                select: 'name slug logo'
+            }
+        })
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(Number(limit))
@@ -493,5 +531,113 @@ exports.searchVideos = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     }
     catch (error) {
         throw new errorHandler_1.AppError('Failed to search videos', 500);
+    }
+});
+// Get videos by store
+exports.getVideosByStore = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { storeId } = req.params;
+    const { type, limit = 20, offset = 0 } = req.query;
+    try {
+        console.log('🎥 [VIDEO] Fetching videos for store:', storeId);
+        // Check if storeId is a valid ObjectId format (24 hex characters)
+        // If not, return empty results immediately since stores field only accepts ObjectIds
+        if (!mongoose_1.default.Types.ObjectId.isValid(storeId) || !/^[0-9a-fA-F]{24}$/.test(storeId)) {
+            console.log(`ℹ️ [VIDEO] Store ID "${storeId}" is not a valid ObjectId format, returning empty array`);
+            return (0, response_1.sendSuccess)(res, {
+                content: [],
+                total: 0
+            }, 'Videos retrieved successfully');
+        }
+        // Build query with valid ObjectId
+        const query = {
+            isPublished: true,
+            isApproved: true,
+            moderationStatus: 'approved',
+            stores: new mongoose_1.default.Types.ObjectId(storeId)
+        };
+        // Filter by type if specified
+        if (type === 'video') {
+            query.contentType = { $in: ['ugc', 'merchant'] };
+        }
+        const videos = await Video_1.Video.find(query)
+            .populate('creator', 'profile.firstName profile.lastName profile.avatar')
+            .populate({
+            path: 'products',
+            select: 'name images description price inventory rating category store',
+            populate: {
+                path: 'store',
+                select: 'name slug logo'
+            }
+        })
+            .sort({ createdAt: -1 })
+            .skip(Number(offset))
+            .limit(Number(limit))
+            .lean();
+        const total = await Video_1.Video.countDocuments(query);
+        console.log(`✅ [VIDEO] Found ${videos.length} videos for store ${storeId}`);
+        // Return empty array if no videos found (not an error)
+        if (videos.length === 0) {
+            console.log(`ℹ️ [VIDEO] No videos found for store ${storeId}, returning empty array`);
+        }
+        // Transform videos to match UGC API format
+        const content = videos.map((video) => ({
+            _id: video._id,
+            userId: video.creator?._id || video.creator,
+            user: {
+                _id: video.creator?._id || video.creator,
+                profile: video.creator?.profile || { firstName: '', lastName: '', avatar: '' }
+            },
+            type: 'video',
+            url: video.videoUrl,
+            thumbnail: video.thumbnail,
+            caption: video.description,
+            tags: video.tags || [],
+            relatedProduct: video.products?.[0] || null,
+            relatedStore: video.stores?.[0] ? {
+                _id: video.stores[0],
+                name: '',
+                logo: ''
+            } : null,
+            likes: video.analytics?.likes || video.engagement?.likes?.length || 0,
+            comments: video.analytics?.comments || video.engagement?.comments || 0,
+            shares: video.analytics?.shares || video.engagement?.shares || 0,
+            views: video.analytics?.totalViews || video.analytics?.views || video.engagement?.views || 0,
+            isLiked: false,
+            isBookmarked: false,
+            createdAt: video.createdAt,
+            updatedAt: video.updatedAt
+        }));
+        (0, response_1.sendSuccess)(res, {
+            content,
+            total
+        }, 'Videos retrieved successfully');
+    }
+    catch (error) {
+        console.error('❌ [VIDEO] Get videos by store error:', error);
+        throw new errorHandler_1.AppError('Failed to fetch store videos', 500);
+    }
+});
+// Report video
+exports.reportVideo = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { videoId } = req.params;
+    const { reason, details } = req.body;
+    const userId = req.userId;
+    try {
+        const video = await Video_1.Video.findById(videoId);
+        if (!video) {
+            return (0, response_1.sendNotFound)(res, 'Video not found');
+        }
+        // Use the reportVideo method from the model
+        await video.reportVideo(userId, reason, details);
+        console.log(`✅ [VIDEO] Video ${videoId} reported by user ${userId} for reason: ${reason}`);
+        (0, response_1.sendSuccess)(res, {
+            videoId: video._id,
+            reportCount: video.reportCount,
+            isReported: video.isReported
+        }, 'Video reported successfully. Thank you for helping keep our community safe.');
+    }
+    catch (error) {
+        console.error('❌ [VIDEO] Report video error:', error);
+        throw new errorHandler_1.AppError('Failed to report video', 500);
     }
 });

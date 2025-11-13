@@ -175,6 +175,13 @@ const ProductSchema = new mongoose_1.Schema({
         unlimited: {
             type: Boolean,
             default: false
+        },
+        estimatedRestockDate: {
+            type: Date
+        },
+        allowBackorder: {
+            type: Boolean,
+            default: false
         }
     },
     ratings: {

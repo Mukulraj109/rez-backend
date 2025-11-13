@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const storeController_1 = require("../controllers/storeController");
+const storeVisitController_1 = require("../controllers/storeVisitController");
 const auth_1 = require("../middleware/auth");
 const validation_1 = require("../middleware/validation");
 // import { generalLimiter, searchLimiter } from '../middleware/rateLimiter'; // Disabled for development
@@ -124,4 +125,31 @@ auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
     page: validation_2.Joi.number().integer().min(1).default(1),
     limit: validation_2.Joi.number().integer().min(1).max(50).default(20)
 })), storeController_1.searchStoresByDeliveryTime);
+// ============================================
+// Store Visit Routes (nested under /stores/:storeId)
+// ============================================
+// Schedule a store visit
+router.post('/:storeId/visits/schedule', auth_1.authenticate, (0, validation_1.validateParams)(validation_2.Joi.object({
+    storeId: validation_1.commonSchemas.objectId().required()
+})), (req, res, next) => {
+    // Inject storeId from URL params into request body
+    req.body.storeId = req.params.storeId;
+    next();
+}, storeVisitController_1.scheduleStoreVisit);
+// Get queue number for walk-in
+router.post('/:storeId/queue', auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
+    storeId: validation_1.commonSchemas.objectId().required()
+})), (req, res, next) => {
+    // Inject storeId from URL params into request body
+    req.body.storeId = req.params.storeId;
+    next();
+}, storeVisitController_1.getQueueNumber);
+// Get current queue status (public)
+router.get('/:storeId/queue/status', (0, validation_1.validateParams)(validation_2.Joi.object({
+    storeId: validation_1.commonSchemas.objectId().required()
+})), storeVisitController_1.getCurrentQueueStatus);
+// Check store availability / crowd status (public)
+router.get('/:storeId/availability', (0, validation_1.validateParams)(validation_2.Joi.object({
+    storeId: validation_1.commonSchemas.objectId().required()
+})), storeVisitController_1.checkStoreAvailability);
 exports.default = router;

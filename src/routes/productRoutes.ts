@@ -135,7 +135,8 @@ router.get('/store/:storeId',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateParams(Joi.object({
-    storeId: commonSchemas.objectId().required()
+    // Accept both ObjectId format and string IDs (for mock data compatibility)
+    storeId: Joi.string().trim().min(1).required()
   })),
   validateQuery(Joi.object({
     category: commonSchemas.objectId,

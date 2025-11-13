@@ -11,9 +11,11 @@ const router = (0, express_1.Router)();
 router.post('/', auth_1.authenticate, (0, validation_1.validate)(validation_2.Joi.object({
     title: validation_2.Joi.string().trim().min(1).max(100).required(),
     description: validation_2.Joi.string().trim().max(1000).optional(),
+    contentType: validation_2.Joi.string().valid('merchant', 'ugc', 'article_video').default('ugc'),
     videoUrl: validation_2.Joi.string().uri().required(),
     thumbnailUrl: validation_2.Joi.string().uri().optional(),
     category: validation_2.Joi.string().valid('trending_me', 'trending_her', 'waist', 'article', 'featured', 'challenge', 'tutorial', 'review').default('general'),
+    associatedArticle: validation_1.commonSchemas.objectId().optional(),
     tags: validation_2.Joi.array().items(validation_2.Joi.string().trim().max(50)).max(10).optional(),
     products: validation_2.Joi.array().items(validation_1.commonSchemas.objectId()).max(20).optional(),
     duration: validation_2.Joi.number().integer().min(0).optional(),
@@ -59,11 +61,23 @@ auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
     page: validation_2.Joi.number().integer().min(1).default(1),
     limit: validation_2.Joi.number().integer().min(1).max(50).default(20)
 })), videoController_1.getVideosByCreator);
+// Get videos by store
+router.get('/store/:storeId', 
+// generalLimiter,, // Disabled for development
+auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
+    // Accept both ObjectId format and string IDs (for mock data compatibility)
+    storeId: validation_2.Joi.string().trim().min(1).required()
+})), (0, validation_1.validateQuery)(validation_2.Joi.object({
+    type: validation_2.Joi.string().valid('photo', 'video').optional(),
+    limit: validation_2.Joi.number().integer().min(1).max(50).default(20),
+    offset: validation_2.Joi.number().integer().min(0).default(0)
+})), videoController_1.getVideosByStore);
 // Get single video by ID
 router.get('/:videoId', 
 // generalLimiter,, // Disabled for development
 auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
-    videoId: validation_1.commonSchemas.objectId().required()
+    // Accept both ObjectId format and string IDs (for mock data compatibility)
+    videoId: validation_2.Joi.string().trim().min(1).required()
 })), videoController_1.getVideoById);
 // Like/Unlike video (requires authentication)
 router.post('/:videoId/like', 
@@ -88,4 +102,13 @@ auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
     page: validation_2.Joi.number().integer().min(1).default(1),
     limit: validation_2.Joi.number().integer().min(1).max(50).default(20)
 })), videoController_1.getVideoComments);
+// Report video (requires authentication)
+router.post('/:videoId/report', 
+// generalLimiter,, // Disabled for development
+auth_1.authenticate, (0, validation_1.validateParams)(validation_2.Joi.object({
+    videoId: validation_1.commonSchemas.objectId().required()
+})), (0, validation_1.validate)(validation_2.Joi.object({
+    reason: validation_2.Joi.string().valid('inappropriate', 'misleading', 'spam', 'copyright', 'other').required(),
+    details: validation_2.Joi.string().trim().max(500).optional()
+})), videoController_1.reportVideo);
 exports.default = router;

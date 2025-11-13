@@ -54,6 +54,13 @@ const VideoSchema = new mongoose_1.Schema({
         required: true,
         index: true
     },
+    contentType: {
+        type: String,
+        enum: ['merchant', 'ugc', 'article_video'],
+        required: true,
+        default: 'ugc',
+        index: true
+    },
     videoUrl: {
         type: String,
         required: true,
@@ -88,6 +95,10 @@ const VideoSchema = new mongoose_1.Schema({
             trim: true,
             match: [/^#[\w\d_]+$/, 'Hashtags must start with # and contain only letters, numbers, and underscores']
         }],
+    associatedArticle: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: 'Article'
+    },
     products: [{
             type: mongoose_1.Schema.Types.ObjectId,
             ref: 'Product'
@@ -229,6 +240,35 @@ const VideoSchema = new mongoose_1.Schema({
             desktop: { type: Number, default: 0 }
         }
     },
+    reports: [{
+            userId: {
+                type: mongoose_1.Schema.Types.ObjectId,
+                ref: 'User',
+                required: true
+            },
+            reason: {
+                type: String,
+                required: true,
+                enum: ['inappropriate', 'misleading', 'spam', 'copyright', 'other']
+            },
+            details: {
+                type: String,
+                maxlength: 500
+            },
+            reportedAt: {
+                type: Date,
+                default: Date.now
+            }
+        }],
+    reportCount: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
+    isReported: {
+        type: Boolean,
+        default: false
+    },
     isPublished: {
         type: Boolean,
         default: false,
@@ -322,6 +362,7 @@ const VideoSchema = new mongoose_1.Schema({
 // Indexes for performance
 VideoSchema.index({ creator: 1, isPublished: 1, createdAt: -1 });
 VideoSchema.index({ category: 1, isPublished: 1, publishedAt: -1 });
+VideoSchema.index({ contentType: 1, isPublished: 1, publishedAt: -1 });
 VideoSchema.index({ isFeatured: 1, isPublished: 1 });
 VideoSchema.index({ isTrending: 1, isPublished: 1 });
 VideoSchema.index({ tags: 1, isPublished: 1 });
@@ -438,6 +479,27 @@ VideoSchema.methods.updateAnalytics = async function () {
     this.analytics.likeRate = (likes / views) * 100;
     this.analytics.shareRate = (shares / views) * 100;
     await this.save();
+};
+// Method to report video
+VideoSchema.methods.reportVideo = async function (userId, reason, details) {
+    const userObjectId = new mongoose_1.default.Types.ObjectId(userId);
+    // Check if user already reported this video
+    const alreadyReported = this.reports.some((report) => report.userId.equals(userObjectId));
+    if (!alreadyReported) {
+        this.reports.push({
+            userId: userObjectId,
+            reason,
+            details: details || '',
+            reportedAt: new Date()
+        });
+        this.reportCount = this.reports.length;
+        // Auto-flag video if it has 5+ reports
+        if (this.reportCount >= 5) {
+            this.isReported = true;
+            this.moderationStatus = 'flagged';
+        }
+        await this.save();
+    }
 };
 // Method to check if video is viewable by user
 VideoSchema.methods.isViewableBy = function (userId) {

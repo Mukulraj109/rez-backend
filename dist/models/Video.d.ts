@@ -53,6 +53,7 @@ export interface IVideo extends Document {
     title: string;
     description?: string;
     creator: Types.ObjectId;
+    contentType: 'merchant' | 'ugc' | 'article_video';
     videoUrl: string;
     thumbnail: string;
     preview?: string;
@@ -60,12 +61,21 @@ export interface IVideo extends Document {
     subcategory?: string;
     tags: string[];
     hashtags: string[];
+    associatedArticle?: Types.ObjectId;
     products: Types.ObjectId[];
     stores: Types.ObjectId[];
     engagement: IVideoEngagement;
     metadata: IVideoMetadata;
     processing: IVideoProcessing;
     analytics: IVideoAnalytics;
+    reports: Array<{
+        userId: Types.ObjectId;
+        reason: string;
+        details?: string;
+        reportedAt: Date;
+    }>;
+    reportCount: number;
+    isReported: boolean;
     isPublished: boolean;
     isFeatured: boolean;
     isApproved: boolean;
@@ -113,6 +123,7 @@ export interface IVideo extends Document {
             timestamp: Date;
         }>;
     }>;
+    reportVideo(userId: string, reason: string, details?: string): Promise<void>;
     incrementViews(userId?: string): Promise<void>;
     toggleLike(userId: string): Promise<boolean>;
     addComment(userId: string, content: string): Promise<void>;
