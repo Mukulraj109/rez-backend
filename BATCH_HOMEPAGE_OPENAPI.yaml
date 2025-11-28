@@ -1,0 +1,827 @@
+openapi: 3.0.3
+info:
+  title: Batch Homepage API
+  description: |
+    Consolidated homepage endpoint that aggregates multiple sections into a single request.
+    Reduces frontend load time from ~2000ms to <300ms.
+  version: 1.0.0
+  contact:
+    name: Backend Team
+    email: backend@rez-app.com
+
+servers:
+  - url: http://localhost:5000/api/v1
+    description: Local development
+  - url: https://api-staging.rez-app.com/api/v1
+    description: Staging environment
+  - url: https://api.rez-app.com/api/v1
+    description: Production environment
+
+tags:
+  - name: Homepage
+    description: Batch homepage endpoints
+
+paths:
+  /homepage:
+    get:
+      tags:
+        - Homepage
+      summary: Get batch homepage data
+      description: |
+        Fetches all homepage sections in a single request with intelligent caching.
+        Supports partial failures - if one section fails, others still return.
+      operationId: getHomepage
+      parameters:
+        - name: userId
+          in: query
+          description: User ID for personalized content
+          required: false
+          schema:
+            type: string
+            format: objectId
+            example: "507f1f77bcf86cd799439011"
+
+        - name: limit
+          in: query
+          description: Number of items per section
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 10
+            example: 15
+
+        - name: sections
+          in: query
+          description: Comma-separated list of sections to fetch
+          required: false
+          schema:
+            type: string
+            example: "justForYou,events,trendingStores"
+          examples:
+            all:
+              value: ""
+              summary: Fetch all sections (default)
+            specific:
+              value: "justForYou,events"
+              summary: Fetch only specific sections
+
+        - name: location
+          in: query
+          description: Location coordinates in "lng,lat" format
+          required: false
+          schema:
+            type: string
+            pattern: '^-?\d+\.?\d*,-?\d+\.?\d*$'
+            example: "77.5946,12.9716"
+
+        - name: includeAnalytics
+          in: query
+          description: Include analytics metadata in response
+          required: false
+          schema:
+            type: boolean
+            default: false
+            example: false
+
+        - name: fresh
+          in: query
+          description: Bypass cache and force fresh data
+          required: false
+          schema:
+            type: boolean
+            default: false
+            example: false
+
+      responses:
+        '200':
+          description: Success - Full or partial response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomepageResponse'
+              examples:
+                fullSuccess:
+                  $ref: '#/components/examples/FullSuccessResponse'
+                partialSuccess:
+                  $ref: '#/components/examples/PartialSuccessResponse'
+
+        '400':
+          description: Bad Request - Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: "VALIDATION_ERROR"
+                  message: "Invalid query parameters"
+                  details:
+                    - field: "limit"
+                      message: "Must be between 1 and 20"
+
+        '401':
+          description: Unauthorized - Invalid or missing authentication
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+        '429':
+          description: Too Many Requests - Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: "RATE_LIMIT_EXCEEDED"
+                  message: "Too many requests, please try again later"
+                  retryAfter: 60
+
+        '500':
+          description: Internal Server Error - All sections failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: "INTERNAL_SERVER_ERROR"
+                  message: "Failed to fetch homepage data"
+
+        '503':
+          description: Service Unavailable - Temporary outage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+      security:
+        - BearerAuth: []
+        - {}  # Allow unauthenticated access
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    HomepageResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required:
+            - sections
+            - metadata
+          properties:
+            sections:
+              $ref: '#/components/schemas/Sections'
+            metadata:
+              $ref: '#/components/schemas/Metadata'
+            analytics:
+              $ref: '#/components/schemas/Analytics'
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectionError'
+
+    Sections:
+      type: object
+      properties:
+        justForYou:
+          $ref: '#/components/schemas/ProductSection'
+        newArrivals:
+          $ref: '#/components/schemas/ProductSection'
+        trendingStores:
+          $ref: '#/components/schemas/StoreSection'
+        events:
+          $ref: '#/components/schemas/EventSection'
+        offers:
+          $ref: '#/components/schemas/OfferSection'
+        flashSales:
+          $ref: '#/components/schemas/OfferSection'
+
+    ProductSection:
+      type: object
+      required:
+        - id
+        - title
+        - type
+        - items
+        - total
+        - hasMore
+        - lastUpdated
+      properties:
+        id:
+          type: string
+          enum: [justForYou, newArrivals]
+          example: "justForYou"
+        title:
+          type: string
+          example: "Just for You"
+        type:
+          type: string
+          enum: [products, recommendations]
+          example: "recommendations"
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductItem'
+        total:
+          type: integer
+          description: Total number of items available
+          example: 45
+        hasMore:
+          type: boolean
+          description: Whether more items are available
+          example: true
+        lastUpdated:
+          type: string
+          format: date-time
+          example: "2025-11-14T10:30:00Z"
+
+    StoreSection:
+      type: object
+      required:
+        - id
+        - title
+        - type
+        - items
+        - total
+        - hasMore
+        - lastUpdated
+      properties:
+        id:
+          type: string
+          enum: [trendingStores]
+          example: "trendingStores"
+        title:
+          type: string
+          example: "Trending Stores"
+        type:
+          type: string
+          enum: [stores]
+          example: "stores"
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreItem'
+        total:
+          type: integer
+          example: 28
+        hasMore:
+          type: boolean
+          example: true
+        lastUpdated:
+          type: string
+          format: date-time
+          example: "2025-11-14T10:30:00Z"
+
+    EventSection:
+      type: object
+      required:
+        - id
+        - title
+        - type
+        - items
+        - total
+        - hasMore
+        - lastUpdated
+      properties:
+        id:
+          type: string
+          enum: [events]
+          example: "events"
+        title:
+          type: string
+          example: "Events"
+        type:
+          type: string
+          enum: [events]
+          example: "events"
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventItem'
+        total:
+          type: integer
+          example: 12
+        hasMore:
+          type: boolean
+          example: false
+        lastUpdated:
+          type: string
+          format: date-time
+          example: "2025-11-14T10:30:00Z"
+
+    OfferSection:
+      type: object
+      required:
+        - id
+        - title
+        - type
+        - items
+        - total
+        - hasMore
+        - lastUpdated
+      properties:
+        id:
+          type: string
+          enum: [offers, flashSales]
+          example: "offers"
+        title:
+          type: string
+          example: "Special Offers"
+        type:
+          type: string
+          enum: [offers]
+          example: "offers"
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfferItem'
+        total:
+          type: integer
+          example: 18
+        hasMore:
+          type: boolean
+          example: true
+        lastUpdated:
+          type: string
+          format: date-time
+          example: "2025-11-14T10:30:00Z"
+
+    ProductItem:
+      type: object
+      required:
+        - id
+        - name
+        - image
+        - price
+        - brand
+        - category
+      properties:
+        id:
+          type: string
+          format: objectId
+          example: "507f1f77bcf86cd799439011"
+        name:
+          type: string
+          example: "Wireless Headphones"
+        brand:
+          type: string
+          example: "Sony"
+        image:
+          type: string
+          format: uri
+          example: "https://cdn.rez-app.com/products/headphones.jpg"
+        price:
+          type: object
+          required:
+            - current
+            - currency
+          properties:
+            current:
+              type: number
+              example: 8999
+            original:
+              type: number
+              example: 12999
+            currency:
+              type: string
+              example: "₹"
+            discount:
+              type: number
+              description: Discount percentage
+              example: 30
+        category:
+          type: string
+          example: "Electronics"
+        rating:
+          type: object
+          properties:
+            value:
+              type: number
+              example: 4.6
+            count:
+              type: integer
+              example: 567
+        cashback:
+          type: object
+          properties:
+            percentage:
+              type: number
+              example: 5
+            maxAmount:
+              type: number
+              example: 500
+        inventory:
+          type: object
+          properties:
+            stock:
+              type: integer
+              example: 45
+            lowStockThreshold:
+              type: integer
+              example: 10
+
+    StoreItem:
+      type: object
+      required:
+        - id
+        - name
+        - image
+        - rating
+        - category
+      properties:
+        id:
+          type: string
+          format: objectId
+          example: "507f1f77bcf86cd799439012"
+        name:
+          type: string
+          example: "TechMart Electronics"
+        logo:
+          type: string
+          format: uri
+          example: "https://cdn.rez-app.com/stores/techmart-logo.png"
+        image:
+          type: string
+          format: uri
+          example: "https://cdn.rez-app.com/stores/techmart.jpg"
+        rating:
+          type: object
+          required:
+            - value
+            - count
+          properties:
+            value:
+              type: number
+              example: 4.8
+            count:
+              type: integer
+              example: 1234
+            maxValue:
+              type: number
+              example: 5
+        cashback:
+          type: object
+          properties:
+            percentage:
+              type: number
+              example: 10
+            maxAmount:
+              type: number
+              example: 1000
+        category:
+          type: string
+          example: "Electronics"
+        location:
+          type: object
+          properties:
+            address:
+              type: string
+              example: "123 Main St"
+            city:
+              type: string
+              example: "Bangalore"
+            distance:
+              type: string
+              example: "2.3 km"
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["featured", "verified", "fastDelivery"]
+
+    EventItem:
+      type: object
+      required:
+        - id
+        - title
+        - image
+        - date
+        - category
+      properties:
+        id:
+          type: string
+          format: objectId
+          example: "507f1f77bcf86cd799439013"
+        title:
+          type: string
+          example: "Tech Conference 2025"
+        subtitle:
+          type: string
+          example: "Join us for the biggest tech event"
+        image:
+          type: string
+          format: uri
+          example: "https://cdn.rez-app.com/events/techconf.jpg"
+        price:
+          type: object
+          properties:
+            amount:
+              type: number
+              example: 1500
+            currency:
+              type: string
+              example: "₹"
+            isFree:
+              type: boolean
+              example: false
+        location:
+          type: string
+          example: "Bangalore Convention Center"
+        date:
+          type: string
+          format: date-time
+          example: "2025-12-15T09:00:00Z"
+        time:
+          type: string
+          example: "9:00 AM - 5:00 PM"
+        category:
+          type: string
+          example: "Technology"
+        organizer:
+          type: string
+          example: "Tech Events Inc"
+        isOnline:
+          type: boolean
+          example: false
+
+    OfferItem:
+      type: object
+      required:
+        - id
+        - title
+        - image
+        - discountedPrice
+        - originalPrice
+      properties:
+        id:
+          type: string
+          format: objectId
+          example: "507f1f77bcf86cd799439014"
+        title:
+          type: string
+          example: "50% Off on Electronics"
+        subtitle:
+          type: string
+          example: "Limited time offer"
+        image:
+          type: string
+          format: uri
+          example: "https://cdn.rez-app.com/offers/electronics-sale.jpg"
+        discountedPrice:
+          type: number
+          example: 4999
+        originalPrice:
+          type: number
+          example: 9999
+        cashbackPercentage:
+          type: number
+          example: 10
+        validity:
+          type: string
+          format: date-time
+          example: "2025-12-31T23:59:59Z"
+        category:
+          type: string
+          example: "Electronics"
+        store:
+          type: object
+          properties:
+            id:
+              type: string
+              format: objectId
+            name:
+              type: string
+            logo:
+              type: string
+              format: uri
+
+    Metadata:
+      type: object
+      required:
+        - timestamp
+        - cacheKey
+        - ttl
+        - fromCache
+        - executionTime
+        - partialFailure
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: Request timestamp
+          example: "2025-11-14T10:30:00Z"
+        userId:
+          type: string
+          format: objectId
+          description: User ID (if authenticated)
+          example: "507f1f77bcf86cd799439011"
+        cacheKey:
+          type: string
+          description: Cache key used for this request
+          example: "homepage:507f1f77bcf86cd799439011:v1"
+        ttl:
+          type: integer
+          description: Cache TTL in seconds
+          example: 300
+        fromCache:
+          type: boolean
+          description: Whether data was served from cache
+          example: false
+        executionTime:
+          type: number
+          description: Query execution time in milliseconds
+          example: 245
+        partialFailure:
+          type: boolean
+          description: Whether some sections failed to load
+          example: false
+        stale:
+          type: boolean
+          description: Whether served stale data
+          example: false
+
+    Analytics:
+      type: object
+      properties:
+        sectionViews:
+          type: object
+          additionalProperties:
+            type: integer
+          example:
+            justForYou: 150
+            events: 89
+        recommendationScore:
+          type: number
+          description: Personalization score (0-1)
+          example: 0.85
+
+    SectionError:
+      type: object
+      required:
+        - section
+        - message
+        - code
+      properties:
+        section:
+          type: string
+          enum: [justForYou, newArrivals, trendingStores, events, offers, flashSales]
+          example: "offers"
+        message:
+          type: string
+          example: "Failed to fetch offers"
+        code:
+          type: string
+          enum:
+            - SECTION_FETCH_ERROR
+            - CACHE_ERROR
+            - TIMEOUT_ERROR
+            - VALIDATION_ERROR
+            - DB_CONNECTION_ERROR
+          example: "SECTION_FETCH_ERROR"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-11-14T10:30:00Z"
+        severity:
+          type: string
+          enum: [low, medium, high]
+          example: "medium"
+
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - error
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "Invalid query parameters"
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+            retryAfter:
+              type: integer
+              description: Seconds to wait before retrying (for 429)
+              example: 60
+
+  examples:
+    FullSuccessResponse:
+      summary: Full success - all sections loaded
+      value:
+        success: true
+        data:
+          sections:
+            justForYou:
+              id: "justForYou"
+              title: "Just for You"
+              type: "recommendations"
+              items:
+                - id: "507f1f77bcf86cd799439011"
+                  name: "Wireless Headphones"
+                  brand: "Sony"
+                  image: "https://cdn.rez-app.com/products/headphones.jpg"
+                  price:
+                    current: 8999
+                    original: 12999
+                    currency: "₹"
+                    discount: 30
+                  category: "Electronics"
+                  rating:
+                    value: 4.6
+                    count: 567
+              total: 45
+              hasMore: true
+              lastUpdated: "2025-11-14T10:30:00Z"
+            events:
+              id: "events"
+              title: "Events"
+              type: "events"
+              items:
+                - id: "507f1f77bcf86cd799439013"
+                  title: "Tech Conference 2025"
+                  image: "https://cdn.rez-app.com/events/techconf.jpg"
+                  date: "2025-12-15T09:00:00Z"
+                  category: "Technology"
+              total: 12
+              hasMore: false
+              lastUpdated: "2025-11-14T10:30:00Z"
+          metadata:
+            timestamp: "2025-11-14T10:30:00Z"
+            userId: "507f1f77bcf86cd799439011"
+            cacheKey: "homepage:507f1f77bcf86cd799439011:v1"
+            ttl: 300
+            fromCache: false
+            executionTime: 245
+            partialFailure: false
+
+    PartialSuccessResponse:
+      summary: Partial success - some sections failed
+      value:
+        success: true
+        data:
+          sections:
+            justForYou:
+              id: "justForYou"
+              title: "Just for You"
+              type: "recommendations"
+              items: []
+              total: 45
+              hasMore: true
+              lastUpdated: "2025-11-14T10:30:00Z"
+            events:
+              id: "events"
+              title: "Events"
+              type: "events"
+              items: []
+              total: 12
+              hasMore: false
+              lastUpdated: "2025-11-14T10:30:00Z"
+            offers: null
+          metadata:
+            timestamp: "2025-11-14T10:30:00Z"
+            partialFailure: true
+            executionTime: 280
+            fromCache: false
+        errors:
+          - section: "offers"
+            message: "Failed to fetch offers"
+            code: "SECTION_FETCH_ERROR"
+            timestamp: "2025-11-14T10:30:00Z"
+            severity: "medium"

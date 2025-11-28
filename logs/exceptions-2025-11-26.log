@@ -1,0 +1,292 @@
+2025-11-26 11:15:44 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/models/StoreGallery.ts[0m:[93m229[0m:[93m66[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m229[0m           $ifNull: ['$coverImage', { $arrayElemAt: ['$url', 0] } },
+[7m   [0m [91m                                                                 ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m232[0m:[93m5[0m - [91merror[0m[90m TS1137: [0mExpression or comma expected.
+
+[7m232[0m     },
+[7m   [0m [91m    ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m3[0m - [91merror[0m[90m TS1109: [0mExpression expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m  ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m4[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m   ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m239[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m239[0m };
+[7m   [0m [91m~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/models/StoreGallery.ts[0m:[93m229[0m:[93m66[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m229[0m           $ifNull: ['$coverImage', { $arrayElemAt: ['$url', 0] } },
+[7m   [0m [91m                                                                 ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m232[0m:[93m5[0m - [91merror[0m[90m TS1137: [0mExpression or comma expected.
+
+[7m232[0m     },
+[7m   [0m [91m    ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m3[0m - [91merror[0m[90m TS1109: [0mExpression expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m  ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m4[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m   ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m239[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m239[0m };
+[7m   [0m [91m~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[1005,1137,1109,1128,1128]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m229\u001b[0m:\u001b[93m66\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m',' expected.\r\n\r\n\u001b[7m229\u001b[0m           $ifNull: ['$coverImage', { $arrayElemAt: ['$url', 0] } },\r\n\u001b[7m   \u001b[0m \u001b[91m                                                                 ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m232\u001b[0m:\u001b[93m5\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1137: \u001b[0mExpression or comma expected.\r\n\r\n\u001b[7m232\u001b[0m     },\r\n\u001b[7m   \u001b[0m \u001b[91m    ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m236\u001b[0m:\u001b[93m3\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1109: \u001b[0mExpression expected.\r\n\r\n\u001b[7m236\u001b[0m   ]);\r\n\u001b[7m   \u001b[0m \u001b[91m  ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m236\u001b[0m:\u001b[93m4\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m236\u001b[0m   ]);\r\n\u001b[7m   \u001b[0m \u001b[91m   ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m239\u001b[0m:\u001b[93m1\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m239\u001b[0m };\r\n\u001b[7m   \u001b[0m \u001b[91m~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Wed Nov 26 2025 11:15:44 GMT+0530 (India Standard Time)","process":{"pid":12904,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1500401664,"heapTotal":1436368896,"heapUsed":1386881152,"external":26907637,"arrayBuffers":23590591}},"os":{"loadavg":[0,0,0],"uptime":84359.734},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}
+2025-11-26 11:16:53 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/models/StoreGallery.ts[0m:[93m229[0m:[93m66[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m229[0m           $ifNull: ['$coverImage', { $arrayElemAt: ['$url', 0] } },
+[7m   [0m [91m                                                                 ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m232[0m:[93m5[0m - [91merror[0m[90m TS1137: [0mExpression or comma expected.
+
+[7m232[0m     },
+[7m   [0m [91m    ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m3[0m - [91merror[0m[90m TS1109: [0mExpression expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m  ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m4[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m   ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m239[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m239[0m };
+[7m   [0m [91m~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/models/StoreGallery.ts[0m:[93m229[0m:[93m66[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m229[0m           $ifNull: ['$coverImage', { $arrayElemAt: ['$url', 0] } },
+[7m   [0m [91m                                                                 ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m232[0m:[93m5[0m - [91merror[0m[90m TS1137: [0mExpression or comma expected.
+
+[7m232[0m     },
+[7m   [0m [91m    ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m3[0m - [91merror[0m[90m TS1109: [0mExpression expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m  ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m4[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m   ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m239[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m239[0m };
+[7m   [0m [91m~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[1005,1137,1109,1128,1128]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m229\u001b[0m:\u001b[93m66\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m',' expected.\r\n\r\n\u001b[7m229\u001b[0m           $ifNull: ['$coverImage', { $arrayElemAt: ['$url', 0] } },\r\n\u001b[7m   \u001b[0m \u001b[91m                                                                 ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m232\u001b[0m:\u001b[93m5\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1137: \u001b[0mExpression or comma expected.\r\n\r\n\u001b[7m232\u001b[0m     },\r\n\u001b[7m   \u001b[0m \u001b[91m    ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m236\u001b[0m:\u001b[93m3\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1109: \u001b[0mExpression expected.\r\n\r\n\u001b[7m236\u001b[0m   ]);\r\n\u001b[7m   \u001b[0m \u001b[91m  ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m236\u001b[0m:\u001b[93m4\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m236\u001b[0m   ]);\r\n\u001b[7m   \u001b[0m \u001b[91m   ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m239\u001b[0m:\u001b[93m1\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m239\u001b[0m };\r\n\u001b[7m   \u001b[0m \u001b[91m~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Wed Nov 26 2025 11:16:53 GMT+0530 (India Standard Time)","process":{"pid":16208,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1526288384,"heapTotal":1459699712,"heapUsed":1406276784,"external":26914281,"arrayBuffers":23597235}},"os":{"loadavg":[0,0,0],"uptime":84428.296},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}
+2025-11-26 11:31:42 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/models/StoreGallery.ts[0m:[93m229[0m:[93m66[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m229[0m           $ifNull: ['$coverImage', { $arrayElemAt: ['$url', 0] } },
+[7m   [0m [91m                                                                 ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m232[0m:[93m5[0m - [91merror[0m[90m TS1137: [0mExpression or comma expected.
+
+[7m232[0m     },
+[7m   [0m [91m    ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m3[0m - [91merror[0m[90m TS1109: [0mExpression expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m  ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m4[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m   ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m239[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m239[0m };
+[7m   [0m [91m~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/models/StoreGallery.ts[0m:[93m229[0m:[93m66[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m229[0m           $ifNull: ['$coverImage', { $arrayElemAt: ['$url', 0] } },
+[7m   [0m [91m                                                                 ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m232[0m:[93m5[0m - [91merror[0m[90m TS1137: [0mExpression or comma expected.
+
+[7m232[0m     },
+[7m   [0m [91m    ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m3[0m - [91merror[0m[90m TS1109: [0mExpression expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m  ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m4[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m   ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m239[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m239[0m };
+[7m   [0m [91m~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[1005,1137,1109,1128,1128]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m229\u001b[0m:\u001b[93m66\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m',' expected.\r\n\r\n\u001b[7m229\u001b[0m           $ifNull: ['$coverImage', { $arrayElemAt: ['$url', 0] } },\r\n\u001b[7m   \u001b[0m \u001b[91m                                                                 ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m232\u001b[0m:\u001b[93m5\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1137: \u001b[0mExpression or comma expected.\r\n\r\n\u001b[7m232\u001b[0m     },\r\n\u001b[7m   \u001b[0m \u001b[91m    ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m236\u001b[0m:\u001b[93m3\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1109: \u001b[0mExpression expected.\r\n\r\n\u001b[7m236\u001b[0m   ]);\r\n\u001b[7m   \u001b[0m \u001b[91m  ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m236\u001b[0m:\u001b[93m4\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m236\u001b[0m   ]);\r\n\u001b[7m   \u001b[0m \u001b[91m   ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m239\u001b[0m:\u001b[93m1\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m239\u001b[0m };\r\n\u001b[7m   \u001b[0m \u001b[91m~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Wed Nov 26 2025 11:31:42 GMT+0530 (India Standard Time)","process":{"pid":27304,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1498439680,"heapTotal":1434533888,"heapUsed":1386107216,"external":26914577,"arrayBuffers":23597531}},"os":{"loadavg":[0,0,0],"uptime":85318.062},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}
+2025-11-26 12:02:32 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/models/StoreGallery.ts[0m:[93m229[0m:[93m66[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m229[0m           $ifNull: ['$coverImage', { $arrayElemAt: ['$url', 0] } },
+[7m   [0m [91m                                                                 ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m232[0m:[93m5[0m - [91merror[0m[90m TS1137: [0mExpression or comma expected.
+
+[7m232[0m     },
+[7m   [0m [91m    ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m3[0m - [91merror[0m[90m TS1109: [0mExpression expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m  ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m4[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m   ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m239[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m239[0m };
+[7m   [0m [91m~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/models/StoreGallery.ts[0m:[93m229[0m:[93m66[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m229[0m           $ifNull: ['$coverImage', { $arrayElemAt: ['$url', 0] } },
+[7m   [0m [91m                                                                 ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m232[0m:[93m5[0m - [91merror[0m[90m TS1137: [0mExpression or comma expected.
+
+[7m232[0m     },
+[7m   [0m [91m    ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m3[0m - [91merror[0m[90m TS1109: [0mExpression expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m  ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m4[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m   ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m239[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m239[0m };
+[7m   [0m [91m~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[1005,1137,1109,1128,1128]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m229\u001b[0m:\u001b[93m66\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m',' expected.\r\n\r\n\u001b[7m229\u001b[0m           $ifNull: ['$coverImage', { $arrayElemAt: ['$url', 0] } },\r\n\u001b[7m   \u001b[0m \u001b[91m                                                                 ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m232\u001b[0m:\u001b[93m5\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1137: \u001b[0mExpression or comma expected.\r\n\r\n\u001b[7m232\u001b[0m     },\r\n\u001b[7m   \u001b[0m \u001b[91m    ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m236\u001b[0m:\u001b[93m3\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1109: \u001b[0mExpression expected.\r\n\r\n\u001b[7m236\u001b[0m   ]);\r\n\u001b[7m   \u001b[0m \u001b[91m  ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m236\u001b[0m:\u001b[93m4\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m236\u001b[0m   ]);\r\n\u001b[7m   \u001b[0m \u001b[91m   ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m239\u001b[0m:\u001b[93m1\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m239\u001b[0m };\r\n\u001b[7m   \u001b[0m \u001b[91m~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Wed Nov 26 2025 12:02:32 GMT+0530 (India Standard Time)","process":{"pid":31212,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1500413952,"heapTotal":1436770304,"heapUsed":1386495104,"external":26877403,"arrayBuffers":23560357}},"os":{"loadavg":[0,0,0],"uptime":87167.546},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}
+2025-11-26 12:03:30 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/models/StoreGallery.ts[0m:[93m229[0m:[93m66[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m229[0m           $ifNull: ['$coverImage', { $arrayElemAt: ['$url', 0] } },
+[7m   [0m [91m                                                                 ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m232[0m:[93m5[0m - [91merror[0m[90m TS1137: [0mExpression or comma expected.
+
+[7m232[0m     },
+[7m   [0m [91m    ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m3[0m - [91merror[0m[90m TS1109: [0mExpression expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m  ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m4[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m   ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m239[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m239[0m };
+[7m   [0m [91m~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/models/StoreGallery.ts[0m:[93m229[0m:[93m66[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m229[0m           $ifNull: ['$coverImage', { $arrayElemAt: ['$url', 0] } },
+[7m   [0m [91m                                                                 ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m232[0m:[93m5[0m - [91merror[0m[90m TS1137: [0mExpression or comma expected.
+
+[7m232[0m     },
+[7m   [0m [91m    ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m3[0m - [91merror[0m[90m TS1109: [0mExpression expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m  ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m236[0m:[93m4[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m236[0m   ]);
+[7m   [0m [91m   ~[0m
+[96msrc/models/StoreGallery.ts[0m:[93m239[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m239[0m };
+[7m   [0m [91m~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[1005,1137,1109,1128,1128]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m229\u001b[0m:\u001b[93m66\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m',' expected.\r\n\r\n\u001b[7m229\u001b[0m           $ifNull: ['$coverImage', { $arrayElemAt: ['$url', 0] } },\r\n\u001b[7m   \u001b[0m \u001b[91m                                                                 ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m232\u001b[0m:\u001b[93m5\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1137: \u001b[0mExpression or comma expected.\r\n\r\n\u001b[7m232\u001b[0m     },\r\n\u001b[7m   \u001b[0m \u001b[91m    ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m236\u001b[0m:\u001b[93m3\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1109: \u001b[0mExpression expected.\r\n\r\n\u001b[7m236\u001b[0m   ]);\r\n\u001b[7m   \u001b[0m \u001b[91m  ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m236\u001b[0m:\u001b[93m4\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m236\u001b[0m   ]);\r\n\u001b[7m   \u001b[0m \u001b[91m   ~\u001b[0m\r\n\u001b[96msrc/models/StoreGallery.ts\u001b[0m:\u001b[93m239\u001b[0m:\u001b[93m1\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m239\u001b[0m };\r\n\u001b[7m   \u001b[0m \u001b[91m~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Wed Nov 26 2025 12:03:30 GMT+0530 (India Standard Time)","process":{"pid":31724,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1502683136,"heapTotal":1435844608,"heapUsed":1374271120,"external":26908013,"arrayBuffers":23558687}},"os":{"loadavg":[0,0,0],"uptime":87225.328},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}
+2025-11-26 15:29:02 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/products.ts[0m:[93m314[0m:[93m17[0m - [91merror[0m[90m TS18046: [0m'cat._id' is of type 'unknown'.
+
+[7m314[0m             id: cat._id.toString()
+[7m   [0m [91m                ~~~~~~~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/products.ts[0m:[93m314[0m:[93m17[0m - [91merror[0m[90m TS18046: [0m'cat._id' is of type 'unknown'.
+
+[7m314[0m             id: cat._id.toString()
+[7m   [0m [91m                ~~~~~~~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[18046]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m314\u001b[0m:\u001b[93m17\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS18046: \u001b[0m'cat._id' is of type 'unknown'.\r\n\r\n\u001b[7m314\u001b[0m             id: cat._id.toString()\r\n\u001b[7m   \u001b[0m \u001b[91m                ~~~~~~~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Wed Nov 26 2025 15:29:02 GMT+0530 (India Standard Time)","process":{"pid":23216,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1563447296,"heapTotal":1496731648,"heapUsed":1433114024,"external":29846070,"arrayBuffers":26529024}},"os":{"loadavg":[0,0,0],"uptime":99557.812},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}

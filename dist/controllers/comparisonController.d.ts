@@ -1,0 +1,10 @@
+import { Request, Response } from 'express';
+export declare const createComparison: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getUserComparisons: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getComparisonById: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const updateComparison: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const deleteComparison: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const addStoreToComparison: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const removeStoreFromComparison: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getComparisonStats: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const clearAllComparisons: (req: Request, res: Response, next: import("express").NextFunction) => void;

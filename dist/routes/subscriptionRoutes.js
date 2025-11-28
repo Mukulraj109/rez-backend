@@ -1,0 +1,83 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const subscriptionController = __importStar(require("../controllers/subscriptionController"));
+const auth_1 = require("../middleware/auth");
+const webhookSecurity_1 = require("../middleware/webhookSecurity");
+const router = express_1.default.Router();
+// Logging middleware for all subscription routes
+router.use((req, res, next) => {
+    console.log('📡 [SUBSCRIPTION ROUTE] Incoming request:', {
+        method: req.method,
+        path: req.path,
+        fullUrl: req.originalUrl,
+        hasAuth: !!req.headers.authorization,
+        body: req.method === 'POST' ? req.body : undefined
+    });
+    next();
+});
+// Public routes
+router.get('/tiers', subscriptionController.getSubscriptionTiers);
+// Webhook endpoint with comprehensive security middleware stack
+// Order matters: IP whitelist -> rate limit -> payload validation -> logging -> controller
+router.post('/webhook', webhookSecurity_1.razorpayIPWhitelist, // Check IP is from Razorpay
+webhookSecurity_1.webhookRateLimiter, // Rate limiting
+webhookSecurity_1.validateWebhookPayload, // Validate payload structure
+webhookSecurity_1.logWebhookSecurityEvent, // Audit logging
+subscriptionController.handleWebhook // Main handler with replay attack prevention
+);
+// Protected routes (require authentication)
+console.log('🔒 [SUBSCRIPTION ROUTES] Setting up protected routes with authentication');
+router.use((req, res, next) => {
+    console.log('🔒 [SUBSCRIPTION ROUTE] Attempting authentication for:', req.path);
+    next();
+});
+router.use(auth_1.authenticate);
+router.get('/current', subscriptionController.getCurrentSubscription);
+router.get('/benefits', subscriptionController.getSubscriptionBenefits);
+router.get('/usage', subscriptionController.getSubscriptionUsage);
+router.get('/value-proposition/:tier', subscriptionController.getValueProposition);
+router.post('/subscribe', subscriptionController.subscribeToPlan);
+router.post('/validate-promo', subscriptionController.validatePromoCode);
+router.post('/upgrade', subscriptionController.upgradeSubscription);
+router.post('/downgrade', subscriptionController.downgradeSubscription);
+router.post('/cancel', subscriptionController.cancelSubscription);
+router.post('/renew', subscriptionController.renewSubscription);
+router.patch('/auto-renew', subscriptionController.toggleAutoRenew);
+exports.default = router;

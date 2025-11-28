@@ -1,0 +1,13 @@
+import { Request, Response } from 'express';
+export declare const createArticle: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getArticles: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getArticleById: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const updateArticle: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const deleteArticle: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getArticlesByCategory: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getTrendingArticles: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getFeaturedArticles: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const searchArticles: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const toggleArticleLike: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const toggleArticleBookmark: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const incrementArticleShare: (req: Request, res: Response, next: import("express").NextFunction) => void;

@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: merchant-backend-service
+  labels:
+    app: merchant-backend
+spec:
+  selector:
+    app: merchant-backend
+  ports:
+  - port: 80
+    targetPort: 5001
+    protocol: TCP
+    name: http
+  type: LoadBalancer
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: merchant-backend-internal
+  labels:
+    app: merchant-backend
+spec:
+  selector:
+    app: merchant-backend
+  ports:
+  - port: 5001
+    targetPort: 5001
+    protocol: TCP
+    name: http
+  type: ClusterIP

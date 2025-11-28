@@ -1,0 +1,60 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 30
+    },
+    "auditLog": "C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\logs\\.3496ae13a06f2a25f9d8c481c57d3adde0ec3096-audit.json",
+    "files": [
+        {
+            "date": 1763462788487,
+            "name": "C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\logs\\exceptions-2025-11-18.log",
+            "hash": "72c294c0a8a1fb71304cc5a75b98edde055f2ba38864e827023d4edbf1d91509"
+        },
+        {
+            "date": 1763528815341,
+            "name": "C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\logs\\exceptions-2025-11-19.log",
+            "hash": "a46c2a9cb9f3f6489fa80cf66eab8255d9e15054521268fec54c619246497e64"
+        },
+        {
+            "date": 1763615768421,
+            "name": "C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\logs\\exceptions-2025-11-20.log",
+            "hash": "bbea7281fdec8670b8f88eae42ca48d9a2aa0b0a8df40ede9ee73f330fa0b957"
+        },
+        {
+            "date": 1763702862667,
+            "name": "C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\logs\\exceptions-2025-11-21.log",
+            "hash": "1138dd8c833cf645d4f491397f333a0bdd8a4b2e105d50cf411de5260f2ae894"
+        },
+        {
+            "date": 1763793483610,
+            "name": "C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\logs\\exceptions-2025-11-22.log",
+            "hash": "d6611289f2e98241464a55e60e6aab6d915ac87353fd1be5c8fc080013655627"
+        },
+        {
+            "date": 1763959309396,
+            "name": "C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\logs\\exceptions-2025-11-24.log",
+            "hash": "312102b1813a458f9ad6515e940e489cdc8d6cd2303956b2f1c9a1d731777f23"
+        },
+        {
+            "date": 1764050315387,
+            "name": "C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\logs\\exceptions-2025-11-25.log",
+            "hash": "c994756bfe47fc717de400679f2dace8be3f62eaf0bfbb298164d075bbcf2efc"
+        },
+        {
+            "date": 1764132482013,
+            "name": "C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\logs\\exceptions-2025-11-26.log",
+            "hash": "e7a1c020dca7d70b1edd1ef4efc26e7d49ffb87fb592d2eb75384e856649ac6d"
+        },
+        {
+            "date": 1764219813272,
+            "name": "C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\logs\\exceptions-2025-11-27.log",
+            "hash": "0be3c10469384d114a596b8d6d41e06883ce5c3a218a0d6181f6bf1f4664ef3a"
+        },
+        {
+            "date": 1764305217219,
+            "name": "C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\logs\\exceptions-2025-11-28.log",
+            "hash": "c6d3ae3265f312a731a8d465c8ad1bacf5a139239b0226fc8d2beab81c92d616"
+        }
+    ],
+    "hashType": "sha256"
+}

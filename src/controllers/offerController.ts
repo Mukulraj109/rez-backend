@@ -1,0 +1,1077 @@
+import { Request, Response } from 'express';
+import mongoose from 'mongoose';
+import Offer, { IOffer } from '../models/Offer';
+import OfferCategory from '../models/OfferCategory';
+import HeroBanner from '../models/HeroBanner';
+import UserOfferInteraction from '../models/UserOfferInteraction';
+import OfferRedemption from '../models/OfferRedemption';
+import Favorite from '../models/Favorite';
+import { User } from '../models/User';
+import { Wallet } from '../models/Wallet';
+import { sendSuccess, sendError, sendPaginated } from '../utils/response';
+import { filterExclusiveOffers, getUserFollowedStores } from '../middleware/exclusiveOfferMiddleware';
+import { recordExclusiveOfferView, recordExclusiveOfferRedemption } from '../services/followerAnalyticsService';
+
+/**
+ * GET /api/offers
+ * Get offers with filters, sorting, and pagination
+ */
+export const getOffers = async (req: Request, res: Response) => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      category,
+      store,
+      featured,
+      trending,
+      new: isNew,
+      minCashback,
+      sortBy = 'createdAt',
+      order = 'desc',
+    } = req.query;
+
+    // Build filter query
+    const filter: any = {
+      'validity.isActive': true,
+      'validity.startDate': { $lte: new Date() },
+      'validity.endDate': { $gte: new Date() },
+    };
+
+    if (category) {
+      filter.category = category;
+    }
+
+    if (store) {
+      filter.store = store;
+    }
+
+    if (featured === 'true') {
+      filter.isFeatured = true;
+    }
+
+    if (trending === 'true') {
+      filter.isTrending = true;
+    }
+
+    if (isNew === 'true') {
+      filter.isNew = true;
+    }
+
+    if (minCashback) {
+      filter.cashBackPercentage = { $gte: Number(minCashback) };
+    }
+
+    // Sort options
+    const sortOptions: any = {};
+    const sortField = sortBy as string;
+    sortOptions[sortField] = order === 'asc' ? 1 : -1;
+
+    // Pagination
+    const pageNum = Math.max(1, Number(page));
+    const limitNum = Math.min(50, Math.max(1, Number(limit)));
+    const skip = (pageNum - 1) * limitNum;
+
+    // Execute query
+    const [offers, total] = await Promise.all([
+      Offer.find(filter)
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Offer.countDocuments(filter),
+    ]);
+
+    // Filter exclusive offers based on user follow status
+    const userId = req.user?.id;
+    const followedStores = userId ? await getUserFollowedStores(userId) : [];
+    const filteredOffers = await filterExclusiveOffers(offers, userId, followedStores);
+
+    sendPaginated(res, filteredOffers, pageNum, limitNum, total, 'Offers fetched successfully');
+  } catch (error) {
+    console.error('Error fetching offers:', error);
+    sendError(res, 'Failed to fetch offers', 500);
+  }
+};
+
+/**
+ * GET /api/offers/featured
+ * Get featured offers
+ */
+export const getFeaturedOffers = async (req: Request, res: Response) => {
+  try {
+    const { limit = 10 } = req.query;
+
+    const offers = await Offer.find({
+      'metadata.featured': true,
+      'validity.isActive': true,
+      'validity.startDate': { $lte: new Date() },
+      'validity.endDate': { $gte: new Date() }
+    })
+    .sort({ 'metadata.priority': -1, createdAt: -1 })
+    .limit(Number(limit))
+    .populate('store.id', 'name logo rating')
+    .lean();
+
+    sendSuccess(res, offers, 'Featured offers fetched successfully');
+  } catch (error) {
+    console.error('Error fetching featured offers:', error);
+    sendError(res, 'Failed to fetch featured offers', 500);
+  }
+};
+
+/**
+ * GET /api/offers/trending
+ * Get trending offers
+ */
+export const getTrendingOffers = async (req: Request, res: Response) => {
+  try {
+    const { limit = 10 } = req.query;
+
+    const offers = await Offer.findTrendingOffers(Number(limit));
+
+    sendSuccess(res, offers, 'Trending offers fetched successfully');
+  } catch (error) {
+    console.error('Error fetching trending offers:', error);
+    sendError(res, 'Failed to fetch trending offers', 500);
+  }
+};
+
+/**
+ * GET /api/offers/search
+ * Search offers by query
+ */
+export const searchOffers = async (req: Request, res: Response) => {
+  try {
+    const { q, page = 1, limit = 20 } = req.query;
+
+    if (!q || typeof q !== 'string') {
+      return sendError(res, 'Search query is required', 400);
+    }
+
+    // Text search
+    const filter: any = {
+      $text: { $search: q },
+      isActive: true,
+      startDate: { $lte: new Date() },
+      endDate: { $gte: new Date() },
+    };
+
+    // Pagination
+    const pageNum = Math.max(1, Number(page));
+    const limitNum = Math.min(50, Math.max(1, Number(limit)));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [offers, total] = await Promise.all([
+      Offer.find(filter, { score: { $meta: 'textScore' } })
+        .sort({ score: { $meta: 'textScore' } })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Offer.countDocuments(filter),
+    ]);
+
+    sendPaginated(res, offers, pageNum, limitNum, total, 'Offers fetched successfully');
+  } catch (error) {
+    console.error('Error searching offers:', error);
+    sendError(res, 'Failed to search offers', 500);
+  }
+};
+
+/**
+ * GET /api/offers/category/:categoryId
+ * Get offers by category
+ */
+export const getOffersByCategory = async (req: Request, res: Response) => {
+  try {
+    const { categoryId } = req.params;
+    const { page = 1, limit = 20, sortBy = 'createdAt', order = 'desc' } = req.query;
+
+    const filter: any = {
+      category: categoryId,
+      isActive: true,
+      startDate: { $lte: new Date() },
+      endDate: { $gte: new Date() },
+    };
+
+    // Sort options
+    const sortOptions: any = {};
+    sortOptions[sortBy as string] = order === 'asc' ? 1 : -1;
+
+    // Pagination
+    const pageNum = Math.max(1, Number(page));
+    const limitNum = Math.min(50, Math.max(1, Number(limit)));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [offers, total] = await Promise.all([
+      Offer.find(filter)
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Offer.countDocuments(filter),
+    ]);
+
+    sendPaginated(res, offers, pageNum, limitNum, total, 'Offers fetched successfully');
+  } catch (error) {
+    console.error('Error fetching offers by category:', error);
+    sendError(res, 'Failed to fetch offers by category', 500);
+  }
+};
+
+/**
+ * GET /api/offers/store/:storeId
+ * Get offers for a specific store
+ */
+export const getOffersByStore = async (req: Request, res: Response) => {
+  try {
+    const { storeId } = req.params;
+    const { page = 1, limit = 20, active } = req.query;
+
+    const filter: any = {
+      'store.id': new mongoose.Types.ObjectId(storeId),
+    };
+
+    // Filter by active status if provided
+    if (active !== undefined) {
+      // Convert query param to boolean (handle string 'true'/'false')
+      const activeStr = String(active).toLowerCase();
+      const isActive = activeStr === 'true' || activeStr === '1';
+      filter['validity.isActive'] = isActive;
+    } else {
+      // Default to active offers
+      filter['validity.isActive'] = true;
+    }
+
+    // Filter by validity dates (only show offers that are currently valid)
+    const now = new Date();
+    filter['validity.startDate'] = { $lte: now };
+    filter['validity.endDate'] = { $gte: now };
+
+    // Pagination
+    const pageNum = Math.max(1, Number(page));
+    const limitNum = Math.min(50, Math.max(1, Number(limit)));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [offers, total] = await Promise.all([
+      Offer.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Offer.countDocuments(filter),
+    ]);
+
+    sendPaginated(res, offers, pageNum, limitNum, total, 'Offers fetched successfully');
+  } catch (error) {
+    console.error('Error fetching store offers:', error);
+    sendError(res, 'Failed to fetch store offers', 500);
+  }
+};
+
+/**
+ * GET /api/offers/:id
+ * Get single offer by ID
+ */
+export const getOfferById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const offer = await Offer.findById(id)
+      .lean();
+
+    if (!offer) {
+      return sendError(res, 'Offer not found', 404);
+    }
+
+    // Check if offer is follower-exclusive and user has access
+    const userId = req.user?.id;
+    const offerStoreId = (offer.store as any)?._id?.toString() || (offer.store as any)?.id?.toString() || offer.store?.toString();
+
+    if (offer.isFollowerExclusive && userId) {
+      const followedStores = await getUserFollowedStores(userId);
+      const filteredOffers = await filterExclusiveOffers([offer], userId, followedStores);
+
+      if (filteredOffers.length === 0) {
+        return sendError(
+          res,
+          'This is a follower-exclusive offer. Please follow the store to access it.',
+          403,
+          { requiresFollow: true, storeId: offerStoreId }
+        );
+      }
+
+      // Record analytics for exclusive offer view
+      if (offer.isFollowerExclusive && offerStoreId) {
+        recordExclusiveOfferView(offerStoreId).catch(err =>
+          console.error('Failed to record exclusive offer view:', err)
+        );
+      }
+    }
+
+    // Check if user has favorited (if authenticated)
+    let isFavorite = false;
+    if (req.user) {
+      const favorite = await Favorite.findOne({
+        user: req.user.id,
+        itemType: 'offer',
+        item: id,
+      });
+      isFavorite = !!favorite;
+    }
+
+    sendSuccess(res, { ...offer, isFavorite }, 'Offer fetched successfully');
+  } catch (error) {
+    console.error('Error fetching offer:', error);
+    sendError(res, 'Failed to fetch offer', 500);
+  }
+};
+
+/**
+ * POST /api/offers/:id/redeem
+ * Redeem an offer (authenticated users only)
+ */
+export const redeemOffer = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.id;
+    const { redemptionType = 'online' } = req.body;
+
+    // Find offer
+    const offer = await Offer.findById(id);
+
+    if (!offer) {
+      return sendError(res, 'Offer not found', 404);
+    }
+
+    // Check if offer is valid
+    const now = new Date();
+    if (now > offer.validity.endDate || now < offer.validity.startDate || !offer.validity.isActive) {
+      return sendError(res, 'Offer is no longer valid', 400);
+    }
+
+    // Check if user already has an active redemption for this offer
+    const existingActiveRedemption = await OfferRedemption.findOne({
+      user: userId,
+      offer: id,
+      status: { $in: ['active', 'pending'] }
+    });
+
+    if (existingActiveRedemption) {
+      return sendError(res, 'You have already redeemed this offer. Please check "My Vouchers" to view your voucher.', 400);
+    }
+
+    // Check user redemption limit (count all redemptions including used ones)
+    const userRedemptionCount = await OfferRedemption.countDocuments({
+      user: userId,
+      offer: id
+    });
+
+    if (offer.restrictions.usageLimitPerUser && userRedemptionCount >= offer.restrictions.usageLimitPerUser) {
+      return sendError(res, 'You have already reached the redemption limit for this offer', 400);
+    }
+
+    // Check global redemption limit (count actual redemptions, not views)
+    if (offer.restrictions.usageLimit) {
+      const totalRedemptions = await OfferRedemption.countDocuments({ offer: id });
+      if (totalRedemptions >= offer.restrictions.usageLimit) {
+        return sendError(res, 'Offer redemption limit reached', 400);
+      }
+    }
+
+    // Create redemption with cashback details
+    const redemption = new OfferRedemption({
+      user: userId,
+      offer: id,
+      redemptionType,
+      redemptionDate: new Date(),
+      validityDays: 30, // Can be customized
+      status: 'active',
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    await redemption.save();
+
+    // Update offer engagement
+    await Offer.findByIdAndUpdate(id, {
+      $inc: { 'engagement.viewsCount': 1 }
+    });
+
+    // Record analytics for exclusive offer redemption
+    if (offer.isFollowerExclusive) {
+      const storeId = offer.store?.id?.toString() || offer.store?.toString();
+      if (storeId) {
+        recordExclusiveOfferRedemption(storeId).catch(err =>
+          console.error('Failed to record exclusive offer redemption:', err)
+        );
+      }
+    }
+
+    // Populate for response with cashback info and restrictions
+    await redemption.populate('offer', 'title image cashbackPercentage validUntil type category restrictions');
+
+    // Return response with cashback details and terms
+    const responseData = {
+      ...redemption.toObject(),
+      cashbackPercentage: offer.cashbackPercentage,
+      offerType: offer.type,
+      restrictions: {
+        minOrderValue: offer.restrictions.minOrderValue,
+        maxDiscountAmount: offer.restrictions.maxDiscountAmount,
+        usageLimitPerUser: offer.restrictions.usageLimitPerUser,
+      },
+    };
+
+    sendSuccess(res, responseData, 'Offer redeemed successfully', 201);
+  } catch (error) {
+    console.error('Error redeeming offer:', error);
+    sendError(res, 'Failed to redeem offer', 500);
+  }
+};
+
+/**
+ * GET /api/offers/my-redemptions
+ * Get user's offer redemptions
+ */
+export const getUserRedemptions = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { status, page = 1, limit = 20 } = req.query;
+
+    const filter: any = { user: userId };
+
+    if (status) {
+      filter.status = status;
+    }
+
+    // Pagination
+    const pageNum = Math.max(1, Number(page));
+    const limitNum = Math.min(50, Math.max(1, Number(limit)));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [redemptions, total] = await Promise.all([
+      OfferRedemption.find(filter)
+        .populate('offer', 'title image cashbackPercentage category validUntil type restrictions')
+        .populate('order', 'orderNumber totalAmount status')
+        .sort({ redemptionDate: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      OfferRedemption.countDocuments(filter),
+    ]);
+
+    // Enhance redemptions with cashback info and restrictions
+    const enhancedRedemptions = redemptions.map((redemption: any) => ({
+      ...redemption,
+      cashbackPercentage: redemption.offer?.cashbackPercentage || 0,
+      restrictions: {
+        minOrderValue: redemption.offer?.restrictions?.minOrderValue,
+        maxDiscountAmount: redemption.offer?.restrictions?.maxDiscountAmount,
+        usageLimitPerUser: redemption.offer?.restrictions?.usageLimitPerUser,
+      },
+    }));
+
+    sendPaginated(res, enhancedRedemptions, pageNum, limitNum, total, 'Redemptions fetched successfully');
+  } catch (error) {
+    console.error('Error fetching user redemptions:', error);
+    sendError(res, 'Failed to fetch redemptions', 500);
+  }
+};
+
+/**
+ * POST /api/offers/:id/favorite
+ * Add offer to favorites
+ */
+export const addOfferToFavorites = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.id;
+
+    // Check if offer exists
+    const offer = await Offer.findById(id);
+
+    if (!offer) {
+      return sendError(res, 'Offer not found', 404);
+    }
+
+    // Check if already favorited
+    const existing = await Favorite.findOne({
+      user: userId,
+      itemType: 'offer',
+      item: id,
+    });
+
+    if (existing) {
+      return sendError(res, 'Offer already in favorites', 400);
+    }
+
+    // Create favorite
+    const favorite = new Favorite({
+      user: userId,
+      itemType: 'offer',
+      item: id,
+    });
+
+    await favorite.save();
+
+    // Update offer engagement
+    await Offer.findByIdAndUpdate(id, {
+      $inc: { 'engagement.favoriteCount': 1 }
+    });
+
+    sendSuccess(res, { success: true }, 'Offer added to favorites', 201);
+  } catch (error) {
+    console.error('Error adding to favorites:', error);
+    sendError(res, 'Failed to add to favorites', 500);
+  }
+};
+
+/**
+ * DELETE /api/offers/:id/favorite
+ * Remove offer from favorites
+ */
+export const removeOfferFromFavorites = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.id;
+
+    // Remove favorite
+    const result = await Favorite.findOneAndDelete({
+      user: userId,
+      itemType: 'offer',
+      item: id,
+    });
+
+    if (!result) {
+      return sendError(res, 'Favorite not found', 404);
+    }
+
+    // Update offer engagement
+    await Offer.findByIdAndUpdate(id, {
+      $inc: { 'engagement.favoriteCount': -1 }
+    });
+
+    sendSuccess(res, { success: true }, 'Offer removed from favorites');
+  } catch (error) {
+    console.error('Error removing from favorites:', error);
+    sendError(res, 'Failed to remove from favorites', 500);
+  }
+};
+
+/**
+ * GET /api/offers/favorites
+ * Get user's favorite offers
+ */
+export const getUserFavoriteOffers = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { page = 1, limit = 20 } = req.query;
+
+    // Pagination
+    const pageNum = Math.max(1, Number(page));
+    const limitNum = Math.min(50, Math.max(1, Number(limit)));
+    const skip = (pageNum - 1) * limitNum;
+
+    // Get favorites
+    const [favorites, total] = await Promise.all([
+      Favorite.find({
+        user: userId,
+        itemType: 'offer',
+      })
+        .populate({
+          path: 'item',
+          model: 'Offer',
+          populate: [
+            { path: 'category', select: 'name slug' },
+            { path: 'store', select: 'name logo location ratings' },
+          ],
+        })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Favorite.countDocuments({
+        user: userId,
+        itemType: 'offer',
+      }),
+    ]);
+
+    // Extract offers
+    const offers = favorites.map((fav: any) => ({
+      ...fav.item,
+      isFavorite: true,
+    }));
+
+    sendPaginated(res, offers, pageNum, limitNum, total, 'Offers fetched successfully');
+  } catch (error) {
+    console.error('Error fetching favorite offers:', error);
+    sendError(res, 'Failed to fetch favorite offers', 500);
+  }
+};
+
+/**
+ * POST /api/offers/:id/view
+ * Track offer view (analytics)
+ */
+export const trackOfferView = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Increment view count
+    await Offer.findByIdAndUpdate(id, { $inc: { viewCount: 1 } });
+
+    sendSuccess(res, { success: true }, 'View tracked');
+  } catch (error) {
+    console.error('Error tracking view:', error);
+    // Don't return error for analytics endpoints
+    res.status(200).json({ success: true });
+  }
+};
+
+/**
+ * POST /api/offers/:id/click
+ * Track offer click (analytics)
+ */
+export const trackOfferClick = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Increment click count
+    await Offer.findByIdAndUpdate(id, { $inc: { clickCount: 1 } });
+
+    sendSuccess(res, { success: true }, 'Click tracked');
+  } catch (error) {
+    console.error('Error tracking click:', error);
+    // Don't return error for analytics endpoints
+    res.status(200).json({ success: true });
+  }
+};
+
+/**
+ * GET /api/offers/recommendations
+ * Get personalized offer recommendations (optional auth)
+ */
+export const getRecommendedOffers = async (req: Request, res: Response) => {
+  try {
+    const { limit = 10 } = req.query;
+
+    // For now, return trending offers as recommendations
+    // Can be enhanced with ML-based recommendations later
+    const offers = await Offer.find({
+      'validity.isActive': true,
+      'validity.startDate': { $lte: new Date() },
+      'validity.endDate': { $gte: new Date() },
+    })
+      .sort({ 'engagement.viewsCount': -1, 'engagement.likesCount': -1 })
+      .limit(Number(limit))
+      .populate('store.id', 'name logo rating')
+      .lean();
+
+    sendSuccess(res, offers, 'Recommended offers fetched successfully');
+  } catch (error) {
+    console.error('Error fetching recommendations:', error);
+    sendError(res, 'Failed to fetch recommendations', 500);
+  }
+};
+
+/**
+ * GET /api/offers/mega
+ * Get mega offers
+ */
+export const getMegaOffers = async (req: Request, res: Response) => {
+  try {
+    const { limit = 10 } = req.query;
+
+    const offers = await Offer.findMegaOffers();
+    const limitedOffers = offers.slice(0, Number(limit));
+
+    sendSuccess(res, limitedOffers, 'Mega offers fetched successfully');
+  } catch (error) {
+    console.error('Error fetching mega offers:', error);
+    sendError(res, 'Failed to fetch mega offers', 500);
+  }
+};
+
+/**
+ * GET /api/offers/students
+ * Get student offers
+ */
+export const getStudentOffers = async (req: Request, res: Response) => {
+  try {
+    const { limit = 10 } = req.query;
+
+    const offers = await Offer.findStudentOffers();
+    const limitedOffers = offers.slice(0, Number(limit));
+
+    sendSuccess(res, limitedOffers, 'Student offers fetched successfully');
+  } catch (error) {
+    console.error('Error fetching student offers:', error);
+    sendError(res, 'Failed to fetch student offers', 500);
+  }
+};
+
+/**
+ * GET /api/offers/new-arrivals
+ * Get new arrival offers
+ */
+export const getNewArrivalOffers = async (req: Request, res: Response) => {
+  try {
+    const { limit = 10 } = req.query;
+
+    const offers = await Offer.findNewArrivals(Number(limit));
+
+    sendSuccess(res, offers, 'New arrival offers fetched successfully');
+  } catch (error) {
+    console.error('Error fetching new arrival offers:', error);
+    sendError(res, 'Failed to fetch new arrival offers', 500);
+  }
+};
+
+/**
+ * GET /api/offers/nearby
+ * Get nearby offers based on user location
+ */
+export const getNearbyOffers = async (req: Request, res: Response) => {
+  try {
+    const { lat, lng, maxDistance = 10, limit = 20 } = req.query;
+
+    if (!lat || !lng) {
+      return sendError(res, 'Latitude and longitude are required', 400);
+    }
+
+    const userLocation: [number, number] = [Number(lng), Number(lat)];
+    const offers = await Offer.findNearbyOffers(userLocation, Number(maxDistance));
+    const limitedOffers = offers.slice(0, Number(limit));
+
+    // Calculate distances for each offer
+    const offersWithDistance = limitedOffers.map(offer => ({
+      ...offer.toObject(),
+      distance: offer.calculateDistance(userLocation)
+    }));
+
+    sendSuccess(res, offersWithDistance, 'Nearby offers fetched successfully');
+  } catch (error) {
+    console.error('Error fetching nearby offers:', error);
+    sendError(res, 'Failed to fetch nearby offers', 500);
+  }
+};
+
+/**
+ * GET /api/offers/page-data
+ * Get complete offers page data (hero banner, sections, etc.)
+ */
+export const getOffersPageData = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { lat, lng } = req.query;
+
+    // Get hero banner
+    const heroBanner = await HeroBanner.findActiveBanners('offers', 'top');
+    const activeHeroBanner = heroBanner.length > 0 ? heroBanner[0] : null;
+
+    // Get mega offers
+    const megaOffers = await Offer.findMegaOffers();
+    const limitedMegaOffers = megaOffers.slice(0, 5);
+
+    // Get student offers
+    const studentOffers = await Offer.findStudentOffers();
+    const limitedStudentOffers = studentOffers.slice(0, 4);
+
+    // Get new arrival offers
+    const newArrivalOffers = await Offer.findNewArrivals(4);
+
+    // Get trending offers
+    const trendingOffers = await Offer.findTrendingOffers(5);
+
+    // Get user's liked offers if authenticated
+    let userLikedOffers: string[] = [];
+    if (userId) {
+      const likedInteractions = await UserOfferInteraction.find({
+        user: userId,
+        action: 'like'
+      }).select('offer');
+      userLikedOffers = likedInteractions.map(interaction => interaction.offer.toString());
+    }
+
+    // Calculate distances if location provided
+    let offersWithDistance: any = {
+      mega: limitedMegaOffers,
+      students: limitedStudentOffers,
+      newArrivals: newArrivalOffers,
+      trending: trendingOffers
+    };
+
+    if (lat && lng) {
+      const userLocation: [number, number] = [Number(lng), Number(lat)];
+      
+      // Helper function to calculate distance
+      const calculateDistance = (offer: any): number => {
+        if (!offer.location?.coordinates) return 0;
+        const [lng, lat] = offer.location.coordinates;
+        const R = 6371; // Earth's radius in kilometers
+        const dLat = (lat - userLocation[1]) * Math.PI / 180;
+        const dLng = (lng - userLocation[0]) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(userLocation[1] * Math.PI / 180) * Math.cos(lat * Math.PI / 180) *
+                  Math.sin(dLng/2) * Math.sin(dLng/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return Math.round(R * c * 10) / 10; // Round to 1 decimal place
+      };
+      
+      offersWithDistance = {
+        mega: limitedMegaOffers.map(offer => ({
+          ...offer,
+          distance: calculateDistance(offer)
+        })),
+        students: limitedStudentOffers.map(offer => ({
+          ...offer,
+          distance: calculateDistance(offer)
+        })),
+        newArrivals: newArrivalOffers.map(offer => ({
+          ...offer,
+          distance: calculateDistance(offer)
+        })),
+        trending: trendingOffers.map(offer => ({
+          ...offer,
+          distance: calculateDistance(offer)
+        }))
+      };
+    }
+
+    // Add user engagement data
+    const offersWithEngagement: any = {
+      mega: offersWithDistance.mega.map((offer: any) => ({
+        ...offer,
+        engagement: {
+          ...offer.engagement,
+          isLikedByUser: userLikedOffers.includes(offer._id.toString())
+        }
+      })),
+      students: offersWithDistance.students.map((offer: any) => ({
+        ...offer,
+        engagement: {
+          ...offer.engagement,
+          isLikedByUser: userLikedOffers.includes(offer._id.toString())
+        }
+      })),
+      newArrivals: offersWithDistance.newArrivals.map((offer: any) => ({
+        ...offer,
+        engagement: {
+          ...offer.engagement,
+          isLikedByUser: userLikedOffers.includes(offer._id.toString())
+        }
+      })),
+      trending: offersWithDistance.trending.map((offer: any) => ({
+        ...offer,
+        engagement: {
+          ...offer.engagement,
+          isLikedByUser: userLikedOffers.includes(offer._id.toString())
+        }
+      }))
+    };
+
+    // Get user's wallet balance - check Wallet model first, then User.wallet
+    let userWalletBalance = 0;
+    if (userId) {
+      // Check Wallet model first (more accurate)
+      const wallet = await Wallet.findOne({ user: userId });
+      
+      if (wallet) {
+        userWalletBalance = wallet.balance.available || wallet.balance.total || 0;
+        console.log('💰 [OFFERS] Using Wallet model balance:', {
+          userId,
+          available: wallet.balance.available,
+          total: wallet.balance.total,
+          final: userWalletBalance
+        });
+      } else {
+        // Fallback to User.wallet
+        const user = await User.findById(userId).select('wallet walletBalance phoneNumber');
+        userWalletBalance = user?.wallet?.balance || user?.walletBalance || req.user?.wallet?.balance || 0;
+        console.log('💰 [OFFERS] Using User.wallet balance:', {
+          userId,
+          phoneNumber: user?.phoneNumber,
+          walletBalance: user?.walletBalance,
+          userWalletBalance: user?.wallet?.balance,
+          final: userWalletBalance
+        });
+      }
+    }
+
+    const pageData: any = {
+      heroBanner: activeHeroBanner,
+      sections: {
+        mega: {
+          title: 'MEGA OFFERS',
+          offers: offersWithEngagement.mega
+        },
+        students: {
+          title: 'Offer for the students',
+          offers: offersWithEngagement.students
+        },
+        newArrivals: {
+          title: 'New arrival',
+          offers: offersWithEngagement.newArrivals
+        },
+        trending: {
+          title: 'Trending Now',
+          offers: offersWithEngagement.trending
+        }
+      },
+      userEngagement: {
+        likedOffers: userLikedOffers,
+        userPoints: userWalletBalance
+      }
+    };
+
+    sendSuccess(res, pageData, 'Offers page data fetched successfully');
+  } catch (error) {
+    console.error('Error fetching offers page data:', error);
+    sendError(res, 'Failed to fetch offers page data', 500);
+  }
+};
+
+/**
+ * POST /api/offers/:id/like
+ * Like/unlike an offer
+ */
+export const toggleOfferLike = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return sendError(res, 'Authentication required', 401);
+    }
+
+    const offer = await Offer.findById(id);
+    if (!offer) {
+      return sendError(res, 'Offer not found', 404);
+    }
+
+    // Check if user already liked this offer
+    const existingInteraction = await UserOfferInteraction.findOne({
+      user: userId,
+      offer: id,
+      action: 'like'
+    });
+
+    let isLiked = false;
+    let likesCount = offer.engagement.likesCount;
+
+    if (existingInteraction) {
+      // Unlike the offer
+      await UserOfferInteraction.findByIdAndDelete(existingInteraction._id);
+      likesCount = Math.max(0, likesCount - 1);
+    } else {
+      // Like the offer
+      await UserOfferInteraction.trackInteraction(
+        userId,
+        new mongoose.Types.ObjectId(id),
+        'like',
+        {
+          source: 'offers_page',
+          device: req.headers['user-agent']?.includes('Mobile') ? 'mobile' : 'desktop',
+          ipAddress: req.ip
+        }
+      );
+      likesCount += 1;
+      isLiked = true;
+    }
+
+    // Update offer engagement count
+    await Offer.findByIdAndUpdate(id, {
+      'engagement.likesCount': likesCount
+    });
+
+    sendSuccess(res, {
+      isLiked,
+      likesCount
+    }, isLiked ? 'Offer liked successfully' : 'Offer unliked successfully');
+  } catch (error) {
+    console.error('Error toggling offer like:', error);
+    sendError(res, 'Failed to toggle offer like', 500);
+  }
+};
+
+/**
+ * POST /api/offers/:id/share
+ * Share an offer
+ */
+export const shareOffer = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    const { platform, message } = req.body;
+
+    const offer = await Offer.findById(id);
+    if (!offer) {
+      return sendError(res, 'Offer not found', 404);
+    }
+
+    // Track share interaction
+    if (userId) {
+      await UserOfferInteraction.trackInteraction(
+        userId,
+        new mongoose.Types.ObjectId(id),
+        'share',
+        {
+          source: 'offers_page',
+          platform,
+          message,
+          device: req.headers['user-agent']?.includes('Mobile') ? 'mobile' : 'desktop',
+          ipAddress: req.ip
+        }
+      );
+    }
+
+    // Update offer share count
+    await Offer.findByIdAndUpdate(id, {
+      $inc: { 'engagement.sharesCount': 1 }
+    });
+
+    sendSuccess(res, { success: true }, 'Offer shared successfully');
+  } catch (error) {
+    console.error('Error sharing offer:', error);
+    sendError(res, 'Failed to share offer', 500);
+  }
+};
+
+/**
+ * GET /api/offer-categories
+ * Get all offer categories
+ */
+export const getOfferCategories = async (req: Request, res: Response) => {
+  try {
+    const categories = await OfferCategory.findActiveCategories();
+
+    sendSuccess(res, categories, 'Offer categories fetched successfully');
+  } catch (error) {
+    console.error('Error fetching offer categories:', error);
+    sendError(res, 'Failed to fetch offer categories', 500);
+  }
+};
+
+/**
+ * GET /api/hero-banners
+ * Get active hero banners
+ */
+export const getHeroBanners = async (req: Request, res: Response) => {
+  try {
+    const { page = 'offers', position = 'top' } = req.query;
+    const userData = req.user ? {
+      userType: req.user.userType,
+      age: req.user.age,
+      location: req.user.location,
+      interests: req.user.interests
+    } : undefined;
+
+    const banners = await HeroBanner.findBannersForUser(userData, page as string);
+
+    sendSuccess(res, banners, 'Hero banners fetched successfully');
+  } catch (error) {
+    console.error('Error fetching hero banners:', error);
+    sendError(res, 'Failed to fetch hero banners', 500);
+  }
+};

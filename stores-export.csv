@@ -1,0 +1,9 @@
+ID,Name,Slug,Category,Address,City,Rating,Reviews,Delivery Time,Min Order,Delivery Fee,Cashback %,Partner Level,Active,Featured,Verified
+68ee29d08c4fa11015d7034a,"TechMart Electronics",techmart-electronics,68ee29d08c4fa11015d70340,"Connaught Place, New Delhi",New Delhi,4.5,1250,"30-45 mins",500,40,10,gold,true,true,true
+68ee29d08c4fa11015d7034b,"Fashion Hub",fashion-hub,68ee29d08c4fa11015d70341,"Karol Bagh, New Delhi",New Delhi,4.3,980,"45-60 mins",800,50,15,platinum,true,true,true
+68ee29d08c4fa11015d7034c,"Foodie Paradise",foodie-paradise,68ee29d08c4fa11015d70342,"CP Market, New Delhi",New Delhi,4.7,1580,"20-30 mins",300,30,5,gold,true,true,true
+68ee29d08c4fa11015d7034d,"BookWorld",bookworld,68ee29d08c4fa11015d70343,"Daryaganj, New Delhi",New Delhi,4.4,650,"35-50 mins",400,40,12,bronze,true,false,true
+68ee29d08c4fa11015d7034e,"Sports Central",sports-central,68ee29d08c4fa11015d70344,"Lajpat Nagar, New Delhi",New Delhi,4.6,750,"40-55 mins",1000,60,8,silver,true,false,true
+69049a75e80417f9f8d64ef2,"Shopping Mall",shopping-mall,68ecdb9f55f086b04de299ef,"Phoenix MarketCity, New Delhi",New Delhi,4.4,201,"45-60 mins",1000,30,8,gold,true,false,true
+69049a75e80417f9f8d64efd,"Entertainment Hub",entertainment-hub,68ecdb9f55f086b04de299f1,"Select Citywalk, Saket, New Delhi",New Delhi,4.3,145,"45-60 mins",500,30,5,silver,true,false,true
+69049a75e80417f9f8d64f04,"Travel Express",travel-express,68ecdb9f55f086b04de299ef,"Connaught Place, New Delhi",New Delhi,4.5,234,"45-60 mins",1000,30,10,platinum,true,false,true

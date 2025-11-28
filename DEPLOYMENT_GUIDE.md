@@ -1,667 +1,656 @@
-# DEPLOYMENT GUIDE
-## Rez Merchant App - Production Deployment
+# Production Deployment Guide
 
-**Version:** 1.0.0
-**Last Updated:** 2025-11-17
-**Estimated Time:** 4-6 hours (first deployment)
+## Overview
 
----
+This guide covers the complete process of deploying the REZ Merchant Backend to production, including infrastructure setup, configuration, and deployment procedures.
 
-## TABLE OF CONTENTS
-
+## Table of Contents
 1. [Prerequisites](#prerequisites)
-2. [Environment Setup](#environment-setup)
-3. [Build Configuration](#build-configuration)
-4. [iOS Deployment](#ios-deployment)
-5. [Android Deployment](#android-deployment)
-6. [Web Deployment](#web-deployment)
-7. [Post-Deployment](#post-deployment)
-8. [Rollback Procedure](#rollback-procedure)
-9. [Monitoring](#monitoring)
-10. [Troubleshooting](#troubleshooting)
+2. [Infrastructure Setup](#infrastructure-setup)
+3. [Environment Configuration](#environment-configuration)
+4. [Database Setup](#database-setup)
+5. [Docker Setup](#docker-setup)
+6. [Kubernetes Deployment](#kubernetes-deployment)
+7. [CI/CD Pipeline](#cicd-pipeline)
+8. [Post-Deployment](#post-deployment)
+9. [Troubleshooting](#troubleshooting)
 
----
+## Prerequisites
 
-## PREREQUISITES
-
-### Required Accounts
-- [ ] Apple Developer Account ($99/year) - for iOS
-- [ ] Google Play Developer Account ($25 one-time) - for Android
-- [ ] Expo Account (free) - for builds
-- [ ] Domain and hosting (if deploying web version)
-- [ ] Backend API deployed and accessible
-
-### Required Software
-```bash
-Node.js >= 18.0.0
-npm >= 9.0.0
-Expo CLI >= 6.0.0
-EAS CLI >= 3.0.0 (for production builds)
-```
+### Required Tools
+- Docker Desktop (Windows/Mac) or Docker Engine (Linux)
+- kubectl CLI
+- AWS CLI or GCP Cloud SDK (for cloud deployments)
+- Node.js 18+
+- MongoDB client tools
+- Git
 
 ### Installation
+
+**Docker**
 ```bash
-# Install Expo CLI globally
-npm install -g expo-cli
+# Windows/Mac: Download from https://www.docker.com/products/docker-desktop
 
-# Install EAS CLI globally
-npm install -g eas-cli
-
-# Verify installations
-expo --version
-eas --version
+# Ubuntu
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
 ```
 
----
-
-## ENVIRONMENT SETUP
-
-### 1. Clone Repository
+**kubectl**
 ```bash
-git clone https://github.com/rez-platform/merchant-app.git
-cd merchant-app
-npm install
+# Windows (PowerShell)
+choco install kubernetes-cli
+
+# Mac
+brew install kubectl
+
+# Linux
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 ```
 
-### 2. Configure Environment Variables
-
-Create `.env.production` file:
+**AWS CLI** (if using AWS)
 ```bash
-cp .env.example .env.production
+# Windows
+choco install awscli
+
+# Mac
+brew install awscli
+
+# Linux
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
 ```
 
-Edit `.env.production` with production values:
-```env
-# PRODUCTION CONFIGURATION
-NODE_ENV=production
-APP_ENV=production
-EXPO_DEBUG=false
+### Required Accounts
+- Docker Hub account (for image registry)
+- MongoDB Atlas account
+- Redis Cloud account (or self-hosted)
+- Cloudinary account
+- SendGrid account
+- Twilio account
+- Razorpay account
+- Sentry account
+- Cloud provider account (AWS/GCP/Azure)
 
-# API Endpoints
-EXPO_PUBLIC_API_BASE_URL=https://api.rezmerchant.com/api/v1
-SOCKET_URL=wss://api.rezmerchant.com
+## Infrastructure Setup
 
-# Security
-SENTRY_DSN=your_production_sentry_dsn
-SENTRY_ENABLED=true
+### Option 1: AWS EKS
 
-# Analytics
-ANALYTICS_ENABLED=true
-GOOGLE_ANALYTICS_ID=UA-XXXXXXXXX-X
-
-# Features
-ENABLE_DEV_MENU=false
-ENABLE_API_LOGGING=false
-DEBUG_MODE=false
-LOG_LEVEL=error
-
-# Performance
-ENABLE_PERFORMANCE_MONITORING=true
-ENABLE_SSL_PINNING=true
-ENABLE_ROOT_DETECTION=true
-```
-
-### 3. Update app.json for Production
-
-Ensure these are set correctly:
-```json
-{
-  "expo": {
-    "name": "Rez Merchant",
-    "slug": "rez-merchant-app",
-    "version": "1.0.0",
-    "owner": "your-expo-username",
-    "ios": {
-      "bundleIdentifier": "com.rez.merchant",
-      "buildNumber": "1"
-    },
-    "android": {
-      "package": "com.rez.merchant",
-      "versionCode": 1
-    }
-  }
-}
-```
-
----
-
-## BUILD CONFIGURATION
-
-### 1. Initialize EAS Build
-
+**Create EKS Cluster**
 ```bash
-# Login to Expo
-eas login
+# Install eksctl
+brew install eksctl  # Mac
+choco install eksctl  # Windows
 
-# Initialize EAS configuration
-eas build:configure
+# Create cluster
+eksctl create cluster \
+  --name rez-production \
+  --region us-east-1 \
+  --nodegroup-name standard-workers \
+  --node-type t3.medium \
+  --nodes 3 \
+  --nodes-min 3 \
+  --nodes-max 10 \
+  --managed
+
+# Configure kubectl
+aws eks update-kubeconfig --name rez-production --region us-east-1
 ```
 
-This creates `eas.json`:
-```json
-{
-  "build": {
-    "development": {
-      "developmentClient": true,
-      "distribution": "internal"
-    },
-    "preview": {
-      "distribution": "internal",
-      "ios": {
-        "simulator": true
-      }
-    },
-    "production": {
-      "env": {
-        "NODE_ENV": "production"
-      }
-    }
-  }
-}
-```
+### Option 2: GKE (Google Kubernetes Engine)
 
-### 2. Configure Secrets
-
-Store sensitive keys in EAS Secrets (never in code):
+**Create GKE Cluster**
 ```bash
-# Add Sentry DSN
-eas secret:create --scope project --name SENTRY_DSN --value your_sentry_dsn
+# Install gcloud
+# Download from https://cloud.google.com/sdk/docs/install
 
-# Add other secrets as needed
-eas secret:create --scope project --name API_SECRET_KEY --value your_secret
+# Create cluster
+gcloud container clusters create rez-production \
+  --zone us-central1-a \
+  --num-nodes 3 \
+  --machine-type n1-standard-2 \
+  --enable-autoscaling \
+  --min-nodes 3 \
+  --max-nodes 10
+
+# Configure kubectl
+gcloud container clusters get-credentials rez-production --zone us-central1-a
 ```
 
----
+### Option 3: Azure AKS
 
-## IOS DEPLOYMENT
+**Create AKS Cluster**
+```bash
+# Install Azure CLI
+# Download from https://docs.microsoft.com/en-us/cli/azure/install-azure-cli
 
-### Phase 1: Prepare for App Store
+# Create resource group
+az group create --name rez-production --location eastus
 
-#### 1. Apple Developer Setup
-1. Go to [Apple Developer](https://developer.apple.com)
-2. Create App ID: `com.rez.merchant`
-3. Create provisioning profiles (Development, Distribution)
-4. Create App Store Connect app listing
+# Create cluster
+az aks create \
+  --resource-group rez-production \
+  --name rez-cluster \
+  --node-count 3 \
+  --enable-cluster-autoscaler \
+  --min-count 3 \
+  --max-count 10 \
+  --node-vm-size Standard_D2s_v3
 
-#### 2. App Store Connect Setup
-1. Go to [App Store Connect](https://appstoreconnect.apple.com)
-2. Create new app:
-   - Name: "Rez Merchant"
-   - Bundle ID: `com.rez.merchant`
-   - SKU: `rez-merchant-1`
-3. Fill in app information:
-   - Category: Business
-   - Subcategory: Business Management
-   - Age Rating: 4+
-   - Copyright: © 2025 Rez Platform
+# Configure kubectl
+az aks get-credentials --resource-group rez-production --name rez-cluster
+```
 
-#### 3. App Metadata
-Prepare the following:
-- **App Description** (4000 chars max)
-- **Keywords** (100 chars max): merchant, business, inventory, orders, analytics
-- **Support URL**: https://help.rezmerchant.com
-- **Marketing URL**: https://rezmerchant.com
-- **Privacy Policy URL**: https://rezmerchant.com/privacy
-
-#### 4. Screenshots (Required Sizes)
-- 6.5" Display (iPhone 14 Pro Max): 1284 x 2778 pixels
-- 5.5" Display (iPhone 8 Plus): 1242 x 2208 pixels
-- iPad Pro (12.9"): 2048 x 2732 pixels
-
-Minimum 3 screenshots per size.
-
-### Phase 2: Build for iOS
+### Verify Kubernetes Setup
 
 ```bash
-# Build for iOS
-eas build --platform ios --profile production
+# Check cluster connection
+kubectl cluster-info
 
-# This will:
-# 1. Upload your code to EAS servers
-# 2. Build the iOS binary
-# 3. Generate IPA file
-# 4. Take 15-30 minutes
+# Check nodes
+kubectl get nodes
+
+# Create production namespace
+kubectl create namespace production
+
+# Set default namespace
+kubectl config set-context --current --namespace=production
 ```
 
-### Phase 3: Submit to App Store
+## Environment Configuration
 
-#### Option A: Automatic Submission
-```bash
-# Submit directly from command line
-eas submit --platform ios --latest
-```
-
-#### Option B: Manual Submission
-1. Download IPA from EAS dashboard
-2. Upload to App Store Connect via Transporter app
-3. Fill in build information
-4. Submit for review
-
-### Phase 4: App Review
-- Average review time: 24-48 hours
-- Check email for status updates
-- Respond to any questions from Apple reviewers
-
-### Phase 5: Release
-Once approved:
-1. Go to App Store Connect
-2. Select "Release this version"
-3. App goes live within 24 hours
-
----
-
-## ANDROID DEPLOYMENT
-
-### Phase 1: Prepare for Play Store
-
-#### 1. Google Play Console Setup
-1. Go to [Google Play Console](https://play.google.com/console)
-2. Create new app:
-   - App name: "Rez Merchant"
-   - Default language: English (US)
-   - App or game: App
-   - Free or paid: Free
-
-#### 2. App Content
-Fill in required information:
-- **Privacy Policy URL**: https://rezmerchant.com/privacy
-- **App Category**: Business
-- **Target audience**: 18+
-- **Content rating**: Everyone
-
-#### 3. Store Listing
-- **Short description** (80 chars max)
-- **Full description** (4000 chars max)
-- **App icon**: 512 x 512 pixels (PNG)
-- **Feature graphic**: 1024 x 500 pixels
-
-#### 4. Screenshots (Required Sizes)
-- Phone: At least 2 screenshots (min 320px, max 3840px)
-- 7" Tablet: Optional
-- 10" Tablet: Optional
-
-### Phase 2: Generate Signing Key
+### 1. Create Production Environment File
 
 ```bash
-# Generate upload keystore (KEEP THIS SECURE!)
-keytool -genkeypair -v -storetype PKCS12 \
-  -keystore upload-keystore.jks \
-  -keyalg RSA \
-  -keysize 2048 \
-  -validity 10000 \
-  -alias upload \
-  -storepass YOUR_SECURE_PASSWORD \
-  -keypass YOUR_SECURE_PASSWORD \
-  -dname "CN=Rez Merchant, OU=Mobile, O=Rez Platform, L=New York, ST=NY, C=US"
+# Copy example file
+cp .env.production.example .env.production
 
-# IMPORTANT: Back up this file securely!
-# Store password in password manager
+# Edit with your values
+nano .env.production
 ```
 
-Configure in `eas.json`:
-```json
-{
-  "build": {
-    "production": {
-      "android": {
-        "buildType": "app-bundle"
+### 2. Generate Secrets
+
+```bash
+# Generate JWT secrets
+openssl rand -hex 32  # Copy this for JWT_SECRET
+openssl rand -hex 32  # Copy this for JWT_MERCHANT_SECRET
+openssl rand -hex 32  # Copy this for ENCRYPTION_KEY
+openssl rand -hex 32  # Copy this for SESSION_SECRET
+```
+
+### 3. Configure External Services
+
+**MongoDB Atlas**
+1. Create account at https://cloud.mongodb.com
+2. Create M30 cluster (or higher for production)
+3. Configure network access (whitelist Kubernetes cluster IPs)
+4. Create database user with appropriate permissions
+5. Get connection string: `mongodb+srv://user:password@cluster.mongodb.net/rez`
+
+**Redis Cloud**
+1. Create account at https://redis.com/try-free
+2. Create production database
+3. Get connection details: `redis://password@host:port`
+
+**Cloudinary**
+1. Sign up at https://cloudinary.com
+2. Get cloud name, API key, API secret from dashboard
+3. Create upload presets for production
+
+**SendGrid**
+1. Create account at https://sendgrid.com
+2. Create API key with Mail Send permissions
+3. Verify sender email address
+
+**Twilio**
+1. Sign up at https://twilio.com
+2. Get Account SID and Auth Token
+3. Purchase phone number
+4. Set up Verify service (for OTP)
+
+**Razorpay**
+1. Create account at https://razorpay.com
+2. Switch to Live mode
+3. Get API Key ID and Key Secret
+4. Configure webhooks
+
+**Sentry**
+1. Create account at https://sentry.io
+2. Create new project
+3. Get DSN from project settings
+
+## Database Setup
+
+### 1. MongoDB Atlas Configuration
+
+**Create Database**
+```javascript
+// Connect to MongoDB
+mongosh "mongodb+srv://cluster.mongodb.net" --username admin
+
+// Create database
+use rez
+
+// Create collections with validation
+db.createCollection("merchants", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["email", "store"],
+      properties: {
+        email: { bsonType: "string" },
+        store: { bsonType: "object" }
       }
     }
   }
-}
+})
+
+// Create indexes
+db.merchants.createIndex({ email: 1 }, { unique: true })
+db.merchants.createIndex({ "store.slug": 1 })
+db.products.createIndex({ merchantId: 1, status: 1 })
+db.orders.createIndex({ merchantId: 1, status: 1 })
 ```
 
-### Phase 3: Build for Android
+### 2. Run Migrations
 
 ```bash
-# Build for Android
-eas build --platform android --profile production
+# From local machine
+MONGODB_URI="mongodb+srv://..." npm run migrate
 
-# This will:
-# 1. Upload your code to EAS servers
-# 2. Build the Android App Bundle (AAB)
-# 3. Take 10-20 minutes
+# Or from Kubernetes pod
+kubectl run migration \
+  --rm -it \
+  --image=rezapp/merchant-backend:latest \
+  --env="MONGODB_URI=$MONGODB_URI" \
+  --command -- npm run migrate
 ```
 
-### Phase 4: Submit to Play Store
+### 3. Create Database Backup
 
-#### Option A: Automatic Submission
 ```bash
-# Submit directly from command line
-eas submit --platform android --latest
+# Manual backup
+mongodump --uri="mongodb+srv://..." --out=/backups/initial
+
+# Configure automated backups in MongoDB Atlas
+# Settings > Backup > Enable Cloud Backup
 ```
 
-#### Option B: Manual Submission
-1. Download AAB from EAS dashboard
-2. Go to Play Console > Production track
-3. Create new release
-4. Upload AAB file
-5. Fill in release notes
-6. Submit for review
+## Docker Setup
 
-### Phase 5: App Review
-- Average review time: 2-7 days (usually faster than iOS)
-- Check email for status updates
-- Respond to any policy violations
+### 1. Build Docker Image
 
-### Phase 6: Release
-Once approved:
-1. Roll out to percentage (e.g., 10%, 50%, 100%)
-2. Monitor crash reports
-3. Increase rollout percentage gradually
-
----
-
-## WEB DEPLOYMENT
-
-### Option 1: Static Hosting (Netlify/Vercel)
-
-#### Build for Web
 ```bash
-# Build web version
-npx expo export:web
+# Build image
+docker build -t rezapp/merchant-backend:v1.0.0 .
 
-# This creates web-build/ directory
+# Tag as latest
+docker tag rezapp/merchant-backend:v1.0.0 rezapp/merchant-backend:latest
+
+# Test image locally
+docker run -p 5001:5001 \
+  -e NODE_ENV=production \
+  -e MONGODB_URI=mongodb://localhost:27017/rez \
+  rezapp/merchant-backend:latest
 ```
 
-#### Deploy to Netlify
+### 2. Push to Docker Registry
+
 ```bash
-# Install Netlify CLI
-npm install -g netlify-cli
+# Login to Docker Hub
+docker login
 
-# Deploy
-netlify deploy --prod --dir=web-build
+# Push images
+docker push rezapp/merchant-backend:v1.0.0
+docker push rezapp/merchant-backend:latest
+
+# Verify
+docker pull rezapp/merchant-backend:latest
 ```
 
-#### Deploy to Vercel
+### 3. Test with Docker Compose (Local)
+
 ```bash
-# Install Vercel CLI
-npm install -g vercel
+# Start all services
+docker-compose up -d
 
-# Deploy
-vercel --prod
+# Check logs
+docker-compose logs -f api
+
+# Test API
+curl http://localhost:5001/health
+
+# Stop services
+docker-compose down
 ```
 
-### Option 2: Custom Server (nginx)
+## Kubernetes Deployment
 
-#### Build
+### 1. Create Secrets
+
 ```bash
-npx expo export:web
+# Create secrets from .env file
+kubectl create secret generic db-secrets \
+  --from-literal=mongodb-uri="$MONGODB_URI" \
+  -n production
+
+kubectl create secret generic cache-secrets \
+  --from-literal=redis-url="$REDIS_URL" \
+  -n production
+
+kubectl create secret generic auth-secrets \
+  --from-literal=jwt-secret="$JWT_SECRET" \
+  --from-literal=jwt-merchant-secret="$JWT_MERCHANT_SECRET" \
+  -n production
+
+kubectl create secret generic cloudinary-secrets \
+  --from-literal=cloud-name="$CLOUDINARY_CLOUD_NAME" \
+  --from-literal=api-key="$CLOUDINARY_API_KEY" \
+  --from-literal=api-secret="$CLOUDINARY_API_SECRET" \
+  -n production
+
+kubectl create secret generic email-secrets \
+  --from-literal=sendgrid-api-key="$SENDGRID_API_KEY" \
+  -n production
+
+kubectl create secret generic sms-secrets \
+  --from-literal=twilio-account-sid="$TWILIO_ACCOUNT_SID" \
+  --from-literal=twilio-auth-token="$TWILIO_AUTH_TOKEN" \
+  -n production
+
+kubectl create secret generic payment-secrets \
+  --from-literal=razorpay-key-id="$RAZORPAY_KEY_ID" \
+  --from-literal=razorpay-key-secret="$RAZORPAY_KEY_SECRET" \
+  -n production
 ```
 
-#### nginx Configuration
-```nginx
-server {
-    listen 80;
-    server_name merchant.rezmerchant.com;
-    root /var/www/merchant-app/web-build;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    # Caching
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-}
-```
-
-#### Deploy
+**Verify secrets**
 ```bash
-# Copy files to server
-scp -r web-build/* user@server:/var/www/merchant-app/
-
-# Restart nginx
-sudo systemctl restart nginx
+kubectl get secrets -n production
+kubectl describe secret db-secrets -n production
 ```
 
----
+### 2. Deploy Application
 
-## POST-DEPLOYMENT
-
-### 1. Verify Deployment
-
-#### iOS
 ```bash
-# Check app in TestFlight first
-# Then verify in App Store after approval
+# Apply deployment
+kubectl apply -f k8s/deployment.yaml -n production
+
+# Apply service
+kubectl apply -f k8s/service.yaml -n production
+
+# Apply HPA
+kubectl apply -f k8s/hpa.yaml -n production
+
+# Check deployment status
+kubectl rollout status deployment/merchant-backend -n production
+
+# Check pods
+kubectl get pods -n production -l app=merchant-backend
+
+# Check services
+kubectl get svc -n production
 ```
 
-#### Android
+### 3. Verify Deployment
+
 ```bash
-# Check in Internal Testing track first
-# Then verify in Play Store after approval
+# Check pod logs
+kubectl logs -f deployment/merchant-backend -n production
+
+# Get service external IP
+kubectl get svc merchant-backend-service -n production
+
+# Test health endpoint
+curl http://<EXTERNAL-IP>/health
+
+# Check resource usage
+kubectl top pods -n production
 ```
 
-#### Web
-```bash
-# Visit your web app URL
-# Test all major features
+### 4. Configure Ingress (Optional)
+
+```yaml
+# ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: merchant-backend-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  tls:
+  - hosts:
+    - api.rezapp.com
+    secretName: api-tls
+  rules:
+  - host: api.rezapp.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: merchant-backend-service
+            port:
+              number: 80
 ```
 
-### 2. Enable Monitoring
-
-#### Sentry Setup
 ```bash
-# Install Sentry CLI
-npm install -g @sentry/cli
-
-# Create release
-sentry-cli releases new rez-merchant@1.0.0
-sentry-cli releases set-commits rez-merchant@1.0.0 --auto
-sentry-cli releases finalize rez-merchant@1.0.0
+# Apply ingress
+kubectl apply -f ingress.yaml -n production
 ```
 
-#### Analytics Setup
-- Verify Google Analytics is receiving events
-- Check Mixpanel dashboard
-- Monitor user engagement
+## CI/CD Pipeline
 
-### 3. Update Documentation
-- [ ] Update README with app store links
-- [ ] Add badges to README
-- [ ] Update support documentation
-- [ ] Create release notes
+### 1. Setup GitHub Secrets
 
-### 4. Announce Launch
-- [ ] Email existing beta users
-- [ ] Social media announcement
-- [ ] Update website with app store badges
-- [ ] Press release (if applicable)
+Go to GitHub repository settings > Secrets and add:
 
----
+- `DOCKER_USERNAME`: Docker Hub username
+- `DOCKER_PASSWORD`: Docker Hub password
+- `KUBE_CONFIG_STAGING`: Base64 encoded kubeconfig for staging
+- `KUBE_CONFIG_PRODUCTION`: Base64 encoded kubeconfig for production
 
-## ROLLBACK PROCEDURE
-
-### iOS Rollback
-1. Go to App Store Connect
-2. Select previous version
-3. Submit for review (can take 24-48 hours)
-
-**OR**
-
-Deactivate current version (pulls from store immediately, but users keep installed version)
-
-### Android Rollback
-1. Go to Play Console
-2. Production track > Releases
-3. Halt rollout immediately
-4. Create new release with previous version
-5. Submit for review (usually faster than iOS)
-
-**OR**
-
-Reduce rollout percentage to 0% (immediate)
-
-### Web Rollback
+**Get kubeconfig**
 ```bash
-# If using git-based deployment (Netlify/Vercel)
-git revert HEAD
+# Get current kubeconfig
+cat ~/.kube/config | base64
+
+# Copy the output and add to GitHub secrets
+```
+
+### 2. Trigger Deployment
+
+```bash
+# Deployment happens automatically on push to main
+git add .
+git commit -m "feat: add new feature"
 git push origin main
 
-# If using custom server
-# Re-deploy previous web-build/ directory
+# Monitor deployment in GitHub Actions
+# https://github.com/your-org/merchant-backend/actions
 ```
 
----
+### 3. Manual Deployment
 
-## MONITORING
-
-### Key Metrics to Monitor
-
-#### Health Metrics
-- Crash-free rate (target: >99.5%)
-- App startup time (target: <3s)
-- API response time (target: <500ms)
-- Network errors
-
-#### Business Metrics
-- Daily Active Users (DAU)
-- Monthly Active Users (MAU)
-- User retention rate
-- Feature adoption rate
-- Session duration
-
-### Monitoring Tools
-
-#### Sentry (Errors & Performance)
-```javascript
-// Already configured in app/_layout.tsx
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  environment: 'production',
-  tracesSampleRate: 1.0,
-});
-```
-
-#### Google Analytics
-```javascript
-// Track screen views
-Analytics.logEvent('screen_view', {
-  screen_name: 'Products',
-  screen_class: 'ProductsScreen',
-});
-```
-
-#### Custom Alerts
-Set up alerts for:
-- Crash rate > 1%
-- API error rate > 5%
-- Server response time > 1s
-- User sign-ups drop
-
----
-
-## TROUBLESHOOTING
-
-### Common Issues
-
-#### Build Fails
 ```bash
-# Clear cache and retry
-expo start --clear
-rm -rf node_modules
-npm install
-eas build --clear-cache --platform [ios/android]
+# Trigger workflow manually from GitHub UI
+# Actions > Deploy to Production > Run workflow
 ```
 
-#### iOS Provisioning Errors
+## Post-Deployment
+
+### 1. Verify All Services
+
+**API Health**
 ```bash
-# Re-sync provisioning profiles
-eas credentials
-# Select "Sync provisioning profile"
+curl https://api.rezapp.com/health
+# Expected: {"status": "ok", "timestamp": "..."}
 ```
 
-#### Android Keystore Issues
+**Database Connection**
 ```bash
-# Verify keystore
-keytool -list -v -keystore upload-keystore.jks
+curl https://api.rezapp.com/api/merchants/profile
+# Should return 401 (authentication required) not 500
 ```
 
-#### App Crashes on Launch
-1. Check Sentry for crash logs
-2. Verify environment variables
-3. Test API connectivity
-4. Check for missing native modules
+**External Services**
+- Upload test image to Cloudinary
+- Send test email via SendGrid
+- Send test SMS via Twilio
+- Process test payment via Razorpay
 
-#### Web Build Errors
+### 2. Configure Monitoring
+
+**Sentry**
 ```bash
-# Update Expo web
-npm install expo@latest expo-web@latest
-npx expo install --fix
-
-# Rebuild
-npx expo export:web
+# Verify errors are being captured
+# Trigger a test error and check Sentry dashboard
 ```
 
----
+**New Relic**
+```bash
+# Verify APM data is flowing
+# Check New Relic dashboard for transactions
+```
 
-## DEPLOYMENT CHECKLIST
+### 3. Setup Alerts
 
-### Pre-Deployment
-- [ ] All features tested
-- [ ] No critical bugs
-- [ ] Performance metrics met
-- [ ] Security audit passed
-- [ ] Environment variables configured
-- [ ] Analytics configured
-- [ ] Error tracking configured
-- [ ] Backend API tested
+**Kubernetes Alerts**
+```yaml
+# alerting-rules.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alerting-rules
+data:
+  rules.yaml: |
+    groups:
+    - name: merchant-backend
+      interval: 30s
+      rules:
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+        annotations:
+          summary: "High error rate detected"
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+        annotations:
+          summary: "High response time detected"
+```
 
-### iOS Specific
-- [ ] Apple Developer account active
-- [ ] App Store Connect app created
-- [ ] Screenshots prepared (all sizes)
-- [ ] App metadata filled
-- [ ] Privacy policy URL set
-- [ ] Support URL set
+### 4. Test Critical Flows
 
-### Android Specific
-- [ ] Google Play Console account active
-- [ ] Play Store listing created
-- [ ] Screenshots prepared
-- [ ] App content filled
-- [ ] Signing key generated and backed up
-- [ ] Privacy policy URL set
+- [ ] Merchant registration
+- [ ] Merchant login
+- [ ] Product creation
+- [ ] Product update
+- [ ] Order placement
+- [ ] Payment processing
+- [ ] Notification sending
+- [ ] File upload
 
-### Post-Deployment
-- [ ] Monitor crash reports (first 24 hours)
-- [ ] Monitor user reviews
-- [ ] Check analytics dashboard
-- [ ] Verify all features work in production
-- [ ] Update documentation
-- [ ] Announce launch
+### 5. Performance Testing
 
----
+```bash
+# Install k6 (load testing tool)
+# https://k6.io/docs/getting-started/installation/
 
-## SUPPORT & RESOURCES
+# Run load test
+k6 run loadtest.js
 
-### Documentation
-- [Expo Documentation](https://docs.expo.dev)
-- [EAS Build Documentation](https://docs.expo.dev/build/introduction/)
-- [App Store Review Guidelines](https://developer.apple.com/app-store/review/guidelines/)
-- [Play Store Policies](https://play.google.com/about/developer-content-policy/)
+# Monitor during load test
+kubectl top pods -n production
+```
 
-### Community
-- [Expo Forums](https://forums.expo.dev)
-- [Stack Overflow](https://stackoverflow.com/questions/tagged/expo)
-- [Discord](https://chat.expo.dev)
+## Troubleshooting
 
-### Contact
-- Email: support@rezmerchant.com
-- Documentation: https://docs.rezmerchant.com
+### Issue: Pods not starting
 
----
+```bash
+# Check pod status
+kubectl get pods -n production
 
-**Deployment Time Estimates:**
+# Describe pod
+kubectl describe pod <pod-name> -n production
 
-| Platform | First Time | Subsequent |
-|----------|-----------|------------|
-| iOS | 4-6 hours + 24-48h review | 30 min + 24-48h review |
-| Android | 3-4 hours + 2-7 days review | 20 min + 2-7 days review |
-| Web | 30-60 minutes | 10 minutes |
+# Check logs
+kubectl logs <pod-name> -n production
 
-**Good luck with your deployment!** 🚀
+# Common causes:
+# - Image pull errors (check image name/tag)
+# - Missing secrets
+# - Resource limits too low
+# - Failed health checks
+```
+
+### Issue: Can't connect to database
+
+```bash
+# Check secrets
+kubectl get secret db-secrets -n production -o yaml
+
+# Test connection from pod
+kubectl exec -it <pod-name> -n production -- \
+  node -e "require('mongoose').connect(process.env.MONGODB_URI).then(() => console.log('Connected'))"
+
+# Common causes:
+# - Wrong connection string
+# - Network access not whitelisted
+# - Wrong credentials
+```
+
+### Issue: Service not accessible
+
+```bash
+# Check service
+kubectl get svc merchant-backend-service -n production
+
+# Check endpoints
+kubectl get endpoints merchant-backend-service -n production
+
+# Check ingress (if using)
+kubectl get ingress -n production
+
+# Common causes:
+# - Service selector doesn't match pod labels
+# - No healthy pods (check readiness probe)
+# - Firewall blocking traffic
+```
+
+### Issue: High CPU/Memory usage
+
+```bash
+# Check resource usage
+kubectl top pods -n production
+
+# Increase resources
+kubectl set resources deployment merchant-backend \
+  --limits=cpu=2000m,memory=2Gi \
+  --requests=cpu=1000m,memory=1Gi \
+  -n production
+
+# Scale horizontally
+kubectl scale deployment merchant-backend --replicas=5 -n production
+```
+
+## Additional Resources
+
+- [Kubernetes Documentation](https://kubernetes.io/docs/)
+- [Docker Documentation](https://docs.docker.com/)
+- [MongoDB Atlas Documentation](https://docs.atlas.mongodb.com/)
+- [Production Runbook](./PRODUCTION_RUNBOOK.md)
+- [Rollback Guide](./ROLLBACK_GUIDE.md)
+- [Deployment Checklist](./DEPLOYMENT_CHECKLIST.md)
+
+## Support
+
+For deployment issues:
+- Slack: #devops channel
+- Email: devops@rezapp.com
+- On-call: See [PRODUCTION_RUNBOOK.md](./PRODUCTION_RUNBOOK.md)

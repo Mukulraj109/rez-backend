@@ -1,0 +1,14 @@
+{
+  "email": "test-merchant-debug@example.com",
+  "password": "Test@123456",
+  "businessName": "Test Merchant Store",
+  "ownerName": "Test Owner",
+  "phone": "+919876543210",
+  "businessAddress": {
+    "street": "123 Test Street",
+    "city": "Bangalore",
+    "state": "Karnataka",
+    "pincode": "560001",
+    "country": "India"
+  }
+}

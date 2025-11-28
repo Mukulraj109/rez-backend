@@ -1,0 +1,13 @@
+import { Request, Response } from 'express';
+export declare const createVideo: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getVideos: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getVideoById: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getVideosByCategory: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getTrendingVideos: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getVideosByCreator: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const toggleVideoLike: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const addVideoComment: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getVideoComments: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const searchVideos: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getVideosByStore: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const reportVideo: (req: Request, res: Response, next: import("express").NextFunction) => void;

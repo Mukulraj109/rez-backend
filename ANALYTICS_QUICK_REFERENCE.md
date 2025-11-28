@@ -1,314 +1,204 @@
-# Analytics Service Quick Reference
+# Analytics API Quick Reference
 
-## Quick Import
+**Base URL:** `/api/merchant/analytics`
+**Auth Required:** Yes (Bearer token)
 
-```typescript
-import { analyticsService } from '@/services/api/analytics';
-import {
-  DateRangeFilter,
-  SalesForecastResponse,
-  InventoryStockoutResponse,
-  CustomerInsights,
-  SeasonalTrendResponse,
-  ProductPerformanceResponse,
-  RevenueBreakdownResponse,
-  AnalyticsOverview,
-  ExportRequest,
-  ExportResponse
-} from '@/types/analytics';
+---
+
+## 🎯 Quick Reference Table
+
+| Endpoint | Method | Purpose | Cache TTL |
+|----------|--------|---------|-----------|
+| `/overview` | GET | Dashboard overview | 15 min |
+| `/inventory/stockout-prediction` | GET | Stockout forecasts | 30 min |
+| `/customers/insights` | GET | Customer analytics | 30 min |
+| `/products/performance` | GET | Product metrics | 15 min |
+| `/revenue/breakdown` | GET | Revenue by category/product | 30 min |
+| `/comparison` | GET | Period comparison | Inherited |
+| `/realtime` | GET | Today's metrics | 1 min |
+| `/export/:exportId` | GET | Export status | 5 min |
+
+---
+
+## 📊 1. Dashboard Overview
+
+```bash
+GET /api/merchant/analytics/overview?period=30d
 ```
 
-## Core Methods
+**Returns:** Sales, products, customers, inventory, and trends in one call.
 
-### Overview & Dashboards
-```typescript
-// Get all key metrics for dashboard
-const overview = await analyticsService.getAnalyticsOverview({ preset: '30d' });
+**Use Case:** Main merchant dashboard
+
+---
+
+## 📦 2. Stockout Prediction
+
+```bash
+# All critical products
+GET /api/merchant/analytics/inventory/stockout-prediction
+
+# Specific product
+GET /api/merchant/analytics/inventory/stockout-prediction?productId=abc123
 ```
 
-### Forecasting
-```typescript
-// Sales forecast for next 30/60/90 days
-const forecast = await analyticsService.getSalesForecast(30, { preset: '90d' });
-console.log(forecast.summary.averageForecast);  // Average forecasted sales
-console.log(forecast.summary.trend);             // 'up' | 'down' | 'stable'
+**Returns:** Days until stockout, reorder recommendations
+
+**Use Case:** Inventory alerts and reorder management
+
+---
+
+## 👥 3. Customer Insights
+
+```bash
+GET /api/merchant/analytics/customers/insights
 ```
 
-### Inventory Management
-```typescript
-// Predict stockouts and reorder needs
-const inventory = await analyticsService.getStockoutPredictions();
-inventory.highRisk.forEach(item => {
-  console.log(`${item.productName}: ${item.daysUntilStockout} days until stockout`);
-  console.log(`Reorder: ${item.recommendedReorderQty} units by ${item.recommendedReorderDate}`);
-});
+**Returns:** Total customers, new vs returning, lifetime value, top customers
+
+**Use Case:** Customer analytics dashboard
+
+---
+
+## 🏆 4. Product Performance
+
+```bash
+GET /api/merchant/analytics/products/performance?limit=10&sortBy=revenue
 ```
 
-### Customer Analytics
-```typescript
-// Comprehensive customer insights
-const insights = await analyticsService.getCustomerInsights();
-console.log(insights.ltv.averageLTV);              // Average customer lifetime value
-console.log(insights.retention.overallRetentionRate); // Retention %
-console.log(insights.churn.atRiskCount);           // Customers at churn risk
-insights.churn.predictions.forEach(p => {
-  if (p.riskLevel === 'high') {
-    console.log(`${p.email}: ${p.recommendedActions[0]}`); // Retention action
-  }
-});
+**Query Params:**
+- `limit`: Number of products (default: 10)
+- `sortBy`: `revenue` or `quantity` (default: revenue)
+
+**Use Case:** Best sellers report
+
+---
+
+## 💰 5. Revenue Breakdown
+
+```bash
+# By category
+GET /api/merchant/analytics/revenue/breakdown?groupBy=category
+
+# By product
+GET /api/merchant/analytics/revenue/breakdown?groupBy=product
+
+# By payment method
+GET /api/merchant/analytics/revenue/breakdown?groupBy=paymentMethod
 ```
 
-### Trend Analysis
-```typescript
-// Seasonal patterns and trends
-const trends = await analyticsService.getSeasonalTrends('sales', { preset: '1y' });
-console.log(trends.overallAnalysis.trend);       // 'up' | 'down' | 'stable' | 'cyclic'
-console.log(trends.overallAnalysis.seasonality); // 0-100
-console.log(trends.predictions.expectedTrend);   // Next season trend
+**Use Case:** Revenue composition analysis
+
+---
+
+## 📈 6. Period Comparison
+
+```bash
+GET /api/merchant/analytics/comparison?metric=revenue&period=7d
 ```
 
-### Product Performance
-```typescript
-// Product metrics and rankings
-const products = await analyticsService.getProductPerformance({
-  sortBy: 'revenue',
-  limit: 10
-});
-products.byPerformance.topPerformers.forEach(p => {
-  console.log(`${p.productName}: $${p.profitability.netProfit} profit`);
-  console.log(`Margin: ${p.profitability.marginPercentage}%`);
-});
+**Query Params:**
+- `metric`: `revenue`, `orders`, or `customers`
+- `period`: `7d`, `30d`, `90d`
+
+**Returns:** Current vs previous period with change %
+
+**Use Case:** Growth tracking
+
+---
+
+## ⚡ 7. Real-time Metrics
+
+```bash
+GET /api/merchant/analytics/realtime
 ```
 
-### Revenue Analysis
-```typescript
-// Revenue breakdown by dimensions
-const revenue = await analyticsService.getRevenueBreakdown();
-revenue.breakdown.byCategory.forEach(c => {
-  console.log(`${c.category}: $${c.amount}`);
-});
-revenue.breakdown.byPaymentMethod.forEach(m => {
-  console.log(`${m.method}: ${m.percentage.toFixed(1)}%`);
-});
+**Returns:** Today's revenue, orders, and active customers
+
+**Use Case:** Live dashboard widget
+
+---
+
+## 📤 8. Export Status
+
+```bash
+GET /api/merchant/analytics/export/:exportId
 ```
 
-## Date Range Helpers
+**Returns:** Export job status and download URL
 
-```typescript
-// Quick date ranges
-const today = analyticsService.getTodayDate();                        // '2024-11-17'
-const weekAgo = analyticsService.getDateNDaysAgo(7);                  // '2024-11-10'
-const range = analyticsService.buildDateRangeFromPreset('30d');       // { startDate, endDate }
-const days = analyticsService.getDaysDifference(start, end);          // Number of days
-const previous = analyticsService.getPreviousPeriodDateRange(range);  // Previous period
-```
+**Use Case:** Data export feature
 
-## Date Range Presets
+---
 
-```typescript
-// Use preset for quick date ranges
-const presets = ['7d', '14d', '30d', '90d', '1y', 'custom'];
+## 🔧 Common Patterns
 
-// Example usage
-const data = await analyticsService.getAnalyticsOverview({
-  preset: '30d'  // Last 30 days
-});
-
-// Or custom dates
-const custom = await analyticsService.getAnalyticsOverview({
-  startDate: '2024-10-01',
-  endDate: '2024-10-31'
-});
-```
-
-## Formatting Utilities
-
-```typescript
-// Currency
-analyticsService.formatCurrency(1234.56, 'USD');        // '$1,234.56'
-
-// Percentage
-analyticsService.formatPercentage(0.1523);              // '15.23%'
-analyticsService.formatPercentage(1.5);                 // '150.00%'
-
-// Large numbers
-analyticsService.formatCompactNumber(1500000);          // '1.5M'
-analyticsService.formatCompactNumber(1234567);          // '1.2M'
-
-// Emojis
-analyticsService.getTrendEmoji('up');                   // '📈'
-analyticsService.getTrendEmoji('down');                 // '📉'
-analyticsService.getTrendEmoji('stable');               // '➡️'
-
-// Colors
-analyticsService.getRiskLevelColor('high');             // '#ef4444'
-analyticsService.getRiskLevelColor('medium');           // '#f59e0b'
-analyticsService.getRiskLevelColor('low');              // '#10b981'
-
-analyticsService.getHealthStatusColor('excellent');     // '#059669'
-analyticsService.getHealthStatusColor('good');          // '#10b981'
-analyticsService.getHealthStatusColor('fair');          // '#f59e0b'
-analyticsService.getHealthStatusColor('poor');          // '#ef4444'
-```
-
-## Common Patterns
-
-### Dashboard Component
-```typescript
-useEffect(() => {
-  (async () => {
-    try {
-      const [overview, forecast] = await Promise.all([
-        analyticsService.getAnalyticsOverview({ preset: '30d' }),
-        analyticsService.getSalesForecast(30)
-      ]);
-      setDashboard({ overview, forecast });
-    } catch (error) {
-      setError(error.message);
-    }
-  })();
-}, []);
-```
-
-### Period Comparison
-```typescript
-const today = analyticsService.getTodayDate();
-const thirtyDaysAgo = analyticsService.getDateNDaysAgo(30);
-const sixtyDaysAgo = analyticsService.getDateNDaysAgo(60);
-
-const comparison = await analyticsService.comparePeriods(
-  { startDate: thirtyDaysAgo, endDate: today },
-  { startDate: sixtyDaysAgo, endDate: thirtyDaysAgo }
-);
-
-console.log(`Growth: ${(comparison.change.revenuePercentage * 100).toFixed(1)}%`);
-```
-
-### Batch Export
-```typescript
-const export = await analyticsService.exportAnalytics({
-  format: 'excel',
-  reportTypes: ['overview', 'sales_forecast', 'customers', 'products'],
-  timeRange: analyticsService.buildDateRangeFromPreset('30d'),
-  includeCharts: true,
-  includeComparisons: true
-});
-
-console.log(`Download: ${export.url}`);
-```
-
-## Type Definitions Summary
-
-### Key Response Types
-
-```typescript
-// Sales Forecast
-SalesForecastResponse {
-  timeRange: DateRange
-  forecastDays: number
-  method: string
-  accuracy: number
-  forecasts: SalesForecast[]
-  summary: {
-    averageForecast: number
-    totalForecast: number
-    trend: 'up' | 'down' | 'stable'
-    growthRate: number
-  }
-}
-
-// Stockout Prediction
-InventoryStockoutResponse {
-  totalProducts: number
-  productsAtRisk: number
-  highRisk: StockoutPrediction[]
-  mediumRisk: StockoutPrediction[]
-  safeStock: StockoutPrediction[]
-  summary: { ... }
-  recommendations: { ... }
-}
-
-// Customer Insights
-CustomerInsights {
-  totalCustomers: number
-  newCustomers: number
-  ltv: { averageLTV, highValueCount, ... }
-  retention: { overallRetentionRate, cohorts, ... }
-  churn: { churnRate, predictions, ... }
-  segments: { ... }
-}
-
-// Product Performance
-ProductPerformanceResponse {
-  totalProducts: number
-  byPerformance: {
-    topPerformers: ProductPerformance[]
-    middlePerformers: ProductPerformance[]
-    underperformers: ProductPerformance[]
-  }
-  byCategory: [ ... ]
-  summary: { ... }
-}
-```
-
-## Error Handling
-
+### Error Handling
 ```typescript
 try {
-  const data = await analyticsService.getSalesForecast();
-} catch (error) {
-  if (error instanceof Error) {
-    console.error(error.message);
-    // Handle based on message
-    if (error.message.includes('401')) {
-      // Reauthenticate
-    } else if (error.message.includes('500')) {
-      // Retry
-    }
+  const response = await fetch('/api/merchant/analytics/overview', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  const data = await response.json();
+
+  if (!data.success) {
+    console.error(data.message);
   }
+} catch (error) {
+  console.error('API Error:', error);
 }
 ```
 
-## All Available Methods
+### Period Selection
+```typescript
+const periods = {
+  today: '?period=today',
+  week: '?period=week',
+  month: '?period=month',
+  custom: '?startDate=2025-01-01&endDate=2025-01-31'
+};
+```
 
-| Method | Returns | Purpose |
-|--------|---------|---------|
-| `getAnalyticsOverview(dateRange?)` | `AnalyticsOverview` | Dashboard metrics |
-| `getSalesForecast(days?, dateRange?)` | `SalesForecastResponse` | Sales forecast |
-| `getStockoutPredictions(dateRange?)` | `InventoryStockoutResponse` | Inventory risk |
-| `getCustomerInsights(dateRange?)` | `CustomerInsights` | Customer analytics |
-| `getSeasonalTrends(dataType?, dateRange?)` | `SeasonalTrendResponse` | Seasonal patterns |
-| `getProductPerformance(options?)` | `ProductPerformanceResponse` | Product metrics |
-| `getRevenueBreakdown(dateRange?)` | `RevenueBreakdownResponse` | Revenue analysis |
-| `comparePeriods(current, previous)` | `PeriodComparison` | Period comparison |
-| `getRealTimeMetrics()` | `RealTimeMetrics` | Live metrics |
-| `exportAnalytics(request)` | `ExportResponse` | Export report |
-| `getExportUrl(exportId)` | `string` | Download URL |
+---
 
-## Endpoint Mapping
+## 📝 Response Format
 
-| Service Method | Backend Endpoint |
-|---|---|
-| `getAnalyticsOverview()` | `GET /api/merchant/analytics/overview` |
-| `getSalesForecast()` | `GET /api/merchant/analytics/sales/forecast` |
-| `getStockoutPredictions()` | `GET /api/merchant/analytics/inventory/stockout-prediction` |
-| `getCustomerInsights()` | `GET /api/merchant/analytics/customers/insights` |
-| `getSeasonalTrends()` | `GET /api/merchant/analytics/trends/seasonal` |
-| `getProductPerformance()` | `GET /api/merchant/analytics/products/performance` |
-| `getRevenueBreakdown()` | `GET /api/merchant/analytics/revenue/breakdown` |
-| `comparePeriods()` | `GET /api/merchant/analytics/comparison` |
-| `getRealTimeMetrics()` | `GET /api/merchant/analytics/realtime` |
-| `exportAnalytics()` | `POST /api/merchant/analytics/export` |
+All endpoints return:
+```json
+{
+  "success": true|false,
+  "data": { ... },
+  "message": "Error message (if applicable)"
+}
+```
 
-## Checklist for Implementation
+---
 
-- [x] Import service and types
-- [x] Implement error handling
-- [x] Use date range helpers
-- [x] Format output with utilities
-- [x] Handle loading states
-- [x] Cache if needed
-- [x] Implement analytics tracking
-- [x] Add to components
-- [x] Test with real data
-- [x] Deploy to production
+## 🚀 Performance Tips
+
+1. **Use `/overview` instead of multiple calls** - Gets all dashboard data in one request
+2. **Leverage caching** - Repeated calls within TTL return cached data
+3. **Limit product queries** - Use `limit` parameter to reduce data transfer
+4. **Filter stockout predictions** - Use `productId` for single product instead of fetching all
+
+---
+
+## 🔒 Security
+
+- All endpoints require authentication
+- Merchants can only access their own store's data
+- Store ID automatically derived from auth token
+
+---
+
+## 📞 Support
+
+For issues or questions:
+- Check `AGENT_3_ANALYTICS_STANDARDIZATION_REPORT.md` for detailed docs
+- Review response format examples in the full report
+- Verify auth token is valid and not expired
+
+---
+
+**Last Updated:** 2025-11-17
+**Version:** 1.0

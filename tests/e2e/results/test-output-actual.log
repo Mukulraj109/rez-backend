@@ -1,0 +1,31 @@
+
+================================================================================
+  MERCHANT BACKEND E2E TEST SUITE - 122+ ENDPOINTS
+  Base URL: http://localhost:5001
+================================================================================
+
+
+🔍 Checking Backend Connectivity...
+
+  ⚠ Backend is not accessible!
+  ⚠ Make sure the backend is running at http://localhost:5001
+  ⚠ Fatal error: Backend connectivity check failed
+Error: Backend connectivity check failed
+    at checkBackendConnectivity (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\tests\e2e\merchant-endpoints-test.js:133:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async runAllTests (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\tests\e2e\merchant-endpoints-test.js:56:5)
+
+═══════════════════════════════════════════════════════════════
+                     TEST EXECUTION SUMMARY                        
+═══════════════════════════════════════════════════════════════
+
+Total Tests:     0
+Passed:          0 (NaN%)
+Failed:          0 (NaN%)
+Skipped:         0
+Duration:        0.53s
+Avg Response:    NaNms
+
+═══════════════════════════════════════════════════════════════
+
+  ✓ Test results saved to: ./tests/e2e/results/test-results.json

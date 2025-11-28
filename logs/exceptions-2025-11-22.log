@@ -1,0 +1,844 @@
+2025-11-22 16:40:08 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/products.ts[0m:[93m99[0m:[93m16[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m99[0m   while (await MProduct.findOne({ sku })) {
+[7m  [0m [91m               ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m191[0m:[93m7[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'products'?
+
+[7m191[0m       MProduct.find(searchCriteria)
+[7m   [0m [91m      ~~~~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m190[0m:[93m12[0m
+    [7m190[0m     const [products, totalCount] = await Promise.all([
+    [7m   [0m [96m           ~~~~~~~~[0m
+    'products' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m195[0m:[93m7[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'products'?
+
+[7m195[0m       MProduct.countDocuments(searchCriteria)
+[7m   [0m [91m      ~~~~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m190[0m:[93m12[0m
+    [7m190[0m     const [products, totalCount] = await Promise.all([
+    [7m   [0m [96m           ~~~~~~~~[0m
+    'products' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m230[0m:[93m30[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'Product'?
+
+[7m230[0m     const categories = await MProduct.distinct('category', { merchantId: req.merchantId });
+[7m   [0m [91m                             ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m250[0m:[93m27[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'product'?
+
+[7m250[0m     const product = await MProduct.findOne({
+[7m   [0m [91m                          ~~~~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m250[0m:[93m11[0m
+    [7m250[0m     const product = await MProduct.findOne({
+    [7m   [0m [96m          ~~~~~~~[0m
+    'product' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m327[0m:[93m37[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m327[0m       const existingProduct = await MProduct.findOne({ sku: productData.sku });
+[7m   [0m [91m                                    ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m354[0m:[93m25[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'product'?
+
+[7m354[0m     const product = new MProduct(productData);
+[7m   [0m [91m                        ~~~~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m354[0m:[93m11[0m
+    [7m354[0m     const product = new MProduct(productData);
+    [7m   [0m [96m          ~~~~~~~[0m
+    'product' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m427[0m:[93m29[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'product'?
+
+[7m427[0m       const product = await MProduct.findOne({
+[7m   [0m [91m                            ~~~~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m427[0m:[93m13[0m
+    [7m427[0m       const product = await MProduct.findOne({
+    [7m   [0m [96m            ~~~~~~~[0m
+    'product' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m460[0m:[93m39[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m460[0m         const existingProduct = await MProduct.findOne({ sku: productData.sku });
+[7m   [0m [91m                                      ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m553[0m:[93m27[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m553[0m     const product = await MProduct.findOne({
+[7m   [0m [91m                          ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m598[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m598[0m     await MProduct.findOneAndDelete({
+[7m   [0m [91m          ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m644[0m:[93m27[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'product'?
+
+[7m644[0m     const product = await MProduct.findOne({
+[7m   [0m [91m                          ~~~~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m644[0m:[93m11[0m
+    [7m644[0m     const product = await MProduct.findOne({
+    [7m   [0m [96m          ~~~~~~~[0m
+    'product' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m677[0m:[93m27[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'product'?
+
+[7m677[0m     const product = await MProduct.findOne({
+[7m   [0m [91m                          ~~~~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m677[0m:[93m11[0m
+    [7m677[0m     const product = await MProduct.findOne({
+    [7m   [0m [96m          ~~~~~~~[0m
+    'product' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m735[0m:[93m27[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m735[0m     const product = await MProduct.findOne({
+[7m   [0m [91m                          ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m874[0m:[93m28[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m874[0m       const result = await MProduct.deleteMany({
+[7m   [0m [91m                           ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m880[0m:[93m28[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m880[0m       const result = await MProduct.updateMany(
+[7m   [0m [91m                           ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m941[0m:[93m27[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m941[0m     const session = await MProduct.db.startSession();
+[7m   [0m [91m                          ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m946[0m:[93m38[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m946[0m       const existingProducts = await MProduct.find({
+[7m   [0m [91m                                     ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m955[0m:[93m45[0m - [91merror[0m[90m TS7006: [0mParameter 'p' implicitly has an 'any' type.
+
+[7m955[0m       const foundIds = existingProducts.map(p => p._id.toString());
+[7m   [0m [91m                                            ~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m965[0m:[93m26[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m965[0m           result = await MProduct.deleteMany({
+[7m   [0m [91m                         ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m979[0m:[93m26[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m979[0m           result = await MProduct.updateMany(
+[7m   [0m [91m                         ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m993[0m:[93m26[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m993[0m           result = await MProduct.updateMany(
+[7m   [0m [91m                         ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m1007[0m:[93m26[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m1007[0m           result = await MProduct.updateMany(
+[7m    [0m [91m                         ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m1089[0m:[93m25[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'Product'?
+
+[7m1089[0m   const session = await MProduct.db.startSession();
+[7m    [0m [91m                        ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m1267[0m:[93m25[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'Product'?
+
+[7m1267[0m   const session = await MProduct.db.startSession();
+[7m    [0m [91m                        ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m1363[0m:[93m25[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m1363[0m   const session = await MProduct.db.startSession();
+[7m    [0m [91m                        ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m1368[0m:[93m35[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m1368[0m     const merchantProduct = await MProduct.findById(merchantProductId).session(session);
+[7m    [0m [91m                                  ~~~~~~~~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/products.ts[0m:[93m99[0m:[93m16[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m99[0m   while (await MProduct.findOne({ sku })) {
+[7m  [0m [91m               ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m191[0m:[93m7[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'products'?
+
+[7m191[0m       MProduct.find(searchCriteria)
+[7m   [0m [91m      ~~~~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m190[0m:[93m12[0m
+    [7m190[0m     const [products, totalCount] = await Promise.all([
+    [7m   [0m [96m           ~~~~~~~~[0m
+    'products' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m195[0m:[93m7[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'products'?
+
+[7m195[0m       MProduct.countDocuments(searchCriteria)
+[7m   [0m [91m      ~~~~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m190[0m:[93m12[0m
+    [7m190[0m     const [products, totalCount] = await Promise.all([
+    [7m   [0m [96m           ~~~~~~~~[0m
+    'products' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m230[0m:[93m30[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'Product'?
+
+[7m230[0m     const categories = await MProduct.distinct('category', { merchantId: req.merchantId });
+[7m   [0m [91m                             ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m250[0m:[93m27[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'product'?
+
+[7m250[0m     const product = await MProduct.findOne({
+[7m   [0m [91m                          ~~~~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m250[0m:[93m11[0m
+    [7m250[0m     const product = await MProduct.findOne({
+    [7m   [0m [96m          ~~~~~~~[0m
+    'product' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m327[0m:[93m37[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m327[0m       const existingProduct = await MProduct.findOne({ sku: productData.sku });
+[7m   [0m [91m                                    ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m354[0m:[93m25[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'product'?
+
+[7m354[0m     const product = new MProduct(productData);
+[7m   [0m [91m                        ~~~~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m354[0m:[93m11[0m
+    [7m354[0m     const product = new MProduct(productData);
+    [7m   [0m [96m          ~~~~~~~[0m
+    'product' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m427[0m:[93m29[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'product'?
+
+[7m427[0m       const product = await MProduct.findOne({
+[7m   [0m [91m                            ~~~~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m427[0m:[93m13[0m
+    [7m427[0m       const product = await MProduct.findOne({
+    [7m   [0m [96m            ~~~~~~~[0m
+    'product' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m460[0m:[93m39[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m460[0m         const existingProduct = await MProduct.findOne({ sku: productData.sku });
+[7m   [0m [91m                                      ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m553[0m:[93m27[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m553[0m     const product = await MProduct.findOne({
+[7m   [0m [91m                          ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m598[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m598[0m     await MProduct.findOneAndDelete({
+[7m   [0m [91m          ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m644[0m:[93m27[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'product'?
+
+[7m644[0m     const product = await MProduct.findOne({
+[7m   [0m [91m                          ~~~~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m644[0m:[93m11[0m
+    [7m644[0m     const product = await MProduct.findOne({
+    [7m   [0m [96m          ~~~~~~~[0m
+    'product' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m677[0m:[93m27[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'product'?
+
+[7m677[0m     const product = await MProduct.findOne({
+[7m   [0m [91m                          ~~~~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m677[0m:[93m11[0m
+    [7m677[0m     const product = await MProduct.findOne({
+    [7m   [0m [96m          ~~~~~~~[0m
+    'product' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m735[0m:[93m27[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m735[0m     const product = await MProduct.findOne({
+[7m   [0m [91m                          ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m874[0m:[93m28[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m874[0m       const result = await MProduct.deleteMany({
+[7m   [0m [91m                           ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m880[0m:[93m28[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m880[0m       const result = await MProduct.updateMany(
+[7m   [0m [91m                           ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m941[0m:[93m27[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m941[0m     const session = await MProduct.db.startSession();
+[7m   [0m [91m                          ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m946[0m:[93m38[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m946[0m       const existingProducts = await MProduct.find({
+[7m   [0m [91m                                     ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m955[0m:[93m45[0m - [91merror[0m[90m TS7006: [0mParameter 'p' implicitly has an 'any' type.
+
+[7m955[0m       const foundIds = existingProducts.map(p => p._id.toString());
+[7m   [0m [91m                                            ~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m965[0m:[93m26[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m965[0m           result = await MProduct.deleteMany({
+[7m   [0m [91m                         ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m979[0m:[93m26[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m979[0m           result = await MProduct.updateMany(
+[7m   [0m [91m                         ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m993[0m:[93m26[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m993[0m           result = await MProduct.updateMany(
+[7m   [0m [91m                         ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m1007[0m:[93m26[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m1007[0m           result = await MProduct.updateMany(
+[7m    [0m [91m                         ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m1089[0m:[93m25[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'Product'?
+
+[7m1089[0m   const session = await MProduct.db.startSession();
+[7m    [0m [91m                        ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m1267[0m:[93m25[0m - [91merror[0m[90m TS2552: [0mCannot find name 'MProduct'. Did you mean 'Product'?
+
+[7m1267[0m   const session = await MProduct.db.startSession();
+[7m    [0m [91m                        ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m1363[0m:[93m25[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m1363[0m   const session = await MProduct.db.startSession();
+[7m    [0m [91m                        ~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m1368[0m:[93m35[0m - [91merror[0m[90m TS2304: [0mCannot find name 'MProduct'.
+
+[7m1368[0m     const merchantProduct = await MProduct.findById(merchantProductId).session(session);
+[7m    [0m [91m                                  ~~~~~~~~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[2304,2552,2552,2552,2552,2304,2552,2552,2304,2304,2304,2552,2552,2304,2304,2304,2304,2304,7006,2304,2304,2304,2304,2552,2552,2304,2304]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m99\u001b[0m:\u001b[93m16\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m99\u001b[0m   while (await MProduct.findOne({ sku })) {\r\n\u001b[7m  \u001b[0m \u001b[91m               ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m191\u001b[0m:\u001b[93m7\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2552: \u001b[0mCannot find name 'MProduct'. Did you mean 'products'?\r\n\r\n\u001b[7m191\u001b[0m       MProduct.find(searchCriteria)\r\n\u001b[7m   \u001b[0m \u001b[91m      ~~~~~~~~\u001b[0m\r\n\r\n  \u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m190\u001b[0m:\u001b[93m12\u001b[0m\r\n    \u001b[7m190\u001b[0m     const [products, totalCount] = await Promise.all([\r\n    \u001b[7m   \u001b[0m \u001b[96m           ~~~~~~~~\u001b[0m\r\n    'products' is declared here.\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m195\u001b[0m:\u001b[93m7\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2552: \u001b[0mCannot find name 'MProduct'. Did you mean 'products'?\r\n\r\n\u001b[7m195\u001b[0m       MProduct.countDocuments(searchCriteria)\r\n\u001b[7m   \u001b[0m \u001b[91m      ~~~~~~~~\u001b[0m\r\n\r\n  \u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m190\u001b[0m:\u001b[93m12\u001b[0m\r\n    \u001b[7m190\u001b[0m     const [products, totalCount] = await Promise.all([\r\n    \u001b[7m   \u001b[0m \u001b[96m           ~~~~~~~~\u001b[0m\r\n    'products' is declared here.\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m230\u001b[0m:\u001b[93m30\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2552: \u001b[0mCannot find name 'MProduct'. Did you mean 'Product'?\r\n\r\n\u001b[7m230\u001b[0m     const categories = await MProduct.distinct('category', { merchantId: req.merchantId });\r\n\u001b[7m   \u001b[0m \u001b[91m                             ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m250\u001b[0m:\u001b[93m27\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2552: \u001b[0mCannot find name 'MProduct'. Did you mean 'product'?\r\n\r\n\u001b[7m250\u001b[0m     const product = await MProduct.findOne({\r\n\u001b[7m   \u001b[0m \u001b[91m                          ~~~~~~~~\u001b[0m\r\n\r\n  \u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m250\u001b[0m:\u001b[93m11\u001b[0m\r\n    \u001b[7m250\u001b[0m     const product = await MProduct.findOne({\r\n    \u001b[7m   \u001b[0m \u001b[96m          ~~~~~~~\u001b[0m\r\n    'product' is declared here.\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m327\u001b[0m:\u001b[93m37\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m327\u001b[0m       const existingProduct = await MProduct.findOne({ sku: productData.sku });\r\n\u001b[7m   \u001b[0m \u001b[91m                                    ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m354\u001b[0m:\u001b[93m25\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2552: \u001b[0mCannot find name 'MProduct'. Did you mean 'product'?\r\n\r\n\u001b[7m354\u001b[0m     const product = new MProduct(productData);\r\n\u001b[7m   \u001b[0m \u001b[91m                        ~~~~~~~~\u001b[0m\r\n\r\n  \u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m354\u001b[0m:\u001b[93m11\u001b[0m\r\n    \u001b[7m354\u001b[0m     const product = new MProduct(productData);\r\n    \u001b[7m   \u001b[0m \u001b[96m          ~~~~~~~\u001b[0m\r\n    'product' is declared here.\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m427\u001b[0m:\u001b[93m29\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2552: \u001b[0mCannot find name 'MProduct'. Did you mean 'product'?\r\n\r\n\u001b[7m427\u001b[0m       const product = await MProduct.findOne({\r\n\u001b[7m   \u001b[0m \u001b[91m                            ~~~~~~~~\u001b[0m\r\n\r\n  \u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m427\u001b[0m:\u001b[93m13\u001b[0m\r\n    \u001b[7m427\u001b[0m       const product = await MProduct.findOne({\r\n    \u001b[7m   \u001b[0m \u001b[96m            ~~~~~~~\u001b[0m\r\n    'product' is declared here.\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m460\u001b[0m:\u001b[93m39\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m460\u001b[0m         const existingProduct = await MProduct.findOne({ sku: productData.sku });\r\n\u001b[7m   \u001b[0m \u001b[91m                                      ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m553\u001b[0m:\u001b[93m27\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m553\u001b[0m     const product = await MProduct.findOne({\r\n\u001b[7m   \u001b[0m \u001b[91m                          ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m598\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m598\u001b[0m     await MProduct.findOneAndDelete({\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m644\u001b[0m:\u001b[93m27\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2552: \u001b[0mCannot find name 'MProduct'. Did you mean 'product'?\r\n\r\n\u001b[7m644\u001b[0m     const product = await MProduct.findOne({\r\n\u001b[7m   \u001b[0m \u001b[91m                          ~~~~~~~~\u001b[0m\r\n\r\n  \u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m644\u001b[0m:\u001b[93m11\u001b[0m\r\n    \u001b[7m644\u001b[0m     const product = await MProduct.findOne({\r\n    \u001b[7m   \u001b[0m \u001b[96m          ~~~~~~~\u001b[0m\r\n    'product' is declared here.\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m677\u001b[0m:\u001b[93m27\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2552: \u001b[0mCannot find name 'MProduct'. Did you mean 'product'?\r\n\r\n\u001b[7m677\u001b[0m     const product = await MProduct.findOne({\r\n\u001b[7m   \u001b[0m \u001b[91m                          ~~~~~~~~\u001b[0m\r\n\r\n  \u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m677\u001b[0m:\u001b[93m11\u001b[0m\r\n    \u001b[7m677\u001b[0m     const product = await MProduct.findOne({\r\n    \u001b[7m   \u001b[0m \u001b[96m          ~~~~~~~\u001b[0m\r\n    'product' is declared here.\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m735\u001b[0m:\u001b[93m27\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m735\u001b[0m     const product = await MProduct.findOne({\r\n\u001b[7m   \u001b[0m \u001b[91m                          ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m874\u001b[0m:\u001b[93m28\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m874\u001b[0m       const result = await MProduct.deleteMany({\r\n\u001b[7m   \u001b[0m \u001b[91m                           ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m880\u001b[0m:\u001b[93m28\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m880\u001b[0m       const result = await MProduct.updateMany(\r\n\u001b[7m   \u001b[0m \u001b[91m                           ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m941\u001b[0m:\u001b[93m27\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m941\u001b[0m     const session = await MProduct.db.startSession();\r\n\u001b[7m   \u001b[0m \u001b[91m                          ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m946\u001b[0m:\u001b[93m38\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m946\u001b[0m       const existingProducts = await MProduct.find({\r\n\u001b[7m   \u001b[0m \u001b[91m                                     ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m955\u001b[0m:\u001b[93m45\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS7006: \u001b[0mParameter 'p' implicitly has an 'any' type.\r\n\r\n\u001b[7m955\u001b[0m       const foundIds = existingProducts.map(p => p._id.toString());\r\n\u001b[7m   \u001b[0m \u001b[91m                                            ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m965\u001b[0m:\u001b[93m26\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m965\u001b[0m           result = await MProduct.deleteMany({\r\n\u001b[7m   \u001b[0m \u001b[91m                         ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m979\u001b[0m:\u001b[93m26\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m979\u001b[0m           result = await MProduct.updateMany(\r\n\u001b[7m   \u001b[0m \u001b[91m                         ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m993\u001b[0m:\u001b[93m26\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m993\u001b[0m           result = await MProduct.updateMany(\r\n\u001b[7m   \u001b[0m \u001b[91m                         ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m1007\u001b[0m:\u001b[93m26\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m1007\u001b[0m           result = await MProduct.updateMany(\r\n\u001b[7m    \u001b[0m \u001b[91m                         ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m1089\u001b[0m:\u001b[93m25\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2552: \u001b[0mCannot find name 'MProduct'. Did you mean 'Product'?\r\n\r\n\u001b[7m1089\u001b[0m   const session = await MProduct.db.startSession();\r\n\u001b[7m    \u001b[0m \u001b[91m                        ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m1267\u001b[0m:\u001b[93m25\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2552: \u001b[0mCannot find name 'MProduct'. Did you mean 'Product'?\r\n\r\n\u001b[7m1267\u001b[0m   const session = await MProduct.db.startSession();\r\n\u001b[7m    \u001b[0m \u001b[91m                        ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m1363\u001b[0m:\u001b[93m25\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m1363\u001b[0m   const session = await MProduct.db.startSession();\r\n\u001b[7m    \u001b[0m \u001b[91m                        ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m1368\u001b[0m:\u001b[93m35\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'MProduct'.\r\n\r\n\u001b[7m1368\u001b[0m     const merchantProduct = await MProduct.findById(merchantProductId).session(session);\r\n\u001b[7m    \u001b[0m \u001b[91m                                  ~~~~~~~~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Sat Nov 22 2025 16:40:08 GMT+0530 (India Standard Time)","process":{"pid":24696,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1530728448,"heapTotal":1463500800,"heapUsed":1408139048,"external":29875368,"arrayBuffers":26558322}},"os":{"loadavg":[0,0,0],"uptime":9548.062},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}
+2025-11-22 17:22:48 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/products.ts[0m:[93m185[0m:[93m11[0m - [91merror[0m[90m TS2552: [0mCannot find name 'store'. Did you mean 'storeId'?
+
+[7m185[0m       if (store) {
+[7m   [0m [91m          ~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m118[0m:[93m3[0m
+    [7m118[0m   storeId,
+    [7m   [0m [96m  ~~~~~~~[0m
+    'storeId' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m191[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'query'.
+
+[7m191[0m     if (query) {
+[7m   [0m [91m        ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m192[0m:[93m7[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m192[0m       searchCriteria.$text = { $search: query };
+[7m   [0m [91m      ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m192[0m:[93m41[0m - [91merror[0m[90m TS2304: [0mCannot find name 'query'.
+
+[7m192[0m       searchCriteria.$text = { $search: query };
+[7m   [0m [91m                                        ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m196[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'stockLevel'.
+
+[7m196[0m     if (stockLevel && stockLevel !== 'all') {
+[7m   [0m [91m        ~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m196[0m:[93m23[0m - [91merror[0m[90m TS2304: [0mCannot find name 'stockLevel'.
+
+[7m196[0m     if (stockLevel && stockLevel !== 'all') {
+[7m   [0m [91m                      ~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m197[0m:[93m15[0m - [91merror[0m[90m TS2304: [0mCannot find name 'stockLevel'.
+
+[7m197[0m       switch (stockLevel) {
+[7m   [0m [91m              ~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m199[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m199[0m           searchCriteria['inventory.stock'] = { $gt: 0 };
+[7m   [0m [91m          ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m202[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m202[0m           searchCriteria.$expr = {
+[7m   [0m [91m          ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m207[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m207[0m           searchCriteria['inventory.stock'] = 0;
+[7m   [0m [91m          ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m214[0m:[93m13[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortBy'.
+
+[7m214[0m     switch (sortBy) {
+[7m   [0m [91m            ~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m216[0m:[93m29[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m216[0m         sortCriteria.name = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                            ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m219[0m:[93m30[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m219[0m         sortCriteria.price = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                             ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m222[0m:[93m43[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m222[0m         sortCriteria['inventory.stock'] = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                                          ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m225[0m:[93m34[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m225[0m         sortCriteria.updatedAt = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                                 ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m229[0m:[93m34[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m229[0m         sortCriteria.createdAt = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                                 ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m234[0m:[93m19[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m234[0m     const skip = (page - 1) * limit;
+[7m   [0m [91m                  ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m234[0m:[93m31[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m234[0m     const skip = (page - 1) * limit;
+[7m   [0m [91m                              ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m239[0m:[93m20[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m239[0m       Product.find(searchCriteria)
+[7m   [0m [91m                   ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m242[0m:[93m16[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m242[0m         .limit(limit),
+[7m   [0m [91m               ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m243[0m:[93m30[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m243[0m       Product.countDocuments(searchCriteria)
+[7m   [0m [91m                             ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m249[0m:[93m47[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m249[0m     const totalPages = Math.ceil(totalCount / limit);
+[7m   [0m [91m                                              ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m250[0m:[93m21[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m250[0m     const hasNext = page < totalPages;
+[7m   [0m [91m                    ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m251[0m:[93m25[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m251[0m     const hasPrevious = page > 1;
+[7m   [0m [91m                        ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m259[0m:[93m11[0m - [91merror[0m[90m TS18004: [0mNo value exists in scope for the shorthand property 'page'. Either declare one or provide an initializer.
+
+[7m259[0m           page,
+[7m   [0m [91m          ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m260[0m:[93m11[0m - [91merror[0m[90m TS18004: [0mNo value exists in scope for the shorthand property 'limit'. Either declare one or provide an initializer.
+
+[7m260[0m           limit,
+[7m   [0m [91m          ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m269[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'res'.
+
+[7m269[0m     return res.status(500).json({
+[7m   [0m [91m           ~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m191[0m:[93m5[0m - [91merror[0m[90m TS1472: [0m'catch' or 'finally' expected.
+
+[7m191[0m     if (query) {
+[7m   [0m [91m    ~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m267[0m:[93m5[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m267[0m   } catch (error: any) {
+[7m   [0m [91m    ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m275[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m275[0m });
+[7m   [0m [91m~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m275[0m:[93m2[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m275[0m });
+[7m   [0m [91m ~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/products.ts[0m:[93m185[0m:[93m11[0m - [91merror[0m[90m TS2552: [0mCannot find name 'store'. Did you mean 'storeId'?
+
+[7m185[0m       if (store) {
+[7m   [0m [91m          ~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m118[0m:[93m3[0m
+    [7m118[0m   storeId,
+    [7m   [0m [96m  ~~~~~~~[0m
+    'storeId' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m191[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'query'.
+
+[7m191[0m     if (query) {
+[7m   [0m [91m        ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m192[0m:[93m7[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m192[0m       searchCriteria.$text = { $search: query };
+[7m   [0m [91m      ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m192[0m:[93m41[0m - [91merror[0m[90m TS2304: [0mCannot find name 'query'.
+
+[7m192[0m       searchCriteria.$text = { $search: query };
+[7m   [0m [91m                                        ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m196[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'stockLevel'.
+
+[7m196[0m     if (stockLevel && stockLevel !== 'all') {
+[7m   [0m [91m        ~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m196[0m:[93m23[0m - [91merror[0m[90m TS2304: [0mCannot find name 'stockLevel'.
+
+[7m196[0m     if (stockLevel && stockLevel !== 'all') {
+[7m   [0m [91m                      ~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m197[0m:[93m15[0m - [91merror[0m[90m TS2304: [0mCannot find name 'stockLevel'.
+
+[7m197[0m       switch (stockLevel) {
+[7m   [0m [91m              ~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m199[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m199[0m           searchCriteria['inventory.stock'] = { $gt: 0 };
+[7m   [0m [91m          ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m202[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m202[0m           searchCriteria.$expr = {
+[7m   [0m [91m          ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m207[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m207[0m           searchCriteria['inventory.stock'] = 0;
+[7m   [0m [91m          ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m214[0m:[93m13[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortBy'.
+
+[7m214[0m     switch (sortBy) {
+[7m   [0m [91m            ~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m216[0m:[93m29[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m216[0m         sortCriteria.name = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                            ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m219[0m:[93m30[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m219[0m         sortCriteria.price = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                             ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m222[0m:[93m43[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m222[0m         sortCriteria['inventory.stock'] = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                                          ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m225[0m:[93m34[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m225[0m         sortCriteria.updatedAt = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                                 ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m229[0m:[93m34[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m229[0m         sortCriteria.createdAt = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                                 ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m234[0m:[93m19[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m234[0m     const skip = (page - 1) * limit;
+[7m   [0m [91m                  ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m234[0m:[93m31[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m234[0m     const skip = (page - 1) * limit;
+[7m   [0m [91m                              ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m239[0m:[93m20[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m239[0m       Product.find(searchCriteria)
+[7m   [0m [91m                   ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m242[0m:[93m16[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m242[0m         .limit(limit),
+[7m   [0m [91m               ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m243[0m:[93m30[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m243[0m       Product.countDocuments(searchCriteria)
+[7m   [0m [91m                             ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m249[0m:[93m47[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m249[0m     const totalPages = Math.ceil(totalCount / limit);
+[7m   [0m [91m                                              ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m250[0m:[93m21[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m250[0m     const hasNext = page < totalPages;
+[7m   [0m [91m                    ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m251[0m:[93m25[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m251[0m     const hasPrevious = page > 1;
+[7m   [0m [91m                        ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m259[0m:[93m11[0m - [91merror[0m[90m TS18004: [0mNo value exists in scope for the shorthand property 'page'. Either declare one or provide an initializer.
+
+[7m259[0m           page,
+[7m   [0m [91m          ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m260[0m:[93m11[0m - [91merror[0m[90m TS18004: [0mNo value exists in scope for the shorthand property 'limit'. Either declare one or provide an initializer.
+
+[7m260[0m           limit,
+[7m   [0m [91m          ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m269[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'res'.
+
+[7m269[0m     return res.status(500).json({
+[7m   [0m [91m           ~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m191[0m:[93m5[0m - [91merror[0m[90m TS1472: [0m'catch' or 'finally' expected.
+
+[7m191[0m     if (query) {
+[7m   [0m [91m    ~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m267[0m:[93m5[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m267[0m   } catch (error: any) {
+[7m   [0m [91m    ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m275[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m275[0m });
+[7m   [0m [91m~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m275[0m:[93m2[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m275[0m });
+[7m   [0m [91m ~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[2552,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,18004,18004,2304,1472,1005,1128,1128]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m185\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2552: \u001b[0mCannot find name 'store'. Did you mean 'storeId'?\r\n\r\n\u001b[7m185\u001b[0m       if (store) {\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~\u001b[0m\r\n\r\n  \u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m118\u001b[0m:\u001b[93m3\u001b[0m\r\n    \u001b[7m118\u001b[0m   storeId,\r\n    \u001b[7m   \u001b[0m \u001b[96m  ~~~~~~~\u001b[0m\r\n    'storeId' is declared here.\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m191\u001b[0m:\u001b[93m9\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'query'.\r\n\r\n\u001b[7m191\u001b[0m     if (query) {\r\n\u001b[7m   \u001b[0m \u001b[91m        ~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m192\u001b[0m:\u001b[93m7\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'searchCriteria'.\r\n\r\n\u001b[7m192\u001b[0m       searchCriteria.$text = { $search: query };\r\n\u001b[7m   \u001b[0m \u001b[91m      ~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m192\u001b[0m:\u001b[93m41\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'query'.\r\n\r\n\u001b[7m192\u001b[0m       searchCriteria.$text = { $search: query };\r\n\u001b[7m   \u001b[0m \u001b[91m                                        ~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m196\u001b[0m:\u001b[93m9\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'stockLevel'.\r\n\r\n\u001b[7m196\u001b[0m     if (stockLevel && stockLevel !== 'all') {\r\n\u001b[7m   \u001b[0m \u001b[91m        ~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m196\u001b[0m:\u001b[93m23\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'stockLevel'.\r\n\r\n\u001b[7m196\u001b[0m     if (stockLevel && stockLevel !== 'all') {\r\n\u001b[7m   \u001b[0m \u001b[91m                      ~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m197\u001b[0m:\u001b[93m15\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'stockLevel'.\r\n\r\n\u001b[7m197\u001b[0m       switch (stockLevel) {\r\n\u001b[7m   \u001b[0m \u001b[91m              ~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m199\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'searchCriteria'.\r\n\r\n\u001b[7m199\u001b[0m           searchCriteria['inventory.stock'] = { $gt: 0 };\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m202\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'searchCriteria'.\r\n\r\n\u001b[7m202\u001b[0m           searchCriteria.$expr = {\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m207\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'searchCriteria'.\r\n\r\n\u001b[7m207\u001b[0m           searchCriteria['inventory.stock'] = 0;\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m214\u001b[0m:\u001b[93m13\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'sortBy'.\r\n\r\n\u001b[7m214\u001b[0m     switch (sortBy) {\r\n\u001b[7m   \u001b[0m \u001b[91m            ~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m216\u001b[0m:\u001b[93m29\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'sortOrder'.\r\n\r\n\u001b[7m216\u001b[0m         sortCriteria.name = sortOrder === 'asc' ? 1 : -1;\r\n\u001b[7m   \u001b[0m \u001b[91m                            ~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m219\u001b[0m:\u001b[93m30\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'sortOrder'.\r\n\r\n\u001b[7m219\u001b[0m         sortCriteria.price = sortOrder === 'asc' ? 1 : -1;\r\n\u001b[7m   \u001b[0m \u001b[91m                             ~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m222\u001b[0m:\u001b[93m43\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'sortOrder'.\r\n\r\n\u001b[7m222\u001b[0m         sortCriteria['inventory.stock'] = sortOrder === 'asc' ? 1 : -1;\r\n\u001b[7m   \u001b[0m \u001b[91m                                          ~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m225\u001b[0m:\u001b[93m34\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'sortOrder'.\r\n\r\n\u001b[7m225\u001b[0m         sortCriteria.updatedAt = sortOrder === 'asc' ? 1 : -1;\r\n\u001b[7m   \u001b[0m \u001b[91m                                 ~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m229\u001b[0m:\u001b[93m34\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'sortOrder'.\r\n\r\n\u001b[7m229\u001b[0m         sortCriteria.createdAt = sortOrder === 'asc' ? 1 : -1;\r\n\u001b[7m   \u001b[0m \u001b[91m                                 ~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m234\u001b[0m:\u001b[93m19\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'page'.\r\n\r\n\u001b[7m234\u001b[0m     const skip = (page - 1) * limit;\r\n\u001b[7m   \u001b[0m \u001b[91m                  ~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m234\u001b[0m:\u001b[93m31\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'limit'.\r\n\r\n\u001b[7m234\u001b[0m     const skip = (page - 1) * limit;\r\n\u001b[7m   \u001b[0m \u001b[91m                              ~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m239\u001b[0m:\u001b[93m20\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'searchCriteria'.\r\n\r\n\u001b[7m239\u001b[0m       Product.find(searchCriteria)\r\n\u001b[7m   \u001b[0m \u001b[91m                   ~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m242\u001b[0m:\u001b[93m16\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'limit'.\r\n\r\n\u001b[7m242\u001b[0m         .limit(limit),\r\n\u001b[7m   \u001b[0m \u001b[91m               ~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m243\u001b[0m:\u001b[93m30\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'searchCriteria'.\r\n\r\n\u001b[7m243\u001b[0m       Product.countDocuments(searchCriteria)\r\n\u001b[7m   \u001b[0m \u001b[91m                             ~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m249\u001b[0m:\u001b[93m47\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'limit'.\r\n\r\n\u001b[7m249\u001b[0m     const totalPages = Math.ceil(totalCount / limit);\r\n\u001b[7m   \u001b[0m \u001b[91m                                              ~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m250\u001b[0m:\u001b[93m21\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'page'.\r\n\r\n\u001b[7m250\u001b[0m     const hasNext = page < totalPages;\r\n\u001b[7m   \u001b[0m \u001b[91m                    ~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m251\u001b[0m:\u001b[93m25\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'page'.\r\n\r\n\u001b[7m251\u001b[0m     const hasPrevious = page > 1;\r\n\u001b[7m   \u001b[0m \u001b[91m                        ~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m259\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS18004: \u001b[0mNo value exists in scope for the shorthand property 'page'. Either declare one or provide an initializer.\r\n\r\n\u001b[7m259\u001b[0m           page,\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m260\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS18004: \u001b[0mNo value exists in scope for the shorthand property 'limit'. Either declare one or provide an initializer.\r\n\r\n\u001b[7m260\u001b[0m           limit,\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m269\u001b[0m:\u001b[93m12\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'res'.\r\n\r\n\u001b[7m269\u001b[0m     return res.status(500).json({\r\n\u001b[7m   \u001b[0m \u001b[91m           ~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m191\u001b[0m:\u001b[93m5\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1472: \u001b[0m'catch' or 'finally' expected.\r\n\r\n\u001b[7m191\u001b[0m     if (query) {\r\n\u001b[7m   \u001b[0m \u001b[91m    ~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m267\u001b[0m:\u001b[93m5\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m',' expected.\r\n\r\n\u001b[7m267\u001b[0m   } catch (error: any) {\r\n\u001b[7m   \u001b[0m \u001b[91m    ~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m275\u001b[0m:\u001b[93m1\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m275\u001b[0m });\r\n\u001b[7m   \u001b[0m \u001b[91m~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m275\u001b[0m:\u001b[93m2\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m275\u001b[0m });\r\n\u001b[7m   \u001b[0m \u001b[91m ~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Sat Nov 22 2025 17:22:48 GMT+0530 (India Standard Time)","process":{"pid":31528,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1554006016,"heapTotal":1487802368,"heapUsed":1436969976,"external":29854110,"arrayBuffers":26537064}},"os":{"loadavg":[0,0,0],"uptime":12108.265},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}
+2025-11-22 17:24:39 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/products.ts[0m:[93m185[0m:[93m11[0m - [91merror[0m[90m TS2552: [0mCannot find name 'store'. Did you mean 'storeId'?
+
+[7m185[0m       if (store) {
+[7m   [0m [91m          ~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m118[0m:[93m3[0m
+    [7m118[0m   storeId,
+    [7m   [0m [96m  ~~~~~~~[0m
+    'storeId' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m191[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'query'.
+
+[7m191[0m     if (query) {
+[7m   [0m [91m        ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m192[0m:[93m7[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m192[0m       searchCriteria.$text = { $search: query };
+[7m   [0m [91m      ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m192[0m:[93m41[0m - [91merror[0m[90m TS2304: [0mCannot find name 'query'.
+
+[7m192[0m       searchCriteria.$text = { $search: query };
+[7m   [0m [91m                                        ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m196[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'stockLevel'.
+
+[7m196[0m     if (stockLevel && stockLevel !== 'all') {
+[7m   [0m [91m        ~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m196[0m:[93m23[0m - [91merror[0m[90m TS2304: [0mCannot find name 'stockLevel'.
+
+[7m196[0m     if (stockLevel && stockLevel !== 'all') {
+[7m   [0m [91m                      ~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m197[0m:[93m15[0m - [91merror[0m[90m TS2304: [0mCannot find name 'stockLevel'.
+
+[7m197[0m       switch (stockLevel) {
+[7m   [0m [91m              ~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m199[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m199[0m           searchCriteria['inventory.stock'] = { $gt: 0 };
+[7m   [0m [91m          ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m202[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m202[0m           searchCriteria.$expr = {
+[7m   [0m [91m          ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m207[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m207[0m           searchCriteria['inventory.stock'] = 0;
+[7m   [0m [91m          ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m214[0m:[93m13[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortBy'.
+
+[7m214[0m     switch (sortBy) {
+[7m   [0m [91m            ~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m216[0m:[93m29[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m216[0m         sortCriteria.name = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                            ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m219[0m:[93m30[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m219[0m         sortCriteria.price = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                             ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m222[0m:[93m43[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m222[0m         sortCriteria['inventory.stock'] = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                                          ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m225[0m:[93m34[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m225[0m         sortCriteria.updatedAt = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                                 ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m229[0m:[93m34[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m229[0m         sortCriteria.createdAt = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                                 ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m234[0m:[93m19[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m234[0m     const skip = (page - 1) * limit;
+[7m   [0m [91m                  ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m234[0m:[93m31[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m234[0m     const skip = (page - 1) * limit;
+[7m   [0m [91m                              ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m239[0m:[93m20[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m239[0m       Product.find(searchCriteria)
+[7m   [0m [91m                   ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m242[0m:[93m16[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m242[0m         .limit(limit),
+[7m   [0m [91m               ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m243[0m:[93m30[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m243[0m       Product.countDocuments(searchCriteria)
+[7m   [0m [91m                             ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m249[0m:[93m47[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m249[0m     const totalPages = Math.ceil(totalCount / limit);
+[7m   [0m [91m                                              ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m250[0m:[93m21[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m250[0m     const hasNext = page < totalPages;
+[7m   [0m [91m                    ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m251[0m:[93m25[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m251[0m     const hasPrevious = page > 1;
+[7m   [0m [91m                        ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m259[0m:[93m11[0m - [91merror[0m[90m TS18004: [0mNo value exists in scope for the shorthand property 'page'. Either declare one or provide an initializer.
+
+[7m259[0m           page,
+[7m   [0m [91m          ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m260[0m:[93m11[0m - [91merror[0m[90m TS18004: [0mNo value exists in scope for the shorthand property 'limit'. Either declare one or provide an initializer.
+
+[7m260[0m           limit,
+[7m   [0m [91m          ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m269[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'res'.
+
+[7m269[0m     return res.status(500).json({
+[7m   [0m [91m           ~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m191[0m:[93m5[0m - [91merror[0m[90m TS1472: [0m'catch' or 'finally' expected.
+
+[7m191[0m     if (query) {
+[7m   [0m [91m    ~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m267[0m:[93m5[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m267[0m   } catch (error: any) {
+[7m   [0m [91m    ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m275[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m275[0m });
+[7m   [0m [91m~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m275[0m:[93m2[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m275[0m });
+[7m   [0m [91m ~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/products.ts[0m:[93m185[0m:[93m11[0m - [91merror[0m[90m TS2552: [0mCannot find name 'store'. Did you mean 'storeId'?
+
+[7m185[0m       if (store) {
+[7m   [0m [91m          ~~~~~[0m
+
+  [96msrc/merchantroutes/products.ts[0m:[93m118[0m:[93m3[0m
+    [7m118[0m   storeId,
+    [7m   [0m [96m  ~~~~~~~[0m
+    'storeId' is declared here.
+[96msrc/merchantroutes/products.ts[0m:[93m191[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'query'.
+
+[7m191[0m     if (query) {
+[7m   [0m [91m        ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m192[0m:[93m7[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m192[0m       searchCriteria.$text = { $search: query };
+[7m   [0m [91m      ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m192[0m:[93m41[0m - [91merror[0m[90m TS2304: [0mCannot find name 'query'.
+
+[7m192[0m       searchCriteria.$text = { $search: query };
+[7m   [0m [91m                                        ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m196[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'stockLevel'.
+
+[7m196[0m     if (stockLevel && stockLevel !== 'all') {
+[7m   [0m [91m        ~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m196[0m:[93m23[0m - [91merror[0m[90m TS2304: [0mCannot find name 'stockLevel'.
+
+[7m196[0m     if (stockLevel && stockLevel !== 'all') {
+[7m   [0m [91m                      ~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m197[0m:[93m15[0m - [91merror[0m[90m TS2304: [0mCannot find name 'stockLevel'.
+
+[7m197[0m       switch (stockLevel) {
+[7m   [0m [91m              ~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m199[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m199[0m           searchCriteria['inventory.stock'] = { $gt: 0 };
+[7m   [0m [91m          ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m202[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m202[0m           searchCriteria.$expr = {
+[7m   [0m [91m          ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m207[0m:[93m11[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m207[0m           searchCriteria['inventory.stock'] = 0;
+[7m   [0m [91m          ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m214[0m:[93m13[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortBy'.
+
+[7m214[0m     switch (sortBy) {
+[7m   [0m [91m            ~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m216[0m:[93m29[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m216[0m         sortCriteria.name = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                            ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m219[0m:[93m30[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m219[0m         sortCriteria.price = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                             ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m222[0m:[93m43[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m222[0m         sortCriteria['inventory.stock'] = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                                          ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m225[0m:[93m34[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m225[0m         sortCriteria.updatedAt = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                                 ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m229[0m:[93m34[0m - [91merror[0m[90m TS2304: [0mCannot find name 'sortOrder'.
+
+[7m229[0m         sortCriteria.createdAt = sortOrder === 'asc' ? 1 : -1;
+[7m   [0m [91m                                 ~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m234[0m:[93m19[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m234[0m     const skip = (page - 1) * limit;
+[7m   [0m [91m                  ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m234[0m:[93m31[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m234[0m     const skip = (page - 1) * limit;
+[7m   [0m [91m                              ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m239[0m:[93m20[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m239[0m       Product.find(searchCriteria)
+[7m   [0m [91m                   ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m242[0m:[93m16[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m242[0m         .limit(limit),
+[7m   [0m [91m               ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m243[0m:[93m30[0m - [91merror[0m[90m TS2304: [0mCannot find name 'searchCriteria'.
+
+[7m243[0m       Product.countDocuments(searchCriteria)
+[7m   [0m [91m                             ~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m249[0m:[93m47[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m249[0m     const totalPages = Math.ceil(totalCount / limit);
+[7m   [0m [91m                                              ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m250[0m:[93m21[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m250[0m     const hasNext = page < totalPages;
+[7m   [0m [91m                    ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m251[0m:[93m25[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m251[0m     const hasPrevious = page > 1;
+[7m   [0m [91m                        ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m259[0m:[93m11[0m - [91merror[0m[90m TS18004: [0mNo value exists in scope for the shorthand property 'page'. Either declare one or provide an initializer.
+
+[7m259[0m           page,
+[7m   [0m [91m          ~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m260[0m:[93m11[0m - [91merror[0m[90m TS18004: [0mNo value exists in scope for the shorthand property 'limit'. Either declare one or provide an initializer.
+
+[7m260[0m           limit,
+[7m   [0m [91m          ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m269[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'res'.
+
+[7m269[0m     return res.status(500).json({
+[7m   [0m [91m           ~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m191[0m:[93m5[0m - [91merror[0m[90m TS1472: [0m'catch' or 'finally' expected.
+
+[7m191[0m     if (query) {
+[7m   [0m [91m    ~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m267[0m:[93m5[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m267[0m   } catch (error: any) {
+[7m   [0m [91m    ~~~~~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m275[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m275[0m });
+[7m   [0m [91m~[0m
+[96msrc/merchantroutes/products.ts[0m:[93m275[0m:[93m2[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m275[0m });
+[7m   [0m [91m ~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[2552,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,18004,18004,2304,1472,1005,1128,1128]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m185\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2552: \u001b[0mCannot find name 'store'. Did you mean 'storeId'?\r\n\r\n\u001b[7m185\u001b[0m       if (store) {\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~\u001b[0m\r\n\r\n  \u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m118\u001b[0m:\u001b[93m3\u001b[0m\r\n    \u001b[7m118\u001b[0m   storeId,\r\n    \u001b[7m   \u001b[0m \u001b[96m  ~~~~~~~\u001b[0m\r\n    'storeId' is declared here.\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m191\u001b[0m:\u001b[93m9\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'query'.\r\n\r\n\u001b[7m191\u001b[0m     if (query) {\r\n\u001b[7m   \u001b[0m \u001b[91m        ~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m192\u001b[0m:\u001b[93m7\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'searchCriteria'.\r\n\r\n\u001b[7m192\u001b[0m       searchCriteria.$text = { $search: query };\r\n\u001b[7m   \u001b[0m \u001b[91m      ~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m192\u001b[0m:\u001b[93m41\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'query'.\r\n\r\n\u001b[7m192\u001b[0m       searchCriteria.$text = { $search: query };\r\n\u001b[7m   \u001b[0m \u001b[91m                                        ~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m196\u001b[0m:\u001b[93m9\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'stockLevel'.\r\n\r\n\u001b[7m196\u001b[0m     if (stockLevel && stockLevel !== 'all') {\r\n\u001b[7m   \u001b[0m \u001b[91m        ~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m196\u001b[0m:\u001b[93m23\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'stockLevel'.\r\n\r\n\u001b[7m196\u001b[0m     if (stockLevel && stockLevel !== 'all') {\r\n\u001b[7m   \u001b[0m \u001b[91m                      ~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m197\u001b[0m:\u001b[93m15\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'stockLevel'.\r\n\r\n\u001b[7m197\u001b[0m       switch (stockLevel) {\r\n\u001b[7m   \u001b[0m \u001b[91m              ~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m199\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'searchCriteria'.\r\n\r\n\u001b[7m199\u001b[0m           searchCriteria['inventory.stock'] = { $gt: 0 };\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m202\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'searchCriteria'.\r\n\r\n\u001b[7m202\u001b[0m           searchCriteria.$expr = {\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m207\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'searchCriteria'.\r\n\r\n\u001b[7m207\u001b[0m           searchCriteria['inventory.stock'] = 0;\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m214\u001b[0m:\u001b[93m13\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'sortBy'.\r\n\r\n\u001b[7m214\u001b[0m     switch (sortBy) {\r\n\u001b[7m   \u001b[0m \u001b[91m            ~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m216\u001b[0m:\u001b[93m29\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'sortOrder'.\r\n\r\n\u001b[7m216\u001b[0m         sortCriteria.name = sortOrder === 'asc' ? 1 : -1;\r\n\u001b[7m   \u001b[0m \u001b[91m                            ~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m219\u001b[0m:\u001b[93m30\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'sortOrder'.\r\n\r\n\u001b[7m219\u001b[0m         sortCriteria.price = sortOrder === 'asc' ? 1 : -1;\r\n\u001b[7m   \u001b[0m \u001b[91m                             ~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m222\u001b[0m:\u001b[93m43\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'sortOrder'.\r\n\r\n\u001b[7m222\u001b[0m         sortCriteria['inventory.stock'] = sortOrder === 'asc' ? 1 : -1;\r\n\u001b[7m   \u001b[0m \u001b[91m                                          ~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m225\u001b[0m:\u001b[93m34\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'sortOrder'.\r\n\r\n\u001b[7m225\u001b[0m         sortCriteria.updatedAt = sortOrder === 'asc' ? 1 : -1;\r\n\u001b[7m   \u001b[0m \u001b[91m                                 ~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m229\u001b[0m:\u001b[93m34\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'sortOrder'.\r\n\r\n\u001b[7m229\u001b[0m         sortCriteria.createdAt = sortOrder === 'asc' ? 1 : -1;\r\n\u001b[7m   \u001b[0m \u001b[91m                                 ~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m234\u001b[0m:\u001b[93m19\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'page'.\r\n\r\n\u001b[7m234\u001b[0m     const skip = (page - 1) * limit;\r\n\u001b[7m   \u001b[0m \u001b[91m                  ~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m234\u001b[0m:\u001b[93m31\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'limit'.\r\n\r\n\u001b[7m234\u001b[0m     const skip = (page - 1) * limit;\r\n\u001b[7m   \u001b[0m \u001b[91m                              ~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m239\u001b[0m:\u001b[93m20\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'searchCriteria'.\r\n\r\n\u001b[7m239\u001b[0m       Product.find(searchCriteria)\r\n\u001b[7m   \u001b[0m \u001b[91m                   ~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m242\u001b[0m:\u001b[93m16\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'limit'.\r\n\r\n\u001b[7m242\u001b[0m         .limit(limit),\r\n\u001b[7m   \u001b[0m \u001b[91m               ~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m243\u001b[0m:\u001b[93m30\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'searchCriteria'.\r\n\r\n\u001b[7m243\u001b[0m       Product.countDocuments(searchCriteria)\r\n\u001b[7m   \u001b[0m \u001b[91m                             ~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m249\u001b[0m:\u001b[93m47\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'limit'.\r\n\r\n\u001b[7m249\u001b[0m     const totalPages = Math.ceil(totalCount / limit);\r\n\u001b[7m   \u001b[0m \u001b[91m                                              ~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m250\u001b[0m:\u001b[93m21\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'page'.\r\n\r\n\u001b[7m250\u001b[0m     const hasNext = page < totalPages;\r\n\u001b[7m   \u001b[0m \u001b[91m                    ~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m251\u001b[0m:\u001b[93m25\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'page'.\r\n\r\n\u001b[7m251\u001b[0m     const hasPrevious = page > 1;\r\n\u001b[7m   \u001b[0m \u001b[91m                        ~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m259\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS18004: \u001b[0mNo value exists in scope for the shorthand property 'page'. Either declare one or provide an initializer.\r\n\r\n\u001b[7m259\u001b[0m           page,\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m260\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS18004: \u001b[0mNo value exists in scope for the shorthand property 'limit'. Either declare one or provide an initializer.\r\n\r\n\u001b[7m260\u001b[0m           limit,\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m269\u001b[0m:\u001b[93m12\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'res'.\r\n\r\n\u001b[7m269\u001b[0m     return res.status(500).json({\r\n\u001b[7m   \u001b[0m \u001b[91m           ~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m191\u001b[0m:\u001b[93m5\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1472: \u001b[0m'catch' or 'finally' expected.\r\n\r\n\u001b[7m191\u001b[0m     if (query) {\r\n\u001b[7m   \u001b[0m \u001b[91m    ~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m267\u001b[0m:\u001b[93m5\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m',' expected.\r\n\r\n\u001b[7m267\u001b[0m   } catch (error: any) {\r\n\u001b[7m   \u001b[0m \u001b[91m    ~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m275\u001b[0m:\u001b[93m1\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m275\u001b[0m });\r\n\u001b[7m   \u001b[0m \u001b[91m~\u001b[0m\r\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m275\u001b[0m:\u001b[93m2\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m275\u001b[0m });\r\n\u001b[7m   \u001b[0m \u001b[91m ~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Sat Nov 22 2025 17:24:39 GMT+0530 (India Standard Time)","process":{"pid":33512,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1523511296,"heapTotal":1457324032,"heapUsed":1408488272,"external":29854166,"arrayBuffers":26537120}},"os":{"loadavg":[0,0,0],"uptime":12219.734},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}

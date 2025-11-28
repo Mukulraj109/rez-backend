@@ -1,0 +1,546 @@
+2025-11-25 11:46:54 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/controllers/reviewController.ts[0m:[93m250[0m:[93m9[0m - [91merror[0m[90m TS2367: [0mThis comparison appears to be unintentional because the types '"pending" | "rejected"' and '"approved"' have no overlap.
+
+[7m250[0m     if (review.moderationStatus === 'approved') {
+[7m   [0m [91m        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/controllers/reviewController.ts[0m:[93m250[0m:[93m9[0m - [91merror[0m[90m TS2367: [0mThis comparison appears to be unintentional because the types '"pending" | "rejected"' and '"approved"' have no overlap.
+
+[7m250[0m     if (review.moderationStatus === 'approved') {
+[7m   [0m [91m        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[2367]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m250\u001b[0m:\u001b[93m9\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2367: \u001b[0mThis comparison appears to be unintentional because the types '\"pending\" | \"rejected\"' and '\"approved\"' have no overlap.\r\n\r\n\u001b[7m250\u001b[0m     if (review.moderationStatus === 'approved') {\r\n\u001b[7m   \u001b[0m \u001b[91m        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Tue Nov 25 2025 11:46:54 GMT+0530 (India Standard Time)","process":{"pid":11156,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":466448384,"heapTotal":1132511232,"heapUsed":1084441872,"external":26605446,"arrayBuffers":23150857}},"os":{"loadavg":[0,0,0],"uptime":5466.109},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}
+2025-11-25 13:25:41 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/controllers/reviewController.ts[0m:[93m142[0m:[93m22[0m - [91merror[0m[90m TS2304: [0mCannot find name 'ratingStats'.
+
+[7m142[0m       averageRating: ratingStats.average || 0, // Only approved reviews
+[7m   [0m [91m                     ~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m143[0m:[93m21[0m - [91merror[0m[90m TS2304: [0mCannot find name 'adjustedStats'.
+
+[7m143[0m       totalReviews: adjustedStats.count || 0, // Includes user's pending reviews
+[7m   [0m [91m                    ~~~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m145[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'ratingStats'.
+
+[7m145[0m         5: ratingStats.distribution?.[5] || 0, // Only approved reviews
+[7m   [0m [91m           ~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m146[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'ratingStats'.
+
+[7m146[0m         4: ratingStats.distribution?.[4] || 0,
+[7m   [0m [91m           ~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m147[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'ratingStats'.
+
+[7m147[0m         3: ratingStats.distribution?.[3] || 0,
+[7m   [0m [91m           ~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m148[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'ratingStats'.
+
+[7m148[0m         2: ratingStats.distribution?.[2] || 0,
+[7m   [0m [91m           ~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m149[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'ratingStats'.
+
+[7m149[0m         1: ratingStats.distribution?.[1] || 0,
+[7m   [0m [91m           ~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m153[0m:[93m17[0m - [91merror[0m[90m TS2304: [0mCannot find name 'res'.
+
+[7m153[0m     sendSuccess(res, {
+[7m   [0m [91m                ~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m154[0m:[93m16[0m - [91merror[0m[90m TS2304: [0mCannot find name 'transformedReviews'.
+
+[7m154[0m       reviews: transformedReviews,
+[7m   [0m [91m               ~~~~~~~~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m157[0m:[93m25[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m157[0m         current: Number(page),
+[7m   [0m [91m                        ~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m158[0m:[93m26[0m - [91merror[0m[90m TS2304: [0mCannot find name 'total'.
+
+[7m158[0m         pages: Math.ceil(total / Number(limit)),
+[7m   [0m [91m                         ~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m158[0m:[93m41[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m158[0m         pages: Math.ceil(total / Number(limit)),
+[7m   [0m [91m                                        ~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m159[0m:[93m16[0m - [91merror[0m[90m TS2304: [0mCannot find name 'total'.
+
+[7m159[0m         total: total,
+[7m   [0m [91m               ~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m160[0m:[93m23[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m160[0m         limit: Number(limit),
+[7m   [0m [91m                      ~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m161[0m:[93m18[0m - [91merror[0m[90m TS2304: [0mCannot find name 'skip'.
+
+[7m161[0m         hasNext: skip + reviews.length < total,
+[7m   [0m [91m                 ~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m161[0m:[93m25[0m - [91merror[0m[90m TS2304: [0mCannot find name 'reviews'.
+
+[7m161[0m         hasNext: skip + reviews.length < total,
+[7m   [0m [91m                        ~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m161[0m:[93m42[0m - [91merror[0m[90m TS2304: [0mCannot find name 'total'.
+
+[7m161[0m         hasNext: skip + reviews.length < total,
+[7m   [0m [91m                                         ~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m162[0m:[93m29[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m162[0m         hasPrevious: Number(page) > 1
+[7m   [0m [91m                            ~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m136[0m:[93m6[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m136[0m     }));
+[7m   [0m [91m     ~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m136[0m:[93m7[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m136[0m     }));
+[7m   [0m [91m      ~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m166[0m:[93m3[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m166[0m   } catch (error) {
+[7m   [0m [91m  ~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m166[0m:[93m5[0m - [91merror[0m[90m TS1005: [0m'try' expected.
+
+[7m166[0m   } catch (error) {
+[7m   [0m [91m    ~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m170[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m170[0m });
+[7m   [0m [91m~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m170[0m:[93m2[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m170[0m });
+[7m   [0m [91m ~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/controllers/reviewController.ts[0m:[93m142[0m:[93m22[0m - [91merror[0m[90m TS2304: [0mCannot find name 'ratingStats'.
+
+[7m142[0m       averageRating: ratingStats.average || 0, // Only approved reviews
+[7m   [0m [91m                     ~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m143[0m:[93m21[0m - [91merror[0m[90m TS2304: [0mCannot find name 'adjustedStats'.
+
+[7m143[0m       totalReviews: adjustedStats.count || 0, // Includes user's pending reviews
+[7m   [0m [91m                    ~~~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m145[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'ratingStats'.
+
+[7m145[0m         5: ratingStats.distribution?.[5] || 0, // Only approved reviews
+[7m   [0m [91m           ~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m146[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'ratingStats'.
+
+[7m146[0m         4: ratingStats.distribution?.[4] || 0,
+[7m   [0m [91m           ~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m147[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'ratingStats'.
+
+[7m147[0m         3: ratingStats.distribution?.[3] || 0,
+[7m   [0m [91m           ~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m148[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'ratingStats'.
+
+[7m148[0m         2: ratingStats.distribution?.[2] || 0,
+[7m   [0m [91m           ~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m149[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'ratingStats'.
+
+[7m149[0m         1: ratingStats.distribution?.[1] || 0,
+[7m   [0m [91m           ~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m153[0m:[93m17[0m - [91merror[0m[90m TS2304: [0mCannot find name 'res'.
+
+[7m153[0m     sendSuccess(res, {
+[7m   [0m [91m                ~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m154[0m:[93m16[0m - [91merror[0m[90m TS2304: [0mCannot find name 'transformedReviews'.
+
+[7m154[0m       reviews: transformedReviews,
+[7m   [0m [91m               ~~~~~~~~~~~~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m157[0m:[93m25[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m157[0m         current: Number(page),
+[7m   [0m [91m                        ~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m158[0m:[93m26[0m - [91merror[0m[90m TS2304: [0mCannot find name 'total'.
+
+[7m158[0m         pages: Math.ceil(total / Number(limit)),
+[7m   [0m [91m                         ~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m158[0m:[93m41[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m158[0m         pages: Math.ceil(total / Number(limit)),
+[7m   [0m [91m                                        ~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m159[0m:[93m16[0m - [91merror[0m[90m TS2304: [0mCannot find name 'total'.
+
+[7m159[0m         total: total,
+[7m   [0m [91m               ~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m160[0m:[93m23[0m - [91merror[0m[90m TS2304: [0mCannot find name 'limit'.
+
+[7m160[0m         limit: Number(limit),
+[7m   [0m [91m                      ~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m161[0m:[93m18[0m - [91merror[0m[90m TS2304: [0mCannot find name 'skip'.
+
+[7m161[0m         hasNext: skip + reviews.length < total,
+[7m   [0m [91m                 ~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m161[0m:[93m25[0m - [91merror[0m[90m TS2304: [0mCannot find name 'reviews'.
+
+[7m161[0m         hasNext: skip + reviews.length < total,
+[7m   [0m [91m                        ~~~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m161[0m:[93m42[0m - [91merror[0m[90m TS2304: [0mCannot find name 'total'.
+
+[7m161[0m         hasNext: skip + reviews.length < total,
+[7m   [0m [91m                                         ~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m162[0m:[93m29[0m - [91merror[0m[90m TS2304: [0mCannot find name 'page'.
+
+[7m162[0m         hasPrevious: Number(page) > 1
+[7m   [0m [91m                            ~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m136[0m:[93m6[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m136[0m     }));
+[7m   [0m [91m     ~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m136[0m:[93m7[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m136[0m     }));
+[7m   [0m [91m      ~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m166[0m:[93m3[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m166[0m   } catch (error) {
+[7m   [0m [91m  ~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m166[0m:[93m5[0m - [91merror[0m[90m TS1005: [0m'try' expected.
+
+[7m166[0m   } catch (error) {
+[7m   [0m [91m    ~~~~~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m170[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m170[0m });
+[7m   [0m [91m~[0m
+[96msrc/controllers/reviewController.ts[0m:[93m170[0m:[93m2[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m170[0m });
+[7m   [0m [91m ~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,2304,1005,1005,1128,1005,1128,1128]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m142\u001b[0m:\u001b[93m22\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'ratingStats'.\r\n\r\n\u001b[7m142\u001b[0m       averageRating: ratingStats.average || 0, // Only approved reviews\r\n\u001b[7m   \u001b[0m \u001b[91m                     ~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m143\u001b[0m:\u001b[93m21\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'adjustedStats'.\r\n\r\n\u001b[7m143\u001b[0m       totalReviews: adjustedStats.count || 0, // Includes user's pending reviews\r\n\u001b[7m   \u001b[0m \u001b[91m                    ~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m145\u001b[0m:\u001b[93m12\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'ratingStats'.\r\n\r\n\u001b[7m145\u001b[0m         5: ratingStats.distribution?.[5] || 0, // Only approved reviews\r\n\u001b[7m   \u001b[0m \u001b[91m           ~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m146\u001b[0m:\u001b[93m12\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'ratingStats'.\r\n\r\n\u001b[7m146\u001b[0m         4: ratingStats.distribution?.[4] || 0,\r\n\u001b[7m   \u001b[0m \u001b[91m           ~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m147\u001b[0m:\u001b[93m12\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'ratingStats'.\r\n\r\n\u001b[7m147\u001b[0m         3: ratingStats.distribution?.[3] || 0,\r\n\u001b[7m   \u001b[0m \u001b[91m           ~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m148\u001b[0m:\u001b[93m12\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'ratingStats'.\r\n\r\n\u001b[7m148\u001b[0m         2: ratingStats.distribution?.[2] || 0,\r\n\u001b[7m   \u001b[0m \u001b[91m           ~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m149\u001b[0m:\u001b[93m12\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'ratingStats'.\r\n\r\n\u001b[7m149\u001b[0m         1: ratingStats.distribution?.[1] || 0,\r\n\u001b[7m   \u001b[0m \u001b[91m           ~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m153\u001b[0m:\u001b[93m17\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'res'.\r\n\r\n\u001b[7m153\u001b[0m     sendSuccess(res, {\r\n\u001b[7m   \u001b[0m \u001b[91m                ~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m154\u001b[0m:\u001b[93m16\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'transformedReviews'.\r\n\r\n\u001b[7m154\u001b[0m       reviews: transformedReviews,\r\n\u001b[7m   \u001b[0m \u001b[91m               ~~~~~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m157\u001b[0m:\u001b[93m25\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'page'.\r\n\r\n\u001b[7m157\u001b[0m         current: Number(page),\r\n\u001b[7m   \u001b[0m \u001b[91m                        ~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m158\u001b[0m:\u001b[93m26\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'total'.\r\n\r\n\u001b[7m158\u001b[0m         pages: Math.ceil(total / Number(limit)),\r\n\u001b[7m   \u001b[0m \u001b[91m                         ~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m158\u001b[0m:\u001b[93m41\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'limit'.\r\n\r\n\u001b[7m158\u001b[0m         pages: Math.ceil(total / Number(limit)),\r\n\u001b[7m   \u001b[0m \u001b[91m                                        ~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m159\u001b[0m:\u001b[93m16\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'total'.\r\n\r\n\u001b[7m159\u001b[0m         total: total,\r\n\u001b[7m   \u001b[0m \u001b[91m               ~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m160\u001b[0m:\u001b[93m23\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'limit'.\r\n\r\n\u001b[7m160\u001b[0m         limit: Number(limit),\r\n\u001b[7m   \u001b[0m \u001b[91m                      ~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m161\u001b[0m:\u001b[93m18\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'skip'.\r\n\r\n\u001b[7m161\u001b[0m         hasNext: skip + reviews.length < total,\r\n\u001b[7m   \u001b[0m \u001b[91m                 ~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m161\u001b[0m:\u001b[93m25\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'reviews'.\r\n\r\n\u001b[7m161\u001b[0m         hasNext: skip + reviews.length < total,\r\n\u001b[7m   \u001b[0m \u001b[91m                        ~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m161\u001b[0m:\u001b[93m42\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'total'.\r\n\r\n\u001b[7m161\u001b[0m         hasNext: skip + reviews.length < total,\r\n\u001b[7m   \u001b[0m \u001b[91m                                         ~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m162\u001b[0m:\u001b[93m29\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'page'.\r\n\r\n\u001b[7m162\u001b[0m         hasPrevious: Number(page) > 1\r\n\u001b[7m   \u001b[0m \u001b[91m                            ~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m136\u001b[0m:\u001b[93m6\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m';' expected.\r\n\r\n\u001b[7m136\u001b[0m     }));\r\n\u001b[7m   \u001b[0m \u001b[91m     ~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m136\u001b[0m:\u001b[93m7\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m',' expected.\r\n\r\n\u001b[7m136\u001b[0m     }));\r\n\u001b[7m   \u001b[0m \u001b[91m      ~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m166\u001b[0m:\u001b[93m3\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m166\u001b[0m   } catch (error) {\r\n\u001b[7m   \u001b[0m \u001b[91m  ~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m166\u001b[0m:\u001b[93m5\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m'try' expected.\r\n\r\n\u001b[7m166\u001b[0m   } catch (error) {\r\n\u001b[7m   \u001b[0m \u001b[91m    ~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m170\u001b[0m:\u001b[93m1\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m170\u001b[0m });\r\n\u001b[7m   \u001b[0m \u001b[91m~\u001b[0m\r\n\u001b[96msrc/controllers/reviewController.ts\u001b[0m:\u001b[93m170\u001b[0m:\u001b[93m2\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m170\u001b[0m });\r\n\u001b[7m   \u001b[0m \u001b[91m ~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Tue Nov 25 2025 13:25:41 GMT+0530 (India Standard Time)","process":{"pid":30532,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1228038144,"heapTotal":1160298496,"heapUsed":1116893680,"external":26611793,"arrayBuffers":23157204}},"os":{"loadavg":[0,0,0],"uptime":5759.75},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}
+2025-11-25 14:01:21 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/stores.ts[0m:[93m873[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'totalReviews'.
+
+[7m873[0m         totalReviews: stats.count || 0,
+[7m   [0m [91m        ~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m874[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'ratingBreakdown'.
+
+[7m874[0m         ratingBreakdown: {
+[7m   [0m [91m        ~~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m883[0m:[93m9[0m - [91merror[0m[90m TS2695: [0mLeft side of comma operator is unused and has no side effects.
+
+[7m883[0m         page,
+[7m   [0m [91m        ~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m883[0m:[93m9[0m - [91merror[0m[90m TS2695: [0mLeft side of comma operator is unused and has no side effects.
+
+[7m883[0m         page,
+[7m   [0m [91m        ~~~~~[0m
+[7m884[0m         limit,
+[7m   [0m [91m~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m883[0m:[93m9[0m - [91merror[0m[90m TS2695: [0mLeft side of comma operator is unused and has no side effects.
+
+[7m883[0m         page,
+[7m   [0m [91m        ~~~~~[0m
+[7m884[0m         limit,
+[7m   [0m [91m~~~~~~~~~~~~~~[0m
+[7m885[0m         totalCount,
+[7m   [0m [91m~~~~~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m886[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'totalPages'.
+
+[7m886[0m         totalPages: Math.ceil(totalCount / limit),
+[7m   [0m [91m        ~~~~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m887[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'hasNext'.
+
+[7m887[0m         hasNext: page < Math.ceil(totalCount / limit),
+[7m   [0m [91m        ~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m888[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'hasPrevious'.
+
+[7m888[0m         hasPrevious: page > 1
+[7m   [0m [91m        ~~~~~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m894[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'res'.
+
+[7m894[0m     return res.status(500).json({
+[7m   [0m [91m           ~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m870[0m:[93m8[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m870[0m       })),
+[7m   [0m [91m       ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m870[0m:[93m9[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m870[0m       })),
+[7m   [0m [91m        ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m871[0m:[93m12[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m871[0m       stats: {
+[7m   [0m [91m           ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m873[0m:[93m21[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m873[0m         totalReviews: stats.count || 0,
+[7m   [0m [91m                    ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m874[0m:[93m24[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m874[0m         ratingBreakdown: {
+[7m   [0m [91m                       ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m875[0m:[93m12[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m875[0m           5: stats.distribution?.[5] || 0,
+[7m   [0m [91m           ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m876[0m:[93m12[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m876[0m           4: stats.distribution?.[4] || 0,
+[7m   [0m [91m           ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m877[0m:[93m12[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m877[0m           3: stats.distribution?.[3] || 0,
+[7m   [0m [91m           ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m878[0m:[93m12[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m878[0m           2: stats.distribution?.[2] || 0,
+[7m   [0m [91m           ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m879[0m:[93m12[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m879[0m           1: stats.distribution?.[1] || 0,
+[7m   [0m [91m           ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m880[0m:[93m9[0m - [91merror[0m[90m TS1109: [0mExpression expected.
+
+[7m880[0m         },
+[7m   [0m [91m        ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m880[0m:[93m10[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m880[0m         },
+[7m   [0m [91m         ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m881[0m:[93m8[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m881[0m       },
+[7m   [0m [91m       ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m886[0m:[93m19[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m886[0m         totalPages: Math.ceil(totalCount / limit),
+[7m   [0m [91m                  ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m887[0m:[93m16[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m887[0m         hasNext: page < Math.ceil(totalCount / limit),
+[7m   [0m [91m               ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m888[0m:[93m20[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m888[0m         hasPrevious: page > 1
+[7m   [0m [91m                   ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m890[0m:[93m6[0m - [91merror[0m[90m TS1472: [0m'catch' or 'finally' expected.
+
+[7m890[0m     }, 'Store reviews retrieved successfully');
+[7m   [0m [91m     ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m890[0m:[93m46[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m890[0m     }, 'Store reviews retrieved successfully');
+[7m   [0m [91m                                             ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m892[0m:[93m3[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m892[0m   } catch (error: any) {
+[7m   [0m [91m  ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m892[0m:[93m5[0m - [91merror[0m[90m TS1005: [0m'try' expected.
+
+[7m892[0m   } catch (error: any) {
+[7m   [0m [91m    ~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m899[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m899[0m });
+[7m   [0m [91m~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m899[0m:[93m2[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m899[0m });
+[7m   [0m [91m ~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/stores.ts[0m:[93m873[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'totalReviews'.
+
+[7m873[0m         totalReviews: stats.count || 0,
+[7m   [0m [91m        ~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m874[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'ratingBreakdown'.
+
+[7m874[0m         ratingBreakdown: {
+[7m   [0m [91m        ~~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m883[0m:[93m9[0m - [91merror[0m[90m TS2695: [0mLeft side of comma operator is unused and has no side effects.
+
+[7m883[0m         page,
+[7m   [0m [91m        ~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m883[0m:[93m9[0m - [91merror[0m[90m TS2695: [0mLeft side of comma operator is unused and has no side effects.
+
+[7m883[0m         page,
+[7m   [0m [91m        ~~~~~[0m
+[7m884[0m         limit,
+[7m   [0m [91m~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m883[0m:[93m9[0m - [91merror[0m[90m TS2695: [0mLeft side of comma operator is unused and has no side effects.
+
+[7m883[0m         page,
+[7m   [0m [91m        ~~~~~[0m
+[7m884[0m         limit,
+[7m   [0m [91m~~~~~~~~~~~~~~[0m
+[7m885[0m         totalCount,
+[7m   [0m [91m~~~~~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m886[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'totalPages'.
+
+[7m886[0m         totalPages: Math.ceil(totalCount / limit),
+[7m   [0m [91m        ~~~~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m887[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'hasNext'.
+
+[7m887[0m         hasNext: page < Math.ceil(totalCount / limit),
+[7m   [0m [91m        ~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m888[0m:[93m9[0m - [91merror[0m[90m TS2304: [0mCannot find name 'hasPrevious'.
+
+[7m888[0m         hasPrevious: page > 1
+[7m   [0m [91m        ~~~~~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m894[0m:[93m12[0m - [91merror[0m[90m TS2304: [0mCannot find name 'res'.
+
+[7m894[0m     return res.status(500).json({
+[7m   [0m [91m           ~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m870[0m:[93m8[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m870[0m       })),
+[7m   [0m [91m       ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m870[0m:[93m9[0m - [91merror[0m[90m TS1005: [0m',' expected.
+
+[7m870[0m       })),
+[7m   [0m [91m        ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m871[0m:[93m12[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m871[0m       stats: {
+[7m   [0m [91m           ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m873[0m:[93m21[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m873[0m         totalReviews: stats.count || 0,
+[7m   [0m [91m                    ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m874[0m:[93m24[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m874[0m         ratingBreakdown: {
+[7m   [0m [91m                       ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m875[0m:[93m12[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m875[0m           5: stats.distribution?.[5] || 0,
+[7m   [0m [91m           ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m876[0m:[93m12[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m876[0m           4: stats.distribution?.[4] || 0,
+[7m   [0m [91m           ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m877[0m:[93m12[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m877[0m           3: stats.distribution?.[3] || 0,
+[7m   [0m [91m           ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m878[0m:[93m12[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m878[0m           2: stats.distribution?.[2] || 0,
+[7m   [0m [91m           ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m879[0m:[93m12[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m879[0m           1: stats.distribution?.[1] || 0,
+[7m   [0m [91m           ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m880[0m:[93m9[0m - [91merror[0m[90m TS1109: [0mExpression expected.
+
+[7m880[0m         },
+[7m   [0m [91m        ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m880[0m:[93m10[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m880[0m         },
+[7m   [0m [91m         ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m881[0m:[93m8[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m881[0m       },
+[7m   [0m [91m       ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m886[0m:[93m19[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m886[0m         totalPages: Math.ceil(totalCount / limit),
+[7m   [0m [91m                  ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m887[0m:[93m16[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m887[0m         hasNext: page < Math.ceil(totalCount / limit),
+[7m   [0m [91m               ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m888[0m:[93m20[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m888[0m         hasPrevious: page > 1
+[7m   [0m [91m                   ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m890[0m:[93m6[0m - [91merror[0m[90m TS1472: [0m'catch' or 'finally' expected.
+
+[7m890[0m     }, 'Store reviews retrieved successfully');
+[7m   [0m [91m     ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m890[0m:[93m46[0m - [91merror[0m[90m TS1005: [0m';' expected.
+
+[7m890[0m     }, 'Store reviews retrieved successfully');
+[7m   [0m [91m                                             ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m892[0m:[93m3[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m892[0m   } catch (error: any) {
+[7m   [0m [91m  ~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m892[0m:[93m5[0m - [91merror[0m[90m TS1005: [0m'try' expected.
+
+[7m892[0m   } catch (error: any) {
+[7m   [0m [91m    ~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m899[0m:[93m1[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m899[0m });
+[7m   [0m [91m~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m899[0m:[93m2[0m - [91merror[0m[90m TS1128: [0mDeclaration or statement expected.
+
+[7m899[0m });
+[7m   [0m [91m ~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[2304,2304,2695,2695,2695,2304,2304,2304,2304,1005,1005,1005,1005,1005,1005,1005,1005,1005,1005,1109,1128,1128,1005,1005,1005,1472,1005,1128,1005,1128,1128]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m873\u001b[0m:\u001b[93m9\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'totalReviews'.\r\n\r\n\u001b[7m873\u001b[0m         totalReviews: stats.count || 0,\r\n\u001b[7m   \u001b[0m \u001b[91m        ~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m874\u001b[0m:\u001b[93m9\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'ratingBreakdown'.\r\n\r\n\u001b[7m874\u001b[0m         ratingBreakdown: {\r\n\u001b[7m   \u001b[0m \u001b[91m        ~~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m883\u001b[0m:\u001b[93m9\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2695: \u001b[0mLeft side of comma operator is unused and has no side effects.\r\n\r\n\u001b[7m883\u001b[0m         page,\r\n\u001b[7m   \u001b[0m \u001b[91m        ~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m883\u001b[0m:\u001b[93m9\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2695: \u001b[0mLeft side of comma operator is unused and has no side effects.\r\n\r\n\u001b[7m883\u001b[0m         page,\r\n\u001b[7m   \u001b[0m \u001b[91m        ~~~~~\u001b[0m\r\n\u001b[7m884\u001b[0m         limit,\r\n\u001b[7m   \u001b[0m \u001b[91m~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m883\u001b[0m:\u001b[93m9\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2695: \u001b[0mLeft side of comma operator is unused and has no side effects.\r\n\r\n\u001b[7m883\u001b[0m         page,\r\n\u001b[7m   \u001b[0m \u001b[91m        ~~~~~\u001b[0m\r\n\u001b[7m884\u001b[0m         limit,\r\n\u001b[7m   \u001b[0m \u001b[91m~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[7m885\u001b[0m         totalCount,\r\n\u001b[7m   \u001b[0m \u001b[91m~~~~~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m886\u001b[0m:\u001b[93m9\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'totalPages'.\r\n\r\n\u001b[7m886\u001b[0m         totalPages: Math.ceil(totalCount / limit),\r\n\u001b[7m   \u001b[0m \u001b[91m        ~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m887\u001b[0m:\u001b[93m9\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'hasNext'.\r\n\r\n\u001b[7m887\u001b[0m         hasNext: page < Math.ceil(totalCount / limit),\r\n\u001b[7m   \u001b[0m \u001b[91m        ~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m888\u001b[0m:\u001b[93m9\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'hasPrevious'.\r\n\r\n\u001b[7m888\u001b[0m         hasPrevious: page > 1\r\n\u001b[7m   \u001b[0m \u001b[91m        ~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m894\u001b[0m:\u001b[93m12\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2304: \u001b[0mCannot find name 'res'.\r\n\r\n\u001b[7m894\u001b[0m     return res.status(500).json({\r\n\u001b[7m   \u001b[0m \u001b[91m           ~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m870\u001b[0m:\u001b[93m8\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m';' expected.\r\n\r\n\u001b[7m870\u001b[0m       })),\r\n\u001b[7m   \u001b[0m \u001b[91m       ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m870\u001b[0m:\u001b[93m9\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m',' expected.\r\n\r\n\u001b[7m870\u001b[0m       })),\r\n\u001b[7m   \u001b[0m \u001b[91m        ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m871\u001b[0m:\u001b[93m12\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m';' expected.\r\n\r\n\u001b[7m871\u001b[0m       stats: {\r\n\u001b[7m   \u001b[0m \u001b[91m           ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m873\u001b[0m:\u001b[93m21\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m';' expected.\r\n\r\n\u001b[7m873\u001b[0m         totalReviews: stats.count || 0,\r\n\u001b[7m   \u001b[0m \u001b[91m                    ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m874\u001b[0m:\u001b[93m24\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m';' expected.\r\n\r\n\u001b[7m874\u001b[0m         ratingBreakdown: {\r\n\u001b[7m   \u001b[0m \u001b[91m                       ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m875\u001b[0m:\u001b[93m12\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m';' expected.\r\n\r\n\u001b[7m875\u001b[0m           5: stats.distribution?.[5] || 0,\r\n\u001b[7m   \u001b[0m \u001b[91m           ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m876\u001b[0m:\u001b[93m12\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m';' expected.\r\n\r\n\u001b[7m876\u001b[0m           4: stats.distribution?.[4] || 0,\r\n\u001b[7m   \u001b[0m \u001b[91m           ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m877\u001b[0m:\u001b[93m12\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m';' expected.\r\n\r\n\u001b[7m877\u001b[0m           3: stats.distribution?.[3] || 0,\r\n\u001b[7m   \u001b[0m \u001b[91m           ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m878\u001b[0m:\u001b[93m12\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m';' expected.\r\n\r\n\u001b[7m878\u001b[0m           2: stats.distribution?.[2] || 0,\r\n\u001b[7m   \u001b[0m \u001b[91m           ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m879\u001b[0m:\u001b[93m12\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m';' expected.\r\n\r\n\u001b[7m879\u001b[0m           1: stats.distribution?.[1] || 0,\r\n\u001b[7m   \u001b[0m \u001b[91m           ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m880\u001b[0m:\u001b[93m9\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1109: \u001b[0mExpression expected.\r\n\r\n\u001b[7m880\u001b[0m         },\r\n\u001b[7m   \u001b[0m \u001b[91m        ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m880\u001b[0m:\u001b[93m10\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m880\u001b[0m         },\r\n\u001b[7m   \u001b[0m \u001b[91m         ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m881\u001b[0m:\u001b[93m8\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m881\u001b[0m       },\r\n\u001b[7m   \u001b[0m \u001b[91m       ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m886\u001b[0m:\u001b[93m19\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m';' expected.\r\n\r\n\u001b[7m886\u001b[0m         totalPages: Math.ceil(totalCount / limit),\r\n\u001b[7m   \u001b[0m \u001b[91m                  ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m887\u001b[0m:\u001b[93m16\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m';' expected.\r\n\r\n\u001b[7m887\u001b[0m         hasNext: page < Math.ceil(totalCount / limit),\r\n\u001b[7m   \u001b[0m \u001b[91m               ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m888\u001b[0m:\u001b[93m20\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m';' expected.\r\n\r\n\u001b[7m888\u001b[0m         hasPrevious: page > 1\r\n\u001b[7m   \u001b[0m \u001b[91m                   ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m890\u001b[0m:\u001b[93m6\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1472: \u001b[0m'catch' or 'finally' expected.\r\n\r\n\u001b[7m890\u001b[0m     }, 'Store reviews retrieved successfully');\r\n\u001b[7m   \u001b[0m \u001b[91m     ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m890\u001b[0m:\u001b[93m46\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m';' expected.\r\n\r\n\u001b[7m890\u001b[0m     }, 'Store reviews retrieved successfully');\r\n\u001b[7m   \u001b[0m \u001b[91m                                             ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m892\u001b[0m:\u001b[93m3\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m892\u001b[0m   } catch (error: any) {\r\n\u001b[7m   \u001b[0m \u001b[91m  ~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m892\u001b[0m:\u001b[93m5\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1005: \u001b[0m'try' expected.\r\n\r\n\u001b[7m892\u001b[0m   } catch (error: any) {\r\n\u001b[7m   \u001b[0m \u001b[91m    ~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m899\u001b[0m:\u001b[93m1\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m899\u001b[0m });\r\n\u001b[7m   \u001b[0m \u001b[91m~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m899\u001b[0m:\u001b[93m2\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1128: \u001b[0mDeclaration or statement expected.\r\n\r\n\u001b[7m899\u001b[0m });\r\n\u001b[7m   \u001b[0m \u001b[91m ~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Tue Nov 25 2025 14:01:21 GMT+0530 (India Standard Time)","process":{"pid":31024,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1599918080,"heapTotal":1528426496,"heapUsed":1474628960,"external":29883604,"arrayBuffers":26566558}},"os":{"loadavg":[0,0,0],"uptime":7898.89},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}
+2025-11-25 16:12:38 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/stores.ts[0m:[93m491[0m:[93m26[0m - [91merror[0m[90m TS18048: [0m'mongoose.connection.db' is possibly 'undefined'.
+
+[7m491[0m       const collection = mongoose.connection.db.collection('stores');
+[7m   [0m [91m                         ~~~~~~~~~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m493[0m:[93m44[0m - [91merror[0m[90m TS2769: [0mNo overload matches this call.
+  The last overload gave the following error.
+    Argument of type 'unknown' is not assignable to parameter of type 'string | number | Uint8Array<ArrayBufferLike> | ObjectId | ObjectIdLike | undefined'.
+
+[7m493[0m         { _id: new mongoose.Types.ObjectId(store._id) },
+[7m   [0m [91m                                           ~~~~~~~~~[0m
+
+  [96mnode_modules/bson/bson.d.ts[0m:[93m1386[0m:[93m5[0m
+    [7m1386[0m     constructor(inputId?: string | number | ObjectId | ObjectIdLike | Uint8Array);
+    [7m    [0m [96m    ~~~~~~~~~~~[0m
+    The last overload is declared here.
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/stores.ts[0m:[93m491[0m:[93m26[0m - [91merror[0m[90m TS18048: [0m'mongoose.connection.db' is possibly 'undefined'.
+
+[7m491[0m       const collection = mongoose.connection.db.collection('stores');
+[7m   [0m [91m                         ~~~~~~~~~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/stores.ts[0m:[93m493[0m:[93m44[0m - [91merror[0m[90m TS2769: [0mNo overload matches this call.
+  The last overload gave the following error.
+    Argument of type 'unknown' is not assignable to parameter of type 'string | number | Uint8Array<ArrayBufferLike> | ObjectId | ObjectIdLike | undefined'.
+
+[7m493[0m         { _id: new mongoose.Types.ObjectId(store._id) },
+[7m   [0m [91m                                           ~~~~~~~~~[0m
+
+  [96mnode_modules/bson/bson.d.ts[0m:[93m1386[0m:[93m5[0m
+    [7m1386[0m     constructor(inputId?: string | number | ObjectId | ObjectIdLike | Uint8Array);
+    [7m    [0m [96m    ~~~~~~~~~~~[0m
+    The last overload is declared here.
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[18048,2769]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m491\u001b[0m:\u001b[93m26\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS18048: \u001b[0m'mongoose.connection.db' is possibly 'undefined'.\r\n\r\n\u001b[7m491\u001b[0m       const collection = mongoose.connection.db.collection('stores');\r\n\u001b[7m   \u001b[0m \u001b[91m                         ~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m493\u001b[0m:\u001b[93m44\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2769: \u001b[0mNo overload matches this call.\r\n  The last overload gave the following error.\r\n    Argument of type 'unknown' is not assignable to parameter of type 'string | number | Uint8Array<ArrayBufferLike> | ObjectId | ObjectIdLike | undefined'.\r\n\r\n\u001b[7m493\u001b[0m         { _id: new mongoose.Types.ObjectId(store._id) },\r\n\u001b[7m   \u001b[0m \u001b[91m                                           ~~~~~~~~~\u001b[0m\r\n\r\n  \u001b[96mnode_modules/bson/bson.d.ts\u001b[0m:\u001b[93m1386\u001b[0m:\u001b[93m5\u001b[0m\r\n    \u001b[7m1386\u001b[0m     constructor(inputId?: string | number | ObjectId | ObjectIdLike | Uint8Array);\r\n    \u001b[7m    \u001b[0m \u001b[96m    ~~~~~~~~~~~\u001b[0m\r\n    The last overload is declared here.\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Tue Nov 25 2025 16:12:38 GMT+0530 (India Standard Time)","process":{"pid":20368,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":695083008,"heapTotal":1507860480,"heapUsed":1454703984,"external":29854262,"arrayBuffers":26537216}},"os":{"loadavg":[0,0,0],"uptime":15776.375},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}

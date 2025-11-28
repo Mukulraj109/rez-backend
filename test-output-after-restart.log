@@ -1,0 +1,318 @@
+
+> user-backend@1.0.0 test:e2e-merchant
+> node tests/e2e/merchant-endpoints-test.js
+
+
+================================================================================
+  MERCHANT BACKEND E2E TEST SUITE - 122+ ENDPOINTS
+  Base URL: http://localhost:5001
+================================================================================
+
+
+🔍 Checking Backend Connectivity...
+
+  ✓ Backend is running and healthy
+
+📦 Testing Authentication Endpoints (11 endpoints)...
+  ✓ POST /api/merchant/auth/register - Register new merchant
+  ✓ POST /api/merchant/auth/login - Login merchant
+  ✓ GET /api/merchant/auth/me - Get current merchant (44ms)
+  ✓ PUT /api/merchant/auth/change-password - Change password (414ms)
+  ✓ POST /api/merchant/auth/forgot-password - Request password reset (267ms)
+  ✗ POST /api/merchant/auth/reset-password - Reset password (invalid token) (4ms)
+  ✗ POST /api/merchant/auth/verify-email - Verify email (invalid token) (4ms)
+  ✗ POST /api/merchant/auth/logout - Logout merchant (6ms)
+
+📦 Testing Dashboard Endpoints (6 endpoints)...
+  ✓ GET /api/merchant/dashboard - Get dashboard overview (201ms)
+  ✓ GET /api/merchant/dashboard/metrics - Get metric cards (47ms)
+  ✗ GET /api/merchant/dashboard/activity - Get recent activity (62ms)
+  ✗ GET /api/merchant/dashboard/top-products - Get top selling products (42ms)
+  ✗ GET /api/merchant/dashboard/sales-data - Get sales chart data (63ms)
+  ✗ GET /api/merchant/dashboard/low-stock - Get low stock alerts (44ms)
+
+📦 Testing Onboarding Endpoints (16 endpoints)...
+  ✗ GET /api/merchant/onboarding/status - Get onboarding status (47ms)
+  ✗ POST /api/merchant/onboarding/step/1 - Save step 1 data (47ms)
+  ✗ POST /api/merchant/onboarding/step/2 - Save step 2 data (47ms)
+  ✓ POST /api/merchant/onboarding/step/3 - Save step 3 data (67ms)
+  ✓ POST /api/merchant/onboarding/step/4 - Save step 4 data (65ms)
+  ✗ POST /api/merchant/onboarding/step/5 - Save step 5 data (46ms)
+  ✗ POST /api/merchant/onboarding/submit - Submit for approval (3ms)
+  ✓ GET /api/merchant/onboarding/documents - Get uploaded documents (45ms)
+
+📦 Testing Team Management Endpoints (10 endpoints)...
+  ✗ GET /api/merchant/team - List team members (47ms)
+  ✗ POST /api/merchant/team/invite - Invite team member (316ms)
+  ✓ GET /api/merchant/team/me/permissions - Get my permissions (29ms)
+
+📦 Testing Product Endpoints (23 endpoints)...
+  ✓ GET /api/merchant/products - List products (45ms)
+  ✗ POST /api/merchant/products - Create product (27ms)
+  ○ GET /api/merchant/products/:id - Get single product
+  ○ PUT /api/merchant/products/:id - Update product
+  ○ GET /api/merchant/products/:id/variants - Get product variants
+  ○ POST /api/merchant/products/:id/variants - Create variant
+  ○ GET /api/merchant/products/:id/reviews - Get product reviews
+  ✓ GET /api/merchant/bulk/products/template - Download import template (31ms)
+  ✓ GET /api/merchant/bulk/products/export - Export products (47ms)
+
+📦 Testing Order Endpoints (10 endpoints)...
+  ✗ GET /api/merchant/orders - List orders (5ms)
+  ✗ GET /api/merchant/orders/analytics - Get order analytics (5ms)
+
+📦 Testing Cashback Endpoints (11 endpoints)...
+  ✗ GET /api/merchant/cashback - List cashback requests (4ms)
+  ✗ GET /api/merchant/cashback/stats - Get cashback statistics (5ms)
+  ✗ GET /api/merchant/cashback/pending-count - Get pending count (6ms)
+  ✗ GET /api/merchant/cashback/export - Export cashback data (3ms)
+
+📦 Testing Notification Endpoints (18 endpoints)...
+  ✗ GET /api/merchant/notifications - List notifications (4ms)
+  ✗ GET /api/merchant/notifications/unread-count - Get unread count (4ms)
+  ✗ GET /api/merchant/notifications/stats - Get notification stats (4ms)
+  ✗ POST /api/merchant/notifications/mark-all-read - Mark all as read (4ms)
+  ✗ DELETE /api/merchant/notifications/clear-all - Clear all notifications (3ms)
+
+📦 Testing Analytics Endpoints (17 endpoints)...
+  ✗ GET /api/merchant/analytics/sales/overview - Sales overview (48ms)
+  ✗ GET /api/merchant/analytics/sales/trends - Sales trends (47ms)
+  ✗ GET /api/merchant/analytics/sales/by-time - Sales by time (44ms)
+  ✗ GET /api/merchant/analytics/sales/by-day - Sales by day (46ms)
+  ✗ GET /api/merchant/analytics/products/top-selling - Top selling products (45ms)
+  ✗ GET /api/merchant/analytics/categories/performance - Category performance (46ms)
+  ✗ GET /api/merchant/analytics/customers/insights - Customer insights (46ms)
+  ✗ GET /api/merchant/analytics/inventory/status - Inventory status (46ms)
+  ✗ GET /api/merchant/analytics/payments/breakdown - Payment breakdown (44ms)
+  ✗ GET /api/merchant/analytics/forecast/sales - Sales forecast (44ms)
+  ✗ GET /api/merchant/analytics/trends/seasonal - Seasonal trends (45ms)
+  ✓ GET /api/merchant/analytics/cache/stats - Cache statistics (25ms)
+  ✗ GET /api/merchant/analytics/export - Export analytics (24ms)
+
+📦 Testing Audit Log Endpoints (17 endpoints)...
+  ✓ GET /api/merchant/audit/logs - List audit logs (64ms)
+  ✗ GET /api/merchant/audit/stats - Get audit statistics (46ms)
+  ✗ GET /api/merchant/audit/search - Search audit logs (26ms)
+  ✗ GET /api/merchant/audit/timeline - Get timeline (44ms)
+  ✗ GET /api/merchant/audit/timeline/today - Get today's timeline (42ms)
+  ✗ GET /api/merchant/audit/timeline/recent - Get recent timeline (48ms)
+  ✓ GET /api/merchant/audit/timeline/summary - Get timeline summary (43ms)
+  ✗ GET /api/merchant/audit/timeline/critical - Get critical events (44ms)
+  ✓ GET /api/merchant/audit/timeline/heatmap - Get activity heatmap (45ms)
+  ✗ GET /api/merchant/audit/retention/stats - Retention statistics (45ms)
+  ✗ GET /api/merchant/audit/retention/compliance - Compliance status (63ms)
+  ✓ GET /api/merchant/audit/export - Export audit logs (48ms)
+
+📦 Testing Upload Endpoints (6 endpoints)...
+  ℹ Note: Upload endpoints require multipart/form-data and actual file uploads
+  ℹ Skipping upload tests in this automated suite
+  ○ POST /api/merchant/uploads/product-image
+  ○ POST /api/merchant/uploads/product-images
+  ○ POST /api/merchant/uploads/store-logo
+  ○ POST /api/merchant/uploads/store-banner
+  ○ POST /api/merchant/uploads/video
+  ○ DELETE /api/merchant/uploads/:publicId
+
+📦 Testing Cleanup...
+  ✓ Logged out successfully
+
+═══════════════════════════════════════════════════════════════
+                     TEST EXECUTION SUMMARY                        
+═══════════════════════════════════════════════════════════════
+
+Total Tests:     76
+Passed:          19 (25.00%)
+Failed:          46 (60.53%)
+Skipped:         11
+Duration:        4.33s
+Avg Response:    43ms
+
+═══════════════════════════════════════════════════════════════
+
+❌ FAILED TESTS:
+
+  ✗ Authentication - POST /api/merchant/auth/reset-password - Reset password (invalid token)
+    POST /api/merchant/auth/reset-password
+    Expected: 400, Got: 404
+
+  ✗ Authentication - POST /api/merchant/auth/verify-email - Verify email (invalid token)
+    POST /api/merchant/auth/verify-email
+    Expected: 400, Got: 404
+
+  ✗ Authentication - POST /api/merchant/auth/logout - Logout merchant
+    POST /api/merchant/auth/logout
+    Expected: 200, Got: 500
+
+  ✗ Dashboard - GET /api/merchant/dashboard/activity - Get recent activity
+    GET /api/merchant/dashboard/activity
+    Expected: 200, Got: 200
+
+  ✗ Dashboard - GET /api/merchant/dashboard/top-products - Get top selling products
+    GET /api/merchant/dashboard/top-products
+    Expected: 200, Got: 200
+
+  ✗ Dashboard - GET /api/merchant/dashboard/sales-data - Get sales chart data
+    GET /api/merchant/dashboard/sales-data
+    Expected: 200, Got: 200
+
+  ✗ Dashboard - GET /api/merchant/dashboard/low-stock - Get low stock alerts
+    GET /api/merchant/dashboard/low-stock
+    Expected: 200, Got: 200
+
+  ✗ Onboarding - GET /api/merchant/onboarding/status - Get onboarding status
+    GET /api/merchant/onboarding/status
+    Expected: 200, Got: 200
+
+  ✗ Onboarding - POST /api/merchant/onboarding/step/1 - Save step 1 data
+    POST /api/merchant/onboarding/step/1
+    Expected: 200, Got: 400
+
+  ✗ Onboarding - POST /api/merchant/onboarding/step/2 - Save step 2 data
+    POST /api/merchant/onboarding/step/2
+    Expected: 200, Got: 400
+
+  ✗ Onboarding - POST /api/merchant/onboarding/step/5 - Save step 5 data
+    POST /api/merchant/onboarding/step/5
+    Expected: 200, Got: 400
+
+  ✗ Onboarding - POST /api/merchant/onboarding/submit - Submit for approval
+    POST /api/merchant/onboarding/submit
+    Expected: 200, Got: 500
+
+  ✗ Team - GET /api/merchant/team - List team members
+    GET /api/merchant/team
+    Expected: 200, Got: 200
+
+  ✗ Team - POST /api/merchant/team/invite - Invite team member
+    POST /api/merchant/team/invite
+    Expected: 201, Got: 201
+
+  ✗ Products - POST /api/merchant/products - Create product
+    POST /api/merchant/products
+    Expected: 201, Got: 400
+
+  ✗ Orders - GET /api/merchant/orders - List orders
+    GET /api/merchant/orders
+    Expected: 200, Got: 401
+
+  ✗ Orders - GET /api/merchant/orders/analytics - Get order analytics
+    GET /api/merchant/orders/analytics
+    Expected: 200, Got: 401
+
+  ✗ Cashback - GET /api/merchant/cashback - List cashback requests
+    GET /api/merchant/cashback
+    Expected: 200, Got: 401
+
+  ✗ Cashback - GET /api/merchant/cashback/stats - Get cashback statistics
+    GET /api/merchant/cashback/stats
+    Expected: 200, Got: 401
+
+  ✗ Cashback - GET /api/merchant/cashback/pending-count - Get pending count
+    GET /api/merchant/cashback/pending-count
+    Expected: 200, Got: 401
+
+  ✗ Cashback - GET /api/merchant/cashback/export - Export cashback data
+    GET /api/merchant/cashback/export
+    Expected: 200, Got: 401
+
+  ✗ Notifications - GET /api/merchant/notifications - List notifications
+    GET /api/merchant/notifications
+    Expected: 200, Got: 401
+
+  ✗ Notifications - GET /api/merchant/notifications/unread-count - Get unread count
+    GET /api/merchant/notifications/unread-count
+    Expected: 200, Got: 401
+
+  ✗ Notifications - GET /api/merchant/notifications/stats - Get notification stats
+    GET /api/merchant/notifications/stats
+    Expected: 200, Got: 401
+
+  ✗ Notifications - POST /api/merchant/notifications/mark-all-read - Mark all as read
+    POST /api/merchant/notifications/mark-all-read
+    Expected: 200, Got: 500
+
+  ✗ Notifications - DELETE /api/merchant/notifications/clear-all - Clear all notifications
+    DELETE /api/merchant/notifications/clear-all
+    Expected: 200, Got: 500
+
+  ✗ Analytics - GET /api/merchant/analytics/sales/overview - Sales overview
+    GET /api/merchant/analytics/sales/overview
+    Expected: 200, Got: 404
+
+  ✗ Analytics - GET /api/merchant/analytics/sales/trends - Sales trends
+    GET /api/merchant/analytics/sales/trends
+    Expected: 200, Got: 404
+
+  ✗ Analytics - GET /api/merchant/analytics/sales/by-time - Sales by time
+    GET /api/merchant/analytics/sales/by-time
+    Expected: 200, Got: 404
+
+  ✗ Analytics - GET /api/merchant/analytics/sales/by-day - Sales by day
+    GET /api/merchant/analytics/sales/by-day
+    Expected: 200, Got: 404
+
+  ✗ Analytics - GET /api/merchant/analytics/products/top-selling - Top selling products
+    GET /api/merchant/analytics/products/top-selling
+    Expected: 200, Got: 404
+
+  ✗ Analytics - GET /api/merchant/analytics/categories/performance - Category performance
+    GET /api/merchant/analytics/categories/performance
+    Expected: 200, Got: 404
+
+  ✗ Analytics - GET /api/merchant/analytics/customers/insights - Customer insights
+    GET /api/merchant/analytics/customers/insights
+    Expected: 200, Got: 404
+
+  ✗ Analytics - GET /api/merchant/analytics/inventory/status - Inventory status
+    GET /api/merchant/analytics/inventory/status
+    Expected: 200, Got: 404
+
+  ✗ Analytics - GET /api/merchant/analytics/payments/breakdown - Payment breakdown
+    GET /api/merchant/analytics/payments/breakdown
+    Expected: 200, Got: 404
+
+  ✗ Analytics - GET /api/merchant/analytics/forecast/sales - Sales forecast
+    GET /api/merchant/analytics/forecast/sales
+    Expected: 200, Got: 404
+
+  ✗ Analytics - GET /api/merchant/analytics/trends/seasonal - Seasonal trends
+    GET /api/merchant/analytics/trends/seasonal
+    Expected: 200, Got: 404
+
+  ✗ Analytics - GET /api/merchant/analytics/export - Export analytics
+    GET /api/merchant/analytics/export
+    Expected: 200, Got: 404
+
+  ✗ Audit - GET /api/merchant/audit/stats - Get audit statistics
+    GET /api/merchant/audit/stats
+    Expected: 200, Got: 200
+
+  ✗ Audit - GET /api/merchant/audit/search - Search audit logs
+    GET /api/merchant/audit/search
+    Expected: 200, Got: 400
+
+  ✗ Audit - GET /api/merchant/audit/timeline - Get timeline
+    GET /api/merchant/audit/timeline
+    Expected: 200, Got: 200
+
+  ✗ Audit - GET /api/merchant/audit/timeline/today - Get today's timeline
+    GET /api/merchant/audit/timeline/today
+    Expected: 200, Got: 200
+
+  ✗ Audit - GET /api/merchant/audit/timeline/recent - Get recent timeline
+    GET /api/merchant/audit/timeline/recent
+    Expected: 200, Got: 200
+
+  ✗ Audit - GET /api/merchant/audit/timeline/critical - Get critical events
+    GET /api/merchant/audit/timeline/critical
+    Expected: 200, Got: 200
+
+  ✗ Audit - GET /api/merchant/audit/retention/stats - Retention statistics
+    GET /api/merchant/audit/retention/stats
+    Expected: 200, Got: 200
+
+  ✗ Audit - GET /api/merchant/audit/retention/compliance - Compliance status
+    GET /api/merchant/audit/retention/compliance
+    Expected: 200, Got: 200
+
+  ✓ Test results saved to: ./tests/e2e/results/test-results.json
