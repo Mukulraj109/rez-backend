@@ -1,64 +1,92 @@
-const mongoose = require('mongoose');
-const { Store } = require('./dist/models/Store');
+const API_BASE_URL = 'http://localhost:5001/api';
 
-async function testAPI() {
+// You'll need to replace this with a valid auth token from your merchant app
+// Get it from: AsyncStorage.getItem('auth_token')
+// For now, we'll test public endpoints
+const AUTH_TOKEN = '';
+
+async function testEndpoint(name, url, options = {}) {
+  const startTime = Date.now();
   try {
-    await mongoose.connect('mongodb://localhost:27017/rez-app');
-    console.log('✅ Connected to MongoDB');
-
-    // Test 1: Get all stores
-    console.log('\n🧪 Test 1: Get all stores');
-    const allStores = await Store.find({ isActive: true }).limit(5);
-    console.log(`Found ${allStores.length} stores`);
-    allStores.forEach(store => {
-      console.log(`- ${store.name} (${store.deliveryCategories.fastDelivery ? 'Fast Delivery' : 'Regular'})`);
+    const response = await fetch(`${API_BASE_URL}${url}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${AUTH_TOKEN}`,
+        ...options.headers
+      }
     });
 
-    // Test 2: Search stores by category (fastDelivery)
-    console.log('\n🧪 Test 2: Search stores by fastDelivery category');
-    const fastDeliveryStores = await Store.find({
-      isActive: true,
-      'deliveryCategories.fastDelivery': true
-    });
-    console.log(`Found ${fastDeliveryStores.length} fast delivery stores`);
-    fastDeliveryStores.forEach(store => {
-      console.log(`- ${store.name}: ${store.operationalInfo.deliveryTime}`);
-    });
+    const duration = Date.now() - startTime;
+    const data = await response.json();
 
-    // Test 3: Search stores by category (budgetFriendly)
-    console.log('\n🧪 Test 3: Search stores by budgetFriendly category');
-    const budgetStores = await Store.find({
-      isActive: true,
-      'deliveryCategories.budgetFriendly': true
-    });
-    console.log(`Found ${budgetStores.length} budget friendly stores`);
-    budgetStores.forEach(store => {
-      console.log(`- ${store.name}: Min order ₹${store.operationalInfo.minimumOrder}`);
-    });
-
-    // Test 4: Test MainStorePage compatibility
-    console.log('\n🧪 Test 4: MainStorePage compatibility test');
-    const storeForMainPage = await Store.findOne({ isActive: true }).populate('category', 'name slug');
-    if (storeForMainPage) {
-      console.log('✅ Store data structure for MainStorePage:');
-      console.log(`- ID: ${storeForMainPage._id}`);
-      console.log(`- Name: ${storeForStorePage.name}`);
-      console.log(`- Category: ${storeForMainPage.category?.name}`);
-      console.log(`- Location: ${storeForMainPage.location.address}`);
-      console.log(`- Rating: ${storeForMainPage.ratings.average}`);
-      console.log(`- Delivery Time: ${storeForMainPage.operationalInfo.deliveryTime}`);
-      console.log(`- Fast Delivery: ${storeForMainPage.deliveryCategories.fastDelivery}`);
-      console.log(`- Budget Friendly: ${storeForMainPage.deliveryCategories.budgetFriendly}`);
+    if (response.ok && data.success !== false) {
+      console.log(`✅ ${name} - PASSED (${duration}ms)`);
+      console.log(`   Response:`, JSON.stringify(data).substring(0, 100) + '...');
+      return { passed: true, duration, data };
+    } else {
+      console.log(`❌ ${name} - FAILED (${duration}ms)`);
+      console.log(`   Error:`, data.message || response.statusText);
+      return { passed: false, duration, error: data.message };
     }
-
-    console.log('\n🎉 All tests passed! Backend is ready for Phase 2.');
-
   } catch (error) {
-    console.error('❌ Test failed:', error);
-  } finally {
-    await mongoose.disconnect();
-    console.log('🔌 Disconnected from MongoDB');
+    const duration = Date.now() - startTime;
+    console.log(`❌ ${name} - ERROR (${duration}ms)`);
+    console.log(`   Error:`, error.message);
+    return { passed: false, duration, error: error.message };
   }
 }
 
-testAPI();
+async function runTests() {
+  console.log('\n🧪 Starting API Integration Tests...\n');
+  console.log('API Base URL:', API_BASE_URL);
+  console.log('Auth Token:', AUTH_TOKEN ? 'Set ✓' : 'NOT SET ✗');
+  console.log('='.repeat(60) + '\n');
+
+  if (!AUTH_TOKEN) {
+    console.log('⚠️  Running without authentication - only testing endpoint availability');
+    console.log('   Some endpoints may return 401 Unauthorized\n');
+  }
+
+  const results = [];
+
+  // Sync Service Tests
+  console.log('📦 Testing Sync Service...\n');
+  results.push(await testEndpoint('Get Sync Status', '/merchant/sync/status'));
+  results.push(await testEndpoint('Get Sync History', '/merchant/sync/history?limit=5'));
+  results.push(await testEndpoint('Get Sync Health', '/merchant/sync/health'));
+  
+  // Profile Service Tests
+  console.log('\n👤 Testing Profile Service...\n');
+  results.push(await testEndpoint('Get Customer View Profile', '/merchant/profile/customer-view'));
+  results.push(await testEndpoint('Get Visibility Settings', '/merchant/profile/visibility'));
+  results.push(await testEndpoint('Get Customer Reviews', '/merchant/profile/customer-reviews?page=1&limit=5'));
+
+  // Bulk Operations Tests
+  console.log('\n📊 Testing Bulk Operations...\n');
+  results.push(await testEndpoint('Download CSV Template', '/merchant/bulk/products/template?format=csv'));
+  
+  // Summary
+  console.log('\n' + '='.repeat(60));
+  console.log('\n📊 Test Results Summary:\n');
+  
+  const passed = results.filter(r => r.passed).length;
+  const failed = results.filter(r => !r.passed).length;
+  
+  console.log(`Total Tests: ${results.length}`);
+  console.log(`✅ Passed: ${passed}`);
+  console.log(`❌ Failed: ${failed}`);
+  console.log(`Success Rate: ${((passed / results.length) * 100).toFixed(1)}%`);
+  
+  if (failed > 0) {
+    console.log('\n❌ Failed Tests:');
+    results.filter(r => !r.passed).forEach((r, i) => {
+      console.log(`  ${i + 1}. ${r.error}`);
+    });
+  }
+  
+  console.log('\n' + '='.repeat(60) + '\n');
+}
+
+// Run tests
+runTests().catch(console.error);

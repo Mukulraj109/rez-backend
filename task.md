@@ -1,0 +1,4 @@
+on the earn tab on app folder on the (tabs) there will be earn.tsx file chnage the ui and content and for that use this ss the design is:"C:\Users\Mukul raj\OneDrive\Pictures\Screenshots\Screenshot 2025-08-19 144222.png"
+"C:\Users\Mukul raj\OneDrive\Pictures\Screenshots\Screenshot 2025-08-19 144149.png"
+"C:\Users\Mukul raj\OneDrive\Pictures\Screenshots\Screenshot 2025-08-19 144200.png"
+"C:\Users\Mukul raj\OneDrive\Pictures\Screenshots\Screenshot 2025-08-19 144206.png" use all this pic and create a earn page like this and manage the state properly and it should be backend ready and in this page if u think it need some sub-components then create them so think and use dummy data for now it should be backend ready and make ui modern and compatible with previous made components

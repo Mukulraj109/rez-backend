@@ -1,27 +1,33 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node scripts/test-auth-integration.js)",
-      "Bash(curl:*)",
-      "Bash(node:*)",
+      "Bash(dir)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(mv:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run:*)",
+      "Bash(npm audit:*)",
+      "Bash(npm ls:*)",
+      "Bash(timeout 15s npx expo start --no-dev-client --web-only --non-interactive)",
+      "Bash(timeout 10s npx expo start --web --non-interactive)",
+      "Bash(npx expo install:*)",
+      "Bash(timeout 10s npx expo start --tunnel --non-interactive)",
+      "Bash(CI=1 timeout 8s npx expo start --dev-client)",
+      "Bash(set CI=1)",
+      "Bash(timeout 8s npx expo prebuild --platform android)",
       "Bash(npm start)",
-      "Bash(npm run build:*)",
-      "Bash(PORT=5002 npm run dev)",
-      "Bash(PORT=5003 npm run dev)",
-      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app/**)",
-      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\app\\products/**)",
-      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\services\\api/**)",
-      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\services/**)",
-      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\services/**)",
-      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\services/**)",
-      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\config/**)",
-      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\app/**)",
-      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\admin-project\\merchant-app\\app\\(dashboard)/**)"
+      "Bash(curl:*)",
+      "Bash(npx expo start:*)",
+      "Bash(mkdir:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(rm:*)",
+      "Bash(netsh:*)",
+      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app/**)",
+      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\user-backend\\src/**)",
+      "Read(/C:\\Users\\Mukul raj\\Downloads\\healthtick\\rez-app\\user-backend\\src\\merchantroutes/**)"
     ],
     "deny": [],
-    "ask": [],
-    "additionalDirectories": [
-      "C:\\c\\Users\\Mukul raj\\Downloads\\rez-app"
-    ]
+    "ask": []
   }
 }

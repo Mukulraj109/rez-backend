@@ -1,0 +1,108 @@
+{
+  "expo": {
+    "name": "Rez Merchant",
+    "slug": "rez-merchant-app",
+    "version": "1.0.0",
+    "description": "Complete merchant management solution for Rez platform. Manage products, orders, analytics, team, and more.",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "scheme": "rez-merchant",
+    "owner": "rez-platform",
+    "privacy": "public",
+    "primaryColor": "#7C3AED",
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#7C3AED"
+    },
+    "extra": {
+      "router": {
+        "appDir": "app"
+      }
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.rez.merchant",
+      "buildNumber": "1",
+      "requireFullScreen": false,
+      "appStoreUrl": "https://apps.apple.com/app/rez-merchant/id0000000000",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSExceptionDomains": {
+            "localhost": {
+              "NSExceptionAllowsInsecureHTTPLoads": true,
+              "NSExceptionMinimumTLSVersion": "1.0",
+              "NSIncludesSubdomains": true
+            },
+            "192.168.168.39": {
+              "NSExceptionAllowsInsecureHTTPLoads": true,
+              "NSExceptionMinimumTLSVersion": "1.0",
+              "NSIncludesSubdomains": true
+            }
+          }
+        },
+        "NSCameraUsageDescription": "Allow Rez Merchant to use your camera to scan barcodes and take product photos.",
+        "NSPhotoLibraryUsageDescription": "Allow Rez Merchant to access your photo library to upload product images.",
+        "NSPhotoLibraryAddUsageDescription": "Allow Rez Merchant to save product images to your photo library."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#7C3AED"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.rez.merchant",
+      "versionCode": 1,
+      "playStoreUrl": "https://play.google.com/store/apps/details?id=com.rez.merchant",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "VIBRATE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#7C3AED"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/images/favicon.png",
+      "name": "Rez Merchant",
+      "shortName": "Rez Merchant",
+      "lang": "en",
+      "scope": "/",
+      "themeColor": "#7C3AED",
+      "backgroundColor": "#ffffff",
+      "display": "standalone",
+      "startUrl": "/",
+      "orientation": "any"
+    },
+    "extra": {
+      "privacyPolicyUrl": "https://rezmerchant.com/privacy",
+      "termsOfServiceUrl": "https://rezmerchant.com/terms",
+      "supportEmail": "support@rezmerchant.com",
+      "appVersion": "1.0.0",
+      "apiVersion": "v1"
+    },
+    "hooks": {
+      "postPublish": []
+    },
+    "githubUrl": "https://github.com/rez-platform/merchant-app"
+  }
+}
