@@ -336,13 +336,37 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
   const { limit = 10 } = req.query;
 
   try {
-    const stores = await Store.find({
+    // First, try to get featured stores
+    let stores = await Store.find({
       isActive: true,
       isFeatured: true
     })
     .sort({ 'ratings.average': -1, createdAt: -1 })
     .limit(Number(limit))
     .lean();
+
+    // If no featured stores, get all active stores sorted by rating
+    if (stores.length === 0) {
+      stores = await Store.find({
+        isActive: true
+      })
+      .sort({ 'ratings.average': -1, createdAt: -1 })
+      .limit(Number(limit))
+      .lean();
+    }
+    // If featured stores exist but less than limit, fill with other active stores
+    else if (stores.length < Number(limit)) {
+      const featuredIds = stores.map(s => s._id);
+      const additionalStores = await Store.find({
+        isActive: true,
+        _id: { $nin: featuredIds }
+      })
+      .sort({ 'ratings.average': -1, createdAt: -1 })
+      .limit(Number(limit) - stores.length)
+      .lean();
+
+      stores = [...stores, ...additionalStores];
+    }
 
     sendSuccess(res, stores, 'Featured stores retrieved successfully');
 
@@ -1047,10 +1071,10 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
       }])
     );
 
-    // Build query for stores
+    // Build query for stores - only require isActive, not isVerified
+    // Verified stores will get higher ranking through trending score
     const query: any = {
-      isActive: true,
-      isVerified: true
+      isActive: true
     };
 
     if (category) {
@@ -1059,7 +1083,7 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
 
     // Get stores with analytics
     const stores = await Store.find(query)
-      .select('name logo category location ratings analytics contact createdAt')
+      .select('name logo banner category location ratings analytics contact createdAt description')
       .lean();
 
     // Calculate trending score for each store
@@ -1068,11 +1092,13 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
         const storeId = store._id.toString();
         const orderData = orderStatsMap.get(storeId) || { orderCount: 0, totalRevenue: 0 };
 
-        // Calculate trending score: (orders * 10) + (views * 1) + (revenue * 0.01)
+        // Calculate trending score: (orders * 10) + (views * 1) + (revenue * 0.01) + (rating * 5)
+        // Added rating factor so new stores without orders still have a score
         const trendingScore =
           (orderData.orderCount * 10) +
           ((store.analytics as any)?.views || 0) +
-          (orderData.totalRevenue * 0.01);
+          (orderData.totalRevenue * 0.01) +
+          (((store.ratings as any)?.average || 0) * 5);
 
         return {
           ...store,
@@ -1081,7 +1107,7 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
           recentRevenue: orderData.totalRevenue
         };
       })
-      .filter(store => store.trendingScore > 0) // Only stores with activity
+      // Show all active stores, not just ones with activity
       .sort((a, b) => b.trendingScore - a.trendingScore); // Sort by score descending
 
     // Apply pagination

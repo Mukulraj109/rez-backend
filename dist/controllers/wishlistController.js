@@ -32,11 +32,15 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.removeItemByTypeAndId = exports.checkWishlistStatus = exports.getDefaultWishlist = exports.getPublicWishlists = exports.deleteWishlist = exports.updateWishlistItem = exports.removeFromWishlist = exports.addToWishlist = exports.getWishlistById = exports.createWishlist = exports.getUserWishlists = void 0;
 const Wishlist_1 = require("../models/Wishlist");
 const Product_1 = require("../models/Product");
 const Store_1 = require("../models/Store");
+const Discount_1 = __importDefault(require("../models/Discount"));
 const response_1 = require("../utils/response");
 const asyncHandler_1 = require("../utils/asyncHandler");
 const errorHandler_1 = require("../middleware/errorHandler");
@@ -118,12 +122,12 @@ exports.getWishlistById = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
 exports.addToWishlist = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { wishlistId } = req.params;
     const userId = req.userId;
-    const { itemType: rawItemType, itemId, priority, notes, targetPrice, notifyOnPriceChange, notifyOnAvailability, tags } = req.body;
+    const { itemType: rawItemType, itemId, priority, notes, targetPrice, notifyOnPriceChange, notifyOnAvailability, tags, discountSnapshot: clientSnapshot } = req.body;
     try {
         // Normalize itemType to match backend schema (capitalize first letter)
         const itemType = rawItemType.charAt(0).toUpperCase() + rawItemType.slice(1).toLowerCase();
-        // Validate itemType
-        const validTypes = ['Product', 'Store', 'Video'];
+        // Validate itemType - now includes 'Discount'
+        const validTypes = ['Product', 'Store', 'Video', 'Discount'];
         if (!validTypes.includes(itemType)) {
             return (0, response_1.sendBadRequest)(res, `Invalid itemType. Must be one of: ${validTypes.join(', ')}`);
         }
@@ -136,7 +140,8 @@ exports.addToWishlist = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         if (existingItem) {
             return (0, response_1.sendBadRequest)(res, 'Item already exists in wishlist');
         }
-        // Verify item exists
+        // Verify item exists and prepare snapshot data
+        let discountSnapshot;
         if (itemType === 'Product') {
             const product = await Product_1.Product.findById(itemId);
             if (!product) {
@@ -149,8 +154,32 @@ exports.addToWishlist = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
                 return (0, response_1.sendNotFound)(res, 'Store not found');
             }
         }
+        else if (itemType === 'Discount') {
+            // Fetch discount and create snapshot
+            const discount = await Discount_1.default.findById(itemId).populate('storeId', 'name');
+            if (!discount) {
+                return (0, response_1.sendNotFound)(res, 'Discount not found');
+            }
+            // Create discount snapshot to preserve deal info
+            discountSnapshot = {
+                discountId: discount._id,
+                name: discount.name,
+                description: discount.description,
+                type: discount.type,
+                value: discount.value,
+                minOrderValue: discount.minOrderValue,
+                maxDiscount: discount.maxDiscountAmount,
+                validFrom: discount.validFrom,
+                validUntil: discount.validUntil,
+                storeId: discount.storeId || clientSnapshot?.storeId,
+                storeName: discount.storeId?.name || clientSnapshot?.storeName,
+                productId: discount.applicableProducts?.[0] || clientSnapshot?.productId,
+                productName: clientSnapshot?.productName,
+                savedAt: new Date()
+            };
+        }
         // Add item to wishlist
-        wishlist.items.push({
+        const newItem = {
             itemType: itemType,
             itemId,
             addedAt: new Date(),
@@ -160,7 +189,12 @@ exports.addToWishlist = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             notifyOnPriceChange: notifyOnPriceChange !== false,
             notifyOnAvailability: notifyOnAvailability !== false,
             tags: tags || []
-        });
+        };
+        // Add discount snapshot if saving a deal
+        if (discountSnapshot) {
+            newItem.discountSnapshot = discountSnapshot;
+        }
+        wishlist.items.push(newItem);
         await wishlist.save();
         // If the item is a Store, increment the followers count and record analytics
         if (itemType === 'Store') {
@@ -345,8 +379,8 @@ exports.checkWishlistStatus = (0, asyncHandler_1.asyncHandler)(async (req, res) 
         }
         // Normalize itemType to match backend schema (capitalize first letter)
         const normalizedItemType = itemType.charAt(0).toUpperCase() + itemType.slice(1).toLowerCase();
-        // Validate itemType
-        const validTypes = ['Product', 'Store', 'Video'];
+        // Validate itemType - now includes 'Discount'
+        const validTypes = ['Product', 'Store', 'Video', 'Discount'];
         if (!validTypes.includes(normalizedItemType)) {
             return (0, response_1.sendBadRequest)(res, `Invalid itemType. Must be one of: ${validTypes.join(', ')}`);
         }

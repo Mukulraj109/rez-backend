@@ -123,12 +123,27 @@ export interface IStoreVideo {
     duration?: number;
     uploadedAt?: Date;
 }
+export interface IStoreActionButtonDestination {
+    type: 'phone' | 'url' | 'maps' | 'internal';
+    value: string;
+}
+export interface IStoreActionButton {
+    id: 'call' | 'product' | 'location' | 'custom';
+    enabled: boolean;
+    label?: string;
+    destination?: IStoreActionButtonDestination;
+    order?: number;
+}
+export interface IStoreActionButtons {
+    enabled: boolean;
+    buttons: IStoreActionButton[];
+}
 export interface IStore extends Document {
     name: string;
     slug: string;
     description?: string;
     logo?: string;
-    banner?: string | string[];
+    banner?: string[];
     videos?: IStoreVideo[];
     category: Types.ObjectId;
     subCategories?: Types.ObjectId[];
@@ -167,6 +182,7 @@ export interface IStore extends Document {
     };
     serviceTypes?: string[];
     consultationTypes?: string[];
+    actionButtons?: IStoreActionButtons;
     createdAt: Date;
     updatedAt: Date;
     isOpen(): boolean;

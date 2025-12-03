@@ -31,6 +31,7 @@ export interface IProductInventory {
     unlimited: boolean;
     estimatedRestockDate?: Date;
     allowBackorder?: boolean;
+    reservedStock?: number;
 }
 export interface IProductRatings {
     average: number;
@@ -86,6 +87,8 @@ export interface IProductCashback {
     minPurchase?: number;
     validUntil?: Date;
     terms?: string;
+    isActive?: boolean;
+    conditions?: string[];
 }
 export interface IProductDeliveryInfo {
     estimatedDays?: string;
@@ -131,6 +134,7 @@ export interface IProduct {
     isActive: boolean;
     isFeatured: boolean;
     isDigital: boolean;
+    visibility?: 'public' | 'hidden' | 'featured';
     weight?: number;
     dimensions?: {
         length?: number;
@@ -147,6 +151,10 @@ export interface IProduct {
     relatedProducts?: Types.ObjectId[];
     createdAt: Date;
     updatedAt: Date;
+    isDeleted: boolean;
+    deletedAt?: Date;
+    deletedBy?: Types.ObjectId;
+    deletedByModel?: 'User' | 'Merchant';
     isInStock(): boolean;
     getVariantByType(type: string, value: string): IProductVariant | null;
     calculateDiscountedPrice(): number;
@@ -156,5 +164,8 @@ export interface IProduct {
     resetDailyAnalytics(): Promise<void>;
     calculateCashback(purchaseAmount?: number): number;
     getEstimatedDelivery(userLocation?: any): string;
+    softDelete(deletedBy: Types.ObjectId): Promise<void>;
+    restore(): Promise<void>;
+    permanentDelete(): Promise<void>;
 }
 export declare const Product: mongoose.Model<any, {}, {}, {}, any, any>;

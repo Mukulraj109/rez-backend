@@ -1,9 +1,27 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
+// Discount snapshot interface - stores deal info at save time
+export interface IDiscountSnapshot {
+  discountId: Types.ObjectId;
+  name: string;
+  description?: string;
+  type: 'percentage' | 'fixed' | 'flat';
+  value: number;
+  minOrderValue?: number;
+  maxDiscount?: number;
+  validFrom?: Date;
+  validUntil?: Date;
+  storeId: Types.ObjectId;
+  storeName?: string;
+  productId?: Types.ObjectId;
+  productName?: string;
+  savedAt: Date;
+}
+
 // Wishlist item interface
 export interface IWishlistItem {
   _id?: Types.ObjectId;
-  itemType: 'Product' | 'Store' | 'Video';
+  itemType: 'Product' | 'Store' | 'Video' | 'Discount';
   itemId: Types.ObjectId;
   addedAt: Date;
   priority: 'low' | 'medium' | 'high';
@@ -13,6 +31,7 @@ export interface IWishlistItem {
   notifyOnAvailability: boolean;
   targetPrice?: number; // User's target price for notifications
   tags: string[];
+  discountSnapshot?: IDiscountSnapshot; // Stores discount info when saving deals
 }
 
 // Wishlist sharing interface
@@ -100,7 +119,7 @@ const WishlistSchema = new Schema<IWishlist>({
     itemType: {
       type: String,
       required: true,
-      enum: ['Product', 'Store', 'Video']
+      enum: ['Product', 'Store', 'Video', 'Discount']
     },
     itemId: {
       type: Schema.Types.ObjectId,
@@ -142,7 +161,24 @@ const WishlistSchema = new Schema<IWishlist>({
       type: String,
       trim: true,
       lowercase: true
-    }]
+    }],
+    // Discount snapshot - stores deal info at save time
+    discountSnapshot: {
+      discountId: { type: Schema.Types.ObjectId, ref: 'Discount' },
+      name: { type: String },
+      description: { type: String },
+      type: { type: String, enum: ['percentage', 'fixed', 'flat'] },
+      value: { type: Number },
+      minOrderValue: { type: Number },
+      maxDiscount: { type: Number },
+      validFrom: { type: Date },
+      validUntil: { type: Date },
+      storeId: { type: Schema.Types.ObjectId, ref: 'Store' },
+      storeName: { type: String },
+      productId: { type: Schema.Types.ObjectId, ref: 'Product' },
+      productName: { type: String },
+      savedAt: { type: Date }
+    }
   }],
   category: {
     type: String,

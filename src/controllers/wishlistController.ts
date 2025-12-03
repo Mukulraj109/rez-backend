@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
-import { Wishlist } from '../models/Wishlist';
+import { Wishlist, IDiscountSnapshot } from '../models/Wishlist';
 import { Product } from '../models/Product';
 import { Store } from '../models/Store';
+import Discount from '../models/Discount';
 import { sendSuccess, sendNotFound, sendBadRequest } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
@@ -95,14 +96,14 @@ export const getWishlistById = asyncHandler(async (req: Request, res: Response) 
 export const addToWishlist = asyncHandler(async (req: Request, res: Response) => {
   const { wishlistId } = req.params;
   const userId = req.userId!;
-  const { itemType: rawItemType, itemId, priority, notes, targetPrice, notifyOnPriceChange, notifyOnAvailability, tags } = req.body;
+  const { itemType: rawItemType, itemId, priority, notes, targetPrice, notifyOnPriceChange, notifyOnAvailability, tags, discountSnapshot: clientSnapshot } = req.body;
 
   try {
     // Normalize itemType to match backend schema (capitalize first letter)
     const itemType = rawItemType.charAt(0).toUpperCase() + rawItemType.slice(1).toLowerCase();
 
-    // Validate itemType
-    const validTypes = ['Product', 'Store', 'Video'];
+    // Validate itemType - now includes 'Discount'
+    const validTypes = ['Product', 'Store', 'Video', 'Discount'];
     if (!validTypes.includes(itemType)) {
       return sendBadRequest(res, `Invalid itemType. Must be one of: ${validTypes.join(', ')}`);
     }
@@ -122,7 +123,9 @@ export const addToWishlist = asyncHandler(async (req: Request, res: Response) =>
       return sendBadRequest(res, 'Item already exists in wishlist');
     }
 
-    // Verify item exists
+    // Verify item exists and prepare snapshot data
+    let discountSnapshot: IDiscountSnapshot | undefined;
+
     if (itemType === 'Product') {
       const product = await Product.findById(itemId);
       if (!product) {
@@ -133,11 +136,35 @@ export const addToWishlist = asyncHandler(async (req: Request, res: Response) =>
       if (!store) {
         return sendNotFound(res, 'Store not found');
       }
+    } else if (itemType === 'Discount') {
+      // Fetch discount and create snapshot
+      const discount = await Discount.findById(itemId).populate('storeId', 'name');
+      if (!discount) {
+        return sendNotFound(res, 'Discount not found');
+      }
+
+      // Create discount snapshot to preserve deal info
+      discountSnapshot = {
+        discountId: discount._id,
+        name: discount.name,
+        description: discount.description,
+        type: discount.type as 'percentage' | 'fixed' | 'flat',
+        value: discount.value,
+        minOrderValue: discount.minOrderValue,
+        maxDiscount: discount.maxDiscountAmount,
+        validFrom: discount.validFrom,
+        validUntil: discount.validUntil,
+        storeId: discount.storeId || clientSnapshot?.storeId,
+        storeName: (discount.storeId as any)?.name || clientSnapshot?.storeName,
+        productId: discount.applicableProducts?.[0] || clientSnapshot?.productId,
+        productName: clientSnapshot?.productName,
+        savedAt: new Date()
+      };
     }
 
     // Add item to wishlist
-    wishlist.items.push({
-      itemType: itemType as 'Product' | 'Store' | 'Video',
+    const newItem: any = {
+      itemType: itemType as 'Product' | 'Store' | 'Video' | 'Discount',
       itemId,
       addedAt: new Date(),
       priority: priority || 'medium',
@@ -146,8 +173,14 @@ export const addToWishlist = asyncHandler(async (req: Request, res: Response) =>
       notifyOnPriceChange: notifyOnPriceChange !== false,
       notifyOnAvailability: notifyOnAvailability !== false,
       tags: tags || []
-    });
+    };
 
+    // Add discount snapshot if saving a deal
+    if (discountSnapshot) {
+      newItem.discountSnapshot = discountSnapshot;
+    }
+
+    wishlist.items.push(newItem);
     await wishlist.save();
 
     // If the item is a Store, increment the followers count and record analytics
@@ -366,8 +399,8 @@ export const checkWishlistStatus = asyncHandler(async (req: Request, res: Respon
     // Normalize itemType to match backend schema (capitalize first letter)
     const normalizedItemType = (itemType as string).charAt(0).toUpperCase() + (itemType as string).slice(1).toLowerCase();
 
-    // Validate itemType
-    const validTypes = ['Product', 'Store', 'Video'];
+    // Validate itemType - now includes 'Discount'
+    const validTypes = ['Product', 'Store', 'Video', 'Discount'];
     if (!validTypes.includes(normalizedItemType)) {
       return sendBadRequest(res, `Invalid itemType. Must be one of: ${validTypes.join(', ')}`);
     }

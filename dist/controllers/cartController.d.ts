@@ -12,3 +12,5 @@ export declare const lockItem: (req: Request, res: Response, next: import("expre
 export declare const unlockItem: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const moveLockedToCart: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const getLockedItems: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const lockItemWithPayment: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getLockFeeOptions: (req: Request, res: Response, next: import("express").NextFunction) => void;

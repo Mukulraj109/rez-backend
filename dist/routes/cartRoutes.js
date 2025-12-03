@@ -83,4 +83,12 @@ router.post('/lock/:productId/move-to-cart',
 (0, validation_1.validateParams)(validation_2.Joi.object({
     productId: validation_1.commonSchemas.objectId().required()
 })), cartController_1.moveLockedToCart);
+// Lock item with payment (MakeMyTrip style)
+router.post('/lock-with-payment', 
+// generalLimiter,, // Disabled for development
+cartController_1.lockItemWithPayment);
+// Get lock fee options for a product
+router.get('/lock-fee-options', 
+// generalLimiter,, // Disabled for development
+cartController_1.getLockFeeOptions);
 exports.default = router;

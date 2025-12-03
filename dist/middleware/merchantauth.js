@@ -58,10 +58,14 @@ const authMiddleware = async (req, res, next) => {
         // Verify token using merchant-specific secret
         const merchantSecret = process.env.JWT_MERCHANT_SECRET;
         if (!merchantSecret) {
-            console.warn('⚠️ WARNING: JWT_MERCHANT_SECRET not set! Using fallback. Set JWT_MERCHANT_SECRET in .env for production!');
+            console.error('❌ CRITICAL ERROR: JWT_MERCHANT_SECRET is not configured in environment variables');
+            return res.status(500).json({
+                success: false,
+                message: 'Server configuration error: JWT secret not configured'
+            });
         }
         console.log('🔍 AUTH DEBUG: Verifying token with merchant secret');
-        const decoded = jwt.verify(token, merchantSecret || 'fallback-merchant-secret');
+        const decoded = jwt.verify(token, merchantSecret);
         console.log('🔍 AUTH DEBUG: Token decoded successfully');
         console.log('🔍 AUTH DEBUG: MerchantId:', decoded.merchantId);
         console.log('🔍 AUTH DEBUG: MerchantUserId:', decoded.merchantUserId);
@@ -156,7 +160,12 @@ const optionalAuthMiddleware = async (req, res, next) => {
         const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
         if (token) {
             const merchantSecret = process.env.JWT_MERCHANT_SECRET;
-            const decoded = jwt.verify(token, merchantSecret || 'fallback-merchant-secret');
+            if (!merchantSecret) {
+                // For optional auth, we just skip authentication if secret is not configured
+                console.warn('⚠️ WARNING: JWT_MERCHANT_SECRET not configured, skipping optional authentication');
+                return next();
+            }
+            const decoded = jwt.verify(token, merchantSecret);
             const merchant = await Merchant_1.Merchant.findById(decoded.merchantId);
             if (merchant && merchant.isActive) {
                 req.merchantId = decoded.merchantId;

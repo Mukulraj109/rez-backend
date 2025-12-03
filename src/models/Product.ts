@@ -37,6 +37,7 @@ export interface IProductInventory {
   unlimited: boolean; // For digital products
   estimatedRestockDate?: Date; // When product will be back in stock
   allowBackorder?: boolean; // Allow orders when out of stock
+  reservedStock?: number; // Stock reserved for pending orders
 }
 
 // Product ratings interface
@@ -102,6 +103,8 @@ export interface IProductCashback {
   minPurchase?: number;
   validUntil?: Date;
   terms?: string;
+  isActive?: boolean; // Whether cashback is currently active
+  conditions?: string[]; // Cashback conditions array
 }
 
 // Product delivery info interface
@@ -153,6 +156,7 @@ export interface IProduct {
   isActive: boolean;
   isFeatured: boolean;
   isDigital: boolean;
+  visibility?: 'public' | 'hidden' | 'featured'; // Product visibility status
   weight?: number; // in grams
   dimensions?: {
     length?: number;
@@ -170,6 +174,12 @@ export interface IProduct {
   createdAt: Date;
   updatedAt: Date;
 
+  // Soft delete fields
+  isDeleted: boolean;
+  deletedAt?: Date;
+  deletedBy?: Types.ObjectId; // Reference to User or Merchant who deleted
+  deletedByModel?: 'User' | 'Merchant'; // Model reference for deletedBy
+
   // Methods
   isInStock(): boolean;
   getVariantByType(type: string, value: string): IProductVariant | null;
@@ -180,6 +190,9 @@ export interface IProduct {
   resetDailyAnalytics(): Promise<void>;
   calculateCashback(purchaseAmount?: number): number;
   getEstimatedDelivery(userLocation?: any): string;
+  softDelete(deletedBy: Types.ObjectId): Promise<void>;
+  restore(): Promise<void>;
+  permanentDelete(): Promise<void>;
 }
 
 // Product Schema
@@ -352,6 +365,11 @@ const ProductSchema = new Schema<IProduct>({
     allowBackorder: {
       type: Boolean,
       default: false
+    },
+    reservedStock: {
+      type: Number,
+      default: 0,
+      min: 0
     }
   },
   ratings: {
@@ -503,7 +521,15 @@ const ProductSchema = new Schema<IProduct>({
       default: 0
     },
     validUntil: Date,
-    terms: String
+    terms: String,
+    isActive: {
+      type: Boolean,
+      default: true
+    },
+    conditions: [{
+      type: String,
+      trim: true
+    }]
   },
   deliveryInfo: {
     estimatedDays: {
@@ -559,6 +585,11 @@ const ProductSchema = new Schema<IProduct>({
     type: Boolean,
     default: false
   },
+  visibility: {
+    type: String,
+    enum: ['public', 'hidden', 'featured'],
+    default: 'public'
+  },
   weight: {
     type: Number,
     min: 0 // in grams
@@ -582,7 +613,27 @@ const ProductSchema = new Schema<IProduct>({
   relatedProducts: [{
     type: Schema.Types.ObjectId,
     ref: 'Product'
-  }]
+  }],
+
+  // Soft delete fields
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  },
+  deletedBy: {
+    type: Schema.Types.ObjectId,
+    refPath: 'deletedByModel' // Dynamic reference
+  },
+  deletedByModel: {
+    type: String,
+    enum: ['User', 'Merchant'],
+    default: null
+  }
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -618,35 +669,70 @@ ProductSchema.index({
 });
 
 // Compound indexes
-ProductSchema.index({ category: 1, 'pricing.selling': 1, isActive: 1 });
-ProductSchema.index({ store: 1, 'ratings.average': -1 });
-ProductSchema.index({ isFeatured: 1, 'ratings.average': -1, isActive: 1 });
+ProductSchema.index({ category: 1, 'pricing.selling': 1, isActive: 1, isDeleted: 1 });
+ProductSchema.index({ store: 1, 'ratings.average': -1, isDeleted: 1 });
+ProductSchema.index({ isFeatured: 1, 'ratings.average': -1, isActive: 1, isDeleted: 1 });
 
 // Analytics indexes for merchant dashboard
-ProductSchema.index({ store: 1, 'analytics.purchases': -1 }); // Top selling by quantity
-ProductSchema.index({ store: 1, category: 1, createdAt: -1 }); // Category performance
-ProductSchema.index({ store: 1, 'inventory.stock': 1, 'inventory.lowStockThreshold': 1 }); // Low stock alerts
+ProductSchema.index({ store: 1, 'analytics.purchases': -1, isDeleted: 1 }); // Top selling by quantity
+ProductSchema.index({ store: 1, category: 1, createdAt: -1, isDeleted: 1 }); // Category performance
+ProductSchema.index({ store: 1, 'inventory.stock': 1, 'inventory.lowStockThreshold': 1, isDeleted: 1 }); // Low stock alerts
+
+// Soft delete indexes
+ProductSchema.index({ isDeleted: 1, deletedAt: 1 }); // For cleanup queries
+ProductSchema.index({ store: 1, isDeleted: 1 }); // For merchant queries with deleted filter
+ProductSchema.index({ merchantId: 1, isDeleted: 1 }); // For merchant queries with deleted filter
 
 // Virtual for discount percentage
-ProductSchema.virtual('discountPercentage').get(function() {
+ProductSchema.virtual('discountPercentage').get(function(this: IProduct) {
   if (this.pricing.original <= this.pricing.selling) return 0;
   return Math.round(((this.pricing.original - this.pricing.selling) / this.pricing.original) * 100);
 });
 
 // Virtual for low stock status
-ProductSchema.virtual('isLowStock').get(function() {
+ProductSchema.virtual('isLowStock').get(function(this: IProduct) {
   if (this.inventory.unlimited) return false;
   return this.inventory.stock <= (this.inventory.lowStockThreshold || 5);
 });
 
 // Virtual for out of stock status
-ProductSchema.virtual('isOutOfStock').get(function() {
+ProductSchema.virtual('isOutOfStock').get(function(this: IProduct) {
   if (this.inventory.unlimited) return false;
   return this.inventory.stock === 0;
 });
 
+// Pre-find middleware to exclude soft-deleted products by default
+ProductSchema.pre(/^find/, function(this: any, next) {
+  // Only apply filter if not explicitly querying for deleted products
+  if (!this.getQuery().hasOwnProperty('isDeleted')) {
+    // Use $ne: true to include products where isDeleted is false OR doesn't exist (for backward compatibility)
+    this.where({ isDeleted: { $ne: true } });
+  }
+  next();
+});
+
+// Pre-findOne middleware
+ProductSchema.pre('findOne', function(this: any, next) {
+  // Only apply filter if not explicitly querying for deleted products
+  if (!this.getQuery().hasOwnProperty('isDeleted')) {
+    // Use $ne: true to include products where isDeleted is false OR doesn't exist (for backward compatibility)
+    this.where({ isDeleted: { $ne: true } });
+  }
+  next();
+});
+
+// Pre-count middleware
+ProductSchema.pre('countDocuments', function(this: any, next) {
+  // Only apply filter if not explicitly querying for deleted products
+  if (!this.getQuery().hasOwnProperty('isDeleted')) {
+    // Use $ne: true to include products where isDeleted is false OR doesn't exist (for backward compatibility)
+    this.where({ isDeleted: { $ne: true } });
+  }
+  next();
+});
+
 // Pre-save hook to generate slug and calculate discount
-ProductSchema.pre('save', function(next) {
+ProductSchema.pre('save', function(this: IProduct, next) {
   // Generate slug if not provided
   if (!this.slug && this.name) {
     this.slug = this.name
@@ -655,7 +741,7 @@ ProductSchema.pre('save', function(next) {
       .replace(/\s+/g, '-')
       .trim();
   }
-  
+
   // Calculate discount percentage
   if (this.pricing.original && this.pricing.selling) {
     if (this.pricing.original > this.pricing.selling) {
@@ -664,12 +750,12 @@ ProductSchema.pre('save', function(next) {
       this.pricing.discount = 0;
     }
   }
-  
+
   // Update availability based on stock
   if (!this.inventory.unlimited) {
     this.inventory.isAvailable = this.inventory.stock > 0;
   }
-  
+
   next();
 });
 
@@ -845,6 +931,39 @@ ProductSchema.methods.getEstimatedDelivery = function(userLocation?: any): strin
 
   // Return standard delivery time
   return this.deliveryInfo?.standardDeliveryTime || this.deliveryInfo?.estimatedDays || '2-3 days';
+};
+
+// Method to soft delete product
+ProductSchema.methods.softDelete = async function(deletedBy: Types.ObjectId): Promise<void> {
+  this.isDeleted = true;
+  this.deletedAt = new Date();
+  this.deletedBy = deletedBy;
+  this.deletedByModel = 'Merchant'; // Default to Merchant, can be User if needed
+  this.isActive = false; // Also mark as inactive
+  await this.save();
+};
+
+// Method to restore soft-deleted product
+ProductSchema.methods.restore = async function(): Promise<void> {
+  // Check if product was deleted within 30 days
+  if (this.deletedAt) {
+    const daysSinceDeletion = Math.floor((Date.now() - this.deletedAt.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSinceDeletion > 30) {
+      throw new Error('Cannot restore product deleted more than 30 days ago');
+    }
+  }
+
+  this.isDeleted = false;
+  this.deletedAt = null;
+  this.deletedBy = null;
+  this.deletedByModel = null;
+  this.isActive = true; // Restore to active state
+  await this.save();
+};
+
+// Method to permanently delete product (admin only)
+ProductSchema.methods.permanentDelete = async function(): Promise<void> {
+  await this.deleteOne();
 };
 
 // Static method to search products

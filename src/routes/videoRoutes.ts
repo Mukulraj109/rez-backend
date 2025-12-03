@@ -8,6 +8,8 @@ import {
   getVideosByCreator,
   getVideosByStore,
   toggleVideoLike,
+  toggleVideoBookmark,
+  trackVideoView,
   addVideoComment,
   getVideoComments,
   searchVideos,
@@ -129,13 +131,31 @@ router.get('/:videoId',
 );
 
 // Like/Unlike video (requires authentication)
-router.post('/:videoId/like', 
+router.post('/:videoId/like',
   // generalLimiter,, // Disabled for development
   authenticate,
   validateParams(Joi.object({
     videoId: commonSchemas.objectId().required()
   })),
   toggleVideoLike
+);
+
+// Bookmark/Unbookmark video (requires authentication)
+router.post('/:videoId/bookmark',
+  authenticate,
+  validateParams(Joi.object({
+    videoId: commonSchemas.objectId().required()
+  })),
+  toggleVideoBookmark
+);
+
+// Track video view (optional authentication)
+router.post('/:videoId/view',
+  optionalAuth,
+  validateParams(Joi.object({
+    videoId: commonSchemas.objectId().required()
+  })),
+  trackVideoView
 );
 
 // Add comment to video (requires authentication)

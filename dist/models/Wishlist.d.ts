@@ -1,7 +1,23 @@
 import mongoose, { Document, Types } from 'mongoose';
+export interface IDiscountSnapshot {
+    discountId: Types.ObjectId;
+    name: string;
+    description?: string;
+    type: 'percentage' | 'fixed' | 'flat';
+    value: number;
+    minOrderValue?: number;
+    maxDiscount?: number;
+    validFrom?: Date;
+    validUntil?: Date;
+    storeId: Types.ObjectId;
+    storeName?: string;
+    productId?: Types.ObjectId;
+    productName?: string;
+    savedAt: Date;
+}
 export interface IWishlistItem {
     _id?: Types.ObjectId;
-    itemType: 'Product' | 'Store' | 'Video';
+    itemType: 'Product' | 'Store' | 'Video' | 'Discount';
     itemId: Types.ObjectId;
     addedAt: Date;
     priority: 'low' | 'medium' | 'high';
@@ -11,6 +27,7 @@ export interface IWishlistItem {
     notifyOnAvailability: boolean;
     targetPrice?: number;
     tags: string[];
+    discountSnapshot?: IDiscountSnapshot;
 }
 export interface IWishlistSharing {
     isPublic: boolean;

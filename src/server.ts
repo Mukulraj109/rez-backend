@@ -38,6 +38,7 @@ import './workers/exportWorker';
 import { globalErrorHandler, notFoundHandler } from './middleware/errorHandler';
 import { logger, requestLogger, correlationIdMiddleware } from './config/logger';
 import { initSentry, sentryRequestHandler, sentryTracingHandler, sentryErrorHandler } from './config/sentry';
+import { setCsrfToken, validateCsrfToken } from './middleware/csrf';
 // DEV: import { generalLimiter } from './middleware/rateLimiter';
 // Import routes
 import authRoutes from './routes/authRoutes';
@@ -76,6 +77,7 @@ import activityRoutes from './routes/activityRoutes';
 import paymentRoutes from './routes/paymentRoutes';
 import stockRoutes from './routes/stockRoutes';
 import socialMediaRoutes from './routes/socialMediaRoutes';
+import securityRoutes from './routes/securityRoutes';
 import eventRoutes from './routes/eventRoutes';
 import referralRoutes from './routes/referralRoutes';
 import profileRoutes from './routes/profileRoutes';
@@ -107,6 +109,7 @@ import homepageRoutes from './routes/homepageRoutes';
 import searchRoutes from './routes/searchRoutes';
 import webhookRoutes from './routes/webhookRoutes';
 import storeGalleryRoutes from './routes/storeGallery';  // Public store gallery routes
+import productGalleryRoutes from './routes/productGallery';  // Public product gallery routes
 import authRoutes1 from './merchantroutes/auth';  // Temporarily disabled
 import merchantRoutes from './merchantroutes/merchants';  // Temporarily disabled
 import merchantProfileRoutes from './merchantroutes/merchant-profile'; // Disabled due to missing properties
@@ -133,7 +136,13 @@ import bulkRoutes from './merchantroutes/bulk';
 import storeRoutesM from './merchantroutes/stores';  // Merchant store management routes
 import merchantOfferRoutes from './merchantroutes/offers';  // Merchant offers/deals management routes
 import storeGalleryRoutesM from './merchantroutes/storeGallery';  // Merchant store gallery management routes
+import productGalleryRoutesM from './merchantroutes/productGallery';  // Merchant product gallery management routes
 import merchantDiscountRoutes from './merchantroutes/discounts';  // Merchant discount management routes (Phase 3)
+import merchantStoreVoucherRoutes from './merchantroutes/storeVouchers';  // Merchant store voucher management routes
+import merchantOutletRoutes from './merchantroutes/outlets';  // Merchant outlet management routes
+import merchantVideoRoutes from './merchantroutes/videos';  // Merchant promotional video routes
+import bulkImportRoutes from './merchantroutes/bulkImport';  // Bulk product import routes
+import merchantSocialMediaRoutes from './merchantroutes/socialMedia';  // Merchant social media verification routes
 import { RealTimeService } from './merchantservices/RealTimeService';  // Temporarily disabled
 import { ReportService } from './merchantservices/ReportService';  // Temporarily disabled
 import stockSocketService from './services/stockSocketService';
@@ -236,7 +245,8 @@ const corsOptions = {
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
+  exposedHeaders: ['X-CSRF-Token'],
   credentials: true,
   optionsSuccessStatus: 200
 };
@@ -265,6 +275,17 @@ app.use((req: any, res: any, next: any) => {
 });
 
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Cookie parser middleware (required for CSRF protection)
+// Note: Install cookie-parser package: npm install cookie-parser @types/cookie-parser
+// import cookieParser from 'cookie-parser';
+// app.use(cookieParser());
+
+// CSRF Protection Middleware
+// Automatically sets CSRF token in cookie and response header for all requests
+// Note: Requires cookie-parser to be installed and enabled above
+// app.use(setCsrfToken);
+console.log('⚠️  CSRF protection middleware available but not enabled (requires cookie-parser)');
 
 // Compression middleware
 app.use(compression());
@@ -369,6 +390,41 @@ app.get('/health', async (req, res) => {
 // Simple test endpoint
 app.get('/test', (req, res) => {
   res.json({ message: 'Test endpoint working' });
+});
+
+// CSRF Token endpoint
+// Returns a new CSRF token for web clients
+// Note: Requires cookie-parser and setCsrfToken middleware to be enabled
+app.get('/api/csrf-token', (req, res) => {
+  try {
+    // The setCsrfToken middleware will automatically set the token in cookie and header
+    // This endpoint just needs to return success
+    const csrfToken = res.getHeader('x-csrf-token');
+
+    if (!csrfToken) {
+      return res.status(503).json({
+        success: false,
+        message: 'CSRF protection is not enabled. Please install cookie-parser package.',
+        note: 'Run: npm install cookie-parser @types/cookie-parser'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'CSRF token generated successfully',
+      token: csrfToken,
+      usage: {
+        header: 'Include this token in X-CSRF-Token header for POST/PUT/DELETE requests',
+        cookie: 'Token is also set in csrf-token cookie automatically'
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate CSRF token',
+      error: error.message
+    });
+  }
 });
 
 const server = createServer(app);
@@ -525,6 +581,7 @@ app.use(`${API_PREFIX}/activities`, activityRoutes);
 app.use(`${API_PREFIX}/payment`, paymentRoutes);
 app.use(`${API_PREFIX}/stock`, stockRoutes);
 app.use(`${API_PREFIX}/social-media`, socialMediaRoutes);
+app.use(`${API_PREFIX}/security`, securityRoutes);
 app.use(`${API_PREFIX}/events`, eventRoutes);
 app.use(`${API_PREFIX}/referral`, referralRoutes);
 app.use(`${API_PREFIX}/user/profile`, profileRoutes);
@@ -605,6 +662,10 @@ console.log('✅ Search routes registered at /api/search');
 app.use(`${API_PREFIX}/stores`, storeGalleryRoutes);
 console.log('✅ Store gallery routes registered at /api/stores/:storeId/gallery');
 
+// Product Gallery Routes - Public gallery viewing
+app.use(`${API_PREFIX}/products`, productGalleryRoutes);
+console.log('✅ Product gallery routes registered at /api/products/:productId/gallery');
+
 // // Merchant API Routes
 // // Apply general rate limiting to all merchant routes
 // // DEV: app.use('/api/merchant', generalLimiter);
@@ -630,10 +691,18 @@ app.use('/api/merchant/stores', storeRoutesM);  // Merchant store management rou
 console.log('✅ Merchant store management routes registered at /api/merchant/stores');
 app.use('/api/merchant/stores', storeGalleryRoutesM);  // Merchant store gallery management routes
 console.log('✅ Merchant store gallery management routes registered at /api/merchant/stores/:storeId/gallery');
+app.use('/api/merchant/products', productGalleryRoutesM);  // Merchant product gallery management routes
+console.log('✅ Merchant product gallery management routes registered at /api/merchant/products/:productId/gallery');
 app.use('/api/merchant/offers', merchantOfferRoutes);  // Merchant offers/deals management routes
 console.log('✅ Merchant offers management routes registered at /api/merchant/offers');
 app.use('/api/merchant/discounts', merchantDiscountRoutes);  // Merchant discount management routes (Phase 3)
 console.log('✅ Merchant discount management routes registered at /api/merchant/discounts');
+app.use('/api/merchant/store-vouchers', merchantStoreVoucherRoutes);  // Merchant store voucher management routes
+console.log('✅ Merchant store voucher management routes registered at /api/merchant/store-vouchers');
+app.use('/api/merchant/outlets', merchantOutletRoutes);  // Merchant outlet management routes
+console.log('✅ Merchant outlet management routes registered at /api/merchant/outlets');
+app.use('/api/merchant/videos', merchantVideoRoutes);  // Merchant promotional video routes
+console.log('✅ Merchant promotional video routes registered at /api/merchant/videos');
 
 // // Merchant Sync Routes - Syncs merchant data to customer app
 app.use('/api/merchant/sync', merchantSyncRoutes);
@@ -653,9 +722,17 @@ console.log('✅ Merchant onboarding routes registered at /api/merchant/onboardi
 app.use('/api/merchant/bulk', bulkRoutes);
 console.log('✅ Bulk product operations routes registered at /api/merchant/bulk (Agent 4)');
 
+// // Bulk Product Import Routes - CSV/Excel product import with validation
+app.use('/api/merchant/products', bulkImportRoutes);
+console.log('✅ Bulk product import routes registered at /api/merchant/products');
+
 // // Merchant Notification Routes (Agent 2) - 5 critical notification endpoints
 app.use('/api/merchant/notifications', merchantNotificationRoutes);
 console.log('✅ Merchant notification routes registered at /api/merchant/notifications (Agent 2)');
+
+// // Merchant Social Media Verification Routes - Verify Instagram posts for user cashback
+app.use('/api/merchant/social-media-posts', merchantSocialMediaRoutes);
+console.log('✅ Merchant social media routes registered at /api/merchant/social-media-posts');
 
 // Root endpoint (MUST be before 404 handler)
 app.get('/', (req, res) => {

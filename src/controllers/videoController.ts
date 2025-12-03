@@ -220,8 +220,10 @@ export const getVideoById = asyncHandler(async (req: Request, res: Response) => 
   const userId = req.userId;
 
   try {
-    const video = await Video.findOne({ _id: videoId, isPublished: true, isApproved: true })
+    // First try to find the video - merchant videos don't need isPublished/isApproved
+    const video = await Video.findById(videoId)
       .populate('creator', 'profile.firstName profile.lastName profile.avatar profile.bio')
+      .populate('stores', 'name slug logo')
       .populate({
         path: 'products',
         select: 'name images description price pricing inventory rating category store',
@@ -236,30 +238,119 @@ export const getVideoById = asyncHandler(async (req: Request, res: Response) => 
       return sendNotFound(res, 'Video not found');
     }
 
-    // Increment view count
-    await Video.findByIdAndUpdate(videoId, {
-      $inc: { 'analytics.views': 1 }
-    });
+    // For UGC content (not merchant), check publish/approval status
+    const videoData = video as any;
+    if (videoData.contentType !== 'merchant' && (!videoData.isPublished || !videoData.isApproved)) {
+      return sendNotFound(res, 'Video not available');
+    }
 
-    // Get creator's other videos
-    const otherVideos = await Video.find({
-      creator: (video as any).creator._id,
-      _id: { $ne: videoId },
-      isPublished: true
-    })
-    .populate('creator', 'profile.firstName profile.lastName profile.avatar')
-    .limit(10)
-    .sort({ createdAt: -1 })
-    .lean();
+    // NOTE: View count is NOT incremented here - use the dedicated /videos/:id/view endpoint
+    // This prevents double-counting when just fetching video data
+
+    // Get the first store from stores array (for merchant videos)
+    const primaryStore = videoData.stores && videoData.stores.length > 0 ? videoData.stores[0] : null;
+
+    // Get related videos (same store for merchant, same creator for UGC)
+    let otherVideos: any[] = [];
+    if (videoData.contentType === 'merchant' && primaryStore) {
+      // For merchant videos, get other videos from the same store
+      otherVideos = await Video.find({
+        stores: primaryStore._id || primaryStore,
+        _id: { $ne: videoId },
+        contentType: 'merchant'
+      })
+      .populate('stores', 'name slug logo')
+      .limit(10)
+      .sort({ createdAt: -1 })
+      .lean();
+    } else if (videoData.creator) {
+      // For UGC, get other videos from the same creator
+      otherVideos = await Video.find({
+        creator: videoData.creator._id || videoData.creator,
+        _id: { $ne: videoId },
+        isPublished: true
+      })
+      .populate('creator', 'profile.firstName profile.lastName profile.avatar')
+      .limit(10)
+      .sort({ createdAt: -1 })
+      .lean();
+    }
+
+    // Check if authenticated user has liked/bookmarked this video
+    let userLiked = false;
+    let userBookmarked = false;
+
+    if (userId) {
+      // Check likedBy array
+      if (videoData.likedBy && Array.isArray(videoData.likedBy)) {
+        userLiked = videoData.likedBy.some((id: any) => id && id.toString() === userId);
+      }
+      // Also check engagement.likes array (legacy)
+      if (!userLiked && videoData.engagement?.likes && Array.isArray(videoData.engagement.likes)) {
+        userLiked = videoData.engagement.likes.some((id: any) => id && id.toString() === userId);
+      }
+
+      // Check bookmarkedBy array
+      if (videoData.bookmarkedBy && Array.isArray(videoData.bookmarkedBy)) {
+        userBookmarked = videoData.bookmarkedBy.some((id: any) => id && id.toString() === userId);
+      }
+    }
+
+    // Transform video to API response format
+    const responseVideo = {
+      id: videoData._id,
+      title: videoData.title,
+      description: videoData.description,
+      videoUrl: videoData.videoUrl,
+      thumbnail: videoData.thumbnail, // Use correct field name
+      duration: videoData.metadata?.duration || 0,
+      contentType: videoData.contentType,
+      creator: videoData.creator ? {
+        id: videoData.creator._id,
+        name: videoData.creator.profile
+          ? `${videoData.creator.profile.firstName || ''} ${videoData.creator.profile.lastName || ''}`.trim()
+          : 'User',
+        avatar: videoData.creator.profile?.avatar,
+      } : primaryStore ? {
+        id: primaryStore._id,
+        name: primaryStore.name || 'Store',
+        avatar: primaryStore.logo,
+      } : null,
+      metrics: {
+        views: videoData.analytics?.totalViews || videoData.engagement?.views || 0,
+        likes: videoData.analytics?.likes || (videoData.likedBy?.length || videoData.engagement?.likes?.length || 0),
+        comments: videoData.analytics?.comments || videoData.engagement?.comments || 0,
+        shares: videoData.analytics?.shares || videoData.engagement?.shares || 0,
+      },
+      engagement: {
+        liked: userLiked,
+        bookmarked: userBookmarked,
+      },
+      tags: videoData.tags || [],
+      relatedProducts: (videoData.products || []).map((p: any) => ({
+        id: p._id,
+        name: p.name,
+        price: p.pricing?.currentPrice || p.price || 0,
+        thumbnail: p.images?.[0]?.url || p.images?.[0],
+      })),
+      createdAt: videoData.createdAt,
+    };
 
     sendSuccess(res, {
-      video,
-      otherVideos,
-      isLiked: false, // TODO: Check if user liked the video
-      isFollowing: false // TODO: Check if user follows the creator
+      video: responseVideo,
+      otherVideos: otherVideos.map((v: any) => ({
+        id: v._id,
+        title: v.title,
+        thumbnail: v.thumbnail,
+        duration: v.metadata?.duration || 0,
+        views: v.analytics?.totalViews || v.engagement?.views || 0,
+      })),
+      isLiked: userLiked,
+      isFollowing: false
     }, 'Video retrieved successfully');
 
   } catch (error) {
+    console.error('Error fetching video:', error);
     throw new AppError('Failed to fetch video', 500);
   }
 });
@@ -443,40 +534,63 @@ export const toggleVideoLike = asyncHandler(async (req: Request, res: Response) 
 
   try {
     const video = await Video.findById(videoId);
-    
+
     if (!video) {
       return sendNotFound(res, 'Video not found');
     }
 
     const userObjectId = new mongoose.Types.ObjectId(userId);
-    
-    // Check if user already liked the video
-    const likedIndex = video.likedBy.findIndex(id => id.equals(userObjectId));
+
+    // Initialize arrays if they don't exist
+    if (!video.likedBy) {
+      video.likedBy = [];
+    }
+    if (!video.engagement) {
+      video.engagement = { views: 0, likes: [], shares: 0, comments: 0, saves: 0, reports: 0 };
+    }
+    if (!video.engagement.likes) {
+      video.engagement.likes = [];
+    }
+
+    // Check if user already liked the video (check both arrays)
+    const likedInLikedBy = video.likedBy.some(id => id && id.equals(userObjectId));
+    const likedInEngagement = video.engagement.likes.some((id: any) => id && id.equals(userObjectId));
+    const wasLiked = likedInLikedBy || likedInEngagement;
+
     let isLiked = false;
 
-    if (likedIndex > -1) {
-      // Unlike: remove user from likedBy array
-      video.likedBy.splice(likedIndex, 1);
-      video.analytics.likes = Math.max(0, video.analytics.likes - 1);
+    if (wasLiked) {
+      // Unlike: remove user from BOTH arrays
+      video.likedBy = video.likedBy.filter(id => !id || !id.equals(userObjectId));
+      video.engagement.likes = video.engagement.likes.filter((id: any) => !id || !id.equals(userObjectId));
     } else {
-      // Like: add user to likedBy array
+      // Like: add user to BOTH arrays
       video.likedBy.push(userObjectId);
-      video.analytics.likes += 1;
+      video.engagement.likes.push(userObjectId);
       isLiked = true;
     }
 
-    // Update engagement score
-    video.analytics.engagement = video.analytics.likes + video.analytics.comments + (video.analytics.shares || 0);
+    // Update analytics.likes count for consistency
+    if (!video.analytics) {
+      video.analytics = {} as any;
+    }
+    video.analytics.likes = video.likedBy.length;
+
+    // Get total likes from likedBy array length
+    const totalLikes = video.likedBy.length;
 
     await video.save();
+
+    console.log(`✅ [toggleVideoLike] User ${userId} ${isLiked ? 'liked' : 'unliked'} video ${videoId}. Total likes: ${totalLikes}`);
 
     sendSuccess(res, {
       videoId: video._id,
       isLiked,
-      totalLikes: video.analytics.likes
+      totalLikes
     }, isLiked ? 'Video liked successfully' : 'Video unliked successfully');
 
   } catch (error) {
+    console.error('[toggleVideoLike] Error:', error);
     throw new AppError('Failed to toggle video like', 500);
   }
 });
@@ -626,6 +740,7 @@ export const searchVideos = asyncHandler(async (req: Request, res: Response) => 
 export const getVideosByStore = asyncHandler(async (req: Request, res: Response) => {
   const { storeId } = req.params;
   const { type, limit = 20, offset = 0 } = req.query;
+  const userId = req.userId; // Optional - can be undefined for non-authenticated users
 
   try {
     console.log('🎥 [VIDEO] Fetching videos for store:', storeId);
@@ -641,16 +756,21 @@ export const getVideosByStore = asyncHandler(async (req: Request, res: Response)
     }
 
     // Build query with valid ObjectId
+    // Include both approved UGC and merchant videos (merchant videos are auto-approved)
     const query: any = {
       isPublished: true,
-      isApproved: true,
-      moderationStatus: 'approved',
-      stores: new mongoose.Types.ObjectId(storeId)
+      stores: new mongoose.Types.ObjectId(storeId),
+      $or: [
+        // UGC videos that are approved
+        { contentType: 'ugc', isApproved: true, moderationStatus: 'approved' },
+        // Merchant promotional videos (auto-approved)
+        { contentType: 'merchant' }
+      ]
     };
 
-    // Filter by type if specified
+    // Filter by type if specified (both ugc and merchant are treated as video content)
     if (type === 'video') {
-      query.contentType = { $in: ['ugc', 'merchant'] };
+      // Already filtered in $or clause above
     }
 
     const videos = await Video.find(query)
@@ -678,33 +798,49 @@ export const getVideosByStore = asyncHandler(async (req: Request, res: Response)
     }
 
     // Transform videos to match UGC API format
-    const content = videos.map((video: any) => ({
-      _id: video._id,
-      userId: video.creator?._id || video.creator,
-      user: {
-        _id: video.creator?._id || video.creator,
-        profile: video.creator?.profile || { firstName: '', lastName: '', avatar: '' }
-      },
-      type: 'video',
-      url: video.videoUrl,
-      thumbnail: video.thumbnail,
-      caption: video.description,
-      tags: video.tags || [],
-      relatedProduct: video.products?.[0] || null,
-      relatedStore: video.stores?.[0] ? {
-        _id: video.stores[0],
-        name: '',
-        logo: ''
-      } : null,
-      likes: video.analytics?.likes || video.engagement?.likes?.length || 0,
-      comments: video.analytics?.comments || video.engagement?.comments || 0,
-      shares: video.analytics?.shares || video.engagement?.shares || 0,
-      views: video.analytics?.totalViews || video.analytics?.views || video.engagement?.views || 0,
-      isLiked: false,
-      isBookmarked: false,
-      createdAt: video.createdAt,
-      updatedAt: video.updatedAt
-    }));
+    const content = videos.map((video: any) => {
+      // Compute user-specific like/bookmark status
+      const isLiked = userId ? (
+        video.likedBy?.some((id: any) => id.toString() === userId) ||
+        video.engagement?.likes?.some((id: any) => id.toString() === userId) ||
+        false
+      ) : false;
+
+      const isBookmarked = userId ? (
+        video.bookmarkedBy?.some((id: any) => id.toString() === userId) ||
+        false
+      ) : false;
+
+      return {
+        _id: video._id,
+        userId: video.creator?._id || video.creator,
+        user: {
+          _id: video.creator?._id || video.creator,
+          profile: video.creator?.profile || { firstName: '', lastName: '', avatar: '' }
+        },
+        type: 'video',
+        url: video.videoUrl,
+        videoUrl: video.videoUrl,
+        thumbnail: video.thumbnail,
+        caption: video.description,
+        description: video.description,
+        tags: video.tags || [],
+        relatedProduct: video.products?.[0] || null,
+        relatedStore: video.stores?.[0] ? {
+          _id: video.stores[0],
+          name: '',
+          logo: ''
+        } : null,
+        likes: video.analytics?.likes || video.likedBy?.length || video.engagement?.likes?.length || 0,
+        comments: video.analytics?.comments || video.engagement?.comments || 0,
+        shares: video.analytics?.shares || video.engagement?.shares || 0,
+        views: video.analytics?.totalViews || video.analytics?.views || video.engagement?.views || 0,
+        isLiked,
+        isBookmarked,
+        createdAt: video.createdAt,
+        updatedAt: video.updatedAt
+      };
+    });
 
     sendSuccess(res, {
       content,
@@ -744,5 +880,62 @@ export const reportVideo = asyncHandler(async (req: Request, res: Response) => {
   } catch (error) {
     console.error('❌ [VIDEO] Report video error:', error);
     throw new AppError('Failed to report video', 500);
+  }
+});
+
+// Toggle bookmark on video
+export const toggleVideoBookmark = asyncHandler(async (req: Request, res: Response) => {
+  const { videoId } = req.params;
+  const userId = req.userId!;
+
+  try {
+    const video = await Video.findById(videoId);
+
+    if (!video) {
+      return sendNotFound(res, 'Video not found');
+    }
+
+    // Use the toggleBookmark method from the model
+    const isBookmarked = await video.toggleBookmark(userId);
+
+    console.log(`✅ [VIDEO] Video ${videoId} ${isBookmarked ? 'bookmarked' : 'unbookmarked'} by user ${userId}`);
+
+    sendSuccess(res, {
+      videoId: video._id,
+      isBookmarked,
+      totalBookmarks: video.bookmarkedBy?.length || 0
+    }, isBookmarked ? 'Video bookmarked successfully' : 'Bookmark removed successfully');
+
+  } catch (error) {
+    console.error('❌ [VIDEO] Toggle bookmark error:', error);
+    throw new AppError('Failed to toggle bookmark', 500);
+  }
+});
+
+// Track video view
+export const trackVideoView = asyncHandler(async (req: Request, res: Response) => {
+  const { videoId } = req.params;
+  const userId = req.userId; // Optional - can be undefined for non-authenticated users
+
+  try {
+    const video = await Video.findById(videoId);
+
+    if (!video) {
+      return sendNotFound(res, 'Video not found');
+    }
+
+    // Use the incrementViews method from the model
+    await video.incrementViews(userId || undefined);
+
+    console.log(`✅ [VIDEO] View tracked for video ${videoId}${userId ? ` by user ${userId}` : ' (anonymous)'}`);
+
+    sendSuccess(res, {
+      videoId: video._id,
+      views: video.engagement.views
+    }, 'View tracked successfully');
+
+  } catch (error) {
+    console.error('❌ [VIDEO] Track view error:', error);
+    throw new AppError('Failed to track view', 500);
   }
 });

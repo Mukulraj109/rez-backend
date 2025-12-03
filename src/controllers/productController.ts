@@ -38,6 +38,20 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
     category, store, excludeProducts, diversityMode
   });
 
+  // Try to get from cache first (skip if excludeProducts or diversityMode is used)
+  if (!excludeProducts && diversityMode === 'none') {
+    const filterHash = generateQueryCacheKey({
+      category, store, minPrice, maxPrice, rating, inStock, featured, search, sortBy, page, limit
+    });
+    const cacheKey = CacheKeys.productList(filterHash);
+    const cachedData = await redisService.get<any>(cacheKey);
+
+    if (cachedData) {
+      console.log('✅ [GET PRODUCTS] Returning from cache');
+      return sendPaginated(res, cachedData.products, Number(page), Number(limit), cachedData.total);
+    }
+  }
+
   // Build query
   const query: any = {
     isActive: true,
@@ -90,10 +104,10 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
         ...query,
         $text: { $search: search as string }
       })
-      .select({ score: { $meta: 'textScore' } })
-      .populate('category', 'name slug')
-      .populate('store', 'name logo location.city')
-      .sort({ score: { $meta: 'textScore' } });
+        .select({ score: { $meta: 'textScore' } })
+        .populate('category', 'name slug')
+        .populate('store', 'name logo location.city')
+        .sort({ score: { $meta: 'textScore' } });
     } else {
       // Apply sorting
       let sortOptions: any = {};
@@ -116,7 +130,7 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
         default:
           sortOptions = { createdAt: -1 };
       }
-      
+
       productsQuery = productsQuery.sort(sortOptions);
     }
 
@@ -180,6 +194,19 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
       console.log('✨ [GET PRODUCTS] Diversity applied. Products:', products.length, '→', finalProducts.length);
     }
 
+    // Cache the results (only if no excludeProducts or diversityMode)
+    if (!excludeProducts && diversityMode === 'none') {
+      const filterHash = generateQueryCacheKey({
+        category, store, minPrice, maxPrice, rating, inStock, featured, search, sortBy, page, limit
+      });
+      const cacheKey = CacheKeys.productList(filterHash);
+      await redisService.set(
+        cacheKey,
+        { products: finalProducts, total: totalProducts },
+        CacheTTL.PRODUCT_LIST
+      );
+    }
+
     sendPaginated(res, finalProducts, Number(page), Number(limit), totalProducts);
 
   } catch (error) {
@@ -207,8 +234,8 @@ export const getProductById = asyncHandler(async (req: Request, res: Response) =
       _id: id,
       isActive: true
     })
-    .populate('category', 'name slug type')
-    .populate('store', 'name logo location contact ratings operationalInfo');
+      .populate('category', 'name slug type')
+      .populate('store', 'name logo slug location contact ratings operationalInfo');
 
     console.log('📦 [GET PRODUCT BY ID] Product found:', product ? 'Yes' : 'No');
 
@@ -243,9 +270,9 @@ export const getProductById = asyncHandler(async (req: Request, res: Response) =
       isActive: true,
       'inventory.isAvailable': true
     })
-    .select('name title image price rating')
-    .limit(6)
-    .lean();
+      .select('name title image price rating')
+      .limit(6)
+      .lean();
 
     console.log('📦 [GET PRODUCT BY ID] Found', similarProducts.length, 'similar products');
 
@@ -293,10 +320,20 @@ export const getProductsByCategory = asyncHandler(async (req: Request, res: Resp
   } = req.query;
 
   try {
+    // Try to get from cache first
+    const categoryFilterHash = generateQueryCacheKey({ minPrice, maxPrice, rating, sortBy, page, limit });
+    const categoryCacheKey = CacheKeys.productsByCategory(categorySlug, categoryFilterHash);
+    const cachedData = await redisService.get<any>(categoryCacheKey);
+
+    if (cachedData) {
+      console.log('✅ [GET PRODUCTS BY CATEGORY] Returning from cache');
+      return sendPaginated(res, [cachedData.response], Number(page), Number(limit), cachedData.total);
+    }
+
     // Find category
-    const category = await Category.findOne({ 
-      slug: categorySlug, 
-      isActive: true 
+    const category = await Category.findOne({
+      slug: categorySlug,
+      isActive: true
     });
 
     if (!category) {
@@ -363,6 +400,13 @@ export const getProductsByCategory = asyncHandler(async (req: Request, res: Resp
       products
     };
 
+    // Cache the results
+    await redisService.set(
+      categoryCacheKey,
+      { response, total: totalProducts },
+      CacheTTL.PRODUCT_LIST
+    );
+
     sendPaginated(res, [response], Number(page), Number(limit), totalProducts);
 
   } catch (error) {
@@ -388,6 +432,16 @@ export const getProductsByStore = asyncHandler(async (req: Request, res: Respons
     if (!mongoose.Types.ObjectId.isValid(storeId) || !/^[0-9a-fA-F]{24}$/.test(storeId)) {
       console.log(`ℹ️ [PRODUCTS] Store ID "${storeId}" is not a valid ObjectId format, returning empty array`);
       return sendPaginated(res, [], Number(page), Number(limit), 0);
+    }
+
+    // Try to get from cache first
+    const storeFilterHash = generateQueryCacheKey({ category, minPrice, maxPrice, sortBy, page, limit });
+    const storeCacheKey = CacheKeys.productsByStore(storeId, storeFilterHash);
+    const cachedData = await redisService.get<any>(storeCacheKey);
+
+    if (cachedData) {
+      console.log('✅ [GET PRODUCTS BY STORE] Returning from cache');
+      return sendPaginated(res, [cachedData.response], Number(page), Number(limit), cachedData.total);
     }
 
     // Verify store exists
@@ -456,6 +510,13 @@ export const getProductsByStore = asyncHandler(async (req: Request, res: Respons
       products
     };
 
+    // Cache the results
+    await redisService.set(
+      storeCacheKey,
+      { response, total: totalProducts },
+      CacheTTL.STORE_PRODUCTS
+    );
+
     sendPaginated(res, [response], Number(page), Number(limit), totalProducts);
 
   } catch (error) {
@@ -499,9 +560,11 @@ export const getFeaturedProducts = asyncHandler(async (req: Request, res: Respon
       isFeatured: true,
       'inventory.isAvailable': true
     })
-    .sort({ 'rating.value': -1, createdAt: -1 })
-    .limit(Number(limit))
-    .lean();
+      .populate('category', 'name slug')
+      .populate('store', 'name slug logo location')
+      .sort({ 'rating.value': -1, createdAt: -1 })
+      .limit(Number(limit))
+      .lean();
 
     console.log('✅ [FEATURED PRODUCTS] Query successful! Found products:', products.length);
     console.log('📦 [FEATURED PRODUCTS] Sample product:', products[0] ? {
@@ -563,6 +626,15 @@ export const getNewArrivals = asyncHandler(async (req: Request, res: Response) =
   try {
     console.log('🔍 [NEW ARRIVALS] Starting query with limit:', limit);
 
+    // Try to get from cache first
+    const cacheKey = CacheKeys.productNewArrivals(Number(limit));
+    const cachedProducts = await redisService.get<any[]>(cacheKey);
+
+    if (cachedProducts) {
+      console.log('✅ [NEW ARRIVALS] Returning from cache');
+      return sendSuccess(res, cachedProducts, 'New arrival products retrieved successfully');
+    }
+
     // First, let's check what products exist
     const totalProducts = await Product.countDocuments();
     console.log('📊 [NEW ARRIVALS] Total products in database:', totalProducts);
@@ -579,11 +651,11 @@ export const getNewArrivals = asyncHandler(async (req: Request, res: Response) =
       isActive: true,
       'inventory.isAvailable': true
     })
-    .populate('category', 'name slug')
-    .populate('store', 'name slug logo')
-    .sort({ createdAt: -1 }) // Most recent first
-    .limit(Number(limit))
-    .lean();
+      .populate('category', 'name slug')
+      .populate('store', 'name slug logo location')
+      .sort({ createdAt: -1 }) // Most recent first
+      .limit(Number(limit))
+      .lean();
 
     console.log('✅ [NEW ARRIVALS] Query successful! Found products:', products.length);
     console.log('📦 [NEW ARRIVALS] Sample product:', products[0] ? {
@@ -626,6 +698,9 @@ export const getNewArrivals = asyncHandler(async (req: Request, res: Response) =
 
     console.log('✅ [NEW ARRIVALS] Transformation complete. Returning', transformedProducts.length, 'products');
 
+    // Cache the results
+    await redisService.set(cacheKey, transformedProducts, CacheTTL.PRODUCT_NEW_ARRIVALS);
+
     sendSuccess(res, transformedProducts, 'New arrival products retrieved successfully');
   } catch (error) {
     console.error('❌ [NEW ARRIVALS] Error occurred:', error);
@@ -637,8 +712,8 @@ export const getNewArrivals = asyncHandler(async (req: Request, res: Response) =
 
 // Search products
 export const searchProducts = asyncHandler(async (req: Request, res: Response) => {
-  const { 
-    q: searchText, 
+  const {
+    q: searchText,
     category,
     store,
     brand,
@@ -655,6 +730,18 @@ export const searchProducts = asyncHandler(async (req: Request, res: Response) =
   }
 
   try {
+    // Try to get from cache first
+    const searchFilterHash = generateQueryCacheKey({
+      category, store, brand, minPrice, maxPrice, rating, inStock, page, limit
+    });
+    const searchCacheKey = CacheKeys.productSearch(searchText as string, searchFilterHash);
+    const cachedData = await redisService.get<any>(searchCacheKey);
+
+    if (cachedData) {
+      console.log('✅ [SEARCH PRODUCTS] Returning from cache');
+      return sendPaginated(res, cachedData.products, Number(page), Number(limit), cachedData.total);
+    }
+
     // Build filters
     const filters: any = {};
     if (category) filters.category = category;
@@ -675,7 +762,7 @@ export const searchProducts = asyncHandler(async (req: Request, res: Response) =
     };
 
     // Search products using text search and filters
-    const searchQuery: any = { 
+    const searchQuery: any = {
       isActive: true,
       $text: { $search: searchText as string }
     };
@@ -708,6 +795,13 @@ export const searchProducts = asyncHandler(async (req: Request, res: Response) =
 
     const total = await totalQuery.countDocuments();
 
+    // Cache the results
+    await redisService.set(
+      searchCacheKey,
+      { products, total },
+      CacheTTL.PRODUCT_SEARCH
+    );
+
     sendPaginated(res, products, Number(page), Number(limit), total);
 
   } catch (error) {
@@ -721,11 +815,20 @@ export const getRecommendations = asyncHandler(async (req: Request, res: Respons
   const { limit = 6 } = req.query;
 
   try {
+    console.log('🔍 [RECOMMENDATIONS] Getting recommendations for product:', productId);
+
     const product = await Product.findById(productId);
-    
+
     if (!product) {
       return sendNotFound(res, 'Product not found');
     }
+
+    console.log('📦 [RECOMMENDATIONS] Source product:', {
+      id: product._id,
+      name: product.name,
+      category: product.category,
+      price: product.pricing?.selling
+    });
 
     // Get recommendations based on category and price range
     const priceRange = {
@@ -743,14 +846,56 @@ export const getRecommendations = asyncHandler(async (req: Request, res: Respons
         $lte: priceRange.max
       }
     })
-    .populate('store', 'name logo')
-    .sort({ 'ratings.average': -1, 'analytics.purchases': -1 })
-    .limit(Number(limit))
-    .lean();
+      .populate('category', 'name slug')  // ✅ Populate category
+      .populate('store', 'name logo')
+      .sort({ 'ratings.average': -1, 'analytics.purchases': -1 })
+      .limit(Number(limit))
+      .lean();
 
-    sendSuccess(res, recommendations, 'Product recommendations retrieved successfully');
+    console.log('✅ [RECOMMENDATIONS] Found', recommendations.length, 'recommendations');
+
+    // ✅ CRITICAL FIX: Transform data for frontend
+    const transformedRecommendations = recommendations.map((product: any) => {
+      // Safely extract pricing
+      const sellingPrice = product.pricing?.selling || product.price || 0;
+      const originalPrice = product.pricing?.original || product.originalPrice || sellingPrice;
+      const discount = product.pricing?.discount ||
+        (originalPrice > sellingPrice ?
+          Math.round(((originalPrice - sellingPrice) / originalPrice) * 100) : 0);
+
+      // Safely extract image
+      let productImage = '';
+      if (Array.isArray(product.images) && product.images.length > 0) {
+        const firstImage = product.images[0];
+        productImage = typeof firstImage === 'string' ? firstImage : firstImage?.url || '';
+      } else if (product.image) {
+        productImage = product.image;
+      }
+
+      return {
+        id: product._id.toString(),
+        _id: product._id.toString(),
+        name: product.name || 'Unnamed Product',
+        image: productImage,
+        price: sellingPrice,  // ✅ FIXED: Now properly extracts price
+        originalPrice: originalPrice,
+        discount: discount,
+        rating: product.ratings?.average || 0,
+        reviewCount: product.ratings?.count || 0,
+        brand: product.brand || '',
+        cashback: (product.cashback?.percentage || 0) > 0,
+        cashbackPercentage: product.cashback?.percentage || 0,
+        category: product.category?.name || (typeof product.category === 'string' ? product.category : ''),  // ✅ FIXED: Properly extract category
+        store: product.store,
+      };
+    });
+
+    console.log('✅ [RECOMMENDATIONS] Transformed sample:', transformedRecommendations[0]);
+
+    sendSuccess(res, transformedRecommendations, 'Product recommendations retrieved successfully');
 
   } catch (error) {
+    console.error('❌ [RECOMMENDATIONS] Error:', error);
     throw new AppError('Failed to get recommendations', 500);
   }
 });
@@ -874,9 +1019,9 @@ export const getFrequentlyBoughtTogether = asyncHandler(async (req: Request, res
         isActive: true,
         'inventory.isAvailable': true
       })
-      .select('name title price pricing image images rating ratings inventory')
-      .limit(Number(limit) - frequentProducts.length)
-      .lean();
+        .select('name title price pricing image images rating ratings inventory')
+        .limit(Number(limit) - frequentProducts.length)
+        .lean();
 
       frequentProducts.push(...additionalProducts);
     }
@@ -968,10 +1113,10 @@ export const getSearchSuggestions = asyncHandler(async (req: Request, res: Respo
       'inventory.isAvailable': true,
       name: { $regex: searchQuery, $options: 'i' }
     })
-    .select('name')
-    .sort({ 'analytics.views': -1, 'analytics.purchases': -1 })
-    .limit(10)
-    .lean();
+      .select('name')
+      .sort({ 'analytics.views': -1, 'analytics.purchases': -1 })
+      .limit(10)
+      .lean();
 
     // Extract unique product names
     const suggestions = products.map(p => p.name);
@@ -1186,7 +1331,8 @@ export const getRelatedProducts = asyncHandler(async (req: Request, res: Respons
     console.log('🔗 [RELATED PRODUCTS] Getting related products for:', id);
 
     // Try to get from cache first
-    const cacheKey = CacheKeys.productRecommendations(id, Number(limit));
+    // Added :v2 suffix to bust old cache with missing price data
+    const cacheKey = `${CacheKeys.productRecommendations(id, Number(limit))}:v2`;
     const cachedProducts = await redisService.get<any[]>(cacheKey);
 
     if (cachedProducts) {
@@ -1210,17 +1356,53 @@ export const getRelatedProducts = asyncHandler(async (req: Request, res: Respons
       isActive: true,
       'inventory.isAvailable': true
     })
-    .populate('store', 'name logo')
-    .populate('category', 'name slug')
-    .sort({ 'ratings.average': -1, 'analytics.views': -1 })
-    .limit(Number(limit))
-    .lean();
+      .populate('store', 'name logo')
+      .populate('category', 'name slug')
+      .sort({ 'ratings.average': -1, 'analytics.views': -1 })
+      .limit(Number(limit))
+      .lean();
+
+    // ✅ CRITICAL FIX: Transform data for frontend
+    const transformedRelatedProducts = relatedProducts.map((product: any) => {
+      // Safely extract pricing
+      const sellingPrice = product.pricing?.selling || product.price || 0;
+      const originalPrice = product.pricing?.original || product.originalPrice || sellingPrice;
+      const discount = product.pricing?.discount ||
+        (originalPrice > sellingPrice ?
+          Math.round(((originalPrice - sellingPrice) / originalPrice) * 100) : 0);
+
+      // Safely extract image
+      let productImage = '';
+      if (Array.isArray(product.images) && product.images.length > 0) {
+        const firstImage = product.images[0];
+        productImage = typeof firstImage === 'string' ? firstImage : firstImage?.url || '';
+      } else if (product.image) {
+        productImage = product.image;
+      }
+
+      return {
+        id: product._id.toString(),
+        _id: product._id.toString(),
+        name: product.name || 'Unnamed Product',
+        image: productImage,
+        price: sellingPrice,  // ✅ FIXED: Now properly extracts price
+        originalPrice: originalPrice,
+        discount: discount,
+        rating: product.ratings?.average || 0,
+        reviewCount: product.ratings?.count || 0,
+        brand: product.brand || '',
+        cashback: (product.cashback?.percentage || 0) > 0,
+        cashbackPercentage: product.cashback?.percentage || 0,
+        category: product.category?.name || (typeof product.category === 'string' ? product.category : ''),
+        store: product.store,
+      };
+    });
 
     // Cache the results
-    await redisService.set(cacheKey, relatedProducts, CacheTTL.PRODUCT_DETAIL);
+    await redisService.set(cacheKey, transformedRelatedProducts, CacheTTL.PRODUCT_DETAIL);
 
-    console.log('✅ [RELATED PRODUCTS] Found', relatedProducts.length, 'related products');
-    sendSuccess(res, relatedProducts, 'Related products retrieved successfully');
+    console.log('✅ [RELATED PRODUCTS] Found', transformedRelatedProducts.length, 'related products');
+    sendSuccess(res, transformedRelatedProducts, 'Related products retrieved successfully');
 
   } catch (error) {
     console.error('❌ [RELATED PRODUCTS] Error:', error);

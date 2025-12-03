@@ -13,6 +13,7 @@ export interface ICartItem {
   price: number;
   originalPrice?: number;
   discount?: number;
+  lockedQuantity?: number; // Number of items that have lock fee applied (discount only for these)
   addedAt: Date;
   notes?: string;
   metadata?: any; // For storing event-specific metadata (slotId, etc.)
@@ -30,7 +31,7 @@ export interface IReservedItem {
   expiresAt: Date;
 }
 
-// Locked item interface for price locking
+// Locked item interface for price locking with payment
 export interface ILockedItem {
   product: Types.ObjectId;
   store: Types.ObjectId;
@@ -44,6 +45,15 @@ export interface ILockedItem {
   lockedAt: Date;
   expiresAt: Date;
   notes?: string;
+
+  // Payment fields for paid lock feature (MakeMyTrip style)
+  lockFee?: number;                    // Amount paid to lock
+  lockFeePercentage?: number;          // 5, 7, or 10 based on duration
+  lockDuration?: number;               // Duration in hours (24, 72, 168)
+  paymentMethod?: 'wallet' | 'paybill' | 'upi';
+  paymentTransactionId?: Types.ObjectId; // Reference to Transaction
+  lockPaymentStatus?: 'pending' | 'paid' | 'refunded' | 'forfeited' | 'applied'; // applied = used in checkout
+  isPaidLock?: boolean;                // true if user paid to lock (vs free lock)
 }
 
 export interface ICartModel extends Model<ICart> {
@@ -162,6 +172,11 @@ const CartSchema = new Schema<ICart>({
       default: 0,
       min: 0
     },
+    lockedQuantity: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
     addedAt: {
       type: Date,
       default: Date.now
@@ -258,6 +273,38 @@ const CartSchema = new Schema<ICart>({
       type: String,
       trim: true,
       maxlength: 500
+    },
+    // Payment fields for paid lock feature (MakeMyTrip style)
+    lockFee: {
+      type: Number,
+      min: 0,
+      default: 0
+    },
+    lockFeePercentage: {
+      type: Number,
+      min: 0,
+      max: 100
+    },
+    lockDuration: {
+      type: Number,
+      min: 1
+    },
+    paymentMethod: {
+      type: String,
+      enum: ['wallet', 'paybill', 'upi']
+    },
+    paymentTransactionId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Transaction'
+    },
+    lockPaymentStatus: {
+      type: String,
+      enum: ['pending', 'paid', 'refunded', 'forfeited', 'applied'],
+      default: 'pending'
+    },
+    isPaidLock: {
+      type: Boolean,
+      default: false
     }
   }],
   totals: {
@@ -633,12 +680,28 @@ CartSchema.methods.updateItemQuantity = async function(
 CartSchema.methods.calculateTotals = async function(): Promise<void> {
   let subtotal = 0;
   let savings = 0;
-  
+  let itemDiscounts = 0; // Total of lock fee discounts
+
   // Calculate subtotal and savings
   this.items.forEach((item: ICartItem) => {
-    const itemTotal = item.price * item.quantity;
+    // Calculate item total based on locked quantity
+    // lockedQuantity items get the lock fee discount, remaining items are at full price
+    const lockedQty = item.lockedQuantity || 0;
+    const regularQty = item.quantity - lockedQty;
+    const lockFeeDiscount = item.discount || 0;
+
+    // All items at original price, then subtract lock fee discount
+    // This ensures: 2 items at ₹10,000 = ₹20,000, minus ₹500 lock fee = ₹19,500
+    const itemTotal = (item.price * item.quantity) - lockFeeDiscount;
     subtotal += itemTotal;
-    
+
+    // Track lock fee discounts for display
+    if (lockFeeDiscount > 0) {
+      itemDiscounts += lockFeeDiscount;
+      savings += lockFeeDiscount;
+    }
+
+    // Also track savings from original price differences (sale prices, etc.)
     if (item.originalPrice && item.originalPrice > item.price) {
       savings += (item.originalPrice - item.price) * item.quantity;
     }
@@ -954,11 +1017,69 @@ CartSchema.methods.moveLockedToCart = async function(
 
   const lockedItem = this.lockedItems[lockedItemIndex];
 
-  // Add to cart with locked price
-  await this.addItem(productId, lockedItem.quantity, variant);
+  // For paid locks, we need to apply the lock fee as a discount
+  if (lockedItem.isPaidLock && lockedItem.lockFee) {
+    console.log('➡️ [MOVE MODEL] Moving paid locked item with lock fee applied:', {
+      lockedPrice: lockedItem.lockedPrice,
+      lockFee: lockedItem.lockFee,
+      remainingPrice: lockedItem.lockedPrice - lockedItem.lockFee
+    });
+
+    // Get product and store info
+    const Product = this.model('Product');
+    const product = await Product.findById(productId).populate('store').lean();
+
+    if (!product) {
+      throw new Error('Product not found');
+    }
+
+    // Check if item already exists in cart
+    const existingItemIndex = this.items.findIndex((item: ICartItem) => {
+      if (!item.product) return false;
+      const itemProductMatch = item.product.toString() === productId;
+      const variantMatch = variant
+        ? item.variant?.type === variant.type && item.variant?.value === variant.value
+        : !item.variant || (typeof item.variant === 'object' && (!item.variant.type && !item.variant.value));
+      return itemProductMatch && variantMatch;
+    });
+
+    if (existingItemIndex > -1) {
+      // Update existing item - add quantities and track locked quantity
+      this.items[existingItemIndex].quantity += lockedItem.quantity;
+      // Track how many items have the lock fee discount
+      this.items[existingItemIndex].lockedQuantity = (this.items[existingItemIndex].lockedQuantity || 0) + lockedItem.quantity;
+      // Apply the lock fee discount
+      this.items[existingItemIndex].discount = (this.items[existingItemIndex].discount || 0) + lockedItem.lockFee;
+      this.items[existingItemIndex].addedAt = new Date();
+    } else {
+      // Add new item - keep original price and track lockedQuantity
+      // The lock fee discount will be applied based on lockedQuantity in calculateTotals
+      const cartItem: ICartItem = {
+        product: (product as any)._id,
+        store: (product as any).store?._id || null,
+        quantity: lockedItem.quantity,
+        variant: lockedItem.variant,
+        price: lockedItem.lockedPrice, // Original price (₹10,000)
+        originalPrice: lockedItem.lockedPrice,
+        discount: lockedItem.lockFee, // Lock fee (₹500) - only applies to lockedQuantity
+        lockedQuantity: lockedItem.quantity, // How many items have the lock fee discount
+        addedAt: new Date(),
+        notes: `Lock fee of ₹${lockedItem.lockFee} already paid for ${lockedItem.quantity} item(s)`
+      };
+
+      console.log('➡️ [MOVE MODEL] Adding cart item with lock fee discount:', cartItem);
+      this.items.push(cartItem);
+    }
+  } else {
+    // Regular lock (not paid) - use normal addItem
+    await this.addItem(productId, lockedItem.quantity, variant);
+  }
 
   // Remove from locked items
   this.lockedItems.splice(lockedItemIndex, 1);
+
+  // Extend cart expiry
+  this.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   console.log('➡️ [MOVE MODEL] Item moved successfully, remaining locked items:', this.lockedItems.length);
   await this.save();

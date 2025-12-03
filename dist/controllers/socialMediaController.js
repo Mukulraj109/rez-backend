@@ -38,7 +38,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getPlatformStats = exports.deletePost = exports.updatePostStatus = exports.getPostById = exports.getUserEarnings = exports.getUserPosts = exports.submitPost = void 0;
+exports.extractInstagramPostData = exports.verifyInstagramAccount = exports.verifyInstagramPost = exports.getPlatformStats = exports.deletePost = exports.updatePostStatus = exports.getPostById = exports.getUserEarnings = exports.getUserPosts = exports.submitPost = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
 const SocialMediaPost_1 = __importDefault(require("../models/SocialMediaPost"));
 const Order_1 = require("../models/Order");
@@ -48,22 +48,60 @@ const asyncHandler_1 = require("../utils/asyncHandler");
 const errorHandler_1 = require("../middleware/errorHandler");
 const response_1 = require("../utils/response");
 const achievementService_1 = __importDefault(require("../services/achievementService"));
+// Rate limit configuration
+const RATE_LIMITS = {
+    COOLDOWN_HOURS: 1, // 1 hour between submissions (aligned with frontend)
+    DAILY_LIMIT: 3,
+    WEEKLY_LIMIT: 10,
+    MONTHLY_LIMIT: 30,
+    REJECTION_COOLDOWN_HOURS: 24 // 24 hours after rejection
+};
 // Submit a new social media post
 exports.submitPost = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const userId = req.userId;
-    const { platform, postUrl, orderId } = req.body;
-    console.log('📱 [SOCIAL MEDIA] Submitting post:', { userId, platform, postUrl, orderId });
+    const { platform, postUrl, orderId, fraudMetadata } = req.body;
+    console.log('\n========================================');
+    console.log('📱 [SOCIAL MEDIA] SUBMIT POST START');
+    console.log('========================================');
+    console.log('📱 [SOCIAL MEDIA] Request body:', JSON.stringify({ userId, platform, postUrl, orderId }, null, 2));
+    // Log fraud metadata if provided
+    if (fraudMetadata) {
+        console.log('🔒 [FRAUD] Metadata received:', {
+            deviceId: fraudMetadata.deviceId?.substring(0, 10) + '...',
+            trustScore: fraudMetadata.trustScore,
+            riskScore: fraudMetadata.riskScore,
+            riskLevel: fraudMetadata.riskLevel,
+            checksPassed: fraudMetadata.checksPassed,
+            totalChecks: fraudMetadata.totalChecks,
+            warningsCount: fraudMetadata.warnings?.length || 0
+        });
+        // Block submissions with critical risk level
+        if (fraudMetadata.riskLevel === 'critical') {
+            console.warn('🚫 [FRAUD] Blocked critical risk submission:', { userId, riskScore: fraudMetadata.riskScore });
+            return (0, response_1.sendError)(res, 'Submission blocked due to security concerns. Please contact support.', 403);
+        }
+        // Block if trust score is too low
+        if (fraudMetadata.trustScore !== undefined && fraudMetadata.trustScore < 20) {
+            console.warn('🚫 [FRAUD] Blocked low trust score submission:', { userId, trustScore: fraudMetadata.trustScore });
+            return (0, response_1.sendError)(res, 'Device verification failed. Please try again or contact support.', 403);
+        }
+    }
     try {
         // Validate URL format based on platform
+        // Note: Instagram supports /p/, /reel/, and /reels/ URLs
         const urlPatterns = {
-            instagram: /^https?:\/\/(www\.)?instagram\.com\/([\w.]+\/)?(p|reel|instagramreel)\/[a-zA-Z0-9_-]+\/?(\?.*)?$/,
+            instagram: /^https?:\/\/(www\.)?instagram\.com\/([\w.]+\/)?(p|reel|reels|instagramreel)\/[a-zA-Z0-9_-]+\/?(\?.*)?$/,
             facebook: /^https?:\/\/(www\.)?facebook\.com\//,
             twitter: /^https?:\/\/(www\.)?(twitter|x)\.com\/.*\/status\/[0-9]+/,
             tiktok: /^https?:\/\/(www\.)?tiktok\.com\//
         };
-        if (!urlPatterns[platform]?.test(postUrl)) {
+        const urlIsValid = urlPatterns[platform]?.test(postUrl);
+        console.log('📱 [SOCIAL MEDIA] URL validation:', { platform, postUrl, urlIsValid, pattern: urlPatterns[platform]?.toString() });
+        if (!urlIsValid) {
+            console.log('❌ [SOCIAL MEDIA] URL validation FAILED');
             return (0, response_1.sendError)(res, `Invalid ${platform} post URL format`, 400);
         }
+        console.log('✅ [SOCIAL MEDIA] URL validation PASSED');
         // FRAUD PREVENTION CHECK 1: Check if URL already submitted
         const existingPost = await SocialMediaPost_1.default.findOne({ postUrl });
         if (existingPost) {
@@ -81,36 +119,87 @@ exports.submitPost = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
                 return (0, response_1.sendError)(res, 'You have already submitted a post for this order', 409);
             }
         }
-        // FRAUD PREVENTION CHECK 3: Check cooldown period (24 hours)
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        // FRAUD PREVENTION CHECK 3: Check cooldown period (1 hour - aligned with frontend)
+        const cooldownTime = new Date(Date.now() - RATE_LIMITS.COOLDOWN_HOURS * 60 * 60 * 1000);
         const recentSubmission = await SocialMediaPost_1.default.findOne({
             user: userId,
-            submittedAt: { $gte: twentyFourHoursAgo }
+            submittedAt: { $gte: cooldownTime }
         });
         if (recentSubmission) {
-            const hoursRemaining = Math.ceil((recentSubmission.submittedAt.getTime() + 24 * 60 * 60 * 1000 - Date.now()) / (60 * 60 * 1000));
-            console.warn('⚠️ [FRAUD] User in cooldown period:', { userId, hoursRemaining });
-            return (0, response_1.sendError)(res, `Please wait ${hoursRemaining} hours before submitting another post`, 429);
+            const minutesRemaining = Math.ceil((recentSubmission.submittedAt.getTime() + RATE_LIMITS.COOLDOWN_HOURS * 60 * 60 * 1000 - Date.now()) / (60 * 1000));
+            console.warn('⚠️ [FRAUD] User in cooldown period:', { userId, minutesRemaining });
+            return (0, response_1.sendError)(res, `Please wait ${minutesRemaining} minutes before submitting another post`, 429);
         }
-        // FRAUD PREVENTION CHECK 4: Check daily limit (3 posts per day)
+        // FRAUD PREVENTION CHECK 4: Check rejection cooldown (24 hours after rejection)
+        const rejectionCooldownTime = new Date(Date.now() - RATE_LIMITS.REJECTION_COOLDOWN_HOURS * 60 * 60 * 1000);
+        const recentRejection = await SocialMediaPost_1.default.findOne({
+            user: userId,
+            status: 'rejected',
+            reviewedAt: { $gte: rejectionCooldownTime }
+        });
+        if (recentRejection) {
+            const hoursRemaining = Math.ceil((recentRejection.reviewedAt.getTime() + RATE_LIMITS.REJECTION_COOLDOWN_HOURS * 60 * 60 * 1000 - Date.now()) / (60 * 60 * 1000));
+            console.warn('⚠️ [FRAUD] User in rejection cooldown:', { userId, hoursRemaining });
+            return (0, response_1.sendError)(res, `Your last post was rejected. Please wait ${hoursRemaining} hours before submitting again.`, 429);
+        }
+        // FRAUD PREVENTION CHECK 5: Check daily limit (3 posts per day)
         const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
         const todaySubmissions = await SocialMediaPost_1.default.countDocuments({
             user: userId,
             submittedAt: { $gte: oneDayAgo }
         });
-        if (todaySubmissions >= 3) {
+        if (todaySubmissions >= RATE_LIMITS.DAILY_LIMIT) {
             console.warn('⚠️ [FRAUD] User exceeded daily limit:', { userId, submissions: todaySubmissions });
-            return (0, response_1.sendError)(res, 'Maximum 3 submissions per day reached. Please try again tomorrow.', 429);
+            return (0, response_1.sendError)(res, `Maximum ${RATE_LIMITS.DAILY_LIMIT} submissions per day reached. Please try again tomorrow.`, 429);
         }
-        // Calculate cashback amount
+        // FRAUD PREVENTION CHECK 6: Check weekly limit (10 posts per week)
+        const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        const weeklySubmissions = await SocialMediaPost_1.default.countDocuments({
+            user: userId,
+            submittedAt: { $gte: oneWeekAgo }
+        });
+        if (weeklySubmissions >= RATE_LIMITS.WEEKLY_LIMIT) {
+            console.warn('⚠️ [FRAUD] User exceeded weekly limit:', { userId, submissions: weeklySubmissions });
+            return (0, response_1.sendError)(res, `Maximum ${RATE_LIMITS.WEEKLY_LIMIT} submissions per week reached. Please try again next week.`, 429);
+        }
+        // FRAUD PREVENTION CHECK 7: Check monthly limit (30 posts per month)
+        const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const monthlySubmissions = await SocialMediaPost_1.default.countDocuments({
+            user: userId,
+            submittedAt: { $gte: oneMonthAgo }
+        });
+        if (monthlySubmissions >= RATE_LIMITS.MONTHLY_LIMIT) {
+            console.warn('⚠️ [FRAUD] User exceeded monthly limit:', { userId, submissions: monthlySubmissions });
+            return (0, response_1.sendError)(res, `Maximum ${RATE_LIMITS.MONTHLY_LIMIT} submissions per month reached.`, 429);
+        }
+        // Calculate cashback amount and extract store/merchant info
         let cashbackAmount = 0;
         let orderNumber = '';
+        let storeId;
+        let merchantId;
         if (orderId) {
-            const order = await Order_1.Order.findOne({ _id: orderId, user: userId });
+            const order = await Order_1.Order.findOne({ _id: orderId, user: userId })
+                .populate({
+                path: 'items.store',
+                select: 'merchantId name' // NOTE: Store model uses 'merchantId', not 'merchant'
+            });
             if (order) {
                 const orderTotal = order.totals?.total || 0;
                 cashbackAmount = Math.round(orderTotal * 0.05); // 5% cashback
                 orderNumber = order.orderNumber;
+                // Extract store and merchant from order items
+                // Use the first item's store (primary store for this order)
+                const firstItemWithStore = order.items?.find((item) => item.store);
+                if (firstItemWithStore && firstItemWithStore.store) {
+                    const store = firstItemWithStore.store;
+                    storeId = typeof store === 'object' ? store._id : store;
+                    // Get merchantId from store if populated
+                    // NOTE: Store model uses 'merchantId' field, not 'merchant'
+                    if (typeof store === 'object' && store.merchantId) {
+                        merchantId = store.merchantId;
+                    }
+                }
+                console.log('📦 [SOCIAL MEDIA] Order store/merchant:', { storeId, merchantId, orderNumber });
             }
         }
         // Capture request metadata for fraud prevention
@@ -123,10 +212,16 @@ exports.submitPost = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             deviceFingerprint: deviceFingerprint ? 'present' : 'missing',
             userAgent: userAgent?.substring(0, 50)
         });
+        // Determine if manual review is required based on risk level
+        const requiresManualReview = fraudMetadata && (fraudMetadata.riskLevel === 'high' ||
+            fraudMetadata.riskScore > 60 ||
+            (fraudMetadata.warnings && fraudMetadata.warnings.length > 2));
         // Create post submission
         const post = new SocialMediaPost_1.default({
             user: userId,
             order: orderId,
+            store: storeId, // Link to store for merchant verification
+            merchant: merchantId, // Link to merchant for filtering
             platform,
             postUrl,
             status: 'pending',
@@ -134,14 +229,34 @@ exports.submitPost = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             cashbackPercentage: 5,
             submittedAt: new Date(),
             submissionIp: typeof submissionIp === 'string' ? submissionIp : submissionIp?.[0],
-            deviceFingerprint,
+            deviceFingerprint: deviceFingerprint || fraudMetadata?.deviceId,
             userAgent,
             metadata: {
-                orderNumber
+                orderNumber,
+                // Store fraud metadata for review
+                fraudMetadata: fraudMetadata ? {
+                    trustScore: fraudMetadata.trustScore,
+                    riskScore: fraudMetadata.riskScore,
+                    riskLevel: fraudMetadata.riskLevel,
+                    checksPassed: fraudMetadata.checksPassed,
+                    totalChecks: fraudMetadata.totalChecks,
+                    warnings: fraudMetadata.warnings,
+                    requiresManualReview
+                } : undefined
             }
         });
         await post.save();
-        console.log('✅ [SOCIAL MEDIA] Post submitted successfully:', post._id);
+        console.log('========================================');
+        console.log('✅ [SOCIAL MEDIA] POST SAVED SUCCESSFULLY');
+        console.log('========================================');
+        console.log('📱 [SOCIAL MEDIA] Saved post details:', JSON.stringify({
+            postId: post._id,
+            userId: post.user,
+            orderId: post.order,
+            storeId: post.store,
+            status: post.status,
+            cashbackAmount: post.cashbackAmount
+        }, null, 2));
         // Audit Log: Track submission
         await AuditLog_1.default.log({
             merchantId: new mongoose_1.Types.ObjectId('000000000000000000000000'), // System/user activity
@@ -177,9 +292,10 @@ exports.submitPost = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
                 status: post.status,
                 cashbackAmount: post.cashbackAmount,
                 submittedAt: post.submittedAt,
-                estimatedReview: '48 hours'
+                storeId: post.store,
+                estimatedReview: '24 hours'
             }
-        }, 'Post submitted successfully! We will review it within 48 hours.', 201);
+        }, 'Post submitted successfully! The merchant will verify your post within 24 hours.', 201);
     }
     catch (error) {
         console.error('❌ [SOCIAL MEDIA] Submit error:', error);
@@ -190,12 +306,16 @@ exports.submitPost = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
 exports.getUserPosts = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const userId = req.userId;
     const { page = 1, limit = 20, status } = req.query;
-    console.log('📱 [SOCIAL MEDIA] Getting user posts:', { userId, page, limit, status });
+    console.log('\n========================================');
+    console.log('📱 [SOCIAL MEDIA] GET USER POSTS');
+    console.log('========================================');
+    console.log('📱 [SOCIAL MEDIA] Query params:', { userId, page, limit, status });
     try {
         const query = { user: userId };
         if (status) {
             query.status = status;
         }
+        console.log('📱 [SOCIAL MEDIA] MongoDB query:', JSON.stringify(query));
         const skip = (Number(page) - 1) * Number(limit);
         const posts = await SocialMediaPost_1.default.find(query)
             .sort({ createdAt: -1 })
@@ -204,7 +324,10 @@ exports.getUserPosts = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             .lean();
         const total = await SocialMediaPost_1.default.countDocuments(query);
         const totalPages = Math.ceil(total / Number(limit));
-        console.log(`✅ [SOCIAL MEDIA] Found ${posts.length} posts`);
+        console.log(`✅ [SOCIAL MEDIA] Found ${posts.length} posts, total: ${total}`);
+        if (posts.length > 0) {
+            console.log('📱 [SOCIAL MEDIA] First post:', JSON.stringify(posts[0], null, 2));
+        }
         (0, response_1.sendSuccess)(res, {
             posts,
             pagination: {
@@ -434,5 +557,247 @@ exports.getPlatformStats = (0, asyncHandler_1.asyncHandler)(async (req, res) => 
     catch (error) {
         console.error('❌ [SOCIAL MEDIA] Stats error:', error);
         throw new errorHandler_1.AppError('Failed to fetch statistics', 500);
+    }
+});
+// ============================================================================
+// INSTAGRAM VERIFICATION ENDPOINTS
+// ============================================================================
+// Configuration for Instagram content requirements
+const INSTAGRAM_CONFIG = {
+    REQUIRED_BRAND_MENTIONS: ['@rezapp', '#rezapp', 'rez app', 'rezapp'],
+    REQUIRED_HASHTAGS: ['#cashback', '#shopping'],
+    OPTIONAL_HASHTAGS: ['#deals', '#savings', '#onlineshopping'],
+    MIN_CAPTION_LENGTH: 20,
+    MAX_POST_AGE_DAYS: 30,
+    CONTENT_MATCH_THRESHOLD: 0.6,
+    MIN_FOLLOWERS: 100,
+    MIN_POSTS: 10
+};
+// Helper: Parse Instagram URL
+const parseInstagramUrl = (url) => {
+    try {
+        const cleanUrl = url.trim().toLowerCase();
+        // Pattern 1: instagram.com/p/POST_ID
+        const pattern1 = /instagram\.com\/p\/([a-zA-Z0-9_-]+)/i;
+        const match1 = url.match(pattern1);
+        if (match1) {
+            return { postId: match1[1], postType: 'post', isValid: true };
+        }
+        // Pattern 2: instagram.com/reel/POST_ID
+        const pattern2 = /instagram\.com\/reel\/([a-zA-Z0-9_-]+)/i;
+        const match2 = url.match(pattern2);
+        if (match2) {
+            return { postId: match2[1], postType: 'reel', isValid: true };
+        }
+        // Pattern 3: instagram.com/USERNAME/p/POST_ID
+        const pattern3 = /instagram\.com\/([\w.]+)\/p\/([a-zA-Z0-9_-]+)/i;
+        const match3 = url.match(pattern3);
+        if (match3) {
+            return { username: match3[1], postId: match3[2], postType: 'post', isValid: true };
+        }
+        // Pattern 4: instagram.com/USERNAME/reel/POST_ID
+        const pattern4 = /instagram\.com\/([\w.]+)\/reel\/([a-zA-Z0-9_-]+)/i;
+        const match4 = url.match(pattern4);
+        if (match4) {
+            return { username: match4[1], postId: match4[2], postType: 'reel', isValid: true };
+        }
+        return { isValid: false };
+    }
+    catch {
+        return { isValid: false };
+    }
+};
+// Helper: Analyze caption content
+const analyzeCaption = (caption = '') => {
+    const lowerCaption = caption.toLowerCase();
+    // Check brand mentions
+    const brandMentions = INSTAGRAM_CONFIG.REQUIRED_BRAND_MENTIONS.filter(mention => lowerCaption.includes(mention.toLowerCase()));
+    const hasBrandMention = brandMentions.length > 0;
+    // Check required hashtags
+    const requiredHashtags = INSTAGRAM_CONFIG.REQUIRED_HASHTAGS.filter(tag => lowerCaption.includes(tag.toLowerCase()));
+    const hasRequiredHashtags = requiredHashtags.length > 0;
+    // Check optional hashtags
+    const optionalHashtags = INSTAGRAM_CONFIG.OPTIONAL_HASHTAGS.filter(tag => lowerCaption.includes(tag.toLowerCase()));
+    // Calculate match score (0-100)
+    let matchScore = 0;
+    if (hasBrandMention)
+        matchScore += 50;
+    if (hasRequiredHashtags)
+        matchScore += 30;
+    if (caption.length >= INSTAGRAM_CONFIG.MIN_CAPTION_LENGTH)
+        matchScore += 10;
+    if (optionalHashtags.length > 0)
+        matchScore += 10;
+    return {
+        hasBrandMention,
+        hasRequiredHashtags,
+        brandMentions,
+        requiredHashtags,
+        optionalHashtags,
+        matchScore: Math.min(matchScore, 100)
+    };
+};
+// Verify Instagram post
+exports.verifyInstagramPost = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { url, postId: providedPostId, username: providedUsername } = req.body;
+    console.log('📸 [INSTAGRAM] Verifying post:', { url });
+    const errors = [];
+    const warnings = [];
+    try {
+        // Step 1: Parse and validate URL
+        const parsed = parseInstagramUrl(url);
+        if (!parsed.isValid || !parsed.postId) {
+            errors.push('Invalid Instagram URL format');
+            return (0, response_1.sendSuccess)(res, {
+                isValid: false,
+                exists: false,
+                isAccessible: false,
+                errors,
+                warnings
+            });
+        }
+        const postId = providedPostId || parsed.postId;
+        const username = providedUsername || parsed.username;
+        // Step 2: Simulate post verification
+        // NOTE: In production, this would call Instagram Graph API
+        // For now, we verify URL format and return simulated data
+        // Simulate API delay
+        await new Promise(resolve => setTimeout(resolve, 500));
+        // For demo purposes, assume post exists and is accessible
+        // In production, you would:
+        // 1. Use Instagram Graph API with a valid access token
+        // 2. Call GET /{post-id}?fields=id,caption,media_type,timestamp,username
+        // 3. Handle API errors (post deleted, private, etc.)
+        const simulatedPostData = {
+            id: postId,
+            permalink: url,
+            caption: `Amazing purchase from @rezapp! #cashback #shopping #deals - Love this product!`,
+            media_type: parsed.postType === 'reel' ? 'VIDEO' : 'IMAGE',
+            timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days ago
+            username: username || 'user123'
+        };
+        const simulatedAccountData = {
+            id: 'account_' + postId,
+            username: username || 'user123',
+            account_type: 'PERSONAL',
+            followers_count: 250,
+            follows_count: 180,
+            media_count: 45
+        };
+        // Step 3: Analyze content
+        const contentAnalysis = analyzeCaption(simulatedPostData.caption);
+        if (!contentAnalysis.hasBrandMention) {
+            warnings.push(`Post should mention our brand: ${INSTAGRAM_CONFIG.REQUIRED_BRAND_MENTIONS.slice(0, 2).join(', ')}`);
+        }
+        if (!contentAnalysis.hasRequiredHashtags) {
+            warnings.push(`Post should include hashtags: ${INSTAGRAM_CONFIG.REQUIRED_HASHTAGS.join(', ')}`);
+        }
+        if (contentAnalysis.matchScore < INSTAGRAM_CONFIG.CONTENT_MATCH_THRESHOLD * 100) {
+            warnings.push(`Content match score is ${contentAnalysis.matchScore}%. Consider adding more relevant content.`);
+        }
+        // Step 4: Check post age
+        const postDate = new Date(simulatedPostData.timestamp);
+        const daysSincePost = (Date.now() - postDate.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysSincePost > INSTAGRAM_CONFIG.MAX_POST_AGE_DAYS) {
+            warnings.push(`Post is ${Math.floor(daysSincePost)} days old. We prefer posts from the last ${INSTAGRAM_CONFIG.MAX_POST_AGE_DAYS} days.`);
+        }
+        // Step 5: Check account requirements
+        if (simulatedAccountData.followers_count < INSTAGRAM_CONFIG.MIN_FOLLOWERS) {
+            warnings.push(`Account has fewer than ${INSTAGRAM_CONFIG.MIN_FOLLOWERS} followers`);
+        }
+        if (simulatedAccountData.media_count < INSTAGRAM_CONFIG.MIN_POSTS) {
+            warnings.push(`Account has fewer than ${INSTAGRAM_CONFIG.MIN_POSTS} posts`);
+        }
+        console.log('✅ [INSTAGRAM] Post verification complete');
+        (0, response_1.sendSuccess)(res, {
+            isValid: errors.length === 0,
+            exists: true,
+            isAccessible: true,
+            postData: simulatedPostData,
+            accountData: simulatedAccountData,
+            contentMatches: {
+                hasBrandMention: contentAnalysis.hasBrandMention,
+                hasRequiredHashtags: contentAnalysis.hasRequiredHashtags,
+                hasProductMention: true, // Simulated
+                matchScore: contentAnalysis.matchScore
+            },
+            errors,
+            warnings
+        });
+    }
+    catch (error) {
+        console.error('❌ [INSTAGRAM] Verification error:', error);
+        errors.push('Failed to verify Instagram post');
+        (0, response_1.sendSuccess)(res, {
+            isValid: false,
+            exists: false,
+            isAccessible: false,
+            errors,
+            warnings
+        });
+    }
+});
+// Verify Instagram account
+exports.verifyInstagramAccount = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { username } = req.body;
+    console.log('📸 [INSTAGRAM] Verifying account:', username);
+    const errors = [];
+    try {
+        // Simulate API delay
+        await new Promise(resolve => setTimeout(resolve, 300));
+        // In production, this would call Instagram Graph API
+        // GET /{username}?fields=id,username,account_type,followers_count,media_count
+        const simulatedAccountData = {
+            id: 'account_' + username,
+            username,
+            account_type: 'PERSONAL',
+            followers_count: Math.floor(Math.random() * 500) + 100,
+            follows_count: Math.floor(Math.random() * 300) + 50,
+            media_count: Math.floor(Math.random() * 100) + 10,
+            profile_picture_url: `https://picsum.photos/seed/${username}/200/200`,
+            is_verified: false
+        };
+        console.log('✅ [INSTAGRAM] Account verification complete');
+        (0, response_1.sendSuccess)(res, {
+            isValid: true,
+            accountData: simulatedAccountData,
+            errors
+        });
+    }
+    catch (error) {
+        console.error('❌ [INSTAGRAM] Account verification error:', error);
+        errors.push('Failed to verify Instagram account');
+        (0, response_1.sendSuccess)(res, {
+            isValid: false,
+            errors
+        });
+    }
+});
+// Extract Instagram post data
+exports.extractInstagramPostData = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { url, postId: providedPostId } = req.body;
+    console.log('📸 [INSTAGRAM] Extracting post data:', { url });
+    try {
+        const parsed = parseInstagramUrl(url);
+        if (!parsed.isValid || !parsed.postId) {
+            return (0, response_1.sendError)(res, 'Invalid Instagram URL', 400);
+        }
+        const postId = providedPostId || parsed.postId;
+        // Simulate API delay
+        await new Promise(resolve => setTimeout(resolve, 200));
+        // In production, this would fetch actual thumbnail from Instagram
+        const thumbnailUrl = `https://picsum.photos/seed/${postId}/400/400`;
+        console.log('✅ [INSTAGRAM] Post data extracted');
+        (0, response_1.sendSuccess)(res, {
+            success: true,
+            postId,
+            username: parsed.username,
+            postType: parsed.postType,
+            thumbnailUrl
+        });
+    }
+    catch (error) {
+        console.error('❌ [INSTAGRAM] Extract data error:', error);
+        (0, response_1.sendError)(res, 'Failed to extract post data', 500);
     }
 });

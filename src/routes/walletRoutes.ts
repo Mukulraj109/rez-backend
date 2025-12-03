@@ -19,7 +19,8 @@ import {
   getPayBillTransactions,
   createPayBillPaymentIntent,
   confirmPayBillPayment,
-  creditLoyaltyPoints
+  creditLoyaltyPoints,
+  devTopup
 } from '../controllers/walletController';
 import { authenticate } from '../middleware/auth';
 
@@ -180,5 +181,13 @@ router.post('/paybill/create-payment-intent', createPayBillPaymentIntent);
  * @access  Private
  */
 router.post('/paybill/confirm-payment', confirmPayBillPayment);
+
+/**
+ * @route   POST /api/wallet/dev-topup
+ * @desc    Add test funds to wallet (DEVELOPMENT ONLY)
+ * @body    { amount, type: 'wallet' | 'paybill' }
+ * @access  Private
+ */
+router.post('/dev-topup', devTopup);
 
 export default router;

@@ -85,6 +85,14 @@ router.post('/:videoId/like',
 auth_1.authenticate, (0, validation_1.validateParams)(validation_2.Joi.object({
     videoId: validation_1.commonSchemas.objectId().required()
 })), videoController_1.toggleVideoLike);
+// Bookmark/Unbookmark video (requires authentication)
+router.post('/:videoId/bookmark', auth_1.authenticate, (0, validation_1.validateParams)(validation_2.Joi.object({
+    videoId: validation_1.commonSchemas.objectId().required()
+})), videoController_1.toggleVideoBookmark);
+// Track video view (optional authentication)
+router.post('/:videoId/view', auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
+    videoId: validation_1.commonSchemas.objectId().required()
+})), videoController_1.trackVideoView);
 // Add comment to video (requires authentication)
 router.post('/:videoId/comments', 
 // generalLimiter,, // Disabled for development

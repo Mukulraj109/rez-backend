@@ -2,6 +2,8 @@ import mongoose, { Document, Types } from 'mongoose';
 export interface ISocialMediaPost extends Document {
     user: Types.ObjectId;
     order?: Types.ObjectId;
+    store?: Types.ObjectId;
+    merchant?: Types.ObjectId;
     platform: 'instagram' | 'facebook' | 'twitter' | 'tiktok';
     postUrl: string;
     status: 'pending' | 'approved' | 'rejected' | 'credited';
@@ -12,6 +14,7 @@ export interface ISocialMediaPost extends Document {
     creditedAt?: Date;
     reviewedBy?: Types.ObjectId;
     rejectionReason?: string;
+    approvalNotes?: string;
     submissionIp?: string;
     deviceFingerprint?: string;
     userAgent?: string;

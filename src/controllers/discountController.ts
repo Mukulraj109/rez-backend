@@ -512,6 +512,7 @@ export const getDiscountAnalytics = async (req: Request, res: Response) => {
  * GET /api/discounts/bill-payment
  * Get available bill payment discounts
  * Supports store-specific filtering (Phase 2)
+ * Returns ALL discounts (regardless of minOrderValue) - frontend handles eligibility display
  */
 export const getBillPaymentDiscounts = async (req: Request, res: Response) => {
   try {
@@ -519,67 +520,73 @@ export const getBillPaymentDiscounts = async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     const now = new Date();
-    
+
     // Build store-specific filter (Phase 2)
     const storeFilter: any = {};
     if (storeId && mongoose.Types.ObjectId.isValid(storeId as string)) {
       // Get store's merchantId for merchant-level discounts
       const store = await Store.findById(storeId).select('merchantId').lean();
       const merchantId = store?.merchantId;
-      
+
       // Include: global discounts + merchant discounts + store discounts
       storeFilter.$or = [
         { scope: 'global' }, // Global discounts (available to all stores)
+        { scope: { $exists: false } }, // Legacy discounts without scope field
         ...(merchantId ? [{ scope: 'merchant', merchantId: new mongoose.Types.ObjectId(merchantId) }] : []), // Merchant-level discounts
         { scope: 'store', storeId: new mongoose.Types.ObjectId(storeId as string) } // Store-specific discounts
       ];
     } else {
-      // No storeId: only global discounts
-      storeFilter.scope = 'global';
+      // No storeId: only global discounts and legacy discounts
+      storeFilter.$or = [
+        { scope: 'global' },
+        { scope: { $exists: false } }
+      ];
     }
-    
-    // Build base filter with all non-$or conditions
+
+    // Build base filter - NO minOrderValue filter
+    // Frontend will show all discounts and indicate eligibility
     const baseFilter: any = {
       applicableOn: 'bill_payment',
       isActive: true,
       validFrom: { $lte: now },
-      validUntil: { $gte: now },
-      minOrderValue: { $lte: Number(orderValue) }
+      validUntil: { $gte: now }
+      // NOTE: minOrderValue filter removed - show all discounts
+      // Frontend displays "Add ₹X more to unlock" for ineligible ones
     };
-    
-    // Add store scope filter (if no $or, add scope directly)
-    if (!storeFilter.$or) {
-      Object.assign(baseFilter, storeFilter);
-    }
-    
-    // Build filter with $and to combine multiple $or conditions
-    const filter: any = {
-      ...baseFilter
-    };
-    
-    // Combine store filter and usage limit filter using $and
-    const orConditions: any[] = [];
-    
-    // Add store filter $or if it exists
+
+    // Build $and array to combine all OR conditions
+    const andConditions: any[] = [];
+
+    // 1. Payment method filter - exclude card-specific discounts
+    // Card discounts should appear in Section4 (Card Offers), not Section3 (Mega Sale)
+    andConditions.push({
+      $or: [
+        { paymentMethod: 'upi' },
+        { paymentMethod: 'all' },
+        { paymentMethod: { $exists: false } },
+        { paymentMethod: null }
+      ]
+    });
+
+    // 2. Store scope filter
     if (storeFilter.$or) {
-      orConditions.push({ $or: storeFilter.$or });
+      andConditions.push({ $or: storeFilter.$or });
     }
-    
-    // Add usage limit $or
-    orConditions.push({
+
+    // 3. Usage limit filter
+    andConditions.push({
       $or: [
         { usageLimit: { $exists: false } },
+        { usageLimit: null },
         { $expr: { $lt: ['$usedCount', '$usageLimit'] } }
       ]
     });
-    
-    // If we have multiple $or conditions, wrap in $and
-    if (orConditions.length > 1) {
-      filter.$and = orConditions;
-    } else if (orConditions.length === 1) {
-      // Only one $or condition, add it directly
-      Object.assign(filter, orConditions[0]);
-    }
+
+    // Build final filter
+    const filter: any = {
+      ...baseFilter,
+      $and: andConditions
+    };
 
     let discounts = await Discount.find(filter)
       .sort({ priority: -1, value: -1 })

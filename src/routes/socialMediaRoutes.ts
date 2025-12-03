@@ -9,7 +9,10 @@ import {
   getPostById,
   updatePostStatus,
   deletePost,
-  getPlatformStats
+  getPlatformStats,
+  verifyInstagramPost,
+  verifyInstagramAccount,
+  extractInstagramPostData
 } from '../controllers/socialMediaController';
 import { requireAuth, requireAdmin } from '../middleware/auth';
 import { validateBody, validateParams, validateQuery, commonSchemas } from '../middleware/validation';
@@ -25,7 +28,17 @@ router.post('/submit',
   validateBody(Joi.object({
     platform: Joi.string().valid('instagram', 'facebook', 'twitter', 'tiktok').required(),
     postUrl: Joi.string().uri().required(),
-    orderId: commonSchemas.objectId()
+    orderId: commonSchemas.objectId(),
+    // Optional fraud detection metadata from frontend
+    fraudMetadata: Joi.object({
+      deviceId: Joi.string().optional(),
+      trustScore: Joi.number().optional(),
+      riskScore: Joi.number().optional(),
+      riskLevel: Joi.string().valid('low', 'medium', 'high', 'critical').optional(),
+      checksPassed: Joi.number().optional(),
+      totalChecks: Joi.number().optional(),
+      warnings: Joi.array().items(Joi.string()).optional()
+    }).optional()
   })),
   submitPost
 );
@@ -34,7 +47,7 @@ router.post('/submit',
 router.get('/posts',
   validateQuery(Joi.object({
     page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(50).default(20),
+    limit: Joi.number().integer().min(1).max(100).default(20), // Increased max to 100
     status: Joi.string().valid('pending', 'approved', 'rejected', 'credited')
   })),
   getUserPosts
@@ -81,6 +94,37 @@ router.delete('/posts/:postId',
     postId: commonSchemas.objectId().required()
   })),
   deletePost
+);
+
+// ============================================================================
+// INSTAGRAM VERIFICATION ENDPOINTS
+// ============================================================================
+
+// Verify an Instagram post exists and is accessible
+router.post('/instagram/verify-post',
+  validateBody(Joi.object({
+    url: Joi.string().uri().required(),
+    postId: Joi.string().optional(),
+    username: Joi.string().optional()
+  })),
+  verifyInstagramPost
+);
+
+// Verify an Instagram account
+router.post('/instagram/verify-account',
+  validateBody(Joi.object({
+    username: Joi.string().required()
+  })),
+  verifyInstagramAccount
+);
+
+// Extract basic data from an Instagram post URL
+router.post('/instagram/extract-post-data',
+  validateBody(Joi.object({
+    url: Joi.string().uri().required(),
+    postId: Joi.string().optional()
+  })),
+  extractInstagramPostData
 );
 
 export default router;

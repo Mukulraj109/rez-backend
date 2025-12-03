@@ -48,6 +48,16 @@ const SocialMediaPostSchema = new mongoose_1.Schema({
         ref: 'Order',
         index: true
     },
+    store: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: 'Store',
+        index: true
+    },
+    merchant: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: 'Merchant',
+        index: true
+    },
     platform: {
         type: String,
         required: [true, 'Platform is required'],
@@ -112,6 +122,11 @@ const SocialMediaPostSchema = new mongoose_1.Schema({
         trim: true,
         maxlength: [500, 'Rejection reason cannot exceed 500 characters']
     },
+    approvalNotes: {
+        type: String,
+        trim: true,
+        maxlength: [500, 'Approval notes cannot exceed 500 characters']
+    },
     // Fraud Prevention Fields
     submissionIp: {
         type: String,
@@ -154,6 +169,10 @@ SocialMediaPostSchema.index({ user: 1, createdAt: -1 });
 SocialMediaPostSchema.index({ user: 1, status: 1 });
 SocialMediaPostSchema.index({ status: 1, submittedAt: 1 });
 SocialMediaPostSchema.index({ platform: 1, status: 1 });
+// Merchant verification indexes
+SocialMediaPostSchema.index({ store: 1, status: 1 }); // For merchant to query their store's posts
+SocialMediaPostSchema.index({ merchant: 1, status: 1 }); // For merchant to query all their posts
+SocialMediaPostSchema.index({ store: 1, submittedAt: -1 }); // For merchant chronological view
 // Fraud prevention indexes
 SocialMediaPostSchema.index({ user: 1, order: 1 }); // Prevent duplicate order submissions
 SocialMediaPostSchema.index({ submissionIp: 1, submittedAt: -1 }); // Track IP submissions

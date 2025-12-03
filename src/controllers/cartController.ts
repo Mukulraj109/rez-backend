@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { Cart } from '../models/Cart';
 import { Product } from '../models/Product';
 import Event from '../models/Event';
@@ -1077,5 +1078,368 @@ export const getLockedItems = asyncHandler(async (req: Request, res: Response) =
   } catch (error) {
     console.error('❌ [GET LOCKED] Error:', error);
     throw new AppError('Failed to get locked items', 500);
+  }
+});
+
+// Lock fee configuration - Only 3 hour lock at 5%
+const LOCK_FEE_CONFIG: Record<number, { hours: number; percentage: number; label: string }> = {
+  3: { hours: 3, percentage: 5, label: '3 Hours' },
+};
+
+// Calculate lock fee
+const calculateLockFee = (productPrice: number, durationHours: number): { fee: number; percentage: number } => {
+  const config = LOCK_FEE_CONFIG[durationHours];
+  if (!config) {
+    throw new Error('Invalid lock duration. Choose 3 hours.');
+  }
+  const fee = Math.ceil((productPrice * config.percentage) / 100);
+  return { fee, percentage: config.percentage };
+};
+
+// Lock item with payment (MakeMyTrip style)
+export const lockItemWithPayment = asyncHandler(async (req: Request, res: Response) => {
+  console.log('🔒💰 [LOCK WITH PAYMENT] Starting paid lock process');
+  console.log('🔒💰 [LOCK WITH PAYMENT] User ID:', req.userId);
+  console.log('🔒💰 [LOCK WITH PAYMENT] Request body:', req.body);
+
+  if (!req.userId) {
+    console.error('❌ [LOCK WITH PAYMENT] No user ID provided');
+    return sendUnauthorized(res, 'Authentication required');
+  }
+
+  const {
+    productId,
+    quantity = 1,
+    variant,
+    duration = 3, // Default 3 hours
+    paymentMethod = 'wallet' // 'wallet' | 'paybill' | 'upi'
+  } = req.body;
+
+  if (!productId) {
+    console.error('❌ [LOCK WITH PAYMENT] No product ID provided');
+    return sendBadRequest(res, 'Product ID is required');
+  }
+
+  // Validate duration
+  if (!LOCK_FEE_CONFIG[duration]) {
+    return sendBadRequest(res, 'Invalid lock duration. Use 3 hours lock.');
+  }
+
+  try {
+    // 1. Get product details
+    console.log('🔒💰 [LOCK WITH PAYMENT] Finding product:', productId);
+    const product = await Product.findById(productId).populate('store');
+
+    if (!product) {
+      return sendNotFound(res, 'Product not found');
+    }
+
+    if (!product.isActive || !product.inventory.isAvailable) {
+      return sendBadRequest(res, 'Product is not available for purchase');
+    }
+
+    // Check stock
+    if (!product.inventory.unlimited && product.inventory.stock < quantity) {
+      return sendBadRequest(res, `Only ${product.inventory.stock} items available in stock`);
+    }
+
+    // Check if product is already locked (prevent double charging)
+    // Only check for NON-EXPIRED locks
+    const existingCart = await Cart.getActiveCart(req.userId);
+    if (existingCart) {
+      const now = new Date();
+
+      // Check for non-expired locks
+      const alreadyLocked = existingCart.lockedItems.find((item: any) => {
+        const itemProductId = item.product?._id?.toString() || item.product?.toString();
+        const productMatch = itemProductId === productId;
+        const variantMatch = !variant || (item.variant?.type === variant?.type && item.variant?.value === variant?.value);
+        const isNotExpired = item.expiresAt > now; // Only check non-expired locks
+        return productMatch && variantMatch && isNotExpired;
+      });
+
+      if (alreadyLocked) {
+        console.log('🔒💰 [LOCK WITH PAYMENT] Product already locked (non-expired), rejecting duplicate lock');
+        return sendBadRequest(res, 'This product is already locked. Go to your cart to view or modify your locked items.');
+      }
+
+      // Clean up expired locks for this product/variant combination
+      const expiredLocksCount = existingCart.lockedItems.filter((item: any) => {
+        const itemProductId = item.product?._id?.toString() || item.product?.toString();
+        const productMatch = itemProductId === productId;
+        const variantMatch = !variant || (item.variant?.type === variant?.type && item.variant?.value === variant?.value);
+        const isExpired = item.expiresAt <= now;
+        return productMatch && variantMatch && isExpired;
+      }).length;
+
+      if (expiredLocksCount > 0) {
+        console.log(`🔒💰 [LOCK WITH PAYMENT] Found ${expiredLocksCount} expired locks for this product, cleaning up...`);
+        existingCart.lockedItems = existingCart.lockedItems.filter((item: any) => {
+          const itemProductId = item.product?._id?.toString() || item.product?.toString();
+          const productMatch = itemProductId === productId;
+          const variantMatch = !variant || (item.variant?.type === variant?.type && item.variant?.value === variant?.value);
+          const isExpired = item.expiresAt <= now;
+          // Keep items that DON'T match (other products) OR aren't expired
+          return !(productMatch && variantMatch && isExpired);
+        });
+        await existingCart.save();
+        console.log('🔒💰 [LOCK WITH PAYMENT] Expired locks cleaned up');
+      }
+    }
+
+    // 2. Calculate lock fee
+    const productPrice = product.pricing?.selling || product.price?.current || 0;
+    if (!productPrice || productPrice === 0) {
+      return sendBadRequest(res, 'Product price not available');
+    }
+
+    const { fee: lockFee, percentage: lockFeePercentage } = calculateLockFee(productPrice * quantity, duration);
+    console.log('🔒💰 [LOCK WITH PAYMENT] Lock fee calculated:', { productPrice, lockFee, lockFeePercentage, duration });
+
+    // 3. Process payment
+    const { Wallet } = await import('../models/Wallet');
+    const { Transaction } = await import('../models/Transaction');
+
+    const wallet = await Wallet.findOne({ user: req.userId });
+    if (!wallet) {
+      return sendBadRequest(res, 'Wallet not found. Please set up your wallet first.');
+    }
+
+    console.log('🔒💰 [LOCK WITH PAYMENT] Wallet found:', {
+      available: wallet.balance.available,
+      paybill: wallet.balance.paybill,
+      total: wallet.balance.total
+    });
+
+    // Determine which balance to use
+    let balanceSource: 'wallet' | 'paybill' = 'wallet';
+    let availableBalance = wallet.balance.available;
+
+    if (paymentMethod === 'paybill') {
+      balanceSource = 'paybill';
+      availableBalance = wallet.balance.paybill;
+    }
+
+    if (paymentMethod === 'upi') {
+      // For UPI, we would redirect to Razorpay - for now, return info for frontend
+      return sendSuccess(res, {
+        requiresUpiPayment: true,
+        lockFee,
+        lockFeePercentage,
+        duration,
+        productId,
+        quantity,
+        productName: product.name,
+        productPrice: productPrice * quantity
+      }, 'UPI payment required. Complete payment to lock the item.');
+    }
+
+    // Check balance
+    if (availableBalance < lockFee) {
+      return sendBadRequest(res,
+        `Insufficient ${balanceSource === 'paybill' ? 'PayBill' : 'wallet'} balance. ` +
+        `Required: ₹${lockFee}, Available: ₹${availableBalance}`
+      );
+    }
+
+    // 4. Deduct from wallet/paybill
+    const balanceBefore = wallet.balance.total;
+
+    if (balanceSource === 'paybill') {
+      await wallet.usePayBillBalance(lockFee);
+    } else {
+      await wallet.deductFunds(lockFee);
+    }
+
+    const balanceAfter = wallet.balance.total;
+    console.log('🔒💰 [LOCK WITH PAYMENT] Payment deducted:', { balanceBefore, balanceAfter, lockFee });
+
+    // 5. Create transaction record
+    const transaction = await Transaction.create({
+      user: req.userId,
+      type: 'debit',
+      category: 'spending',
+      amount: lockFee,
+      currency: 'INR',
+      description: `Lock fee for ${product.name} (${duration}h lock)`,
+      source: {
+        type: 'order',
+        reference: product._id,
+        description: `Price lock deposit - ${LOCK_FEE_CONFIG[duration].label}`,
+        metadata: {
+          projectTitle: product.name,
+          storeInfo: product.store ? {
+            name: (product.store as any).name,
+            id: (product.store as any)._id
+          } : undefined
+        }
+      },
+      status: {
+        current: 'completed',
+        history: [{
+          status: 'completed',
+          timestamp: new Date()
+        }]
+      },
+      balanceBefore,
+      balanceAfter,
+      isReversible: true,
+      notes: `Lock duration: ${duration} hours, Payment method: ${balanceSource}`
+    });
+
+    console.log('🔒💰 [LOCK WITH PAYMENT] Transaction created:', transaction.transactionId);
+
+    // 6. Add to cart locked items
+    let cart = await Cart.getActiveCart(req.userId);
+
+    if (!cart) {
+      cart = await Cart.create({
+        user: req.userId,
+        items: [],
+        lockedItems: [],
+        totals: {
+          subtotal: 0, tax: 0, delivery: 0, discount: 0, cashback: 0, total: 0, savings: 0
+        },
+        isActive: true,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      });
+    }
+
+    const expiresAt = new Date(Date.now() + duration * 60 * 60 * 1000);
+    const storeId = typeof product.store === 'object' && (product.store as any)?._id
+      ? (product.store as any)._id
+      : product.store || null;
+
+    // Handle existing cart item - can't have same product in both cart and locked
+    const existingCartItemIndex = cart.items.findIndex((item: any) => {
+      const itemProductId = item.product?._id?.toString() || item.product?.toString();
+      const productMatch = itemProductId === productId;
+      const variantMatch = !variant || (item.variant?.type === variant?.type && item.variant?.value === variant?.value);
+      return productMatch && variantMatch;
+    });
+
+    if (existingCartItemIndex > -1) {
+      const cartItem = cart.items[existingCartItemIndex];
+
+      // Check if this cart item was previously locked (has lock fee already applied)
+      // Only check notes - discount alone doesn't mean lock fee was paid
+      const hasLockFeeApplied = cartItem.notes?.includes('Lock fee');
+
+      if (hasLockFeeApplied) {
+        // This item already has a lock fee applied - don't allow re-locking
+        return sendBadRequest(res, 'This item already has a lock fee applied. Complete your purchase or remove it from cart first.');
+      }
+
+      const cartQty = cartItem.quantity || 1;
+
+      if (cartQty <= quantity) {
+        // Lock quantity >= cart quantity: Remove entire item from cart
+        console.log(`🔒💰 [LOCK WITH PAYMENT] Removing item from cart (cart qty: ${cartQty}, lock qty: ${quantity})`);
+        cart.items.splice(existingCartItemIndex, 1);
+      } else {
+        // Cart has more than we're locking: Reduce cart quantity
+        console.log(`🔒💰 [LOCK WITH PAYMENT] Reducing cart qty from ${cartQty} to ${cartQty - quantity}`);
+        cart.items[existingCartItemIndex].quantity = cartQty - quantity;
+      }
+    }
+
+    // Add new locked item (duplicates are blocked earlier in the function)
+    cart.lockedItems.push({
+      product: productId,
+      store: storeId,
+      quantity,
+      variant,
+      lockedPrice: productPrice,
+      originalPrice: product.pricing?.original || product.price?.original || productPrice,
+      lockedAt: new Date(),
+      expiresAt,
+      notes: `Paid lock - ₹${lockFee} deposit (${lockFeePercentage}%)`,
+      lockFee,
+      lockFeePercentage,
+      lockDuration: duration,
+      paymentMethod: balanceSource,
+      paymentTransactionId: transaction._id,
+      lockPaymentStatus: 'paid',
+      isPaidLock: true
+    } as any);
+
+    await cart.save();
+    console.log('🔒💰 [LOCK WITH PAYMENT] Lock saved successfully');
+
+    // 7. Reload with populated fields
+    const populatedCart = await Cart.findById(cart._id)
+      .populate({
+        path: 'lockedItems.product',
+        select: 'name images pricing store category'
+      })
+      .populate({
+        path: 'lockedItems.store',
+        select: 'name logo location'
+      });
+
+    sendSuccess(res, {
+      cart: populatedCart,
+      lockDetails: {
+        lockFee,
+        lockFeePercentage,
+        duration,
+        expiresAt,
+        transactionId: transaction.transactionId,
+        paymentMethod: balanceSource,
+        message: `Price locked for ${LOCK_FEE_CONFIG[duration].label}. ₹${lockFee} will be deducted from your final payment.`
+      }
+    }, 'Item locked successfully with payment');
+
+  } catch (error) {
+    console.error('❌ [LOCK WITH PAYMENT] Error:', error);
+    throw new AppError(error instanceof Error ? error.message : 'Failed to lock item with payment', 500);
+  }
+});
+
+// Get lock fee options for a product
+export const getLockFeeOptions = asyncHandler(async (req: Request, res: Response) => {
+  console.log('💰 [GET LOCK OPTIONS] Getting lock fee options');
+
+  const { productId, quantity = 1 } = req.query;
+
+  if (!productId) {
+    return sendBadRequest(res, 'Product ID is required');
+  }
+
+  try {
+    const product = await Product.findById(productId);
+
+    if (!product) {
+      return sendNotFound(res, 'Product not found');
+    }
+
+    const productPrice = product.pricing?.selling || product.price?.current || 0;
+    if (!productPrice) {
+      return sendBadRequest(res, 'Product price not available');
+    }
+
+    const totalPrice = productPrice * Number(quantity);
+
+    // Return only 3-hour lock option at 5%
+    const threeHourConfig = LOCK_FEE_CONFIG[3];
+    const options = [{
+      duration: 3,
+      label: threeHourConfig.label,
+      percentage: threeHourConfig.percentage,
+      fee: Math.ceil((totalPrice * threeHourConfig.percentage) / 100)
+    }];
+
+    sendSuccess(res, {
+      productId,
+      productName: product.name,
+      productPrice,
+      quantity: Number(quantity),
+      totalPrice,
+      lockOptions: options
+    }, 'Lock fee options retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [GET LOCK OPTIONS] Error:', error);
+    throw new AppError('Failed to get lock fee options', 500);
   }
 });

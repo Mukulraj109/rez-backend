@@ -258,6 +258,151 @@ export function sanitizeURL(url: string): string | null {
   return trimmed;
 }
 
+/**
+ * Sanitize HTML content - removes dangerous tags while preserving basic formatting
+ * Used for product descriptions, reviews, etc.
+ */
+export function sanitizeHTML(input: string): string {
+  if (!input || typeof input !== 'string') return '';
+
+  let sanitized = input.trim();
+
+  // Remove null bytes
+  sanitized = sanitized.replace(/\0/g, '');
+
+  // Remove script tags and content
+  sanitized = sanitized.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+
+  // Remove iframe tags
+  sanitized = sanitized.replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '');
+
+  // Remove object/embed tags
+  sanitized = sanitized.replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '');
+  sanitized = sanitized.replace(/<embed\b[^<]*(?:(?!<\/embed>)<[^<]*)*<\/embed>/gi, '');
+
+  // Remove inline event handlers (onclick, onerror, etc.)
+  sanitized = sanitized.replace(/on\w+\s*=\s*["'][^"']*["']/gi, '');
+
+  // Remove javascript: protocol from links
+  sanitized = sanitized.replace(/javascript:/gi, '');
+
+  // Remove data: protocol (can be used for XSS)
+  sanitized = sanitized.replace(/data:text\/html/gi, '');
+
+  return sanitized;
+}
+
+/**
+ * Sanitize product text fields (name, description, tags, SEO fields)
+ */
+export function sanitizeProductText(text: string, options?: {
+  maxLength?: number;
+  allowHTML?: boolean;
+  stripTags?: boolean;
+}): string {
+  if (!text || typeof text !== 'string') return '';
+
+  const { maxLength, allowHTML = false, stripTags = true } = options || {};
+
+  let sanitized = text.trim();
+
+  // Remove null bytes
+  sanitized = sanitized.replace(/\0/g, '');
+
+  if (stripTags || !allowHTML) {
+    // Remove all HTML tags if not allowed
+    sanitized = sanitized.replace(/<[^>]*>/g, '');
+  } else {
+    // Sanitize HTML while preserving safe tags
+    sanitized = sanitizeHTML(sanitized);
+  }
+
+  // Remove control characters except newlines and tabs
+  sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+
+  // Trim to max length if specified
+  if (maxLength && sanitized.length > maxLength) {
+    sanitized = sanitized.substring(0, maxLength);
+  }
+
+  return sanitized;
+}
+
+/**
+ * Sanitize product data object
+ */
+export function sanitizeProductData(productData: any): any {
+  if (!productData || typeof productData !== 'object') return productData;
+
+  const sanitized: any = {};
+
+  // Text fields that should be sanitized (no HTML)
+  const textFields = ['name', 'shortDescription', 'brand', 'sku', 'barcode'];
+  const htmlFields = ['description']; // Fields that can contain limited HTML
+  const seoFields = ['metaTitle', 'metaDescription'];
+  const arrayFields = ['tags', 'searchKeywords'];
+
+  // Sanitize text fields (no HTML)
+  for (const field of textFields) {
+    if (productData[field]) {
+      sanitized[field] = sanitizeProductText(productData[field], {
+        stripTags: true,
+        maxLength: field === 'name' ? 200 : undefined
+      });
+    }
+  }
+
+  // Sanitize HTML fields (limited HTML allowed)
+  for (const field of htmlFields) {
+    if (productData[field]) {
+      sanitized[field] = sanitizeProductText(productData[field], {
+        allowHTML: true,
+        stripTags: false
+      });
+    }
+  }
+
+  // Sanitize SEO fields
+  for (const field of seoFields) {
+    if (productData[field]) {
+      sanitized[field] = sanitizeProductText(productData[field], {
+        stripTags: true,
+        maxLength: field === 'metaTitle' ? 60 : 160
+      });
+    }
+  }
+
+  // Sanitize array fields (tags, keywords)
+  for (const field of arrayFields) {
+    if (Array.isArray(productData[field])) {
+      sanitized[field] = productData[field]
+        .filter((item: any) => typeof item === 'string')
+        .map((item: string) => sanitizeProductText(item, { stripTags: true, maxLength: 50 }))
+        .filter((item: string) => item.length > 0);
+    }
+  }
+
+  // Copy over other fields without modification (numbers, booleans, objects)
+  const processedFields = [...textFields, ...htmlFields, ...seoFields, ...arrayFields];
+  for (const key in productData) {
+    if (productData.hasOwnProperty(key) && !processedFields.includes(key)) {
+      sanitized[key] = productData[key];
+    }
+  }
+
+  return sanitized;
+}
+
+/**
+ * Middleware to sanitize product request data
+ */
+export const sanitizeProductRequest = (req: Request, res: Response, next: NextFunction) => {
+  if (req.body && typeof req.body === 'object') {
+    req.body = sanitizeProductData(req.body);
+  }
+  next();
+};
+
 export default {
   sanitizeBody,
   sanitizeQuery,
@@ -268,5 +413,9 @@ export default {
   sanitizeObjectId,
   sanitizeEmail,
   sanitizePhoneNumber,
-  sanitizeURL
+  sanitizeURL,
+  sanitizeHTML,
+  sanitizeProductText,
+  sanitizeProductData,
+  sanitizeProductRequest
 };

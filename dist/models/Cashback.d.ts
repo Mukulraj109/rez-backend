@@ -48,7 +48,9 @@ export declare class CashbackModel {
             isNew: boolean;
             schema: Schema;
             merchantId: string;
+            order: CashbackOrder;
             expiresAt: Date;
+            paymentMethod?: "wallet" | "bank_transfer" | "check" | undefined;
             timeline: Array<{
                 status: CashbackStatus;
                 timestamp: Date;
@@ -60,11 +62,9 @@ export declare class CashbackModel {
             paidAmount?: number | undefined;
             paidAt?: Date | undefined;
             priority: "normal" | "high" | "urgent";
-            paymentMethod?: "wallet" | "bank_transfer" | "check" | undefined;
             reviewedBy?: string | undefined;
             reviewedAt?: Date | undefined;
             rejectionReason?: string | undefined;
-            order: CashbackOrder;
             orderId: string;
             cashbackRate: number;
             customerId: string;

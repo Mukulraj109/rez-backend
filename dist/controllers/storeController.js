@@ -274,13 +274,35 @@ exports.getNearbyStores = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
 exports.getFeaturedStores = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const { limit = 10 } = req.query;
     try {
-        const stores = await Store_1.Store.find({
+        // First, try to get featured stores
+        let stores = await Store_1.Store.find({
             isActive: true,
             isFeatured: true
         })
             .sort({ 'ratings.average': -1, createdAt: -1 })
             .limit(Number(limit))
             .lean();
+        // If no featured stores, get all active stores sorted by rating
+        if (stores.length === 0) {
+            stores = await Store_1.Store.find({
+                isActive: true
+            })
+                .sort({ 'ratings.average': -1, createdAt: -1 })
+                .limit(Number(limit))
+                .lean();
+        }
+        // If featured stores exist but less than limit, fill with other active stores
+        else if (stores.length < Number(limit)) {
+            const featuredIds = stores.map(s => s._id);
+            const additionalStores = await Store_1.Store.find({
+                isActive: true,
+                _id: { $nin: featuredIds }
+            })
+                .sort({ 'ratings.average': -1, createdAt: -1 })
+                .limit(Number(limit) - stores.length)
+                .lean();
+            stores = [...stores, ...additionalStores];
+        }
         (0, response_1.sendSuccess)(res, stores, 'Featured stores retrieved successfully');
     }
     catch (error) {
@@ -870,27 +892,29 @@ exports.getTrendingStores = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
                 orderCount: stat.orderCount,
                 totalRevenue: stat.totalRevenue
             }]));
-        // Build query for stores
+        // Build query for stores - only require isActive, not isVerified
+        // Verified stores will get higher ranking through trending score
         const query = {
-            isActive: true,
-            isVerified: true
+            isActive: true
         };
         if (category) {
             query.category = category;
         }
         // Get stores with analytics
         const stores = await Store_1.Store.find(query)
-            .select('name logo category location ratings analytics contact createdAt')
+            .select('name logo banner category location ratings analytics contact createdAt description')
             .lean();
         // Calculate trending score for each store
         const storesWithScore = stores
             .map(store => {
             const storeId = store._id.toString();
             const orderData = orderStatsMap.get(storeId) || { orderCount: 0, totalRevenue: 0 };
-            // Calculate trending score: (orders * 10) + (views * 1) + (revenue * 0.01)
+            // Calculate trending score: (orders * 10) + (views * 1) + (revenue * 0.01) + (rating * 5)
+            // Added rating factor so new stores without orders still have a score
             const trendingScore = (orderData.orderCount * 10) +
                 (store.analytics?.views || 0) +
-                (orderData.totalRevenue * 0.01);
+                (orderData.totalRevenue * 0.01) +
+                ((store.ratings?.average || 0) * 5);
             return {
                 ...store,
                 trendingScore,
@@ -898,7 +922,7 @@ exports.getTrendingStores = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
                 recentRevenue: orderData.totalRevenue
             };
         })
-            .filter(store => store.trendingScore > 0) // Only stores with activity
+            // Show all active stores, not just ones with activity
             .sort((a, b) => b.trendingScore - a.trendingScore); // Sort by score descending
         // Apply pagination
         const startIndex = (Number(page) - 1) * Number(limit);

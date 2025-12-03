@@ -40,6 +40,27 @@ export declare function sanitizePhoneNumber(phone: string): string | null;
  * Sanitize URL
  */
 export declare function sanitizeURL(url: string): string | null;
+/**
+ * Sanitize HTML content - removes dangerous tags while preserving basic formatting
+ * Used for product descriptions, reviews, etc.
+ */
+export declare function sanitizeHTML(input: string): string;
+/**
+ * Sanitize product text fields (name, description, tags, SEO fields)
+ */
+export declare function sanitizeProductText(text: string, options?: {
+    maxLength?: number;
+    allowHTML?: boolean;
+    stripTags?: boolean;
+}): string;
+/**
+ * Sanitize product data object
+ */
+export declare function sanitizeProductData(productData: any): any;
+/**
+ * Middleware to sanitize product request data
+ */
+export declare const sanitizeProductRequest: (req: Request, res: Response, next: NextFunction) => void;
 declare const _default: {
     sanitizeBody: (req: Request, res: Response, next: NextFunction) => void;
     sanitizeQuery: (req: Request, res: Response, next: NextFunction) => void;
@@ -51,5 +72,9 @@ declare const _default: {
     sanitizeEmail: typeof sanitizeEmail;
     sanitizePhoneNumber: typeof sanitizePhoneNumber;
     sanitizeURL: typeof sanitizeURL;
+    sanitizeHTML: typeof sanitizeHTML;
+    sanitizeProductText: typeof sanitizeProductText;
+    sanitizeProductData: typeof sanitizeProductData;
+    sanitizeProductRequest: (req: Request, res: Response, next: NextFunction) => void;
 };
 export default _default;

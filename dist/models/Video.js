@@ -353,7 +353,16 @@ const VideoSchema = new mongoose_1.Schema({
         index: true
     },
     scheduledAt: Date,
-    expiresAt: Date
+    expiresAt: Date,
+    // User tracking fields
+    likedBy: [{
+            type: mongoose_1.Schema.Types.ObjectId,
+            ref: 'User'
+        }],
+    bookmarkedBy: [{
+            type: mongoose_1.Schema.Types.ObjectId,
+            ref: 'User'
+        }]
 }, {
     timestamps: true,
     toJSON: { virtuals: true },
@@ -371,6 +380,8 @@ VideoSchema.index({ 'engagement.views': -1, isPublished: 1 });
 VideoSchema.index({ 'engagement.likes': -1, isPublished: 1 });
 VideoSchema.index({ moderationStatus: 1 });
 VideoSchema.index({ publishedAt: -1 });
+VideoSchema.index({ bookmarkedBy: 1 });
+VideoSchema.index({ likedBy: 1 });
 // Text search index
 VideoSchema.index({
     title: 'text',
@@ -456,6 +467,29 @@ VideoSchema.methods.toggleLike = async function (userId) {
     }
     await this.save();
     return !isLiked; // Return new like status
+};
+// Method to toggle bookmark
+VideoSchema.methods.toggleBookmark = async function (userId) {
+    const userObjectId = new mongoose_1.default.Types.ObjectId(userId);
+    // Initialize bookmarkedBy if not exists
+    if (!this.bookmarkedBy) {
+        this.bookmarkedBy = [];
+    }
+    // Initialize engagement if not exists
+    if (!this.engagement) {
+        this.engagement = { views: 0, likes: [], shares: 0, comments: 0, saves: 0, reports: 0 };
+    }
+    const isBookmarked = this.bookmarkedBy.some((id) => id.equals(userObjectId));
+    if (isBookmarked) {
+        this.bookmarkedBy = this.bookmarkedBy.filter((id) => !id.equals(userObjectId));
+    }
+    else {
+        this.bookmarkedBy.push(userObjectId);
+    }
+    // Update engagement.saves count
+    this.engagement.saves = this.bookmarkedBy.length;
+    await this.save();
+    return !isBookmarked; // Return new bookmark status
 };
 // Method to add comment (simplified)
 VideoSchema.methods.addComment = async function (userId, content) {

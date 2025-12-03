@@ -38,6 +38,7 @@ export declare const getDiscountAnalytics: (req: Request, res: Response) => Prom
  * GET /api/discounts/bill-payment
  * Get available bill payment discounts
  * Supports store-specific filtering (Phase 2)
+ * Returns ALL discounts (regardless of minOrderValue) - frontend handles eligibility display
  */
 export declare const getBillPaymentDiscounts: (req: Request, res: Response) => Promise<void>;
 /**

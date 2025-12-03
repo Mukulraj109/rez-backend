@@ -54,6 +54,11 @@ export interface IProduct extends Document {
         isActive: boolean;
         conditions?: string[];
     };
+    relatedProducts?: mongoose.Types.ObjectId[];
+    frequentlyBoughtWith?: Array<{
+        product: mongoose.Types.ObjectId;
+        purchaseCount: number;
+    }>;
     shipping?: {
         estimatedDelivery?: string;
         [key: string]: any;
@@ -86,6 +91,9 @@ export interface IProduct extends Document {
     publishedAt?: Date;
     createdAt: Date;
     updatedAt: Date;
+    isDeleted?: boolean;
+    deletedAt?: Date;
+    deletedBy?: mongoose.Types.ObjectId;
 }
 export declare const MProduct: mongoose.Model<any, {}, {}, {}, any, any>;
 export declare class ProductModel {

@@ -58,7 +58,7 @@ const WishlistSchema = new mongoose_1.Schema({
             itemType: {
                 type: String,
                 required: true,
-                enum: ['Product', 'Store', 'Video']
+                enum: ['Product', 'Store', 'Video', 'Discount']
             },
             itemId: {
                 type: mongoose_1.Schema.Types.ObjectId,
@@ -100,7 +100,24 @@ const WishlistSchema = new mongoose_1.Schema({
                     type: String,
                     trim: true,
                     lowercase: true
-                }]
+                }],
+            // Discount snapshot - stores deal info at save time
+            discountSnapshot: {
+                discountId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Discount' },
+                name: { type: String },
+                description: { type: String },
+                type: { type: String, enum: ['percentage', 'fixed', 'flat'] },
+                value: { type: Number },
+                minOrderValue: { type: Number },
+                maxDiscount: { type: Number },
+                validFrom: { type: Date },
+                validUntil: { type: Date },
+                storeId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Store' },
+                storeName: { type: String },
+                productId: { type: mongoose_1.Schema.Types.ObjectId, ref: 'Product' },
+                productName: { type: String },
+                savedAt: { type: Date }
+            }
         }],
     category: {
         type: String,

@@ -1,0 +1,522 @@
+2025-12-01 12:09:06 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/controllers/productController.ts[0m:[93m324[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'filterHash'.
+
+[7m324[0m     const filterHash = generateQueryCacheKey({ minPrice, maxPrice, rating, sortBy, page, limit });
+[7m   [0m [91m          ~~~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m325[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'cacheKey'.
+
+[7m325[0m     const cacheKey = CacheKeys.productsByCategory(categorySlug, filterHash);
+[7m   [0m [91m          ~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m404[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'filterHash'.
+
+[7m404[0m     const filterHash = generateQueryCacheKey({ minPrice, maxPrice, rating, sortBy, page, limit });
+[7m   [0m [91m          ~~~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m405[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'cacheKey'.
+
+[7m405[0m     const cacheKey = CacheKeys.productsByCategory(categorySlug, filterHash);
+[7m   [0m [91m          ~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m440[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'filterHash'.
+
+[7m440[0m     const filterHash = generateQueryCacheKey({ category, minPrice, maxPrice, sortBy, page, limit });
+[7m   [0m [91m          ~~~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m441[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'cacheKey'.
+
+[7m441[0m     const cacheKey = CacheKeys.productsByStore(storeId, filterHash);
+[7m   [0m [91m          ~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m516[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'filterHash'.
+
+[7m516[0m     const filterHash = generateQueryCacheKey({ category, minPrice, maxPrice, sortBy, page, limit });
+[7m   [0m [91m          ~~~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m517[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'cacheKey'.
+
+[7m517[0m     const cacheKey = CacheKeys.productsByStore(storeId, filterHash);
+[7m   [0m [91m          ~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m736[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'filterHash'.
+
+[7m736[0m     const filterHash = generateQueryCacheKey({
+[7m   [0m [91m          ~~~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m739[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'cacheKey'.
+
+[7m739[0m     const cacheKey = CacheKeys.productSearch(searchText as string, filterHash);
+[7m   [0m [91m          ~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m801[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'filterHash'.
+
+[7m801[0m     const filterHash = generateQueryCacheKey({
+[7m   [0m [91m          ~~~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m804[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'cacheKey'.
+
+[7m804[0m     const cacheKey = CacheKeys.productSearch(searchText as string, filterHash);
+[7m   [0m [91m          ~~~~~~~~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/controllers/productController.ts[0m:[93m324[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'filterHash'.
+
+[7m324[0m     const filterHash = generateQueryCacheKey({ minPrice, maxPrice, rating, sortBy, page, limit });
+[7m   [0m [91m          ~~~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m325[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'cacheKey'.
+
+[7m325[0m     const cacheKey = CacheKeys.productsByCategory(categorySlug, filterHash);
+[7m   [0m [91m          ~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m404[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'filterHash'.
+
+[7m404[0m     const filterHash = generateQueryCacheKey({ minPrice, maxPrice, rating, sortBy, page, limit });
+[7m   [0m [91m          ~~~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m405[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'cacheKey'.
+
+[7m405[0m     const cacheKey = CacheKeys.productsByCategory(categorySlug, filterHash);
+[7m   [0m [91m          ~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m440[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'filterHash'.
+
+[7m440[0m     const filterHash = generateQueryCacheKey({ category, minPrice, maxPrice, sortBy, page, limit });
+[7m   [0m [91m          ~~~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m441[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'cacheKey'.
+
+[7m441[0m     const cacheKey = CacheKeys.productsByStore(storeId, filterHash);
+[7m   [0m [91m          ~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m516[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'filterHash'.
+
+[7m516[0m     const filterHash = generateQueryCacheKey({ category, minPrice, maxPrice, sortBy, page, limit });
+[7m   [0m [91m          ~~~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m517[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'cacheKey'.
+
+[7m517[0m     const cacheKey = CacheKeys.productsByStore(storeId, filterHash);
+[7m   [0m [91m          ~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m736[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'filterHash'.
+
+[7m736[0m     const filterHash = generateQueryCacheKey({
+[7m   [0m [91m          ~~~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m739[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'cacheKey'.
+
+[7m739[0m     const cacheKey = CacheKeys.productSearch(searchText as string, filterHash);
+[7m   [0m [91m          ~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m801[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'filterHash'.
+
+[7m801[0m     const filterHash = generateQueryCacheKey({
+[7m   [0m [91m          ~~~~~~~~~~[0m
+[96msrc/controllers/productController.ts[0m:[93m804[0m:[93m11[0m - [91merror[0m[90m TS2451: [0mCannot redeclare block-scoped variable 'cacheKey'.
+
+[7m804[0m     const cacheKey = CacheKeys.productSearch(searchText as string, filterHash);
+[7m   [0m [91m          ~~~~~~~~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[2451,2451,2451,2451,2451,2451,2451,2451,2451,2451,2451,2451]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/controllers/productController.ts\u001b[0m:\u001b[93m324\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2451: \u001b[0mCannot redeclare block-scoped variable 'filterHash'.\r\n\r\n\u001b[7m324\u001b[0m     const filterHash = generateQueryCacheKey({ minPrice, maxPrice, rating, sortBy, page, limit });\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/productController.ts\u001b[0m:\u001b[93m325\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2451: \u001b[0mCannot redeclare block-scoped variable 'cacheKey'.\r\n\r\n\u001b[7m325\u001b[0m     const cacheKey = CacheKeys.productsByCategory(categorySlug, filterHash);\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/productController.ts\u001b[0m:\u001b[93m404\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2451: \u001b[0mCannot redeclare block-scoped variable 'filterHash'.\r\n\r\n\u001b[7m404\u001b[0m     const filterHash = generateQueryCacheKey({ minPrice, maxPrice, rating, sortBy, page, limit });\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/productController.ts\u001b[0m:\u001b[93m405\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2451: \u001b[0mCannot redeclare block-scoped variable 'cacheKey'.\r\n\r\n\u001b[7m405\u001b[0m     const cacheKey = CacheKeys.productsByCategory(categorySlug, filterHash);\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/productController.ts\u001b[0m:\u001b[93m440\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2451: \u001b[0mCannot redeclare block-scoped variable 'filterHash'.\r\n\r\n\u001b[7m440\u001b[0m     const filterHash = generateQueryCacheKey({ category, minPrice, maxPrice, sortBy, page, limit });\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/productController.ts\u001b[0m:\u001b[93m441\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2451: \u001b[0mCannot redeclare block-scoped variable 'cacheKey'.\r\n\r\n\u001b[7m441\u001b[0m     const cacheKey = CacheKeys.productsByStore(storeId, filterHash);\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/productController.ts\u001b[0m:\u001b[93m516\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2451: \u001b[0mCannot redeclare block-scoped variable 'filterHash'.\r\n\r\n\u001b[7m516\u001b[0m     const filterHash = generateQueryCacheKey({ category, minPrice, maxPrice, sortBy, page, limit });\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/productController.ts\u001b[0m:\u001b[93m517\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2451: \u001b[0mCannot redeclare block-scoped variable 'cacheKey'.\r\n\r\n\u001b[7m517\u001b[0m     const cacheKey = CacheKeys.productsByStore(storeId, filterHash);\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/productController.ts\u001b[0m:\u001b[93m736\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2451: \u001b[0mCannot redeclare block-scoped variable 'filterHash'.\r\n\r\n\u001b[7m736\u001b[0m     const filterHash = generateQueryCacheKey({\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/productController.ts\u001b[0m:\u001b[93m739\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2451: \u001b[0mCannot redeclare block-scoped variable 'cacheKey'.\r\n\r\n\u001b[7m739\u001b[0m     const cacheKey = CacheKeys.productSearch(searchText as string, filterHash);\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/productController.ts\u001b[0m:\u001b[93m801\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2451: \u001b[0mCannot redeclare block-scoped variable 'filterHash'.\r\n\r\n\u001b[7m801\u001b[0m     const filterHash = generateQueryCacheKey({\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/controllers/productController.ts\u001b[0m:\u001b[93m804\u001b[0m:\u001b[93m11\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2451: \u001b[0mCannot redeclare block-scoped variable 'cacheKey'.\r\n\r\n\u001b[7m804\u001b[0m     const cacheKey = CacheKeys.productSearch(searchText as string, filterHash);\r\n\u001b[7m   \u001b[0m \u001b[91m          ~~~~~~~~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Mon Dec 01 2025 12:09:06 GMT+0530 (India Standard Time)","process":{"pid":32420,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1092259840,"heapTotal":1030115328,"heapUsed":989614048,"external":26437049,"arrayBuffers":23118496}},"os":{"loadavg":[0,0,0],"uptime":151529.14},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}
+2025-12-01 12:13:56 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/products.ts[0m:[93m319[0m:[93m80[0m - [91merror[0m[90m TS2339: [0mProperty 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[] | (FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })'.
+  Property 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[]'.
+
+[7m319[0m           message: `SKU "${sku}" is already used by product "${existingProduct.name}"`,
+[7m   [0m [91m                                                                               ~~~~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/products.ts[0m:[93m319[0m:[93m80[0m - [91merror[0m[90m TS2339: [0mProperty 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[] | (FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })'.
+  Property 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[]'.
+
+[7m319[0m           message: `SKU "${sku}" is already used by product "${existingProduct.name}"`,
+[7m   [0m [91m                                                                               ~~~~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[2339]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m319\u001b[0m:\u001b[93m80\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2339: \u001b[0mProperty 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[] | (FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })'.\r\n  Property 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[]'.\r\n\r\n\u001b[7m319\u001b[0m           message: `SKU \"${sku}\" is already used by product \"${existingProduct.name}\"`,\r\n\u001b[7m   \u001b[0m \u001b[91m                                                                               ~~~~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Mon Dec 01 2025 12:13:56 GMT+0530 (India Standard Time)","process":{"pid":4792,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1570713600,"heapTotal":1503457280,"heapUsed":1440149672,"external":29862478,"arrayBuffers":26545432}},"os":{"loadavg":[0,0,0],"uptime":151818.984},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}
+2025-12-01 12:27:03 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/products.ts[0m:[93m319[0m:[93m80[0m - [91merror[0m[90m TS2339: [0mProperty 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[] | (FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })'.
+  Property 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[]'.
+
+[7m319[0m           message: `SKU "${sku}" is already used by product "${existingProduct.name}"`,
+[7m   [0m [91m                                                                               ~~~~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/products.ts[0m:[93m319[0m:[93m80[0m - [91merror[0m[90m TS2339: [0mProperty 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[] | (FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })'.
+  Property 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[]'.
+
+[7m319[0m           message: `SKU "${sku}" is already used by product "${existingProduct.name}"`,
+[7m   [0m [91m                                                                               ~~~~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[2339]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m319\u001b[0m:\u001b[93m80\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2339: \u001b[0mProperty 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[] | (FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })'.\r\n  Property 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[]'.\r\n\r\n\u001b[7m319\u001b[0m           message: `SKU \"${sku}\" is already used by product \"${existingProduct.name}\"`,\r\n\u001b[7m   \u001b[0m \u001b[91m                                                                               ~~~~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Mon Dec 01 2025 12:27:03 GMT+0530 (India Standard Time)","process":{"pid":37832,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1573445632,"heapTotal":1505292288,"heapUsed":1441656832,"external":29925520,"arrayBuffers":26608474}},"os":{"loadavg":[0,0,0],"uptime":152606.203},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}
+2025-12-01 12:28:57 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/products.ts[0m:[93m319[0m:[93m80[0m - [91merror[0m[90m TS2339: [0mProperty 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[] | (FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })'.
+  Property 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[]'.
+
+[7m319[0m           message: `SKU "${sku}" is already used by product "${existingProduct.name}"`,
+[7m   [0m [91m                                                                               ~~~~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/products.ts[0m:[93m319[0m:[93m80[0m - [91merror[0m[90m TS2339: [0mProperty 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[] | (FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })'.
+  Property 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[]'.
+
+[7m319[0m           message: `SKU "${sku}" is already used by product "${existingProduct.name}"`,
+[7m   [0m [91m                                                                               ~~~~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[2339]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m319\u001b[0m:\u001b[93m80\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2339: \u001b[0mProperty 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[] | (FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })'.\r\n  Property 'name' does not exist on type '(FlattenMaps<any> & Required<{ _id: unknown; }> & { __v: number; })[]'.\r\n\r\n\u001b[7m319\u001b[0m           message: `SKU \"${sku}\" is already used by product \"${existingProduct.name}\"`,\r\n\u001b[7m   \u001b[0m \u001b[91m                                                                               ~~~~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Mon Dec 01 2025 12:28:57 GMT+0530 (India Standard Time)","process":{"pid":38180,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1569320960,"heapTotal":1503834112,"heapUsed":1443455816,"external":29867858,"arrayBuffers":26550812}},"os":{"loadavg":[0,0,0],"uptime":152720.531},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}
+2025-12-01 12:31:30 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/bulkImport.ts[0m:[93m8[0m:[93m10[0m - [91merror[0m[90m TS2305: [0mModule '"../middleware/merchantAuth"' has no exported member 'authenticateMerchant'.
+
+[7m8[0m import { authenticateMerchant } from '../middleware/merchantAuth';
+[7m [0m [91m         ~~~~~~~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/bulkImport.ts[0m:[93m8[0m:[93m38[0m - [91merror[0m[90m TS1149: [0mFile name 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/middleware/merchantAuth.ts' differs from already included file name 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/middleware/merchantauth.ts' only in casing.
+  The file is in the program because:
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/auth.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/merchants.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/merchant-profile.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/products.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/categories.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/uploads.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/orders.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/cashback.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/dashboard.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/analytics.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/sync.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/team.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/audit.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/onboarding.ts'
+    Imported via '../../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/routes/merchant/orders.ts'
+    Imported via '../../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/routes/merchant/cashback.ts'
+    Imported via '../../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/routes/merchant/notifications.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/bulk.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/stores.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/offers.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/storeGallery.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/discounts.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/storeVouchers.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/outlets.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/videos.ts'
+    Imported via '../middleware/merchantAuth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/bulkImport.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/product-restore.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/reviews.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/variants.ts'
+    Root file specified for compilation
+
+[7m8[0m import { authenticateMerchant } from '../middleware/merchantAuth';
+[7m [0m [91m                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  [96msrc/merchantroutes/auth.ts[0m:[93m10[0m:[93m32[0m
+    [7m10[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m  [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/merchants.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/merchant-profile.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/products.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/categories.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/uploads.ts[0m:[93m5[0m:[93m32[0m
+    [7m5[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/orders.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/cashback.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/dashboard.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/analytics.ts[0m:[93m9[0m:[93m32[0m
+    [7m9[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/sync.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/team.ts[0m:[93m5[0m:[93m32[0m
+    [7m5[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/audit.ts[0m:[93m5[0m:[93m32[0m
+    [7m5[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/onboarding.ts[0m:[93m4[0m:[93m56[0m
+    [7m4[0m import { authMiddleware as authenticateMerchant } from '../middleware/merchantauth';
+    [7m [0m [96m                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/routes/merchant/orders.ts[0m:[93m9[0m:[93m56[0m
+    [7m9[0m import { authMiddleware as authenticateMerchant } from '../../middleware/merchantauth';
+    [7m [0m [96m                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/routes/merchant/cashback.ts[0m:[93m14[0m:[93m56[0m
+    [7m14[0m import { authMiddleware as authenticateMerchant } from '../../middleware/merchantauth';
+    [7m  [0m [96m                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/routes/merchant/notifications.ts[0m:[93m24[0m:[93m56[0m
+    [7m24[0m import { authMiddleware as authenticateMerchant } from '../../middleware/merchantauth';
+    [7m  [0m [96m                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/bulk.ts[0m:[93m5[0m:[93m32[0m
+    [7m5[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/stores.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/offers.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/storeGallery.ts[0m:[93m5[0m:[93m32[0m
+    [7m5[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/discounts.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/storeVouchers.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/outlets.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/videos.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/product-restore.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/reviews.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/variants.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/merchantroutes/bulkImport.ts[0m:[93m8[0m:[93m10[0m - [91merror[0m[90m TS2305: [0mModule '"../middleware/merchantAuth"' has no exported member 'authenticateMerchant'.
+
+[7m8[0m import { authenticateMerchant } from '../middleware/merchantAuth';
+[7m [0m [91m         ~~~~~~~~~~~~~~~~~~~~[0m
+[96msrc/merchantroutes/bulkImport.ts[0m:[93m8[0m:[93m38[0m - [91merror[0m[90m TS1149: [0mFile name 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/middleware/merchantAuth.ts' differs from already included file name 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/middleware/merchantauth.ts' only in casing.
+  The file is in the program because:
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/auth.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/merchants.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/merchant-profile.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/products.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/categories.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/uploads.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/orders.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/cashback.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/dashboard.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/analytics.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/sync.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/team.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/audit.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/onboarding.ts'
+    Imported via '../../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/routes/merchant/orders.ts'
+    Imported via '../../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/routes/merchant/cashback.ts'
+    Imported via '../../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/routes/merchant/notifications.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/bulk.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/stores.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/offers.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/storeGallery.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/discounts.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/storeVouchers.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/outlets.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/videos.ts'
+    Imported via '../middleware/merchantAuth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/bulkImport.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/product-restore.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/reviews.ts'
+    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/variants.ts'
+    Root file specified for compilation
+
+[7m8[0m import { authenticateMerchant } from '../middleware/merchantAuth';
+[7m [0m [91m                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  [96msrc/merchantroutes/auth.ts[0m:[93m10[0m:[93m32[0m
+    [7m10[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m  [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/merchants.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/merchant-profile.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/products.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/categories.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/uploads.ts[0m:[93m5[0m:[93m32[0m
+    [7m5[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/orders.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/cashback.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/dashboard.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/analytics.ts[0m:[93m9[0m:[93m32[0m
+    [7m9[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/sync.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/team.ts[0m:[93m5[0m:[93m32[0m
+    [7m5[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/audit.ts[0m:[93m5[0m:[93m32[0m
+    [7m5[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/onboarding.ts[0m:[93m4[0m:[93m56[0m
+    [7m4[0m import { authMiddleware as authenticateMerchant } from '../middleware/merchantauth';
+    [7m [0m [96m                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/routes/merchant/orders.ts[0m:[93m9[0m:[93m56[0m
+    [7m9[0m import { authMiddleware as authenticateMerchant } from '../../middleware/merchantauth';
+    [7m [0m [96m                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/routes/merchant/cashback.ts[0m:[93m14[0m:[93m56[0m
+    [7m14[0m import { authMiddleware as authenticateMerchant } from '../../middleware/merchantauth';
+    [7m  [0m [96m                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/routes/merchant/notifications.ts[0m:[93m24[0m:[93m56[0m
+    [7m24[0m import { authMiddleware as authenticateMerchant } from '../../middleware/merchantauth';
+    [7m  [0m [96m                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/bulk.ts[0m:[93m5[0m:[93m32[0m
+    [7m5[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/stores.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/offers.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/storeGallery.ts[0m:[93m5[0m:[93m32[0m
+    [7m5[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/discounts.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/storeVouchers.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/outlets.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/videos.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/product-restore.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/reviews.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+  [96msrc/merchantroutes/variants.ts[0m:[93m2[0m:[93m32[0m
+    [7m2[0m import { authMiddleware } from '../middleware/merchantauth';
+    [7m [0m [96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+    File is included via import here.
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[2305,1149]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/merchantroutes/bulkImport.ts\u001b[0m:\u001b[93m8\u001b[0m:\u001b[93m10\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2305: \u001b[0mModule '\"../middleware/merchantAuth\"' has no exported member 'authenticateMerchant'.\r\n\r\n\u001b[7m8\u001b[0m import { authenticateMerchant } from '../middleware/merchantAuth';\r\n\u001b[7m \u001b[0m \u001b[91m         ~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n\u001b[96msrc/merchantroutes/bulkImport.ts\u001b[0m:\u001b[93m8\u001b[0m:\u001b[93m38\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS1149: \u001b[0mFile name 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/middleware/merchantAuth.ts' differs from already included file name 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/middleware/merchantauth.ts' only in casing.\r\n  The file is in the program because:\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/auth.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/merchants.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/merchant-profile.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/products.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/categories.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/uploads.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/orders.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/cashback.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/dashboard.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/analytics.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/sync.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/team.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/audit.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/onboarding.ts'\r\n    Imported via '../../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/routes/merchant/orders.ts'\r\n    Imported via '../../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/routes/merchant/cashback.ts'\r\n    Imported via '../../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/routes/merchant/notifications.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/bulk.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/stores.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/offers.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/storeGallery.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/discounts.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/storeVouchers.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/outlets.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/videos.ts'\r\n    Imported via '../middleware/merchantAuth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/bulkImport.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/product-restore.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/reviews.ts'\r\n    Imported via '../middleware/merchantauth' from file 'C:/Users/Mukul raj/Downloads/rez-new/rez-app/user-backend/src/merchantroutes/variants.ts'\r\n    Root file specified for compilation\r\n\r\n\u001b[7m8\u001b[0m import { authenticateMerchant } from '../middleware/merchantAuth';\r\n\u001b[7m \u001b[0m \u001b[91m                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n\r\n  \u001b[96msrc/merchantroutes/auth.ts\u001b[0m:\u001b[93m10\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m10\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m  \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/merchants.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/merchant-profile.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/products.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/categories.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/uploads.ts\u001b[0m:\u001b[93m5\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m5\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/orders.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/cashback.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/dashboard.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/analytics.ts\u001b[0m:\u001b[93m9\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m9\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/sync.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/team.ts\u001b[0m:\u001b[93m5\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m5\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/audit.ts\u001b[0m:\u001b[93m5\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m5\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/onboarding.ts\u001b[0m:\u001b[93m4\u001b[0m:\u001b[93m56\u001b[0m\r\n    \u001b[7m4\u001b[0m import { authMiddleware as authenticateMerchant } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/routes/merchant/orders.ts\u001b[0m:\u001b[93m9\u001b[0m:\u001b[93m56\u001b[0m\r\n    \u001b[7m9\u001b[0m import { authMiddleware as authenticateMerchant } from '../../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/routes/merchant/cashback.ts\u001b[0m:\u001b[93m14\u001b[0m:\u001b[93m56\u001b[0m\r\n    \u001b[7m14\u001b[0m import { authMiddleware as authenticateMerchant } from '../../middleware/merchantauth';\r\n    \u001b[7m  \u001b[0m \u001b[96m                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/routes/merchant/notifications.ts\u001b[0m:\u001b[93m24\u001b[0m:\u001b[93m56\u001b[0m\r\n    \u001b[7m24\u001b[0m import { authMiddleware as authenticateMerchant } from '../../middleware/merchantauth';\r\n    \u001b[7m  \u001b[0m \u001b[96m                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/bulk.ts\u001b[0m:\u001b[93m5\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m5\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/stores.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/offers.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/storeGallery.ts\u001b[0m:\u001b[93m5\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m5\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/discounts.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/storeVouchers.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/outlets.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/videos.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/product-restore.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/reviews.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n  \u001b[96msrc/merchantroutes/variants.ts\u001b[0m:\u001b[93m2\u001b[0m:\u001b[93m32\u001b[0m\r\n    \u001b[7m2\u001b[0m import { authMiddleware } from '../middleware/merchantauth';\r\n    \u001b[7m \u001b[0m \u001b[96m                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n    File is included via import here.\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Mon Dec 01 2025 12:31:30 GMT+0530 (India Standard Time)","process":{"pid":13736,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1622401024,"heapTotal":1558401024,"heapUsed":1500539440,"external":29854294,"arrayBuffers":26537248}},"os":{"loadavg":[0,0,0],"uptime":152873.078},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}
+2025-12-01 17:23:41 [error] [user-backend]: uncaughtException: ⨯ Unable to compile TypeScript:
+[96msrc/controllers/cartController.ts[0m:[93m1286[0m:[93m7[0m - [91merror[0m[90m TS2322: [0mType 'unknown' is not assignable to type 'ObjectId | undefined'.
+
+[7m1286[0m       cart.lockedItems[existingLockIndex].paymentTransactionId = transaction._id;
+[7m    [0m [91m      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+TSError: ⨯ Unable to compile TypeScript:
+[96msrc/controllers/cartController.ts[0m:[93m1286[0m:[93m7[0m - [91merror[0m[90m TS2322: [0mType 'unknown' is not assignable to type 'ObjectId | undefined'.
+
+[7m1286[0m       cart.lockedItems[existingLockIndex].paymentTransactionId = transaction._id;
+[7m    [0m [91m      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+    at createTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:280:16)
+    at reportTSError (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:283:23)
+    at getOutput (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:436:21)
+    at Object.compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:658:47)
+    at m._compile (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:789:36)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)
+    at require.extensions.<computed> [as .ts] (C:\Users\Mukul raj\Downloads\rez-new\rez-app\user-backend\node_modules\@isaacs\ts-node-temp-fork-for-pr-2009\dist\index.js:792:16)
+    at Module.load (node:internal/modules/cjs/loader:1208:32)
+    at Module._load (node:internal/modules/cjs/loader:1024:12)
+    at Module.require (node:internal/modules/cjs/loader:1233:19) {"error":{"diagnosticCodes":[2322]},"stack":"TSError: ⨯ Unable to compile TypeScript:\n\u001b[96msrc/controllers/cartController.ts\u001b[0m:\u001b[93m1286\u001b[0m:\u001b[93m7\u001b[0m - \u001b[91merror\u001b[0m\u001b[90m TS2322: \u001b[0mType 'unknown' is not assignable to type 'ObjectId | undefined'.\r\n\r\n\u001b[7m1286\u001b[0m       cart.lockedItems[existingLockIndex].paymentTransactionId = transaction._id;\r\n\u001b[7m    \u001b[0m \u001b[91m      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\u001b[0m\r\n\n    at createTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:280:16)\n    at reportTSError (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:283:23)\n    at getOutput (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:436:21)\n    at Object.compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:658:47)\n    at m._compile (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:789:36)\n    at Module._extensions..js (node:internal/modules/cjs/loader:1416:10)\n    at require.extensions.<computed> [as .ts] (C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js:792:16)\n    at Module.load (node:internal/modules/cjs/loader:1208:32)\n    at Module._load (node:internal/modules/cjs/loader:1024:12)\n    at Module.require (node:internal/modules/cjs/loader:1233:19)","exception":true,"date":"Mon Dec 01 2025 17:23:41 GMT+0530 (India Standard Time)","process":{"pid":3272,"uid":null,"gid":null,"cwd":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend","execPath":"C:\\Program Files\\nodejs\\node.exe","version":"v20.14.0","argv":["C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\bin.js","C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\src\\server.ts","src/server.ts"],"memoryUsage":{"rss":1230921728,"heapTotal":1164611584,"heapUsed":1113811440,"external":26378499,"arrayBuffers":23059946}},"os":{"loadavg":[0,0,0],"uptime":170404.328},"trace":[{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"createTSError","line":280,"method":null,"native":false},{"column":23,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"reportTSError","line":283,"method":null,"native":false},{"column":21,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"getOutput","line":436,"method":null,"native":false},{"column":47,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"Object.compile","line":658,"method":"compile","native":false},{"column":36,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"m._compile","line":789,"method":"_compile","native":false},{"column":10,"file":"node:internal/modules/cjs/loader","function":"Module._extensions..js","line":1416,"method":".js","native":false},{"column":16,"file":"C:\\Users\\Mukul raj\\Downloads\\rez-new\\rez-app\\user-backend\\node_modules\\@isaacs\\ts-node-temp-fork-for-pr-2009\\dist\\index.js","function":"require.extensions.<computed> [as .ts]","line":792,"method":"ts]","native":false},{"column":32,"file":"node:internal/modules/cjs/loader","function":"Module.load","line":1208,"method":"load","native":false},{"column":12,"file":"node:internal/modules/cjs/loader","function":"Module._load","line":1024,"method":"_load","native":false},{"column":19,"file":"node:internal/modules/cjs/loader","function":"Module.require","line":1233,"method":"require","native":false}],"environment":"development"}

@@ -142,4 +142,11 @@ router.post('/paybill/create-payment-intent', walletController_1.createPayBillPa
  * @access  Private
  */
 router.post('/paybill/confirm-payment', walletController_1.confirmPayBillPayment);
+/**
+ * @route   POST /api/wallet/dev-topup
+ * @desc    Add test funds to wallet (DEVELOPMENT ONLY)
+ * @body    { amount, type: 'wallet' | 'paybill' }
+ * @access  Private
+ */
+router.post('/dev-topup', walletController_1.devTopup);
 exports.default = router;

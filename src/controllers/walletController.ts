@@ -1490,3 +1490,60 @@ export const confirmPayBillPayment = asyncHandler(async (req: Request, res: Resp
     sendError(res, error.message || 'Failed to confirm payment', 500);
   }
 });
+
+/**
+ * @desc    Add test funds to wallet (DEVELOPMENT ONLY)
+ * @route   POST /api/wallet/dev-topup
+ * @access  Private
+ */
+export const devTopup = asyncHandler(async (req: Request, res: Response) => {
+  // Only allow in development
+  if (process.env.NODE_ENV === 'production') {
+    return sendError(res, 'This endpoint is not available in production', 403);
+  }
+
+  const userId = (req as any).userId;
+  const { amount = 1000, type = 'wallet' } = req.body;
+
+  console.log('🧪 [DEV TOPUP] Adding test funds:', { userId, amount, type });
+
+  if (!userId) {
+    return sendError(res, 'User not authenticated', 401);
+  }
+
+  try {
+    let wallet = await Wallet.findOne({ user: userId });
+
+    if (!wallet) {
+      wallet = new Wallet({
+        user: userId,
+        balance: { total: 0, available: 0, pending: 0, paybill: 0 },
+        currency: 'INR',
+        isActive: true
+      });
+    }
+
+    if (type === 'paybill') {
+      wallet.balance.paybill = (wallet.balance.paybill || 0) + Number(amount);
+    } else {
+      wallet.balance.total = (wallet.balance.total || 0) + Number(amount);
+      wallet.balance.available = (wallet.balance.available || 0) + Number(amount);
+    }
+
+    await wallet.save();
+
+    console.log('✅ [DEV TOPUP] Test funds added:', wallet.balance);
+
+    sendSuccess(res, {
+      wallet: {
+        balance: wallet.balance,
+        currency: wallet.currency
+      },
+      addedAmount: amount,
+      type: type
+    }, `Test ${type} funds added successfully`);
+  } catch (error: any) {
+    console.error('❌ [DEV TOPUP] Error:', error);
+    sendError(res, error.message, 500);
+  }
+});

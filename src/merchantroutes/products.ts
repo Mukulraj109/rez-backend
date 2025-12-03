@@ -3,15 +3,24 @@ import { authMiddleware } from '../middleware/merchantauth';
 import { validateRequest, validateQuery, validateParams } from '../middleware/merchantvalidation';
 // Using unified Product model instead of MProduct for real-time sync with user app
 import { Product } from '../models/Product';
+import { MProduct as MerchantProduct } from '../models/MerchantProduct';
 import { Store } from '../models/Store';
 import { Category } from '../models/Category';
 import { Review } from '../models/Review';
 import Joi from 'joi';
-import mongoose from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import SMSService from '../services/SMSService';
 import { Merchant } from '../models/Merchant';
 import AuditService from '../services/AuditService';
 import CloudinaryService from '../services/CloudinaryService';
+// Import rate limiters and sanitization
+import {
+  productGetLimiter,
+  productWriteLimiter,
+  productDeleteLimiter,
+  productBulkLimiter
+} from '../middleware/rateLimiter';
+import { sanitizeProductRequest } from '../middleware/sanitization';
 
 const router = Router();
 
@@ -107,7 +116,7 @@ const generateSKU = async (merchantId: string, productName: string): Promise<str
 // @route   GET /api/products
 // @desc    Get merchant products with search and filtering
 // @access  Private
-router.get('/', validateQuery(searchProductsSchema), async (req, res) => {
+router.get('/', productGetLimiter, validateQuery(searchProductsSchema), async (req, res) => {
   try {
    const {
   query,
@@ -269,13 +278,81 @@ router.get('/', validateQuery(searchProductsSchema), async (req, res) => {
     });
   }
 });
+// @route   GET /api/products/validate-sku
+// @desc    Validate if SKU is unique
+// @access  Private
+router.get('/validate-sku', productGetLimiter, async (req, res) => {
+  try {
+    const { sku, excludeProductId } = req.query;
+    const merchantId = req.merchantId;
+
+    if (!sku || typeof sku !== 'string' || !sku.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'SKU is required'
+      });
+    }
+
+    // Build query to check for existing SKU
+    const query: any = {
+      sku: { $regex: new RegExp(`^${sku.trim()}$`, 'i') }, // Case-insensitive exact match
+      merchantId: new mongoose.Types.ObjectId(merchantId)
+    };
+
+    // Exclude specific product if provided (for edit mode)
+    if (excludeProductId && mongoose.Types.ObjectId.isValid(excludeProductId as string)) {
+      query._id = { $ne: new mongoose.Types.ObjectId(excludeProductId as string) };
+    }
+
+    // Check if SKU exists in MerchantProduct
+    const existingProduct = await MerchantProduct.findOne(query).select('name sku').lean() as { name: string; sku: string } | null;
+
+    if (existingProduct) {
+      // SKU is already in use
+      const timestamp = Date.now().toString().slice(-4);
+      const suggestion = `${sku.trim()}-${timestamp}`;
+
+      return res.json({
+        success: true,
+        data: {
+          isAvailable: false,
+          message: `SKU "${sku}" is already used by product "${existingProduct.name}"`,
+          suggestion
+        }
+      });
+    }
+
+    // SKU is available
+    return res.json({
+      success: true,
+      data: {
+        isAvailable: true,
+        message: 'SKU is available'
+      }
+    });
+  } catch (error: any) {
+    console.error('Validate SKU error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to validate SKU',
+      error: error.message
+    });
+  }
+});
+
 // @route   GET /api/products/categories
 // @desc    Get all available product categories from Category model
 // @access  Private
-router.get('/categories', async (req, res) => {
+router.get('/categories', productGetLimiter, async (req, res) => {
   try {
-    // Fetch all active categories from Category model
-    const categories = await Category.find({ isActive: true })
+    // Fetch only PARENT categories (no parentCategory) - subcategories are fetched separately
+    const categories = await Category.find({
+      isActive: true,
+      $or: [
+        { parentCategory: null },
+        { parentCategory: { $exists: false } }
+      ]
+    })
       .select('name slug _id')
       .sort({ name: 1 })
       .lean();
@@ -301,13 +378,14 @@ router.get('/categories', async (req, res) => {
       id: cat._id ? cat._id.toString() : ''
     }));
 
-    // Add any used categories that might not be in the Category model (for backward compatibility)
+    // Add any used parent categories that might not be in the list (for backward compatibility)
     const usedCategoryIds = new Set(categories.map((c: any) => c._id ? c._id.toString() : ''));
     for (const usedCatId of usedCategories) {
       if (usedCatId && !usedCategoryIds.has(usedCatId.toString())) {
-        // This category is used but not in Category model - try to find it
+        // This category is used but not in the list - check if it's a parent category
         const cat = await Category.findById(usedCatId);
-        if (cat) {
+        // Only add if it's a parent category (no parentCategory)
+        if (cat && !cat.parentCategory) {
           categoryList.push({
             label: cat.name,
             value: cat.slug || cat.name.toLowerCase().replace(/\s+/g, '-'),
@@ -333,7 +411,7 @@ router.get('/categories', async (req, res) => {
 // @route   GET /api/products/:id
 // @desc    Get single product
 // @access  Private
-router.get('/:id', validateParams(productIdSchema), async (req, res) => {
+router.get('/:id', productGetLimiter, validateParams(productIdSchema), async (req, res) => {
   try {
     const productId = req.params.id;
     const merchantId = req.merchantId;
@@ -406,7 +484,7 @@ router.get('/:id', validateParams(productIdSchema), async (req, res) => {
 // @route   POST /api/products
 // @desc    Create new product
 // @access  Private
-router.post('/', validateRequest(createProductSchema), async (req, res) => {
+router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(createProductSchema), async (req, res) => {
   try {
     const productData = req.body;
     productData.merchantId = req.merchantId;
@@ -680,6 +758,8 @@ router.post('/', validateRequest(createProductSchema), async (req, res) => {
 // @desc    Update product
 // @access  Private
 router.put('/:id',
+  productWriteLimiter,
+  sanitizeProductRequest,
   validateParams(productIdSchema),
   validateRequest(updateProductSchema),
   async (req, res) => {
@@ -929,7 +1009,7 @@ router.put('/:id',
 // @route   DELETE /api/products/:id
 // @desc    Delete product and all related data (images, videos, user-side product)
 // @access  Private
-router.delete('/:id', validateParams(productIdSchema), async (req, res) => {
+router.delete('/:id', productDeleteLimiter, validateParams(productIdSchema), async (req, res) => {
   try {
     const productId = req.params.id;
     const merchantId = req.merchantId;
@@ -1109,7 +1189,7 @@ router.delete('/:id', validateParams(productIdSchema), async (req, res) => {
 // @route   GET /api/products/:id/variants
 // @desc    Get product variants
 // @access  Private
-router.get('/:id/variants', async (req, res) => {
+router.get('/:id/variants', productGetLimiter, async (req, res) => {
   try {
     const product = await Product.findOne({
       _id: req.params.id,
@@ -1142,7 +1222,7 @@ router.get('/:id/variants', async (req, res) => {
 // @route   POST /api/products/:id/variants
 // @desc    Create product variant
 // @access  Private
-router.post('/:id/variants', async (req, res) => {
+router.post('/:id/variants', productWriteLimiter, async (req, res) => {
   try {
     const product = await Product.findOne({
       _id: req.params.id,
@@ -1193,10 +1273,187 @@ router.post('/:id/variants', async (req, res) => {
   }
 });
 
+// @route   PUT /api/products/:id/variants/:variantId
+// @desc    Update product variant
+// @access  Private
+router.put('/:id/variants/:variantId', productWriteLimiter, async (req, res) => {
+  try {
+    const { id: productId, variantId } = req.params;
+
+    console.log('✏️ [UPDATE VARIANT] Request received:');
+    console.log('   Product ID:', productId);
+    console.log('   Variant ID:', variantId);
+    console.log('   Merchant ID:', req.merchantId);
+
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid product ID format'
+      });
+    }
+
+    const productObjectId = new mongoose.Types.ObjectId(productId);
+    const merchantObjectId = new mongoose.Types.ObjectId(req.merchantId);
+
+    // Find product
+    const product = await Product.findOne({
+      _id: productObjectId,
+      merchantId: merchantObjectId
+    });
+
+    if (!product) {
+      console.log('❌ [UPDATE VARIANT] Product not found');
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    // Find variant by variantId
+    if (!product.inventory?.variants || product.inventory.variants.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product has no variants'
+      });
+    }
+
+    const variantIndex = product.inventory.variants.findIndex(
+      (v: any) => v.variantId === variantId
+    );
+
+    if (variantIndex === -1) {
+      console.log('❌ [UPDATE VARIANT] Variant not found');
+      return res.status(404).json({
+        success: false,
+        message: 'Variant not found'
+      });
+    }
+
+    // Update variant fields
+    const variant = product.inventory.variants[variantIndex];
+    const updateData = req.body;
+
+    if (updateData.type !== undefined) variant.type = updateData.type;
+    if (updateData.value !== undefined) variant.value = updateData.value;
+    if (updateData.attributes !== undefined) variant.attributes = updateData.attributes;
+    if (updateData.price !== undefined) variant.price = updateData.price;
+    if (updateData.stock !== undefined) variant.stock = updateData.stock;
+    if (updateData.sku !== undefined) variant.sku = updateData.sku;
+    if (updateData.images !== undefined) variant.images = updateData.images;
+    if (updateData.isAvailable !== undefined) variant.isAvailable = updateData.isAvailable;
+
+    // Mark the variants array as modified for Mongoose to detect the change
+    product.markModified('inventory.variants');
+    await product.save();
+
+    console.log('✅ [UPDATE VARIANT] Variant updated successfully');
+
+    return res.json({
+      success: true,
+      message: 'Variant updated successfully',
+      data: {
+        variant: product.inventory.variants[variantIndex]
+      }
+    });
+  } catch (error: any) {
+    console.error('❌ [UPDATE VARIANT] Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update product variant',
+      error: error.message
+    });
+  }
+});
+
+// @route   DELETE /api/products/:id/variants/:variantId
+// @desc    Delete product variant
+// @access  Private
+router.delete('/:id/variants/:variantId', productDeleteLimiter, async (req, res) => {
+  try {
+    const { id: productId, variantId } = req.params;
+
+    console.log('🗑️ [DELETE VARIANT] Request received:');
+    console.log('   Product ID:', productId);
+    console.log('   Variant ID:', variantId);
+    console.log('   Merchant ID:', req.merchantId);
+
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid product ID format'
+      });
+    }
+
+    const productObjectId = new mongoose.Types.ObjectId(productId);
+    const merchantObjectId = new mongoose.Types.ObjectId(req.merchantId);
+
+    // Find product
+    const product = await Product.findOne({
+      _id: productObjectId,
+      merchantId: merchantObjectId
+    });
+
+    if (!product) {
+      console.log('❌ [DELETE VARIANT] Product not found');
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    // Find and remove variant by variantId
+    if (!product.inventory?.variants || product.inventory.variants.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product has no variants'
+      });
+    }
+
+    const variantIndex = product.inventory.variants.findIndex(
+      (v: any) => v.variantId === variantId
+    );
+
+    if (variantIndex === -1) {
+      console.log('❌ [DELETE VARIANT] Variant not found');
+      return res.status(404).json({
+        success: false,
+        message: 'Variant not found'
+      });
+    }
+
+    // Remove the variant
+    const deletedVariant = product.inventory.variants[variantIndex];
+    product.inventory.variants.splice(variantIndex, 1);
+
+    // Mark the variants array as modified for Mongoose to detect the change
+    product.markModified('inventory.variants');
+    await product.save();
+
+    console.log('✅ [DELETE VARIANT] Variant deleted successfully');
+
+    return res.json({
+      success: true,
+      message: 'Variant deleted successfully',
+      data: {
+        deletedVariant
+      }
+    });
+  } catch (error: any) {
+    console.error('❌ [DELETE VARIANT] Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete product variant',
+      error: error.message
+    });
+  }
+});
+
 // @route   GET /api/products/:id/reviews
 // @desc    Get product reviews
 // @access  Private
-router.get('/:id/reviews', async (req, res) => {
+router.get('/:id/reviews', productGetLimiter, async (req, res) => {
   try {
     const merchantId = req.merchantId!;
     const productId = req.params.id;
@@ -1286,7 +1543,7 @@ router.get('/:id/reviews', async (req, res) => {
 // @route   POST /api/products/bulk
 // @desc    Bulk operations on products (deprecated - use /bulk-action)
 // @access  Private
-router.post('/bulk', async (req, res) => {
+router.post('/bulk', productBulkLimiter, async (req, res) => {
   try {
     const { productIds, action, data } = req.body;
 
@@ -1372,7 +1629,7 @@ router.post('/bulk', async (req, res) => {
 // @route   POST /api/products/bulk-action
 // @desc    Perform bulk actions on multiple products with validation and transactions
 // @access  Private
-router.post('/bulk-action', async (req, res) => {
+router.post('/bulk-action', productBulkLimiter, async (req, res) => {
   try {
     const { action, productIds } = req.body;
 
@@ -1644,6 +1901,86 @@ async function createUserSideProduct(merchantProduct: any, merchantId: string): 
     console.log(`   - Store: ${store.name} (${store._id})`);
     console.log(`   - Category: ${category.name} (${category._id})`);
 
+    // Sync relatedProducts - map merchant product IDs to user product IDs
+    let relatedProductIds: Types.ObjectId[] = [];
+    if (merchantProduct.relatedProducts && merchantProduct.relatedProducts.length > 0) {
+      console.log(`   - Syncing ${merchantProduct.relatedProducts.length} related products...`);
+
+      // Find corresponding user products by SKU (merchant products should have been synced)
+      const relatedMerchantProducts = await Product.find({
+        _id: { $in: merchantProduct.relatedProducts }
+      }).select('sku').session(session);
+
+      if (relatedMerchantProducts.length > 0) {
+        const relatedSkus = relatedMerchantProducts.map(p => p.sku);
+        const relatedUserProducts = await Product.find({
+          sku: { $in: relatedSkus }
+        }).select('_id').session(session);
+
+        relatedProductIds = relatedUserProducts.map(p => p._id);
+        console.log(`   - Found ${relatedProductIds.length} user-side related products`);
+      }
+    }
+
+    // Sync frequentlyBoughtWith - map merchant product IDs to user product IDs
+    let frequentlyBoughtWithData: Array<{ productId: Types.ObjectId; purchaseCount: number }> = [];
+    if (merchantProduct.frequentlyBoughtWith && merchantProduct.frequentlyBoughtWith.length > 0) {
+      console.log(`   - Syncing ${merchantProduct.frequentlyBoughtWith.length} frequently bought with products...`);
+
+      // Extract product IDs from frequentlyBoughtWith
+      const merchantProductIds = merchantProduct.frequentlyBoughtWith.map((item: any) => item.product);
+
+      // Find corresponding merchant products to get their SKUs
+      const relatedMerchantProducts = await Product.find({
+        _id: { $in: merchantProductIds }
+      }).select('sku').session(session);
+
+      if (relatedMerchantProducts.length > 0) {
+        const relatedSkus = relatedMerchantProducts.map(p => p.sku);
+        const relatedUserProducts = await Product.find({
+          sku: { $in: relatedSkus }
+        }).select('_id sku').session(session);
+
+        // Create a SKU to user product ID map
+        const skuToUserProductId = new Map();
+        relatedUserProducts.forEach(p => {
+          skuToUserProductId.set(p.sku, p._id);
+        });
+
+        // Map merchant product IDs to user product IDs with purchase counts
+        for (const item of merchantProduct.frequentlyBoughtWith) {
+          const merchantProd = relatedMerchantProducts.find(p => p._id.toString() === item.product.toString());
+          if (merchantProd && skuToUserProductId.has(merchantProd.sku)) {
+            frequentlyBoughtWithData.push({
+              productId: skuToUserProductId.get(merchantProd.sku),
+              purchaseCount: item.purchaseCount || 0
+            });
+          }
+        }
+        console.log(`   - Mapped ${frequentlyBoughtWithData.length} frequently bought with products`);
+      }
+    }
+
+    // Sync variants if available
+    let variantsData: any[] = [];
+    if (merchantProduct.variants && merchantProduct.variants.length > 0) {
+      console.log(`   - Syncing ${merchantProduct.variants.length} variants...`);
+      variantsData = merchantProduct.variants.map((variant: any) => ({
+        variantId: variant._id?.toString() || variant.variantId || `variant-${Date.now()}-${Math.random()}`,
+        type: variant.option || variant.type || 'option',
+        value: variant.value,
+        attributes: variant.attributes || {},
+        price: variant.price,
+        compareAtPrice: variant.compareAtPrice,
+        stock: variant.stock || 0,
+        sku: variant.sku,
+        images: variant.images || [],
+        barcode: variant.barcode,
+        weight: variant.weight,
+        isAvailable: variant.isAvailable !== undefined ? variant.isAvailable : (variant.stock || 0) > 0
+      }));
+    }
+
     // Create the user-side product
     const userProduct = new Product({
       name: merchantProduct.name,
@@ -1668,7 +2005,9 @@ async function createUserSideProduct(merchantProduct: any, merchantId: string): 
         stock: merchantProduct.inventory.stock,
         isAvailable: merchantProduct.inventory.stock > 0,
         lowStockThreshold: merchantProduct.inventory.lowStockThreshold || 5,
-        unlimited: false
+        unlimited: false,
+        variants: variantsData,
+        reservedStock: merchantProduct.inventory.reservedStock || 0 // Sync reserved stock
       },
       ratings: {
         average: 0,
@@ -1691,8 +2030,32 @@ async function createUserSideProduct(merchantProduct: any, merchantId: string): 
         returnRate: 0,
         avgRating: 0
       },
+      // Map cashback from MerchantProduct to Product model format
+      cashback: merchantProduct.cashback ? {
+        percentage: merchantProduct.cashback.percentage || 0,
+        maxAmount: merchantProduct.cashback.maxAmount,
+        minPurchase: undefined, // Not available in MerchantProduct
+        validUntil: undefined, // Not available in MerchantProduct
+        terms: merchantProduct.cashback.conditions?.join('\n') || undefined, // Join conditions as terms
+        isActive: merchantProduct.cashback.isActive ?? true, // Sync isActive flag
+        conditions: merchantProduct.cashback.conditions || [] // Sync conditions array
+      } : undefined,
+      // Map deliveryInfo if available
+      deliveryInfo: merchantProduct.deliveryInfo ? {
+        estimatedDays: merchantProduct.deliveryInfo.estimatedDays,
+        freeShippingThreshold: merchantProduct.deliveryInfo.freeShippingThreshold,
+        expressAvailable: merchantProduct.deliveryInfo.expressAvailable,
+        standardDeliveryTime: merchantProduct.deliveryInfo.standardDeliveryTime,
+        expressDeliveryTime: merchantProduct.deliveryInfo.expressDeliveryTime,
+        deliveryPartner: merchantProduct.deliveryInfo.deliveryPartner
+      } : undefined,
+      // Map relatedProducts
+      relatedProducts: relatedProductIds.length > 0 ? relatedProductIds : undefined,
+      // Map frequentlyBoughtWith
+      frequentlyBoughtWith: frequentlyBoughtWithData.length > 0 ? frequentlyBoughtWithData : undefined,
       isActive: merchantProduct.status === 'active',
       isFeatured: merchantProduct.visibility === 'featured',
+      visibility: merchantProduct.visibility || 'public', // Sync visibility status
       isDigital: false,
       weight: merchantProduct.weight,
       dimensions: merchantProduct.dimensions ? {
@@ -1759,12 +2122,39 @@ async function updateUserSideProduct(merchantProduct: any, merchantId: string): 
       'inventory.stock': merchantProduct.inventory.stock,
       'inventory.isAvailable': merchantProduct.inventory.stock > 0,
       'inventory.lowStockThreshold': merchantProduct.inventory.lowStockThreshold || 5,
+      'inventory.reservedStock': merchantProduct.inventory.reservedStock || 0, // Sync reserved stock
       tags: merchantProduct.tags || [],
       isActive: merchantProduct.status === 'active',
       isFeatured: merchantProduct.visibility === 'featured',
+      visibility: merchantProduct.visibility || 'public', // Sync visibility status
       weight: merchantProduct.weight,
       updatedAt: new Date()
     };
+
+    // Update cashback if provided
+    if (merchantProduct.cashback) {
+      updates.cashback = {
+        percentage: merchantProduct.cashback.percentage || 0,
+        maxAmount: merchantProduct.cashback.maxAmount,
+        minPurchase: undefined, // Not available in MerchantProduct
+        validUntil: undefined, // Not available in MerchantProduct
+        terms: merchantProduct.cashback.conditions?.join('\n') || undefined, // Join conditions as terms
+        isActive: merchantProduct.cashback.isActive ?? true, // Sync isActive flag
+        conditions: merchantProduct.cashback.conditions || [] // Sync conditions array
+      };
+    }
+
+    // Update deliveryInfo if provided
+    if (merchantProduct.deliveryInfo) {
+      updates.deliveryInfo = {
+        estimatedDays: merchantProduct.deliveryInfo.estimatedDays,
+        freeShippingThreshold: merchantProduct.deliveryInfo.freeShippingThreshold,
+        expressAvailable: merchantProduct.deliveryInfo.expressAvailable,
+        standardDeliveryTime: merchantProduct.deliveryInfo.standardDeliveryTime,
+        expressDeliveryTime: merchantProduct.deliveryInfo.expressDeliveryTime,
+        deliveryPartner: merchantProduct.deliveryInfo.deliveryPartner
+      };
+    }
 
     // Update discount percentage
     if (merchantProduct.compareAtPrice) {
@@ -1795,6 +2185,105 @@ async function updateUserSideProduct(merchantProduct: any, merchantId: string): 
         height: merchantProduct.dimensions.height,
         unit: merchantProduct.dimensions.unit
       };
+    }
+
+    // Update relatedProducts - map merchant product IDs to user product IDs
+    if (merchantProduct.relatedProducts !== undefined) {
+      if (merchantProduct.relatedProducts && merchantProduct.relatedProducts.length > 0) {
+        console.log(`   - Syncing ${merchantProduct.relatedProducts.length} related products...`);
+
+        // Find corresponding user products by SKU
+        const relatedMerchantProducts = await Product.find({
+          _id: { $in: merchantProduct.relatedProducts }
+        }).select('sku').session(session);
+
+        if (relatedMerchantProducts.length > 0) {
+          const relatedSkus = relatedMerchantProducts.map(p => p.sku);
+          const relatedUserProducts = await Product.find({
+            sku: { $in: relatedSkus }
+          }).select('_id').session(session);
+
+          updates.relatedProducts = relatedUserProducts.map(p => p._id);
+          console.log(`   - Updated ${updates.relatedProducts.length} related products`);
+        } else {
+          updates.relatedProducts = [];
+        }
+      } else {
+        updates.relatedProducts = [];
+      }
+    }
+
+    // Update frequentlyBoughtWith - map merchant product IDs to user product IDs
+    if (merchantProduct.frequentlyBoughtWith !== undefined) {
+      if (merchantProduct.frequentlyBoughtWith && merchantProduct.frequentlyBoughtWith.length > 0) {
+        console.log(`   - Syncing ${merchantProduct.frequentlyBoughtWith.length} frequently bought with products...`);
+
+        // Extract product IDs
+        const merchantProductIds = merchantProduct.frequentlyBoughtWith.map((item: any) => item.product);
+
+        // Find corresponding merchant products to get their SKUs
+        const relatedMerchantProducts = await Product.find({
+          _id: { $in: merchantProductIds }
+        }).select('sku').session(session);
+
+        if (relatedMerchantProducts.length > 0) {
+          const relatedSkus = relatedMerchantProducts.map(p => p.sku);
+          const relatedUserProducts = await Product.find({
+            sku: { $in: relatedSkus }
+          }).select('_id sku').session(session);
+
+          // Create a SKU to user product ID map
+          const skuToUserProductId = new Map();
+          relatedUserProducts.forEach(p => {
+            skuToUserProductId.set(p.sku, p._id);
+          });
+
+          // Map merchant product IDs to user product IDs with purchase counts
+          const frequentlyBoughtWithData: Array<{ productId: Types.ObjectId; purchaseCount: number }> = [];
+          for (const item of merchantProduct.frequentlyBoughtWith) {
+            const merchantProd = relatedMerchantProducts.find(p => p._id.toString() === item.product.toString());
+            if (merchantProd && skuToUserProductId.has(merchantProd.sku)) {
+              frequentlyBoughtWithData.push({
+                productId: skuToUserProductId.get(merchantProd.sku),
+                purchaseCount: item.purchaseCount || 0
+              });
+            }
+          }
+
+          updates.frequentlyBoughtWith = frequentlyBoughtWithData;
+          console.log(`   - Updated ${frequentlyBoughtWithData.length} frequently bought with products`);
+        } else {
+          updates.frequentlyBoughtWith = [];
+        }
+      } else {
+        updates.frequentlyBoughtWith = [];
+      }
+    }
+
+    // Update variants if provided
+    if (merchantProduct.variants !== undefined) {
+      if (merchantProduct.variants && merchantProduct.variants.length > 0) {
+        console.log(`   - Syncing ${merchantProduct.variants.length} variants...`);
+        const variantsData = merchantProduct.variants.map((variant: any) => ({
+          variantId: variant._id?.toString() || variant.variantId || `variant-${Date.now()}-${Math.random()}`,
+          type: variant.option || variant.type || 'option',
+          value: variant.value,
+          attributes: variant.attributes || {},
+          price: variant.price,
+          compareAtPrice: variant.compareAtPrice,
+          stock: variant.stock || 0,
+          sku: variant.sku,
+          images: variant.images || [],
+          barcode: variant.barcode,
+          weight: variant.weight,
+          isAvailable: variant.isAvailable !== undefined ? variant.isAvailable : (variant.stock || 0) > 0
+        }));
+
+        updates['inventory.variants'] = variantsData;
+        console.log(`   - Updated ${variantsData.length} variants`);
+      } else {
+        updates['inventory.variants'] = [];
+      }
     }
 
     await Product.updateOne({ _id: userProduct._id }, updates, { session });

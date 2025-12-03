@@ -112,6 +112,7 @@ export interface IVideo extends Document {
     createdAt: Date;
     updatedAt: Date;
     likedBy: Types.ObjectId[];
+    bookmarkedBy: Types.ObjectId[];
     comments: Array<{
         user: Types.ObjectId;
         content: string;
@@ -126,6 +127,7 @@ export interface IVideo extends Document {
     reportVideo(userId: string, reason: string, details?: string): Promise<void>;
     incrementViews(userId?: string): Promise<void>;
     toggleLike(userId: string): Promise<boolean>;
+    toggleBookmark(userId: string): Promise<boolean>;
     addComment(userId: string, content: string): Promise<void>;
     share(): Promise<void>;
     updateAnalytics(): Promise<void>;

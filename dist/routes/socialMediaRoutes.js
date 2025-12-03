@@ -14,12 +14,22 @@ router.use(auth_1.requireAuth);
 router.post('/submit', (0, validation_1.validateBody)(validation_2.Joi.object({
     platform: validation_2.Joi.string().valid('instagram', 'facebook', 'twitter', 'tiktok').required(),
     postUrl: validation_2.Joi.string().uri().required(),
-    orderId: validation_1.commonSchemas.objectId()
+    orderId: validation_1.commonSchemas.objectId(),
+    // Optional fraud detection metadata from frontend
+    fraudMetadata: validation_2.Joi.object({
+        deviceId: validation_2.Joi.string().optional(),
+        trustScore: validation_2.Joi.number().optional(),
+        riskScore: validation_2.Joi.number().optional(),
+        riskLevel: validation_2.Joi.string().valid('low', 'medium', 'high', 'critical').optional(),
+        checksPassed: validation_2.Joi.number().optional(),
+        totalChecks: validation_2.Joi.number().optional(),
+        warnings: validation_2.Joi.array().items(validation_2.Joi.string()).optional()
+    }).optional()
 })), socialMediaController_1.submitPost);
 // Get user's posts
 router.get('/posts', (0, validation_1.validateQuery)(validation_2.Joi.object({
     page: validation_2.Joi.number().integer().min(1).default(1),
-    limit: validation_2.Joi.number().integer().min(1).max(50).default(20),
+    limit: validation_2.Joi.number().integer().min(1).max(100).default(20), // Increased max to 100
     status: validation_2.Joi.string().valid('pending', 'approved', 'rejected', 'credited')
 })), socialMediaController_1.getUserPosts);
 // Get user's earnings summary
@@ -46,4 +56,22 @@ router.patch('/posts/:postId/status', auth_1.requireAdmin, // ✅ Admin verifica
 router.delete('/posts/:postId', (0, validation_1.validateParams)(validation_2.Joi.object({
     postId: validation_1.commonSchemas.objectId().required()
 })), socialMediaController_1.deletePost);
+// ============================================================================
+// INSTAGRAM VERIFICATION ENDPOINTS
+// ============================================================================
+// Verify an Instagram post exists and is accessible
+router.post('/instagram/verify-post', (0, validation_1.validateBody)(validation_2.Joi.object({
+    url: validation_2.Joi.string().uri().required(),
+    postId: validation_2.Joi.string().optional(),
+    username: validation_2.Joi.string().optional()
+})), socialMediaController_1.verifyInstagramPost);
+// Verify an Instagram account
+router.post('/instagram/verify-account', (0, validation_1.validateBody)(validation_2.Joi.object({
+    username: validation_2.Joi.string().required()
+})), socialMediaController_1.verifyInstagramAccount);
+// Extract basic data from an Instagram post URL
+router.post('/instagram/extract-post-data', (0, validation_1.validateBody)(validation_2.Joi.object({
+    url: validation_2.Joi.string().uri().required(),
+    postId: validation_2.Joi.string().optional()
+})), socialMediaController_1.extractInstagramPostData);
 exports.default = router;

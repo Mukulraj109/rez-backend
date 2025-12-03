@@ -429,6 +429,7 @@ exports.getDiscountAnalytics = getDiscountAnalytics;
  * GET /api/discounts/bill-payment
  * Get available bill payment discounts
  * Supports store-specific filtering (Phase 2)
+ * Returns ALL discounts (regardless of minOrderValue) - frontend handles eligibility display
  */
 const getBillPaymentDiscounts = async (req, res) => {
     try {
@@ -444,51 +445,57 @@ const getBillPaymentDiscounts = async (req, res) => {
             // Include: global discounts + merchant discounts + store discounts
             storeFilter.$or = [
                 { scope: 'global' }, // Global discounts (available to all stores)
+                { scope: { $exists: false } }, // Legacy discounts without scope field
                 ...(merchantId ? [{ scope: 'merchant', merchantId: new mongoose_1.default.Types.ObjectId(merchantId) }] : []), // Merchant-level discounts
                 { scope: 'store', storeId: new mongoose_1.default.Types.ObjectId(storeId) } // Store-specific discounts
             ];
         }
         else {
-            // No storeId: only global discounts
-            storeFilter.scope = 'global';
+            // No storeId: only global discounts and legacy discounts
+            storeFilter.$or = [
+                { scope: 'global' },
+                { scope: { $exists: false } }
+            ];
         }
-        // Build base filter with all non-$or conditions
+        // Build base filter - NO minOrderValue filter
+        // Frontend will show all discounts and indicate eligibility
         const baseFilter = {
             applicableOn: 'bill_payment',
             isActive: true,
             validFrom: { $lte: now },
-            validUntil: { $gte: now },
-            minOrderValue: { $lte: Number(orderValue) }
+            validUntil: { $gte: now }
+            // NOTE: minOrderValue filter removed - show all discounts
+            // Frontend displays "Add ₹X more to unlock" for ineligible ones
         };
-        // Add store scope filter (if no $or, add scope directly)
-        if (!storeFilter.$or) {
-            Object.assign(baseFilter, storeFilter);
-        }
-        // Build filter with $and to combine multiple $or conditions
-        const filter = {
-            ...baseFilter
-        };
-        // Combine store filter and usage limit filter using $and
-        const orConditions = [];
-        // Add store filter $or if it exists
+        // Build $and array to combine all OR conditions
+        const andConditions = [];
+        // 1. Payment method filter - exclude card-specific discounts
+        // Card discounts should appear in Section4 (Card Offers), not Section3 (Mega Sale)
+        andConditions.push({
+            $or: [
+                { paymentMethod: 'upi' },
+                { paymentMethod: 'all' },
+                { paymentMethod: { $exists: false } },
+                { paymentMethod: null }
+            ]
+        });
+        // 2. Store scope filter
         if (storeFilter.$or) {
-            orConditions.push({ $or: storeFilter.$or });
+            andConditions.push({ $or: storeFilter.$or });
         }
-        // Add usage limit $or
-        orConditions.push({
+        // 3. Usage limit filter
+        andConditions.push({
             $or: [
                 { usageLimit: { $exists: false } },
+                { usageLimit: null },
                 { $expr: { $lt: ['$usedCount', '$usageLimit'] } }
             ]
         });
-        // If we have multiple $or conditions, wrap in $and
-        if (orConditions.length > 1) {
-            filter.$and = orConditions;
-        }
-        else if (orConditions.length === 1) {
-            // Only one $or condition, add it directly
-            Object.assign(filter, orConditions[0]);
-        }
+        // Build final filter
+        const filter = {
+            ...baseFilter,
+            $and: andConditions
+        };
         let discounts = await Discount_1.default.find(filter)
             .sort({ priority: -1, value: -1 })
             .lean();

@@ -112,6 +112,27 @@ export interface IStoreVideo {
   uploadedAt?: Date;
 }
 
+// Store action button destination interface
+export interface IStoreActionButtonDestination {
+  type: 'phone' | 'url' | 'maps' | 'internal';
+  value: string;
+}
+
+// Store action button interface
+export interface IStoreActionButton {
+  id: 'call' | 'product' | 'location' | 'custom';
+  enabled: boolean;
+  label?: string;
+  destination?: IStoreActionButtonDestination;
+  order?: number;
+}
+
+// Store action buttons configuration interface
+export interface IStoreActionButtons {
+  enabled: boolean;
+  buttons: IStoreActionButton[];
+}
+
 // Main Store interface
 export interface IStore extends Document {
   name: string;
@@ -162,6 +183,9 @@ export interface IStore extends Document {
   };
   serviceTypes?: string[]; // For SERVICE stores: ['haircut', 'massage', 'facial']
   consultationTypes?: string[]; // For CONSULTATION stores: ['general', 'dental', 'eye']
+
+  // Action buttons configuration for ProductPage
+  actionButtons?: IStoreActionButtons;
 
   createdAt: Date;
   updatedAt: Date;
@@ -557,7 +581,46 @@ const StoreSchema = new Schema<IStore>({
   consultationTypes: [{
     type: String,
     trim: true
-  }]
+  }],
+
+  // Action buttons configuration for ProductPage
+  actionButtons: {
+    enabled: {
+      type: Boolean,
+      default: true
+    },
+    buttons: [{
+      id: {
+        type: String,
+        enum: ['call', 'product', 'location', 'custom'],
+        required: true
+      },
+      enabled: {
+        type: Boolean,
+        default: true
+      },
+      label: {
+        type: String,
+        maxlength: 30,
+        trim: true
+      },
+      destination: {
+        type: {
+          type: String,
+          enum: ['phone', 'url', 'maps', 'internal']
+        },
+        value: {
+          type: String,
+          trim: true
+        }
+      },
+      order: {
+        type: Number,
+        default: 0,
+        min: 0
+      }
+    }]
+  }
 }, {
   timestamps: true,
   toJSON: { virtuals: true },

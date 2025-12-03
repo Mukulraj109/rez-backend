@@ -27,6 +27,11 @@ export declare const favoriteLimiter: (req: Request, res: Response, next: NextFu
 export declare const recommendationLimiter: (req: Request, res: Response, next: NextFunction) => void;
 export declare const referralLimiter: (req: Request, res: Response, next: NextFunction) => void;
 export declare const referralShareLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const productGetLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const productWriteLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const productDeleteLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const productBulkLimiter: (req: Request, res: Response, next: NextFunction) => void;
+export declare const createProductLimiter: (method: "GET" | "POST" | "PUT" | "DELETE" | "BULK") => (req: Request, res: Response, next: NextFunction) => void;
 export declare const createRateLimiter: (options: {
     windowMs?: number;
     max?: number;

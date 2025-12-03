@@ -6,3 +6,6 @@ export declare const getPostById: (req: Request, res: Response, next: import("ex
 export declare const updatePostStatus: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const deletePost: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const getPlatformStats: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const verifyInstagramPost: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const verifyInstagramAccount: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const extractInstagramPostData: (req: Request, res: Response, next: import("express").NextFunction) => void;

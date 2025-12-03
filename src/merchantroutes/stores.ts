@@ -108,7 +108,21 @@ const createStoreSchema = Joi.object({
   }).optional(),
   tags: Joi.array().items(Joi.string()).optional(),
   isActive: Joi.boolean().default(true),
-  isFeatured: Joi.boolean().default(false)
+  isFeatured: Joi.boolean().default(false),
+  // Action buttons configuration for ProductPage
+  actionButtons: Joi.object({
+    enabled: Joi.boolean().default(true),
+    buttons: Joi.array().items(Joi.object({
+      id: Joi.string().valid('call', 'product', 'location', 'custom').required(),
+      enabled: Joi.boolean().default(true),
+      label: Joi.string().max(30).optional(),
+      destination: Joi.object({
+        type: Joi.string().valid('phone', 'url', 'maps', 'internal').required(),
+        value: Joi.string().required()
+      }).optional(),
+      order: Joi.number().min(0).default(0)
+    })).max(5).optional()
+  }).optional()
 });
 
 const updateStoreSchema = createStoreSchema.fork(
@@ -562,6 +576,14 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
     if (updates.isActive !== undefined) store.isActive = updates.isActive;
     if (updates.isFeatured !== undefined) store.isFeatured = updates.isFeatured;
 
+    // Update action buttons configuration
+    if (updates.actionButtons !== undefined) {
+      (store as any).actionButtons = {
+        enabled: updates.actionButtons.enabled !== undefined ? updates.actionButtons.enabled : true,
+        buttons: updates.actionButtons.buttons || []
+      };
+    }
+
     // If banner was updated using raw MongoDB, we need to update other fields using raw MongoDB too
     // to prevent Mongoose from overwriting the banner with undefined
     if (updates.banner !== undefined && mongoose.connection.db) {
@@ -791,16 +813,8 @@ router.post('/:id/activate', validateParams(storeIdSchema), async (req: Request,
       });
     }
 
-    // Deactivate all other stores for this merchant
-    await Store.updateMany(
-      {
-        merchantId: new mongoose.Types.ObjectId(merchantId),
-        _id: { $ne: storeId }
-      },
-      { isActive: false }
-    );
-
     // Activate this store using updateOne to bypass full document validation
+    // Note: Multiple stores can be active simultaneously for the same merchant
     // Use lean() to return plain object and avoid Mongoose model initialization validation
     const updatedStore = await Store.findByIdAndUpdate(
       storeId,
@@ -848,6 +862,87 @@ router.post('/:id/activate', validateParams(storeIdSchema), async (req: Request,
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to activate store'
+    });
+  }
+});
+
+/**
+ * @route   POST /api/merchant/stores/:id/deactivate
+ * @desc    Set store as inactive
+ * @access  Private (Merchant)
+ */
+router.post('/:id/deactivate', validateParams(storeIdSchema), async (req: Request, res: Response) => {
+  try {
+    const merchantId = (req as any).merchantId;
+    const storeId = req.params.id;
+
+    if (!merchantId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Merchant ID not found. Authentication required.'
+      });
+    }
+
+    // Find store and verify ownership
+    const store = await Store.findOne({
+      _id: storeId,
+      merchantId: new mongoose.Types.ObjectId(merchantId)
+    }).lean();
+
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        message: 'Store not found'
+      });
+    }
+
+    // Deactivate this store
+    const updatedStore = await Store.findByIdAndUpdate(
+      storeId,
+      { isActive: false },
+      { new: true, runValidators: false }
+    ).lean();
+
+    if (!updatedStore) {
+      return res.status(404).json({
+        success: false,
+        message: 'Store not found after update'
+      });
+    }
+
+    // Audit log
+    await AuditService.log({
+      merchantId: merchantId,
+      action: 'store.deactivated',
+      resourceType: 'store',
+      resourceId: (updatedStore._id as mongoose.Types.ObjectId).toString(),
+      details: {
+        after: updatedStore,
+        metadata: { name: updatedStore.name }
+      },
+      ipAddress: req.ip || 'unknown',
+      userAgent: req.headers['user-agent'] || 'unknown',
+      severity: 'info'
+    });
+
+    // Send real-time notification
+    if (global.io) {
+      global.io.to(`merchant-${merchantId}`).emit('store_deactivated', {
+        storeId: updatedStore._id,
+        storeName: updatedStore.name
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Store deactivated successfully',
+      data: updatedStore
+    });
+  } catch (error: any) {
+    console.error('Deactivate store error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to deactivate store'
     });
   }
 });

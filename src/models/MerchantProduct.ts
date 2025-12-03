@@ -69,7 +69,16 @@ export interface IProduct extends Document {
     isActive: boolean;
     conditions?: string[];
   };
-  
+
+  // Related Products
+  relatedProducts?: mongoose.Types.ObjectId[];
+
+  // Frequently Bought With
+  frequentlyBoughtWith?: Array<{
+    product: mongoose.Types.ObjectId;
+    purchaseCount: number;
+  }>;
+
   // Additional properties needed by SyncService
   shipping?: {
     estimatedDelivery?: string;
@@ -104,6 +113,11 @@ export interface IProduct extends Document {
   publishedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+
+  // Soft delete fields
+  isDeleted?: boolean;
+  deletedAt?: Date;
+  deletedBy?: mongoose.Types.ObjectId;
 }
 
 const ProductSchema = new Schema<IProduct>({
@@ -313,6 +327,25 @@ const ProductSchema = new Schema<IProduct>({
     },
     conditions: [String]
   },
+
+  // Related Products
+  relatedProducts: [{
+    type: Schema.Types.ObjectId,
+    ref: 'MProduct' // References other merchant products
+  }],
+
+  // Frequently Bought With
+  frequentlyBoughtWith: [{
+    product: {
+      type: Schema.Types.ObjectId,
+      ref: 'MProduct' // References other merchant products
+    },
+    purchaseCount: {
+      type: Number,
+      default: 0,
+      min: 0
+    }
+  }],
   
   // Additional optional fields for SyncService
   shipping: {
@@ -336,8 +369,24 @@ const ProductSchema = new Schema<IProduct>({
   },
   isFeatured: { type: Boolean, default: false },
   sortOrder: { type: Number, default: 0 },
-  
-  publishedAt: Date
+
+  publishedAt: Date,
+
+  // Soft delete fields
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  },
+  deletedBy: {
+    type: Schema.Types.ObjectId,
+    ref: 'Merchant',
+    default: null
+  }
 }, {
   timestamps: true,
   toJSON: {
@@ -370,10 +419,44 @@ ProductSchema.index({ merchantId: 1, isFeatured: 1, sortOrder: 1 });
 ProductSchema.index({ merchantId: 1, visibility: 1, status: 1 });
 
 // Indexes for analytics and reporting
-ProductSchema.index({ merchantId: 1, createdAt: -1, status: 1 });
-ProductSchema.index({ status: 1, 'cashback.isActive': 1 });
-ProductSchema.index({ 'inventory.stock': 1, 'inventory.lowStockThreshold': 1 }, {
+ProductSchema.index({ merchantId: 1, createdAt: -1, status: 1, isDeleted: 1 });
+ProductSchema.index({ status: 1, 'cashback.isActive': 1, isDeleted: 1 });
+ProductSchema.index({ 'inventory.stock': 1, 'inventory.lowStockThreshold': 1, isDeleted: 1 }, {
   partialFilterExpression: { 'inventory.trackInventory': true }
+});
+
+// Soft delete indexes
+ProductSchema.index({ isDeleted: 1, deletedAt: 1 });
+ProductSchema.index({ merchantId: 1, isDeleted: 1 });
+
+// Pre-find middleware to exclude soft-deleted products by default
+ProductSchema.pre(/^find/, function(this: any, next) {
+  // Only apply filter if not explicitly querying for deleted products
+  if (!this.getQuery().hasOwnProperty('isDeleted')) {
+    // Use $ne: true to include products where isDeleted is false OR doesn't exist (for backward compatibility)
+    this.where({ isDeleted: { $ne: true } });
+  }
+  next();
+});
+
+// Pre-findOne middleware
+ProductSchema.pre('findOne', function(this: any, next) {
+  // Only apply filter if not explicitly querying for deleted products
+  if (!this.getQuery().hasOwnProperty('isDeleted')) {
+    // Use $ne: true to include products where isDeleted is false OR doesn't exist (for backward compatibility)
+    this.where({ isDeleted: { $ne: true } });
+  }
+  next();
+});
+
+// Pre-count middleware
+ProductSchema.pre('countDocuments', function(this: any, next) {
+  // Only apply filter if not explicitly querying for deleted products
+  if (!this.getQuery().hasOwnProperty('isDeleted')) {
+    // Use $ne: true to include products where isDeleted is false OR doesn't exist (for backward compatibility)
+    this.where({ isDeleted: { $ne: true } });
+  }
+  next();
 });
 
 // Ensure only one main image per product
@@ -383,7 +466,7 @@ ProductSchema.pre('save', function(next) {
     for (let img of this.images) {
       if (img.isMain) mainImageCount++;
     }
-    
+
     // If no main image or multiple main images, set the first one as main
     if (mainImageCount !== 1) {
       this.images.forEach((img, index) => {

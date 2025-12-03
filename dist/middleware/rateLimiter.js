@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createRateLimiter = exports.referralShareLimiter = exports.referralLimiter = exports.recommendationLimiter = exports.favoriteLimiter = exports.comparisonLimiter = exports.analyticsLimiter = exports.reviewLimiter = exports.strictLimiter = exports.searchLimiter = exports.uploadLimiter = exports.securityLimiter = exports.otpLimiter = exports.passwordResetLimiter = exports.registrationLimiter = exports.authLimiter = exports.generalLimiter = void 0;
+exports.createRateLimiter = exports.createProductLimiter = exports.productBulkLimiter = exports.productDeleteLimiter = exports.productWriteLimiter = exports.productGetLimiter = exports.referralShareLimiter = exports.referralLimiter = exports.recommendationLimiter = exports.favoriteLimiter = exports.comparisonLimiter = exports.analyticsLimiter = exports.reviewLimiter = exports.strictLimiter = exports.searchLimiter = exports.uploadLimiter = exports.securityLimiter = exports.otpLimiter = exports.passwordResetLimiter = exports.registrationLimiter = exports.authLimiter = exports.generalLimiter = void 0;
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 // Check if rate limiting is disabled
 const isRateLimitDisabled = process.env.DISABLE_RATE_LIMIT === 'true';
@@ -238,6 +238,106 @@ exports.referralShareLimiter = isRateLimitDisabled
         standardHeaders: true,
         legacyHeaders: false
     });
+// ================================================
+// PRODUCT CRUD RATE LIMITERS
+// ================================================
+// Product GET requests rate limiter
+exports.productGetLimiter = isRateLimitDisabled
+    ? passthroughMiddleware
+    : (0, express_rate_limit_1.default)({
+        windowMs: 60 * 1000, // 1 minute
+        max: 100, // 100 GET requests per minute
+        message: (req, res) => {
+            console.warn(`[RATE LIMIT] Product GET exceeded: IP ${req.ip}, Path: ${req.path}`);
+            res.status(429).json({
+                success: false,
+                message: 'Too many product requests. Please try again in a minute.',
+                retryAfter: 60
+            });
+        },
+        standardHeaders: true,
+        legacyHeaders: false
+    });
+// Product POST/PUT rate limiter (create/update)
+exports.productWriteLimiter = isRateLimitDisabled
+    ? passthroughMiddleware
+    : (0, express_rate_limit_1.default)({
+        windowMs: 60 * 1000, // 1 minute
+        max: 30, // 30 POST/PUT requests per minute
+        message: (req, res) => {
+            console.warn(`[RATE LIMIT] Product write exceeded: IP ${req.ip}, Path: ${req.path}, Method: ${req.method}`);
+            res.status(429).json({
+                success: false,
+                message: 'Too many product creation/update requests. Please slow down.',
+                retryAfter: 60
+            });
+        },
+        standardHeaders: true,
+        legacyHeaders: false
+    });
+// Product DELETE rate limiter
+exports.productDeleteLimiter = isRateLimitDisabled
+    ? passthroughMiddleware
+    : (0, express_rate_limit_1.default)({
+        windowMs: 60 * 1000, // 1 minute
+        max: 10, // 10 DELETE requests per minute
+        message: (req, res) => {
+            console.warn(`[RATE LIMIT] Product delete exceeded: IP ${req.ip}, Path: ${req.path}`);
+            res.status(429).json({
+                success: false,
+                message: 'Too many product deletion requests. Please try again later.',
+                retryAfter: 60
+            });
+        },
+        standardHeaders: true,
+        legacyHeaders: false
+    });
+// Product bulk operations rate limiter (stricter)
+exports.productBulkLimiter = isRateLimitDisabled
+    ? passthroughMiddleware
+    : (0, express_rate_limit_1.default)({
+        windowMs: 60 * 1000, // 1 minute
+        max: 5, // 5 bulk operations per minute
+        message: (req, res) => {
+            console.warn(`[RATE LIMIT] Product bulk operation exceeded: IP ${req.ip}, Path: ${req.path}`);
+            res.status(429).json({
+                success: false,
+                message: 'Too many bulk operations. Please wait before performing another bulk action.',
+                retryAfter: 60
+            });
+        },
+        standardHeaders: true,
+        legacyHeaders: false
+    });
+// Combined product operation limiter (for routes that need flexible control)
+const createProductLimiter = (method) => {
+    if (isRateLimitDisabled) {
+        return passthroughMiddleware;
+    }
+    const configs = {
+        GET: { windowMs: 60 * 1000, max: 100, operation: 'read' },
+        POST: { windowMs: 60 * 1000, max: 30, operation: 'create' },
+        PUT: { windowMs: 60 * 1000, max: 30, operation: 'update' },
+        DELETE: { windowMs: 60 * 1000, max: 10, operation: 'delete' },
+        BULK: { windowMs: 60 * 1000, max: 5, operation: 'bulk operation' }
+    };
+    const config = configs[method];
+    return (0, express_rate_limit_1.default)({
+        windowMs: config.windowMs,
+        max: config.max,
+        message: (req, res) => {
+            console.warn(`[RATE LIMIT] Product ${config.operation} exceeded: IP ${req.ip}, Path: ${req.path}`);
+            res.status(429).json({
+                success: false,
+                message: `Too many product ${config.operation} requests. Please try again later.`,
+                retryAfter: Math.ceil(config.windowMs / 1000)
+            });
+        },
+        standardHeaders: true,
+        legacyHeaders: false
+    });
+};
+exports.createProductLimiter = createProductLimiter;
 // Create custom rate limiter
 const createRateLimiter = (options) => {
     if (isRateLimitDisabled) {

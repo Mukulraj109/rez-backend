@@ -235,6 +235,23 @@ const ProductSchema = new mongoose_1.Schema({
         },
         conditions: [String]
     },
+    // Related Products
+    relatedProducts: [{
+            type: mongoose_1.Schema.Types.ObjectId,
+            ref: 'MProduct' // References other merchant products
+        }],
+    // Frequently Bought With
+    frequentlyBoughtWith: [{
+            product: {
+                type: mongoose_1.Schema.Types.ObjectId,
+                ref: 'MProduct' // References other merchant products
+            },
+            purchaseCount: {
+                type: Number,
+                default: 0,
+                min: 0
+            }
+        }],
     // Additional optional fields for SyncService
     shipping: {
         estimatedDelivery: String,
@@ -257,7 +274,22 @@ const ProductSchema = new mongoose_1.Schema({
     },
     isFeatured: { type: Boolean, default: false },
     sortOrder: { type: Number, default: 0 },
-    publishedAt: Date
+    publishedAt: Date,
+    // Soft delete fields
+    isDeleted: {
+        type: Boolean,
+        default: false,
+        index: true
+    },
+    deletedAt: {
+        type: Date,
+        default: null
+    },
+    deletedBy: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: 'Merchant',
+        default: null
+    }
 }, {
     timestamps: true,
     toJSON: {
@@ -287,10 +319,40 @@ ProductSchema.index({ merchantId: 1, 'ratings.average': -1 });
 ProductSchema.index({ merchantId: 1, isFeatured: 1, sortOrder: 1 });
 ProductSchema.index({ merchantId: 1, visibility: 1, status: 1 });
 // Indexes for analytics and reporting
-ProductSchema.index({ merchantId: 1, createdAt: -1, status: 1 });
-ProductSchema.index({ status: 1, 'cashback.isActive': 1 });
-ProductSchema.index({ 'inventory.stock': 1, 'inventory.lowStockThreshold': 1 }, {
+ProductSchema.index({ merchantId: 1, createdAt: -1, status: 1, isDeleted: 1 });
+ProductSchema.index({ status: 1, 'cashback.isActive': 1, isDeleted: 1 });
+ProductSchema.index({ 'inventory.stock': 1, 'inventory.lowStockThreshold': 1, isDeleted: 1 }, {
     partialFilterExpression: { 'inventory.trackInventory': true }
+});
+// Soft delete indexes
+ProductSchema.index({ isDeleted: 1, deletedAt: 1 });
+ProductSchema.index({ merchantId: 1, isDeleted: 1 });
+// Pre-find middleware to exclude soft-deleted products by default
+ProductSchema.pre(/^find/, function (next) {
+    // Only apply filter if not explicitly querying for deleted products
+    if (!this.getQuery().hasOwnProperty('isDeleted')) {
+        // Use $ne: true to include products where isDeleted is false OR doesn't exist (for backward compatibility)
+        this.where({ isDeleted: { $ne: true } });
+    }
+    next();
+});
+// Pre-findOne middleware
+ProductSchema.pre('findOne', function (next) {
+    // Only apply filter if not explicitly querying for deleted products
+    if (!this.getQuery().hasOwnProperty('isDeleted')) {
+        // Use $ne: true to include products where isDeleted is false OR doesn't exist (for backward compatibility)
+        this.where({ isDeleted: { $ne: true } });
+    }
+    next();
+});
+// Pre-count middleware
+ProductSchema.pre('countDocuments', function (next) {
+    // Only apply filter if not explicitly querying for deleted products
+    if (!this.getQuery().hasOwnProperty('isDeleted')) {
+        // Use $ne: true to include products where isDeleted is false OR doesn't exist (for backward compatibility)
+        this.where({ isDeleted: { $ne: true } });
+    }
+    next();
 });
 // Ensure only one main image per product
 ProductSchema.pre('save', function (next) {

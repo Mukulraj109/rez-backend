@@ -119,3 +119,9 @@ export declare const createPayBillPaymentIntent: (req: Request, res: Response, n
  * @access  Private
  */
 export declare const confirmPayBillPayment: (req: Request, res: Response, next: import("express").NextFunction) => void;
+/**
+ * @desc    Add test funds to wallet (DEVELOPMENT ONLY)
+ * @route   POST /api/wallet/dev-topup
+ * @access  Private
+ */
+export declare const devTopup: (req: Request, res: Response, next: import("express").NextFunction) => void;

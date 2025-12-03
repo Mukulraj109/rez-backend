@@ -12,6 +12,7 @@ export interface ICartItem {
     price: number;
     originalPrice?: number;
     discount?: number;
+    lockedQuantity?: number;
     addedAt: Date;
     notes?: string;
     metadata?: any;
@@ -39,6 +40,13 @@ export interface ILockedItem {
     lockedAt: Date;
     expiresAt: Date;
     notes?: string;
+    lockFee?: number;
+    lockFeePercentage?: number;
+    lockDuration?: number;
+    paymentMethod?: 'wallet' | 'paybill' | 'upi';
+    paymentTransactionId?: Types.ObjectId;
+    lockPaymentStatus?: 'pending' | 'paid' | 'refunded' | 'forfeited' | 'applied';
+    isPaidLock?: boolean;
 }
 export interface ICartModel extends Model<ICart> {
     getActiveCart(userId: string): Promise<ICart | null>;

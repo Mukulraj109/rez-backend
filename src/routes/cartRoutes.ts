@@ -12,7 +12,9 @@ import {
   lockItem,
   unlockItem,
   moveLockedToCart,
-  getLockedItems
+  getLockedItems,
+  lockItemWithPayment,
+  getLockFeeOptions
 } from '../controllers/cartController';
 import { authenticate } from '../middleware/auth';
 import { validate, validateParams, cartSchemas, commonSchemas } from '../middleware/validation';
@@ -136,6 +138,18 @@ router.post('/lock/:productId/move-to-cart',
     productId: commonSchemas.objectId().required()
   })),
   moveLockedToCart
+);
+
+// Lock item with payment (MakeMyTrip style)
+router.post('/lock-with-payment',
+  // generalLimiter,, // Disabled for development
+  lockItemWithPayment
+);
+
+// Get lock fee options for a product
+router.get('/lock-fee-options',
+  // generalLimiter,, // Disabled for development
+  getLockFeeOptions
 );
 
 export default router;

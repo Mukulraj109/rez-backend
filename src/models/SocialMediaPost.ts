@@ -6,6 +6,8 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 export interface ISocialMediaPost extends Document {
   user: Types.ObjectId;
   order?: Types.ObjectId;
+  store?: Types.ObjectId; // Store that the order belongs to (for merchant verification)
+  merchant?: Types.ObjectId; // Merchant who owns the store
   platform: 'instagram' | 'facebook' | 'twitter' | 'tiktok';
   postUrl: string;
   status: 'pending' | 'approved' | 'rejected' | 'credited';
@@ -16,6 +18,7 @@ export interface ISocialMediaPost extends Document {
   creditedAt?: Date;
   reviewedBy?: Types.ObjectId;
   rejectionReason?: string;
+  approvalNotes?: string; // Notes from merchant when approving
 
   // Fraud Prevention Fields
   submissionIp?: string;
@@ -63,6 +66,16 @@ const SocialMediaPostSchema = new Schema<ISocialMediaPost>({
   order: {
     type: Schema.Types.ObjectId,
     ref: 'Order',
+    index: true
+  },
+  store: {
+    type: Schema.Types.ObjectId,
+    ref: 'Store',
+    index: true
+  },
+  merchant: {
+    type: Schema.Types.ObjectId,
+    ref: 'Merchant',
     index: true
   },
   platform: {
@@ -129,6 +142,11 @@ const SocialMediaPostSchema = new Schema<ISocialMediaPost>({
     trim: true,
     maxlength: [500, 'Rejection reason cannot exceed 500 characters']
   },
+  approvalNotes: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Approval notes cannot exceed 500 characters']
+  },
   // Fraud Prevention Fields
   submissionIp: {
     type: String,
@@ -172,6 +190,10 @@ SocialMediaPostSchema.index({ user: 1, createdAt: -1 });
 SocialMediaPostSchema.index({ user: 1, status: 1 });
 SocialMediaPostSchema.index({ status: 1, submittedAt: 1 });
 SocialMediaPostSchema.index({ platform: 1, status: 1 });
+// Merchant verification indexes
+SocialMediaPostSchema.index({ store: 1, status: 1 }); // For merchant to query their store's posts
+SocialMediaPostSchema.index({ merchant: 1, status: 1 }); // For merchant to query all their posts
+SocialMediaPostSchema.index({ store: 1, submittedAt: -1 }); // For merchant chronological view
 // Fraud prevention indexes
 SocialMediaPostSchema.index({ user: 1, order: 1 }); // Prevent duplicate order submissions
 SocialMediaPostSchema.index({ submissionIp: 1, submittedAt: -1 }); // Track IP submissions

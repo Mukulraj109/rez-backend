@@ -418,7 +418,45 @@ const StoreSchema = new mongoose_1.Schema({
     consultationTypes: [{
             type: String,
             trim: true
-        }]
+        }],
+    // Action buttons configuration for ProductPage
+    actionButtons: {
+        enabled: {
+            type: Boolean,
+            default: true
+        },
+        buttons: [{
+                id: {
+                    type: String,
+                    enum: ['call', 'product', 'location', 'custom'],
+                    required: true
+                },
+                enabled: {
+                    type: Boolean,
+                    default: true
+                },
+                label: {
+                    type: String,
+                    maxlength: 30,
+                    trim: true
+                },
+                destination: {
+                    type: {
+                        type: String,
+                        enum: ['phone', 'url', 'maps', 'internal']
+                    },
+                    value: {
+                        type: String,
+                        trim: true
+                    }
+                },
+                order: {
+                    type: Number,
+                    default: 0,
+                    min: 0
+                }
+            }]
+    }
 }, {
     timestamps: true,
     toJSON: { virtuals: true },
@@ -560,6 +598,7 @@ StoreSchema.statics.getFeatured = function (limit = 10) {
         .sort({ 'ratings.average': -1 })
         .limit(limit);
 };
+// Use existing model if already registered, otherwise create new one
 // Delete cached model to force schema update (for development)
 if (mongoose_1.default.models.Store) {
     delete mongoose_1.default.models.Store;

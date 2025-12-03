@@ -205,6 +205,11 @@ const ProductSchema = new mongoose_1.Schema({
         allowBackorder: {
             type: Boolean,
             default: false
+        },
+        reservedStock: {
+            type: Number,
+            default: 0,
+            min: 0
         }
     },
     ratings: {
@@ -356,7 +361,15 @@ const ProductSchema = new mongoose_1.Schema({
             default: 0
         },
         validUntil: Date,
-        terms: String
+        terms: String,
+        isActive: {
+            type: Boolean,
+            default: true
+        },
+        conditions: [{
+                type: String,
+                trim: true
+            }]
     },
     deliveryInfo: {
         estimatedDays: {
@@ -412,6 +425,11 @@ const ProductSchema = new mongoose_1.Schema({
         type: Boolean,
         default: false
     },
+    visibility: {
+        type: String,
+        enum: ['public', 'hidden', 'featured'],
+        default: 'public'
+    },
     weight: {
         type: Number,
         min: 0 // in grams
@@ -435,7 +453,26 @@ const ProductSchema = new mongoose_1.Schema({
     relatedProducts: [{
             type: mongoose_1.Schema.Types.ObjectId,
             ref: 'Product'
-        }]
+        }],
+    // Soft delete fields
+    isDeleted: {
+        type: Boolean,
+        default: false,
+        index: true
+    },
+    deletedAt: {
+        type: Date,
+        default: null
+    },
+    deletedBy: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        refPath: 'deletedByModel' // Dynamic reference
+    },
+    deletedByModel: {
+        type: String,
+        enum: ['User', 'Merchant'],
+        default: null
+    }
 }, {
     timestamps: true,
     toJSON: { virtuals: true },
@@ -468,13 +505,17 @@ ProductSchema.index({
     }
 });
 // Compound indexes
-ProductSchema.index({ category: 1, 'pricing.selling': 1, isActive: 1 });
-ProductSchema.index({ store: 1, 'ratings.average': -1 });
-ProductSchema.index({ isFeatured: 1, 'ratings.average': -1, isActive: 1 });
+ProductSchema.index({ category: 1, 'pricing.selling': 1, isActive: 1, isDeleted: 1 });
+ProductSchema.index({ store: 1, 'ratings.average': -1, isDeleted: 1 });
+ProductSchema.index({ isFeatured: 1, 'ratings.average': -1, isActive: 1, isDeleted: 1 });
 // Analytics indexes for merchant dashboard
-ProductSchema.index({ store: 1, 'analytics.purchases': -1 }); // Top selling by quantity
-ProductSchema.index({ store: 1, category: 1, createdAt: -1 }); // Category performance
-ProductSchema.index({ store: 1, 'inventory.stock': 1, 'inventory.lowStockThreshold': 1 }); // Low stock alerts
+ProductSchema.index({ store: 1, 'analytics.purchases': -1, isDeleted: 1 }); // Top selling by quantity
+ProductSchema.index({ store: 1, category: 1, createdAt: -1, isDeleted: 1 }); // Category performance
+ProductSchema.index({ store: 1, 'inventory.stock': 1, 'inventory.lowStockThreshold': 1, isDeleted: 1 }); // Low stock alerts
+// Soft delete indexes
+ProductSchema.index({ isDeleted: 1, deletedAt: 1 }); // For cleanup queries
+ProductSchema.index({ store: 1, isDeleted: 1 }); // For merchant queries with deleted filter
+ProductSchema.index({ merchantId: 1, isDeleted: 1 }); // For merchant queries with deleted filter
 // Virtual for discount percentage
 ProductSchema.virtual('discountPercentage').get(function () {
     if (this.pricing.original <= this.pricing.selling)
@@ -492,6 +533,33 @@ ProductSchema.virtual('isOutOfStock').get(function () {
     if (this.inventory.unlimited)
         return false;
     return this.inventory.stock === 0;
+});
+// Pre-find middleware to exclude soft-deleted products by default
+ProductSchema.pre(/^find/, function (next) {
+    // Only apply filter if not explicitly querying for deleted products
+    if (!this.getQuery().hasOwnProperty('isDeleted')) {
+        // Use $ne: true to include products where isDeleted is false OR doesn't exist (for backward compatibility)
+        this.where({ isDeleted: { $ne: true } });
+    }
+    next();
+});
+// Pre-findOne middleware
+ProductSchema.pre('findOne', function (next) {
+    // Only apply filter if not explicitly querying for deleted products
+    if (!this.getQuery().hasOwnProperty('isDeleted')) {
+        // Use $ne: true to include products where isDeleted is false OR doesn't exist (for backward compatibility)
+        this.where({ isDeleted: { $ne: true } });
+    }
+    next();
+});
+// Pre-count middleware
+ProductSchema.pre('countDocuments', function (next) {
+    // Only apply filter if not explicitly querying for deleted products
+    if (!this.getQuery().hasOwnProperty('isDeleted')) {
+        // Use $ne: true to include products where isDeleted is false OR doesn't exist (for backward compatibility)
+        this.where({ isDeleted: { $ne: true } });
+    }
+    next();
 });
 // Pre-save hook to generate slug and calculate discount
 ProductSchema.pre('save', function (next) {
@@ -662,6 +730,35 @@ ProductSchema.methods.getEstimatedDelivery = function (userLocation) {
     }
     // Return standard delivery time
     return this.deliveryInfo?.standardDeliveryTime || this.deliveryInfo?.estimatedDays || '2-3 days';
+};
+// Method to soft delete product
+ProductSchema.methods.softDelete = async function (deletedBy) {
+    this.isDeleted = true;
+    this.deletedAt = new Date();
+    this.deletedBy = deletedBy;
+    this.deletedByModel = 'Merchant'; // Default to Merchant, can be User if needed
+    this.isActive = false; // Also mark as inactive
+    await this.save();
+};
+// Method to restore soft-deleted product
+ProductSchema.methods.restore = async function () {
+    // Check if product was deleted within 30 days
+    if (this.deletedAt) {
+        const daysSinceDeletion = Math.floor((Date.now() - this.deletedAt.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysSinceDeletion > 30) {
+            throw new Error('Cannot restore product deleted more than 30 days ago');
+        }
+    }
+    this.isDeleted = false;
+    this.deletedAt = null;
+    this.deletedBy = null;
+    this.deletedByModel = null;
+    this.isActive = true; // Restore to active state
+    await this.save();
+};
+// Method to permanently delete product (admin only)
+ProductSchema.methods.permanentDelete = async function () {
+    await this.deleteOne();
 };
 // Static method to search products
 ProductSchema.statics.searchProducts = function (searchText, filters = {}, options = {}) {

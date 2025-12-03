@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.confirmPayBillPayment = exports.createPayBillPaymentIntent = exports.getPayBillTransactions = exports.usePayBillBalance = exports.getPayBillBalance = exports.addPayBillBalance = exports.handlePaymentWebhook = exports.getPaymentMethods = exports.checkPaymentStatus = exports.initiatePayment = exports.getCategoriesBreakdown = exports.updateWalletSettings = exports.getTransactionSummary = exports.processPayment = exports.withdrawFunds = exports.topupWallet = exports.getTransactionById = exports.getTransactions = exports.creditLoyaltyPoints = exports.getWalletBalance = void 0;
+exports.devTopup = exports.confirmPayBillPayment = exports.createPayBillPaymentIntent = exports.getPayBillTransactions = exports.usePayBillBalance = exports.getPayBillBalance = exports.addPayBillBalance = exports.handlePaymentWebhook = exports.getPaymentMethods = exports.checkPaymentStatus = exports.initiatePayment = exports.getCategoriesBreakdown = exports.updateWalletSettings = exports.getTransactionSummary = exports.processPayment = exports.withdrawFunds = exports.topupWallet = exports.getTransactionById = exports.getTransactions = exports.creditLoyaltyPoints = exports.getWalletBalance = void 0;
 const Wallet_1 = require("../models/Wallet");
 const Transaction_1 = require("../models/Transaction");
 const User_1 = require("../models/User");
@@ -1237,5 +1237,54 @@ exports.confirmPayBillPayment = (0, asyncHandler_1.asyncHandler)(async (req, res
     catch (error) {
         console.error('❌ [STRIPE PAYBILL] Error confirming payment:', error);
         (0, response_1.sendError)(res, error.message || 'Failed to confirm payment', 500);
+    }
+});
+/**
+ * @desc    Add test funds to wallet (DEVELOPMENT ONLY)
+ * @route   POST /api/wallet/dev-topup
+ * @access  Private
+ */
+exports.devTopup = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    // Only allow in development
+    if (process.env.NODE_ENV === 'production') {
+        return (0, response_1.sendError)(res, 'This endpoint is not available in production', 403);
+    }
+    const userId = req.userId;
+    const { amount = 1000, type = 'wallet' } = req.body;
+    console.log('🧪 [DEV TOPUP] Adding test funds:', { userId, amount, type });
+    if (!userId) {
+        return (0, response_1.sendError)(res, 'User not authenticated', 401);
+    }
+    try {
+        let wallet = await Wallet_1.Wallet.findOne({ user: userId });
+        if (!wallet) {
+            wallet = new Wallet_1.Wallet({
+                user: userId,
+                balance: { total: 0, available: 0, pending: 0, paybill: 0 },
+                currency: 'INR',
+                isActive: true
+            });
+        }
+        if (type === 'paybill') {
+            wallet.balance.paybill = (wallet.balance.paybill || 0) + Number(amount);
+        }
+        else {
+            wallet.balance.total = (wallet.balance.total || 0) + Number(amount);
+            wallet.balance.available = (wallet.balance.available || 0) + Number(amount);
+        }
+        await wallet.save();
+        console.log('✅ [DEV TOPUP] Test funds added:', wallet.balance);
+        (0, response_1.sendSuccess)(res, {
+            wallet: {
+                balance: wallet.balance,
+                currency: wallet.currency
+            },
+            addedAmount: amount,
+            type: type
+        }, `Test ${type} funds added successfully`);
+    }
+    catch (error) {
+        console.error('❌ [DEV TOPUP] Error:', error);
+        (0, response_1.sendError)(res, error.message, 500);
     }
 });
