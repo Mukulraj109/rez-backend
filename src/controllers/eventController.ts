@@ -19,6 +19,7 @@ export const getAllEvents = asyncHandler(async (req: Request, res: Response) => 
     offset = 0,
     featured,
     upcoming,
+    todayAndFuture,
     sortBy = 'date'
   } = req.query;
 
@@ -49,6 +50,13 @@ export const getAllEvents = asyncHandler(async (req: Request, res: Response) => 
 
   if (upcoming === 'true') {
     query.date = { $gte: new Date() };
+  }
+
+  // Filter from start of today (includes today's events even if time has passed)
+  if (todayAndFuture === 'true') {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    query.date = { $gte: startOfToday };
   }
 
   // Build sort

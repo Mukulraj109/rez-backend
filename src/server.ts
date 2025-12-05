@@ -143,6 +143,7 @@ import merchantOutletRoutes from './merchantroutes/outlets';  // Merchant outlet
 import merchantVideoRoutes from './merchantroutes/videos';  // Merchant promotional video routes
 import bulkImportRoutes from './merchantroutes/bulkImport';  // Bulk product import routes
 import merchantSocialMediaRoutes from './merchantroutes/socialMedia';  // Merchant social media verification routes
+import merchantEventsRoutes from './merchantroutes/events';  // Merchant events management routes
 import { RealTimeService } from './merchantservices/RealTimeService';  // Temporarily disabled
 import { ReportService } from './merchantservices/ReportService';  // Temporarily disabled
 import stockSocketService from './services/stockSocketService';
@@ -733,6 +734,10 @@ console.log('✅ Merchant notification routes registered at /api/merchant/notifi
 // // Merchant Social Media Verification Routes - Verify Instagram posts for user cashback
 app.use('/api/merchant/social-media-posts', merchantSocialMediaRoutes);
 console.log('✅ Merchant social media routes registered at /api/merchant/social-media-posts');
+
+// Merchant Events Management Routes - Create, manage, and track events
+app.use('/api/merchant/events', merchantEventsRoutes);
+console.log('✅ Merchant events routes registered at /api/merchant/events');
 
 // Root endpoint (MUST be before 404 handler)
 app.get('/', (req, res) => {
