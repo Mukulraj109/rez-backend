@@ -1138,7 +1138,8 @@ exports.getRelatedProducts = (0, asyncHandler_1.asyncHandler)(async (req, res) =
     try {
         console.log('🔗 [RELATED PRODUCTS] Getting related products for:', id);
         // Try to get from cache first
-        const cacheKey = cacheHelper_1.CacheKeys.productRecommendations(id, Number(limit));
+        // Added :v2 suffix to bust old cache with missing price data
+        const cacheKey = `${cacheHelper_1.CacheKeys.productRecommendations(id, Number(limit))}:v2`;
         const cachedProducts = await redisService_1.default.get(cacheKey);
         if (cachedProducts) {
             console.log('✅ [RELATED PRODUCTS] Returning from cache');
@@ -1164,7 +1165,7 @@ exports.getRelatedProducts = (0, asyncHandler_1.asyncHandler)(async (req, res) =
             .limit(Number(limit))
             .lean();
         // ✅ CRITICAL FIX: Transform data for frontend
-        const transformedRelatedProducts = relatedProducts.map(product => {
+        const transformedRelatedProducts = relatedProducts.map((product) => {
             // Safely extract pricing
             const sellingPrice = product.pricing?.selling || product.price || 0;
             const originalPrice = product.pricing?.original || product.originalPrice || sellingPrice;

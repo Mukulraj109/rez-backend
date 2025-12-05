@@ -4,21 +4,29 @@ import Joi from 'joi';
 // Generic validation middleware
 export const validate = (schema: Joi.ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
-    const { error } = schema.validate(req.body, { abortEarly: false });
-    
+    const { error, value } = schema.validate(req.body, {
+      abortEarly: false,
+      stripUnknown: true,  // Remove unknown fields
+      allowUnknown: false  // Don't allow unknown fields after stripping
+    });
+
     if (error) {
       const errors = error.details.map(detail => ({
         field: detail.path.join('.'),
         message: detail.message
       }));
-      
+
+      console.log('[VALIDATION ERROR]', JSON.stringify({ body: req.body, errors }, null, 2));
+
       return res.status(400).json({
         success: false,
         message: 'Validation failed',
         errors
       });
     }
-    
+
+    // Use validated/sanitized values
+    req.body = value;
     next();
   };
 };
@@ -84,8 +92,11 @@ export const commonSchemas = {
     search: Joi.string().trim().max(100)
   }),
   
-  // Phone number (Indian format) - accepts +91XXXXXXXXXX, 91XXXXXXXXXX, XXXXXXXXXX formats with optional spaces
- phoneNumber: Joi.string().pattern(/^(\+91|91)?[\s]?[6-9]\d{9}$/).message('Invalid phone number format'),
+  // Phone number (Indian format) - accepts various formats: +91XXXXXXXXXX, 91XXXXXXXXXX, XXXXXXXXXX
+  // More permissive regex to handle edge cases
+  phoneNumber: Joi.string()
+    .pattern(/^(\+?91)?[\s\-]?[6-9]\d{9}$/)
+    .message('Invalid phone number format. Please enter a valid 10-digit Indian mobile number.'),
   
   // Email
   email: Joi.string().email().lowercase(),
@@ -111,10 +122,17 @@ export const commonSchemas = {
 
 // Authentication validation schemas
 export const authSchemas = {
+  // For sign-in/login flow - only phone number required, email and referral are optional
   sendOTP: Joi.object({
     phoneNumber: commonSchemas.phoneNumber.required(),
-    email: commonSchemas.email.optional(),
-    referralCode: Joi.string().trim().uppercase().min(6).max(10).optional()
+    email: Joi.alternatives().try(
+      Joi.string().valid('', null),
+      Joi.string().email().lowercase()
+    ).optional(),
+    referralCode: Joi.alternatives().try(
+      Joi.string().valid('', null),
+      Joi.string().trim().uppercase().min(6).max(10)
+    ).optional()
   }),
   
   verifyOTP: Joi.object({
