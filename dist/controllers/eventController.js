@@ -13,7 +13,7 @@ const paymentGatewayService_1 = __importDefault(require("../services/paymentGate
 // @route   GET /api/events
 // @access  Public
 exports.getAllEvents = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
-    const { category, location, date, limit = 20, offset = 0, featured, upcoming, sortBy = 'date' } = req.query;
+    const { category, location, date, limit = 20, offset = 0, featured, upcoming, todayAndFuture, sortBy = 'date' } = req.query;
     // Build query
     const query = { status: 'published' };
     if (category) {
@@ -36,6 +36,12 @@ exports.getAllEvents = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     }
     if (upcoming === 'true') {
         query.date = { $gte: new Date() };
+    }
+    // Filter from start of today (includes today's events even if time has passed)
+    if (todayAndFuture === 'true') {
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        query.date = { $gte: startOfToday };
     }
     // Build sort
     let sort = { date: 1 };

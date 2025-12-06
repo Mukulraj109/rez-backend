@@ -9,18 +9,25 @@ exports.Joi = joi_1.default;
 // Generic validation middleware
 const validate = (schema) => {
     return (req, res, next) => {
-        const { error } = schema.validate(req.body, { abortEarly: false });
+        const { error, value } = schema.validate(req.body, {
+            abortEarly: false,
+            stripUnknown: true, // Remove unknown fields
+            allowUnknown: false // Don't allow unknown fields after stripping
+        });
         if (error) {
             const errors = error.details.map(detail => ({
                 field: detail.path.join('.'),
                 message: detail.message
             }));
+            console.log('[VALIDATION ERROR]', JSON.stringify({ body: req.body, errors }, null, 2));
             return res.status(400).json({
                 success: false,
                 message: 'Validation failed',
                 errors
             });
         }
+        // Use validated/sanitized values
+        req.body = value;
         next();
     };
 };
@@ -74,8 +81,11 @@ exports.commonSchemas = {
         sort: joi_1.default.string().valid('createdAt', '-createdAt', 'updatedAt', '-updatedAt', 'name', '-name'),
         search: joi_1.default.string().trim().max(100)
     }),
-    // Phone number (Indian format) - accepts +91XXXXXXXXXX, 91XXXXXXXXXX, XXXXXXXXXX formats with optional spaces
-    phoneNumber: joi_1.default.string().pattern(/^(\+91|91)?[\s]?[6-9]\d{9}$/).message('Invalid phone number format'),
+    // Phone number (Indian format) - accepts various formats: +91XXXXXXXXXX, 91XXXXXXXXXX, XXXXXXXXXX
+    // More permissive regex to handle edge cases
+    phoneNumber: joi_1.default.string()
+        .pattern(/^(\+?91)?[\s\-]?[6-9]\d{9}$/)
+        .message('Invalid phone number format. Please enter a valid 10-digit Indian mobile number.'),
     // Email
     email: joi_1.default.string().email().lowercase(),
     // OTP
@@ -93,10 +103,11 @@ exports.commonSchemas = {
 };
 // Authentication validation schemas
 exports.authSchemas = {
+    // For sign-in/login flow - only phone number required, email and referral are optional
     sendOTP: joi_1.default.object({
         phoneNumber: exports.commonSchemas.phoneNumber.required(),
-        email: exports.commonSchemas.email.optional(),
-        referralCode: joi_1.default.string().trim().uppercase().min(6).max(10).optional()
+        email: joi_1.default.alternatives().try(joi_1.default.string().valid('', null), joi_1.default.string().email().lowercase()).optional(),
+        referralCode: joi_1.default.alternatives().try(joi_1.default.string().valid('', null), joi_1.default.string().trim().uppercase().min(6).max(10)).optional()
     }),
     verifyOTP: joi_1.default.object({
         phoneNumber: exports.commonSchemas.phoneNumber.required(),

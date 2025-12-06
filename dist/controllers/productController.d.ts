@@ -16,3 +16,5 @@ export declare const getPopularSearches: (req: Request, res: Response, next: imp
 export declare const getTrendingProducts: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const getRelatedProducts: (req: Request, res: Response, next: import("express").NextFunction) => void;
 export declare const checkAvailability: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getPopularProducts: (req: Request, res: Response, next: import("express").NextFunction) => void;
+export declare const getNearbyProducts: (req: Request, res: Response, next: import("express").NextFunction) => void;

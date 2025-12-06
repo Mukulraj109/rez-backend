@@ -1,6 +1,16 @@
 // Store Promo Coins Configuration
 // Configure how users earn store-specific promo coins
 
+// Subscription tier multipliers for promo coin earning
+// Higher tiers earn more coins per order
+export const TIER_PROMO_COIN_MULTIPLIERS: Record<string, number> = {
+  free: 1.0,       // 5% base earning
+  bronze: 1.25,    // 6.25% effective
+  silver: 1.5,     // 7.5% effective
+  gold: 1.75,      // 8.75% effective
+  platinum: 2.0    // 10% effective
+};
+
 export interface PromoCoinsConfig {
   enabled: boolean;
   earningRate: {
@@ -144,5 +154,37 @@ export function getCoinsExpiryDate(
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + config.expiry.expiryDays);
   return expiryDate;
+}
+
+/**
+ * Get the tier multiplier for promo coin earning
+ * @param tier Subscription tier name
+ * @returns Multiplier value (1.0 for free tier)
+ */
+export function getTierMultiplier(tier: string = 'free'): number {
+  const normalizedTier = tier.toLowerCase();
+  return TIER_PROMO_COIN_MULTIPLIERS[normalizedTier] || TIER_PROMO_COIN_MULTIPLIERS.free;
+}
+
+/**
+ * Calculate promo coins with tier bonus applied
+ * @param orderValue Order total in INR
+ * @param tier User's subscription tier
+ * @param config Optional custom config
+ * @returns Number of promo coins to be awarded (with tier bonus)
+ */
+export function calculatePromoCoinsWithTierBonus(
+  orderValue: number,
+  tier: string = 'free',
+  config: PromoCoinsConfig = DEFAULT_PROMO_COINS_CONFIG
+): number {
+  const baseCoins = calculatePromoCoinsEarned(orderValue, config);
+  const multiplier = getTierMultiplier(tier);
+
+  // Apply tier multiplier and floor the result
+  const bonusCoins = Math.floor(baseCoins * multiplier);
+
+  // Still respect the max coins per order limit
+  return Math.min(bonusCoins, config.earningRate.maxCoinsPerOrder);
 }
 

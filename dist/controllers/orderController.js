@@ -55,6 +55,7 @@ const couponService_1 = __importDefault(require("../services/couponService"));
 const achievementService_1 = __importDefault(require("../services/achievementService"));
 const StorePromoCoin_1 = require("../models/StorePromoCoin");
 const promoCoins_config_1 = require("../config/promoCoins.config");
+const Subscription_1 = require("../models/Subscription");
 const SMSService_1 = require("../services/SMSService");
 const EmailService_1 = __importDefault(require("../services/EmailService"));
 const Store_1 = require("../models/Store");
@@ -62,7 +63,7 @@ const Refund_1 = require("../models/Refund");
 // Create new order from cart
 exports.createOrder = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     const userId = req.userId;
-    const { deliveryAddress, paymentMethod, specialInstructions, couponCode, voucherCode } = req.body;
+    const { deliveryAddress, paymentMethod, specialInstructions, couponCode, voucherCode, coinsUsed } = req.body;
     // Start a MongoDB session for transaction
     const session = await mongoose_1.default.startSession();
     session.startTransaction();
@@ -85,6 +86,46 @@ exports.createOrder = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             await session.abortTransaction();
             session.endSession();
             return (0, response_1.sendBadRequest)(res, 'Cart is empty');
+        }
+        // Validate coin balances if coins are being used
+        if (coinsUsed && (coinsUsed.wasilCoins > 0 || coinsUsed.storePromoCoins > 0)) {
+            console.log('💰 [CREATE ORDER] Validating coin balances:', coinsUsed);
+            // Validate REZ coins (wasilCoins)
+            if (coinsUsed.wasilCoins > 0) {
+                const coinService = require('../services/coinService').default;
+                const userCoinBalance = await coinService.getCoinBalance(userId);
+                if (userCoinBalance < coinsUsed.wasilCoins) {
+                    await session.abortTransaction();
+                    session.endSession();
+                    console.error('❌ [CREATE ORDER] Insufficient REZ coin balance:', {
+                        required: coinsUsed.wasilCoins,
+                        available: userCoinBalance
+                    });
+                    return (0, response_1.sendBadRequest)(res, `Insufficient REZ coin balance. Required: ${coinsUsed.wasilCoins}, Available: ${userCoinBalance}`);
+                }
+                console.log('✅ [CREATE ORDER] REZ coin balance validated:', { required: coinsUsed.wasilCoins, available: userCoinBalance });
+            }
+            // Validate store promo coins
+            if (coinsUsed.storePromoCoins > 0) {
+                // Get the store from the first cart item
+                const firstItem = cart.items[0];
+                const storeId = typeof firstItem.store === 'object'
+                    ? firstItem.store._id
+                    : firstItem.store;
+                if (storeId) {
+                    const storePromoBalance = await StorePromoCoin_1.StorePromoCoin.getAvailableCoins(new mongoose_1.Types.ObjectId(userId), storeId);
+                    if (storePromoBalance < coinsUsed.storePromoCoins) {
+                        await session.abortTransaction();
+                        session.endSession();
+                        console.error('❌ [CREATE ORDER] Insufficient store promo coin balance:', {
+                            required: coinsUsed.storePromoCoins,
+                            available: storePromoBalance
+                        });
+                        return (0, response_1.sendBadRequest)(res, `Insufficient store promo coin balance. Required: ${coinsUsed.storePromoCoins}, Available: ${storePromoBalance}`);
+                    }
+                    console.log('✅ [CREATE ORDER] Store promo coin balance validated:', { required: coinsUsed.storePromoCoins, available: storePromoBalance });
+                }
+            }
         }
         // Validate products availability and build order items
         const orderItems = [];
@@ -264,20 +305,26 @@ exports.createOrder = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
                 // Don't fail order creation, just don't apply the voucher
             }
         }
-        // Calculate total with partner benefits and voucher
-        let total = subtotal + tax + deliveryFee - discount;
+        // Calculate coin discount from coinsUsed
+        const coinDiscount = coinsUsed
+            ? (coinsUsed.wasilCoins || 0) + (coinsUsed.promoCoins || 0) + (coinsUsed.storePromoCoins || 0)
+            : 0;
+        // Calculate total with partner benefits, voucher, and coin discount
+        let total = subtotal + tax + deliveryFee - discount - coinDiscount;
         if (total < 0)
             total = 0;
-        console.log('📦 [CREATE ORDER] Order totals (with partner benefits & voucher):', {
+        console.log('📦 [CREATE ORDER] Order totals (with partner benefits, voucher & coins):', {
             subtotal,
             tax,
             deliveryFee,
             discount,
             voucherDiscount,
+            coinDiscount,
             cashback,
             total,
             partnerBenefitsApplied: partnerBenefits.appliedBenefits,
-            voucherApplied
+            voucherApplied,
+            coinsUsed
         });
         // Generate order number
         const orderCount = await Order_1.Order.countDocuments().session(session);
@@ -299,7 +346,13 @@ exports.createOrder = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
             },
             payment: {
                 method: paymentMethod,
-                status: paymentMethod === 'cod' ? 'pending' : 'pending'
+                status: paymentMethod === 'cod' ? 'pending' : 'pending',
+                coinsUsed: coinsUsed ? {
+                    wasilCoins: coinsUsed.wasilCoins || 0,
+                    promoCoins: coinsUsed.promoCoins || 0,
+                    storePromoCoins: coinsUsed.storePromoCoins || 0,
+                    totalCoinsValue: (coinsUsed.wasilCoins || 0) + (coinsUsed.promoCoins || 0) + (coinsUsed.storePromoCoins || 0)
+                } : undefined
             },
             delivery: {
                 method: 'standard',
@@ -318,6 +371,57 @@ exports.createOrder = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         });
         await order.save({ session });
         console.log('📦 [CREATE ORDER] Order saved successfully:', order.orderNumber);
+        // Deduct coins for COD orders immediately (online payments deduct in PaymentService)
+        if (paymentMethod === 'cod' && coinsUsed && coinDiscount > 0) {
+            console.log('💰 [CREATE ORDER] Deducting coins for COD order:', coinsUsed);
+            // Deduct REZ coins (wasilCoins) from Wallet model
+            if (coinsUsed.wasilCoins && coinsUsed.wasilCoins > 0) {
+                try {
+                    const { Wallet } = require('../models/Wallet');
+                    const wallet = await Wallet.findOne({ user: userId });
+                    if (wallet) {
+                        // Find and update wasil coin in coins array
+                        const wasilCoin = wallet.coins.find((c) => c.type === 'wasil');
+                        if (wasilCoin && wasilCoin.amount >= coinsUsed.wasilCoins) {
+                            wasilCoin.amount -= coinsUsed.wasilCoins;
+                            wasilCoin.lastUsed = new Date();
+                            // Update wallet balances
+                            wallet.balance.available = Math.max(0, wallet.balance.available - coinsUsed.wasilCoins);
+                            wallet.balance.total = Math.max(0, wallet.balance.total - coinsUsed.wasilCoins);
+                            wallet.statistics.totalSpent += coinsUsed.wasilCoins;
+                            wallet.lastTransactionAt = new Date();
+                            await wallet.save();
+                            console.log('✅ [CREATE ORDER] REZ coins deducted from wallet for COD:', coinsUsed.wasilCoins);
+                        }
+                        else {
+                            console.warn('⚠️ [CREATE ORDER] Insufficient wasil coins in wallet');
+                        }
+                    }
+                    // Also create transaction record in CoinTransaction
+                    const coinService = require('../services/coinService').default;
+                    await coinService.deductCoins(userId.toString(), coinsUsed.wasilCoins, 'purchase', `COD Order payment: ${order.orderNumber}`);
+                }
+                catch (coinError) {
+                    console.error('❌ [CREATE ORDER] Failed to deduct REZ coins:', coinError);
+                }
+            }
+            // Deduct store promo coins
+            if (coinsUsed.storePromoCoins && coinsUsed.storePromoCoins > 0) {
+                try {
+                    const firstItem = cart.items[0];
+                    const storeId = typeof firstItem.store === 'object'
+                        ? firstItem.store._id
+                        : firstItem.store;
+                    if (storeId) {
+                        await StorePromoCoin_1.StorePromoCoin.useCoins(new mongoose_1.Types.ObjectId(userId), storeId, coinsUsed.storePromoCoins, order._id);
+                        console.log('✅ [CREATE ORDER] Store promo coins deducted for COD:', coinsUsed.storePromoCoins);
+                    }
+                }
+                catch (coinError) {
+                    console.error('❌ [CREATE ORDER] Failed to deduct store promo coins:', coinError);
+                }
+            }
+        }
         // Mark voucher as used if one was applied
         if (voucherApplied) {
             try {
@@ -730,9 +834,25 @@ exports.updateOrderStatus = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
             // Award store promo coins for delivered order
             try {
                 console.log('💎 [ORDER] Awarding store promo coins for delivered order:', populatedOrder._id);
-                // Calculate promo coins to be earned
+                // Get user's subscription tier for bonus calculation
+                let userTier = 'free';
+                try {
+                    const subscription = await Subscription_1.Subscription.findOne({
+                        user: userIdObj,
+                        status: 'active'
+                    }).select('tier');
+                    if (subscription?.tier) {
+                        userTier = subscription.tier;
+                    }
+                }
+                catch (tierError) {
+                    console.warn('⚠️ [ORDER] Could not fetch user tier, using free tier:', tierError);
+                }
+                // Calculate promo coins with tier bonus
                 const orderValue = populatedOrder.totals.total;
-                const coinsToEarn = (0, promoCoins_config_1.calculatePromoCoinsEarned)(orderValue);
+                const coinsToEarn = (0, promoCoins_config_1.calculatePromoCoinsWithTierBonus)(orderValue, userTier);
+                const baseCoins = (0, promoCoins_config_1.calculatePromoCoinsEarned)(orderValue);
+                const bonusCoins = coinsToEarn - baseCoins;
                 if (coinsToEarn > 0) {
                     // Get store ID from first item (assuming single store per order)
                     const firstItem = populatedOrder.items[0];
@@ -740,9 +860,9 @@ exports.updateOrderStatus = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
                         ? firstItem.store._id
                         : firstItem.store;
                     if (storeId) {
-                        // Award promo coins
+                        // Award promo coins with tier bonus
                         await StorePromoCoin_1.StorePromoCoin.earnCoins(userIdObj, storeId, coinsToEarn, populatedOrder._id);
-                        console.log(`✅ [ORDER] Awarded ${coinsToEarn} promo coins from store ${storeId}`);
+                        console.log(`✅ [ORDER] Awarded ${coinsToEarn} promo coins (base: ${baseCoins}, tier bonus: ${bonusCoins}, tier: ${userTier}) from store ${storeId}`);
                     }
                     else {
                         console.warn('⚠️ [ORDER] Could not determine store ID for promo coins');

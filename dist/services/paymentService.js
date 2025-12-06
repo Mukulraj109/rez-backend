@@ -42,6 +42,8 @@ const Order_1 = require("../models/Order");
 const Product_1 = require("../models/Product");
 const Cart_1 = require("../models/Cart");
 const User_1 = require("../models/User");
+const StorePromoCoin_1 = require("../models/StorePromoCoin");
+const coinService_1 = __importDefault(require("./coinService"));
 const mongoose_1 = __importStar(require("mongoose"));
 const stockSocketService_1 = __importDefault(require("./stockSocketService"));
 const SMSService_1 = require("./SMSService");
@@ -295,6 +297,59 @@ class PaymentService {
             });
             await order.save({ session });
             // Clear user's cart after successful payment
+            // Deduct coins if they were used in this order
+            if (order.payment.coinsUsed) {
+                const { wasilCoins, storePromoCoins } = order.payment.coinsUsed;
+                const userId = order.user;
+                // Deduct REZ coins (wasilCoins) from both Wallet model and CoinTransaction
+                if (wasilCoins && wasilCoins > 0) {
+                    try {
+                        console.log('💰 [PAYMENT SERVICE] Deducting REZ coins:', wasilCoins);
+                        // Update Wallet model (coins array)
+                        const { Wallet } = require('../models/Wallet');
+                        const wallet = await Wallet.findOne({ user: userId });
+                        if (wallet) {
+                            const wasilCoin = wallet.coins.find((c) => c.type === 'wasil');
+                            if (wasilCoin && wasilCoin.amount >= wasilCoins) {
+                                wasilCoin.amount -= wasilCoins;
+                                wasilCoin.lastUsed = new Date();
+                                wallet.balance.available = Math.max(0, wallet.balance.available - wasilCoins);
+                                wallet.balance.total = Math.max(0, wallet.balance.total - wasilCoins);
+                                wallet.statistics.totalSpent += wasilCoins;
+                                wallet.lastTransactionAt = new Date();
+                                await wallet.save();
+                                console.log('✅ [PAYMENT SERVICE] Wallet wasil coins updated:', wasilCoins);
+                            }
+                        }
+                        // Also create transaction record
+                        await coinService_1.default.deductCoins(userId.toString(), wasilCoins, 'purchase', `Order payment: ${order.orderNumber}`);
+                        console.log('✅ [PAYMENT SERVICE] REZ coins deducted successfully:', wasilCoins);
+                    }
+                    catch (coinError) {
+                        console.error('❌ [PAYMENT SERVICE] Failed to deduct REZ coins:', coinError);
+                        // Don't fail payment if coin deduction fails - coins already validated
+                    }
+                }
+                // Deduct store promo coins
+                if (storePromoCoins && storePromoCoins > 0) {
+                    try {
+                        // Get store ID from first order item
+                        const firstItem = order.items[0];
+                        const storeId = typeof firstItem.store === 'object'
+                            ? firstItem.store._id
+                            : firstItem.store;
+                        if (storeId) {
+                            console.log('💰 [PAYMENT SERVICE] Deducting store promo coins:', storePromoCoins);
+                            await StorePromoCoin_1.StorePromoCoin.useCoins(userId, storeId, storePromoCoins, order._id);
+                            console.log('✅ [PAYMENT SERVICE] Store promo coins deducted successfully:', storePromoCoins);
+                        }
+                    }
+                    catch (coinError) {
+                        console.error('❌ [PAYMENT SERVICE] Failed to deduct store promo coins:', coinError);
+                        // Don't fail payment if coin deduction fails - coins already validated
+                    }
+                }
+            }
             const cart = await Cart_1.Cart.findOne({ user: order.user }).session(session);
             if (cart) {
                 cart.items = [];

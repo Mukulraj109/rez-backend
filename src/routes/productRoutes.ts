@@ -16,7 +16,9 @@ import {
   getPopularSearches,
   getTrendingProducts,
   getRelatedProducts,
-  checkAvailability
+  checkAvailability,
+  getPopularProducts,
+  getNearbyProducts
 } from '../controllers/productController';
 import { optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, productSchemas, commonSchemas } from '../middleware/validation';
@@ -104,8 +106,22 @@ router.get('/trending',
   getTrendingProducts
 );
 
+// Get popular products - FOR FRONTEND "Popular" SECTION (v2)
+router.get('/popular',
+  // generalLimiter,, // Disabled for development
+  optionalAuth,
+  getPopularProducts
+);
+
+// Get nearby products - FOR FRONTEND "In Your Area" SECTION
+router.get('/nearby',
+  // generalLimiter,, // Disabled for development
+  optionalAuth,
+  getNearbyProducts
+);
+
 // Get single product by ID
-router.get('/:id', 
+router.get('/:id',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateParams(Joi.object({

@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.checkAvailability = exports.getRelatedProducts = exports.getTrendingProducts = exports.getPopularSearches = exports.getSearchSuggestions = exports.getBundleProducts = exports.getFrequentlyBoughtTogether = exports.getProductAnalytics = exports.trackProductView = exports.getRecommendations = exports.searchProducts = exports.getNewArrivals = exports.getFeaturedProducts = exports.getProductsByStore = exports.getProductsByCategory = exports.getProductById = exports.getProducts = void 0;
+exports.getNearbyProducts = exports.getPopularProducts = exports.checkAvailability = exports.getRelatedProducts = exports.getTrendingProducts = exports.getPopularSearches = exports.getSearchSuggestions = exports.getBundleProducts = exports.getFrequentlyBoughtTogether = exports.getProductAnalytics = exports.trackProductView = exports.getRecommendations = exports.searchProducts = exports.getNewArrivals = exports.getFeaturedProducts = exports.getProductsByStore = exports.getProductsByCategory = exports.getProductById = exports.getProducts = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 const Product_1 = require("../models/Product");
 const Category_1 = require("../models/Category");
@@ -1257,5 +1257,171 @@ exports.checkAvailability = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
     catch (error) {
         console.error('❌ [CHECK AVAILABILITY] Error:', error);
         throw new errorHandler_1.AppError('Failed to check product availability', 500);
+    }
+});
+// Get popular products - FOR FRONTEND "Popular" SECTION
+exports.getPopularProducts = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { limit = 10 } = req.query;
+    try {
+        console.log('🔥 [POPULAR PRODUCTS] Getting popular products with limit:', limit);
+        // Query products sorted by purchases (most ordered first)
+        const products = await Product_1.Product.find({
+            isActive: true,
+            'inventory.isAvailable': true
+        })
+            .populate('category', 'name slug')
+            .populate('store', 'name logo operationalInfo location')
+            .sort({ 'analytics.purchases': -1, 'analytics.views': -1 })
+            .limit(Number(limit))
+            .lean();
+        console.log('✅ [POPULAR PRODUCTS] Found', products.length, 'popular products');
+        // Transform data to include delivery info from store
+        const transformedProducts = products.map((product) => {
+            // Safely extract image
+            let productImage = '';
+            if (Array.isArray(product.images) && product.images.length > 0) {
+                const firstImage = product.images[0];
+                productImage = typeof firstImage === 'string' ? firstImage : firstImage?.url || '';
+            }
+            else if (product.image) {
+                productImage = product.image;
+            }
+            return {
+                id: product._id.toString(),
+                _id: product._id.toString(),
+                name: product.name || product.title || 'Unnamed Product',
+                image: productImage,
+                price: product.pricing?.selling || 0,
+                originalPrice: product.pricing?.original || product.pricing?.selling || 0,
+                discount: product.pricing?.discount || 0,
+                rating: product.ratings?.average || 0,
+                reviewCount: product.ratings?.count || 0,
+                purchases: product.analytics?.purchases || 0,
+                category: product.category?.name || '',
+                store: {
+                    _id: product.store?._id,
+                    name: product.store?.name || '',
+                    logo: product.store?.logo || '',
+                    deliveryTime: product.store?.operationalInfo?.deliveryTime || '30-45 min',
+                    deliveryFee: product.store?.operationalInfo?.deliveryFee || 0,
+                    city: product.store?.location?.city || ''
+                }
+            };
+        });
+        console.log('✅ [POPULAR PRODUCTS] Returning', transformedProducts.length, 'products');
+        (0, response_1.sendSuccess)(res, transformedProducts, 'Popular products retrieved successfully');
+    }
+    catch (error) {
+        console.error('❌ [POPULAR PRODUCTS] Error:', error);
+        throw new errorHandler_1.AppError('Failed to get popular products', 500);
+    }
+});
+// Get nearby products - FOR FRONTEND "In Your Area" SECTION
+exports.getNearbyProducts = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { longitude, latitude, radius = 10, // default 10km
+    limit = 10 } = req.query;
+    try {
+        console.log('📍 [NEARBY PRODUCTS] Getting nearby products:', {
+            longitude, latitude, radius, limit
+        });
+        // Validate coordinates
+        if (!longitude || !latitude) {
+            return (0, response_1.sendError)(res, 'Longitude and latitude are required', 400);
+        }
+        const lng = parseFloat(longitude);
+        const lat = parseFloat(latitude);
+        const radiusKm = parseFloat(radius);
+        const limitNum = parseInt(limit);
+        if (isNaN(lng) || isNaN(lat)) {
+            return (0, response_1.sendError)(res, 'Invalid coordinates', 400);
+        }
+        // Step 1: Find nearby stores using geospatial query
+        const nearbyStores = await Store_1.Store.aggregate([
+            {
+                $geoNear: {
+                    near: { type: 'Point', coordinates: [lng, lat] },
+                    distanceField: 'distance',
+                    maxDistance: radiusKm * 1000, // Convert km to meters
+                    spherical: true,
+                    query: { isActive: true }
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    name: 1,
+                    logo: 1,
+                    operationalInfo: 1,
+                    location: 1,
+                    distance: { $divide: ['$distance', 1000] } // Convert to km
+                }
+            },
+            { $limit: 50 } // Get up to 50 nearby stores
+        ]);
+        console.log('📍 [NEARBY PRODUCTS] Found', nearbyStores.length, 'nearby stores');
+        if (nearbyStores.length === 0) {
+            return (0, response_1.sendSuccess)(res, [], 'No nearby products found');
+        }
+        // Step 2: Get products from nearby stores
+        const storeIds = nearbyStores.map(s => s._id);
+        const storeMap = new Map(nearbyStores.map(s => [s._id.toString(), s]));
+        const products = await Product_1.Product.find({
+            store: { $in: storeIds },
+            isActive: true,
+            'inventory.isAvailable': true
+        })
+            .populate('category', 'name slug')
+            .sort({ 'analytics.purchases': -1 })
+            .limit(limitNum)
+            .lean();
+        console.log('✅ [NEARBY PRODUCTS] Found', products.length, 'products from nearby stores');
+        // Transform data with distance info
+        const transformedProducts = products.map((product) => {
+            const store = storeMap.get(product.store?.toString());
+            // Safely extract image
+            let productImage = '';
+            if (Array.isArray(product.images) && product.images.length > 0) {
+                const firstImage = product.images[0];
+                productImage = typeof firstImage === 'string' ? firstImage : firstImage?.url || '';
+            }
+            else if (product.image) {
+                productImage = product.image;
+            }
+            return {
+                id: product._id.toString(),
+                _id: product._id.toString(),
+                name: product.name || product.title || 'Unnamed Product',
+                image: productImage,
+                price: product.pricing?.selling || 0,
+                originalPrice: product.pricing?.original || product.pricing?.selling || 0,
+                discount: product.pricing?.discount || 0,
+                rating: product.ratings?.average || 0,
+                reviewCount: product.ratings?.count || 0,
+                category: product.category?.name || '',
+                store: {
+                    _id: store?._id,
+                    name: store?.name || '',
+                    logo: store?.logo || '',
+                    deliveryTime: store?.operationalInfo?.deliveryTime || '30-45 min',
+                    deliveryFee: store?.operationalInfo?.deliveryFee || 0,
+                    city: store?.location?.city || '',
+                    distance: store?.distance ? parseFloat(store.distance.toFixed(1)) : null
+                }
+            };
+        });
+        // Sort by distance (closest first)
+        transformedProducts.sort((a, b) => {
+            if (a.store.distance === null)
+                return 1;
+            if (b.store.distance === null)
+                return -1;
+            return a.store.distance - b.store.distance;
+        });
+        console.log('✅ [NEARBY PRODUCTS] Returning', transformedProducts.length, 'products');
+        (0, response_1.sendSuccess)(res, transformedProducts, 'Nearby products retrieved successfully');
+    }
+    catch (error) {
+        console.error('❌ [NEARBY PRODUCTS] Error:', error);
+        throw new errorHandler_1.AppError('Failed to get nearby products', 500);
     }
 });

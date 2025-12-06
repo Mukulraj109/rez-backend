@@ -58,8 +58,20 @@ auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
     page: validation_2.Joi.number().integer().min(1).default(1),
     days: validation_2.Joi.number().integer().min(1).max(30).default(7)
 })), productController_1.getTrendingProducts);
-// Get single product by ID
-router.get('/:id', 
+// Get popular products - FOR FRONTEND "Popular" SECTION (v2)
+// router.get('/popular',
+//   // generalLimiter,, // Disabled for development
+//   optionalAuth,
+//   getPopularProducts
+// );
+// // Get nearby products - FOR FRONTEND "In Your Area" SECTION
+// router.get('/nearby',
+//   // generalLimiter,, // Disabled for development
+//   optionalAuth,
+//   getNearbyProducts
+// );
+// Get single product by ID (only matches valid MongoDB ObjectId format - 24 hex chars)
+router.get('/:id([0-9a-fA-F]{24})', 
 // generalLimiter,, // Disabled for development
 auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
     id: validation_1.commonSchemas.objectId().required()

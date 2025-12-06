@@ -5,6 +5,8 @@ import { Order, IOrder } from '../models/Order';
 import { Product } from '../models/Product';
 import { Cart } from '../models/Cart';
 import { User } from '../models/User';
+import { StorePromoCoin } from '../models/StorePromoCoin';
+import coinService from './coinService';
 import mongoose, { Types } from 'mongoose';
 import stockSocketService from './stockSocketService';
 import { SMSService } from './SMSService';
@@ -357,6 +359,76 @@ class PaymentService {
       await order.save({ session });
 
       // Clear user's cart after successful payment
+      // Deduct coins if they were used in this order
+      if (order.payment.coinsUsed) {
+        const { wasilCoins, storePromoCoins } = order.payment.coinsUsed;
+        const userId = order.user as Types.ObjectId;
+
+        // Deduct REZ coins (wasilCoins) from both Wallet model and CoinTransaction
+        if (wasilCoins && wasilCoins > 0) {
+          try {
+            console.log('💰 [PAYMENT SERVICE] Deducting REZ coins:', wasilCoins);
+
+            // Update Wallet model (coins array)
+            const { Wallet } = require('../models/Wallet');
+            const wallet = await Wallet.findOne({ user: userId });
+
+            if (wallet) {
+              const wasilCoin = wallet.coins.find((c: any) => c.type === 'wasil');
+              if (wasilCoin && wasilCoin.amount >= wasilCoins) {
+                wasilCoin.amount -= wasilCoins;
+                wasilCoin.lastUsed = new Date();
+
+                wallet.balance.available = Math.max(0, wallet.balance.available - wasilCoins);
+                wallet.balance.total = Math.max(0, wallet.balance.total - wasilCoins);
+                wallet.statistics.totalSpent += wasilCoins;
+                wallet.lastTransactionAt = new Date();
+
+                await wallet.save();
+                console.log('✅ [PAYMENT SERVICE] Wallet wasil coins updated:', wasilCoins);
+              }
+            }
+
+            // Also create transaction record
+            await coinService.deductCoins(
+              userId.toString(),
+              wasilCoins,
+              'purchase',
+              `Order payment: ${order.orderNumber}`
+            );
+            console.log('✅ [PAYMENT SERVICE] REZ coins deducted successfully:', wasilCoins);
+          } catch (coinError) {
+            console.error('❌ [PAYMENT SERVICE] Failed to deduct REZ coins:', coinError);
+            // Don't fail payment if coin deduction fails - coins already validated
+          }
+        }
+
+        // Deduct store promo coins
+        if (storePromoCoins && storePromoCoins > 0) {
+          try {
+            // Get store ID from first order item
+            const firstItem = order.items[0];
+            const storeId = typeof firstItem.store === 'object'
+              ? (firstItem.store as any)._id
+              : firstItem.store;
+
+            if (storeId) {
+              console.log('💰 [PAYMENT SERVICE] Deducting store promo coins:', storePromoCoins);
+              await StorePromoCoin.useCoins(
+                userId,
+                storeId as Types.ObjectId,
+                storePromoCoins,
+                order._id as Types.ObjectId
+              );
+              console.log('✅ [PAYMENT SERVICE] Store promo coins deducted successfully:', storePromoCoins);
+            }
+          } catch (coinError) {
+            console.error('❌ [PAYMENT SERVICE] Failed to deduct store promo coins:', coinError);
+            // Don't fail payment if coin deduction fails - coins already validated
+          }
+        }
+      }
+
       const cart = await Cart.findOne({ user: order.user }).session(session);
       if (cart) {
         cart.items = [];

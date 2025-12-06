@@ -1,3 +1,4 @@
+export declare const TIER_PROMO_COIN_MULTIPLIERS: Record<string, number>;
 export interface PromoCoinsConfig {
     enabled: boolean;
     earningRate: {
@@ -50,3 +51,17 @@ export declare function convertCoinsToINR(coins: number, config?: PromoCoinsConf
  * @returns Expiry date or undefined if no expiry
  */
 export declare function getCoinsExpiryDate(config?: PromoCoinsConfig): Date | undefined;
+/**
+ * Get the tier multiplier for promo coin earning
+ * @param tier Subscription tier name
+ * @returns Multiplier value (1.0 for free tier)
+ */
+export declare function getTierMultiplier(tier?: string): number;
+/**
+ * Calculate promo coins with tier bonus applied
+ * @param orderValue Order total in INR
+ * @param tier User's subscription tier
+ * @param config Optional custom config
+ * @returns Number of promo coins to be awarded (with tier bonus)
+ */
+export declare function calculatePromoCoinsWithTierBonus(orderValue: number, tier?: string, config?: PromoCoinsConfig): number;
