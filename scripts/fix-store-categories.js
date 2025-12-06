@@ -1,126 +1,73 @@
 const mongoose = require('mongoose');
-require('dotenv').config();
 
-async function fixStoreCategories() {
-  // Connect to MongoDB
-  await mongoose.connect(process.env.MONGODB_URI, {
-    dbName: process.env.DB_NAME || 'test'
-  });
-  console.log('✅ Connected to MongoDB');
+const MONGODB_URI = 'mongodb+srv://mukulraj756:O71qVcqwpJQvXzWi@cluster0.aulqar3.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+const DB_NAME = 'test';
 
+const categoryMappings = [
+  { keywords: ['tech', 'electronics', 'laptop', 'phone', 'computer', 'gadget'], categoryName: 'Electronics' },
+  { keywords: ['fashion', 'clothing', 'apparel', 'wear', 'dress', 'shirt', 'hub'], categoryName: 'Fashion & Beauty' },
+  { keywords: ['food', 'restaurant', 'cafe', 'pizza', 'burger', 'foodie', 'quickbite', 'bite', 'dine', 'kitchen'], categoryName: 'Food & Dining' },
+  { keywords: ['grocery', 'mart', 'supermarket', 'rapidmart', 'fresh'], categoryName: 'Grocery & Essentials' },
+  { keywords: ['book', 'library'], categoryName: 'Books & Stationery' },
+  { keywords: ['sport', 'fitness', 'gym'], categoryName: 'Sports & Fitness' },
+  { keywords: ['health', 'pharmacy', 'medical', 'wellness'], categoryName: 'Health & Wellness' },
+  { keywords: ['entertainment', 'game', 'movie', 'music'], categoryName: 'Entertainment' },
+  { keywords: ['travel', 'tourism', 'hotel'], categoryName: 'Travel & Tourism' },
+  { keywords: ['home', 'furniture', 'decor'], categoryName: 'Home & Living' },
+  { keywords: ['beauty', 'cosmetic', 'makeup', 'skincare'], categoryName: 'Fashion & Beauty' },
+  { keywords: ['mall', 'shopping'], categoryName: 'General' },
+];
+
+async function run() {
+  await mongoose.connect(MONGODB_URI, { dbName: DB_NAME });
   const db = mongoose.connection.db;
-  try {
-    console.log('\n🔍 Starting store category fix...\n');
+  const stores = db.collection('stores');
+  const categories = db.collection('categories');
 
-    // Get all stores
-    const storesCollection = db.collection('stores');
-    const categoriesCollection = db.collection('categories');
+  const allCats = await categories.find({}).toArray();
+  const catMap = {};
+  allCats.forEach(c => { catMap[c.name] = c._id; });
 
-    const stores = await storesCollection.find({}).toArray();
-    console.log(`📦 Found ${stores.length} stores to check`);
+  const allStores = await stores.find({}).toArray();
+  let updated = 0;
 
-    // Get all valid categories
-    const categories = await categoriesCollection.find({}).toArray();
-    console.log(`📂 Found ${categories.length} categories`);
-
-    const categoryMap = {};
-    categories.forEach(cat => {
-      categoryMap[cat.name.toLowerCase()] = cat._id;
-      if (cat.slug) {
-        categoryMap[cat.slug.toLowerCase()] = cat._id;
-      }
-    });
-
-    let fixedCount = 0;
-    let invalidCount = 0;
-
-    for (const store of stores) {
-      let needsUpdate = false;
-      let newCategoryId = null;
-
-      // Check if category is a valid ObjectId
-      if (!store.category) {
-        console.log(`⚠️  Store "${store.name}" has no category`);
-        invalidCount++;
-        continue;
-      }
-
-      // Try to convert to ObjectId
-      try {
-        if (typeof store.category === 'string') {
-          // Check if it's a valid ObjectId string
-          if (/^[0-9a-fA-F]{24}$/.test(store.category)) {
-            // It's a valid ObjectId string, convert it
-            newCategoryId = new mongoose.Types.ObjectId(store.category);
-            needsUpdate = true;
-          } else {
-            // It's a category name/slug, look it up
-            const categoryKey = store.category.toLowerCase();
-            if (categoryMap[categoryKey]) {
-              newCategoryId = categoryMap[categoryKey];
-              needsUpdate = true;
-              console.log(`🔧 Fixing store "${store.name}": "${store.category}" → ${newCategoryId}`);
-            } else {
-              console.log(`❌ Store "${store.name}" has unknown category: "${store.category}"`);
-              invalidCount++;
-
-              // Set to a default category (Fashion if exists, or first category)
-              const defaultCategory = categories.find(c => c.name === 'Fashion') || categories[0];
-              if (defaultCategory) {
-                newCategoryId = defaultCategory._id;
-                needsUpdate = true;
-                console.log(`   → Setting to default category: ${defaultCategory.name}`);
-              }
-            }
-          }
-        } else if (store.category._bsontype === 'ObjectId' || store.category instanceof mongoose.Types.ObjectId) {
-          // Already a valid ObjectId, verify it exists
-          const categoryExists = await categoriesCollection.findOne({ _id: store.category });
-          if (!categoryExists) {
-            console.log(`⚠️  Store "${store.name}" has invalid category reference: ${store.category}`);
-            const defaultCategory = categories.find(c => c.name === 'Fashion') || categories[0];
-            if (defaultCategory) {
-              newCategoryId = defaultCategory._id;
-              needsUpdate = true;
-              console.log(`   → Setting to default category: ${defaultCategory.name}`);
-            }
-            invalidCount++;
-          }
-        }
-      } catch (error) {
-        console.log(`❌ Error processing store "${store.name}":`, error.message);
-        invalidCount++;
-
-        // Set to default category
-        const defaultCategory = categories.find(c => c.name === 'Fashion') || categories[0];
-        if (defaultCategory) {
-          newCategoryId = defaultCategory._id;
-          needsUpdate = true;
-          console.log(`   → Setting to default category: ${defaultCategory.name}`);
-        }
-      }
-
-      // Update the store if needed
-      if (needsUpdate && newCategoryId) {
-        await storesCollection.updateOne(
-          { _id: store._id },
-          { $set: { category: newCategoryId } }
-        );
-        fixedCount++;
+  for (const store of allStores) {
+    const name = store.name.toLowerCase();
+    let newCatName = null;
+    
+    for (const m of categoryMappings) {
+      if (m.keywords.some(k => name.includes(k))) {
+        newCatName = m.categoryName;
+        break;
       }
     }
 
-    console.log('\n✅ Fix completed!');
-    console.log(`📊 Fixed: ${fixedCount} stores`);
-    console.log(`⚠️  Invalid/Missing: ${invalidCount} stores`);
-
-  } catch (error) {
-    console.error('❌ Error fixing store categories:', error);
-  } finally {
-    await mongoose.connection.close();
-    console.log('\n👋 Database connection closed');
-    process.exit(0);
+    if (newCatName && catMap[newCatName]) {
+      const newId = catMap[newCatName];
+      if (!store.category || store.category.toString() !== newId.toString()) {
+        const oldCat = allCats.find(c => c._id.toString() === (store.category?.toString() || ''));
+        console.log(store.name + ': ' + (oldCat?.name || 'none') + ' -> ' + newCatName);
+        await stores.updateOne({ _id: store._id }, { $set: { category: newId } });
+        updated++;
+      }
+    }
   }
+
+  console.log('\nUpdated ' + updated + ' stores');
+  
+  // Show distribution
+  const dist = await stores.aggregate([
+    { $group: { _id: '$category', count: { $sum: 1 } } },
+    { $sort: { count: -1 } }
+  ]).toArray();
+  
+  console.log('\nNew distribution:');
+  for (const d of dist) {
+    const cat = allCats.find(c => c._id.toString() === d._id?.toString());
+    console.log('  ' + (cat?.name || 'Unknown') + ': ' + d.count);
+  }
+
+  await mongoose.disconnect();
 }
 
-fixStoreCategories();
+run();

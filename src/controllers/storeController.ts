@@ -430,9 +430,9 @@ export const getStoresByCategory = asyncHandler(async (req: Request, res: Respon
   const { page = 1, limit = 20, sortBy = 'rating' } = req.query;
 
   try {
-    const query = { 
-      isActive: true, 
-      categories: categoryId 
+    const query = {
+      isActive: true,
+      category: categoryId  // Fixed: was 'categories', should be 'category'
     };
 
     const sortOptions: any = {};
@@ -459,11 +459,48 @@ export const getStoresByCategory = asyncHandler(async (req: Request, res: Respon
       .limit(Number(limit))
       .lean();
 
+    // Fetch products for each store
+    const storesWithProducts = await Promise.all(
+      stores.map(async (store: any) => {
+        const products = await Product.find({
+          store: store._id,
+          isActive: true,
+          isDeleted: { $ne: true }
+        })
+          .select('name images pricing ratings inventory tags brand shortDescription subCategory category')
+          .limit(10)
+          .lean();
+
+        // Transform products to match frontend expected format
+        const transformedProducts = products.map((product: any) => ({
+          _id: product._id,
+          name: product.name,
+          image: product.images?.[0] || '',
+          imageUrl: product.images?.[0] || '',
+          price: product.pricing?.selling || 0,
+          originalPrice: product.pricing?.original || 0,
+          rating: product.ratings?.average || 0,
+          reviewCount: product.ratings?.count || 0,
+          inStock: product.inventory?.isAvailable !== false,
+          tags: product.tags || [],
+          brand: product.brand || '',
+          description: product.shortDescription || '',
+          subCategory: product.subCategory?.toString() || null,
+          category: product.category?.toString() || null
+        }));
+
+        return {
+          ...store,
+          products: transformedProducts
+        };
+      })
+    );
+
     const total = await Store.countDocuments(query);
     const totalPages = Math.ceil(total / Number(limit));
 
     sendSuccess(res, {
-      stores,
+      stores: storesWithProducts,
       pagination: {
         page: Number(page),
         limit: Number(limit),
@@ -475,6 +512,7 @@ export const getStoresByCategory = asyncHandler(async (req: Request, res: Respon
     }, 'Stores by category retrieved successfully');
 
   } catch (error) {
+    console.error('Error fetching stores by category:', error);
     throw new AppError('Failed to fetch stores by category', 500);
   }
 });
