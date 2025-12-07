@@ -18,7 +18,9 @@ import {
   getRelatedProducts,
   checkAvailability,
   getPopularProducts,
-  getNearbyProducts
+  getNearbyProducts,
+  getHotDeals,
+  getProductsByCategorySlugHomepage
 } from '../controllers/productController';
 import { optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, productSchemas, commonSchemas } from '../middleware/validation';
@@ -118,6 +120,26 @@ router.get('/nearby',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   getNearbyProducts
+);
+
+// Get hot deals - FOR FRONTEND "Hot Deals" SECTION
+router.get('/hot-deals',
+  // generalLimiter,, // Disabled for development
+  optionalAuth,
+  getHotDeals
+);
+
+// Get products by category slug - FOR FRONTEND HOMEPAGE CATEGORY SECTIONS
+router.get('/category-section/:categorySlug',
+  // generalLimiter,, // Disabled for development
+  optionalAuth,
+  validateParams(Joi.object({
+    categorySlug: Joi.string().required()
+  })),
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(20).default(10)
+  })),
+  getProductsByCategorySlugHomepage
 );
 
 // Get single product by ID
