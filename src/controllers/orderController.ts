@@ -507,11 +507,14 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     console.log('📦 [CREATE ORDER] Order creation complete');
 
     // Mark coupon as used if one was applied
-    if (cart.coupon?.code) {
-      console.log('🎟️ [CREATE ORDER] Marking coupon as used:', cart.coupon.code);
+    // Check both cart.coupon (from DB) and couponCode (from request body)
+    // Frontend passes couponCode in request but doesn't save it to cart DB
+    const appliedCouponCode = cart.coupon?.code || couponCode;
+    if (appliedCouponCode) {
+      console.log('🎟️ [CREATE ORDER] Marking coupon as used:', appliedCouponCode);
       await couponService.markCouponAsUsed(
         new Types.ObjectId(userId),
-        cart.coupon.code,
+        appliedCouponCode,
         order._id as Types.ObjectId
       );
     }
