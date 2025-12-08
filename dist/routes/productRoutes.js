@@ -59,19 +59,27 @@ auth_1.optionalAuth, (0, validation_1.validateQuery)(validation_2.Joi.object({
     days: validation_2.Joi.number().integer().min(1).max(30).default(7)
 })), productController_1.getTrendingProducts);
 // Get popular products - FOR FRONTEND "Popular" SECTION (v2)
-// router.get('/popular',
-//   // generalLimiter,, // Disabled for development
-//   optionalAuth,
-//   getPopularProducts
-// );
-// // Get nearby products - FOR FRONTEND "In Your Area" SECTION
-// router.get('/nearby',
-//   // generalLimiter,, // Disabled for development
-//   optionalAuth,
-//   getNearbyProducts
-// );
-// Get single product by ID (only matches valid MongoDB ObjectId format - 24 hex chars)
-router.get('/:id([0-9a-fA-F]{24})', 
+router.get('/popular', 
+// generalLimiter,, // Disabled for development
+auth_1.optionalAuth, productController_1.getPopularProducts);
+// Get nearby products - FOR FRONTEND "In Your Area" SECTION
+router.get('/nearby', 
+// generalLimiter,, // Disabled for development
+auth_1.optionalAuth, productController_1.getNearbyProducts);
+// Get hot deals - FOR FRONTEND "Hot Deals" SECTION
+router.get('/hot-deals', 
+// generalLimiter,, // Disabled for development
+auth_1.optionalAuth, productController_1.getHotDeals);
+// Get products by category slug - FOR FRONTEND HOMEPAGE CATEGORY SECTIONS
+router.get('/category-section/:categorySlug', 
+// generalLimiter,, // Disabled for development
+auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
+    categorySlug: validation_2.Joi.string().required()
+})), (0, validation_1.validateQuery)(validation_2.Joi.object({
+    limit: validation_2.Joi.number().integer().min(1).max(20).default(10)
+})), productController_1.getProductsByCategorySlugHomepage);
+// Get single product by ID
+router.get('/:id', 
 // generalLimiter,, // Disabled for development
 auth_1.optionalAuth, (0, validation_1.validateParams)(validation_2.Joi.object({
     id: validation_1.commonSchemas.objectId().required()

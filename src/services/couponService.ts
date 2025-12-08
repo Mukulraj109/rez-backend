@@ -406,20 +406,34 @@ class CouponService {
       }
 
       // Find user's claimed coupon
-      const userCoupon = await UserCoupon.findOne({
+      let userCoupon = await UserCoupon.findOne({
         user: userId,
         coupon: coupon._id,
         status: 'available',
       });
 
       if (userCoupon) {
+        // Mark existing claimed coupon as used
         await (userCoupon as any).markAsUsed(orderId);
+      } else {
+        // User used coupon without claiming first - create a 'used' record to track usage
+        // This prevents the same user from using the coupon again
+        await UserCoupon.create({
+          user: userId,
+          coupon: coupon._id,
+          claimedDate: new Date(),
+          expiryDate: coupon.validTo,
+          status: 'used',
+          usedDate: new Date(),
+          usedInOrder: orderId,
+        });
+        console.log(`✅ [COUPON SERVICE] Created used UserCoupon record for unclaimed coupon ${couponCode}`);
       }
 
       // Increment coupon usage count
       await (coupon as any).incrementUsageCount();
 
-      console.log(`✅ [COUPON SERVICE] Coupon ${couponCode} marked as used`);
+      console.log(`✅ [COUPON SERVICE] Coupon ${couponCode} marked as used by user ${userId}`);
     } catch (error) {
       console.error('❌ [COUPON SERVICE] Error marking coupon as used:', error);
     }

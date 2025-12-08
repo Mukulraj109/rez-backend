@@ -445,6 +445,75 @@ class PaymentService {
         console.log('🛒 [PAYMENT SERVICE] Cart cleared after successful payment');
       }
 
+      // Create ServiceBooking records for service items in the order
+      const serviceBookings: any[] = [];
+      for (const orderItem of order.items) {
+        if ((orderItem as any).itemType === 'service' && (orderItem as any).serviceBookingDetails) {
+          try {
+            console.log('📅 [PAYMENT SERVICE] Creating ServiceBooking for service item:', orderItem.name);
+
+            const { ServiceBooking } = require('../models/ServiceBooking');
+            const serviceBookingDetails = (orderItem as any).serviceBookingDetails;
+
+            // Generate booking number
+            const bookingNumber = await ServiceBooking.generateBookingNumber();
+
+            // Get user info for customer details
+            let user = order.user as any;
+            if (typeof user === 'string' || user instanceof mongoose.Types.ObjectId) {
+              user = await User.findById(user);
+            }
+
+            const customerName = serviceBookingDetails.customerName ||
+              (user?.profile?.firstName ? `${user.profile.firstName} ${user.profile.lastName || ''}`.trim() : 'Customer');
+            const customerPhone = serviceBookingDetails.customerPhone || user?.phoneNumber || '';
+            const customerEmail = serviceBookingDetails.customerEmail || user?.email;
+
+            // Create service booking
+            const booking = new ServiceBooking({
+              bookingNumber,
+              user: order.user,
+              service: orderItem.product,
+              store: orderItem.store,
+              customerName,
+              customerPhone,
+              customerEmail,
+              bookingDate: serviceBookingDetails.bookingDate,
+              timeSlot: serviceBookingDetails.timeSlot,
+              duration: serviceBookingDetails.duration || 60,
+              serviceType: serviceBookingDetails.serviceType || 'store',
+              pricing: {
+                basePrice: orderItem.price,
+                total: orderItem.subtotal,
+                currency: 'INR'
+              },
+              paymentStatus: 'paid',
+              paymentMethod: order.payment.method,
+              customerNotes: serviceBookingDetails.customerNotes,
+              status: 'confirmed',
+              orderId: order._id
+            });
+
+            await booking.save({ session });
+
+            // Update order item with service booking ID
+            (orderItem as any).serviceBookingId = booking._id;
+
+            serviceBookings.push(booking);
+            console.log('✅ [PAYMENT SERVICE] ServiceBooking created:', booking.bookingNumber);
+          } catch (bookingError) {
+            console.error('❌ [PAYMENT SERVICE] Error creating ServiceBooking:', bookingError);
+            // Don't fail payment if booking creation fails - log and continue
+          }
+        }
+      }
+
+      // Save order with updated serviceBookingIds
+      if (serviceBookings.length > 0) {
+        await order.save({ session });
+        console.log('📅 [PAYMENT SERVICE] Created', serviceBookings.length, 'service booking(s)');
+      }
+
       // Commit transaction
       await session.commitTransaction();
       session.endSession();

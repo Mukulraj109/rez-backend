@@ -1,10 +1,26 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 import { Model } from 'mongoose';
 
+// Service booking details for cart items
+export interface IServiceBookingDetails {
+  bookingDate: Date;
+  timeSlot: {
+    start: string;
+    end: string;
+  };
+  duration: number; // in minutes
+  serviceType: 'home' | 'store' | 'online';
+  customerNotes?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+}
+
 export interface ICartItem {
   product?: Types.ObjectId; // Optional - for products
   event?: Types.ObjectId; // Optional - for events
   store: Types.ObjectId | null; // Allow null for products without store
+  itemType: 'product' | 'service' | 'event'; // Type of item
   quantity: number;
   variant?: {
     type: string;
@@ -17,6 +33,7 @@ export interface ICartItem {
   addedAt: Date;
   notes?: string;
   metadata?: any; // For storing event-specific metadata (slotId, etc.)
+  serviceBookingDetails?: IServiceBookingDetails; // For service bookings
 }
 
 // Reserved item interface for stock reservation
@@ -142,6 +159,11 @@ const CartSchema = new Schema<ICart>({
       ref: 'Store',
       required: false // Allow null for products without store
     },
+    itemType: {
+      type: String,
+      enum: ['product', 'service', 'event'],
+      default: 'product'
+    },
     quantity: {
       type: Number,
       required: true,
@@ -189,6 +211,42 @@ const CartSchema = new Schema<ICart>({
     metadata: {
       type: Schema.Types.Mixed, // For storing event-specific metadata (slotId, etc.)
       required: false
+    },
+    // Service booking details
+    serviceBookingDetails: {
+      bookingDate: {
+        type: Date
+      },
+      timeSlot: {
+        start: { type: String },
+        end: { type: String }
+      },
+      duration: {
+        type: Number, // in minutes
+        min: 15
+      },
+      serviceType: {
+        type: String,
+        enum: ['home', 'store', 'online']
+      },
+      customerNotes: {
+        type: String,
+        trim: true,
+        maxlength: 500
+      },
+      customerName: {
+        type: String,
+        trim: true
+      },
+      customerPhone: {
+        type: String,
+        trim: true
+      },
+      customerEmail: {
+        type: String,
+        trim: true,
+        lowercase: true
+      }
     }
   }],
   reservedItems: [{
@@ -546,6 +604,7 @@ CartSchema.methods.addItem = async function(
       price: extractedPrice,
       originalPrice: extractedOriginalPrice,
       discount: extractedDiscount,
+      itemType: 'product',
       addedAt: new Date()
     };
 
@@ -1063,6 +1122,7 @@ CartSchema.methods.moveLockedToCart = async function(
         originalPrice: lockedItem.lockedPrice,
         discount: lockedItem.lockFee, // Lock fee (₹500) - only applies to lockedQuantity
         lockedQuantity: lockedItem.quantity, // How many items have the lock fee discount
+        itemType: 'product',
         addedAt: new Date(),
         notes: `Lock fee of ₹${lockedItem.lockFee} already paid for ${lockedItem.quantity} item(s)`
       };

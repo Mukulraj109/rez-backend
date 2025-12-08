@@ -1,9 +1,23 @@
 import mongoose, { Document, Types } from 'mongoose';
+export interface IOrderServiceBookingDetails {
+    bookingDate: Date;
+    timeSlot: {
+        start: string;
+        end: string;
+    };
+    duration: number;
+    serviceType: 'home' | 'store' | 'online';
+    customerNotes?: string;
+    customerName?: string;
+    customerPhone?: string;
+    customerEmail?: string;
+}
 export interface IOrderItem {
     product: Types.ObjectId;
     store: Types.ObjectId;
     name: string;
     image: string;
+    itemType: 'product' | 'service' | 'event';
     quantity: number;
     variant?: {
         type: string;
@@ -13,6 +27,8 @@ export interface IOrderItem {
     originalPrice?: number;
     discount?: number;
     subtotal: number;
+    serviceBookingId?: Types.ObjectId;
+    serviceBookingDetails?: IOrderServiceBookingDetails;
 }
 export interface IOrderTotals {
     subtotal: number;

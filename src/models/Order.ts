@@ -1,11 +1,27 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
+// Service booking details for order items
+export interface IOrderServiceBookingDetails {
+  bookingDate: Date;
+  timeSlot: {
+    start: string;
+    end: string;
+  };
+  duration: number; // in minutes
+  serviceType: 'home' | 'store' | 'online';
+  customerNotes?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+}
+
 // Order item interface
 export interface IOrderItem {
   product: Types.ObjectId;
   store: Types.ObjectId;
   name: string; // Store product name at time of order
   image: string; // Store product image at time of order
+  itemType: 'product' | 'service' | 'event'; // Type of item
   quantity: number;
   variant?: {
     type: string;
@@ -15,6 +31,9 @@ export interface IOrderItem {
   originalPrice?: number;
   discount?: number;
   subtotal: number; // price * quantity
+  // Service booking specific fields
+  serviceBookingId?: Types.ObjectId; // Reference to created ServiceBooking
+  serviceBookingDetails?: IOrderServiceBookingDetails;
 }
 
 // Order totals interface
@@ -227,6 +246,11 @@ const OrderSchema = new Schema<IOrder>({
       type: String,
       required: true
     },
+    itemType: {
+      type: String,
+      enum: ['product', 'service', 'event'],
+      default: 'product'
+    },
     quantity: {
       type: Number,
       required: true,
@@ -260,6 +284,27 @@ const OrderSchema = new Schema<IOrder>({
       type: Number,
       required: true,
       min: 0
+    },
+    // Service booking specific fields
+    serviceBookingId: {
+      type: Schema.Types.ObjectId,
+      ref: 'ServiceBooking'
+    },
+    serviceBookingDetails: {
+      bookingDate: { type: Date },
+      timeSlot: {
+        start: { type: String },
+        end: { type: String }
+      },
+      duration: { type: Number, min: 15 },
+      serviceType: {
+        type: String,
+        enum: ['home', 'store', 'online']
+      },
+      customerNotes: { type: String, trim: true, maxlength: 500 },
+      customerName: { type: String, trim: true },
+      customerPhone: { type: String, trim: true },
+      customerEmail: { type: String, trim: true, lowercase: true }
     }
   }],
   totals: {

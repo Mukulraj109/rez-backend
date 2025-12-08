@@ -25,6 +25,26 @@ declare class StripeService {
         metadata?: Record<string, string>;
     }): Promise<Stripe.Checkout.Session>;
     /**
+     * Create a checkout session for general order payment (products, services)
+     */
+    createCheckoutSessionForOrder(params: {
+        orderId: string;
+        amount: number;
+        currency?: string;
+        customerEmail?: string;
+        customerName?: string;
+        successUrl: string;
+        cancelUrl: string;
+        items?: Array<{
+            name: string;
+            description?: string;
+            amount: number;
+            quantity: number;
+            itemType?: 'product' | 'service' | 'event';
+        }>;
+        metadata?: Record<string, string>;
+    }): Promise<Stripe.Checkout.Session>;
+    /**
      * Retrieve a checkout session
      */
     getCheckoutSession(sessionId: string): Promise<Stripe.Checkout.Session>;

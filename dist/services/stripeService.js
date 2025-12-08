@@ -90,6 +90,81 @@ class StripeService {
         }
     }
     /**
+     * Create a checkout session for general order payment (products, services)
+     */
+    async createCheckoutSessionForOrder(params) {
+        if (!this.stripe) {
+            throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY in environment variables.');
+        }
+        console.log('💳 [STRIPE SERVICE] Creating checkout session for order:', {
+            orderId: params.orderId,
+            amount: params.amount,
+            itemCount: params.items?.length,
+        });
+        try {
+            // Convert amount to smallest currency unit (paise for INR)
+            const amountInPaise = Math.round(params.amount * 100);
+            // Build line items from order items or use total amount
+            let lineItems;
+            if (params.items && params.items.length > 0) {
+                // Create line items from order items
+                lineItems = params.items.map(item => ({
+                    price_data: {
+                        currency: params.currency || 'inr',
+                        product_data: {
+                            name: item.name,
+                            description: item.description || (item.itemType === 'service' ? 'Service Booking' : 'Product'),
+                        },
+                        unit_amount: Math.round(item.amount * 100),
+                    },
+                    quantity: item.quantity,
+                }));
+            }
+            else {
+                // Use total amount as single line item
+                lineItems = [
+                    {
+                        price_data: {
+                            currency: params.currency || 'inr',
+                            product_data: {
+                                name: `Order ${params.orderId}`,
+                                description: 'Order payment',
+                            },
+                            unit_amount: amountInPaise,
+                        },
+                        quantity: 1,
+                    },
+                ];
+            }
+            // Create checkout session
+            const session = await this.stripe.checkout.sessions.create({
+                payment_method_types: ['card'],
+                line_items: lineItems,
+                mode: 'payment',
+                success_url: params.successUrl,
+                cancel_url: params.cancelUrl,
+                customer_email: params.customerEmail,
+                metadata: {
+                    orderId: params.orderId,
+                    paymentType: 'order',
+                    ...params.metadata,
+                },
+                payment_intent_data: {
+                    metadata: {
+                        orderId: params.orderId,
+                        paymentType: 'order',
+                    },
+                },
+            });
+            console.log('✅ [STRIPE SERVICE] Order checkout session created:', session.id);
+            return session;
+        }
+        catch (error) {
+            console.error('❌ [STRIPE SERVICE] Error creating order checkout session:', error.message);
+            throw new Error(`Failed to create Stripe checkout session for order: ${error.message}`);
+        }
+    }
+    /**
      * Retrieve a checkout session
      */
     async getCheckoutSession(sessionId) {

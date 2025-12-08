@@ -327,6 +327,7 @@ class ReorderService {
             price: validItem.currentPrice,
             originalPrice: validItem.currentPrice,
             discount: 0,
+            itemType: 'product',
             addedAt: new Date()
           });
         }

@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getNearbyProducts = exports.getPopularProducts = exports.checkAvailability = exports.getRelatedProducts = exports.getTrendingProducts = exports.getPopularSearches = exports.getSearchSuggestions = exports.getBundleProducts = exports.getFrequentlyBoughtTogether = exports.getProductAnalytics = exports.trackProductView = exports.getRecommendations = exports.searchProducts = exports.getNewArrivals = exports.getFeaturedProducts = exports.getProductsByStore = exports.getProductsByCategory = exports.getProductById = exports.getProducts = void 0;
+exports.getProductsByCategorySlugHomepage = exports.getHotDeals = exports.getNearbyProducts = exports.getPopularProducts = exports.checkAvailability = exports.getRelatedProducts = exports.getTrendingProducts = exports.getPopularSearches = exports.getSearchSuggestions = exports.getBundleProducts = exports.getFrequentlyBoughtTogether = exports.getProductAnalytics = exports.trackProductView = exports.getRecommendations = exports.searchProducts = exports.getNewArrivals = exports.getFeaturedProducts = exports.getProductsByStore = exports.getProductsByCategory = exports.getProductById = exports.getProducts = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 const Product_1 = require("../models/Product");
 const Category_1 = require("../models/Category");
@@ -1423,5 +1423,142 @@ exports.getNearbyProducts = (0, asyncHandler_1.asyncHandler)(async (req, res) =>
     catch (error) {
         console.error('❌ [NEARBY PRODUCTS] Error:', error);
         throw new errorHandler_1.AppError('Failed to get nearby products', 500);
+    }
+});
+// Get hot deals products - FOR FRONTEND "Hot Deals" SECTION
+exports.getHotDeals = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { limit = 10 } = req.query;
+    try {
+        console.log('🔥 [HOT DEALS] Getting hot deals with limit:', limit);
+        // Step 1: Try to find products with 'hot-deal' tag
+        let products = await Product_1.Product.find({
+            tags: 'hot-deal',
+            isActive: true,
+            'inventory.isAvailable': true
+        })
+            .populate('category', 'name slug')
+            .populate('store', 'name logo operationalInfo location')
+            .sort({ 'cashback.percentage': -1 })
+            .limit(Number(limit))
+            .lean();
+        console.log('🔥 [HOT DEALS] Found', products.length, 'products with hot-deal tag');
+        // Step 2: Fallback to high-cashback products if no tagged products
+        if (products.length === 0) {
+            console.log('🔥 [HOT DEALS] No tagged products, falling back to high-cashback');
+            products = await Product_1.Product.find({
+                isActive: true,
+                'inventory.isAvailable': true,
+                'cashback.percentage': { $gte: 15 },
+                'cashback.isActive': true
+            })
+                .populate('category', 'name slug')
+                .populate('store', 'name logo operationalInfo location')
+                .sort({ 'cashback.percentage': -1 })
+                .limit(Number(limit))
+                .lean();
+            console.log('🔥 [HOT DEALS] Found', products.length, 'high-cashback products');
+        }
+        // Transform data for frontend
+        const transformedProducts = products.map((product) => {
+            let productImage = '';
+            if (Array.isArray(product.images) && product.images.length > 0) {
+                const firstImage = product.images[0];
+                productImage = typeof firstImage === 'string' ? firstImage : firstImage?.url || '';
+            }
+            else if (product.image) {
+                productImage = product.image;
+            }
+            return {
+                id: product._id.toString(),
+                _id: product._id.toString(),
+                name: product.name || 'Unnamed Product',
+                image: productImage,
+                price: product.pricing?.selling || 0,
+                originalPrice: product.pricing?.original || product.pricing?.selling || 0,
+                discount: product.pricing?.discount || 0,
+                rating: product.ratings?.average || 0,
+                reviewCount: product.ratings?.count || 0,
+                cashbackPercentage: product.cashback?.percentage || 0,
+                category: product.category?.name || '',
+                store: {
+                    _id: product.store?._id,
+                    name: product.store?.name || '',
+                    logo: product.store?.logo || '',
+                    city: product.store?.location?.city || ''
+                }
+            };
+        });
+        console.log('✅ [HOT DEALS] Returning', transformedProducts.length, 'hot deals');
+        (0, response_1.sendSuccess)(res, transformedProducts, 'Hot deals retrieved successfully');
+    }
+    catch (error) {
+        console.error('❌ [HOT DEALS] Error:', error);
+        throw new errorHandler_1.AppError('Failed to get hot deals', 500);
+    }
+});
+// Get products by category slug - FOR FRONTEND HOMEPAGE CATEGORY SECTIONS
+exports.getProductsByCategorySlugHomepage = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
+    const { categorySlug } = req.params;
+    const { limit = 10 } = req.query;
+    try {
+        console.log('📂 [CATEGORY SECTION] Getting products for category:', categorySlug, 'limit:', limit);
+        // Find the category by slug
+        const category = await Category_1.Category.findOne({
+            slug: categorySlug,
+            isActive: true
+        });
+        if (!category) {
+            console.log('⚠️ [CATEGORY SECTION] Category not found:', categorySlug);
+            return (0, response_1.sendSuccess)(res, [], 'Category not found');
+        }
+        // Get products in this category
+        const products = await Product_1.Product.find({
+            category: category._id,
+            isActive: true,
+            'inventory.isAvailable': true
+        })
+            .populate('category', 'name slug')
+            .populate('store', 'name logo operationalInfo location')
+            .sort({ 'cashback.percentage': -1, 'analytics.purchases': -1 })
+            .limit(Number(limit))
+            .lean();
+        console.log('📂 [CATEGORY SECTION] Found', products.length, 'products for', categorySlug);
+        // Transform data for frontend (same format as getHotDeals)
+        const transformedProducts = products.map((product) => {
+            let productImage = '';
+            if (Array.isArray(product.images) && product.images.length > 0) {
+                const firstImage = product.images[0];
+                productImage = typeof firstImage === 'string' ? firstImage : firstImage?.url || '';
+            }
+            else if (product.image) {
+                productImage = product.image;
+            }
+            return {
+                id: product._id.toString(),
+                _id: product._id.toString(),
+                name: product.name || 'Unnamed Product',
+                image: productImage,
+                price: product.pricing?.selling || 0,
+                originalPrice: product.pricing?.original || product.pricing?.selling || 0,
+                discount: product.pricing?.discount || 0,
+                rating: product.ratings?.average || 0,
+                reviewCount: product.ratings?.count || 0,
+                cashbackPercentage: product.cashback?.percentage || 0,
+                category: product.category?.name || '',
+                categorySlug: product.category?.slug || '',
+                store: {
+                    _id: product.store?._id,
+                    name: product.store?.name || '',
+                    logo: product.store?.logo || '',
+                    city: product.store?.location?.city || ''
+                }
+            };
+        });
+        console.log('✅ [CATEGORY SECTION] Returning', transformedProducts.length, 'products for', categorySlug);
+        (0, response_1.sendSuccess)(res, transformedProducts, `Products for ${category.name} retrieved successfully`);
+    }
+    catch (error) {
+        console.error('❌ [CATEGORY SECTION] Error:', error);
+        throw new errorHandler_1.AppError('Failed to get products by category', 500);
     }
 });

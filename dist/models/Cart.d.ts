@@ -1,9 +1,23 @@
 import { Document, Types } from 'mongoose';
 import { Model } from 'mongoose';
+export interface IServiceBookingDetails {
+    bookingDate: Date;
+    timeSlot: {
+        start: string;
+        end: string;
+    };
+    duration: number;
+    serviceType: 'home' | 'store' | 'online';
+    customerNotes?: string;
+    customerName?: string;
+    customerPhone?: string;
+    customerEmail?: string;
+}
 export interface ICartItem {
     product?: Types.ObjectId;
     event?: Types.ObjectId;
     store: Types.ObjectId | null;
+    itemType: 'product' | 'service' | 'event';
     quantity: number;
     variant?: {
         type: string;
@@ -16,6 +30,7 @@ export interface ICartItem {
     addedAt: Date;
     notes?: string;
     metadata?: any;
+    serviceBookingDetails?: IServiceBookingDetails;
 }
 export interface IReservedItem {
     productId: Types.ObjectId;

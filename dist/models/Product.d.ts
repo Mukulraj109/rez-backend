@@ -103,6 +103,18 @@ export interface IFrequentlyBoughtWith {
     purchaseCount: number;
     lastUpdated?: Date;
 }
+export interface IServiceDetails {
+    duration: number;
+    serviceType: 'home' | 'store' | 'online';
+    maxBookingsPerSlot: number;
+    requiresAddress: boolean;
+    requiresPaymentUpfront: boolean;
+    serviceArea?: {
+        radius: number;
+        cities?: string[];
+    };
+    serviceCategory?: Types.ObjectId;
+}
 export interface IProduct {
     name: string;
     slug: string;
@@ -129,6 +141,8 @@ export interface IProduct {
     analytics: IProductAnalytics;
     cashback?: IProductCashback;
     deliveryInfo?: IProductDeliveryInfo;
+    serviceDetails?: IServiceDetails;
+    serviceCategory?: Types.ObjectId;
     bundleProducts?: Types.ObjectId[];
     frequentlyBoughtWith?: IFrequentlyBoughtWith[];
     isActive: boolean;

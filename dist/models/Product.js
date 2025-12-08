@@ -394,6 +394,51 @@ const ProductSchema = new mongoose_1.Schema({
         },
         deliveryPartner: String
     },
+    // Service-specific fields (for productType: 'service')
+    serviceDetails: {
+        duration: {
+            type: Number,
+            min: 15,
+            max: 480 // max 8 hours
+        },
+        serviceType: {
+            type: String,
+            enum: ['home', 'store', 'online'],
+            default: 'store'
+        },
+        maxBookingsPerSlot: {
+            type: Number,
+            min: 1,
+            default: 1
+        },
+        requiresAddress: {
+            type: Boolean,
+            default: false
+        },
+        requiresPaymentUpfront: {
+            type: Boolean,
+            default: false
+        },
+        serviceArea: {
+            radius: {
+                type: Number,
+                min: 0
+            },
+            cities: [{
+                    type: String,
+                    trim: true
+                }]
+        },
+        serviceCategory: {
+            type: mongoose_1.Schema.Types.ObjectId,
+            ref: 'ServiceCategory'
+        }
+    },
+    serviceCategory: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: 'ServiceCategory',
+        index: true
+    },
     bundleProducts: [{
             type: mongoose_1.Schema.Types.ObjectId,
             ref: 'Product'
@@ -490,6 +535,10 @@ ProductSchema.index({ isFeatured: 1, isActive: 1 });
 ProductSchema.index({ tags: 1, isActive: 1 });
 ProductSchema.index({ 'inventory.stock': 1, 'inventory.isAvailable': 1 });
 ProductSchema.index({ createdAt: -1 });
+// Service-specific indexes
+ProductSchema.index({ productType: 1, isActive: 1 });
+ProductSchema.index({ serviceCategory: 1, isActive: 1, productType: 1 });
+ProductSchema.index({ productType: 1, 'ratings.average': -1, isActive: 1 });
 // Text search index
 ProductSchema.index({
     name: 'text',

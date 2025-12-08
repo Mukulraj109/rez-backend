@@ -104,6 +104,9 @@ import menuRoutes from './routes/menuRoutes';
 import tableBookingRoutes from './routes/tableBookingRoutes';
 import consultationRoutes from './routes/consultationRoutes';
 import serviceAppointmentRoutes from './routes/serviceAppointmentRoutes';
+import serviceCategoryRoutes from './routes/serviceCategoryRoutes';
+import serviceRoutes from './routes/serviceRoutes';
+import serviceBookingRoutes from './routes/serviceBookingRoutes';
 import storeVisitRoutes from './routes/storeVisitRoutes';
 import homepageRoutes from './routes/homepageRoutes';
 import searchRoutes from './routes/searchRoutes';
@@ -144,6 +147,7 @@ import merchantVideoRoutes from './merchantroutes/videos';  // Merchant promotio
 import bulkImportRoutes from './merchantroutes/bulkImport';  // Bulk product import routes
 import merchantSocialMediaRoutes from './merchantroutes/socialMedia';  // Merchant social media verification routes
 import merchantEventsRoutes from './merchantroutes/events';  // Merchant events management routes
+import merchantServicesRoutes from './merchantroutes/services';  // Merchant services management routes
 import { RealTimeService } from './merchantservices/RealTimeService';  // Temporarily disabled
 import { ReportService } from './merchantservices/ReportService';  // Temporarily disabled
 import stockSocketService from './services/stockSocketService';
@@ -643,6 +647,18 @@ console.log('✅ Table booking routes registered at /api/table-bookings');
 app.use(`${API_PREFIX}/service-appointments`, serviceAppointmentRoutes);
 console.log('✅ Service appointment routes registered at /api/service-appointments');
 
+// Service Categories Routes - Service categories with cashback offers
+app.use(`${API_PREFIX}/service-categories`, serviceCategoryRoutes);
+console.log('✅ Service category routes registered at /api/service-categories');
+
+// Services Routes - Services (products with type 'service')
+app.use(`${API_PREFIX}/services`, serviceRoutes);
+console.log('✅ Service routes registered at /api/services');
+
+// Service Bookings Routes - User service bookings
+app.use(`${API_PREFIX}/service-bookings`, serviceBookingRoutes);
+console.log('✅ Service booking routes registered at /api/service-bookings');
+
 // // Consultation Routes - Medical/Professional consultation bookings
 app.use(`${API_PREFIX}/consultations`, consultationRoutes);
 console.log('✅ Consultation routes registered at /api/consultations');
@@ -738,6 +754,10 @@ console.log('✅ Merchant social media routes registered at /api/merchant/social
 // Merchant Events Management Routes - Create, manage, and track events
 app.use('/api/merchant/events', merchantEventsRoutes);
 console.log('✅ Merchant events routes registered at /api/merchant/events');
+
+// Merchant Services Management Routes - Create, manage services and bookings
+app.use('/api/merchant/services', merchantServicesRoutes);
+console.log('✅ Merchant services routes registered at /api/merchant/services');
 
 // Root endpoint (MUST be before 404 handler)
 app.get('/', (req, res) => {

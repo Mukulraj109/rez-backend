@@ -60,6 +60,8 @@ export declare class OrderModel {
             pricing?: any;
             items: OrderItem[];
             deliveryAddress?: import("../types/shared").Address | undefined;
+            customerName: string;
+            customerEmail: string;
             subtotal: number;
             tax: number;
             delivery?: any;
@@ -83,11 +85,9 @@ export declare class OrderModel {
             deliveredAt?: Date | undefined;
             estimatedDelivery?: Date | undefined;
             priority?: "normal" | "high" | "urgent" | undefined;
-            customerName: string;
             customerId: string;
             customer?: any;
             internalNotes?: string | undefined;
-            customerEmail: string;
             confirmedAt?: Date | undefined;
             shipping: number;
             shippingAddress: import("../types/shared").Address;

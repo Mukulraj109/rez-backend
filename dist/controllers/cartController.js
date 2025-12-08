@@ -115,15 +115,16 @@ exports.addToCart = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
     if (!req.userId) {
         return (0, response_1.sendUnauthorized)(res, 'Authentication required');
     }
-    const { productId, quantity, variant, metadata } = req.body;
+    const { productId, quantity, variant, metadata, itemType, serviceBookingDetails } = req.body;
     try {
         console.log('🛒 [ADD TO CART] Starting add to cart for user:', req.userId);
-        console.log('🛒 [ADD TO CART] Request data:', { productId, quantity, variant, metadata });
+        console.log('🛒 [ADD TO CART] Request data:', { productId, quantity, variant, metadata, itemType, serviceBookingDetails });
         // Verify product exists and is available
         console.log('🛒 [ADD TO CART] Finding product:', productId);
         let product = await Product_1.Product.findById(productId).populate('store');
         let event = null;
         let isEvent = false;
+        let isService = itemType === 'service';
         // If product not found, check if it's an event
         if (!product) {
             console.log('🛒 [ADD TO CART] Product not found, checking if it\'s an event:', productId);
@@ -142,8 +143,13 @@ exports.addToCart = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
                 return (0, response_1.sendNotFound)(res, 'Product not found');
             }
         }
+        // Check if product is a service
+        if (product && product.productType === 'service') {
+            isService = true;
+            console.log('✅ [ADD TO CART] Service found:', product.name);
+        }
         // Handle product-specific validation
-        if (!isEvent && product) {
+        if (!isEvent && !isService && product) {
             console.log('✅ [ADD TO CART] Product found:', product.name);
             console.log('🛒 [ADD TO CART] Product status:', {
                 isActive: product.isActive,
@@ -155,8 +161,18 @@ exports.addToCart = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
                 return (0, response_1.sendNotFound)(res, 'Product not available');
             }
         }
-        // Check stock availability with comprehensive validation (only for products)
-        if (!isEvent && product) {
+        // Validate service booking details
+        if (isService && serviceBookingDetails) {
+            if (!serviceBookingDetails.bookingDate) {
+                return (0, response_1.sendBadRequest)(res, 'Booking date is required for service items');
+            }
+            if (!serviceBookingDetails.timeSlot || !serviceBookingDetails.timeSlot.start) {
+                return (0, response_1.sendBadRequest)(res, 'Time slot is required for service items');
+            }
+            console.log('✅ [ADD TO CART] Service booking details validated:', serviceBookingDetails);
+        }
+        // Check stock availability with comprehensive validation (only for products, not services)
+        if (!isEvent && !isService && product) {
             let availableStock = product.inventory.stock;
             const lowStockThreshold = product.inventory.lowStockThreshold || 5;
             let variantInfo = '';
@@ -237,6 +253,7 @@ exports.addToCart = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
                 const cartItem = {
                     event: event._id,
                     store: null, // Events don't have stores
+                    itemType: 'event',
                     quantity,
                     price: eventPrice,
                     originalPrice: eventOriginalPrice,
@@ -247,6 +264,58 @@ exports.addToCart = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
                 cart.items.push(cartItem);
             }
         }
+        else if (isService && product) {
+            // Handle services - add with booking details
+            console.log('🛒 [ADD TO CART] Adding service to cart');
+            const servicePrice = product.pricing?.selling || product.price?.current || 0;
+            const serviceOriginalPrice = product.pricing?.original || product.price?.original || servicePrice;
+            // Services are unique per booking slot - check for duplicate booking
+            const existingServiceIndex = cart.items.findIndex((item) => {
+                if (item.product?.toString() !== productId)
+                    return false;
+                if (item.itemType !== 'service')
+                    return false;
+                // Same service on same date/time is a duplicate
+                if (serviceBookingDetails && item.serviceBookingDetails) {
+                    const sameDate = new Date(item.serviceBookingDetails.bookingDate).toDateString() ===
+                        new Date(serviceBookingDetails.bookingDate).toDateString();
+                    const sameTime = item.serviceBookingDetails.timeSlot?.start === serviceBookingDetails.timeSlot?.start;
+                    return sameDate && sameTime;
+                }
+                return false;
+            });
+            if (existingServiceIndex >= 0) {
+                console.log('❌ [ADD TO CART] Service already booked for this date/time');
+                return (0, response_1.sendBadRequest)(res, 'This service is already in your cart for the selected date and time');
+            }
+            // Get store ID
+            const storeId = typeof product.store === 'object' && product.store?._id
+                ? product.store._id
+                : product.store;
+            // Add new service item
+            const cartItem = {
+                product: product._id,
+                store: storeId,
+                itemType: 'service',
+                quantity: 1, // Services are always quantity 1 per booking
+                price: servicePrice,
+                originalPrice: serviceOriginalPrice,
+                discount: serviceOriginalPrice > servicePrice ? serviceOriginalPrice - servicePrice : 0,
+                addedAt: new Date(),
+                serviceBookingDetails: {
+                    bookingDate: new Date(serviceBookingDetails.bookingDate),
+                    timeSlot: serviceBookingDetails.timeSlot,
+                    duration: serviceBookingDetails.duration || product.serviceDetails?.duration || 60,
+                    serviceType: serviceBookingDetails.serviceType || product.serviceDetails?.serviceType || 'store',
+                    customerNotes: serviceBookingDetails.customerNotes,
+                    customerName: serviceBookingDetails.customerName,
+                    customerPhone: serviceBookingDetails.customerPhone,
+                    customerEmail: serviceBookingDetails.customerEmail
+                }
+            };
+            console.log('🛒 [ADD TO CART] Service cart item:', cartItem);
+            cart.items.push(cartItem);
+        }
         else if (product) {
             // Handle products - use existing addItem method
             await cart.addItem(productId, quantity, variant);
@@ -256,8 +325,8 @@ exports.addToCart = (0, asyncHandler_1.asyncHandler)(async (req, res) => {
         await cart.calculateTotals();
         console.log('🛒 [ADD TO CART] Saving cart...');
         await cart.save();
-        // Reserve stock for the added item (only for products)
-        if (!isEvent && product) {
+        // Reserve stock for the added item (only for products, not services or events)
+        if (!isEvent && !isService && product) {
             console.log('🔒 [ADD TO CART] Reserving stock...');
             const reservationResult = await reservationService_1.default.reserveStock(cart._id.toString(), productId, quantity, variant);
             if (!reservationResult.success) {

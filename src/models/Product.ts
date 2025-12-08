@@ -124,6 +124,20 @@ export interface IFrequentlyBoughtWith {
   lastUpdated?: Date;
 }
 
+// Service details interface (for products with productType: 'service')
+export interface IServiceDetails {
+  duration: number;                    // Service duration in minutes
+  serviceType: 'home' | 'store' | 'online';
+  maxBookingsPerSlot: number;          // How many bookings per time slot
+  requiresAddress: boolean;            // For home services
+  requiresPaymentUpfront: boolean;     // Merchant choice: pay now or pay later
+  serviceArea?: {
+    radius: number;                    // km (for home services)
+    cities?: string[];
+  };
+  serviceCategory?: Types.ObjectId;    // Reference to ServiceCategory
+}
+
 // Main Product interface
 export interface IProduct {
   name: string;
@@ -151,6 +165,8 @@ export interface IProduct {
   analytics: IProductAnalytics;
   cashback?: IProductCashback;
   deliveryInfo?: IProductDeliveryInfo;
+  serviceDetails?: IServiceDetails;     // For services only
+  serviceCategory?: Types.ObjectId;     // Reference to ServiceCategory for services
   bundleProducts?: Types.ObjectId[];
   frequentlyBoughtWith?: IFrequentlyBoughtWith[];
   isActive: boolean;
@@ -554,6 +570,51 @@ const ProductSchema = new Schema<IProduct>({
     },
     deliveryPartner: String
   },
+  // Service-specific fields (for productType: 'service')
+  serviceDetails: {
+    duration: {
+      type: Number,
+      min: 15,
+      max: 480 // max 8 hours
+    },
+    serviceType: {
+      type: String,
+      enum: ['home', 'store', 'online'],
+      default: 'store'
+    },
+    maxBookingsPerSlot: {
+      type: Number,
+      min: 1,
+      default: 1
+    },
+    requiresAddress: {
+      type: Boolean,
+      default: false
+    },
+    requiresPaymentUpfront: {
+      type: Boolean,
+      default: false
+    },
+    serviceArea: {
+      radius: {
+        type: Number,
+        min: 0
+      },
+      cities: [{
+        type: String,
+        trim: true
+      }]
+    },
+    serviceCategory: {
+      type: Schema.Types.ObjectId,
+      ref: 'ServiceCategory'
+    }
+  },
+  serviceCategory: {
+    type: Schema.Types.ObjectId,
+    ref: 'ServiceCategory',
+    index: true
+  },
   bundleProducts: [{
     type: Schema.Types.ObjectId,
     ref: 'Product'
@@ -652,6 +713,10 @@ ProductSchema.index({ isFeatured: 1, isActive: 1 });
 ProductSchema.index({ tags: 1, isActive: 1 });
 ProductSchema.index({ 'inventory.stock': 1, 'inventory.isAvailable': 1 });
 ProductSchema.index({ createdAt: -1 });
+// Service-specific indexes
+ProductSchema.index({ productType: 1, isActive: 1 });
+ProductSchema.index({ serviceCategory: 1, isActive: 1, productType: 1 });
+ProductSchema.index({ productType: 1, 'ratings.average': -1, isActive: 1 });
 
 // Text search index
 ProductSchema.index({

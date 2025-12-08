@@ -59,6 +59,11 @@ const CartSchema = new mongoose_1.Schema({
                 ref: 'Store',
                 required: false // Allow null for products without store
             },
+            itemType: {
+                type: String,
+                enum: ['product', 'service', 'event'],
+                default: 'product'
+            },
             quantity: {
                 type: Number,
                 required: true,
@@ -106,6 +111,42 @@ const CartSchema = new mongoose_1.Schema({
             metadata: {
                 type: mongoose_1.Schema.Types.Mixed, // For storing event-specific metadata (slotId, etc.)
                 required: false
+            },
+            // Service booking details
+            serviceBookingDetails: {
+                bookingDate: {
+                    type: Date
+                },
+                timeSlot: {
+                    start: { type: String },
+                    end: { type: String }
+                },
+                duration: {
+                    type: Number, // in minutes
+                    min: 15
+                },
+                serviceType: {
+                    type: String,
+                    enum: ['home', 'store', 'online']
+                },
+                customerNotes: {
+                    type: String,
+                    trim: true,
+                    maxlength: 500
+                },
+                customerName: {
+                    type: String,
+                    trim: true
+                },
+                customerPhone: {
+                    type: String,
+                    trim: true
+                },
+                customerEmail: {
+                    type: String,
+                    trim: true,
+                    lowercase: true
+                }
             }
         }],
     reservedItems: [{

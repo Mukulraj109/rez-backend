@@ -209,7 +209,25 @@ export const cartSchemas = {
     variant: Joi.object({
       type: Joi.string().required(),
       value: Joi.string().required()
-    })
+    }),
+    itemType: Joi.string().valid('product', 'service', 'event').optional(),
+    serviceBookingDetails: Joi.object({
+      bookingDate: Joi.string().isoDate().required(),
+      timeSlot: Joi.object({
+        start: Joi.string().required(),
+        end: Joi.string().required()
+      }).required(),
+      duration: Joi.number().optional(),
+      serviceType: Joi.string().valid('home', 'store', 'online').optional(),
+      customerNotes: Joi.string().allow('').optional(),
+      customerName: Joi.string().optional(),
+      customerPhone: Joi.string().optional(),
+      customerEmail: Joi.string().email().allow('').optional()
+    }).optional(),
+    metadata: Joi.object({
+      storeId: Joi.string().optional(),
+      slotId: Joi.string().optional()
+    }).unknown(true).optional()
   }),
   
   updateCartItem: Joi.object({

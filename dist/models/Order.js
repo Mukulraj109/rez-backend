@@ -69,6 +69,11 @@ const OrderSchema = new mongoose_1.Schema({
                 type: String,
                 required: true
             },
+            itemType: {
+                type: String,
+                enum: ['product', 'service', 'event'],
+                default: 'product'
+            },
             quantity: {
                 type: Number,
                 required: true,
@@ -102,6 +107,27 @@ const OrderSchema = new mongoose_1.Schema({
                 type: Number,
                 required: true,
                 min: 0
+            },
+            // Service booking specific fields
+            serviceBookingId: {
+                type: mongoose_1.Schema.Types.ObjectId,
+                ref: 'ServiceBooking'
+            },
+            serviceBookingDetails: {
+                bookingDate: { type: Date },
+                timeSlot: {
+                    start: { type: String },
+                    end: { type: String }
+                },
+                duration: { type: Number, min: 15 },
+                serviceType: {
+                    type: String,
+                    enum: ['home', 'store', 'online']
+                },
+                customerNotes: { type: String, trim: true, maxlength: 500 },
+                customerName: { type: String, trim: true },
+                customerPhone: { type: String, trim: true },
+                customerEmail: { type: String, trim: true, lowercase: true }
             }
         }],
     totals: {

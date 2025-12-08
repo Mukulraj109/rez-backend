@@ -100,6 +100,9 @@ const menuRoutes_1 = __importDefault(require("./routes/menuRoutes"));
 const tableBookingRoutes_1 = __importDefault(require("./routes/tableBookingRoutes"));
 const consultationRoutes_1 = __importDefault(require("./routes/consultationRoutes"));
 const serviceAppointmentRoutes_1 = __importDefault(require("./routes/serviceAppointmentRoutes"));
+const serviceCategoryRoutes_1 = __importDefault(require("./routes/serviceCategoryRoutes"));
+const serviceRoutes_1 = __importDefault(require("./routes/serviceRoutes"));
+const serviceBookingRoutes_1 = __importDefault(require("./routes/serviceBookingRoutes"));
 const storeVisitRoutes_1 = __importDefault(require("./routes/storeVisitRoutes"));
 const homepageRoutes_1 = __importDefault(require("./routes/homepageRoutes"));
 const searchRoutes_1 = __importDefault(require("./routes/searchRoutes"));
@@ -139,6 +142,7 @@ const videos_1 = __importDefault(require("./merchantroutes/videos")); // Merchan
 const bulkImport_1 = __importDefault(require("./merchantroutes/bulkImport")); // Bulk product import routes
 const socialMedia_1 = __importDefault(require("./merchantroutes/socialMedia")); // Merchant social media verification routes
 const events_1 = __importDefault(require("./merchantroutes/events")); // Merchant events management routes
+const services_1 = __importDefault(require("./merchantroutes/services")); // Merchant services management routes
 const RealTimeService_1 = require("./merchantservices/RealTimeService"); // Temporarily disabled
 const ReportService_1 = require("./merchantservices/ReportService"); // Temporarily disabled
 const stockSocketService_1 = __importDefault(require("./services/stockSocketService"));
@@ -589,6 +593,15 @@ console.log('✅ Table booking routes registered at /api/table-bookings');
 // Service Appointment Routes - Service appointments for salons, spas, consultations
 app.use(`${API_PREFIX}/service-appointments`, serviceAppointmentRoutes_1.default);
 console.log('✅ Service appointment routes registered at /api/service-appointments');
+// Service Categories Routes - Service categories with cashback offers
+app.use(`${API_PREFIX}/service-categories`, serviceCategoryRoutes_1.default);
+console.log('✅ Service category routes registered at /api/service-categories');
+// Services Routes - Services (products with type 'service')
+app.use(`${API_PREFIX}/services`, serviceRoutes_1.default);
+console.log('✅ Service routes registered at /api/services');
+// Service Bookings Routes - User service bookings
+app.use(`${API_PREFIX}/service-bookings`, serviceBookingRoutes_1.default);
+console.log('✅ Service booking routes registered at /api/service-bookings');
 // // Consultation Routes - Medical/Professional consultation bookings
 app.use(`${API_PREFIX}/consultations`, consultationRoutes_1.default);
 console.log('✅ Consultation routes registered at /api/consultations');
@@ -668,6 +681,9 @@ console.log('✅ Merchant social media routes registered at /api/merchant/social
 // Merchant Events Management Routes - Create, manage, and track events
 app.use('/api/merchant/events', events_1.default);
 console.log('✅ Merchant events routes registered at /api/merchant/events');
+// Merchant Services Management Routes - Create, manage services and bookings
+app.use('/api/merchant/services', services_1.default);
+console.log('✅ Merchant services routes registered at /api/merchant/services');
 // Root endpoint (MUST be before 404 handler)
 app.get('/', (req, res) => {
     res.json({
