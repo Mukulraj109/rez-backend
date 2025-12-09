@@ -1352,6 +1352,144 @@ export const notifyNewProduct = asyncHandler(async (req: Request, res: Response)
   }
 });
 
+// Search stores by category slug (for frontend categories page)
+export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Response) => {
+  const { slug } = req.params;
+  const {
+    page = 1,
+    limit = 20,
+    sortBy = 'rating'
+  } = req.query;
+
+  try {
+    console.log(`🔍 [GET STORES BY SLUG] Searching for category: ${slug}`);
+
+    // Import Category model (named export)
+    const { Category } = require('../models/Category');
+
+    // Find the category by slug (could be main category or subcategory)
+    const category = await Category.findOne({
+      slug: slug,
+      isActive: true
+    }).lean();
+
+    if (!category) {
+      console.log(`❌ [GET STORES BY SLUG] Category not found: ${slug}`);
+      return sendNotFound(res, `Category '${slug}' not found`);
+    }
+
+    console.log(`✅ [GET STORES BY SLUG] Found category: ${category.name} (${category._id})`);
+
+    // Build query - search for stores with this category OR its parent category
+    const categoryIds = [category._id];
+
+    // If this is a subcategory, also include the parent category
+    if (category.parentCategory) {
+      categoryIds.push(category.parentCategory);
+    }
+
+    // If this is a main category, also include all its child categories
+    if (category.childCategories && category.childCategories.length > 0) {
+      categoryIds.push(...category.childCategories);
+    }
+
+    const query: any = {
+      isActive: true,
+      $or: [
+        { category: { $in: categoryIds } },
+        { 'categories': { $in: categoryIds } }
+      ]
+    };
+
+    // Sorting
+    const sortOptions: any = {};
+    switch (sortBy) {
+      case 'rating':
+        sortOptions['ratings.average'] = -1;
+        break;
+      case 'name':
+        sortOptions.name = 1;
+        break;
+      case 'newest':
+        sortOptions.createdAt = -1;
+        break;
+      default:
+        sortOptions['ratings.average'] = -1;
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Fetch stores
+    const [stores, total] = await Promise.all([
+      Store.find(query)
+        .populate('category', 'name slug icon')
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      Store.countDocuments(query)
+    ]);
+
+    console.log(`📦 [GET STORES BY SLUG] Found ${stores.length} stores for category ${slug}`);
+
+    // Fetch products for each store (first 4 products)
+    const storesWithProducts = await Promise.all(
+      stores.map(async (store: any) => {
+        const products = await Product.find({
+          store: store._id,
+          isActive: true
+        })
+          .select('name pricing images slug rating inventory')
+          .limit(4)
+          .lean();
+
+        // Transform products to expected format
+        const transformedProducts = products.map((product: any) => ({
+          _id: product._id,
+          productId: product._id,
+          name: product.name,
+          price: product.pricing?.current || product.pricing?.base || 0,
+          originalPrice: product.pricing?.original || product.pricing?.base || null,
+          discountPercentage: product.pricing?.discount || null,
+          imageUrl: product.images?.[0] || 'https://via.placeholder.com/150',
+          rating: product.rating?.value || 0,
+          reviewCount: product.rating?.count || 0,
+          inStock: product.inventory?.isAvailable !== false
+        }));
+
+        return {
+          ...store,
+          products: transformedProducts
+        };
+      })
+    );
+
+    const totalPages = Math.ceil(total / Number(limit));
+
+    sendSuccess(res, {
+      stores: storesWithProducts,
+      category: {
+        _id: category._id,
+        name: category.name,
+        slug: category.slug,
+        icon: category.icon
+      },
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        totalPages,
+        hasNext: Number(page) < totalPages,
+        hasPrev: Number(page) > 1
+      }
+    }, `Found ${total} stores for category: ${category.name}`);
+
+  } catch (error) {
+    console.error('❌ [GET STORES BY SLUG] Error:', error);
+    throw new AppError('Failed to get stores by category slug', 500);
+  }
+});
+
 // Helper function to calculate distance between two coordinates
 function calculateDistance(coord1: [number, number], coord2: [number, number]): number {
   const [lon1, lat1] = coord1;

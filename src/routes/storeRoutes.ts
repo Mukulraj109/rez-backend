@@ -17,7 +17,8 @@ import {
   getStoreFollowers,
   sendFollowerNotification,
   notifyNewOffer,
-  notifyNewProduct
+  notifyNewProduct,
+  getStoresByCategorySlug
 } from '../controllers/storeController';
 import { getStoreReviews } from '../controllers/reviewController';
 import {
@@ -129,7 +130,7 @@ router.get('/trending',
 );
 
 // Get stores by category
-router.get('/category/:categoryId', 
+router.get('/category/:categoryId',
   // generalLimiter, // Disabled for development
   optionalAuth,
   validateParams(Joi.object({
@@ -141,6 +142,21 @@ router.get('/category/:categoryId',
     sortBy: Joi.string().valid('rating', 'name', 'newest').default('rating')
   })),
   getStoresByCategory
+);
+
+// Get stores by category slug (for frontend categories page)
+router.get('/by-category-slug/:slug',
+  // generalLimiter, // Disabled for development
+  optionalAuth,
+  validateParams(Joi.object({
+    slug: Joi.string().required()
+  })),
+  validateQuery(Joi.object({
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(50).default(20),
+    sortBy: Joi.string().valid('rating', 'distance', 'name', 'newest').default('rating')
+  })),
+  getStoresByCategorySlug
 );
 
 // Get single store by ID or slug
