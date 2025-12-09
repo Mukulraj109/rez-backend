@@ -414,6 +414,117 @@ export const getProductsByCategory = asyncHandler(async (req: Request, res: Resp
   }
 });
 
+// Get products by subcategory slug - FOR BROWSE CATEGORIES SLIDER
+export const getProductsBySubcategory = asyncHandler(async (req: Request, res: Response) => {
+  const { subcategorySlug } = req.params;
+  const { limit = 10 } = req.query;
+
+  try {
+    console.log('📂 [SUBCATEGORY PRODUCTS] Getting products for subcategory:', subcategorySlug);
+
+    // First, try to find subcategory in Category collection
+    const subcategory = await Category.findOne({
+      slug: subcategorySlug,
+      isActive: true
+    });
+
+    let products: any[] = [];
+
+    if (subcategory) {
+      // Found subcategory - get products with this subCategory
+      console.log('📂 [SUBCATEGORY PRODUCTS] Found subcategory:', subcategory.name, subcategory._id);
+
+      products = await Product.find({
+        $or: [
+          { subCategory: subcategory._id },
+          { category: subcategory._id }
+        ],
+        isActive: true
+      })
+        .populate('category', 'name slug')
+        .populate('subCategory', 'name slug')
+        .populate('store', 'name logo operationalInfo location subcategorySlug')
+        .sort({ 'ratings.average': -1, 'cashback.percentage': -1 })
+        .limit(Number(limit))
+        .lean();
+
+      console.log('📂 [SUBCATEGORY PRODUCTS] Found', products.length, 'products by subCategory');
+    }
+
+    // If no products found via Category, try via Store's subcategorySlug
+    if (products.length === 0) {
+      console.log('📂 [SUBCATEGORY PRODUCTS] No products via Category, trying via Store subcategorySlug');
+
+      // Find stores with this subcategorySlug
+      const stores = await Store.find({
+        subcategorySlug: subcategorySlug,
+        isActive: true
+      }).select('_id').lean();
+
+      if (stores.length > 0) {
+        const storeIds = stores.map(s => s._id);
+        console.log('📂 [SUBCATEGORY PRODUCTS] Found', stores.length, 'stores with subcategorySlug:', subcategorySlug);
+
+        products = await Product.find({
+          store: { $in: storeIds },
+          isActive: true
+        })
+          .populate('category', 'name slug')
+          .populate('subCategory', 'name slug')
+          .populate('store', 'name logo operationalInfo location subcategorySlug')
+          .sort({ 'ratings.average': -1, 'cashback.percentage': -1 })
+          .limit(Number(limit))
+          .lean();
+
+        console.log('📂 [SUBCATEGORY PRODUCTS] Found', products.length, 'products via Store subcategorySlug');
+      }
+    }
+
+    // Transform products for frontend
+    const transformedProducts = products.map((product: any) => {
+      let productImage = '';
+      if (Array.isArray(product.images) && product.images.length > 0) {
+        const firstImage = product.images[0];
+        productImage = typeof firstImage === 'string' ? firstImage : firstImage?.url || '';
+      } else if (product.image) {
+        productImage = product.image;
+      }
+
+      return {
+        id: product._id.toString(),
+        _id: product._id.toString(),
+        name: product.name || 'Unnamed Product',
+        image: productImage,
+        images: product.images,
+        price: product.pricing?.selling || product.pricing?.salePrice || 0,
+        originalPrice: product.pricing?.original || product.pricing?.basePrice || product.pricing?.selling || 0,
+        discount: product.pricing?.discount || 0,
+        rating: product.ratings?.average || 0,
+        reviewCount: product.ratings?.count || 0,
+        category: product.category?.name || '',
+        subCategory: product.subCategory?.name || '',
+        subSubCategory: product.subSubCategory || '',
+        store: product.store ? {
+          id: product.store._id?.toString(),
+          name: product.store.name,
+          logo: product.store.logo,
+          subcategorySlug: product.store.subcategorySlug
+        } : null,
+        cashback: product.cashback?.percentage || 0,
+        description: product.description || '',
+        isFeatured: product.isFeatured || false
+      };
+    });
+
+    console.log('📂 [SUBCATEGORY PRODUCTS] Returning', transformedProducts.length, 'products for', subcategorySlug);
+    sendSuccess(res, transformedProducts, `Products for subcategory: ${subcategorySlug}`);
+
+  } catch (error) {
+    console.error('❌ [SUBCATEGORY PRODUCTS] Error:', error);
+    throw new AppError('Failed to fetch products by subcategory', 500);
+  }
+});
+
 // Get products by store
 export const getProductsByStore = asyncHandler(async (req: Request, res: Response) => {
   const { storeId } = req.params;

@@ -147,6 +147,7 @@ export interface IProduct {
   productType: 'product' | 'service'; // Type: physical product or service
   category: Types.ObjectId;
   subCategory?: Types.ObjectId;
+  subSubCategory?: string; // Sub-sub-category (cuisine/item type)
   store: Types.ObjectId;
   merchantId?: Types.ObjectId; // Link to merchant for easier querying
   brand?: string;
@@ -251,6 +252,11 @@ const ProductSchema = new Schema<IProduct>({
   subCategory: {
     type: Schema.Types.ObjectId,
     ref: 'Category'
+  },
+  subSubCategory: {
+    type: String,
+    trim: true,
+    maxlength: 100
   },
   store: {
     type: Schema.Types.ObjectId,
@@ -705,6 +711,7 @@ const ProductSchema = new Schema<IProduct>({
 ProductSchema.index({ slug: 1 });
 ProductSchema.index({ sku: 1 });
 ProductSchema.index({ category: 1, isActive: 1 });
+ProductSchema.index({ subSubCategory: 1, isActive: 1 });
 ProductSchema.index({ store: 1, isActive: 1 });
 ProductSchema.index({ brand: 1, isActive: 1 });
 ProductSchema.index({ 'pricing.selling': 1 });

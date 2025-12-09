@@ -1,12 +1,7 @@
 /**
- * Script to update all stores with the new 11 category structure
- *
- * This script:
- * 1. Fetches all stores from the database
- * 2. Shows their current category assignments
- * 3. Assigns them to the new 11 main categories based on their name/type
- *
- * Run: npx ts-node src/scripts/updateStoreCategories.ts
+ * Update Store Categories Script
+ * Ensures each store has correct category (main) and subcategory ObjectIds
+ * Based on the subcategorySlug already assigned to each store
  */
 
 import mongoose from 'mongoose';
@@ -17,158 +12,227 @@ dotenv.config();
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://mukulraj756:O71qVcqwpJQvXzWi@cluster0.aulqar3.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 const DB_NAME = process.env.DB_NAME || 'test';
 
-// Category keywords for auto-assignment
-const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  'food-dining': ['restaurant', 'cafe', 'food', 'dining', 'pizza', 'burger', 'biryani', 'chicken', 'chinese', 'italian', 'mexican', 'indian', 'bakery', 'cake', 'sweet', 'dessert', 'ice cream', 'coffee', 'tea', 'juice', 'smoothie', 'fast food', 'qsr', 'kitchen', 'dhaba', 'hotel', 'canteen', 'mess', 'tiffin'],
-  'grocery-essentials': ['grocery', 'supermarket', 'kirana', 'mart', 'vegetables', 'fruits', 'meat', 'fish', 'dairy', 'milk', 'egg', 'bread', 'rice', 'flour', 'oil', 'spices', 'provisions', 'general store', 'departmental'],
-  'beauty-wellness': ['salon', 'spa', 'beauty', 'parlour', 'parlor', 'cosmetic', 'makeup', 'skincare', 'hair', 'nail', 'massage', 'wellness', 'grooming', 'facial', 'waxing', 'threading'],
-  'healthcare': ['pharmacy', 'medical', 'medicine', 'clinic', 'hospital', 'doctor', 'dental', 'dentist', 'diagnostic', 'lab', 'pathology', 'physiotherapy', 'ayurveda', 'homeopathy', 'optical', 'eye', 'health'],
-  'fashion': ['fashion', 'clothing', 'clothes', 'apparel', 'garment', 'dress', 'shirt', 'jeans', 'saree', 'kurti', 'footwear', 'shoes', 'sandals', 'bag', 'watch', 'jewelry', 'jewellery', 'accessory', 'accessories', 'boutique', 'tailor'],
-  'fitness-sports': ['gym', 'fitness', 'yoga', 'zumba', 'crossfit', 'sports', 'cricket', 'football', 'badminton', 'swimming', 'martial arts', 'karate', 'boxing', 'workout', 'exercise'],
-  'education-learning': ['school', 'college', 'coaching', 'tuition', 'classes', 'academy', 'institute', 'training', 'education', 'learning', 'music', 'dance', 'art', 'craft', 'language', 'computer', 'skill'],
-  'home-services': ['plumber', 'plumbing', 'electrician', 'electrical', 'carpenter', 'carpentry', 'ac repair', 'appliance', 'cleaning', 'pest control', 'painting', 'renovation', 'shifting', 'packers', 'movers', 'laundry', 'dry clean', 'repair', 'service'],
-  'travel-experiences': ['travel', 'tour', 'hotel', 'resort', 'homestay', 'taxi', 'cab', 'car rental', 'bike rental', 'bus', 'flight', 'ticket', 'booking', 'holiday', 'vacation', 'trip'],
-  'entertainment': ['movie', 'cinema', 'theatre', 'theater', 'gaming', 'game', 'play', 'fun', 'entertainment', 'event', 'party', 'dj', 'music', 'concert', 'show', 'amusement', 'park'],
-  'financial-lifestyle': ['bank', 'finance', 'insurance', 'loan', 'investment', 'recharge', 'bill payment', 'money transfer', 'atm', 'gold', 'silver']
+// Mapping of subcategory slug to parent category slug
+const SUBCATEGORY_TO_PARENT: Record<string, string> = {
+  // Food & Dining
+  'cafes': 'food-dining',
+  'qsr-fast-food': 'food-dining',
+  'family-restaurants': 'food-dining',
+  'fine-dining': 'food-dining',
+  'ice-cream-dessert': 'food-dining',
+  'bakery-confectionery': 'food-dining',
+  'cloud-kitchens': 'food-dining',
+  'street-food': 'food-dining',
+
+  // Grocery & Essentials
+  'supermarkets': 'grocery-essentials',
+  'kirana-stores': 'grocery-essentials',
+  'fresh-vegetables': 'grocery-essentials',
+  'meat-fish': 'grocery-essentials',
+  'dairy': 'grocery-essentials',
+  'packaged-goods': 'grocery-essentials',
+  'water-cans': 'grocery-essentials',
+
+  // Beauty & Wellness
+  'salons': 'beauty-wellness',
+  'spa-massage': 'beauty-wellness',
+  'beauty-services': 'beauty-wellness',
+  'cosmetology': 'beauty-wellness',
+  'dermatology': 'beauty-wellness',
+  'skincare-cosmetics': 'beauty-wellness',
+  'nail-studios': 'beauty-wellness',
+  'grooming-men': 'beauty-wellness',
+
+  // Healthcare
+  'pharmacy': 'healthcare',
+  'clinics': 'healthcare',
+  'diagnostics': 'healthcare',
+  'dental': 'healthcare',
+  'physiotherapy': 'healthcare',
+  'home-nursing': 'healthcare',
+  'vision-eyewear': 'healthcare',
+
+  // Fashion
+  'footwear': 'fashion',
+  'bags-accessories': 'fashion',
+  'electronics': 'fashion',
+  'mobile-accessories': 'fashion',
+  'watches': 'fashion',
+  'jewelry': 'fashion',
+  'local-brands': 'fashion',
+
+  // Fitness & Sports
+  'gyms': 'fitness-sports',
+  'crossfit': 'fitness-sports',
+  'yoga': 'fitness-sports',
+  'zumba': 'fitness-sports',
+  'martial-arts': 'fitness-sports',
+  'sports-academies': 'fitness-sports',
+  'sportswear': 'fitness-sports',
+
+  // Education & Learning
+  'coaching-centers': 'education-learning',
+  'skill-development': 'education-learning',
+  'music-dance-classes': 'education-learning',
+  'art-craft': 'education-learning',
+  'vocational': 'education-learning',
+  'language-training': 'education-learning',
+
+  // Home Services
+  'ac-repair': 'home-services',
+  'plumbing': 'home-services',
+  'electrical': 'home-services',
+  'cleaning': 'home-services',
+  'pest-control': 'home-services',
+  'house-shifting': 'home-services',
+  'laundry-dry-cleaning': 'home-services',
+  'home-tutors': 'home-services',
+
+  // Travel & Experiences
+  'hotels': 'travel-experiences',
+  'intercity-travel': 'travel-experiences',
+  'taxis': 'travel-experiences',
+  'bike-rentals': 'travel-experiences',
+  'weekend-getaways': 'travel-experiences',
+  'tours': 'travel-experiences',
+  'activities': 'travel-experiences',
+
+  // Entertainment
+  'movies': 'entertainment',
+  'live-events': 'entertainment',
+  'festivals': 'entertainment',
+  'workshops': 'entertainment',
+  'amusement-parks': 'entertainment',
+  'gaming-cafes': 'entertainment',
+  'vr-ar-experiences': 'entertainment',
+
+  // Financial Lifestyle
+  'bill-payments': 'financial-lifestyle',
+  'mobile-recharge': 'financial-lifestyle',
+  'broadband': 'financial-lifestyle',
+  'cable-ott': 'financial-lifestyle',
+  'insurance': 'financial-lifestyle',
+  'gold-savings': 'financial-lifestyle',
+  'donations': 'financial-lifestyle',
 };
 
 async function updateStoreCategories() {
   try {
-    console.log('🚀 Starting store category update...');
+    console.log('🚀 Starting Store Category Update...');
     console.log(`📡 Connecting to MongoDB...`);
 
     await mongoose.connect(MONGODB_URI, { dbName: DB_NAME });
     console.log('✅ Connected to MongoDB\n');
 
-    // Get Category model
-    const Category = mongoose.model('Category', new mongoose.Schema({
-      name: String,
-      slug: String,
-      parentCategory: mongoose.Schema.Types.ObjectId,
-      childCategories: [mongoose.Schema.Types.ObjectId],
-      isActive: Boolean
-    }));
+    const db = mongoose.connection.db!;
+    const categoriesCollection = db.collection('categories');
+    const storesCollection = db.collection('stores');
 
-    // Get Store model
-    const Store = mongoose.model('Store', new mongoose.Schema({
-      name: String,
-      slug: String,
-      description: String,
-      category: mongoose.Schema.Types.ObjectId,
-      categories: [mongoose.Schema.Types.ObjectId],
-      tags: [String],
-      isActive: Boolean
-    }));
+    // Step 1: Build category slug → ObjectId mapping
+    console.log('📦 Building Category Mapping...\n');
+    const categoryMapping: Record<string, mongoose.Types.ObjectId> = {};
 
-    // Fetch all main categories (those without parentCategory)
-    const mainCategories = await Category.find({ parentCategory: { $exists: false } }).lean();
-    console.log(`📦 Found ${mainCategories.length} main categories:`);
-    mainCategories.forEach((cat: any) => {
-      console.log(`   - ${cat.name} (${cat.slug}) - ID: ${cat._id}`);
-    });
-
-    // Create a map of slug to category ID
-    const categoryMap = new Map<string, mongoose.Types.ObjectId>();
-    mainCategories.forEach((cat: any) => {
-      categoryMap.set(cat.slug, cat._id);
-    });
-
-    // Fetch all stores
-    const stores = await Store.find({}).lean();
-    console.log(`\n📦 Found ${stores.length} stores in database\n`);
-
-    if (stores.length === 0) {
-      console.log('❌ No stores found in database!');
-      return;
+    const allCategories = await categoriesCollection.find({}).toArray();
+    for (const cat of allCategories) {
+      categoryMapping[cat.slug] = cat._id as mongoose.Types.ObjectId;
     }
 
-    // Show current store categories
-    console.log('========================================');
-    console.log('CURRENT STORE CATEGORIES');
-    console.log('========================================');
+    console.log(`   Found ${allCategories.length} categories in database\n`);
 
-    for (const store of stores.slice(0, 20)) { // Show first 20
-      const s = store as any;
-      console.log(`📍 ${s.name}`);
-      console.log(`   Category ID: ${s.category || 'None'}`);
-      console.log(`   Tags: ${s.tags?.join(', ') || 'None'}`);
-      console.log('');
-    }
+    // Step 2: Get all stores
+    const stores = await storesCollection.find({}).toArray();
+    console.log(`📦 Processing ${stores.length} stores...\n`);
 
-    if (stores.length > 20) {
-      console.log(`... and ${stores.length - 20} more stores\n`);
-    }
-
-    // Function to determine category based on store name/description/tags
-    function determineCategory(store: any): string {
-      const searchText = `${store.name} ${store.description || ''} ${(store.tags || []).join(' ')}`.toLowerCase();
-
-      for (const [categorySlug, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-        for (const keyword of keywords) {
-          if (searchText.includes(keyword.toLowerCase())) {
-            return categorySlug;
-          }
-        }
-      }
-
-      // Default to food-dining if no match (most common)
-      return 'food-dining';
-    }
-
-    // Update stores with new categories
-    console.log('========================================');
-    console.log('UPDATING STORE CATEGORIES');
-    console.log('========================================\n');
-
-    const categoryAssignments: Record<string, number> = {};
     let updatedCount = 0;
+    let errorCount = 0;
+    const errors: string[] = [];
 
     for (const store of stores) {
-      const s = store as any;
-      const categorySlug = determineCategory(s);
-      const categoryId = categoryMap.get(categorySlug);
+      const subcategorySlug = store.subcategorySlug;
 
-      if (!categoryId) {
-        console.log(`⚠️  No category found for slug: ${categorySlug}`);
+      if (!subcategorySlug) {
+        console.log(`   ⚠️ ${store.name}: No subcategorySlug assigned`);
+        errors.push(`${store.name}: No subcategorySlug`);
+        errorCount++;
         continue;
       }
 
-      // Update the store
-      await Store.updateOne(
-        { _id: s._id },
+      // Find parent category slug
+      const parentSlug = SUBCATEGORY_TO_PARENT[subcategorySlug];
+      if (!parentSlug) {
+        console.log(`   ⚠️ ${store.name}: Unknown subcategory '${subcategorySlug}'`);
+        errors.push(`${store.name}: Unknown subcategory '${subcategorySlug}'`);
+        errorCount++;
+        continue;
+      }
+
+      // Get ObjectIds
+      const mainCategoryId = categoryMapping[parentSlug];
+      const subcategoryId = categoryMapping[subcategorySlug];
+
+      if (!mainCategoryId) {
+        console.log(`   ⚠️ ${store.name}: Main category '${parentSlug}' not found in DB`);
+        errors.push(`${store.name}: Main category '${parentSlug}' not in DB`);
+        errorCount++;
+        continue;
+      }
+
+      if (!subcategoryId) {
+        console.log(`   ⚠️ ${store.name}: Subcategory '${subcategorySlug}' not found in DB`);
+        errors.push(`${store.name}: Subcategory '${subcategorySlug}' not in DB`);
+        errorCount++;
+        continue;
+      }
+
+      // Update store
+      await storesCollection.updateOne(
+        { _id: store._id },
         {
           $set: {
-            category: categoryId,
-            categories: [categoryId]
-          }
+            category: mainCategoryId,
+            subcategory: subcategoryId,
+            updatedAt: new Date(),
+          },
         }
       );
 
-      categoryAssignments[categorySlug] = (categoryAssignments[categorySlug] || 0) + 1;
+      console.log(`   ✅ ${store.name}: ${parentSlug} → ${subcategorySlug}`);
       updatedCount++;
-
-      console.log(`✅ ${s.name} -> ${categorySlug}`);
     }
 
-    // Summary
     console.log('\n========================================');
     console.log('📊 UPDATE SUMMARY');
     console.log('========================================');
-    console.log(`Total stores updated: ${updatedCount}`);
-    console.log('\nCategory distribution:');
-    for (const [category, count] of Object.entries(categoryAssignments).sort((a, b) => b[1] - a[1])) {
-      console.log(`   ${category}: ${count} stores`);
+    console.log(`Total Stores: ${stores.length}`);
+    console.log(`Successfully Updated: ${updatedCount}`);
+    console.log(`Errors: ${errorCount}`);
+    console.log('========================================\n');
+
+    if (errors.length > 0) {
+      console.log('❌ ERRORS:');
+      errors.forEach((e) => console.log(`   - ${e}`));
+      console.log('');
     }
 
-    // Verify by fetching stores with food-dining category
-    const foodDiningId = categoryMap.get('food-dining');
-    if (foodDiningId) {
-      const foodStores = await Store.countDocuments({ category: foodDiningId });
-      console.log(`\n✅ Verification: ${foodStores} stores now have food-dining category`);
+    // Verification: Check a few stores
+    console.log('📊 VERIFICATION (Sample Stores):');
+    const sampleStores = await storesCollection
+      .find({})
+      .limit(5)
+      .toArray();
+
+    for (const store of sampleStores) {
+      const mainCat = await categoriesCollection.findOne({ _id: store.category });
+      const subCat = await categoriesCollection.findOne({ _id: store.subcategory });
+      console.log(`   ${store.name}:`);
+      console.log(`      category: ${mainCat?.name || 'NOT FOUND'} (${mainCat?.slug || 'N/A'})`);
+      console.log(`      subcategory: ${subCat?.name || 'NOT FOUND'} (${subCat?.slug || 'N/A'})`);
+      console.log(`      subcategorySlug: ${store.subcategorySlug}`);
     }
 
   } catch (error) {
     console.error('❌ Error:', error);
+    process.exit(1);
   } finally {
     await mongoose.disconnect();
     console.log('\n🔌 Disconnected from MongoDB');
@@ -177,7 +241,7 @@ async function updateStoreCategories() {
 
 updateStoreCategories()
   .then(() => {
-    console.log('✅ Script completed');
+    console.log('✅ Store category update completed successfully!');
     process.exit(0);
   })
   .catch((error) => {

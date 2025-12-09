@@ -1393,11 +1393,15 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
       categoryIds.push(...category.childCategories);
     }
 
+    // If this is a subcategory, search by subcategory field
+    // If this is a main category, search by category field
     const query: any = {
       isActive: true,
       $or: [
         { category: { $in: categoryIds } },
-        { 'categories': { $in: categoryIds } }
+        { 'categories': { $in: categoryIds } },
+        { subcategory: { $in: categoryIds } }, // Also search by subcategory field
+        { subcategorySlug: slug } // Direct match on subcategory slug
       ]
     };
 
@@ -1439,22 +1443,26 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
           store: store._id,
           isActive: true
         })
-          .select('name pricing images slug rating inventory')
+          .select('name pricing images slug ratings inventory subSubCategory')
           .limit(4)
           .lean();
 
         // Transform products to expected format
+        // Handle both old (price/rating) and new (pricing/ratings) field structures
         const transformedProducts = products.map((product: any) => ({
           _id: product._id,
           productId: product._id,
           name: product.name,
-          price: product.pricing?.current || product.pricing?.base || 0,
-          originalPrice: product.pricing?.original || product.pricing?.base || null,
-          discountPercentage: product.pricing?.discount || null,
+          // Support both pricing.selling (new) and pricing.current/price.current (old)
+          price: product.pricing?.selling || product.pricing?.current || product.price?.current || 0,
+          originalPrice: product.pricing?.original || product.price?.original || null,
+          discountPercentage: product.pricing?.discount || product.price?.discount || null,
           imageUrl: product.images?.[0] || 'https://via.placeholder.com/150',
-          rating: product.rating?.value || 0,
-          reviewCount: product.rating?.count || 0,
-          inStock: product.inventory?.isAvailable !== false
+          // Support both ratings.average (new) and rating.value (old)
+          rating: product.ratings?.average || product.rating?.value || 0,
+          reviewCount: product.ratings?.count || product.rating?.count || 0,
+          inStock: product.inventory?.isAvailable !== false,
+          subSubCategory: product.subSubCategory || null
         }));
 
         return {

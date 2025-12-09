@@ -3,6 +3,7 @@ import {
   getProducts,
   getProductById,
   getProductsByCategory,
+  getProductsBySubcategory,
   getProductsByStore,
   getFeaturedProducts,
   getNewArrivals,
@@ -166,7 +167,7 @@ router.get('/:productId/recommendations',
 );
 
 // Get products by category
-router.get('/category/:categorySlug', 
+router.get('/category/:categorySlug',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateParams(Joi.object({
@@ -180,6 +181,19 @@ router.get('/category/:categorySlug',
     ...commonSchemas.pagination
   })),
   getProductsByCategory
+);
+
+// Get products by subcategory slug - FOR BROWSE CATEGORIES SLIDER
+router.get('/subcategory/:subcategorySlug',
+  // generalLimiter,, // Disabled for development
+  optionalAuth,
+  validateParams(Joi.object({
+    subcategorySlug: Joi.string().required()
+  })),
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(20).default(10)
+  })),
+  getProductsBySubcategory
 );
 
 // Get products by store
