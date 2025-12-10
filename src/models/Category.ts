@@ -26,6 +26,9 @@ export interface ICategory extends Document {
   metadata: ICategoryMetadata;
   productCount: number;
   storeCount: number;
+  isBestDiscount: boolean;
+  isBestSeller: boolean;
+  maxCashback?: number;
   createdAt: Date;
   updatedAt: Date;
   _fullPath?: string;
@@ -129,6 +132,22 @@ const CategorySchema = new Schema<ICategory>({
     type: Number,
     default: 0,
     min: 0
+  },
+  isBestDiscount: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  isBestSeller: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  maxCashback: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 100
   }
 }, {
   timestamps: true,
@@ -146,6 +165,10 @@ CategorySchema.index({ createdAt: -1 });
 
 // Compound index for hierarchical queries
 CategorySchema.index({ type: 1, parentCategory: 1, sortOrder: 1 });
+
+// Indexes for best discount and best seller queries
+CategorySchema.index({ isBestDiscount: 1, isActive: 1, maxCashback: -1, sortOrder: 1 });
+CategorySchema.index({ isBestSeller: 1, isActive: 1, productCount: -1, sortOrder: 1 });
 
 // Virtual for level (root = 0, child = 1, etc.)
 CategorySchema.virtual('level').get(function() {

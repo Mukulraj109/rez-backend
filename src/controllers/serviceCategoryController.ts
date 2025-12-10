@@ -202,20 +202,22 @@ export const getServicesInCategory = async (req: Request, res: Response) => {
 
     res.status(200).json({
       success: true,
-      data: services,
-      category: {
-        _id: category._id,
-        name: category.name,
-        slug: category.slug,
-        icon: category.icon,
-        cashbackPercentage: category.cashbackPercentage,
-        description: category.description
-      },
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        pages: Math.ceil(total / limitNum)
+      data: {
+        services,
+        category: {
+          _id: category._id,
+          name: category.name,
+          slug: category.slug,
+          icon: category.icon,
+          cashbackPercentage: category.cashbackPercentage,
+          description: category.description
+        },
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          pages: Math.ceil(total / limitNum)
+        }
       }
     });
   } catch (error: any) {

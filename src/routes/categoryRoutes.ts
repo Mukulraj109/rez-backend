@@ -5,7 +5,9 @@ import {
   getCategoryBySlug,
   getCategoriesWithCounts,
   getRootCategories,
-  getFeaturedCategories
+  getFeaturedCategories,
+  getBestDiscountCategories,
+  getBestSellerCategories
 } from '../controllers/categoryController';
 import { optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams } from '../middleware/validation';
@@ -58,13 +60,31 @@ router.get('/featured',
 );
 
 // Get categories with counts
-router.get('/with-counts', 
+router.get('/with-counts',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateQuery(Joi.object({
     type: Joi.string().valid('going_out', 'home_delivery', 'earn', 'play', 'general').default('general')
   })),
   getCategoriesWithCounts
+);
+
+// Get best discount categories
+router.get('/best-discount',
+  optionalAuth,
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(20).default(10)
+  })),
+  getBestDiscountCategories
+);
+
+// Get best seller categories
+router.get('/best-seller',
+  optionalAuth,
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(20).default(10)
+  })),
+  getBestSellerCategories
 );
 
 // Get category by slug  

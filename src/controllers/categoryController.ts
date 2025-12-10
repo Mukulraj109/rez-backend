@@ -123,11 +123,11 @@ export const getFeaturedCategories = asyncHandler(async (req: Request, res: Resp
   const { type, limit = 6 } = req.query;
 
   try {
-    const query: any = { 
-      isActive: true, 
-      'metadata.featured': true 
+    const query: any = {
+      isActive: true,
+      'metadata.featured': true
     };
-    
+
     if (type) query.type = type;
 
     const categories = await Category.find(query)
@@ -139,5 +139,45 @@ export const getFeaturedCategories = asyncHandler(async (req: Request, res: Resp
 
   } catch (error) {
     throw new AppError('Failed to fetch featured categories', 500);
+  }
+});
+
+// Get best discount categories
+export const getBestDiscountCategories = asyncHandler(async (req: Request, res: Response) => {
+  const { limit = 10 } = req.query;
+
+  try {
+    const categories = await Category.find({
+      isActive: true,
+      isBestDiscount: true
+    })
+      .sort({ maxCashback: -1, sortOrder: 1 })
+      .limit(Number(limit))
+      .lean();
+
+    sendSuccess(res, categories, 'Best discount categories retrieved successfully');
+
+  } catch (error) {
+    throw new AppError('Failed to fetch best discount categories', 500);
+  }
+});
+
+// Get best seller categories
+export const getBestSellerCategories = asyncHandler(async (req: Request, res: Response) => {
+  const { limit = 10 } = req.query;
+
+  try {
+    const categories = await Category.find({
+      isActive: true,
+      isBestSeller: true
+    })
+      .sort({ productCount: -1, storeCount: -1, sortOrder: 1 })
+      .limit(Number(limit))
+      .lean();
+
+    sendSuccess(res, categories, 'Best seller categories retrieved successfully');
+
+  } catch (error) {
+    throw new AppError('Failed to fetch best seller categories', 500);
   }
 });
