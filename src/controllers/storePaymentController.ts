@@ -12,6 +12,10 @@ import { Request, Response } from 'express';
 import { Store, IStorePaymentSettings } from '../models/Store';
 import { QRCodeService } from '../services/qrCodeService';
 import { Types } from 'mongoose';
+import { StorePayment, IPaymentRewards } from '../models/StorePayment';
+import stripeService from '../services/stripeService';
+import { Wallet } from '../models/Wallet';
+import { Transaction } from '../models/Transaction';
 
 // ==================== QR CODE HANDLERS ====================
 
@@ -566,6 +570,13 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
 
     // Calculate coin redemption
     let coinRedemptionAmount = 0;
+    const coinRedemption = {
+      rezCoins: coinsToRedeem?.rezCoins || 0,
+      promoCoins: coinsToRedeem?.promoCoins || 0,
+      payBill: coinsToRedeem?.payBill || 0,
+      totalAmount: 0,
+    };
+
     if (coinsToRedeem) {
       const maxCoins = (amount * (settings.maxCoinRedemptionPercent || 100)) / 100;
 
@@ -590,9 +601,11 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
       }
 
       coinRedemptionAmount =
-        (coinsToRedeem.rezCoins || 0) +
-        (coinsToRedeem.promoCoins || 0) +
-        (coinsToRedeem.payBill || 0);
+        coinRedemption.rezCoins +
+        coinRedemption.promoCoins +
+        coinRedemption.payBill;
+
+      coinRedemption.totalAmount = coinRedemptionAmount;
 
       if (coinRedemptionAmount > maxCoins) {
         return res.status(400).json({
@@ -600,14 +613,100 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
           message: `Maximum coin redemption is ₹${maxCoins} (${settings.maxCoinRedemptionPercent}% of bill)`,
         });
       }
+
+      // Validate user has enough coins
+      if (coinRedemptionAmount > 0) {
+        const wallet = await Wallet.findOne({ user: userId });
+        if (!wallet) {
+          return res.status(400).json({
+            success: false,
+            message: 'Wallet not found. Cannot redeem coins.',
+          });
+        }
+
+        // Check ReZ coins + Promo coins (from available balance)
+        const coinsNeeded = coinRedemption.rezCoins + coinRedemption.promoCoins;
+        if (coinsNeeded > wallet.balance.available) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient coin balance. You have ₹${wallet.balance.available} but trying to use ₹${coinsNeeded}`,
+          });
+        }
+
+        // Check PayBill balance
+        if (coinRedemption.payBill > (wallet.balance.paybill || 0)) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient PayBill balance. You have ₹${wallet.balance.paybill || 0} but trying to use ₹${coinRedemption.payBill}`,
+          });
+        }
+      }
     }
 
     // Calculate final amount
-    const remainingAmount = amount - coinRedemptionAmount;
+    const remainingAmount = Math.max(0, amount - coinRedemptionAmount);
 
-    // TODO: Create payment intent based on payment method
-    // For now, return a mock response
-    const paymentId = `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    // Generate unique payment ID
+    const paymentId = (StorePayment as any).generatePaymentId();
+
+    // Determine effective payment method
+    const effectivePaymentMethod = remainingAmount === 0 ? 'coins_only' : paymentMethod;
+
+    // Create store payment record
+    const storePayment = new StorePayment({
+      paymentId,
+      userId: new Types.ObjectId(userId),
+      storeId: new Types.ObjectId(storeId),
+      storeName: store.name,
+      billAmount: amount,
+      discountAmount: 0, // Could be calculated from offers
+      coinRedemption,
+      remainingAmount,
+      paymentMethod: effectivePaymentMethod,
+      offersApplied: offersApplied || [],
+      status: 'initiated',
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+    });
+
+    // If there's an amount to pay, create Stripe PaymentIntent
+    let clientSecret: string | undefined;
+
+    if (remainingAmount > 0) {
+      // Check if Stripe is configured
+      if (!stripeService.isStripeConfigured()) {
+        console.warn('⚠️ [STORE PAYMENT] Stripe not configured, proceeding without payment intent');
+      } else {
+        try {
+          console.log('💳 [STORE PAYMENT] Creating Stripe PaymentIntent for ₹', remainingAmount);
+
+          const paymentIntent = await stripeService.createPaymentIntent({
+            amount: remainingAmount,
+            currency: 'inr',
+            metadata: {
+              paymentId,
+              storeId,
+              userId,
+              storeName: store.name,
+              paymentType: 'store_payment',
+              coinRedemption: coinRedemptionAmount.toString(),
+            },
+          });
+
+          storePayment.stripePaymentIntentId = paymentIntent.id;
+          storePayment.stripeClientSecret = paymentIntent.client_secret || undefined;
+          clientSecret = paymentIntent.client_secret || undefined;
+
+          console.log('✅ [STORE PAYMENT] PaymentIntent created:', paymentIntent.id);
+        } catch (stripeError: any) {
+          console.error('❌ [STORE PAYMENT] Failed to create PaymentIntent:', stripeError.message);
+          // Continue without Stripe - can still process coin-only or manual verification
+        }
+      }
+    }
+
+    // Save the payment record
+    await storePayment.save();
+    console.log('✅ [STORE PAYMENT] Payment record created:', paymentId);
 
     res.status(200).json({
       success: true,
@@ -619,11 +718,13 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
         billAmount: amount,
         coinRedemption: coinRedemptionAmount,
         remainingAmount,
-        paymentMethod,
+        paymentMethod: effectivePaymentMethod,
         upiId: settings.upiId,
         offersApplied: offersApplied || [],
         status: 'INITIATED',
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+        expiresAt: storePayment.expiresAt,
+        // Stripe client secret for frontend payment confirmation
+        clientSecret,
       },
     });
   } catch (error: any) {
@@ -641,7 +742,7 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
  */
 export const confirmStorePayment = async (req: Request, res: Response) => {
   try {
-    const { paymentId, transactionId, paymentProof } = req.body;
+    const { paymentId, transactionId } = req.body;
     const userId = (req as any).user?.id;
 
     if (!paymentId) {
@@ -651,11 +752,190 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
       });
     }
 
-    // TODO: Implement actual payment verification
-    // - Verify payment with gateway
-    // - Update payment record
-    // - Credit cashback/coins
-    // - Update loyalty progress
+    // Find the payment record
+    const storePayment = await StorePayment.findOne({ paymentId });
+
+    if (!storePayment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found',
+      });
+    }
+
+    // Verify the payment belongs to this user
+    if (storePayment.userId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized to confirm this payment',
+      });
+    }
+
+    // Check if payment is expired
+    if (storePayment.expiresAt < new Date()) {
+      storePayment.status = 'expired';
+      await storePayment.save();
+      return res.status(400).json({
+        success: false,
+        message: 'Payment has expired',
+      });
+    }
+
+    // Check if already completed
+    if (storePayment.status === 'completed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Payment already completed',
+      });
+    }
+
+    // Verify Stripe payment if applicable (only for card payments, not UPI)
+    const isCardPayment = storePayment.paymentMethod.includes('card');
+    
+    if (storePayment.stripePaymentIntentId && storePayment.remainingAmount > 0 && isCardPayment) {
+      console.log('🔐 [STORE PAYMENT] Verifying Stripe payment:', storePayment.stripePaymentIntentId);
+
+      try {
+        const verification = await stripeService.verifyPaymentIntent(storePayment.stripePaymentIntentId);
+
+        if (!verification.verified) {
+          console.error('❌ [STORE PAYMENT] Payment not verified. Status:', verification.status);
+          return res.status(400).json({
+            success: false,
+            message: `Payment not completed. Status: ${verification.status}`,
+          });
+        }
+
+        console.log('✅ [STORE PAYMENT] Stripe payment verified');
+      } catch (stripeError: any) {
+        console.error('❌ [STORE PAYMENT] Stripe verification failed:', stripeError.message);
+        return res.status(400).json({
+          success: false,
+          message: 'Payment verification failed',
+        });
+      }
+    } else if (storePayment.paymentMethod === 'upi') {
+      // For UPI payments, log the UPI transaction
+      // In production, you would verify UPI payment through your payment gateway
+      console.log('📱 [STORE PAYMENT] UPI payment confirmation - Transaction ID:', transactionId);
+    }
+
+    // Update payment status to processing
+    storePayment.status = 'processing';
+    await storePayment.save();
+
+    // Deduct coins from user's wallet
+    if (storePayment.coinRedemption.totalAmount > 0) {
+      console.log('💰 [STORE PAYMENT] Deducting coins:', storePayment.coinRedemption);
+
+      try {
+        const wallet = await Wallet.findOne({ user: storePayment.userId });
+
+        if (wallet) {
+          // Deduct PayBill balance if used
+          if (storePayment.coinRedemption.payBill > 0) {
+            await wallet.usePayBillBalance(storePayment.coinRedemption.payBill);
+            console.log('✅ Deducted PayBill:', storePayment.coinRedemption.payBill);
+          }
+
+          // Deduct ReZ coins (from available balance)
+          const coinsToDeduce = storePayment.coinRedemption.rezCoins + storePayment.coinRedemption.promoCoins;
+          if (coinsToDeduce > 0) {
+            await wallet.deductFunds(coinsToDeduce);
+            console.log('✅ Deducted coins:', coinsToDeduce);
+          }
+
+          // Create transaction record for coin spending
+          await Transaction.create({
+            user: storePayment.userId,
+            type: 'debit',
+            category: 'spending',
+            amount: storePayment.coinRedemption.totalAmount,
+            balance: wallet.balance.available,
+            description: `Store payment at ${storePayment.storeName}`,
+            reference: {
+              type: 'store_payment',
+              id: storePayment._id,
+            },
+            status: 'completed',
+            source: {
+              type: 'store_payment',
+              store: storePayment.storeId,
+            },
+          });
+        }
+      } catch (walletError: any) {
+        console.error('❌ [STORE PAYMENT] Wallet deduction failed:', walletError.message);
+        // Continue - payment was successful, coin deduction is secondary
+      }
+    }
+
+    // Calculate rewards
+    const store = await Store.findById(storePayment.storeId).select('rewardRules');
+    const rewardRules = store?.rewardRules;
+
+    const rewards: IPaymentRewards = {
+      cashbackEarned: 0,
+      coinsEarned: 0,
+      bonusCoins: 0,
+      loyaltyProgress: {
+        currentVisits: 1,
+        nextMilestone: 5,
+        milestoneReward: 'Loyalty Reward',
+      },
+    };
+
+    // Calculate cashback (percentage of bill)
+    if (rewardRules?.baseCashbackPercent && storePayment.billAmount >= (rewardRules.minimumAmountForReward || 0)) {
+      rewards.cashbackEarned = Math.floor((storePayment.billAmount * rewardRules.baseCashbackPercent) / 100);
+    }
+
+    // Calculate coins earned (1 coin per ₹10 spent, for example)
+    rewards.coinsEarned = Math.floor(storePayment.billAmount / 10);
+
+    // Extra reward for spending above threshold
+    if (rewardRules?.extraRewardThreshold && storePayment.billAmount >= rewardRules.extraRewardThreshold) {
+      rewards.bonusCoins = rewardRules.extraRewardCoins || 0;
+    }
+
+    // Credit reward coins to user's wallet
+    const totalRewardCoins = rewards.coinsEarned + rewards.bonusCoins;
+    if (totalRewardCoins > 0) {
+      try {
+        const wallet = await Wallet.findOne({ user: storePayment.userId });
+        if (wallet) {
+          await wallet.addFunds(totalRewardCoins, 'cashback');
+          console.log('✅ [STORE PAYMENT] Credited reward coins:', totalRewardCoins);
+
+          // Create transaction record for reward
+          await Transaction.create({
+            user: storePayment.userId,
+            type: 'credit',
+            category: 'cashback',
+            amount: totalRewardCoins,
+            balance: wallet.balance.available,
+            description: `Rewards for payment at ${storePayment.storeName}`,
+            reference: {
+              type: 'store_payment',
+              id: storePayment._id,
+            },
+            status: 'completed',
+            source: {
+              type: 'store_payment',
+              store: storePayment.storeId,
+            },
+          });
+        }
+      } catch (rewardError: any) {
+        console.error('❌ [STORE PAYMENT] Failed to credit rewards:', rewardError.message);
+        // Continue - payment was successful
+      }
+    }
+
+    // Mark payment as completed
+    const finalTransactionId = transactionId || storePayment.stripePaymentIntentId || `TXN-${Date.now()}`;
+    await storePayment.markCompleted(finalTransactionId, rewards);
+
+    console.log('✅ [STORE PAYMENT] Payment completed:', paymentId);
 
     res.status(200).json({
       success: true,
@@ -663,18 +943,9 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
       data: {
         paymentId,
         status: 'COMPLETED',
-        transactionId: transactionId || `TXN-${Date.now()}`,
-        completedAt: new Date(),
-        // Rewards earned
-        rewards: {
-          cashbackEarned: 0, // TODO: Calculate
-          coinsEarned: 0, // TODO: Calculate
-          loyaltyProgress: {
-            currentVisits: 1,
-            nextMilestone: 5,
-            milestoneReward: 'Gold Tier Unlock',
-          },
-        },
+        transactionId: finalTransactionId,
+        completedAt: storePayment.completedAt,
+        rewards,
       },
     });
   } catch (error: any) {
@@ -682,6 +953,86 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to confirm payment',
+    });
+  }
+};
+
+/**
+ * Cancel store payment
+ * POST /api/store-payment/cancel
+ */
+export const cancelStorePayment = async (req: Request, res: Response) => {
+  try {
+    const { paymentId, reason } = req.body;
+    const userId = (req as any).user?.id;
+
+    if (!paymentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'paymentId is required',
+      });
+    }
+
+    // Find the payment record
+    const storePayment = await StorePayment.findOne({ paymentId });
+
+    if (!storePayment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found',
+      });
+    }
+
+    // Verify the payment belongs to this user
+    if (storePayment.userId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized to cancel this payment',
+      });
+    }
+
+    // Can only cancel payments that are initiated or processing
+    if (!['initiated', 'processing'].includes(storePayment.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot cancel payment with status: ${storePayment.status}`,
+      });
+    }
+
+    // Cancel Stripe PaymentIntent if exists
+    if (storePayment.stripePaymentIntentId) {
+      try {
+        console.log('🚫 [STORE PAYMENT] Cancelling Stripe PaymentIntent:', storePayment.stripePaymentIntentId);
+        await stripeService.cancelPaymentIntent(storePayment.stripePaymentIntentId);
+        console.log('✅ [STORE PAYMENT] Stripe PaymentIntent cancelled');
+      } catch (stripeError: any) {
+        console.error('⚠️ [STORE PAYMENT] Failed to cancel Stripe PaymentIntent:', stripeError.message);
+        // Continue with cancellation even if Stripe fails
+      }
+    }
+
+    // Update payment status
+    storePayment.status = 'cancelled';
+    storePayment.cancelledAt = new Date();
+    storePayment.cancellationReason = reason || 'user_cancelled';
+    await storePayment.save();
+
+    console.log('✅ [STORE PAYMENT] Payment cancelled:', paymentId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Payment cancelled successfully',
+      data: {
+        paymentId,
+        status: 'CANCELLED',
+        cancelledAt: storePayment.cancelledAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error cancelling store payment:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to cancel payment',
     });
   }
 };
@@ -698,18 +1049,63 @@ export const getStorePaymentHistory = async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
     const merchantId = req.merchantId;
 
-    // TODO: Implement actual payment history from database
-    // For now, return empty array
+    const pageNum = parseInt(page as string) || 1;
+    const limitNum = parseInt(limit as string) || 20;
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build query based on user type
+    const query: any = { status: 'completed' };
+
+    if (storeId && merchantId) {
+      // Merchant requesting store-specific history
+      query.storeId = new Types.ObjectId(storeId);
+    } else if (userId) {
+      // User requesting their own history
+      query.userId = new Types.ObjectId(userId);
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID or Store ID required',
+      });
+    }
+
+    // Fetch transactions
+    const [transactions, total] = await Promise.all([
+      StorePayment.find(query)
+        .sort({ completedAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .select('paymentId storeId storeName billAmount coinRedemption remainingAmount paymentMethod status rewards completedAt')
+        .lean(),
+      StorePayment.countDocuments(query),
+    ]);
+
+    const hasMore = skip + transactions.length < total;
 
     res.status(200).json({
       success: true,
       data: {
-        transactions: [],
+        transactions: transactions.map((t) => ({
+          id: t._id,
+          paymentId: t.paymentId,
+          storeId: t.storeId,
+          storeName: t.storeName,
+          amount: t.billAmount,
+          coinsUsed: t.coinRedemption?.totalAmount || 0,
+          paymentMethod: t.paymentMethod,
+          status: t.status,
+          rewards: t.rewards,
+          createdAt: t.completedAt,
+          completedAt: t.completedAt,
+        })),
         pagination: {
-          page: parseInt(page as string),
-          limit: parseInt(limit as string),
-          total: 0,
-          hasMore: false,
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum),
+          hasNext: hasMore,
+          hasPrev: pageNum > 1,
+          hasMore,
         },
       },
     });

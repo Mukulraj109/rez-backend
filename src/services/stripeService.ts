@@ -267,6 +267,29 @@ class StripeService {
   }
 
   /**
+   * Cancel a payment intent
+   */
+  public async cancelPaymentIntent(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
+    if (!this.stripe) {
+      throw new Error('Stripe is not configured');
+    }
+
+    try {
+      const paymentIntent = await this.stripe.paymentIntents.cancel(paymentIntentId);
+      console.log('✅ [STRIPE SERVICE] Payment intent cancelled:', paymentIntent.id);
+      return paymentIntent;
+    } catch (error: any) {
+      // If already cancelled or in terminal state, that's OK
+      if (error.code === 'payment_intent_unexpected_state') {
+        console.log('⚠️ [STRIPE SERVICE] Payment intent already in terminal state');
+        return await this.stripe.paymentIntents.retrieve(paymentIntentId);
+      }
+      console.error('❌ [STRIPE SERVICE] Error cancelling payment intent:', error.message);
+      throw new Error(`Failed to cancel payment intent: ${error.message}`);
+    }
+  }
+
+  /**
    * Verify payment intent status
    * Returns true if payment is successful
    */

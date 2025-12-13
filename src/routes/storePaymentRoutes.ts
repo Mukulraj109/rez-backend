@@ -5,6 +5,7 @@ import {
   getStorePaymentOffers,
   initiateStorePayment,
   confirmStorePayment,
+  cancelStorePayment,
   getStorePaymentHistory,
   updatePaymentSettings,
   getPaymentSettings,
@@ -70,6 +71,9 @@ router.post('/initiate', authenticate, initiateStorePayment);
 
 // Confirm store payment
 router.post('/confirm', authenticate, confirmStorePayment);
+
+// Cancel store payment
+router.post('/cancel', authenticate, cancelStorePayment);
 
 // Get payment history for a user
 router.get('/history', authenticate, getStorePaymentHistory);
