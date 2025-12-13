@@ -54,6 +54,53 @@ export interface IStoreOffers {
   partnerLevel?: 'bronze' | 'silver' | 'gold' | 'platinum';
 }
 
+// Store QR Code interface
+export interface IStoreQR {
+  code?: string;           // Unique QR code: "REZ-STORE-{storeId}"
+  qrImageUrl?: string;     // Generated QR image URL
+  generatedAt?: Date;
+  isActive: boolean;
+}
+
+// Store Payment Settings interface (Merchant Controls)
+export interface IStorePaymentSettings {
+  // Payment Methods
+  acceptUPI: boolean;
+  acceptCards: boolean;
+  acceptPayLater: boolean;
+
+  // Coin Settings
+  acceptRezCoins: boolean;
+  acceptPromoCoins: boolean;
+  acceptPayBill: boolean;
+  maxCoinRedemptionPercent: number;  // Max % of bill payable via coins (0-100)
+
+  // Hybrid Payment
+  allowHybridPayment: boolean;
+
+  // Offers
+  allowOffers: boolean;
+  allowCashback: boolean;
+
+  // UPI Details for direct payment
+  upiId?: string;          // Merchant's UPI ID
+  upiName?: string;        // Display name for UPI
+}
+
+// Store Reward Rules interface (Merchant Sets)
+export interface IStoreRewardRules {
+  baseCashbackPercent: number;       // Base cashback % for payments
+  reviewBonusCoins: number;          // Bonus coins for review
+  socialShareBonusCoins: number;     // Bonus coins for social share
+  minimumAmountForReward: number;    // Min bill amount to earn rewards
+  extraRewardThreshold?: number;     // e.g., Spend ₹400 → get extra coins
+  extraRewardCoins?: number;         // Extra coins when threshold met
+  visitMilestoneRewards?: {          // Rewards for visit milestones
+    visits: number;                  // e.g., 5th visit
+    coinsReward: number;
+  }[];
+}
+
 // Store delivery categories interface
 export interface IStoreDeliveryCategories {
   fastDelivery: boolean; // 30 min delivery
@@ -186,6 +233,15 @@ export interface IStore extends Document {
 
   // Action buttons configuration for ProductPage
   actionButtons?: IStoreActionButtons;
+
+  // QR Code Configuration for Store Payments
+  storeQR?: IStoreQR;
+
+  // Payment Settings (Merchant Controls)
+  paymentSettings?: IStorePaymentSettings;
+
+  // Reward Rules (Merchant Sets)
+  rewardRules?: IStoreRewardRules;
 
   createdAt: Date;
   updatedAt: Date;
@@ -620,6 +676,135 @@ const StoreSchema = new Schema<IStore>({
         min: 0
       }
     }]
+  },
+
+  // QR Code Configuration for Store Payments
+  storeQR: {
+    code: {
+      type: String,
+      unique: true,
+      sparse: true,  // Allows multiple null values
+      trim: true
+    },
+    qrImageUrl: {
+      type: String,
+      trim: true
+    },
+    generatedAt: {
+      type: Date
+    },
+    isActive: {
+      type: Boolean,
+      default: true
+    }
+  },
+
+  // Payment Settings (Merchant Controls)
+  paymentSettings: {
+    // Payment Methods
+    acceptUPI: {
+      type: Boolean,
+      default: true
+    },
+    acceptCards: {
+      type: Boolean,
+      default: true
+    },
+    acceptPayLater: {
+      type: Boolean,
+      default: false
+    },
+
+    // Coin Settings
+    acceptRezCoins: {
+      type: Boolean,
+      default: true
+    },
+    acceptPromoCoins: {
+      type: Boolean,
+      default: true
+    },
+    acceptPayBill: {
+      type: Boolean,
+      default: true
+    },
+    maxCoinRedemptionPercent: {
+      type: Number,
+      default: 100,
+      min: 0,
+      max: 100
+    },
+
+    // Hybrid Payment
+    allowHybridPayment: {
+      type: Boolean,
+      default: true
+    },
+
+    // Offers
+    allowOffers: {
+      type: Boolean,
+      default: true
+    },
+    allowCashback: {
+      type: Boolean,
+      default: true
+    },
+
+    // UPI Details
+    upiId: {
+      type: String,
+      trim: true
+    },
+    upiName: {
+      type: String,
+      trim: true
+    }
+  },
+
+  // Reward Rules (Merchant Sets)
+  rewardRules: {
+    baseCashbackPercent: {
+      type: Number,
+      default: 5,
+      min: 0,
+      max: 100
+    },
+    reviewBonusCoins: {
+      type: Number,
+      default: 5,
+      min: 0
+    },
+    socialShareBonusCoins: {
+      type: Number,
+      default: 10,
+      min: 0
+    },
+    minimumAmountForReward: {
+      type: Number,
+      default: 100,
+      min: 0
+    },
+    extraRewardThreshold: {
+      type: Number,
+      min: 0
+    },
+    extraRewardCoins: {
+      type: Number,
+      min: 0
+    },
+    visitMilestoneRewards: [{
+      visits: {
+        type: Number,
+        required: true,
+        min: 1
+      },
+      coinsReward: {
+        type: Number,
+        required: true,
+        min: 0
+      }
+    }]
   }
 }, {
   timestamps: true,
@@ -640,6 +825,8 @@ StoreSchema.index({ tags: 1, isActive: 1 });
 StoreSchema.index({ createdAt: -1 });
 StoreSchema.index({ hasMenu: 1, isActive: 1 }); // Menu index
 StoreSchema.index({ bookingType: 1, isActive: 1 }); // Booking type index
+StoreSchema.index({ 'storeQR.code': 1 }); // QR code lookup index
+StoreSchema.index({ 'paymentSettings.upiId': 1 }); // UPI ID lookup index
 
 // Delivery category indexes
 StoreSchema.index({ 'deliveryCategories.fastDelivery': 1, isActive: 1 });
