@@ -7,6 +7,7 @@ import {
   confirmStorePayment,
   cancelStorePayment,
   getStorePaymentHistory,
+  getStorePaymentById,
   updatePaymentSettings,
   getPaymentSettings,
   getStoreQRDetails,
@@ -80,5 +81,8 @@ router.get('/history', authenticate, getStorePaymentHistory);
 
 // Get payment history for a specific store (merchant)
 router.get('/history/:storeId', merchantAuth, getStorePaymentHistory);
+
+// Get single payment details by paymentId
+router.get('/details/:paymentId', authenticate, getStorePaymentById);
 
 export default router;

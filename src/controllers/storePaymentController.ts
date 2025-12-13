@@ -1038,6 +1038,84 @@ export const cancelStorePayment = async (req: Request, res: Response) => {
 };
 
 /**
+ * Get store payment by ID
+ * GET /api/store-payment/:paymentId
+ */
+export const getStorePaymentById = async (req: Request, res: Response) => {
+  try {
+    const { paymentId } = req.params;
+    const userId = (req as any).user?.id;
+
+    console.log('📜 [GET PAYMENT] Looking up payment:', paymentId, 'for user:', userId);
+
+    if (!paymentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'paymentId is required',
+      });
+    }
+
+    // Find the payment record
+    const storePayment = await StorePayment.findOne({ paymentId }).lean();
+
+    console.log('📜 [GET PAYMENT] Found payment:', storePayment ? 'Yes' : 'No');
+
+    if (!storePayment) {
+      // Check if any payments exist at all
+      const count = await StorePayment.countDocuments();
+      console.log('📜 [GET PAYMENT] Total payments in DB:', count);
+
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found',
+      });
+    }
+
+    // Verify the payment belongs to this user
+    if (storePayment.userId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized to view this payment',
+      });
+    }
+
+    // Get store details
+    const store = await Store.findById(storePayment.storeId).select('name logo category').lean();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: storePayment._id,
+        paymentId: storePayment.paymentId,
+        storeId: storePayment.storeId,
+        storeName: storePayment.storeName,
+        storeLogo: store?.logo,
+        storeCategory: store?.category,
+        billAmount: storePayment.billAmount,
+        discountAmount: storePayment.discountAmount,
+        coinRedemption: storePayment.coinRedemption,
+        coinsUsed: storePayment.coinRedemption?.totalAmount || 0,
+        remainingAmount: storePayment.remainingAmount,
+        paymentMethod: storePayment.paymentMethod,
+        offersApplied: storePayment.offersApplied,
+        status: storePayment.status.toUpperCase(),
+        rewards: storePayment.rewards,
+        transactionId: storePayment.transactionId,
+        createdAt: storePayment.createdAt,
+        completedAt: storePayment.completedAt,
+        expiresAt: storePayment.expiresAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error getting store payment:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get payment details',
+    });
+  }
+};
+
+/**
  * Get store payment history
  * GET /api/store-payment/history (for users)
  * GET /api/store-payment/history/:storeId (for merchants)
