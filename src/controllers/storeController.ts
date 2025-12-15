@@ -1401,6 +1401,7 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
         { category: { $in: categoryIds } },
         { 'categories': { $in: categoryIds } },
         { subcategory: { $in: categoryIds } }, // Also search by subcategory field
+        { subCategories: { $in: categoryIds } }, // Search by subCategories array
         { subcategorySlug: slug } // Direct match on subcategory slug
       ]
     };
