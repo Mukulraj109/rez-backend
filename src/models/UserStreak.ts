@@ -2,7 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IUserStreak extends Document {
   user: mongoose.Types.ObjectId;
-  type: 'login' | 'order' | 'review';
+  type: 'login' | 'order' | 'review' | 'app_open';
   currentStreak: number;
   longestStreak: number;
   lastActivityDate: Date;
@@ -10,6 +10,8 @@ export interface IUserStreak extends Document {
   totalDays: number;
   milestones: Array<{
     day: number;
+    coinsReward: number;
+    badgeReward?: string;
     rewardsClaimed: boolean;
     claimedAt?: Date;
   }>;
@@ -34,7 +36,7 @@ const UserStreakSchema: Schema = new Schema(
     },
     type: {
       type: String,
-      enum: ['login', 'order', 'review'],
+      enum: ['login', 'order', 'review', 'app_open'],
       required: true,
       index: true
     },
@@ -66,6 +68,15 @@ const UserStreakSchema: Schema = new Schema(
       day: {
         type: Number,
         required: true
+      },
+      coinsReward: {
+        type: Number,
+        default: 0,
+        min: 0
+      },
+      badgeReward: {
+        type: String,
+        trim: true
       },
       rewardsClaimed: {
         type: Boolean,

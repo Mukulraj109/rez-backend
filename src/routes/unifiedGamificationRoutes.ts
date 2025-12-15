@@ -32,7 +32,10 @@ import {
   getQuizProgress,
   completeQuiz,
   getMyChallengeProgress,
-  getGamificationStats
+  getGamificationStats,
+  getPlayAndEarnData,
+  claimSurpriseDrop,
+  streakCheckin
 } from '../controllers/gamificationController';
 
 // Import streak controller
@@ -116,5 +119,17 @@ router.post('/quiz/:quizId/complete', completeQuiz);
 // ========================================
 // Get complete user gamification statistics
 router.get('/stats', getGamificationStats);
+
+// ========================================
+// PLAY & EARN HUB
+// ========================================
+// Get all play & earn data in one call (spin, challenges, streak, surprise drops)
+router.get('/play-and-earn', getPlayAndEarnData);
+
+// Surprise Coin Drops
+router.post('/surprise-drop/claim', claimSurpriseDrop);
+
+// Daily Streak Check-in
+router.post('/streak/checkin', streakCheckin);
 
 export default router;

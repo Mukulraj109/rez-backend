@@ -13,6 +13,8 @@ import streakService from '../services/streakService';
 import spinWheelService from '../services/spinWheelService';
 import quizService from '../services/quizService';
 import scratchCardService from '../services/scratchCardService';
+import SurpriseCoinDrop from '../models/SurpriseCoinDrop';
+import UserStreak from '../models/UserStreak';
 
 // ========================================
 // CHALLENGES
@@ -683,4 +685,316 @@ export const getGamificationStats = asyncHandler(async (req: Request, res: Respo
   };
 
   sendSuccess(res, stats, 'Gamification stats retrieved successfully');
+});
+
+// ========================================
+// PLAY & EARN HUB
+// ========================================
+
+/**
+ * Get all play & earn hub data in one call
+ * GET /api/gamification/play-and-earn
+ * @returns Combined data for daily spin, challenges, streak, and surprise drops
+ */
+export const getPlayAndEarnData = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const userId = (req.user._id as Types.ObjectId).toString();
+
+  // Get today's date for spin count
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const MAX_DAILY_SPINS = 3;
+
+  // Import MiniGame for spin count
+  const { MiniGame } = await import('../models/MiniGame');
+
+  // Fetch all data in parallel with individual error handling
+  let spinEligibility: { eligible: boolean; nextAvailableAt?: Date | null; reason?: string } = { eligible: false, nextAvailableAt: null };
+  let spinsToday = 0;
+  let lastSpin = null;
+  let activeChallenges: any[] = [];
+  let userStreaks: any[] = [];
+  let availableDrops: any[] = [];
+  let coinBalance = 0;
+
+  try {
+    spinEligibility = await spinWheelService.checkEligibility(userId);
+  } catch (err) {
+    // Spin eligibility check failed, use defaults
+  }
+
+  try {
+    spinsToday = await MiniGame.countDocuments({
+      user: userId,
+      gameType: 'spin_wheel',
+      status: 'completed',
+      completedAt: { $gte: today }
+    });
+  } catch (err) {
+    // Count spins failed, use default
+  }
+
+  try {
+    lastSpin = await MiniGame.findOne({
+      user: userId,
+      gameType: 'spin_wheel',
+      status: 'completed'
+    }).sort({ completedAt: -1 }).select('completedAt');
+  } catch (err) {
+    // Get last spin failed
+  }
+
+  try {
+    activeChallenges = await challengeService.getUserProgress(userId, false);
+  } catch (err) {
+    // Get challenges failed
+  }
+
+  try {
+    userStreaks = await streakService.getUserStreaks(userId);
+  } catch (err) {
+    // Get streaks failed
+  }
+
+  try {
+    availableDrops = await (SurpriseCoinDrop as any).getAvailableDrops(userId);
+  } catch (err) {
+    // Get drops failed
+  }
+
+  try {
+    coinBalance = await coinService.getCoinBalance(userId);
+  } catch (err) {
+    // Get coin balance failed
+  }
+
+  const spinsRemaining = Math.max(0, MAX_DAILY_SPINS - spinsToday);
+
+  // Get the most significant available drop (if any)
+  const activeDrop = Array.isArray(availableDrops) && availableDrops.length > 0 ? availableDrops[0] : null;
+
+  // Calculate completed today (reuse today variable from above)
+  const todayStart = new Date(today);
+  const challengesArray = Array.isArray(activeChallenges) ? activeChallenges : [];
+  const completedToday = challengesArray.filter(
+    (c: any) => c.completed && new Date(c.updatedAt) >= todayStart
+  ).length;
+
+  // Find the app_open streak or fallback to login streak
+  const streaksArray = Array.isArray(userStreaks) ? userStreaks : [];
+  const appOpenStreak = streaksArray.find((s: any) => s.type === 'app_open') ||
+                        streaksArray.find((s: any) => s.type === 'login');
+
+  // Check if user has checked in today
+  const lastActivity = appOpenStreak ? new Date(appOpenStreak.lastActivityDate) : null;
+  const todayCheckedIn = lastActivity
+    ? lastActivity.setHours(0, 0, 0, 0) === todayStart.getTime()
+    : false;
+
+  // Find next milestone
+  const currentStreak = appOpenStreak?.currentStreak || 0;
+  const milestones = [
+    { day: 3, coins: 50 },
+    { day: 7, coins: 200 },
+    { day: 14, coins: 500 },
+    { day: 30, coins: 2000 },
+    { day: 60, coins: 5000 },
+    { day: 100, coins: 10000 }
+  ];
+  const nextMilestone = milestones.find(m => m.day > currentStreak) || milestones[milestones.length - 1];
+
+  const data = {
+    dailySpin: {
+      spinsRemaining,
+      maxSpins: MAX_DAILY_SPINS,
+      lastSpinAt: lastSpin?.completedAt || null,
+      canSpin: (spinEligibility?.eligible ?? false) && spinsRemaining > 0,
+      nextSpinAt: spinEligibility?.nextAvailableAt || null
+    },
+    challenges: {
+      active: challengesArray
+        .filter((c: any) => !c.completed)
+        .slice(0, 3)
+        .map((c: any) => ({
+          id: c._id || c.challenge?._id,
+          title: c.challenge?.title || 'Challenge',
+          progress: {
+            current: c.progress || 0,
+            target: c.challenge?.requirements?.target || 100,
+            percentage: Math.round((c.progress || 0) / (c.challenge?.requirements?.target || 100) * 100)
+          },
+          reward: c.challenge?.rewards?.coins || 0,
+          expiresAt: c.challenge?.endDate
+        })),
+      totalActive: challengesArray.filter((c: any) => !c.completed).length,
+      completedToday
+    },
+    streak: {
+      type: appOpenStreak?.type || 'app_open',
+      currentStreak: currentStreak,
+      longestStreak: appOpenStreak?.longestStreak || 0,
+      nextMilestone,
+      todayCheckedIn
+    },
+    surpriseDrop: activeDrop ? {
+      id: activeDrop._id,
+      available: true,
+      coins: activeDrop.coins,
+      message: activeDrop.message,
+      expiresAt: activeDrop.expiresAt,
+      reason: activeDrop.reason
+    } : {
+      available: false,
+      coins: 0,
+      message: null,
+      expiresAt: null
+    },
+    coinBalance
+  };
+
+  sendSuccess(res, data, 'Play & Earn data retrieved successfully');
+});
+
+/**
+ * Claim a surprise coin drop
+ * POST /api/gamification/surprise-drop/claim
+ */
+export const claimSurpriseDrop = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const { dropId } = req.body;
+  const userId = (req.user._id as Types.ObjectId).toString();
+
+  if (!dropId) {
+    return sendBadRequest(res, 'Drop ID is required');
+  }
+
+  // Claim the drop
+  const claimedDrop = await (SurpriseCoinDrop as any).claimDrop(dropId, userId);
+
+  if (!claimedDrop) {
+    return sendNotFound(res, 'Drop not found, already claimed, or expired');
+  }
+
+  // Award coins to user
+  const result = await coinService.awardCoins(
+    userId,
+    claimedDrop.coins,
+    'surprise_drop',
+    claimedDrop.message,
+    { dropId: claimedDrop._id, reason: claimedDrop.reason }
+  );
+
+  sendSuccess(res, {
+    coins: claimedDrop.coins,
+    newBalance: result.balance,
+    message: `You claimed ${claimedDrop.coins} surprise coins!`
+  }, 'Surprise drop claimed successfully');
+});
+
+/**
+ * Check in for daily streak
+ * POST /api/gamification/streak/checkin
+ */
+export const streakCheckin = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const userId = (req.user._id as Types.ObjectId).toString();
+
+  // Get or create app_open streak
+  let streak = await UserStreak.findOne({ user: userId, type: 'app_open' });
+
+  if (!streak) {
+    // Create new streak
+    streak = new UserStreak({
+      user: userId,
+      type: 'app_open',
+      currentStreak: 0,
+      longestStreak: 0,
+      lastActivityDate: new Date(0), // Set to past to trigger increment
+      streakStartDate: new Date(),
+      totalDays: 0,
+      milestones: [
+        { day: 3, coinsReward: 50, rewardsClaimed: false },
+        { day: 7, coinsReward: 200, rewardsClaimed: false },
+        { day: 14, coinsReward: 500, rewardsClaimed: false },
+        { day: 30, coinsReward: 2000, badgeReward: 'streak_master', rewardsClaimed: false },
+        { day: 60, coinsReward: 5000, rewardsClaimed: false },
+        { day: 100, coinsReward: 10000, badgeReward: 'loyalty_legend', rewardsClaimed: false }
+      ]
+    });
+  }
+
+  // Check if already checked in today
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const lastActivity = new Date(streak.lastActivityDate);
+  lastActivity.setHours(0, 0, 0, 0);
+
+  if (lastActivity.getTime() === today.getTime()) {
+    return sendSuccess(res, {
+      streakUpdated: false,
+      currentStreak: streak.currentStreak,
+      coinsEarned: 0,
+      milestoneReached: null,
+      message: 'Already checked in today'
+    }, 'Already checked in today');
+  }
+
+  // Update streak
+  await streak.updateStreak();
+
+  // Check for milestone rewards
+  let milestoneReached = null;
+  let coinsEarned = 10; // Base daily check-in coins
+
+  for (const milestone of streak.milestones) {
+    if (
+      streak.currentStreak >= milestone.day &&
+      !milestone.rewardsClaimed
+    ) {
+      milestoneReached = {
+        day: milestone.day,
+        coins: milestone.coinsReward,
+        badge: milestone.badgeReward
+      };
+      coinsEarned += milestone.coinsReward;
+
+      // Mark as claimed
+      milestone.rewardsClaimed = true;
+      milestone.claimedAt = new Date();
+    }
+  }
+
+  await streak.save();
+
+  // Award coins
+  const result = await coinService.awardCoins(
+    userId,
+    coinsEarned,
+    'daily_login',
+    milestoneReached
+      ? `Day ${streak.currentStreak} streak + Day ${milestoneReached.day} milestone!`
+      : `Day ${streak.currentStreak} streak bonus`,
+    { streakDay: streak.currentStreak, milestone: milestoneReached }
+  );
+
+  sendSuccess(res, {
+    streakUpdated: true,
+    currentStreak: streak.currentStreak,
+    longestStreak: streak.longestStreak,
+    coinsEarned,
+    milestoneReached,
+    newBalance: result.balance,
+    message: milestoneReached
+      ? `Congratulations! You reached Day ${milestoneReached.day} milestone!`
+      : `Day ${streak.currentStreak} streak! +${coinsEarned} coins`
+  }, 'Streak check-in successful');
 });

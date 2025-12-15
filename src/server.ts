@@ -99,6 +99,7 @@ import billRoutes from './routes/billRoutes';
 import billingRoutes from './routes/billingRoutes';
 import activityFeedRoutes from './routes/activityFeedRoutes';
 import unifiedGamificationRoutes from './routes/unifiedGamificationRoutes';
+import socialProofRoutes from './routes/socialProofRoutes';
 import partnerRoutes from './routes/partnerRoutes';
 import earningsRoutes from './routes/earningsRoutes';
 import menuRoutes from './routes/menuRoutes';
@@ -629,6 +630,10 @@ console.log('✅ Unified gamification routes registered at /api/gamification');
 // Social Feed Routes - Activity feed, follow system, likes, comments
 app.use(`${API_PREFIX}/social`, activityFeedRoutes);
 console.log('✅ Social feed routes registered at /api/social');
+
+// Social Proof Routes - Nearby activity for trust indicators
+app.use(`${API_PREFIX}/social-proof`, socialProofRoutes);
+console.log('✅ Social proof routes registered at /api/social-proof');
 
 // Partner Program Routes - Partner levels, rewards, milestones, earnings
 app.use(`${API_PREFIX}/partner`, partnerRoutes);
