@@ -27,6 +27,10 @@ export interface AddressSearchResult {
   coordinates: [number, number];
   formattedAddress: string;
   placeId?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  pincode?: string;
 }
 
 class GeocodingService {
@@ -66,7 +70,6 @@ class GeocodingService {
     
     const response = await axios.get(url);
     const data = response.data;
-    console.log('Google Maps reverse geocoding response:', data);
     if (data.status !== 'OK' || !data.results || data.resuylts.length === 0) {
       throw new Error('No address found for coordinates');
     }
@@ -120,11 +123,22 @@ class GeocodingService {
 
     const result = data.results[0];
     const components = result.components;
-    
+
+    // Extract city - OpenCage uses different fields for different places
+    const city = components.city
+      || components.town
+      || components.village
+      || components.county
+      || components.state_district
+      || components.suburb
+      || components.locality
+      || components._normalized_city
+      || 'Unknown';
+
     return {
       address: result.formatted,
-      city: components.city || components.town || components.village || 'Unknown',
-      state: components.state || 'Unknown',
+      city: city,
+      state: components.state || components.province || 'Unknown',
       country: components.country || 'Unknown',
       pincode: components.postcode || undefined,
       coordinates: [longitude, latitude],
@@ -193,8 +207,9 @@ class GeocodingService {
    */
   private async searchAddressesOpenCage(request: SearchAddressRequest): Promise<AddressSearchResult[]> {
     const { query, limit = 5 } = request;
-    const url = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(query)}&key=${this.openCageApiKey}&limit=${limit}`;
-    
+    // Add countrycode=in to focus on India results
+    const url = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(query)}&key=${this.openCageApiKey}&limit=${limit}&countrycode=in`;
+
     const response = await axios.get(url);
     const data = response.data;
 
@@ -202,11 +217,30 @@ class GeocodingService {
       return [];
     }
 
-    return data.results.map((result: any) => ({
-      address: result.formatted,
-      coordinates: [result.geometry.lng, result.geometry.lat],
-      formattedAddress: result.formatted,
-    }));
+    return data.results.map((result: any) => {
+      const components = result.components || {};
+
+      // Extract city - OpenCage uses different fields for different places
+      const city = components.city
+        || components.town
+        || components.village
+        || components.county
+        || components.state_district
+        || components.suburb
+        || components.locality
+        || components._normalized_city
+        || '';
+
+      return {
+        address: result.formatted,
+        coordinates: [result.geometry.lng, result.geometry.lat],
+        formattedAddress: result.formatted,
+        city: city,
+        state: components.state || components.province || '',
+        country: components.country || 'India',
+        pincode: components.postcode || '',
+      };
+    });
   }
 
   /**

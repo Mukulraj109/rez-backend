@@ -17,7 +17,7 @@ export const updateUserLocation = asyncHandler(async (req: Request, res: Respons
     return sendUnauthorized(res, 'User not authenticated');
   }
 
-  const { latitude, longitude, address, source = 'manual' } = req.body;
+  const { latitude, longitude, address, city, state, pincode, source = 'manual' } = req.body;
 
   // Validate coordinates
   if (!geocodingService.validateCoordinates(latitude, longitude)) {
@@ -31,28 +31,29 @@ export const updateUserLocation = asyncHandler(async (req: Request, res: Respons
       return sendNotFound(res, 'User not found');
     }
 
-    // If no address provided, get it from coordinates
+    // Initialize location data
     let locationData = {
       coordinates: [longitude, latitude] as [number, number],
       address: address || '',
-      city: '',
-      state: '',
-      pincode: '',
+      city: city || '',
+      state: state || '',
+      pincode: pincode || '',
     };
 
-    if (!address) {
+    // If city/state not provided, get from reverse geocoding
+    if (!locationData.city || !locationData.state) {
       try {
         const geocodeResult = await geocodingService.reverseGeocode({ latitude, longitude });
         locationData = {
           coordinates: [longitude, latitude],
-          address: geocodeResult.formattedAddress,
-          city: geocodeResult.city,
-          state: geocodeResult.state,
-          pincode: geocodeResult.pincode || '',
+          address: address || geocodeResult.formattedAddress,
+          city: city || geocodeResult.city,
+          state: state || geocodeResult.state,
+          pincode: pincode || geocodeResult.pincode || '',
         };
       } catch (error) {
         console.error('Geocoding failed:', error);
-        // Continue with coordinates only
+        // Continue with what we have
       }
     }
 
