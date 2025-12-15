@@ -664,18 +664,49 @@ export const getFeaturedProducts = asyncHandler(async (req: Request, res: Respon
     const inventoryCount = await Product.countDocuments({ 'inventory.isAvailable': true });
     console.log('📊 [FEATURED PRODUCTS] Products with inventory.isAvailable=true:', inventoryCount);
 
-    // Try the full query
+    // Try the full query for featured products first
     console.log('🔍 [FEATURED PRODUCTS] Executing main query...');
-    const products = await Product.find({
+    let products = await Product.find({
       isActive: true,
       isFeatured: true,
       'inventory.isAvailable': true
     })
       .populate('category', 'name slug')
       .populate('store', 'name slug logo location')
-      .sort({ 'rating.value': -1, createdAt: -1 })
+      .sort({ 'ratings.average': -1, createdAt: -1 })
       .limit(Number(limit))
       .lean();
+
+    console.log('✅ [FEATURED PRODUCTS] Featured query found:', products.length, 'products');
+
+    // Fallback: If no featured products, get any active products with good ratings
+    if (products.length === 0) {
+      console.log('⚠️ [FEATURED PRODUCTS] No featured products found, falling back to top-rated active products');
+      products = await Product.find({
+        isActive: true,
+        'inventory.isAvailable': true
+      })
+        .populate('category', 'name slug')
+        .populate('store', 'name slug logo location')
+        .sort({ 'ratings.average': -1, 'ratings.count': -1, createdAt: -1 })
+        .limit(Number(limit))
+        .lean();
+      console.log('✅ [FEATURED PRODUCTS] Fallback query found:', products.length, 'products');
+    }
+
+    // Second fallback: If still no products, get any active products
+    if (products.length === 0) {
+      console.log('⚠️ [FEATURED PRODUCTS] Still no products, trying without inventory filter');
+      products = await Product.find({
+        isActive: true
+      })
+        .populate('category', 'name slug')
+        .populate('store', 'name slug logo location')
+        .sort({ createdAt: -1 })
+        .limit(Number(limit))
+        .lean();
+      console.log('✅ [FEATURED PRODUCTS] Second fallback found:', products.length, 'products');
+    }
 
     console.log('✅ [FEATURED PRODUCTS] Query successful! Found products:', products.length);
     console.log('📦 [FEATURED PRODUCTS] Sample product:', products[0] ? {
