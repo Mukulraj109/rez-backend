@@ -112,6 +112,7 @@ import serviceBookingRoutes from './routes/serviceBookingRoutes';
 import storeVisitRoutes from './routes/storeVisitRoutes';
 import homepageRoutes from './routes/homepageRoutes';
 import searchRoutes from './routes/searchRoutes';
+import mallRoutes from './routes/mallRoutes';  // ReZ Mall routes
 import webhookRoutes from './routes/webhookRoutes';
 import storeGalleryRoutes from './routes/storeGallery';  // Public store gallery routes
 import productGalleryRoutes from './routes/productGallery';  // Public product gallery routes
@@ -682,6 +683,10 @@ console.log('✅ Homepage routes registered at /api/homepage');
 // // Search Routes - Global search across products, stores, and articles
 app.use(`${API_PREFIX}/search`, searchRoutes);
 console.log('✅ Search routes registered at /api/search');
+
+// Mall Routes - ReZ Mall curated brands and offers
+app.use(`${API_PREFIX}/mall`, mallRoutes);
+console.log('✅ Mall routes registered at /api/mall');
 
 // Store Gallery Routes - Public gallery viewing
 app.use(`${API_PREFIX}/stores`, storeGalleryRoutes);
