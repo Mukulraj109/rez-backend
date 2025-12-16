@@ -18,7 +18,7 @@ export interface IUserCashback extends Document {
   order?: Types.ObjectId;
   amount: number;
   cashbackRate: number; // percentage
-  source: 'order' | 'referral' | 'promotion' | 'special_offer' | 'bonus' | 'signup';
+  source: 'order' | 'referral' | 'promotion' | 'special_offer' | 'bonus' | 'signup' | 'mall_purchase';
   status: 'pending' | 'credited' | 'expired' | 'cancelled';
   earnedDate: Date;
   creditedDate?: Date;
@@ -92,7 +92,7 @@ const UserCashbackSchema = new Schema<IUserCashback>(
     },
     source: {
       type: String,
-      enum: ['order', 'referral', 'promotion', 'special_offer', 'bonus', 'signup'],
+      enum: ['order', 'referral', 'promotion', 'special_offer', 'bonus', 'signup', 'mall_purchase'],
       required: true,
       index: true,
     },

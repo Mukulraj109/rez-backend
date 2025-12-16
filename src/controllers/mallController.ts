@@ -2,6 +2,10 @@
  * Mall Controller
  *
  * Handles all ReZ Mall API endpoints for brands, categories, collections, offers, and banners.
+ *
+ * NOTE: ReZ Mall has two systems:
+ * 1. MallBrand-based (external affiliate brands) - legacy, use Cash Store instead
+ * 2. Store-based (in-app delivery marketplace) - stores with deliveryCategories.mall=true
  */
 
 import { Request, Response, NextFunction } from 'express';
@@ -661,4 +665,199 @@ export const deleteMallBanner = asyncHandler(async (req: Request, res: Response)
   await mallService.invalidateAllCaches();
 
   return sendSuccess(res, null, 'Mall banner deleted successfully');
+});
+
+// ==================== STORE-BASED MALL ENDPOINTS ====================
+// These endpoints fetch from Store model where deliveryCategories.mall === true
+// Used for the in-app delivery marketplace (users earn ReZ Coins)
+
+/**
+ * Get Mall Stores Homepage Data
+ * GET /api/mall/stores/homepage
+ *
+ * Returns aggregated mall store data:
+ * - Featured stores
+ * - New stores
+ * - Top rated stores
+ * - Premium stores
+ * - Categories
+ */
+export const getMallStoresHomepage = asyncHandler(async (req: Request, res: Response) => {
+  const data = await mallService.getMallStoresHomepage();
+  return sendSuccess(res, data, 'Mall stores homepage data retrieved successfully');
+});
+
+/**
+ * Get All Mall Stores
+ * GET /api/mall/stores
+ *
+ * Query params:
+ * - category: Category ID
+ * - premium: true/false
+ * - minCoinReward: Minimum coin reward percentage
+ * - search: Search term
+ * - page: Page number
+ * - limit: Items per page
+ */
+export const getMallStores = asyncHandler(async (req: Request, res: Response) => {
+  const {
+    category,
+    premium,
+    minCoinReward,
+    search,
+    page = '1',
+    limit = '20',
+  } = req.query;
+
+  const filters = {
+    category: category as string,
+    premium: premium === 'true',
+    minCoinReward: minCoinReward ? parseInt(minCoinReward as string) : undefined,
+    search: search as string,
+  };
+
+  const pageNum = parseInt(page as string) || 1;
+  const limitNum = Math.min(parseInt(limit as string) || 20, 50);
+
+  const { stores, total, pages } = await mallService.getMallStores(filters, pageNum, limitNum);
+
+  return sendPaginated(res, stores, pageNum, limitNum, total, 'Mall stores retrieved successfully');
+});
+
+/**
+ * Get Featured Mall Stores
+ * GET /api/mall/stores/featured
+ */
+export const getFeaturedMallStores = asyncHandler(async (req: Request, res: Response) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 10, 20);
+  const stores = await mallService.getFeaturedMallStores(limit);
+  return sendSuccess(res, stores, 'Featured mall stores retrieved successfully');
+});
+
+/**
+ * Get New Mall Stores
+ * GET /api/mall/stores/new
+ */
+export const getNewMallStores = asyncHandler(async (req: Request, res: Response) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 10, 20);
+  const stores = await mallService.getNewMallStores(limit);
+  return sendSuccess(res, stores, 'New mall stores retrieved successfully');
+});
+
+/**
+ * Get Top Rated Mall Stores
+ * GET /api/mall/stores/top-rated
+ */
+export const getTopRatedMallStores = asyncHandler(async (req: Request, res: Response) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 10, 20);
+  const stores = await mallService.getTopRatedMallStores(limit);
+  return sendSuccess(res, stores, 'Top rated mall stores retrieved successfully');
+});
+
+/**
+ * Get Premium Mall Stores
+ * GET /api/mall/stores/premium
+ */
+export const getPremiumMallStores = asyncHandler(async (req: Request, res: Response) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 10, 20);
+  const stores = await mallService.getPremiumMallStores(limit);
+  return sendSuccess(res, stores, 'Premium mall stores retrieved successfully');
+});
+
+/**
+ * Get Mall Store by ID
+ * GET /api/mall/stores/:storeId
+ */
+export const getMallStoreById = asyncHandler(async (req: Request, res: Response) => {
+  const { storeId } = req.params;
+
+  if (!Types.ObjectId.isValid(storeId)) {
+    return sendBadRequest(res, 'Invalid store ID');
+  }
+
+  const store = await mallService.getMallStoreById(storeId);
+
+  if (!store) {
+    return sendNotFound(res, 'Mall store not found');
+  }
+
+  return sendSuccess(res, store, 'Mall store retrieved successfully');
+});
+
+/**
+ * Search Mall Stores
+ * GET /api/mall/stores/search
+ */
+export const searchMallStores = asyncHandler(async (req: Request, res: Response) => {
+  const { q, limit = '20' } = req.query;
+
+  if (!q || (q as string).length < 2) {
+    return sendBadRequest(res, 'Search query must be at least 2 characters');
+  }
+
+  const stores = await mallService.searchMallStores(q as string, parseInt(limit as string));
+  return sendSuccess(res, stores, 'Mall store search results retrieved successfully');
+});
+
+/**
+ * Get Mall Store Categories
+ * GET /api/mall/stores/categories
+ */
+export const getMallStoreCategories = asyncHandler(async (req: Request, res: Response) => {
+  const categories = await mallService.getMallStoreCategories();
+  return sendSuccess(res, categories, 'Mall store categories retrieved successfully');
+});
+
+/**
+ * Get Mall Stores by Category
+ * GET /api/mall/stores/category/:categoryId
+ */
+export const getMallStoresByCategory = asyncHandler(async (req: Request, res: Response) => {
+  const { categoryId } = req.params;
+  const { page = '1', limit = '20' } = req.query;
+
+  if (!Types.ObjectId.isValid(categoryId)) {
+    return sendBadRequest(res, 'Invalid category ID');
+  }
+
+  const pageNum = parseInt(page as string) || 1;
+  const limitNum = Math.min(parseInt(limit as string) || 20, 50);
+
+  const { stores, total } = await mallService.getMallStoresByCategory(categoryId, pageNum, limitNum);
+
+  return sendPaginated(res, stores, pageNum, limitNum, total, 'Mall stores by category retrieved successfully');
+});
+
+/**
+ * Get Mall Stores by Category Slug
+ * GET /api/mall/stores/category-slug/:slug
+ * Used by frontend that uses slug in URL routes
+ */
+export const getMallStoresByCategorySlug = asyncHandler(async (req: Request, res: Response) => {
+  const { slug } = req.params;
+  const { page = '1', limit = '20' } = req.query;
+
+  if (!slug) {
+    return sendBadRequest(res, 'Category slug is required');
+  }
+
+  const pageNum = parseInt(page as string) || 1;
+  const limitNum = Math.min(parseInt(limit as string) || 20, 50);
+
+  const { stores, total, category } = await mallService.getMallStoresByCategorySlug(slug, pageNum, limitNum);
+
+  if (!category) {
+    return sendNotFound(res, 'Category not found');
+  }
+
+  return sendSuccess(res, {
+    category,
+    stores,
+    pagination: {
+      page: pageNum,
+      limit: limitNum,
+      total,
+      pages: Math.ceil(total / limitNum),
+    },
+  }, 'Mall stores by category retrieved successfully');
 });

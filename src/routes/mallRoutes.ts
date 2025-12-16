@@ -26,6 +26,18 @@ import {
   getMallBanners,
   trackBrandClick,
   trackBrandPurchase,
+  // Store-based mall endpoints (in-app delivery marketplace)
+  getMallStoresHomepage,
+  getMallStores,
+  getFeaturedMallStores,
+  getNewMallStores,
+  getTopRatedMallStores,
+  getPremiumMallStores,
+  getMallStoreById,
+  searchMallStores,
+  getMallStoreCategories,
+  getMallStoresByCategory,
+  getMallStoresByCategorySlug,
   // Admin endpoints
   createMallBrand,
   updateMallBrand,
@@ -119,6 +131,87 @@ router.post('/brands/:brandId/click', optionalAuth, trackBrandClick);
  * @access  Private
  */
 router.post('/brands/:brandId/purchase', authenticate, trackBrandPurchase);
+
+// ==================== STORE-BASED MALL ROUTES ====================
+// These endpoints fetch stores with deliveryCategories.mall === true
+// For the in-app delivery marketplace (users earn ReZ Coins)
+
+/**
+ * @route   GET /api/mall/stores/homepage
+ * @desc    Get mall stores homepage data (featured, new, top-rated, premium stores)
+ * @access  Public
+ */
+router.get('/stores/homepage', optionalAuth, getMallStoresHomepage);
+
+/**
+ * @route   GET /api/mall/stores/featured
+ * @desc    Get featured mall stores
+ * @access  Public
+ */
+router.get('/stores/featured', optionalAuth, getFeaturedMallStores);
+
+/**
+ * @route   GET /api/mall/stores/new
+ * @desc    Get newly registered mall stores
+ * @access  Public
+ */
+router.get('/stores/new', optionalAuth, getNewMallStores);
+
+/**
+ * @route   GET /api/mall/stores/top-rated
+ * @desc    Get top rated mall stores
+ * @access  Public
+ */
+router.get('/stores/top-rated', optionalAuth, getTopRatedMallStores);
+
+/**
+ * @route   GET /api/mall/stores/premium
+ * @desc    Get premium mall stores
+ * @access  Public
+ */
+router.get('/stores/premium', optionalAuth, getPremiumMallStores);
+
+/**
+ * @route   GET /api/mall/stores/search
+ * @desc    Search mall stores
+ * @access  Public
+ */
+router.get('/stores/search', optionalAuth, searchMallStores);
+
+/**
+ * @route   GET /api/mall/stores/categories
+ * @desc    Get mall store categories (categories with mall stores)
+ * @access  Public
+ */
+router.get('/stores/categories', optionalAuth, getMallStoreCategories);
+
+/**
+ * @route   GET /api/mall/stores/category/:categoryId
+ * @desc    Get mall stores by category ID
+ * @access  Public
+ */
+router.get('/stores/category/:categoryId', optionalAuth, getMallStoresByCategory);
+
+/**
+ * @route   GET /api/mall/stores/category-slug/:slug
+ * @desc    Get mall stores by category slug (for frontend routes)
+ * @access  Public
+ */
+router.get('/stores/category-slug/:slug', optionalAuth, getMallStoresByCategorySlug);
+
+/**
+ * @route   GET /api/mall/stores/:storeId
+ * @desc    Get mall store by ID
+ * @access  Public
+ */
+router.get('/stores/:storeId', optionalAuth, getMallStoreById);
+
+/**
+ * @route   GET /api/mall/stores
+ * @desc    Get all mall stores with filters
+ * @access  Public
+ */
+router.get('/stores', optionalAuth, getMallStores);
 
 // ==================== CATEGORY ROUTES ====================
 

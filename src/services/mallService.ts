@@ -10,6 +10,8 @@ import { MallCategory, IMallCategory } from '../models/MallCategory';
 import { MallCollection, IMallCollection } from '../models/MallCollection';
 import { MallOffer, IMallOffer } from '../models/MallOffer';
 import { MallBanner, IMallBanner } from '../models/MallBanner';
+import { Store, IStore } from '../models/Store';
+import { Category } from '../models/Category';
 import redisService from './redisService';
 
 // Cache TTL constants (in seconds)
@@ -34,6 +36,12 @@ const CACHE_KEYS = {
   OFFERS: 'mall:offers',
   BANNERS: 'mall:banners',
   BRAND: 'mall:brand',
+  // Store-based mall keys
+  MALL_STORES: 'mall:stores',
+  FEATURED_STORES: 'mall:stores:featured',
+  NEW_STORES: 'mall:stores:new',
+  TOP_RATED_STORES: 'mall:stores:top-rated',
+  PREMIUM_STORES: 'mall:stores:premium',
 };
 
 // Types
@@ -55,6 +63,22 @@ export interface MallHomepageData {
   newArrivals: IMallBrand[];
   topRatedBrands: IMallBrand[];
   luxuryBrands: IMallBrand[];
+}
+
+// Store-based mall types for in-app delivery marketplace
+export interface MallStoreFilters {
+  category?: string;
+  premium?: boolean;
+  minCoinReward?: number;
+  search?: string;
+}
+
+export interface MallStoreHomepageData {
+  featuredStores: IStore[];
+  newStores: IStore[];
+  topRatedStores: IStore[];
+  premiumStores: IStore[];
+  categories: any[]; // Category documents
 }
 
 class MallService {
@@ -570,7 +594,13 @@ class MallService {
       CACHE_KEYS.CATEGORIES,
       `${CACHE_KEYS.COLLECTIONS}:*`,
       `${CACHE_KEYS.OFFERS}:*`,
-      `${CACHE_KEYS.BANNERS}:*`
+      `${CACHE_KEYS.BANNERS}:*`,
+      // Store-based cache keys
+      `${CACHE_KEYS.MALL_STORES}:*`,
+      `${CACHE_KEYS.FEATURED_STORES}:*`,
+      `${CACHE_KEYS.NEW_STORES}:*`,
+      `${CACHE_KEYS.TOP_RATED_STORES}:*`,
+      `${CACHE_KEYS.PREMIUM_STORES}:*`,
     ];
 
     for (const key of keys) {
@@ -581,6 +611,348 @@ class MallService {
         await redisService.del(key);
       }
     }
+  }
+
+  // ==================== STORE-BASED MALL METHODS ====================
+  // These methods fetch from Store model where deliveryCategories.mall === true
+  // Used for the in-app delivery marketplace (users earn ReZ Coins)
+
+  /**
+   * Get mall stores homepage data (using Store model)
+   */
+  async getMallStoresHomepage(): Promise<MallStoreHomepageData> {
+    const cacheKey = `${CACHE_KEYS.MALL_STORES}:homepage`;
+    const cached = await redisService.get<MallStoreHomepageData>(cacheKey);
+    if (cached) return cached;
+
+    const [featuredStores, newStores, topRatedStores, premiumStores, categories] = await Promise.all([
+      this.getFeaturedMallStores(10),
+      this.getNewMallStores(8),
+      this.getTopRatedMallStores(6),
+      this.getPremiumMallStores(6),
+      this.getMallStoreCategories(),
+    ]);
+
+    const data: MallStoreHomepageData = {
+      featuredStores,
+      newStores,
+      topRatedStores,
+      premiumStores,
+      categories,
+    };
+
+    await redisService.set(cacheKey, data, CACHE_TTL.HOMEPAGE);
+    return data;
+  }
+
+  /**
+   * Get all mall stores with filters
+   */
+  async getMallStores(
+    filters: MallStoreFilters = {},
+    page: number = 1,
+    limit: number = 20
+  ): Promise<{ stores: IStore[]; total: number; pages: number }> {
+    const query: any = {
+      isActive: true,
+      'deliveryCategories.mall': true,
+    };
+
+    if (filters.category) {
+      query.category = new Types.ObjectId(filters.category);
+    }
+
+    if (filters.premium) {
+      query['deliveryCategories.premium'] = true;
+    }
+
+    if (filters.minCoinReward) {
+      query['rewardRules.baseCashbackPercent'] = { $gte: filters.minCoinReward };
+    }
+
+    if (filters.search) {
+      query.$or = [
+        { name: { $regex: filters.search, $options: 'i' } },
+        { description: { $regex: filters.search, $options: 'i' } },
+        { tags: { $in: [new RegExp(filters.search, 'i')] } },
+      ];
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [stores, total] = await Promise.all([
+      Store.find(query)
+        .populate('category', 'name slug')
+        .sort({ 'ratings.average': -1, isFeatured: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Store.countDocuments(query),
+    ]);
+
+    return {
+      stores,
+      total,
+      pages: Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * Get featured mall stores
+   */
+  async getFeaturedMallStores(limit: number = 10): Promise<IStore[]> {
+    const cacheKey = `${CACHE_KEYS.FEATURED_STORES}:${limit}`;
+    const cached = await redisService.get<IStore[]>(cacheKey);
+    if (cached) return cached;
+
+    const stores = await Store.find({
+      isActive: true,
+      isFeatured: true,
+      'deliveryCategories.mall': true,
+    })
+      .populate('category', 'name slug')
+      .sort({ 'ratings.average': -1 })
+      .limit(limit)
+      .lean();
+
+    await redisService.set(cacheKey, stores, CACHE_TTL.BRANDS);
+    return stores;
+  }
+
+  /**
+   * Get new mall stores (recently registered)
+   */
+  async getNewMallStores(limit: number = 10): Promise<IStore[]> {
+    const cacheKey = `${CACHE_KEYS.NEW_STORES}:${limit}`;
+    const cached = await redisService.get<IStore[]>(cacheKey);
+    if (cached) return cached;
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const stores = await Store.find({
+      isActive: true,
+      'deliveryCategories.mall': true,
+      createdAt: { $gte: thirtyDaysAgo },
+    })
+      .populate('category', 'name slug')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    await redisService.set(cacheKey, stores, CACHE_TTL.BRANDS);
+    return stores;
+  }
+
+  /**
+   * Get top rated mall stores
+   */
+  async getTopRatedMallStores(limit: number = 10): Promise<IStore[]> {
+    const cacheKey = `${CACHE_KEYS.TOP_RATED_STORES}:${limit}`;
+    const cached = await redisService.get<IStore[]>(cacheKey);
+    if (cached) return cached;
+
+    const stores = await Store.find({
+      isActive: true,
+      'deliveryCategories.mall': true,
+      'ratings.count': { $gte: 5 },
+    })
+      .populate('category', 'name slug')
+      .sort({ 'ratings.average': -1 })
+      .limit(limit)
+      .lean();
+
+    await redisService.set(cacheKey, stores, CACHE_TTL.BRANDS);
+    return stores;
+  }
+
+  /**
+   * Get premium mall stores
+   */
+  async getPremiumMallStores(limit: number = 10): Promise<IStore[]> {
+    const cacheKey = `${CACHE_KEYS.PREMIUM_STORES}:${limit}`;
+    const cached = await redisService.get<IStore[]>(cacheKey);
+    if (cached) return cached;
+
+    const stores = await Store.find({
+      isActive: true,
+      'deliveryCategories.mall': true,
+      'deliveryCategories.premium': true,
+    })
+      .populate('category', 'name slug')
+      .sort({ 'ratings.average': -1 })
+      .limit(limit)
+      .lean();
+
+    await redisService.set(cacheKey, stores, CACHE_TTL.BRANDS);
+    return stores;
+  }
+
+  /**
+   * Get mall store by ID
+   */
+  async getMallStoreById(storeId: string): Promise<IStore | null> {
+    const cacheKey = `${CACHE_KEYS.MALL_STORES}:${storeId}`;
+    const cached = await redisService.get<IStore>(cacheKey);
+    if (cached) return cached;
+
+    const store = await Store.findOne({
+      _id: new Types.ObjectId(storeId),
+      isActive: true,
+      'deliveryCategories.mall': true,
+    })
+      .populate('category', 'name slug')
+      .lean();
+
+    if (store) {
+      await redisService.set(cacheKey, store, CACHE_TTL.BRANDS);
+    }
+
+    return store;
+  }
+
+  /**
+   * Get mall store categories (categories that have mall stores)
+   */
+  async getMallStoreCategories(): Promise<any[]> {
+    const cacheKey = `${CACHE_KEYS.MALL_STORES}:categories`;
+    const cached = await redisService.get<any[]>(cacheKey);
+    if (cached) return cached;
+
+    // Get distinct categories that have mall stores
+    const categoriesWithStores = await Store.aggregate([
+      {
+        $match: {
+          isActive: true,
+          'deliveryCategories.mall': true,
+        },
+      },
+      {
+        $group: {
+          _id: '$category',
+          storeCount: { $sum: 1 },
+          avgRating: { $avg: '$ratings.average' },
+          maxCoinReward: { $max: '$rewardRules.baseCashbackPercent' },
+        },
+      },
+      {
+        $lookup: {
+          from: 'categories',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'categoryInfo',
+        },
+      },
+      {
+        $unwind: '$categoryInfo',
+      },
+      {
+        $project: {
+          _id: 1,
+          name: '$categoryInfo.name',
+          slug: '$categoryInfo.slug',
+          icon: '$categoryInfo.icon',
+          storeCount: 1,
+          avgRating: { $round: ['$avgRating', 1] },
+          maxCoinReward: 1,
+        },
+      },
+      {
+        $sort: { storeCount: -1 },
+      },
+    ]);
+
+    await redisService.set(cacheKey, categoriesWithStores, CACHE_TTL.CATEGORIES);
+    return categoriesWithStores;
+  }
+
+  /**
+   * Search mall stores
+   */
+  async searchMallStores(query: string, limit: number = 20): Promise<IStore[]> {
+    if (!query || query.length < 2) return [];
+
+    const stores = await Store.find({
+      isActive: true,
+      'deliveryCategories.mall': true,
+      $or: [
+        { name: { $regex: query, $options: 'i' } },
+        { description: { $regex: query, $options: 'i' } },
+        { tags: { $in: [new RegExp(query, 'i')] } },
+      ],
+    })
+      .populate('category', 'name slug')
+      .sort({ 'ratings.average': -1 })
+      .limit(limit)
+      .lean();
+
+    return stores;
+  }
+
+  /**
+   * Get mall stores by category ID
+   */
+  async getMallStoresByCategory(
+    categoryId: string,
+    page: number = 1,
+    limit: number = 20
+  ): Promise<{ stores: IStore[]; total: number }> {
+    const query = {
+      isActive: true,
+      'deliveryCategories.mall': true,
+      category: new Types.ObjectId(categoryId),
+    };
+
+    const skip = (page - 1) * limit;
+
+    const [stores, total] = await Promise.all([
+      Store.find(query)
+        .populate('category', 'name slug')
+        .sort({ 'ratings.average': -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Store.countDocuments(query),
+    ]);
+
+    return { stores, total };
+  }
+
+  /**
+   * Get mall stores by category slug
+   * Used by frontend category pages that use slug in URL
+   */
+  async getMallStoresByCategorySlug(
+    categorySlug: string,
+    page: number = 1,
+    limit: number = 20
+  ): Promise<{ stores: IStore[]; total: number; category: any }> {
+    // First find the category by slug
+    const category = await Category.findOne({ slug: categorySlug, isActive: true }).lean();
+
+    if (!category) {
+      return { stores: [], total: 0, category: null };
+    }
+
+    const query = {
+      isActive: true,
+      'deliveryCategories.mall': true,
+      category: category._id,
+    };
+
+    const skip = (page - 1) * limit;
+
+    const [stores, total] = await Promise.all([
+      Store.find(query)
+        .populate('category', 'name slug icon color description')
+        .sort({ 'ratings.average': -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Store.countDocuments(query),
+    ]);
+
+    return { stores, total, category };
   }
 }
 

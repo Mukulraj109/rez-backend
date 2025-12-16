@@ -53,6 +53,12 @@ export interface IMallBrand extends Document {
   badges: BrandBadge[];
   externalUrl?: string;
   affiliateCode?: string;
+  webhookConfig?: {
+    apiKey?: string;
+    secretKey?: string;
+    webhookUrl?: string;
+    isEnabled?: boolean;
+  };
   isActive: boolean;
   isFeatured: boolean;
   isLuxury: boolean;
@@ -64,6 +70,11 @@ export interface IMallBrand extends Document {
   tags: string[];
   createdAt: Date;
   updatedAt: Date;
+
+  // Instance methods
+  recordView(): Promise<void>;
+  recordClick(): Promise<void>;
+  recordPurchase(cashbackAmount?: number): Promise<void>;
 }
 
 // Mall Brand Schema
@@ -167,6 +178,25 @@ const MallBrandSchema = new Schema<IMallBrand>({
   affiliateCode: {
     type: String,
     trim: true
+  },
+  // Webhook configuration for receiving conversion notifications
+  webhookConfig: {
+    apiKey: {
+      type: String,
+      trim: true,
+    },
+    secretKey: {
+      type: String,
+      trim: true,
+    },
+    webhookUrl: {
+      type: String,
+      trim: true,
+    },
+    isEnabled: {
+      type: Boolean,
+      default: false,
+    },
   },
   isActive: {
     type: Boolean,
