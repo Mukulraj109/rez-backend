@@ -9,8 +9,11 @@ import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { MallBrand } from '../models/MallBrand';
 
-// Environment variable for master webhook key (for testing/demo)
-const MASTER_WEBHOOK_KEY = process.env.MALL_WEBHOOK_MASTER_KEY || 'rez_webhook_demo_key_2024';
+// Environment variable for master webhook key
+// SECURITY: In production, this MUST be set via environment variable
+// The hardcoded fallback only works in development/test environments
+const MASTER_WEBHOOK_KEY = process.env.MALL_WEBHOOK_MASTER_KEY ||
+  (process.env.NODE_ENV !== 'production' ? 'rez_webhook_demo_key_2024' : undefined);
 
 /**
  * Webhook Authentication Middleware
@@ -41,7 +44,8 @@ export const webhookAuth = async (
     }
 
     // Check master key first (for testing/demo)
-    if (apiKey === MASTER_WEBHOOK_KEY) {
+    // SECURITY: Master key only works if explicitly set (not in production without env var)
+    if (MASTER_WEBHOOK_KEY && apiKey === MASTER_WEBHOOK_KEY) {
       console.log('🔑 [WEBHOOK] Authenticated with master key');
       (req as any).webhookAuth = {
         type: 'master',
@@ -226,24 +230,28 @@ export const webhookRateLimit = (
 
 /**
  * Demo/Test webhook auth (allows any request in development)
+ * SECURITY: Demo routes are COMPLETELY BLOCKED in production
  */
 export const demoWebhookAuth = (
   req: Request,
   res: Response,
   next: NextFunction
 ): void => {
-  // In development, allow all requests to demo endpoints
-  if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
-    (req as any).webhookAuth = {
-      type: 'demo',
-      brandId: null,
-    };
-    next();
+  // SECURITY: Block demo routes entirely in production
+  if (process.env.NODE_ENV === 'production') {
+    res.status(404).json({
+      success: false,
+      message: 'Not found',
+    });
     return;
   }
 
-  // In production, require proper authentication
-  webhookAuth(req, res, next);
+  // In development/test, allow all requests to demo endpoints
+  (req as any).webhookAuth = {
+    type: 'demo',
+    brandId: null,
+  };
+  next();
 };
 
 export default webhookAuth;

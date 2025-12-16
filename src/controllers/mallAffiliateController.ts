@@ -10,6 +10,7 @@ import { Types } from 'mongoose';
 import crypto from 'crypto';
 import mallAffiliateService from '../services/mallAffiliateService';
 import { MallBrand } from '../models/MallBrand';
+import { AffiliateWebhookLog, AffiliateWebhookType } from '../models/AffiliateWebhookLog';
 import {
   sendSuccess,
   sendPaginated,
@@ -18,6 +19,59 @@ import {
   sendError,
   sendUnauthorized,
 } from '../utils/response';
+
+// Helper function to log webhook request
+const logWebhookRequest = async (
+  req: Request,
+  webhookType: AffiliateWebhookType
+): Promise<Types.ObjectId | null> => {
+  try {
+    const webhookAuth = (req as any).webhookAuth;
+    const log = await (AffiliateWebhookLog as any).logWebhook({
+      webhookType,
+      endpoint: req.originalUrl,
+      method: req.method,
+      headers: Object.fromEntries(
+        Object.entries(req.headers)
+          .filter(([key]) => !key.toLowerCase().includes('authorization') && !key.toLowerCase().includes('api-key'))
+          .map(([key, value]) => [key, String(value)])
+      ),
+      body: req.body,
+      queryParams: req.query as Record<string, string>,
+      ipAddress: req.ip || req.socket.remoteAddress || 'unknown',
+      userAgent: req.headers['user-agent'],
+      brandId: webhookAuth?.brandId,
+      brandName: webhookAuth?.brandName,
+      affiliateNetwork: webhookAuth?.type === 'brand' ? 'direct' : undefined,
+    });
+    return log._id;
+  } catch (error) {
+    console.error('[WEBHOOK LOG] Failed to create log entry:', error);
+    return null;
+  }
+};
+
+// Helper function to update webhook log with result
+const updateWebhookLog = async (
+  logId: Types.ObjectId | null,
+  result: {
+    status: 'success' | 'failed' | 'duplicate' | 'invalid';
+    responseStatus: number;
+    responseBody?: Record<string, any>;
+    processingTime: number;
+    errorMessage?: string;
+    clickId?: string;
+    purchaseId?: string;
+    cashbackId?: Types.ObjectId;
+  }
+): Promise<void> => {
+  if (!logId) return;
+  try {
+    await (AffiliateWebhookLog as any).updateLogResult(logId, result);
+  } catch (error) {
+    console.error('[WEBHOOK LOG] Failed to update log entry:', error);
+  }
+};
 
 // Async handler wrapper
 const asyncHandler = (fn: Function) => (req: Request, res: Response, next: NextFunction) => {
@@ -143,6 +197,9 @@ export const getUserCashbackSummary = asyncHandler(async (req: Request, res: Res
  * Called by brand/affiliate network when a purchase is made
  */
 export const processConversionWebhook = asyncHandler(async (req: Request, res: Response) => {
+  const startTime = Date.now();
+  const logId = await logWebhookRequest(req, 'conversion');
+
   const {
     click_id,
     clickId,
@@ -160,37 +217,86 @@ export const processConversionWebhook = asyncHandler(async (req: Request, res: R
   const resolvedOrderAmount = order_amount || orderAmount;
 
   if (!resolvedClickId) {
+    await updateWebhookLog(logId, {
+      status: 'invalid',
+      responseStatus: 400,
+      processingTime: Date.now() - startTime,
+      errorMessage: 'Click ID is required',
+    });
     return sendBadRequest(res, 'Click ID is required');
   }
 
   if (!resolvedOrderId) {
+    await updateWebhookLog(logId, {
+      status: 'invalid',
+      responseStatus: 400,
+      processingTime: Date.now() - startTime,
+      errorMessage: 'Order ID is required',
+      clickId: resolvedClickId,
+    });
     return sendBadRequest(res, 'Order ID is required');
   }
 
   if (!resolvedOrderAmount || resolvedOrderAmount <= 0) {
+    await updateWebhookLog(logId, {
+      status: 'invalid',
+      responseStatus: 400,
+      processingTime: Date.now() - startTime,
+      errorMessage: 'Valid order amount is required',
+      clickId: resolvedClickId,
+    });
     return sendBadRequest(res, 'Valid order amount is required');
   }
 
   // Validate click before processing
   const validation = await mallAffiliateService.validateClickForConversion(resolvedClickId);
   if (!validation.valid) {
+    await updateWebhookLog(logId, {
+      status: 'invalid',
+      responseStatus: 400,
+      processingTime: Date.now() - startTime,
+      errorMessage: validation.error || 'Invalid click',
+      clickId: resolvedClickId,
+    });
     return sendBadRequest(res, validation.error || 'Invalid click');
   }
 
-  const purchase = await mallAffiliateService.processConversion({
-    clickId: resolvedClickId,
-    externalOrderId: resolvedOrderId,
-    orderAmount: resolvedOrderAmount,
-    currency: currency || 'INR',
-    status: status || 'pending',
-    webhookPayload: req.body,
-  });
+  try {
+    const purchase = await mallAffiliateService.processConversion({
+      clickId: resolvedClickId,
+      externalOrderId: resolvedOrderId,
+      orderAmount: resolvedOrderAmount,
+      currency: currency || 'INR',
+      status: status || 'pending',
+      webhookPayload: req.body,
+    });
 
-  return sendSuccess(res, {
-    purchaseId: purchase.purchaseId,
-    status: purchase.status,
-    cashbackAmount: purchase.actualCashback,
-  }, 'Conversion processed successfully');
+    const responseData = {
+      purchaseId: purchase.purchaseId,
+      status: purchase.status,
+      cashbackAmount: purchase.actualCashback,
+    };
+
+    await updateWebhookLog(logId, {
+      status: 'success',
+      responseStatus: 200,
+      responseBody: responseData,
+      processingTime: Date.now() - startTime,
+      clickId: resolvedClickId,
+      purchaseId: purchase.purchaseId,
+    });
+
+    return sendSuccess(res, responseData, 'Conversion processed successfully');
+  } catch (error: any) {
+    await updateWebhookLog(logId, {
+      status: 'failed',
+      responseStatus: 500,
+      processingTime: Date.now() - startTime,
+      errorMessage: error.message,
+      clickId: resolvedClickId,
+    });
+    throw error;
+  }
 });
 
 /**
@@ -200,20 +306,49 @@ export const processConversionWebhook = asyncHandler(async (req: Request, res: R
  * Called when a pending purchase is confirmed
  */
 export const confirmPurchaseWebhook = asyncHandler(async (req: Request, res: Response) => {
-  const { purchase_id, purchaseId, reason } = req.body;
+  const startTime = Date.now();
+  const logId = await logWebhookRequest(req, 'confirm');
 
+  const { purchase_id, purchaseId, reason } = req.body;
   const resolvedPurchaseId = purchase_id || purchaseId;
 
   if (!resolvedPurchaseId) {
+    await updateWebhookLog(logId, {
+      status: 'invalid',
+      responseStatus: 400,
+      processingTime: Date.now() - startTime,
+      errorMessage: 'Purchase ID is required',
+    });
     return sendBadRequest(res, 'Purchase ID is required');
   }
 
-  const purchase = await mallAffiliateService.confirmPurchase(resolvedPurchaseId, reason);
+  try {
+    const purchase = await mallAffiliateService.confirmPurchase(resolvedPurchaseId, reason);
 
-  return sendSuccess(res, {
-    purchaseId: purchase.purchaseId,
-    status: purchase.status,
-  }, 'Purchase confirmed successfully');
+    const responseData = {
+      purchaseId: purchase.purchaseId,
+      status: purchase.status,
+    };
+
+    await updateWebhookLog(logId, {
+      status: 'success',
+      responseStatus: 200,
+      responseBody: responseData,
+      processingTime: Date.now() - startTime,
+      purchaseId: purchase.purchaseId,
+    });
+
+    return sendSuccess(res, responseData, 'Purchase confirmed successfully');
+  } catch (error: any) {
+    await updateWebhookLog(logId, {
+      status: 'failed',
+      responseStatus: 500,
+      processingTime: Date.now() - startTime,
+      errorMessage: error.message,
+      purchaseId: resolvedPurchaseId,
+    });
+    throw error;
+  }
 });
 
 /**
@@ -223,24 +358,60 @@ export const confirmPurchaseWebhook = asyncHandler(async (req: Request, res: Res
  * Called when a purchase is refunded
  */
 export const refundWebhook = asyncHandler(async (req: Request, res: Response) => {
-  const { purchase_id, purchaseId, reason } = req.body;
+  const startTime = Date.now();
+  const logId = await logWebhookRequest(req, 'refund');
 
+  const { purchase_id, purchaseId, reason } = req.body;
   const resolvedPurchaseId = purchase_id || purchaseId;
 
   if (!resolvedPurchaseId) {
+    await updateWebhookLog(logId, {
+      status: 'invalid',
+      responseStatus: 400,
+      processingTime: Date.now() - startTime,
+      errorMessage: 'Purchase ID is required',
+    });
     return sendBadRequest(res, 'Purchase ID is required');
   }
 
   if (!reason) {
+    await updateWebhookLog(logId, {
+      status: 'invalid',
+      responseStatus: 400,
+      processingTime: Date.now() - startTime,
+      errorMessage: 'Refund reason is required',
+      purchaseId: resolvedPurchaseId,
+    });
     return sendBadRequest(res, 'Refund reason is required');
   }
 
-  const purchase = await mallAffiliateService.handleRefund(resolvedPurchaseId, reason);
+  try {
+    const purchase = await mallAffiliateService.handleRefund(resolvedPurchaseId, reason);
 
-  return sendSuccess(res, {
-    purchaseId: purchase.purchaseId,
-    status: purchase.status,
-  }, 'Refund processed successfully');
+    const responseData = {
+      purchaseId: purchase.purchaseId,
+      status: purchase.status,
+    };
+
+    await updateWebhookLog(logId, {
+      status: 'success',
+      responseStatus: 200,
+      responseBody: responseData,
+      processingTime: Date.now() - startTime,
+      purchaseId: purchase.purchaseId,
+    });
+
+    return sendSuccess(res, responseData, 'Refund processed successfully');
+  } catch (error: any) {
+    await updateWebhookLog(logId, {
+      status: 'failed',
+      responseStatus: 500,
+      processingTime: Date.now() - startTime,
+      errorMessage: error.message,
+      purchaseId: resolvedPurchaseId,
+    });
+    throw error;
+  }
 });
 
 /**
@@ -250,24 +421,60 @@ export const refundWebhook = asyncHandler(async (req: Request, res: Response) =>
  * Called when a purchase is rejected (e.g., cancelled order)
  */
 export const rejectPurchaseWebhook = asyncHandler(async (req: Request, res: Response) => {
-  const { purchase_id, purchaseId, reason } = req.body;
+  const startTime = Date.now();
+  const logId = await logWebhookRequest(req, 'reject');
 
+  const { purchase_id, purchaseId, reason } = req.body;
   const resolvedPurchaseId = purchase_id || purchaseId;
 
   if (!resolvedPurchaseId) {
+    await updateWebhookLog(logId, {
+      status: 'invalid',
+      responseStatus: 400,
+      processingTime: Date.now() - startTime,
+      errorMessage: 'Purchase ID is required',
+    });
     return sendBadRequest(res, 'Purchase ID is required');
   }
 
   if (!reason) {
+    await updateWebhookLog(logId, {
+      status: 'invalid',
+      responseStatus: 400,
+      processingTime: Date.now() - startTime,
+      errorMessage: 'Rejection reason is required',
+      purchaseId: resolvedPurchaseId,
+    });
     return sendBadRequest(res, 'Rejection reason is required');
   }
 
-  const purchase = await mallAffiliateService.rejectPurchase(resolvedPurchaseId, reason);
+  try {
+    const purchase = await mallAffiliateService.rejectPurchase(resolvedPurchaseId, reason);
 
-  return sendSuccess(res, {
-    purchaseId: purchase.purchaseId,
-    status: purchase.status,
-  }, 'Purchase rejected successfully');
+    const responseData = {
+      purchaseId: purchase.purchaseId,
+      status: purchase.status,
+    };
+
+    await updateWebhookLog(logId, {
+      status: 'success',
+      responseStatus: 200,
+      responseBody: responseData,
+      processingTime: Date.now() - startTime,
+      purchaseId: purchase.purchaseId,
+    });
+
+    return sendSuccess(res, responseData, 'Purchase rejected successfully');
+  } catch (error: any) {
+    await updateWebhookLog(logId, {
+      status: 'failed',
+      responseStatus: 500,
+      processingTime: Date.now() - startTime,
+      errorMessage: error.message,
+      purchaseId: resolvedPurchaseId,
+    });
+    throw error;
+  }
 });
 
 /**

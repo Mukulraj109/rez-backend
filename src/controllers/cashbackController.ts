@@ -13,7 +13,11 @@ export const getCashbackSummary = async (req: Request, res: Response): Promise<v
   try {
     const userId = (req as any).userId;
 
+    console.log('📊 [CASHBACK CONTROLLER] getCashbackSummary called');
+    console.log('📊 [CASHBACK CONTROLLER] userId:', userId);
+
     if (!userId) {
+      console.log('❌ [CASHBACK CONTROLLER] No userId found - unauthorized');
       res.status(401).json({
         success: false,
         message: 'Unauthorized',
@@ -21,7 +25,10 @@ export const getCashbackSummary = async (req: Request, res: Response): Promise<v
       return;
     }
 
+    console.log('📊 [CASHBACK CONTROLLER] Fetching summary for user:', userId);
     const summary = await cashbackService.getUserSummary(new Types.ObjectId(userId));
+
+    console.log('📊 [CASHBACK CONTROLLER] Summary result:', JSON.stringify(summary, null, 2));
 
     res.status(200).json({
       success: true,

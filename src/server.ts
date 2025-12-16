@@ -30,6 +30,7 @@ import { initializeTrialExpiryJob } from './jobs/trialExpiryNotification';
 // Import new cron jobs
 import { initializeSessionCleanupJob } from './jobs/cleanupExpiredSessions';
 import { initializeCoinExpiryJob } from './jobs/expireCoins';
+import { initializeCashbackJobs } from './jobs/cashbackJobs';
 
 // Import export worker (initializes automatically when imported)
 import './workers/exportWorker';
@@ -894,6 +895,11 @@ async function startServer() {
     console.log('🔄 Initializing coin expiry job...');
     initializeCoinExpiryJob();
     console.log('✅ Coin expiry job started (runs daily at 1:00 AM)');
+
+    // Initialize cashback jobs (credit pending & expire clicks)
+    console.log('🔄 Initializing cashback jobs...');
+    initializeCashbackJobs();
+    console.log('✅ Cashback jobs started (credit: hourly, expire: daily at 2:00 AM)');
 
     // Initialize audit retention service
     console.log('🔄 Initializing audit retention service...');

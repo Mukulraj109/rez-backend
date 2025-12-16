@@ -59,6 +59,13 @@ export interface IMallBrand extends Document {
     webhookUrl?: string;
     isEnabled?: boolean;
   };
+  // Affiliate network configuration for third-party integrations
+  affiliateConfig?: {
+    network?: 'direct' | 'cuelinks' | 'vcommission' | 'impact' | 'other';
+    merchantId?: string;
+    trackingTemplate?: string;  // URL template with {clickId}, {userId} placeholders
+    callbackFormat?: 'json' | 'query';
+  };
   isActive: boolean;
   isFeatured: boolean;
   isLuxury: boolean;
@@ -196,6 +203,27 @@ const MallBrandSchema = new Schema<IMallBrand>({
     isEnabled: {
       type: Boolean,
       default: false,
+    },
+  },
+  // Affiliate network configuration for third-party integrations (Cuelinks, Vcommission, etc.)
+  affiliateConfig: {
+    network: {
+      type: String,
+      enum: ['direct', 'cuelinks', 'vcommission', 'impact', 'other'],
+      default: 'direct',
+    },
+    merchantId: {
+      type: String,
+      trim: true,
+    },
+    trackingTemplate: {
+      type: String,
+      trim: true,
+    },
+    callbackFormat: {
+      type: String,
+      enum: ['json', 'query'],
+      default: 'json',
     },
   },
   isActive: {
