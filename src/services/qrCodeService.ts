@@ -198,28 +198,16 @@ export class QRCodeService {
    */
   static async lookupStoreByQR(qrCode: string): Promise<QRLookupResult> {
     try {
-      console.log('🔍 lookupStoreByQR called with:', qrCode);
-
       // Parse QR code if it's JSON (from scanned QR)
       let code = qrCode;
       try {
         const parsed = JSON.parse(qrCode);
         if (parsed.type === 'REZ_STORE_PAYMENT' && parsed.code) {
           code = parsed.code;
-          console.log('📦 Parsed JSON, extracted code:', code);
         }
       } catch {
         // Not JSON, use as-is (direct code input)
-        console.log('📝 Using raw code (not JSON):', code);
       }
-
-      // First, let's check if any store has this QR code (without isActive filter)
-      const storeWithQR = await Store.findOne({ 'storeQR.code': code });
-      console.log('🏪 Store with this QR code:', storeWithQR ? {
-        name: storeWithQR.name,
-        storeQR: storeWithQR.storeQR,
-        isActive: storeWithQR.isActive
-      } : 'NOT FOUND');
 
       // Find store by QR code
       const store = await Store.findOne({
@@ -231,14 +219,11 @@ export class QRCodeService {
         .populate('category', 'name slug icon');
 
       if (!store) {
-        console.log('❌ Store not found with active QR code');
         return {
           success: false,
           error: 'Store not found or QR code is inactive',
         };
       }
-
-      console.log('✅ Found store:', store.name);
 
       return {
         success: true,
