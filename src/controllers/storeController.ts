@@ -1380,31 +1380,40 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
 
     console.log(`✅ [GET STORES BY SLUG] Found category: ${category.name} (${category._id})`);
 
-    // Build query - search for stores with this category OR its parent category
-    const categoryIds = [category._id];
+    // Determine if this is a subcategory or main category
+    const isSubcategory = !!category.parentCategory;
 
-    // If this is a subcategory, also include the parent category
-    if (category.parentCategory) {
-      categoryIds.push(category.parentCategory);
+    let query: any;
+
+    if (isSubcategory) {
+      // For subcategories: search ONLY by subcategory fields, NOT by parent category
+      // This ensures we get stores specific to this subcategory
+      console.log(`🔍 [GET STORES BY SLUG] Searching as SUBCATEGORY: ${slug}`);
+      query = {
+        isActive: true,
+        $or: [
+          { subcategory: category._id },
+          { subCategories: category._id },
+          { subcategorySlug: slug }
+        ]
+      };
+    } else {
+      // For main categories: search by category and all child categories
+      const categoryIds = [category._id];
+      if (category.childCategories && category.childCategories.length > 0) {
+        categoryIds.push(...category.childCategories);
+      }
+      console.log(`🔍 [GET STORES BY SLUG] Searching as MAIN CATEGORY: ${slug}, including ${categoryIds.length} category IDs`);
+      query = {
+        isActive: true,
+        $or: [
+          { category: { $in: categoryIds } },
+          { categories: { $in: categoryIds } },
+          { subcategory: { $in: categoryIds } },
+          { subCategories: { $elemMatch: { $in: categoryIds } } }
+        ]
+      };
     }
-
-    // If this is a main category, also include all its child categories
-    if (category.childCategories && category.childCategories.length > 0) {
-      categoryIds.push(...category.childCategories);
-    }
-
-    // If this is a subcategory, search by subcategory field
-    // If this is a main category, search by category field
-    const query: any = {
-      isActive: true,
-      $or: [
-        { category: { $in: categoryIds } },
-        { 'categories': { $in: categoryIds } },
-        { subcategory: { $in: categoryIds } }, // Also search by subcategory field
-        { subCategories: { $in: categoryIds } }, // Search by subCategories array
-        { subcategorySlug: slug } // Direct match on subcategory slug
-      ]
-    };
 
     // Sorting
     const sortOptions: any = {};

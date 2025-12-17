@@ -47,15 +47,15 @@ export const getOffers = async (req: Request, res: Response) => {
     }
 
     if (featured === 'true') {
-      filter.isFeatured = true;
+      filter['metadata.featured'] = true;
     }
 
     if (trending === 'true') {
-      filter.isTrending = true;
+      filter['metadata.isTrending'] = true;
     }
 
     if (isNew === 'true') {
-      filter.isNew = true;
+      filter['metadata.isNew'] = true;
     }
 
     if (minCashback) {
