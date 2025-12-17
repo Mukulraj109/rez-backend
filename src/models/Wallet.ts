@@ -8,7 +8,7 @@ export interface IWalletModel extends Model<IWallet> {
 
 // Coin Balance interface
 export interface ICoinBalance {
-  type: 'wasil' | 'promotion' | 'cashback' | 'reward';
+  type: 'wasil' | 'promotion' |'cashback' | 'reward';
   amount: number;
   isActive: boolean;
   earnedDate?: Date;
