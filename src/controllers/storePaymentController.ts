@@ -16,6 +16,7 @@ import { StorePayment, IPaymentRewards } from '../models/StorePayment';
 import stripeService from '../services/stripeService';
 import { Wallet } from '../models/Wallet';
 import { Transaction } from '../models/Transaction';
+// Note: StorePromoCoin model removed - using wallet.brandedCoins instead
 
 // ==================== QR CODE HANDLERS ====================
 
@@ -1097,6 +1098,623 @@ export const getStorePaymentById = async (req: Request, res: Response) => {
  * GET /api/store-payment/history (for users)
  * GET /api/store-payment/history/:storeId (for merchants)
  */
+// ==================== NEW PREMIUM PAYMENT ENDPOINTS ====================
+
+/**
+ * Get all available coins for user at a specific store
+ * GET /api/store-payment/coins/:storeId
+ * 
+ * Returns the 3 coin types per ReZ Wallet design:
+ * 1. ReZ Coins (Universal) - Green, usable everywhere, 30-day expiry, no redemption cap
+ * 2. Branded Coins (Merchant) - Store-specific, no expiry, only at that merchant
+ * 3. Promo Coins (Limited-time) - Gold, expiry countdown, max 20% per bill cap
+ * 
+ * Usage Order: Promo > Branded > ReZ (auto-applied for max savings)
+ */
+export const getCoinsForStore = async (req: Request, res: Response) => {
+  try {
+    const { storeId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated',
+      });
+    }
+
+    // Get store info first
+    const store = await Store.findById(storeId).select('name merchantId paymentSettings').lean();
+    
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        message: 'Store not found',
+      });
+    }
+
+    // Get user's wallet
+    const wallet = await Wallet.findOne({ user: userId });
+    
+    if (!wallet) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          rezCoins: { 
+            available: 0, 
+            using: 0, 
+            enabled: true,
+            color: '#00C06A',
+            description: 'Universal rewards usable anywhere on ReZ',
+            expiryDays: null,
+            redemptionCap: null, // No cap for ReZ coins
+          },
+          promoCoins: { 
+            available: 0, 
+            using: 0, 
+            enabled: true, 
+            expiringToday: false,
+            expiresIn: null,
+            color: '#FFC857',
+            description: 'Special coins from campaigns & events',
+            redemptionCap: 20, // Max 20% per bill
+          },
+          brandedCoins: null,
+          totalApplied: 0,
+          usageOrder: ['promo', 'branded', 'rez'],
+        },
+      });
+    }
+
+    // ==================== 1. REZ COINS (Universal) ====================
+    // Green coin, usable everywhere, 30-day expiry, no redemption cap
+    const rezCoin = wallet.coins?.find((c: any) => c.type === 'rez' && c.isActive);
+    const rezCoinsAvailable = rezCoin?.amount || wallet.balance?.available || 0;
+    
+    // Calculate expiry days for ReZ coins
+    let rezExpiryDays = null;
+    if (rezCoin?.expiryDate) {
+      const now = new Date();
+      const expiry = new Date(rezCoin.expiryDate);
+      const diffTime = expiry.getTime() - now.getTime();
+      rezExpiryDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (rezExpiryDays < 0) rezExpiryDays = 0;
+    }
+
+    // ==================== 2. PROMO COINS (Limited-time) ====================
+    // Gold coin, expiry countdown, max 20% per bill redemption cap
+    // Promo coins are global campaign coins stored in wallet.coins
+    const promoCoin = wallet.coins?.find((c: any) => c.type === 'promo' && c.isActive && c.amount > 0);
+    const promoCoinsAvailable = promoCoin?.amount || 0;
+    
+    // Check promo coin expiry
+    let promoExpiringToday = false;
+    let promoExpiresIn = null;
+    const promoExpiryDate = promoCoin?.promoDetails?.expiryDate || promoCoin?.expiryDate;
+    
+    if (promoExpiryDate) {
+      const now = new Date();
+      const expiry = new Date(promoExpiryDate);
+      const diffTime = expiry.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      promoExpiringToday = diffDays <= 1;
+      promoExpiresIn = diffDays > 0 ? diffDays : 0;
+    }
+    
+    // Get redemption cap (default 20% per bill)
+    const promoRedemptionCap = promoCoin?.promoDetails?.maxRedemptionPercentage || 20;
+
+    // ==================== 3. BRANDED COINS (Merchant-specific) ====================
+    // Merchant color/logo, no expiry, only at that merchant
+    let brandedCoins = null;
+    
+    if (wallet.brandedCoins && Array.isArray(wallet.brandedCoins)) {
+      // Find coins for this specific store/merchant
+      const storeBrandedCoin = wallet.brandedCoins.find(
+        (bc: any) => {
+          // Match by storeId or merchantId
+          const bcMerchantId = bc.merchantId?.toString();
+          const storeMerchantId = (store as any).merchantId?.toString();
+          return bcMerchantId === storeId || bcMerchantId === storeMerchantId;
+        }
+      );
+      
+      if (storeBrandedCoin && storeBrandedCoin.amount > 0) {
+        brandedCoins = {
+          available: storeBrandedCoin.amount,
+          using: 0,
+          enabled: true,
+          storeName: storeBrandedCoin.merchantName || store.name,
+          storeId: storeId,
+          color: storeBrandedCoin.merchantColor || '#6366F1',
+          logo: storeBrandedCoin.merchantLogo,
+          description: `Earned from ${storeBrandedCoin.merchantName || store.name}. Use at this store only.`,
+          expiryDays: null, // Branded coins never expire
+          redemptionCap: null, // No cap for branded coins
+        };
+      }
+    }
+
+    // ==================== RESPONSE ====================
+    res.status(200).json({
+      success: true,
+      data: {
+        // ReZ Coins - Universal rewards
+        rezCoins: {
+          available: rezCoinsAvailable,
+          using: 0,
+          enabled: true,
+          color: '#00C06A', // ReZ Green
+          icon: 'diamond', // Ionicon name
+          description: 'Universal rewards usable anywhere on ReZ',
+          expiryDays: rezExpiryDays,
+          redemptionCap: null, // No redemption cap for ReZ coins
+        },
+        // Promo Coins - Limited-time campaigns
+        promoCoins: {
+          available: promoCoinsAvailable,
+          using: 0,
+          enabled: promoCoinsAvailable > 0,
+          expiringToday: promoExpiringToday,
+          expiresIn: promoExpiresIn,
+          color: '#FFC857', // ReZ Gold
+          icon: 'flame', // Ionicon name
+          description: 'Special coins from campaigns & events',
+          redemptionCap: promoRedemptionCap, // Max 20% per bill default
+        },
+        // Branded Coins - Merchant-specific
+        brandedCoins,
+        // Total applied (starts at 0, updated by frontend)
+        totalApplied: 0,
+        // Usage order for transparency
+        usageOrder: ['promo', 'branded', 'rez'],
+        usageOrderDescription: 'Promo Coins → Branded Coins → ReZ Coins (automatically applied for maximum savings)',
+      },
+    });
+  } catch (error: any) {
+    console.error('Error getting coins for store:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get coins',
+    });
+  }
+};
+
+/**
+ * Get enhanced payment methods with bank-specific offers
+ * GET /api/store-payment/payment-methods/:storeId
+ */
+export const getEnhancedPaymentMethods = async (req: Request, res: Response) => {
+  try {
+    const { storeId } = req.params;
+    const { amount } = req.query;
+    const billAmount = amount ? parseFloat(amount as string) : 0;
+
+    // Get store payment settings, reward rules and offers
+    const store = await Store.findById(storeId)
+      .select('paymentSettings rewardRules name offers')
+      .populate('offers.discounts')
+      .lean();
+
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        message: 'Store not found',
+      });
+    }
+
+    const settings = (store.paymentSettings || {}) as any;
+    const rewardRules = (store as any).rewardRules || {};
+    const paymentMethods: any[] = [];
+
+    // Helper function to get offers for a payment method type from store's active offers
+    const getOffersForPaymentMethod = (methodType: string): any[] => {
+      const offers: any[] = [];
+      
+      // Get store's base cashback if available
+      if (rewardRules.baseCashbackPercent && rewardRules.baseCashbackPercent > 0) {
+        const maxCashback = Math.min(50, Math.floor(billAmount * rewardRules.baseCashbackPercent / 100));
+        if (maxCashback > 0) {
+          offers.push({
+            type: 'cashback',
+            title: `Get ${rewardRules.baseCashbackPercent}% cashback`,
+            description: `Up to ₹${maxCashback} cashback`,
+            value: rewardRules.baseCashbackPercent,
+          });
+        }
+      }
+      
+      return offers;
+    };
+
+    // UPI Payment Method
+    if (settings.acceptUPI !== false) {
+      const upiOffers = getOffersForPaymentMethod('upi');
+      
+      paymentMethods.push({
+        id: 'upi',
+        type: 'upi',
+        name: 'UPI',
+        icon: 'phone-portrait-outline',
+        isAvailable: true,
+        description: 'GPay, PhonePe, Paytm, etc.',
+        badge: 'best',
+        offers: upiOffers,
+        providers: ['gpay', 'phonepe', 'paytm', 'bhim'],
+      });
+    }
+
+    // Credit Card Payment Method
+    if (settings.acceptCards !== false) {
+      const cardOffers = getOffersForPaymentMethod('card');
+      
+      // Add EMI offer for higher amounts
+      if (billAmount >= 3000) {
+        cardOffers.push({
+          type: 'emi',
+          title: 'No Cost EMI Available',
+          description: 'Split payment into easy EMIs',
+          value: 0,
+        });
+      }
+      
+      paymentMethods.push({
+        id: 'credit_card',
+        type: 'credit_card',
+        name: 'Credit Card',
+        icon: 'card-outline',
+        isAvailable: true,
+        description: 'Visa, Mastercard, Rupay',
+        badge: billAmount >= 3000 ? 'popular' : undefined,
+        offers: cardOffers,
+        providers: ['visa', 'mastercard', 'rupay', 'amex'],
+      });
+
+      // Debit Card Payment Method
+      paymentMethods.push({
+        id: 'debit_card',
+        type: 'debit_card',
+        name: 'Debit Card',
+        icon: 'card',
+        isAvailable: true,
+        description: 'All bank debit cards',
+        offers: getOffersForPaymentMethod('debit'),
+        providers: ['visa', 'mastercard', 'rupay'],
+      });
+    }
+
+    // Net Banking
+    paymentMethods.push({
+      id: 'netbanking',
+      type: 'netbanking',
+      name: 'Net Banking',
+      icon: 'business-outline',
+      isAvailable: true,
+      description: 'All major banks',
+      offers: [],
+      providers: ['sbi', 'hdfc', 'icici', 'axis', 'kotak'],
+    });
+
+    // Pay Later / BNPL
+    if (settings.acceptPayLater !== false) {
+      paymentMethods.push({
+        id: 'pay_later',
+        type: 'pay_later',
+        name: 'Pay Later',
+        icon: 'calendar-outline',
+        isAvailable: true,
+        description: 'Buy now, pay later',
+        badge: 'new',
+        offers: billAmount >= 500 ? [
+          {
+            type: 'emi',
+            title: 'Pay in 3 interest-free EMIs',
+            description: 'Split your payment easily',
+            value: 0,
+          },
+        ] : [],
+        providers: ['simpl', 'lazypay', 'zestmoney'],
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: paymentMethods,
+    });
+  } catch (error: any) {
+    console.error('Error getting enhanced payment methods:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get payment methods',
+    });
+  }
+};
+
+/**
+ * Auto-optimize coin allocation for maximum savings
+ * POST /api/store-payment/auto-optimize
+ * 
+ * Usage Order (as per ReZ Wallet design):
+ * 1. Promo Coins (Limited-time, max 20% per bill cap)
+ * 2. Branded Coins (Store-specific, no cap)
+ * 3. ReZ Coins (Universal, no cap)
+ * 
+ * Automatically applied for maximum savings
+ */
+export const autoOptimizeCoins = async (req: Request, res: Response) => {
+  try {
+    const { storeId, billAmount } = req.body;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated',
+      });
+    }
+
+    if (!storeId || !billAmount || billAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'storeId and billAmount are required',
+      });
+    }
+
+    // Get store settings
+    const store = await Store.findById(storeId).select('paymentSettings merchantId name').lean();
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        message: 'Store not found',
+      });
+    }
+
+    // Store's max coin redemption percent (default 100%)
+    const maxCoinPercent = store.paymentSettings?.maxCoinRedemptionPercent || 100;
+    const maxCoinsAllowed = Math.floor((billAmount * maxCoinPercent) / 100);
+
+    // Get user's wallet
+    const wallet = await Wallet.findOne({ user: userId });
+    
+    if (!wallet) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          rezCoins: { available: 0, using: 0, enabled: false, color: '#00C06A' },
+          promoCoins: { available: 0, using: 0, enabled: false, expiringToday: false, color: '#FFC857' },
+          brandedCoins: null,
+          totalApplied: 0,
+          maxAllowed: maxCoinsAllowed,
+          optimizationStrategy: 'no_coins_available',
+          savings: { coinsUsed: 0, percentOfBill: 0 },
+        },
+      });
+    }
+
+    // ==================== 1. REZ COINS ====================
+    const rezCoin = wallet.coins?.find((c: any) => c.type === 'rez' && c.isActive);
+    const rezCoinsAvailable = rezCoin?.amount || wallet.balance?.available || 0;
+
+    // ==================== 2. PROMO COINS ====================
+    // Promo coins are global campaign coins stored in wallet.coins
+    const promoCoin = wallet.coins?.find((c: any) => c.type === 'promo' && c.isActive && c.amount > 0);
+    const promoCoinsAvailable = promoCoin?.amount || 0;
+
+    // Promo coin redemption cap (default 20% per bill)
+    const promoRedemptionCap = promoCoin?.promoDetails?.maxRedemptionPercentage || 20;
+    const maxPromoCoinsAllowed = Math.floor((billAmount * promoRedemptionCap) / 100);
+
+    // Check promo coin expiry
+    let promoExpiringToday = false;
+    let promoExpiresIn = null;
+    const promoExpiryDate = promoCoin?.promoDetails?.expiryDate || promoCoin?.expiryDate;
+    
+    if (promoExpiryDate) {
+      const now = new Date();
+      const expiry = new Date(promoExpiryDate);
+      const diffTime = expiry.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      promoExpiringToday = diffDays <= 1;
+      promoExpiresIn = diffDays > 0 ? diffDays : 0;
+    }
+
+    // ==================== 3. BRANDED COINS ====================
+    let brandedCoinsAvailable = 0;
+    let brandedCoinInfo: any = null;
+    
+    if (wallet.brandedCoins && Array.isArray(wallet.brandedCoins)) {
+      const storeBrandedCoin = wallet.brandedCoins.find(
+        (bc: any) => {
+          const bcMerchantId = bc.merchantId?.toString();
+          const storeMerchantId = (store as any).merchantId?.toString();
+          return bcMerchantId === storeId || bcMerchantId === storeMerchantId;
+        }
+      );
+      
+      if (storeBrandedCoin && storeBrandedCoin.amount > 0) {
+        brandedCoinsAvailable = storeBrandedCoin.amount;
+        brandedCoinInfo = {
+          storeName: storeBrandedCoin.merchantName || store.name,
+          storeId: storeId,
+          color: storeBrandedCoin.merchantColor || '#6366F1',
+          logo: storeBrandedCoin.merchantLogo,
+        };
+      }
+    }
+
+    // ==================== AUTO-OPTIMIZATION ====================
+    // Priority: Promo (expiring first, capped) > Branded > ReZ
+    let remainingAllowance = maxCoinsAllowed;
+    let promoUsing = 0;
+    let brandedUsing = 0;
+    let rezUsing = 0;
+
+    // Step 1: Use Promo Coins first (capped at 20% of bill)
+    if (promoCoinsAvailable > 0 && remainingAllowance > 0) {
+      // Promo coins have their own cap (default 20%)
+      const promoCanUse = Math.min(promoCoinsAvailable, maxPromoCoinsAllowed);
+      promoUsing = Math.min(promoCanUse, remainingAllowance);
+      remainingAllowance -= promoUsing;
+    }
+
+    // Step 2: Use Branded Coins (store-specific, no cap)
+    if (brandedCoinsAvailable > 0 && remainingAllowance > 0) {
+      brandedUsing = Math.min(brandedCoinsAvailable, remainingAllowance);
+      remainingAllowance -= brandedUsing;
+    }
+
+    // Step 3: Use ReZ Coins (universal, no cap)
+    if (rezCoinsAvailable > 0 && remainingAllowance > 0) {
+      rezUsing = Math.min(rezCoinsAvailable, remainingAllowance);
+      remainingAllowance -= rezUsing;
+    }
+
+    const totalApplied = promoUsing + brandedUsing + rezUsing;
+    const percentOfBill = billAmount > 0 ? Math.round((totalApplied / billAmount) * 100) : 0;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        // ReZ Coins - Universal rewards
+        rezCoins: {
+          available: rezCoinsAvailable,
+          using: rezUsing,
+          enabled: rezUsing > 0,
+          color: '#00C06A',
+          icon: 'diamond',
+          description: 'Universal rewards usable anywhere on ReZ',
+          redemptionCap: null, // No cap
+        },
+        // Promo Coins - Limited-time campaigns
+        promoCoins: {
+          available: promoCoinsAvailable,
+          using: promoUsing,
+          enabled: promoUsing > 0,
+          expiringToday: promoExpiringToday,
+          expiresIn: promoExpiresIn,
+          color: '#FFC857',
+          icon: 'flame',
+          description: 'Special coins from campaigns & events',
+          redemptionCap: promoRedemptionCap, // Max 20% per bill
+          maxAllowedForBill: maxPromoCoinsAllowed,
+        },
+        // Branded Coins - Merchant-specific
+        brandedCoins: brandedCoinsAvailable > 0 ? {
+          available: brandedCoinsAvailable,
+          using: brandedUsing,
+          enabled: brandedUsing > 0,
+          color: brandedCoinInfo?.color || '#6366F1',
+          icon: 'storefront',
+          description: `Use only at ${brandedCoinInfo?.storeName}`,
+          redemptionCap: null, // No cap
+          ...brandedCoinInfo,
+        } : null,
+        // Totals
+        totalApplied,
+        maxAllowed: maxCoinsAllowed,
+        // Optimization details
+        optimizationStrategy: 'promo_branded_rez_priority',
+        usageOrder: ['promo', 'branded', 'rez'],
+        usageOrderDescription: 'Promo → Branded → ReZ (for maximum savings)',
+        // Savings summary
+        savings: {
+          coinsUsed: totalApplied,
+          percentOfBill: percentOfBill,
+          amountSaved: totalApplied,
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error('Error auto-optimizing coins:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to auto-optimize coins',
+    });
+  }
+};
+
+/**
+ * Get user's membership tier for a store
+ * GET /api/store-payment/membership/:storeId
+ */
+export const getStoreMembership = async (req: Request, res: Response) => {
+  try {
+    const { storeId } = req.params;
+    const userId = (req as any).user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated',
+      });
+    }
+
+    // Get user's visit count at this store
+    const visitCount = await StorePayment.countDocuments({
+      userId: new Types.ObjectId(userId),
+      storeId: new Types.ObjectId(storeId),
+      status: 'completed',
+    });
+
+    // Determine membership tier based on visits
+    let tier = 'bronze';
+    let tierName = 'Bronze Member';
+    let nextTier: string | null = 'Silver Member';
+    let visitsToNextTier = 5 - visitCount;
+
+    if (visitCount >= 20) {
+      tier = 'gold';
+      tierName = 'Gold Member';
+      nextTier = null;
+      visitsToNextTier = 0;
+    } else if (visitCount >= 10) {
+      tier = 'silver';
+      tierName = 'Silver Member';
+      nextTier = 'Gold Member';
+      visitsToNextTier = 20 - visitCount;
+    } else if (visitCount >= 5) {
+      tier = 'bronze';
+      tierName = 'Bronze Member';
+      nextTier = 'Silver Member';
+      visitsToNextTier = 10 - visitCount;
+    } else {
+      tier = 'new';
+      tierName = 'New Customer';
+      nextTier = 'Bronze Member';
+      visitsToNextTier = 5 - visitCount;
+    }
+
+    // Get tier benefits
+    const tierBenefits: any = {
+      new: { cashbackBonus: 0, prioritySupport: false, exclusiveOffers: false },
+      bronze: { cashbackBonus: 1, prioritySupport: false, exclusiveOffers: false },
+      silver: { cashbackBonus: 2, prioritySupport: true, exclusiveOffers: false },
+      gold: { cashbackBonus: 5, prioritySupport: true, exclusiveOffers: true },
+    };
+
+    res.status(200).json({
+      success: true,
+      data: {
+        tier,
+        tierName,
+        visitCount,
+        nextTier,
+        visitsToNextTier: Math.max(0, visitsToNextTier),
+        benefits: tierBenefits[tier],
+        isEarningRewards: true,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error getting store membership:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get membership info',
+    });
+  }
+};
+
 export const getStorePaymentHistory = async (req: Request, res: Response) => {
   try {
     const { storeId } = req.params;

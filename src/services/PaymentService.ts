@@ -5,7 +5,8 @@ import { Order, IOrder } from '../models/Order';
 import { Product } from '../models/Product';
 import { Cart } from '../models/Cart';
 import { User } from '../models/User';
-import { StorePromoCoin } from '../models/StorePromoCoin';
+// Note: StorePromoCoin removed - using wallet.brandedCoins instead
+import { Wallet } from '../models/Wallet';
 import coinService from './coinService';
 import mongoose, { Types } from 'mongoose';
 import stockSocketService from './stockSocketService';
@@ -32,7 +33,7 @@ import {
 } from '../utils/razorpayUtils';
 import { PaymentLogger } from './logging/paymentLogger';
 import stripeService from './stripeService';
-import { Wallet } from '../models/Wallet';
+// Wallet already imported above
 
 // Initialize Razorpay instance conditionally
 let razorpayInstance: Razorpay | null = null;
@@ -413,17 +414,19 @@ class PaymentService {
               : firstItem.store;
 
             if (storeId) {
-              console.log('💰 [PAYMENT SERVICE] Deducting store promo coins:', storePromoCoins);
-              await StorePromoCoin.useCoins(
-                userId,
-                storeId as Types.ObjectId,
-                storePromoCoins,
-                order._id as Types.ObjectId
-              );
-              console.log('✅ [PAYMENT SERVICE] Store promo coins deducted successfully:', storePromoCoins);
+              console.log('💰 [PAYMENT SERVICE] Deducting branded coins:', storePromoCoins);
+              // Use branded coins from wallet
+              const wallet = await Wallet.findOne({ user: userId });
+              if (wallet) {
+                await wallet.useBrandedCoins(
+                  new Types.ObjectId(storeId.toString()),
+                  storePromoCoins
+                );
+                console.log('✅ [PAYMENT SERVICE] Branded coins deducted successfully:', storePromoCoins);
+              }
             }
           } catch (coinError) {
-            console.error('❌ [PAYMENT SERVICE] Failed to deduct store promo coins:', coinError);
+            console.error('❌ [PAYMENT SERVICE] Failed to deduct branded coins:', coinError);
             // Don't fail payment if coin deduction fails - coins already validated
           }
         }

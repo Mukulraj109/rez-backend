@@ -1154,16 +1154,18 @@ export const getLockedItems = asyncHandler(async (req: Request, res: Response) =
   }
 });
 
-// Lock fee configuration - Only 3 hour lock at 5%
+// Lock fee configuration - Variable duration lock options (2/4/8 hours)
 const LOCK_FEE_CONFIG: Record<number, { hours: number; percentage: number; label: string }> = {
-  3: { hours: 3, percentage: 5, label: '3 Hours' },
+  2: { hours: 2, percentage: 5, label: '2 Hours' },
+  4: { hours: 4, percentage: 10, label: '4 Hours' },
+  8: { hours: 8, percentage: 15, label: '8 Hours' },
 };
 
 // Calculate lock fee
 const calculateLockFee = (productPrice: number, durationHours: number): { fee: number; percentage: number } => {
   const config = LOCK_FEE_CONFIG[durationHours];
   if (!config) {
-    throw new Error('Invalid lock duration. Choose 3 hours.');
+    throw new Error('Invalid lock duration. Choose 2, 4, or 8 hours.');
   }
   const fee = Math.ceil((productPrice * config.percentage) / 100);
   return { fee, percentage: config.percentage };
@@ -1184,7 +1186,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
     productId,
     quantity = 1,
     variant,
-    duration = 3, // Default 3 hours
+    duration = 4, // Default 4 hours (middle option)
     paymentMethod = 'wallet' // 'wallet' | 'upi'
   } = req.body;
 
@@ -1193,9 +1195,9 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
     return sendBadRequest(res, 'Product ID is required');
   }
 
-  // Validate duration
-  if (!LOCK_FEE_CONFIG[duration]) {
-    return sendBadRequest(res, 'Invalid lock duration. Use 3 hours lock.');
+  // Validate duration (2, 4, or 8 hours)
+  if (![2, 4, 8].includes(duration)) {
+    return sendBadRequest(res, 'Invalid lock duration. Choose 2, 4, or 8 hours.');
   }
 
   try {
@@ -1479,14 +1481,13 @@ export const getLockFeeOptions = asyncHandler(async (req: Request, res: Response
 
     const totalPrice = productPrice * Number(quantity);
 
-    // Return only 3-hour lock option at 5%
-    const threeHourConfig = LOCK_FEE_CONFIG[3];
-    const options = [{
-      duration: 3,
-      label: threeHourConfig.label,
-      percentage: threeHourConfig.percentage,
-      fee: Math.ceil((totalPrice * threeHourConfig.percentage) / 100)
-    }];
+    // Return all lock duration options (2, 4, 8 hours)
+    const options = Object.entries(LOCK_FEE_CONFIG).map(([duration, config]) => ({
+      duration: Number(duration),
+      label: config.label,
+      percentage: config.percentage,
+      fee: Math.ceil((totalPrice * config.percentage) / 100)
+    })).sort((a, b) => a.duration - b.duration);
 
     sendSuccess(res, {
       productId,
@@ -1494,7 +1495,8 @@ export const getLockFeeOptions = asyncHandler(async (req: Request, res: Response
       productPrice,
       quantity: Number(quantity),
       totalPrice,
-      lockOptions: options
+      lockOptions: options,
+      defaultDuration: 4 // Recommend 4-hour option
     }, 'Lock fee options retrieved successfully');
 
   } catch (error) {

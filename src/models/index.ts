@@ -29,7 +29,7 @@ export { default as Event } from './Event';
 export { default as EventBooking } from './EventBooking';
 export { default as Consultation } from './Consultation';
 export { Subscription } from './Subscription';
-export { StorePromoCoin } from './StorePromoCoin';
+// StorePromoCoin removed - using wallet.brandedCoins instead
 export { QuizQuestion } from './QuizQuestion';
 export { TriviaQuestion } from './TriviaQuestion';
 export { CoinTransaction } from './CoinTransaction';
@@ -121,7 +121,7 @@ export type { IEventBooking } from './EventBooking';
 export type { IConsultation } from './Consultation';
 export type { ISubscription, ISubscriptionBenefits, ISubscriptionUsage, SubscriptionStatus, BillingCycle } from './Subscription';
 export type { ISubscriptionTier } from './SubscriptionTier';
-export type { IStorePromoCoin } from './StorePromoCoin';
+// IStorePromoCoin type removed - using wallet.brandedCoins instead
 export type { IQuizQuestion, IQuizQuestionModel } from './QuizQuestion';
 export type { ITriviaQuestion, ITriviaQuestionModel } from './TriviaQuestion';
 export type { ICoinTransaction, ICoinTransactionModel } from './CoinTransaction';

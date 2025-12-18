@@ -41,6 +41,41 @@ const sortByRelevance = (items: any[], query: string, fields: string[]): any[] =
 };
 
 /**
+ * Calculate distance between two coordinates (Haversine formula)
+ */
+const calculateDistance = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number => {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+/**
+ * Normalize product name for grouping (remove special chars, lowercase)
+ */
+const normalizeProductName = (name: string, brand?: string): string => {
+  const normalized = name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const brandPart = brand ? brand.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  return brandPart ? `${brandPart} ${normalized}` : normalized;
+};
+
+/**
  * Search products by query
  */
 const searchProducts = async (query: string, limit: number): Promise<any> => {
@@ -83,6 +118,297 @@ const searchProducts = async (query: string, limit: number): Promise<any> => {
   } catch (error) {
     console.error('Error searching products:', error);
     return { items: [], total: 0, hasMore: false };
+  }
+};
+
+/**
+ * Search products grouped by name with seller options
+ * Returns products grouped by normalized name with all seller options
+ */
+const searchProductsGroupedInternal = async (
+  query: string,
+  limit: number,
+  userLocation?: { latitude: number; longitude: number }
+): Promise<any> => {
+  try {
+    const searchQuery: any = {
+      isActive: true,
+      'inventory.isAvailable': true,
+      $or: [
+        { name: { $regex: query, $options: 'i' } },
+        { description: { $regex: query, $options: 'i' } },
+        { brand: { $regex: query, $options: 'i' } },
+        { tags: { $regex: query, $options: 'i' } }
+      ]
+    };
+
+    // Fetch products with full store details
+    const products = await Product.find(searchQuery)
+      .populate('category', 'name slug')
+      .populate({
+        path: 'store',
+        select: 'name logo location ratings isVerified operationalInfo rewardRules',
+        populate: {
+          path: 'category',
+          select: 'name'
+        }
+      })
+      .select(
+        'name slug images pricing ratings inventory brand tags model cashback deliveryInfo category store'
+      )
+      .limit(limit * 5) // Fetch more to account for grouping
+      .lean();
+
+    // Group products by normalized name
+    const productGroups = new Map<string, any[]>();
+
+    products.forEach((product: any) => {
+      const normalizedName = normalizeProductName(product.name, product.brand);
+      if (!productGroups.has(normalizedName)) {
+        productGroups.set(normalizedName, []);
+      }
+      productGroups.get(normalizedName)!.push(product);
+    });
+
+    // Transform grouped products into seller options
+    const groupedProducts: any[] = [];
+    let totalSellers = 0;
+    let minPrice = Infinity;
+    let maxCashback = 0;
+
+    for (const [normalizedName, productList] of productGroups.entries()) {
+      if (groupedProducts.length >= limit) break;
+
+      const firstProduct = productList[0];
+      const sellers: any[] = [];
+
+      for (const product of productList) {
+        const store = product.store;
+        if (!store) continue;
+
+        const currentPrice = product.pricing?.selling || product.pricing?.original || product.pricing?.mrp || 0;
+        const originalPrice = product.pricing?.original || product.pricing?.mrp || currentPrice;
+        const savings = originalPrice > currentPrice ? originalPrice - currentPrice : 0;
+        
+        // Skip if price is 0 or invalid
+        if (!currentPrice || currentPrice <= 0) {
+          console.warn(`[SEARCH] Product ${product._id} has invalid price: ${currentPrice}`);
+          continue;
+        }
+        
+        // Calculate cashback - check product cashback first, then store reward rules, then default
+        let cashbackPercentage = 0;
+        
+        // Check if product has active cashback
+        if (product.cashback?.percentage && 
+            product.cashback.percentage > 0 &&
+            (product.cashback.isActive !== false) && // Active by default unless explicitly false
+            (!product.cashback.validUntil || new Date(product.cashback.validUntil) > new Date())) {
+          cashbackPercentage = product.cashback.percentage;
+        }
+        
+        // Fallback to store reward rules if product doesn't have cashback
+        if (cashbackPercentage === 0 && store.rewardRules?.baseCashbackPercent) {
+          cashbackPercentage = store.rewardRules.baseCashbackPercent;
+        }
+        
+        // Default to 5% if still no cashback (matching Product model's calculateCashback method)
+        if (cashbackPercentage === 0) {
+          cashbackPercentage = 5;
+        }
+        
+        // Calculate cashback amount
+        let cashbackAmount = Math.round((currentPrice * cashbackPercentage) / 100);
+        
+        // Apply max amount limit if specified in product cashback
+        if (product.cashback?.maxAmount && cashbackAmount > product.cashback.maxAmount) {
+          cashbackAmount = product.cashback.maxAmount;
+        }
+        
+        // Calculate coins (5% of product price - rezcoins earned on every purchase)
+        // Ensure minimum 1 coin if price > 0
+        const coins = currentPrice > 0 ? Math.max(1, Math.round((currentPrice * 5) / 100)) : 0;
+        
+        // Debug logging for first product in first group
+        if (groupedProducts.length === 0 && sellers.length === 0) {
+          console.log(`[SEARCH] First product cashback calculation:`, {
+            productId: product._id,
+            productName: product.name?.substring(0, 30),
+            currentPrice,
+            originalPrice,
+            cashbackPercentage,
+            cashbackAmount,
+            coins,
+            hasProductCashback: !!product.cashback?.percentage,
+            productCashbackPercent: product.cashback?.percentage,
+            hasStoreRewardRules: !!store.rewardRules?.baseCashbackPercent,
+            storeRewardRulesPercent: store.rewardRules?.baseCashbackPercent
+          });
+        }
+
+        // Determine availability
+        const stock = product.inventory?.stock || 0;
+        const lowStockThreshold = product.inventory?.lowStockThreshold || 5;
+        let availability: 'in_stock' | 'low_stock' | 'out_of_stock' = 'in_stock';
+        if (stock === 0) {
+          availability = 'out_of_stock';
+        } else if (stock <= lowStockThreshold) {
+          availability = 'low_stock';
+        }
+
+        // Calculate distance if user location provided
+        // Store coordinates are stored as [longitude, latitude] in store.location.coordinates
+        let distance: number | undefined;
+        if (userLocation && store.location?.coordinates) {
+          const [storeLon, storeLat] = store.location.coordinates; // [longitude, latitude]
+          distance = calculateDistance(
+            userLocation.latitude,
+            userLocation.longitude,
+            storeLat,
+            storeLon
+          );
+        }
+
+        // Get delivery info
+        const deliveryInfo = product.deliveryInfo || store.operationalInfo;
+        const deliveryTime = deliveryInfo?.estimatedDays || 
+                           deliveryInfo?.deliveryTime || 
+                           deliveryInfo?.standardDeliveryTime || 
+                           '2-3 days';
+        
+        let deliveryType: 'express' | 'standard' | 'pickup' = 'standard';
+        if (deliveryInfo?.expressAvailable || deliveryTime.includes('min')) {
+          deliveryType = 'express';
+        } else if (deliveryTime.toLowerCase().includes('pickup')) {
+          deliveryType = 'pickup';
+        }
+
+        // Build location string - format: "City • Distance" or "City - Distance"
+        // Extract city name (prefer city over address for cleaner display)
+        let cityName = store.location?.city || '';
+        if (!cityName && store.location?.address) {
+          // Extract city from address if city not available
+          const addressParts = store.location.address.split(',');
+          cityName = addressParts[addressParts.length - 1]?.trim() || store.location.address;
+        }
+        const location = cityName || 'Location not available';
+
+        // Determine badges
+        const badges: string[] = [];
+        
+        // Hot Deal: Show if there's any discount (savings > 0) or if price is competitive
+        // Lowered threshold to 5% to show on more cards
+        if (savings > 0 && savings > currentPrice * 0.05) {
+          badges.push('Hot Deal');
+        }
+        
+        // Limited Stock: Show when stock is low
+        if (availability === 'low_stock') {
+          badges.push('Limited Stock');
+        }
+        
+        // Lock Available: Show on ALL cards - all products have cashback/rezcoins available
+        // This badge indicates cashback/rezcoins are available on every purchase
+        badges.push('Lock Available');
+
+        const sellerOption = {
+          storeId: store._id?.toString() || '',
+          storeName: store.name || 'Unknown Store',
+          storeLogo: store.logo || '',
+          location,
+          distance: distance ? Math.round(distance * 10) / 10 : undefined, // Round to 1 decimal
+          rating: store.ratings?.average || 0,
+          reviewCount: store.ratings?.count || 0,
+          price: {
+            current: currentPrice,
+            original: originalPrice > currentPrice ? originalPrice : undefined,
+            currency: product.pricing?.currency || 'INR'
+          },
+          savings,
+          cashback: {
+            percentage: cashbackPercentage,
+            amount: cashbackAmount,
+            coins
+          },
+          delivery: {
+            time: deliveryTime,
+            type: deliveryType,
+            available: availability !== 'out_of_stock'
+          },
+          availability,
+          isVerified: store.isVerified || false,
+          badges,
+          productId: product._id?.toString()
+        };
+
+        sellers.push(sellerOption);
+        totalSellers++;
+        
+        if (currentPrice < minPrice) minPrice = currentPrice;
+        if (cashbackAmount > maxCashback) maxCashback = cashbackAmount;
+      }
+
+      if (sellers.length > 0) {
+        // Sort sellers by best value (price, cashback, rating, distance)
+        sellers.sort((a, b) => {
+          // Best value score = lower price + higher cashback + higher rating + closer distance
+          const scoreA = 
+            (a.price.current * 0.4) - 
+            (a.cashback.amount * 0.3) - 
+            (a.rating * 100 * 0.2) + 
+            ((a.distance || 999) * 0.1);
+          const scoreB = 
+            (b.price.current * 0.4) - 
+            (b.cashback.amount * 0.3) - 
+            (b.rating * 100 * 0.2) + 
+            ((b.distance || 999) * 0.1);
+          return scoreA - scoreB;
+        });
+
+        groupedProducts.push({
+          productId: firstProduct._id?.toString(),
+          productName: firstProduct.name,
+          productImage: firstProduct.images?.[0] || '',
+          category: firstProduct.category?.name || '',
+          sellers,
+          sellerCount: sellers.length
+        });
+      }
+    }
+
+    // Calculate summary
+    const prices = groupedProducts.flatMap(gp => 
+      gp.sellers.map((s: any) => s.price.current)
+    );
+    const priceRange = {
+      min: prices.length > 0 ? Math.min(...prices) : 0,
+      max: prices.length > 0 ? Math.max(...prices) : 0
+    };
+
+    return {
+      groupedProducts,
+      summary: {
+        sellerCount: totalSellers,
+        minPrice: minPrice === Infinity ? 0 : minPrice,
+        maxCashback,
+        priceRange
+      },
+      total: groupedProducts.length,
+      hasMore: productGroups.size > limit
+    };
+  } catch (error) {
+    console.error('Error searching grouped products:', error);
+    return {
+      groupedProducts: [],
+      summary: {
+        sellerCount: 0,
+        minPrice: 0,
+        maxCashback: 0,
+        priceRange: { min: 0, max: 0 }
+      },
+      total: 0,
+      hasMore: false
+    };
   }
 };
 
@@ -336,6 +662,97 @@ export const clearSearchCache = asyncHandler(async (req: Request, res: Response)
   } catch (error) {
     console.error('❌ [GLOBAL SEARCH] Error clearing cache:', error);
     return sendError(res, 'Failed to clear search cache', 500);
+  }
+});
+
+/**
+ * Search products grouped by name with seller comparison
+ * GET /api/search/products-grouped?q=query&limit=20&lat=...&lon=...
+ * 
+ * Returns products grouped by name with all seller options for comparison
+ */
+export const searchProductsGrouped = asyncHandler(async (req: Request, res: Response) => {
+  const startTime = Date.now();
+
+  const {
+    q: query,
+    limit: limitParam = 20,
+    lat,
+    lon
+  } = req.query;
+
+  // Validate query parameter
+  if (!query || typeof query !== 'string') {
+    return sendBadRequest(res, 'Search query (q) is required');
+  }
+
+  // Validate and parse limit
+  const limit = Math.min(Number(limitParam) || 20, 50); // Max 50 products
+
+  // Parse user location if provided
+  let userLocation: { latitude: number; longitude: number } | undefined;
+  if (lat && lon) {
+    const latitude = Number(lat);
+    const longitude = Number(lon);
+    if (!isNaN(latitude) && !isNaN(longitude)) {
+      userLocation = { latitude, longitude };
+    }
+  }
+
+  // Generate cache key
+  const cacheKey = `search:grouped:${query}:${limit}:${userLocation ? `${userLocation.latitude},${userLocation.longitude}` : 'noloc'}`;
+
+  try {
+    // Check cache first
+    const cachedResult = await redisService.get(cacheKey);
+    if (cachedResult) {
+      const executionTime = Date.now() - startTime;
+      console.log(`✅ [GROUPED SEARCH] Cache hit for query: "${query}" (${executionTime}ms)`);
+      return sendSuccess(res, {
+        ...cachedResult,
+        cached: true,
+        executionTime
+      }, 'Grouped product search completed successfully (cached)');
+    }
+
+    console.log(`🔍 [GROUPED SEARCH] Searching for: "${query}" with limit: ${limit}`);
+
+    // Perform grouped search
+    const result = await searchProductsGroupedInternal(query, limit, userLocation);
+
+    // Cache the results for 10 minutes (600 seconds)
+    const CACHE_TTL = 600;
+    await redisService.set(cacheKey, result, CACHE_TTL);
+
+    const executionTime = Date.now() - startTime;
+    console.log(`✅ [GROUPED SEARCH] Completed in ${executionTime}ms. Products: ${result.total}, Sellers: ${result.summary.sellerCount}`);
+    
+    // Debug: Log first seller's cashback data
+    if (result.groupedProducts && result.groupedProducts.length > 0) {
+      const firstProduct = result.groupedProducts[0];
+      if (firstProduct.sellers && firstProduct.sellers.length > 0) {
+        const firstSeller = firstProduct.sellers[0];
+        console.log(`[DEBUG] First seller cashback data:`, {
+          productName: firstProduct.productName,
+          storeName: firstSeller.storeName,
+          price: firstSeller.price?.current,
+          cashback: firstSeller.cashback,
+          cashbackAmount: firstSeller.cashback?.amount,
+          cashbackCoins: firstSeller.cashback?.coins
+        });
+      }
+    }
+
+    return sendSuccess(res, {
+      ...result,
+      cached: false,
+      executionTime
+    }, 'Grouped product search completed successfully');
+
+  } catch (error) {
+    const executionTime = Date.now() - startTime;
+    console.error(`❌ [GROUPED SEARCH] Error after ${executionTime}ms:`, error);
+    return sendError(res, 'Failed to perform grouped product search', 500);
   }
 });
 

@@ -20,7 +20,8 @@ import cashbackService from '../services/cashbackService';
 import userProductService from '../services/userProductService';
 import couponService from '../services/couponService';
 import achievementService from '../services/achievementService';
-import { StorePromoCoin } from '../models/StorePromoCoin';
+// Note: StorePromoCoin removed - using wallet.brandedCoins instead
+import { Wallet } from '../models/Wallet';
 import { calculatePromoCoinsEarned, calculatePromoCoinsWithTierBonus, getCoinsExpiryDate } from '../config/promoCoins.config';
 import { Subscription } from '../models/Subscription';
 import { SMSService } from '../services/SMSService';
@@ -83,27 +84,30 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
       // Validate store promo coins
       if (coinsUsed.storePromoCoins > 0) {
-        // Get the store from the first cart item
+        // Get the store from the first cart item - now using branded coins
         const firstItem = cart.items[0];
         const storeId = typeof firstItem.store === 'object'
           ? (firstItem.store as any)._id
           : firstItem.store;
 
         if (storeId) {
-          const storePromoBalance = await StorePromoCoin.getAvailableCoins(
-            new Types.ObjectId(userId),
-            storeId as Types.ObjectId
+          // Get branded coins balance from wallet
+          const wallet = await Wallet.findOne({ user: userId });
+          const brandedCoin = wallet?.brandedCoins?.find(
+            (bc: any) => bc.merchantId?.toString() === storeId.toString()
           );
-          if (storePromoBalance < coinsUsed.storePromoCoins) {
+          const brandedBalance = brandedCoin?.amount || 0;
+          
+          if (brandedBalance < coinsUsed.storePromoCoins) {
             await session.abortTransaction();
             session.endSession();
-            console.error('❌ [CREATE ORDER] Insufficient store promo coin balance:', {
+            console.error('❌ [CREATE ORDER] Insufficient branded coin balance:', {
               required: coinsUsed.storePromoCoins,
-              available: storePromoBalance
+              available: brandedBalance
             });
-            return sendBadRequest(res, `Insufficient store promo coin balance. Required: ${coinsUsed.storePromoCoins}, Available: ${storePromoBalance}`);
+            return sendBadRequest(res, `Insufficient store coin balance. Required: ${coinsUsed.storePromoCoins}, Available: ${brandedBalance}`);
           }
-          console.log('✅ [CREATE ORDER] Store promo coin balance validated:', { required: coinsUsed.storePromoCoins, available: storePromoBalance });
+          console.log('✅ [CREATE ORDER] Branded coin balance validated:', { required: coinsUsed.storePromoCoins, available: brandedBalance });
         }
       }
     }
@@ -438,7 +442,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         }
       }
 
-      // Deduct store promo coins
+      // Deduct branded coins (store-specific coins)
       if (coinsUsed.storePromoCoins && coinsUsed.storePromoCoins > 0) {
         try {
           const firstItem = cart.items[0];
@@ -447,16 +451,18 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
             : firstItem.store;
 
           if (storeId) {
-            await StorePromoCoin.useCoins(
-              new Types.ObjectId(userId),
-              storeId as Types.ObjectId,
-              coinsUsed.storePromoCoins,
-              order._id as Types.ObjectId
-            );
-            console.log('✅ [CREATE ORDER] Store promo coins deducted for COD:', coinsUsed.storePromoCoins);
+            // Use branded coins from wallet
+            const wallet = await Wallet.findOne({ user: userId });
+            if (wallet) {
+              await wallet.useBrandedCoins(
+                new Types.ObjectId(storeId.toString()),
+                coinsUsed.storePromoCoins
+              );
+              console.log('✅ [CREATE ORDER] Branded coins deducted for COD:', coinsUsed.storePromoCoins);
+            }
           }
         } catch (coinError) {
-          console.error('❌ [CREATE ORDER] Failed to deduct store promo coins:', coinError);
+          console.error('❌ [CREATE ORDER] Failed to deduct branded coins:', coinError);
         }
       }
     }
@@ -994,27 +1000,30 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         const bonusCoins = coinsToEarn - baseCoins;
 
         if (coinsToEarn > 0) {
-          // Get store ID from first item (assuming single store per order)
+          // Get store info from first item (assuming single store per order)
           const firstItem = populatedOrder.items[0];
-          const storeId = typeof firstItem.store === 'object'
-            ? (firstItem.store as any)._id
-            : firstItem.store;
+          const storeData = firstItem.store as any;
+          const storeId = typeof storeData === 'object' ? storeData._id : storeData;
+          const storeName = typeof storeData === 'object' ? storeData.name : 'Store';
+          const storeLogo = typeof storeData === 'object' ? storeData.logo : undefined;
 
           if (storeId) {
-            // Award promo coins with tier bonus
-            await StorePromoCoin.earnCoins(
-              userIdObj as Types.ObjectId,
-              storeId as Types.ObjectId,
-              coinsToEarn,
-              populatedOrder._id as Types.ObjectId
-            );
-
-            console.log(`✅ [ORDER] Awarded ${coinsToEarn} promo coins (base: ${baseCoins}, tier bonus: ${bonusCoins}, tier: ${userTier}) from store ${storeId}`);
+            // Award branded coins (store-specific coins)
+            const wallet = await Wallet.findOne({ user: userIdObj });
+            if (wallet) {
+              await wallet.addBrandedCoins(
+                new Types.ObjectId(storeId.toString()),
+                storeName,
+                coinsToEarn,
+                storeLogo
+              );
+              console.log(`✅ [ORDER] Awarded ${coinsToEarn} branded coins (base: ${baseCoins}, tier bonus: ${bonusCoins}, tier: ${userTier}) for store ${storeName}`);
+            }
           } else {
-            console.warn('⚠️ [ORDER] Could not determine store ID for promo coins');
+            console.warn('⚠️ [ORDER] Could not determine store ID for branded coins');
           }
         } else {
-          console.log('ℹ️ [ORDER] Order value too low for promo coins or promo coins disabled');
+          console.log('ℹ️ [ORDER] Order value too low for coins or coins disabled');
         }
       } catch (error) {
         console.error('❌ [ORDER] Error awarding promo coins:', error);

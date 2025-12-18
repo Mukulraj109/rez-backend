@@ -28,7 +28,7 @@ import {
   FlashSale,
   Project,
   StockHistory,
-  StorePromoCoin,
+  // StorePromoCoin removed - using wallet.brandedCoins instead
   Subscription,
   TriviaQuestion,
   QuizQuestion,

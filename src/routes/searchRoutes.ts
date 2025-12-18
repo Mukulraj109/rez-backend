@@ -3,6 +3,7 @@ import {
   globalSearch,
   clearSearchCache,
   getAutocomplete,
+  searchProductsGrouped,
   saveSearchHistory,
   getSearchHistory,
   getPopularSearches,
@@ -64,6 +65,20 @@ router.post('/cache/clear', protect, clearSearchCache);
  */
 router.get('/autocomplete', getAutocomplete);
 
+/**
+ * @route   GET /api/search/products-grouped
+ * @desc    Search products grouped by name with seller comparison
+ * @access  Public
+ * @query   q - Search query (required)
+ * @query   limit - Maximum products to return (optional, default: 20, max: 50)
+ * @query   lat - User latitude for distance calculation (optional)
+ * @query   lon - User longitude for distance calculation (optional)
+ *
+ * @example
+ * GET /api/search/products-grouped?q=iphone%2014
+ * GET /api/search/products-grouped?q=iphone%2014&limit=10&lat=12.9716&lon=77.5946
+ */
+router.get('/products-grouped', searchProductsGrouped);
 
 // ============================================
 // SEARCH HISTORY ROUTES
