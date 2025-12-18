@@ -279,7 +279,6 @@ export const getPaymentSettings = async (req: Request, res: Response) => {
       acceptPayLater: false,
       acceptRezCoins: true,
       acceptPromoCoins: true,
-      acceptPayBill: true,
       maxCoinRedemptionPercent: 100,
       allowHybridPayment: true,
       allowOffers: true,
@@ -593,17 +592,9 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
           message: 'This store does not accept Promo Coins',
         });
       }
-      if (coinsToRedeem.payBill && !settings.acceptPayBill) {
-        return res.status(400).json({
-          success: false,
-          message: 'This store does not accept PayBill balance',
-        });
-      }
-
       coinRedemptionAmount =
         coinRedemption.rezCoins +
-        coinRedemption.promoCoins +
-        coinRedemption.payBill;
+        coinRedemption.promoCoins;
 
       coinRedemption.totalAmount = coinRedemptionAmount;
 
@@ -630,14 +621,6 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
           return res.status(400).json({
             success: false,
             message: `Insufficient coin balance. You have ₹${wallet.balance.available} but trying to use ₹${coinsNeeded}`,
-          });
-        }
-
-        // Check PayBill balance
-        if (coinRedemption.payBill > (wallet.balance.paybill || 0)) {
-          return res.status(400).json({
-            success: false,
-            message: `Insufficient PayBill balance. You have ₹${wallet.balance.paybill || 0} but trying to use ₹${coinRedemption.payBill}`,
           });
         }
       }
@@ -831,13 +814,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
         const wallet = await Wallet.findOne({ user: storePayment.userId });
 
         if (wallet) {
-          // Deduct PayBill balance if used
-          if (storePayment.coinRedemption.payBill > 0) {
-            await wallet.usePayBillBalance(storePayment.coinRedemption.payBill);
-            console.log('✅ Deducted PayBill:', storePayment.coinRedemption.payBill);
-          }
-
-          // Deduct ReZ coins (from available balance)
+          // Deduct ReZ coins + Promo coins (from available balance)
           const coinsToDeduce = storePayment.coinRedemption.rezCoins + storePayment.coinRedemption.promoCoins;
           if (coinsToDeduce > 0) {
             await wallet.deductFunds(coinsToDeduce);

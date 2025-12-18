@@ -319,11 +319,15 @@ export const videoSchemas = {
     category: Joi.string().valid('trending_me', 'trending_her', 'waist', 'article', 'featured', 'challenge', 'tutorial', 'review'),
     contentType: Joi.string().valid('merchant', 'ugc', 'article_video'),
     creator: commonSchemas.objectId,
-    hasProducts: Joi.boolean(),
+    hasProducts: Joi.alternatives().try(
+      Joi.boolean(),
+      Joi.string().valid('true', 'false').custom((value) => value === 'true')
+    ),
     search: Joi.string().trim().max(100),
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(100).default(20),
-    sort: Joi.string().valid('createdAt', '-createdAt', 'updatedAt', '-updatedAt', 'name', '-name')
+    sort: Joi.string().valid('createdAt', '-createdAt', 'updatedAt', '-updatedAt', 'name', '-name'),
+    sortBy: Joi.string().valid('trending', 'newest', 'popular', 'views', 'likes')
   })
 };
 

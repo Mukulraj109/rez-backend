@@ -209,17 +209,18 @@ class ChallengeService {
         }
 
         if (wallet) {
-          // Add to wasil coins (REZ coins)
-          const wasilCoin = wallet.coins.find((c: any) => c.type === 'wasil');
-          if (wasilCoin) {
-            wasilCoin.amount += coinsReward;
-            wasilCoin.lastUsed = new Date();
+          // Add to rez coins (REZ coins)
+          const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+          if (rezCoin) {
+            rezCoin.amount += coinsReward;
+            rezCoin.lastUsed = new Date();
           } else {
-            // If wasil coin doesn't exist, create it
+            // If rez coin doesn't exist, create it
             wallet.coins.push({
-              type: 'wasil',
+              type: 'rez',
               amount: coinsReward,
               isActive: true,
+              color: '#00C06A',
               earnedDate: new Date(),
               lastUsed: new Date()
             } as any);

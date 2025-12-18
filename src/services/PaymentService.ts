@@ -374,10 +374,10 @@ class PaymentService {
             const wallet = await Wallet.findOne({ user: userId });
 
             if (wallet) {
-              const wasilCoin = wallet.coins.find((c: any) => c.type === 'wasil');
-              if (wasilCoin && wasilCoin.amount >= wasilCoins) {
-                wasilCoin.amount -= wasilCoins;
-                wasilCoin.lastUsed = new Date();
+              const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+              if (rezCoin && rezCoin.amount >= wasilCoins) {
+                rezCoin.amount -= wasilCoins;
+                rezCoin.lastUsed = new Date();
 
                 wallet.balance.available = Math.max(0, wallet.balance.available - wasilCoins);
                 wallet.balance.total = Math.max(0, wallet.balance.total - wasilCoins);
@@ -385,7 +385,7 @@ class PaymentService {
                 wallet.lastTransactionAt = new Date();
 
                 await wallet.save();
-                console.log('✅ [PAYMENT SERVICE] Wallet wasil coins updated:', wasilCoins);
+                console.log('✅ [PAYMENT SERVICE] Wallet rez coins updated:', wasilCoins);
               }
             }
 

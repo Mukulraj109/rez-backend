@@ -215,25 +215,26 @@ export async function awardSpinPrize(userId: string, prize: SpinResult): Promise
       `Won ${prize.value} coins from Spin Wheel`
     );
 
-    // 2. Add to Wallet wasil coins (for homepage display)
+    // 2. Add to Wallet rez coins (for homepage display)
     const { Wallet } = await import('../models/Wallet');
     const wallet = await Wallet.findOne({ user: userId });
 
     if (wallet) {
-      // Find or create wasil coin entry
-      let wasilCoin = wallet.coins.find(c => c.type === 'wasil');
+      // Find or create rez coin entry
+      let rezCoin = wallet.coins.find(c => c.type === 'rez');
 
-      if (!wasilCoin) {
-        // Create new wasil coin entry
+      if (!rezCoin) {
+        // Create new rez coin entry
         wallet.coins.push({
-          type: 'wasil',
+          type: 'rez',
           amount: prize.value,
           isActive: true,
-          earnedDate: new Date()
+          earnedDate: new Date(),
+          color: '#00C06A'
         });
       } else {
-        // Update existing wasil coin amount
-        wasilCoin.amount += prize.value;
+        // Update existing rez coin amount
+        rezCoin.amount += prize.value;
       }
 
       // Update balance and statistics

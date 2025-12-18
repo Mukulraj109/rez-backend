@@ -34,7 +34,60 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
     return sendError(res, 'Failed to create wallet', 500);
   }
 
+  // Get ReZ and Promo coins from coins array
+  const rezCoin = wallet.coins?.find((c: any) => c.type === 'rez');
+  const promoCoin = wallet.coins?.find((c: any) => c.type === 'promo');
+
+  // Calculate promo coin expiry countdown
+  let promoExpiryCountdown = '';
+  const expiryDateValue = promoCoin?.promoDetails?.expiryDate || promoCoin?.expiryDate;
+  if (expiryDateValue) {
+    const expiryDate = new Date(expiryDateValue);
+    const daysLeft = Math.ceil((expiryDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    if (daysLeft > 0) {
+      promoExpiryCountdown = daysLeft === 1 ? '1 day left' : `${daysLeft} days left`;
+    } else {
+      promoExpiryCountdown = 'Expired';
+    }
+  }
+
   sendSuccess(res, {
+    // Total value
+    totalValue: wallet.balance.total,
+    // Breakdown row
+    breakdown: {
+      rezCoins: {
+        amount: rezCoin?.amount || 0,
+        color: '#00C06A',
+        expiryDate: rezCoin?.expiryDate
+      },
+      cashbackBalance: wallet.balance.cashback || 0,
+      pendingRewards: wallet.balance.pending || 0
+    },
+    // Branded Coins (merchant-specific)
+    brandedCoins: (wallet.brandedCoins || []).map((bc: any) => ({
+      merchantId: bc.merchantId,
+      merchantName: bc.merchantName,
+      merchantLogo: bc.merchantLogo,
+      merchantColor: bc.merchantColor || '#6366F1',
+      amount: bc.amount
+    })),
+    // Promo Coins (limited-time)
+    promoCoins: {
+      amount: promoCoin?.amount || 0,
+      color: '#FFC857',
+      expiryCountdown: promoExpiryCountdown,
+      maxRedemptionPercentage: promoCoin?.promoDetails?.maxRedemptionPercentage || 20
+    },
+    // Coin usage order (for transparency)
+    coinUsageOrder: ['promo', 'branded', 'rez'],
+    // Savings insights
+    savingsInsights: wallet.savingsInsights || {
+      totalSaved: 0,
+      thisMonth: 0,
+      avgPerVisit: 0
+    },
+    // Legacy format for compatibility
     balance: wallet.balance,
     coins: wallet.coins || [],
     currency: wallet.currency,
@@ -84,19 +137,21 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
     return sendError(res, 'Failed to create wallet', 500);
   }
 
-  // Add to wasil coins (REZ coins)
-  const wasilCoin = wallet.coins.find(c => c.type === 'wasil');
-  if (wasilCoin) {
-    wasilCoin.amount += amount;
-    wasilCoin.lastUsed = new Date();
+  // Add to ReZ coins (universal coins)
+  const rezCoin = wallet.coins.find(c => c.type === 'rez');
+  if (rezCoin) {
+    rezCoin.amount += amount;
+    rezCoin.lastUsed = new Date();
   } else {
-    // If wasil coin doesn't exist, create it
+    // If ReZ coin doesn't exist, create it
     wallet.coins.push({
-      type: 'wasil',
+      type: 'rez',
       amount: amount,
       isActive: true,
+      color: '#00C06A',
       earnedDate: new Date(),
-      lastUsed: new Date()
+      lastUsed: new Date(),
+      expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
     } as any);
   }
 
@@ -155,7 +210,7 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
   console.log('✅ [WALLET] Loyalty points credited successfully:', {
     amount,
     newBalance: wallet.balance.available,
-    wasilCoins: wasilCoin?.amount
+    rezCoins: rezCoin?.amount
   });
 
   sendSuccess(res, {
@@ -951,547 +1006,6 @@ export const handlePaymentWebhook = asyncHandler(async (req: Request, res: Respo
 });
 
 /**
- * @desc    Add PayBill balance (prepaid with discount)
- * @route   POST /api/wallet/paybill
- * @access  Private
- */
-export const addPayBillBalance = asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).userId;
-  const { amount, paymentMethod, paymentId, discountPercentage } = req.body;
-
-  console.log('🎟️ [PAYBILL] Adding PayBill balance');
-  console.log('🎟️ [PAYBILL] User ID:', userId);
-  console.log('🎟️ [PAYBILL] Amount:', amount);
-  console.log('🎟️ [PAYBILL] Discount:', discountPercentage || 20, '%');
-
-  if (!userId) {
-    console.error('❌ [PAYBILL] No user ID found');
-    return sendError(res, 'User not authenticated', 401);
-  }
-
-  // Validate amount
-  if (!amount || amount <= 0) {
-    console.error('❌ [PAYBILL] Invalid amount:', amount);
-    return sendBadRequest(res, 'Invalid PayBill amount');
-  }
-
-  // Get or create wallet
-  let wallet = await Wallet.findOne({ user: userId });
-
-  if (!wallet) {
-    console.log('🆕 [PAYBILL] Wallet not found, creating new wallet');
-    wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
-  }
-
-  if (!wallet) {
-    console.error('❌ [PAYBILL] Failed to create wallet');
-    return sendError(res, 'Failed to create wallet', 500);
-  }
-
-  console.log('✅ [PAYBILL] Wallet found/created:', wallet._id);
-  console.log('💵 [PAYBILL] Current PayBill balance:', wallet.balance.paybill);
-
-  // Check if wallet is frozen
-  if (wallet.isFrozen) {
-    console.error('❌ [PAYBILL] Wallet is frozen:', wallet.frozenReason);
-    return sendError(res, `Wallet is frozen: ${wallet.frozenReason}`, 403);
-  }
-
-  const balanceBefore = wallet.balance.paybill || 0;
-
-  console.log('💾 [PAYBILL] Wallet state before adding PayBill:', {
-    balanceTotal: wallet.balance.total,
-    balanceAvailable: wallet.balance.available,
-    balancePending: wallet.balance.pending,
-    balancePaybill: wallet.balance.paybill,
-    statisticsPayBill: wallet.statistics.totalPayBill,
-    statisticsPayBillDiscount: wallet.statistics.totalPayBillDiscount
-  });
-
-  try {
-    // Add PayBill balance with discount
-    console.log('🔄 [PAYBILL] Calling addPayBillBalance method...');
-    const result = await wallet.addPayBillBalance(Number(amount), discountPercentage || 20);
-    console.log('✅ [PAYBILL] addPayBillBalance result:', result);
-
-    console.log('💾 [PAYBILL] Creating transaction record');
-
-    // Create transaction record
-    const transaction = new Transaction({
-      user: new mongoose.Types.ObjectId(userId),
-      type: 'credit',
-      category: 'paybill',
-      amount: result.finalAmount,
-      currency: wallet.currency,
-      description: `PayBill topup - Get ${result.discount} RC extra!`,
-      source: {
-        type: 'paybill',
-        reference: new mongoose.Types.ObjectId(String(wallet._id)),
-        description: `PayBill prepaid with ${discountPercentage || 20}% discount`,
-        metadata: {
-          paymentId: paymentId || `PAYBILL_${Date.now()}`,
-          paymentMethod: paymentMethod || 'gateway',
-          originalAmount: amount,
-          discount: result.discount,
-          discountPercentage: discountPercentage || 20
-        }
-      },
-      balanceBefore: Number(balanceBefore),
-      balanceAfter: Number(balanceBefore) + result.finalAmount,
-      status: {
-        current: 'completed',
-        history: [{
-          status: 'completed',
-          timestamp: new Date()
-        }]
-      }
-    });
-
-    await transaction.save();
-    console.log('✅ [PAYBILL] Transaction saved:', transaction._id);
-
-    // Create activity for PayBill
-    await activityService.wallet.onMoneyAdded(
-      new mongoose.Types.ObjectId(userId),
-      result.finalAmount
-    );
-
-    sendSuccess(res, {
-      transaction,
-      paybillBalance: wallet.balance.paybill,
-      originalAmount: amount,
-      discount: result.discount,
-      finalAmount: result.finalAmount,
-      discountPercentage: discountPercentage || 20,
-      wallet: {
-        balance: wallet.balance,
-        currency: wallet.currency
-      },
-      message: `Added ${amount} + ${result.discount} bonus = ${result.finalAmount} PayBill balance`
-    }, 'PayBill balance added successfully', 201);
-  } catch (error) {
-    console.error('❌ [PAYBILL] Error adding PayBill balance:', error);
-    throw error;
-  }
-});
-
-/**
- * @desc    Get PayBill balance
- * @route   GET /api/wallet/paybill/balance
- * @access  Private
- */
-export const getPayBillBalance = asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).userId;
-
-  if (!userId) {
-    return sendError(res, 'User not authenticated', 401);
-  }
-
-  // Get or create wallet
-  let wallet = await Wallet.findOne({ user: userId });
-
-  if (!wallet) {
-    wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
-  }
-
-  if (!wallet) {
-    return sendError(res, 'Failed to create wallet', 500);
-  }
-
-  sendSuccess(res, {
-    paybillBalance: wallet.balance.paybill,
-    currency: wallet.currency,
-    statistics: {
-      totalPayBill: wallet.statistics.totalPayBill,
-      totalPayBillDiscount: wallet.statistics.totalPayBillDiscount
-    }
-  }, 'PayBill balance retrieved successfully');
-});
-
-/**
- * @desc    Use PayBill balance for payment
- * @route   POST /api/wallet/paybill/use
- * @access  Private
- */
-export const usePayBillBalance = asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).userId;
-  const { amount, orderId, description } = req.body;
-
-  console.log('🎟️ [PAYBILL USE] Using PayBill balance for payment');
-  console.log('🎟️ [PAYBILL USE] User ID:', userId);
-  console.log('🎟️ [PAYBILL USE] Amount:', amount);
-  console.log('🎟️ [PAYBILL USE] Order ID:', orderId);
-
-  if (!userId) {
-    console.error('❌ [PAYBILL USE] No user ID found');
-    return sendError(res, 'User not authenticated', 401);
-  }
-
-  // Validate amount
-  if (!amount || amount <= 0) {
-    console.error('❌ [PAYBILL USE] Invalid amount:', amount);
-    return sendBadRequest(res, 'Invalid payment amount');
-  }
-
-  // Get wallet
-  const wallet = await Wallet.findOne({ user: userId });
-
-  if (!wallet) {
-    console.error('❌ [PAYBILL USE] Wallet not found');
-    return sendNotFound(res, 'Wallet not found');
-  }
-
-  console.log('✅ [PAYBILL USE] Wallet found:', wallet._id);
-  console.log('💵 [PAYBILL USE] Current PayBill balance:', wallet.balance.paybill);
-
-  // Check if wallet is frozen
-  if (wallet.isFrozen) {
-    console.error('❌ [PAYBILL USE] Wallet is frozen:', wallet.frozenReason);
-    return sendError(res, `Wallet is frozen: ${wallet.frozenReason}`, 403);
-  }
-
-  // Check if sufficient PayBill balance
-  if ((wallet.balance.paybill || 0) < amount) {
-    console.error('❌ [PAYBILL USE] Insufficient PayBill balance');
-    return sendBadRequest(res, 'Insufficient PayBill balance');
-  }
-
-  const balanceBefore = wallet.balance.paybill || 0;
-
-  console.log('📝 [PAYBILL USE] Creating transaction record');
-
-  try {
-    // Deduct PayBill balance
-    console.log('🔄 [PAYBILL USE] Calling usePayBillBalance method...');
-    await wallet.usePayBillBalance(Number(amount));
-    console.log('✅ [PAYBILL USE] PayBill balance deducted');
-
-    // Create transaction record
-    const transaction = new Transaction({
-      user: new mongoose.Types.ObjectId(userId),
-      type: 'debit',
-      category: 'spending',
-      amount: Number(amount),
-      currency: wallet.currency,
-      description: description || `Payment using PayBill balance`,
-      source: {
-        type: 'paybill',
-        reference: orderId ? new mongoose.Types.ObjectId(orderId) : new mongoose.Types.ObjectId(String(wallet._id)),
-        description: 'Payment using PayBill prepaid balance',
-        metadata: {
-          orderNumber: orderId || `ORD_${Date.now()}`,
-          paymentMethod: 'paybill'
-        }
-      },
-      balanceBefore: Number(balanceBefore),
-      balanceAfter: Number(balanceBefore) - Number(amount),
-      status: {
-        current: 'completed',
-        history: [{
-          status: 'completed',
-          timestamp: new Date()
-        }]
-      }
-    });
-
-    await transaction.save();
-    console.log('✅ [PAYBILL USE] Transaction saved:', transaction._id);
-
-    // Create activity for PayBill usage
-    await activityService.wallet.onMoneySpent(
-      new mongoose.Types.ObjectId(userId),
-      Number(amount),
-      'PayBill payment'
-    );
-
-    sendSuccess(res, {
-      transaction,
-      paybillBalance: wallet.balance.paybill,
-      amountPaid: amount,
-      wallet: {
-        balance: wallet.balance,
-        currency: wallet.currency
-      },
-      paymentStatus: 'success'
-    }, 'PayBill payment successful', 201);
-  } catch (error) {
-    console.error('❌ [PAYBILL USE] Error using PayBill balance:', error);
-    throw error;
-  }
-});
-
-/**
- * @desc    Get PayBill transaction history
- * @route   GET /api/wallet/paybill/transactions
- * @access  Private
- */
-export const getPayBillTransactions = asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).userId;
-  const { page = 1, limit = 20 } = req.query;
-
-  console.log('🎟️ [PAYBILL TXN] Fetching PayBill transactions');
-  console.log('🎟️ [PAYBILL TXN] User ID:', userId);
-
-  if (!userId) {
-    return sendError(res, 'User not authenticated', 401);
-  }
-
-  const skip = (Number(page) - 1) * Number(limit);
-
-  // Get PayBill transactions (both credit and debit)
-  const transactions = await Transaction.find({
-    user: userId,
-    $or: [
-      { category: 'paybill' },
-      { 'source.type': 'paybill' }
-    ]
-  })
-    .sort({ createdAt: -1 })
-    .limit(Number(limit))
-    .skip(skip);
-
-  const total = await Transaction.countDocuments({
-    user: userId,
-    $or: [
-      { category: 'paybill' },
-      { 'source.type': 'paybill' }
-    ]
-  });
-
-  const totalPages = Math.ceil(total / Number(limit));
-
-  // Get wallet for current balance
-  const wallet = await Wallet.findOne({ user: userId });
-
-  sendSuccess(res, {
-    transactions,
-    currentBalance: wallet?.balance.paybill || 0,
-    pagination: {
-      page: Number(page),
-      limit: Number(limit),
-      total,
-      totalPages,
-      hasNext: Number(page) < totalPages,
-      hasPrev: Number(page) > 1
-    }
-  }, 'PayBill transactions retrieved successfully');
-});
-
-/**
- * @desc    Create Stripe Payment Intent for PayBill
- * @route   POST /api/wallet/paybill/create-payment-intent
- * @access  Private
- */
-export const createPayBillPaymentIntent = asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).userId;
-  const { amount, discountPercentage = 20, paymentType = 'card' } = req.body;
-
-  console.log('💳 [STRIPE PAYBILL] Creating payment intent');
-  console.log('💳 [STRIPE PAYBILL] User ID:', userId);
-  console.log('💳 [STRIPE PAYBILL] Amount:', amount);
-  console.log('💳 [STRIPE PAYBILL] Payment Type:', paymentType);
-
-  if (!userId) {
-    return sendError(res, 'User not authenticated', 401);
-  }
-
-  // Validate amount
-  if (!amount || amount < 50) {
-    return sendBadRequest(res, 'Minimum amount is ₹50');
-  }
-
-  if (amount > 100000) {
-    return sendBadRequest(res, 'Maximum amount is ₹100,000');
-  }
-
-  // Validate payment type
-  const validPaymentTypes = ['card', 'upi'];
-  if (!validPaymentTypes.includes(paymentType)) {
-    return sendBadRequest(res, 'Invalid payment type. Must be card or upi');
-  }
-
-  // Initialize Stripe
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: '2025-09-30.clover',
-  });
-
-  try {
-    // Get user details
-    const user = await User.findById(userId);
-
-    if (!user) {
-      return sendNotFound(res, 'User not found');
-    }
-
-    // Calculate final amount with discount
-    const discount = Math.round((amount * discountPercentage) / 100);
-    const finalAmount = amount + discount;
-
-    // Create payment intent with appropriate payment method types
-    // Note: Stripe amounts are in smallest currency unit (paise for INR)
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: amount * 100, // Convert to paise
-      currency: 'inr',
-      payment_method_types: [paymentType], // Support both card and UPI
-      metadata: {
-        userId: userId.toString(),
-        type: 'paybill',
-        paymentType: paymentType,
-        originalAmount: amount.toString(),
-        discount: discount.toString(),
-        finalAmount: finalAmount.toString(),
-        discountPercentage: discountPercentage.toString(),
-      },
-      description: `PayBill topup: ₹${amount} + ₹${discount} bonus (${discountPercentage}% discount)`,
-      receipt_email: user.email,
-    });
-
-    console.log('✅ [STRIPE PAYBILL] Payment intent created:', paymentIntent.id);
-
-    sendSuccess(res, {
-      clientSecret: paymentIntent.client_secret,
-      paymentIntentId: paymentIntent.id,
-      paymentType,
-      amount,
-      discount,
-      finalAmount,
-      discountPercentage,
-    }, 'Payment intent created successfully');
-  } catch (error: any) {
-    console.error('❌ [STRIPE PAYBILL] Error creating payment intent:', error);
-    sendError(res, error.message || 'Failed to create payment intent', 500);
-  }
-});
-
-/**
- * @desc    Confirm PayBill Payment and Add Balance
- * @route   POST /api/wallet/paybill/confirm-payment
- * @access  Private
- */
-export const confirmPayBillPayment = asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).userId;
-  const { paymentIntentId } = req.body;
-
-  console.log('✅ [STRIPE PAYBILL] Confirming payment');
-  console.log('✅ [STRIPE PAYBILL] User ID:', userId);
-  console.log('✅ [STRIPE PAYBILL] Payment Intent ID:', paymentIntentId);
-
-  if (!userId) {
-    return sendError(res, 'User not authenticated', 401);
-  }
-
-  if (!paymentIntentId) {
-    return sendBadRequest(res, 'Payment Intent ID is required');
-  }
-
-  // Initialize Stripe
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: '2025-09-30.clover',
-  });
-
-  try {
-    // Retrieve payment intent to verify it was successful
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-
-    console.log('🔍 [STRIPE PAYBILL] Payment Intent Status:', paymentIntent.status);
-
-    if (paymentIntent.status !== 'succeeded') {
-      return sendBadRequest(res, `Payment not completed. Status: ${paymentIntent.status}`);
-    }
-
-    // Verify user ID matches
-    if (paymentIntent.metadata.userId !== userId.toString()) {
-      return sendError(res, 'Unauthorized payment confirmation', 403);
-    }
-
-    // Extract metadata
-    const amount = Number(paymentIntent.metadata.originalAmount);
-    const discount = Number(paymentIntent.metadata.discount);
-    const finalAmount = Number(paymentIntent.metadata.finalAmount);
-    const discountPercentage = Number(paymentIntent.metadata.discountPercentage);
-
-    // Get or create wallet
-    let wallet = await Wallet.findOne({ user: userId });
-
-    if (!wallet) {
-      wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
-    }
-
-    if (!wallet) {
-      return sendError(res, 'Failed to create wallet', 500);
-    }
-
-    // Check if wallet is frozen
-    if (wallet.isFrozen) {
-      return sendError(res, `Wallet is frozen: ${wallet.frozenReason}`, 403);
-    }
-
-    const balanceBefore = wallet.balance.paybill || 0;
-
-    // Add PayBill balance
-    const result = await wallet.addPayBillBalance(finalAmount, 0); // Already calculated discount
-
-    // Create transaction record
-    const transaction = new Transaction({
-      user: new mongoose.Types.ObjectId(userId),
-      type: 'credit',
-      category: 'paybill',
-      amount: finalAmount,
-      currency: wallet.currency,
-      description: `PayBill topup via Stripe - Get ${discount} RC extra!`,
-      source: {
-        type: 'paybill',
-        reference: new mongoose.Types.ObjectId(String(wallet._id)),
-        description: `PayBill prepaid with ${discountPercentage}% discount`,
-        metadata: {
-          paymentId: paymentIntent.id,
-          paymentMethod: 'stripe',
-          originalAmount: amount,
-          discount: discount,
-          discountPercentage: discountPercentage,
-          stripePaymentIntentId: paymentIntent.id,
-        }
-      },
-      balanceBefore: Number(balanceBefore),
-      balanceAfter: Number(balanceBefore) + finalAmount,
-      status: {
-        current: 'completed',
-        history: [{
-          status: 'completed',
-          timestamp: new Date()
-        }]
-      }
-    });
-
-    await transaction.save();
-    console.log('✅ [STRIPE PAYBILL] Transaction saved:', transaction._id);
-
-    // Create activity
-    await activityService.wallet.onMoneyAdded(
-      new mongoose.Types.ObjectId(userId),
-      finalAmount
-    );
-
-    sendSuccess(res, {
-      transaction,
-      paybillBalance: wallet.balance.paybill,
-      originalAmount: amount,
-      discount: discount,
-      finalAmount: finalAmount,
-      discountPercentage: discountPercentage,
-      wallet: {
-        balance: wallet.balance,
-        currency: wallet.currency
-      },
-      message: `Added ${amount} + ${discount} bonus = ${finalAmount} PayBill balance`
-    }, 'PayBill balance added successfully', 201);
-  } catch (error: any) {
-    console.error('❌ [STRIPE PAYBILL] Error confirming payment:', error);
-    sendError(res, error.message || 'Failed to confirm payment', 500);
-  }
-});
-
-/**
  * @desc    Add test funds to wallet (DEVELOPMENT ONLY)
  * @route   POST /api/wallet/dev-topup
  * @access  Private
@@ -1503,7 +1017,7 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const userId = (req as any).userId;
-  const { amount = 1000, type = 'wallet' } = req.body;
+  const { amount = 1000, type = 'rez' } = req.body; // type: 'rez' | 'promo' | 'cashback'
 
   console.log('🧪 [DEV TOPUP] Adding test funds:', { userId, amount, type });
 
@@ -1515,21 +1029,31 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
     let wallet = await Wallet.findOne({ user: userId });
 
     if (!wallet) {
-      wallet = new Wallet({
-        user: userId,
-        balance: { total: 0, available: 0, pending: 0, paybill: 0 },
-        currency: 'INR',
-        isActive: true
-      });
+      wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
     }
 
-    if (type === 'paybill') {
-      wallet.balance.paybill = (wallet.balance.paybill || 0) + Number(amount);
+    if (!wallet) {
+      return sendError(res, 'Failed to create wallet', 500);
+    }
+
+    // Add to appropriate coin type
+    if (type === 'promo') {
+      const promoCoin = wallet.coins.find((c: any) => c.type === 'promo');
+      if (promoCoin) {
+        promoCoin.amount += Number(amount);
+      }
+    } else if (type === 'cashback') {
+      wallet.balance.cashback = (wallet.balance.cashback || 0) + Number(amount);
     } else {
-      wallet.balance.total = (wallet.balance.total || 0) + Number(amount);
+      // Default to ReZ Coins
+      const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+      if (rezCoin) {
+        rezCoin.amount += Number(amount);
+      }
       wallet.balance.available = (wallet.balance.available || 0) + Number(amount);
     }
 
+    wallet.balance.total = (wallet.balance.total || 0) + Number(amount);
     await wallet.save();
 
     console.log('✅ [DEV TOPUP] Test funds added:', wallet.balance);
@@ -1537,6 +1061,7 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
     sendSuccess(res, {
       wallet: {
         balance: wallet.balance,
+        coins: wallet.coins,
         currency: wallet.currency
       },
       addedAmount: amount,

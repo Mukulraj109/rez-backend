@@ -98,11 +98,14 @@ router.get('/nearby',
   // generalLimiter, // Disabled for development
   optionalAuth,
   validateQuery(Joi.object({
-    lng: Joi.number().min(-180).max(180).required(),
-    lat: Joi.number().min(-90).max(90).required(),
+    // Accept both naming conventions: lat/lng and latitude/longitude
+    lng: Joi.number().min(-180).max(180),
+    lat: Joi.number().min(-90).max(90),
+    longitude: Joi.number().min(-180).max(180),
+    latitude: Joi.number().min(-90).max(90),
     radius: Joi.number().min(0.1).max(50).default(5),
     limit: Joi.number().integer().min(1).max(50).default(10)
-  })),
+  }).or('lat', 'latitude').or('lng', 'longitude')),
   getNearbyStores
 );
 

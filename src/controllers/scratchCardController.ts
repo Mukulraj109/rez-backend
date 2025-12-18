@@ -173,16 +173,17 @@ export const claimPrize = asyncHandler(async (req: Request, res: Response) => {
         // Add coins to wallet
         const userWallet = await Wallet.findOne({ user: userId });
         if (userWallet) {
-          // Add to wasil coin type
-          const wasilCoin = userWallet.coins.find(coin => coin.type === 'wasil');
-          if (wasilCoin) {
-            wasilCoin.amount += prize.value;
+          // Add to rez coin type
+          const rezCoin = userWallet.coins.find(coin => coin.type === 'rez');
+          if (rezCoin) {
+            rezCoin.amount += prize.value;
           } else {
             userWallet.coins.push({
-              type: 'wasil',
+              type: 'rez',
               amount: prize.value,
               isActive: true,
-              earnedDate: new Date()
+              earnedDate: new Date(),
+              color: '#00C06A'
             });
           }
           userWallet.balance.total += prize.value;

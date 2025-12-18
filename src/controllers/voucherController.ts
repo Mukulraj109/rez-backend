@@ -240,10 +240,10 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
     wallet.balance.available -= purchasePrice;
 
     // Update coins
-    const wasilCoin = wallet.coins.find((c: any) => c.type === 'wasil');
-    if (wasilCoin && wasilCoin.amount >= purchasePrice) {
-      wasilCoin.amount -= purchasePrice;
-      wasilCoin.lastUsed = new Date();
+    const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+    if (rezCoin && rezCoin.amount >= purchasePrice) {
+      rezCoin.amount -= purchasePrice;
+      rezCoin.lastUsed = new Date();
     }
 
     await wallet.save();

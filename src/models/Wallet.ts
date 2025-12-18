@@ -6,26 +6,71 @@ export interface IWalletModel extends Model<IWallet> {
   getWithSummary(userId: Types.ObjectId, period?: 'day' | 'week' | 'month' | 'year'): Promise<any>;
 }
 
-// Coin Balance interface
+// Coin Type enum - 3 types only
+export type CoinType = 'rez' | 'branded' | 'promo';
+
+// Branded Coin Details (merchant-specific coins)
+export interface IBrandedCoinDetails {
+  merchantId: Types.ObjectId;
+  merchantName: string;
+  merchantLogo?: string;
+  merchantColor?: string;
+}
+
+// Promo Coin Details (limited-time coins)
+export interface IPromoCoinDetails {
+  campaignId?: string;
+  campaignName?: string;
+  maxRedemptionPercentage: number; // Default 20% per bill
+  expiryDate: Date;
+}
+
+// Coin Balance interface - Updated for new wallet design
 export interface ICoinBalance {
-  type: 'wasil' | 'promotion' |'cashback' | 'reward';
+  type: CoinType;
   amount: number;
   isActive: boolean;
   earnedDate?: Date;
   lastUsed?: Date;
-  expiryDate?: Date;
+  expiryDate?: Date; // 30 days for ReZ Coins, campaign-based for Promo
+  color: string; // #00C06A for ReZ, merchant color for Branded, #FFC857 for Promo
+  // For Branded Coins
+  brandedDetails?: IBrandedCoinDetails;
+  // For Promo Coins
+  promoDetails?: IPromoCoinDetails;
+}
+
+// Branded Coin in separate array for merchant-specific coins
+export interface IBrandedCoin {
+  merchantId: Types.ObjectId;
+  merchantName: string;
+  merchantLogo?: string;
+  merchantColor?: string;
+  amount: number;
+  earnedDate: Date;
+  lastUsed?: Date;
+  // No expiry for branded coins
+}
+
+// Savings Insights
+export interface ISavingsInsights {
+  totalSaved: number;
+  thisMonth: number;
+  avgPerVisit: number;
+  lastCalculated: Date;
 }
 
 // Wallet interface - complements User.wallet with additional details
 export interface IWallet extends Document {
   user: Types.ObjectId;
   balance: {
-    total: number;          // Total wallet balance
-    available: number;      // Available for spending
+    total: number;          // Total wallet balance (sum of all)
+    available: number;      // Available for spending (ReZ Coins)
     pending: number;        // Pending/locked amount
-    paybill: number;        // PayBill prepaid balance with discount
+    cashback: number;       // Cashback balance
   };
-  coins: ICoinBalance[];    // Individual coin balances
+  coins: ICoinBalance[];    // ReZ Coins and Promo Coins
+  brandedCoins: IBrandedCoin[]; // Merchant-specific coins (separate array)
   currency: string;         // 'REZ_COIN' or 'RC'
   statistics: {
     totalEarned: number;    // Lifetime earnings
@@ -34,9 +79,8 @@ export interface IWallet extends Document {
     totalRefunds: number;   // Total refunds received
     totalTopups: number;    // Total topup amount
     totalWithdrawals: number; // Total withdrawn
-    totalPayBill: number;   // Total PayBill amount added
-    totalPayBillDiscount: number; // Total discount received via PayBill
   };
+  savingsInsights: ISavingsInsights; // Savings tracking for emotional hook
   limits: {
     maxBalance: number;     // Maximum wallet balance allowed
     minWithdrawal: number;  // Minimum withdrawal amount
@@ -50,6 +94,9 @@ export interface IWallet extends Document {
     autoTopupAmount: number;
     lowBalanceAlert: boolean;
     lowBalanceThreshold: number;
+    // Smart Alerts settings
+    smartAlertsEnabled: boolean;
+    expiringCoinsAlertDays: number; // Days before expiry to alert (default 7)
   };
   isActive: boolean;
   isFrozen: boolean;        // Wallet temporarily frozen
@@ -63,12 +110,13 @@ export interface IWallet extends Document {
   canSpend(amount: number): boolean;
   addFunds(amount: number, type: string): Promise<void>;
   deductFunds(amount: number): Promise<void>;
-  addPayBillBalance(amount: number, discountPercentage?: number): Promise<{ finalAmount: number, discount: number }>;
-  usePayBillBalance(amount: number): Promise<void>;
+  addBrandedCoins(merchantId: Types.ObjectId, merchantName: string, amount: number, merchantLogo?: string, merchantColor?: string): Promise<void>;
+  useBrandedCoins(merchantId: Types.ObjectId, amount: number): Promise<void>;
   freeze(reason: string): Promise<void>;
   unfreeze(): Promise<void>;
   resetDailyLimit(): Promise<void>;
   getFormattedBalance(): string;
+  getCoinUsageOrder(): { type: string; amount: number }[]; // Promo > Branded > ReZ
 }
 
 const WalletSchema = new Schema<IWallet>({
@@ -98,17 +146,18 @@ const WalletSchema = new Schema<IWallet>({
       default: 0,
       min: 0
     },
-    paybill: {
+    cashback: {
       type: Number,
       required: true,
       default: 0,
       min: 0
     }
   },
+  // ReZ Coins (universal) and Promo Coins (limited-time)
   coins: [{
     type: {
       type: String,
-      enum: ['wasil', 'promotion', 'cashback', 'reward'],
+      enum: ['rez', 'promo'],
       required: true
     },
     amount: {
@@ -120,9 +169,51 @@ const WalletSchema = new Schema<IWallet>({
       type: Boolean,
       default: true
     },
+    color: {
+      type: String,
+      default: '#00C06A' // Green for ReZ, Gold #FFC857 for Promo
+    },
     earnedDate: Date,
     lastUsed: Date,
-    expiryDate: Date
+    expiryDate: Date, // 30 days for ReZ, campaign-based for Promo
+    // For Promo Coins
+    promoDetails: {
+      campaignId: String,
+      campaignName: String,
+      maxRedemptionPercentage: {
+        type: Number,
+        default: 20 // Max 20% per bill
+      },
+      expiryDate: Date
+    }
+  }],
+  // Branded Coins - Merchant-specific coins (separate array)
+  brandedCoins: [{
+    merchantId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Store',
+      required: true
+    },
+    merchantName: {
+      type: String,
+      required: true
+    },
+    merchantLogo: String,
+    merchantColor: {
+      type: String,
+      default: '#6366F1'
+    },
+    amount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    earnedDate: {
+      type: Date,
+      default: Date.now
+    },
+    lastUsed: Date
+    // No expiry for branded coins
   }],
   currency: {
     type: String,
@@ -160,16 +251,28 @@ const WalletSchema = new Schema<IWallet>({
       type: Number,
       default: 0,
       min: 0
-    },
-    totalPayBill: {
+    }
+  },
+  // Savings Insights - Emotional hook for user retention
+  savingsInsights: {
+    totalSaved: {
       type: Number,
       default: 0,
       min: 0
     },
-    totalPayBillDiscount: {
+    thisMonth: {
       type: Number,
       default: 0,
       min: 0
+    },
+    avgPerVisit: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    lastCalculated: {
+      type: Date,
+      default: Date.now
     }
   },
   limits: {
@@ -221,6 +324,16 @@ const WalletSchema = new Schema<IWallet>({
       type: Number,
       default: 50,
       min: 0
+    },
+    // Smart Alerts settings
+    smartAlertsEnabled: {
+      type: Boolean,
+      default: true
+    },
+    expiringCoinsAlertDays: {
+      type: Number,
+      default: 7, // Alert 7 days before expiry
+      min: 1
     }
   },
   isActive: {
@@ -262,8 +375,9 @@ WalletSchema.virtual('formattedBalance').get(function() {
 
 // Pre-save hook to validate balances
 WalletSchema.pre('save', function(next) {
-  // Ensure total = available + pending + paybill
-  const calculatedTotal = this.balance.available + this.balance.pending + this.balance.paybill;
+  // Ensure total = available + pending + cashback + brandedCoins total
+  const brandedTotal = (this.brandedCoins || []).reduce((sum, coin) => sum + (coin.amount || 0), 0);
+  const calculatedTotal = this.balance.available + this.balance.pending + this.balance.cashback + brandedTotal;
 
   // Allow small rounding differences
   if (Math.abs(this.balance.total - calculatedTotal) > 0.01) {
@@ -386,11 +500,14 @@ WalletSchema.methods.deductFunds = async function(amount: number): Promise<void>
   }
 };
 
-// Method to add PayBill balance with discount
-WalletSchema.methods.addPayBillBalance = async function(
+// Method to add Branded Coins (merchant-specific)
+WalletSchema.methods.addBrandedCoins = async function(
+  merchantId: Types.ObjectId,
+  merchantName: string,
   amount: number,
-  discountPercentage: number = 20
-): Promise<{ finalAmount: number, discount: number }> {
+  merchantLogo?: string,
+  merchantColor?: string
+): Promise<void> {
   if (!this.isActive) {
     throw new Error('Wallet is not active');
   }
@@ -399,23 +516,35 @@ WalletSchema.methods.addPayBillBalance = async function(
     throw new Error('Wallet is frozen');
   }
 
-  // Calculate discount
-  const discount = Math.round((amount * discountPercentage) / 100);
-  const finalAmount = amount + discount;
-
   // Check max balance limit
-  if (this.balance.total + finalAmount > this.limits.maxBalance) {
+  if (this.balance.total + amount > this.limits.maxBalance) {
     throw new Error(`Maximum wallet balance (${this.limits.maxBalance}) would be exceeded`);
   }
 
-  // Add to paybill balance
-  this.balance.paybill += finalAmount;
-  this.balance.total += finalAmount;
+  // Check if merchant already has coins
+  const existingCoin = this.brandedCoins.find(
+    (coin: any) => coin.merchantId.toString() === merchantId.toString()
+  );
+
+  if (existingCoin) {
+    existingCoin.amount += amount;
+    existingCoin.lastUsed = new Date();
+  } else {
+    this.brandedCoins.push({
+      merchantId,
+      merchantName,
+      merchantLogo,
+      merchantColor: merchantColor || '#6366F1',
+      amount,
+      earnedDate: new Date()
+    });
+  }
+
+  // Update total balance
+  this.balance.total += amount;
 
   // Update statistics
-  this.statistics.totalPayBill += amount;
-  this.statistics.totalPayBillDiscount += discount;
-  this.statistics.totalEarned += discount;
+  this.statistics.totalEarned += amount;
 
   this.lastTransactionAt = new Date();
   await this.save();
@@ -423,13 +552,14 @@ WalletSchema.methods.addPayBillBalance = async function(
   // Sync with User model
   await this.syncWithUser();
 
-  console.log(`✅ PayBill added: ${amount} + ${discount} discount = ${finalAmount} total`);
-
-  return { finalAmount, discount };
+  console.log(`✅ Branded Coins added: ${amount} ${merchantName} coins`);
 };
 
-// Method to use PayBill balance
-WalletSchema.methods.usePayBillBalance = async function(amount: number): Promise<void> {
+// Method to use Branded Coins (at specific merchant)
+WalletSchema.methods.useBrandedCoins = async function(
+  merchantId: Types.ObjectId,
+  amount: number
+): Promise<void> {
   if (!this.isActive) {
     throw new Error('Wallet is not active');
   }
@@ -438,12 +568,27 @@ WalletSchema.methods.usePayBillBalance = async function(amount: number): Promise
     throw new Error('Wallet is frozen');
   }
 
-  if (this.balance.paybill < amount) {
-    throw new Error('Insufficient PayBill balance');
+  // Find merchant coins
+  const merchantCoin = this.brandedCoins.find(
+    (coin: any) => coin.merchantId.toString() === merchantId.toString()
+  );
+
+  if (!merchantCoin || merchantCoin.amount < amount) {
+    throw new Error('Insufficient Branded Coins for this merchant');
   }
 
-  // Deduct from paybill balance
-  this.balance.paybill -= amount;
+  // Deduct from branded coins
+  merchantCoin.amount -= amount;
+  merchantCoin.lastUsed = new Date();
+
+  // Remove if zero
+  if (merchantCoin.amount <= 0) {
+    this.brandedCoins = this.brandedCoins.filter(
+      (coin: any) => coin.merchantId.toString() !== merchantId.toString()
+    );
+  }
+
+  // Update total balance
   this.balance.total -= amount;
 
   // Update statistics
@@ -454,6 +599,36 @@ WalletSchema.methods.usePayBillBalance = async function(amount: number): Promise
 
   // Sync with User model
   await this.syncWithUser();
+};
+
+// Method to get coin usage order (Promo > Branded > ReZ)
+WalletSchema.methods.getCoinUsageOrder = function(): { type: string; amount: number; merchantId?: string }[] {
+  const order: { type: string; amount: number; merchantId?: string }[] = [];
+
+  // 1. Promo Coins first (limited-time, highest priority)
+  const promoCoin = this.coins.find((c: any) => c.type === 'promo' && c.isActive && c.amount > 0);
+  if (promoCoin) {
+    order.push({ type: 'promo', amount: promoCoin.amount });
+  }
+
+  // 2. Branded Coins second (merchant-specific)
+  for (const brandedCoin of this.brandedCoins || []) {
+    if (brandedCoin.amount > 0) {
+      order.push({
+        type: 'branded',
+        amount: brandedCoin.amount,
+        merchantId: brandedCoin.merchantId.toString()
+      });
+    }
+  }
+
+  // 3. ReZ Coins last (universal, lowest priority)
+  const rezCoin = this.coins.find((c: any) => c.type === 'rez' && c.isActive && c.amount > 0);
+  if (rezCoin) {
+    order.push({ type: 'rez', amount: rezCoin.amount });
+  }
+
+  return order;
 };
 
 // Method to freeze wallet
@@ -508,23 +683,39 @@ WalletSchema.statics.createForUser = async function(userId: Types.ObjectId) {
     balance: {
       total: 0,
       available: 0,
-      pending: 0
+      pending: 0,
+      cashback: 0
     },
+    // ReZ Coins (universal) and Promo Coins (limited-time)
     coins: [
       {
-        type: 'wasil',
+        type: 'rez',
         amount: 0,
         isActive: true,
-        earnedDate: new Date()
+        color: '#00C06A', // ReZ Green
+        earnedDate: new Date(),
+        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
       },
       {
-        type: 'promotion',
+        type: 'promo',
         amount: 0,
         isActive: true,
-        earnedDate: new Date()
+        color: '#FFC857', // ReZ Gold
+        earnedDate: new Date(),
+        promoDetails: {
+          maxRedemptionPercentage: 20
+        }
       }
     ],
-    currency: 'RC'
+    // Branded coins start empty
+    brandedCoins: [],
+    currency: 'RC',
+    savingsInsights: {
+      totalSaved: 0,
+      thisMonth: 0,
+      avgPerVisit: 0,
+      lastCalculated: new Date()
+    }
   });
 
   await wallet.save();

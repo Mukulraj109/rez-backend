@@ -13,12 +13,6 @@ import {
   checkPaymentStatus,
   getPaymentMethods,
   handlePaymentWebhook,
-  addPayBillBalance,
-  getPayBillBalance,
-  usePayBillBalance,
-  getPayBillTransactions,
-  createPayBillPaymentIntent,
-  confirmPayBillPayment,
   creditLoyaltyPoints,
   devTopup
 } from '../controllers/walletController';
@@ -136,56 +130,9 @@ router.get('/payment-methods', getPaymentMethods);
 router.post('/webhook/:gateway', handlePaymentWebhook);
 
 /**
- * @route   POST /api/wallet/paybill
- * @desc    Add PayBill balance (prepaid with discount)
- * @body    { amount, paymentMethod, paymentId, discountPercentage }
- * @access  Private
- */
-router.post('/paybill', addPayBillBalance);
-
-/**
- * @route   GET /api/wallet/paybill/balance
- * @desc    Get PayBill balance
- * @access  Private
- */
-router.get('/paybill/balance', getPayBillBalance);
-
-/**
- * @route   POST /api/wallet/paybill/use
- * @desc    Use PayBill balance for payment
- * @body    { amount, orderId, description }
- * @access  Private
- */
-router.post('/paybill/use', usePayBillBalance);
-
-/**
- * @route   GET /api/wallet/paybill/transactions
- * @desc    Get PayBill transaction history
- * @query   page, limit
- * @access  Private
- */
-router.get('/paybill/transactions', getPayBillTransactions);
-
-/**
- * @route   POST /api/wallet/paybill/create-payment-intent
- * @desc    Create Stripe Payment Intent for PayBill
- * @body    { amount, discountPercentage }
- * @access  Private
- */
-router.post('/paybill/create-payment-intent', createPayBillPaymentIntent);
-
-/**
- * @route   POST /api/wallet/paybill/confirm-payment
- * @desc    Confirm PayBill payment and add balance
- * @body    { paymentIntentId }
- * @access  Private
- */
-router.post('/paybill/confirm-payment', confirmPayBillPayment);
-
-/**
  * @route   POST /api/wallet/dev-topup
  * @desc    Add test funds to wallet (DEVELOPMENT ONLY)
- * @body    { amount, type: 'wallet' | 'paybill' }
+ * @body    { amount, type: 'rez' | 'promo' | 'cashback' }
  * @access  Private
  */
 router.post('/dev-topup', devTopup);

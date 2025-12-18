@@ -628,9 +628,9 @@ export const withdrawEarnings = asyncHandler(async (req: Request, res: Response)
       return sendNotFound(res, 'Wallet not found');
     }
 
-    // Get wasil coin balance
-    const wasilCoin = wallet.coins.find((c: any) => c.type === 'wasil');
-    const availableBalance = wasilCoin?.amount || 0;
+    // Get rez coin balance
+    const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+    const availableBalance = rezCoin?.amount || 0;
 
     // Check if user has sufficient balance
     if (availableBalance < amount) {

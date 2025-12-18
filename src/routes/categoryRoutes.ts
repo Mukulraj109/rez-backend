@@ -23,7 +23,11 @@ router.get('/',
   validateQuery(Joi.object({
     type: Joi.string().valid('going_out', 'home_delivery', 'earn', 'play', 'general'),
     featured: Joi.boolean(),
-    parent: Joi.string()
+    parent: Joi.string(),
+    isActive: Joi.alternatives().try(
+      Joi.boolean(),
+      Joi.string().valid('true', 'false')
+    )
   })),
   getCategories
 );

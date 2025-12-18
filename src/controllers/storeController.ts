@@ -304,9 +304,13 @@ export const getStoreProducts = asyncHandler(async (req: Request, res: Response)
 
 // Get nearby stores
 export const getNearbyStores = asyncHandler(async (req: Request, res: Response) => {
-  const { lng, lat, radius = 5, limit = 10 } = req.query;
+  const { lng, lat, longitude, latitude, radius = 5, limit = 10 } = req.query;
+  
+  // Accept both naming conventions
+  const finalLng = lng || longitude;
+  const finalLat = lat || latitude;
 
-  if (!lng || !lat) {
+  if (!finalLng || !finalLat) {
     return sendBadRequest(res, 'Longitude and latitude are required');
   }
 
@@ -315,7 +319,7 @@ export const getNearbyStores = asyncHandler(async (req: Request, res: Response) 
       isActive: true,
       'contactInfo.location.coordinates': {
         $near: {
-          $geometry: { type: 'Point', coordinates: [Number(lng), Number(lat)] },
+          $geometry: { type: 'Point', coordinates: [Number(finalLng), Number(finalLat)] },
           $maxDistance: Number(radius) * 1000 // Convert km to meters
         }
       }

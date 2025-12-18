@@ -78,16 +78,17 @@ async function fixMissingRewards() {
 
       const balanceBefore = wallet.balance.available;
 
-      // Add to wasil coins (REZ coins)
-      const wasilCoin = wallet.coins.find((c: any) => c.type === 'wasil');
-      if (wasilCoin) {
-        wasilCoin.amount += coinsReward;
-        wasilCoin.lastUsed = new Date();
+      // Add to rez coins (REZ coins)
+      const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+      if (rezCoin) {
+        rezCoin.amount += coinsReward;
+        rezCoin.lastUsed = new Date();
       } else {
         wallet.coins.push({
-          type: 'wasil',
+          type: 'rez',
           amount: coinsReward,
           isActive: true,
+          color: '#00C06A',
           earnedDate: new Date(),
           lastUsed: new Date()
         } as any);

@@ -1185,7 +1185,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
     quantity = 1,
     variant,
     duration = 3, // Default 3 hours
-    paymentMethod = 'wallet' // 'wallet' | 'paybill' | 'upi'
+    paymentMethod = 'wallet' // 'wallet' | 'upi'
   } = req.body;
 
   if (!productId) {
@@ -1280,18 +1280,10 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
 
     console.log('🔒💰 [LOCK WITH PAYMENT] Wallet found:', {
       available: wallet.balance.available,
-      paybill: wallet.balance.paybill,
       total: wallet.balance.total
     });
 
-    // Determine which balance to use
-    let balanceSource: 'wallet' | 'paybill' = 'wallet';
-    let availableBalance = wallet.balance.available;
-
-    if (paymentMethod === 'paybill') {
-      balanceSource = 'paybill';
-      availableBalance = wallet.balance.paybill;
-    }
+    const availableBalance = wallet.balance.available;
 
     if (paymentMethod === 'upi') {
       // For UPI, we would redirect to Razorpay - for now, return info for frontend
@@ -1310,19 +1302,13 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
     // Check balance
     if (availableBalance < lockFee) {
       return sendBadRequest(res,
-        `Insufficient ${balanceSource === 'paybill' ? 'PayBill' : 'wallet'} balance. ` +
-        `Required: ₹${lockFee}, Available: ₹${availableBalance}`
+        `Insufficient wallet balance. Required: ₹${lockFee}, Available: ₹${availableBalance}`
       );
     }
 
-    // 4. Deduct from wallet/paybill
+    // 4. Deduct from wallet
     const balanceBefore = wallet.balance.total;
-
-    if (balanceSource === 'paybill') {
-      await wallet.usePayBillBalance(lockFee);
-    } else {
-      await wallet.deductFunds(lockFee);
-    }
+    await wallet.deductFunds(lockFee);
 
     const balanceAfter = wallet.balance.total;
     console.log('🔒💰 [LOCK WITH PAYMENT] Payment deducted:', { balanceBefore, balanceAfter, lockFee });
@@ -1357,7 +1343,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
       balanceBefore,
       balanceAfter,
       isReversible: true,
-      notes: `Lock duration: ${duration} hours, Payment method: ${balanceSource}`
+      notes: `Lock duration: ${duration} hours, Payment method: wallet`
     });
 
     console.log('🔒💰 [LOCK WITH PAYMENT] Transaction created:', transaction.transactionId);
@@ -1430,7 +1416,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
       lockFee,
       lockFeePercentage,
       lockDuration: duration,
-      paymentMethod: balanceSource,
+      paymentMethod: 'wallet',
       paymentTransactionId: transaction._id,
       lockPaymentStatus: 'paid',
       isPaidLock: true
@@ -1458,7 +1444,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
         duration,
         expiresAt,
         transactionId: transaction.transactionId,
-        paymentMethod: balanceSource,
+        paymentMethod: 'wallet',
         message: `Price locked for ${LOCK_FEE_CONFIG[duration].label}. ₹${lockFee} will be deducted from your final payment.`
       }
     }, 'Item locked successfully with payment');

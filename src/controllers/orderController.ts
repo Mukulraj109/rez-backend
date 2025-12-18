@@ -406,11 +406,11 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
           const wallet = await Wallet.findOne({ user: userId });
 
           if (wallet) {
-            // Find and update wasil coin in coins array
-            const wasilCoin = wallet.coins.find((c: any) => c.type === 'wasil');
-            if (wasilCoin && wasilCoin.amount >= coinsUsed.wasilCoins) {
-              wasilCoin.amount -= coinsUsed.wasilCoins;
-              wasilCoin.lastUsed = new Date();
+            // Find and update rez coin in coins array
+            const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+            if (rezCoin && rezCoin.amount >= coinsUsed.wasilCoins) {
+              rezCoin.amount -= coinsUsed.wasilCoins;
+              rezCoin.lastUsed = new Date();
 
               // Update wallet balances
               wallet.balance.available = Math.max(0, wallet.balance.available - coinsUsed.wasilCoins);
@@ -421,7 +421,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
               await wallet.save();
               console.log('✅ [CREATE ORDER] REZ coins deducted from wallet for COD:', coinsUsed.wasilCoins);
             } else {
-              console.warn('⚠️ [CREATE ORDER] Insufficient wasil coins in wallet');
+              console.warn('⚠️ [CREATE ORDER] Insufficient rez coins in wallet');
             }
           }
 
