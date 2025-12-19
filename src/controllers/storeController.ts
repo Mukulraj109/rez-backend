@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { Store } from '../models/Store';
 import { Product } from '../models/Product';
 import { Order } from '../models/Order';
@@ -1599,8 +1600,10 @@ export const getRecentEarnings = asyncHandler(async (req: Request, res: Response
     }
 
     // Get recent transactions for this store
+    // Convert storeId string to ObjectId for proper matching
+    const storeObjectId = new mongoose.Types.ObjectId(storeId);
     const recentTransactions = await Transaction.find({
-      'source.metadata.storeInfo.id': storeId,
+      'source.metadata.storeInfo.id': storeObjectId,
       'status.current': 'completed',
       category: { $in: ['spending', 'paybill', 'cashback', 'earning'] }
     })

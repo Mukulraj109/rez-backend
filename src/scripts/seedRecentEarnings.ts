@@ -107,16 +107,21 @@ async function seedRecentEarnings() {
           category: 'earning',
           description: `Earned at ${store.name}`,
           source: {
-            type: 'store_purchase',
+            type: 'order', // Valid enum value
+            reference: store._id, // Required field - using store as reference
+            description: `Purchase at ${store.name}`,
             metadata: {
               storeInfo: {
-                id: store._id.toString(),
+                id: store._id, // Store as ObjectId, not string
                 name: store.name,
               },
               orderValue: amount,
               coinsEarned: coinsEarned,
             }
           },
+          balanceBefore: 0,
+          balanceAfter: coinsEarned,
+          isReversible: false,
           status: {
             current: 'completed',
             history: [{
