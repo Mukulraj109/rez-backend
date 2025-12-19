@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Store } from '../models/Store';
 import { Product } from '../models/Product';
 import { Order } from '../models/Order';
+import { Transaction } from '../models/Transaction';
 import {
   sendSuccess,
   sendNotFound,
@@ -1511,6 +1512,146 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
     throw new AppError('Failed to get stores by category slug', 500);
   }
 });
+
+// Get user's visit count and loyalty info for a specific store
+export const getUserStoreVisits = asyncHandler(async (req: Request, res: Response) => {
+  const { storeId } = req.params;
+  const userId = (req as any).userId;
+
+  if (!userId) {
+    return sendBadRequest(res, 'User authentication required');
+  }
+
+  try {
+    // Get the store to check loyalty config
+    const store = await Store.findById(storeId).select('name rewardRules');
+
+    if (!store) {
+      return sendNotFound(res, 'Store not found');
+    }
+
+    // Count transactions (visits) for this user at this store
+    const visitCount = await Transaction.countDocuments({
+      user: userId,
+      'source.metadata.storeInfo.id': storeId,
+      'status.current': 'completed',
+      category: { $in: ['spending', 'paybill', 'cashback'] }
+    });
+
+    // Get loyalty configuration from store
+    const loyaltyConfig = (store as any).rewardRules?.visitMilestoneRewards || [];
+
+    // Find the next reward milestone
+    let nextMilestone = null;
+    let totalVisitsRequired = 5; // Default
+    let nextReward = 'Free Coffee'; // Default
+
+    for (const milestone of loyaltyConfig) {
+      if (visitCount < milestone.visits) {
+        nextMilestone = milestone;
+        totalVisitsRequired = milestone.visits;
+        nextReward = milestone.reward || 'Free Reward';
+        break;
+      }
+    }
+
+    // If user completed all milestones, use the last one as reference
+    if (!nextMilestone && loyaltyConfig.length > 0) {
+      const lastMilestone = loyaltyConfig[loyaltyConfig.length - 1];
+      totalVisitsRequired = lastMilestone.visits;
+      nextReward = lastMilestone.reward || 'Free Reward';
+    }
+
+    // Calculate progress
+    const progress = Math.min(visitCount / totalVisitsRequired, 1);
+    const visitsRemaining = Math.max(totalVisitsRequired - visitCount, 0);
+
+    return sendSuccess(res, {
+      storeId,
+      storeName: store.name,
+      visitsCompleted: visitCount,
+      totalVisitsRequired,
+      nextReward,
+      visitsRemaining,
+      progress,
+      hasCompletedMilestone: visitCount >= totalVisitsRequired,
+      loyaltyConfig
+    }, 'User store visits retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [GET USER STORE VISITS] Error:', error);
+    throw new AppError('Failed to get user store visits', 500);
+  }
+});
+
+// Get recent earnings by users at a specific store
+// Shows "People are earning here" section data
+export const getRecentEarnings = asyncHandler(async (req: Request, res: Response) => {
+  const { storeId } = req.params;
+  const limit = parseInt(req.query.limit as string) || 5;
+
+  try {
+    // Get the store to verify it exists
+    const store = await Store.findById(storeId).select('name');
+
+    if (!store) {
+      return sendNotFound(res, 'Store not found');
+    }
+
+    // Get recent transactions for this store
+    const recentTransactions = await Transaction.find({
+      'source.metadata.storeInfo.id': storeId,
+      'status.current': 'completed',
+      category: { $in: ['spending', 'paybill', 'cashback', 'earning'] }
+    })
+    .populate('user', 'name firstName lastName avatar profilePicture')
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .lean();
+
+    // Format the response
+    const recentEarnings = recentTransactions.map((tx: any) => {
+      const user = tx.user || {};
+      const userName = user.firstName || user.name?.split(' ')[0] || 'User';
+      const amount = Math.abs(tx.amount || 0);
+      const coinsEarned = Math.round(amount * 0.05); // 5% coin earning
+
+      // Calculate time ago
+      const timeAgo = getTimeAgo(new Date(tx.createdAt));
+
+      return {
+        id: tx._id.toString(),
+        name: userName,
+        avatar: user.avatar || user.profilePicture || null,
+        amountEarned: amount,
+        coinsEarned,
+        timeAgo
+      };
+    });
+
+    return sendSuccess(res, recentEarnings, 'Recent earnings retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [GET RECENT EARNINGS] Error:', error);
+    throw new AppError('Failed to get recent earnings', 500);
+  }
+});
+
+// Helper function to format time ago
+function getTimeAgo(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? 's' : ''} ago`;
+  return `${Math.floor(diffDays / 30)} month${Math.floor(diffDays / 30) > 1 ? 's' : ''} ago`;
+}
 
 // Helper function to calculate distance between two coordinates
 function calculateDistance(coord1: [number, number], coord2: [number, number]): number {

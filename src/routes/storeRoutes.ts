@@ -18,7 +18,9 @@ import {
   sendFollowerNotification,
   notifyNewOffer,
   notifyNewProduct,
-  getStoresByCategorySlug
+  getStoresByCategorySlug,
+  getUserStoreVisits,
+  getRecentEarnings
 } from '../controllers/storeController';
 import { getStoreReviews } from '../controllers/reviewController';
 import {
@@ -300,6 +302,31 @@ router.get('/:storeId/availability',
     storeId: commonSchemas.objectId().required()
   })),
   checkStoreAvailability
+);
+
+// ============================================
+// User Loyalty Routes
+// ============================================
+
+// Get user's visit count and loyalty info for a store
+router.get('/:storeId/user-visits',
+  authenticate,
+  validateParams(Joi.object({
+    storeId: commonSchemas.objectId().required()
+  })),
+  getUserStoreVisits
+);
+
+// Get recent earnings by users at a store (People are earning here)
+router.get('/:storeId/recent-earnings',
+  optionalAuth,
+  validateParams(Joi.object({
+    storeId: commonSchemas.objectId().required()
+  })),
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(20).default(5)
+  })),
+  getRecentEarnings
 );
 
 // ============================================
