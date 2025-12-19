@@ -107,9 +107,10 @@ export const getStoreReviews = asyncHandler(async (req: Request, res: Response) 
     // Transform reviews to match frontend format
     const transformedReviews = reviews.map((review: any) => {
       // Combine firstName and lastName to create full name
+      // Fall back to userName field if user profile is not populated
       const firstName = review.user?.profile?.firstName || '';
       const lastName = review.user?.profile?.lastName || '';
-      const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || 'Anonymous';
+      const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || review.userName || 'Anonymous';
       
       return {
         id: review._id.toString(),
@@ -128,6 +129,11 @@ export const getStoreReviews = asyncHandler(async (req: Request, res: Response) 
         createdAt: review.createdAt,
         verified: review.verified || false,
         images: review.images || [],
+        metadata: review.metadata ? {
+          cashbackEarned: review.metadata.cashbackEarned,
+          orderNumber: review.metadata.orderNumber,
+          purchaseDate: review.metadata.purchaseDate,
+        } : undefined,
         merchantResponse: review.merchantResponse ? {
           message: review.merchantResponse.message,
           respondedAt: review.merchantResponse.respondedAt,
