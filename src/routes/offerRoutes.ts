@@ -39,6 +39,8 @@ router.get('/',
   validateQuery(Joi.object({
     category: commonSchemas.objectId,
     store: commonSchemas.objectId,
+    type: Joi.string().valid('cashback', 'discount', 'voucher', 'combo', 'special', 'walk_in'),
+    tags: Joi.string(),
     featured: Joi.boolean(),
     trending: Joi.boolean(),
     bestSeller: Joi.boolean(),
