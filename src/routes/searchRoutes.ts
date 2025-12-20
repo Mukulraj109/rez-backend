@@ -13,7 +13,7 @@ import {
   clearSearchHistory,
   getSearchAnalytics
 } from '../controllers/searchController';
-import { protect } from '../middleware/auth';
+import { protect, optionalAuth } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -115,15 +115,15 @@ router.get('/history', protect, getSearchHistory);
 
 /**
  * @route   GET /api/search/history/popular
- * @desc    Get user's popular/frequent searches for autocomplete
- * @access  Protected
+ * @desc    Get popular/frequent searches for autocomplete (works with or without auth)
+ * @access  Public (optional auth for personalized results)
  * @query   limit - Maximum results (optional, default: 10, max: 20)
  * @query   type - Filter by type (optional)
  *
  * @example
  * GET /api/search/history/popular?limit=5
  */
-router.get('/history/popular', protect, getPopularSearches);
+router.get('/history/popular', optionalAuth, getPopularSearches);
 
 /**
  * @route   GET /api/search/history/recent

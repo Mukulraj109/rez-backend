@@ -64,13 +64,18 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
     }
 
     // Location-based filtering
+    // Using $geoWithin with $centerSphere for better compatibility with legacy coordinate arrays
+    let userLng: number | undefined;
+    let userLat: number | undefined;
     if (location) {
       const [lng, lat] = location.toString().split(',').map(Number);
-      if (!isNaN(lng) && !isNaN(lat)) {
+      if (!isNaN(lng) && !isNaN(lat) && lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90) {
+        userLng = lng;
+        userLat = lat;
+        const radiusInRadians = Number(radius) / 6371; // Earth's radius is ~6371 km
         query['location.coordinates'] = {
-          $near: {
-            $geometry: { type: 'Point', coordinates: [lng, lat] },
-            $maxDistance: Number(radius) * 1000 // Convert km to meters
+          $geoWithin: {
+            $centerSphere: [[lng, lat], radiusInRadians]
           }
         };
       }
@@ -83,7 +88,8 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
         sortOptions['ratings.average'] = -1;
         break;
       case 'distance':
-        // Distance sorting is handled by $near in location query
+        // Distance sorting will be handled after fetching with $geoWithin
+        sortOptions['ratings.average'] = -1; // Default sort, will re-sort by distance after
         break;
       case 'name':
         sortOptions.name = 1;
@@ -114,12 +120,36 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
     console.log(`✅ [GET STORES] Found ${stores.length} stores`);
 
     // Filter by open status if requested
-    let filteredStores = stores;
+    let filteredStores: any[] = stores;
     if (isOpen === 'true') {
       filteredStores = stores.filter((store: any) => {
         // Simple open check - in a real app, you'd implement the isOpen method
         return store.isActive;
       });
+    }
+
+    // Calculate distances if location was provided
+    if (userLng !== undefined && userLat !== undefined) {
+      filteredStores = filteredStores.map((store: any) => {
+        if (store.location?.coordinates && Array.isArray(store.location.coordinates) && store.location.coordinates.length === 2) {
+          try {
+            const distance = calculateDistance([userLng, userLat], store.location.coordinates);
+            return { ...store, distance: Math.round(distance * 100) / 100 };
+          } catch (e) {
+            return { ...store, distance: null };
+          }
+        }
+        return { ...store, distance: null };
+      });
+
+      // Sort by distance if requested
+      if (sortBy === 'distance') {
+        filteredStores.sort((a: any, b: any) => {
+          if (a.distance === null) return 1;
+          if (b.distance === null) return -1;
+          return a.distance - b.distance;
+        });
+      }
     }
 
     const total = await Store.countDocuments(query);
@@ -306,33 +336,76 @@ export const getStoreProducts = asyncHandler(async (req: Request, res: Response)
 
 // Get nearby stores
 export const getNearbyStores = asyncHandler(async (req: Request, res: Response) => {
-  const { lng, lat, longitude, latitude, radius = 5, limit = 10 } = req.query;
-  
-  // Accept both naming conventions
-  const finalLng = lng || longitude;
-  const finalLat = lat || latitude;
+  const { lng, lat, longitude, latitude, location, radius = 5, limit = 10 } = req.query;
+
+  // Accept multiple formats:
+  // 1. lng/lat as separate params
+  // 2. longitude/latitude as separate params
+  // 3. location as "lng,lat" string (from storeSearchService)
+  let finalLng = lng || longitude;
+  let finalLat = lat || latitude;
+
+  // Parse location string if provided (format: "lng,lat")
+  if (!finalLng && !finalLat && location && typeof location === 'string') {
+    const [parsedLng, parsedLat] = location.split(',');
+    if (parsedLng && parsedLat) {
+      finalLng = parsedLng.trim();
+      finalLat = parsedLat.trim();
+    }
+  }
 
   if (!finalLng || !finalLat) {
-    return sendBadRequest(res, 'Longitude and latitude are required');
+    return sendBadRequest(res, 'Longitude and latitude are required. Provide lng/lat, longitude/latitude, or location as "lng,lat"');
+  }
+
+  const userLng = Number(finalLng);
+  const userLat = Number(finalLat);
+
+  // Validate coordinates
+  if (isNaN(userLng) || isNaN(userLat) || userLng < -180 || userLng > 180 || userLat < -90 || userLat > 90) {
+    return sendBadRequest(res, 'Invalid coordinates provided');
   }
 
   try {
+    // Use $geoWithin with $centerSphere for better compatibility with legacy coordinate arrays
+    const radiusInRadians = Number(radius) / 6371; // Earth's radius is ~6371 km
+
     const stores = await Store.find({
       isActive: true,
-      'contactInfo.location.coordinates': {
-        $near: {
-          $geometry: { type: 'Point', coordinates: [Number(finalLng), Number(finalLat)] },
-          $maxDistance: Number(radius) * 1000 // Convert km to meters
+      'location.coordinates': {
+        $geoWithin: {
+          $centerSphere: [[userLng, userLat], radiusInRadians]
         }
       }
     })
-    .populate('categories', 'name slug')
+    .populate('category', 'name slug icon')
     .limit(Number(limit))
     .lean();
 
-    sendSuccess(res, stores, 'Nearby stores retrieved successfully');
+    // Calculate distances for each store
+    const storesWithDistance = stores.map((store: any) => {
+      if (store.location?.coordinates && Array.isArray(store.location.coordinates) && store.location.coordinates.length === 2) {
+        try {
+          const distance = calculateDistance([userLng, userLat], store.location.coordinates);
+          return { ...store, distance: Math.round(distance * 100) / 100 };
+        } catch (e) {
+          return { ...store, distance: null };
+        }
+      }
+      return { ...store, distance: null };
+    });
+
+    // Sort by distance
+    storesWithDistance.sort((a: any, b: any) => {
+      if (a.distance === null) return 1;
+      if (b.distance === null) return -1;
+      return a.distance - b.distance;
+    });
+
+    sendSuccess(res, { stores: storesWithDistance }, 'Nearby stores retrieved successfully');
 
   } catch (error) {
+    console.error('Error fetching nearby stores:', error);
     throw new AppError('Failed to fetch nearby stores', 500);
   }
 });
@@ -347,6 +420,7 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
       isActive: true,
       isFeatured: true
     })
+    .populate('category', 'name slug icon')
     .sort({ 'ratings.average': -1, createdAt: -1 })
     .limit(Number(limit))
     .lean();
@@ -356,6 +430,7 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
       stores = await Store.find({
         isActive: true
       })
+      .populate('category', 'name slug icon')
       .sort({ 'ratings.average': -1, createdAt: -1 })
       .limit(Number(limit))
       .lean();
@@ -367,6 +442,7 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
         isActive: true,
         _id: { $nin: featuredIds }
       })
+      .populate('category', 'name slug icon')
       .sort({ 'ratings.average': -1, createdAt: -1 })
       .limit(Number(limit) - stores.length)
       .lean();
@@ -374,7 +450,7 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
       stores = [...stores, ...additionalStores];
     }
 
-    sendSuccess(res, stores, 'Featured stores retrieved successfully');
+    sendSuccess(res, { stores }, 'Featured stores retrieved successfully');
 
   } catch (error) {
     throw new AppError('Failed to fetch featured stores', 500);
@@ -898,13 +974,21 @@ export const advancedStoreSearch = asyncHandler(async (req: Request, res: Respon
     }
 
     // Location-based filtering
+    // Note: Using $geoWithin with $centerSphere for better compatibility with legacy coordinate arrays
+    // This avoids issues with $near requiring specific index configurations
+    let userLng: number | undefined;
+    let userLat: number | undefined;
     if (location) {
       const [lng, lat] = location.toString().split(',').map(Number);
-      if (!isNaN(lng) && !isNaN(lat)) {
+      if (!isNaN(lng) && !isNaN(lat) && lng >= -180 && lng <= 180 && lat >= -90 && lat <= 90) {
+        userLng = lng;
+        userLat = lat;
+        // Use $geoWithin with $centerSphere for more reliable geospatial queries
+        // $centerSphere takes [lng, lat] and radius in radians (distance / Earth's radius in km)
+        const radiusInRadians = Number(radius) / 6371; // Earth's radius is ~6371 km
         query['location.coordinates'] = {
-          $near: {
-            $geometry: { type: 'Point', coordinates: [lng, lat] },
-            $maxDistance: Number(radius) * 1000
+          $geoWithin: {
+            $centerSphere: [[lng, lat], radiusInRadians]
           }
         };
       }
@@ -946,16 +1030,28 @@ export const advancedStoreSearch = asyncHandler(async (req: Request, res: Respon
     const total = await Store.countDocuments(query);
 
     // Calculate distances if location provided
-    if (location && stores.length > 0) {
-      const [lng, lat] = location.toString().split(',').map(Number);
+    if (userLng !== undefined && userLat !== undefined && stores.length > 0) {
       stores.forEach((store: any) => {
-        if (store.location?.coordinates) {
-          store.distance = calculateDistance(
-            [lng, lat],
-            store.location.coordinates
-          );
+        if (store.location?.coordinates && Array.isArray(store.location.coordinates) && store.location.coordinates.length === 2) {
+          try {
+            store.distance = calculateDistance(
+              [userLng, userLat],
+              store.location.coordinates
+            );
+          } catch (e) {
+            store.distance = null;
+          }
         }
       });
+
+      // Sort by distance if sortBy is distance
+      if (sortBy === 'distance') {
+        stores.sort((a: any, b: any) => {
+          if (a.distance === null) return 1;
+          if (b.distance === null) return -1;
+          return a.distance - b.distance;
+        });
+      }
     }
 
     sendSuccess(res, {
@@ -1673,3 +1769,148 @@ function calculateDistance(coord1: [number, number], coord2: [number, number]): 
 
   return distance;
 }
+
+// Get top cashback stores
+// GET /api/stores/top-cashback
+export const getTopCashbackStores = asyncHandler(async (req: Request, res: Response) => {
+  const { latitude, longitude, limit = 10, minCashback = 10 } = req.query;
+
+  try {
+    // Build query for stores with cashback >= minCashback
+    const query: any = {
+      isActive: true,
+      'offers.cashback': { $exists: true, $gte: Number(minCashback) }
+    };
+
+    let stores = await Store.find(query)
+      .populate('category', 'name slug icon')
+      .sort({ 'offers.cashback': -1, 'ratings.average': -1 })
+      .limit(Number(limit))
+      .lean();
+
+    // Calculate distance if location provided
+    if (latitude && longitude) {
+      const userLat = Number(latitude);
+      const userLon = Number(longitude);
+
+      stores = stores.map((store: any) => {
+        if (store.location?.coordinates && store.location.coordinates.length === 2) {
+          const [storeLon, storeLat] = store.location.coordinates;
+          const distance = calculateDistance([userLon, userLat], [storeLon, storeLat]);
+          return { ...store, distance: Math.round(distance * 10) / 10 }; // Round to 1 decimal
+        }
+        return store;
+      });
+
+      // Sort by distance if location provided
+      stores.sort((a: any, b: any) => {
+        if (a.distance && b.distance) {
+          return a.distance - b.distance;
+        }
+        return (b.offers?.cashback || 0) - (a.offers?.cashback || 0);
+      });
+    }
+
+    // Format response
+    const formattedStores = stores.map((store: any) => ({
+      _id: store._id,
+      name: store.name,
+      slug: store.slug,
+      logo: store.logo,
+      cashbackPercentage: store.offers?.cashback || 0,
+      maxCashback: store.offers?.maxCashback,
+      minOrderAmount: store.offers?.minOrderAmount,
+      distance: store.distance,
+      rating: store.ratings?.average || 0,
+      reviewCount: store.ratings?.count || 0,
+      category: store.category,
+      location: store.location
+    }));
+
+    sendSuccess(res, { stores: formattedStores }, 'Top cashback stores retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [GET TOP CASHBACK STORES] Error:', error);
+    throw new AppError('Failed to fetch top cashback stores', 500);
+  }
+});
+
+// Get BNPL (Buy Now Pay Later) stores
+// GET /api/stores/bnpl
+export const getBNPLStores = asyncHandler(async (req: Request, res: Response) => {
+  const { latitude, longitude, limit = 10 } = req.query;
+
+  try {
+    // Query stores with BNPL payment methods
+    // Check both operationalInfo.paymentMethods and paymentSettings.acceptPayLater
+    const query: any = {
+      isActive: true,
+      $or: [
+        { 'operationalInfo.paymentMethods': { $in: ['bnpl', 'installment', 'pay-later', 'paylater'] } },
+        { 'paymentSettings.acceptPayLater': true }
+      ]
+    };
+
+    let stores = await Store.find(query)
+      .populate('category', 'name slug icon')
+      .sort({ 'ratings.average': -1, createdAt: -1 })
+      .limit(Number(limit))
+      .lean();
+
+    // Calculate distance if location provided
+    if (latitude && longitude) {
+      const userLat = Number(latitude);
+      const userLon = Number(longitude);
+
+      stores = stores.map((store: any) => {
+        if (store.location?.coordinates && store.location.coordinates.length === 2) {
+          const [storeLon, storeLat] = store.location.coordinates;
+          const distance = calculateDistance([userLon, userLat], [storeLon, storeLat]);
+          return { ...store, distance: Math.round(distance * 10) / 10 };
+        }
+        return store;
+      });
+
+      // Sort by distance if location provided
+      stores.sort((a: any, b: any) => {
+        if (a.distance && b.distance) {
+          return a.distance - b.distance;
+        }
+        return (b.ratings?.average || 0) - (a.ratings?.average || 0);
+      });
+    }
+
+    // Format response with BNPL options
+    const formattedStores = stores.map((store: any) => {
+      // Extract BNPL options from payment methods
+      const paymentMethods = store.operationalInfo?.paymentMethods || [];
+      const bnplOptions: string[] = [];
+      
+      if (paymentMethods.includes('bnpl') || paymentMethods.includes('pay-later') || paymentMethods.includes('paylater')) {
+        bnplOptions.push('3 months', '6 months');
+      }
+      if (paymentMethods.includes('installment')) {
+        bnplOptions.push('3 months', '6 months', '12 months');
+      }
+
+      return {
+        _id: store._id,
+        name: store.name,
+        slug: store.slug,
+        logo: store.logo,
+        bnplOptions: bnplOptions.length > 0 ? bnplOptions : ['3 months', '6 months'], // Default options
+        paymentMethods: paymentMethods,
+        distance: store.distance,
+        rating: store.ratings?.average || 0,
+        category: store.category,
+        location: store.location
+      };
+    });
+
+    sendSuccess(res, { stores: formattedStores }, 'BNPL stores retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [GET BNPL STORES] Error:', error);
+    throw new AppError('Failed to fetch BNPL stores', 500);
+  }
+});

@@ -1956,3 +1956,105 @@ export const getProductsByCategorySlugHomepage = asyncHandler(async (req: Reques
     throw new AppError('Failed to get products by category', 500);
   }
 });
+
+// Get similar products based on query or category
+// GET /api/products/similar
+export const getSimilarProducts = asyncHandler(async (req: Request, res: Response) => {
+  const { query, category, limit = 10 } = req.query;
+
+  try {
+    console.log('🔍 [SIMILAR PRODUCTS] Query params:', { query, category, limit });
+
+    let similarProducts: any[] = [];
+
+    if (category) {
+      // Find products in the same category
+      similarProducts = await Product.find({
+        category: category,
+        isActive: true,
+        'inventory.isAvailable': true
+      })
+        .populate('category', 'name slug')
+        .populate('store', 'name logo slug location')
+        .sort({ 'ratings.average': -1, 'analytics.views': -1 })
+        .limit(Number(limit))
+        .lean();
+    } else if (query) {
+      // Find products with similar tags or in similar categories
+      // First, try to find products with matching tags
+      const searchQuery = query as string;
+      const searchTerms = searchQuery.toLowerCase().split(/\s+/);
+
+      // Build query for similar products
+      const queryObj: any = {
+        isActive: true,
+        'inventory.isAvailable': true,
+        $or: [
+          { name: { $regex: searchQuery, $options: 'i' } },
+          { tags: { $in: searchTerms } },
+          { 'shortDescription': { $regex: searchQuery, $options: 'i' } }
+        ]
+      };
+
+      similarProducts = await Product.find(queryObj)
+        .populate('category', 'name slug')
+        .populate('store', 'name logo slug location')
+        .sort({ 'ratings.average': -1, 'analytics.views': -1 })
+        .limit(Number(limit))
+        .lean();
+
+      // If not enough results, get products from same categories as search results
+      if (similarProducts.length < Number(limit)) {
+        const categoryIds = [...new Set(similarProducts.map(p => p.category?._id || p.category).filter(Boolean))];
+        
+        if (categoryIds.length > 0) {
+          const additionalProducts = await Product.find({
+            category: { $in: categoryIds },
+            isActive: true,
+            'inventory.isAvailable': true,
+            _id: { $nin: similarProducts.map(p => p._id) }
+          })
+            .populate('category', 'name slug')
+            .populate('store', 'name logo slug location')
+            .sort({ 'ratings.average': -1, createdAt: -1 })
+            .limit(Number(limit) - similarProducts.length)
+            .lean();
+
+          similarProducts = [...similarProducts, ...additionalProducts];
+        }
+      }
+    } else {
+      // If no query or category, return popular products
+      similarProducts = await Product.find({
+        isActive: true,
+        'inventory.isAvailable': true
+      })
+        .populate('category', 'name slug')
+        .populate('store', 'name logo slug location')
+        .sort({ 'ratings.average': -1, 'analytics.views': -1 })
+        .limit(Number(limit))
+        .lean();
+    }
+
+    // Format response
+    const formattedProducts = similarProducts.map((product: any) => ({
+      _id: product._id,
+      name: product.name,
+      slug: product.slug,
+      price: product.pricing?.selling || product.pricing?.original || 0,
+      originalPrice: product.pricing?.original,
+      image: product.images?.[0] || product.images?.[0]?.url || null,
+      category: product.category,
+      store: product.store,
+      rating: product.ratings?.average || 0,
+      reviewCount: product.ratings?.count || 0
+    }));
+
+    console.log('✅ [SIMILAR PRODUCTS] Found', formattedProducts.length, 'similar products');
+    sendSuccess(res, { products: formattedProducts }, 'Similar products retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [SIMILAR PRODUCTS] Error:', error);
+    throw new AppError('Failed to fetch similar products', 500);
+  }
+});

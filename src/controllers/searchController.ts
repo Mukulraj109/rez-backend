@@ -877,22 +877,46 @@ export const getSearchHistory = asyncHandler(async (req: Request, res: Response)
 /**
  * Get popular/frequent searches for autocomplete
  * GET /api/search/history/popular
+ * Works with or without authentication - for discovery UI
  */
 export const getPopularSearches = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?._id;
-
-  if (!userId) {
-    throw new AppError('User not authenticated', 401);
-  }
-
   const { limit = 10, type } = req.query;
   const limitNum = Math.min(Number(limit), 20);
 
-  // Get popular searches using aggregation
-  let popularSearches = await (SearchHistory as any).getPopularSearches(
-    userId,
-    limitNum
-  );
+  let popularSearches: any[] = [];
+
+  if (userId) {
+    // If authenticated, get user-specific popular searches
+    popularSearches = await (SearchHistory as any).getPopularSearches(
+      userId,
+      limitNum
+    );
+  }
+
+  // If no user-specific searches or not authenticated, get global popular searches
+  if (!userId || popularSearches.length === 0) {
+    // Aggregate all searches to get global popular searches
+    popularSearches = await SearchHistory.aggregate([
+      {
+        $group: {
+          _id: '$query',
+          count: { $sum: 1 },
+          type: { $first: '$type' },
+          lastSearched: { $max: '$createdAt' }
+        }
+      },
+      { $sort: { count: -1, lastSearched: -1 } },
+      { $limit: limitNum }
+    ]).then(results => 
+      results.map(item => ({
+        query: item._id,
+        count: item.count,
+        type: item.type,
+        lastSearched: item.lastSearched
+      }))
+    );
+  }
 
   // Filter by type if specified
   if (type && ['product', 'store', 'general'].includes(type as string)) {
@@ -900,7 +924,7 @@ export const getPopularSearches = asyncHandler(async (req: Request, res: Respons
   }
 
   console.log('🔥 [SEARCH HISTORY] Popular searches:', {
-    userId,
+    userId: userId || 'anonymous',
     count: popularSearches.length
   });
 
