@@ -487,10 +487,11 @@ const StoreSchema = new Schema<IStore>({
       type: Boolean,
       default: true
     },
-    paymentMethods: [{
-      type: String,
-      enum: ['cash', 'card', 'upi', 'wallet', 'netbanking']
-    }]
+    paymentMethods: {
+      type: [String],
+      enum: ['cash', 'card', 'upi', 'wallet', 'netbanking', 'bnpl', 'pay-later', 'installment'],
+      default: ['upi', 'card', 'wallet', 'cash']
+    }
   },
   deliveryCategories: {
     fastDelivery: {

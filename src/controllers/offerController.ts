@@ -23,10 +23,13 @@ export const getOffers = async (req: Request, res: Response) => {
       limit = 20,
       category,
       store,
+      type,
+      tags,
       featured,
       trending,
       new: isNew,
       minCashback,
+      maxCashback,
       sortBy = 'createdAt',
       order = 'desc',
     } = req.query;
@@ -43,7 +46,15 @@ export const getOffers = async (req: Request, res: Response) => {
     }
 
     if (store) {
-      filter.store = store;
+      filter['store.id'] = store;
+    }
+
+    if (type) {
+      filter.type = type;
+    }
+
+    if (tags) {
+      filter['metadata.tags'] = { $in: [tags] };
     }
 
     if (featured === 'true') {
@@ -58,8 +69,16 @@ export const getOffers = async (req: Request, res: Response) => {
       filter['metadata.isNew'] = true;
     }
 
-    if (minCashback) {
-      filter.cashBackPercentage = { $gte: Number(minCashback) };
+    if (minCashback || maxCashback) {
+      filter.cashbackPercentage = {};
+      if (minCashback) {
+        filter.cashbackPercentage.$gte = Number(minCashback);
+      }
+      if (maxCashback) {
+        filter.cashbackPercentage.$lte = Number(maxCashback);
+      }
+    } else if (minCashback) {
+      filter.cashbackPercentage = { $gte: Number(minCashback) };
     }
 
     // Sort options

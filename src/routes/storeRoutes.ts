@@ -20,7 +20,9 @@ import {
   notifyNewProduct,
   getStoresByCategorySlug,
   getUserStoreVisits,
-  getRecentEarnings
+  getRecentEarnings,
+  getTopCashbackStores,
+  getBNPLStores
 } from '../controllers/storeController';
 import { getStoreReviews } from '../controllers/reviewController';
 import {
@@ -132,6 +134,31 @@ router.get('/trending',
     days: Joi.number().integer().min(1).max(30).default(7)
   })),
   getTrendingStores
+);
+
+// Get top cashback stores - FOR FRONTEND DISCOVERY UI
+router.get('/top-cashback',
+  // generalLimiter, // Disabled for development
+  optionalAuth,
+  validateQuery(Joi.object({
+    latitude: Joi.number().min(-90).max(90),
+    longitude: Joi.number().min(-180).max(180),
+    limit: Joi.number().integer().min(1).max(50).default(10),
+    minCashback: Joi.number().min(0).max(100).default(10)
+  })),
+  getTopCashbackStores
+);
+
+// Get BNPL stores - FOR FRONTEND DISCOVERY UI
+router.get('/bnpl',
+  // generalLimiter, // Disabled for development
+  optionalAuth,
+  validateQuery(Joi.object({
+    latitude: Joi.number().min(-90).max(90),
+    longitude: Joi.number().min(-180).max(180),
+    limit: Joi.number().integer().min(1).max(50).default(10)
+  })),
+  getBNPLStores
 );
 
 // Get stores by category

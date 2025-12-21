@@ -21,7 +21,8 @@ import {
   getPopularProducts,
   getNearbyProducts,
   getHotDeals,
-  getProductsByCategorySlugHomepage
+  getProductsByCategorySlugHomepage,
+  getSimilarProducts
 } from '../controllers/productController';
 import { optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, productSchemas, commonSchemas } from '../middleware/validation';
@@ -128,6 +129,18 @@ router.get('/hot-deals',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   getHotDeals
+);
+
+// Get similar products - FOR FRONTEND EMPTY STATE
+router.get('/similar',
+  // generalLimiter,, // Disabled for development
+  optionalAuth,
+  validateQuery(Joi.object({
+    query: Joi.string().trim().max(100),
+    category: commonSchemas.objectId(),
+    limit: Joi.number().integer().min(1).max(50).default(10)
+  })),
+  getSimilarProducts
 );
 
 // Get products by category slug - FOR FRONTEND HOMEPAGE CATEGORY SECTIONS
