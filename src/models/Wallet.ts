@@ -6,8 +6,12 @@ export interface IWalletModel extends Model<IWallet> {
   getWithSummary(userId: Types.ObjectId, period?: 'day' | 'week' | 'month' | 'year'): Promise<any>;
 }
 
-// Coin Type enum - 3 types only
-export type CoinType = 'rez' | 'branded' | 'promo';
+// Coin Type enum - 4 types (ReZ, Privé, Branded, Promo)
+// ReZ: Universal coins, never expire, earned from purchases/check-ins
+// Privé: Premium coins, 12-month expiry, earned from campaigns/elite tier
+// Branded: Merchant-specific coins, 6-month expiry
+// Promo: Limited-time promotional coins, campaign-based expiry
+export type CoinType = 'rez' | 'prive' | 'branded' | 'promo';
 
 // Branded Coin Details (merchant-specific coins)
 export interface IBrandedCoinDetails {
@@ -153,11 +157,11 @@ const WalletSchema = new Schema<IWallet>({
       min: 0
     }
   },
-  // ReZ Coins (universal) and Promo Coins (limited-time)
+  // ReZ Coins (universal), Privé Coins (premium), and Promo Coins (limited-time)
   coins: [{
     type: {
       type: String,
-      enum: ['rez', 'promo'],
+      enum: ['rez', 'prive', 'promo'],
       required: true
     },
     amount: {
@@ -171,7 +175,7 @@ const WalletSchema = new Schema<IWallet>({
     },
     color: {
       type: String,
-      default: '#00C06A' // Green for ReZ, Gold #FFC857 for Promo
+      default: '#00C06A' // Green for ReZ, Dark Gold #B8860B for Privé, Gold #FFC857 for Promo
     },
     earnedDate: Date,
     lastUsed: Date,
@@ -601,17 +605,18 @@ WalletSchema.methods.useBrandedCoins = async function(
   await this.syncWithUser();
 };
 
-// Method to get coin usage order (Promo > Branded > ReZ)
+// Method to get coin usage order (Promo > Branded > Privé > ReZ)
+// Priority: Use expiring/limited coins first, then premium, then universal
 WalletSchema.methods.getCoinUsageOrder = function(): { type: string; amount: number; merchantId?: string }[] {
   const order: { type: string; amount: number; merchantId?: string }[] = [];
 
-  // 1. Promo Coins first (limited-time, highest priority)
+  // 1. Promo Coins first (limited-time, highest priority - campaign-based expiry)
   const promoCoin = this.coins.find((c: any) => c.type === 'promo' && c.isActive && c.amount > 0);
   if (promoCoin) {
     order.push({ type: 'promo', amount: promoCoin.amount });
   }
 
-  // 2. Branded Coins second (merchant-specific)
+  // 2. Branded Coins second (merchant-specific, 6-month expiry)
   for (const brandedCoin of this.brandedCoins || []) {
     if (brandedCoin.amount > 0) {
       order.push({
@@ -622,7 +627,13 @@ WalletSchema.methods.getCoinUsageOrder = function(): { type: string; amount: num
     }
   }
 
-  // 3. ReZ Coins last (universal, lowest priority)
+  // 3. Privé Coins third (premium coins, 12-month expiry)
+  const priveCoin = this.coins.find((c: any) => c.type === 'prive' && c.isActive && c.amount > 0);
+  if (priveCoin) {
+    order.push({ type: 'prive', amount: priveCoin.amount });
+  }
+
+  // 4. ReZ Coins last (universal, never expire)
   const rezCoin = this.coins.find((c: any) => c.type === 'rez' && c.isActive && c.amount > 0);
   if (rezCoin) {
     order.push({ type: 'rez', amount: rezCoin.amount });
@@ -686,21 +697,29 @@ WalletSchema.statics.createForUser = async function(userId: Types.ObjectId) {
       pending: 0,
       cashback: 0
     },
-    // ReZ Coins (universal) and Promo Coins (limited-time)
+    // ReZ Coins (universal), Privé Coins (premium), and Promo Coins (limited-time)
     coins: [
       {
         type: 'rez',
         amount: 0,
         isActive: true,
-        color: '#00C06A', // ReZ Green
+        color: '#C9A962', // ReZ Gold (matches documentation)
         earnedDate: new Date(),
-        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+        // ReZ coins never expire per documentation
+      },
+      {
+        type: 'prive',
+        amount: 0,
+        isActive: true,
+        color: '#B8860B', // Privé Dark Gold
+        earnedDate: new Date(),
+        expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) // 12 months per documentation
       },
       {
         type: 'promo',
         amount: 0,
         isActive: true,
-        color: '#FFC857', // ReZ Gold
+        color: '#FFC857', // Promo Gold
         earnedDate: new Date(),
         promoDetails: {
           maxRedemptionPercentage: 20

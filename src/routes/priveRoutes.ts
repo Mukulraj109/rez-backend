@@ -1,7 +1,7 @@
 /**
  * Privé Routes
  *
- * API endpoints for Privé eligibility and reputation system
+ * API endpoints for Privé eligibility, offers, check-in, and dashboard
  */
 
 import { Router } from 'express';
@@ -11,6 +11,13 @@ import {
   refreshEligibility,
   getReputationHistory,
   getImprovementTips,
+  dailyCheckIn,
+  getHabitLoops,
+  getPriveDashboard,
+  getPriveOffers,
+  getPriveOfferById,
+  getPriveHighlights,
+  trackOfferClick,
 } from '../controllers/priveController';
 import { authenticate } from '../middleware/auth';
 
@@ -18,6 +25,10 @@ const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+
+// ==========================================
+// Eligibility & Reputation
+// ==========================================
 
 /**
  * @route   GET /api/prive/eligibility
@@ -53,5 +64,70 @@ router.get('/history', getReputationHistory);
  * @access  Private
  */
 router.get('/tips', getImprovementTips);
+
+// ==========================================
+// Daily Check-in & Habits
+// ==========================================
+
+/**
+ * @route   POST /api/prive/check-in
+ * @desc    Daily check-in with streak tracking
+ * @access  Private
+ */
+router.post('/check-in', dailyCheckIn);
+
+/**
+ * @route   GET /api/prive/habit-loops
+ * @desc    Get daily habit loops with progress
+ * @access  Private
+ */
+router.get('/habit-loops', getHabitLoops);
+
+// ==========================================
+// Dashboard
+// ==========================================
+
+/**
+ * @route   GET /api/prive/dashboard
+ * @desc    Get combined dashboard data (eligibility, coins, offers, etc.)
+ * @access  Private
+ */
+router.get('/dashboard', getPriveDashboard);
+
+// ==========================================
+// Offers
+// ==========================================
+
+/**
+ * @route   GET /api/prive/offers
+ * @desc    Get Privé exclusive offers
+ * @access  Private
+ */
+router.get('/offers', getPriveOffers);
+
+/**
+ * @route   GET /api/prive/offers/:id
+ * @desc    Get single Privé offer by ID
+ * @access  Private
+ */
+router.get('/offers/:id', getPriveOfferById);
+
+/**
+ * @route   POST /api/prive/offers/:id/click
+ * @desc    Track offer click for analytics
+ * @access  Private
+ */
+router.post('/offers/:id/click', trackOfferClick);
+
+// ==========================================
+// Highlights
+// ==========================================
+
+/**
+ * @route   GET /api/prive/highlights
+ * @desc    Get today's personalized highlights
+ * @access  Private
+ */
+router.get('/highlights', getPriveHighlights);
 
 export default router;

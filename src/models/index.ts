@@ -89,6 +89,10 @@ export { SearchHistory } from './SearchHistory';
 export { WebhookLog } from './WebhookLog';
 export { Refund } from './Refund';
 
+// Privé models
+export { default as DailyCheckIn, calculateStreakBonus, getStreakMessage } from './DailyCheckIn';
+export { default as PriveOffer } from './PriveOffer';
+
 // Export types for external use
 export type { IUser, IUserProfile, IUserPreferences, IUserWallet, IUserAuth } from './User';
 export type { ICategory, ICategoryMetadata } from './Category';
@@ -126,3 +130,7 @@ export type { IQuizQuestion, IQuizQuestionModel } from './QuizQuestion';
 export type { ITriviaQuestion, ITriviaQuestionModel } from './TriviaQuestion';
 export type { ICoinTransaction, ICoinTransactionModel } from './CoinTransaction';
 export type { IGameSession, IGameSessionModel } from './GameSession';
+
+// Privé types
+export type { IDailyCheckIn, IDailyCheckInModel } from './DailyCheckIn';
+export type { IPriveOffer, IPriveOfferModel } from './PriveOffer';
