@@ -118,6 +118,7 @@ import searchRoutes from './routes/searchRoutes';
 import mallRoutes from './routes/mallRoutes';  // ReZ Mall routes
 import mallAffiliateRoutes from './routes/mallAffiliateRoutes';  // Mall Affiliate tracking routes (legacy - use cashstore/affiliate)
 import cashStoreAffiliateRoutes from './routes/cashStoreAffiliateRoutes';  // Cash Store affiliate tracking routes
+import priveRoutes from './routes/priveRoutes';  // Privé eligibility and reputation routes
 import webhookRoutes from './routes/webhookRoutes';
 import storeGalleryRoutes from './routes/storeGallery';  // Public store gallery routes
 import productGalleryRoutes from './routes/productGallery';  // Public product gallery routes
@@ -703,6 +704,10 @@ console.log('✅ Mall Affiliate routes registered at /api/mall/affiliate (legacy
 // Cash Store Affiliate Routes - External brand cashback tracking
 app.use(`${API_PREFIX}/cashstore/affiliate`, cashStoreAffiliateRoutes);
 console.log('✅ Cash Store Affiliate routes registered at /api/cashstore/affiliate');
+
+// Privé Routes - Eligibility, reputation, and exclusive access
+app.use(`${API_PREFIX}/prive`, priveRoutes);
+console.log('✅ Privé routes registered at /api/prive');
 
 // Store Gallery Routes - Public gallery viewing
 app.use(`${API_PREFIX}/stores`, storeGalleryRoutes);

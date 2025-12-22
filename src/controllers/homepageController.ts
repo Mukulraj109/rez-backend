@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { getHomepageData } from '../services/homepageService';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess, sendInternalError } from '../utils/response';
+import { modeService, ModeId } from '../services/modeService';
 
 /**
  * Homepage Controller
@@ -15,19 +16,29 @@ import { sendSuccess, sendInternalError } from '../utils/response';
  * @query   {string} sections - Comma-separated list of sections to fetch (optional)
  * @query   {number} limit - Limit for each section (optional, default varies by section)
  * @query   {string} location - User location as "lat,lng" (optional)
+ * @query   {string} mode - Mode filter: 'near-u' | 'mall' | 'cash' | 'prive' (optional)
  */
 export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
   const startTime = Date.now();
 
   try {
     // Parse query parameters
-    const { sections, limit, location } = req.query;
+    const { sections, limit, location, mode } = req.query;
     const userId = (req as any).userId; // From optionalAuth middleware
 
-    // Parse sections if provided
+    // Parse and validate mode
+    const activeMode: ModeId = modeService.getModeFromRequest(
+      mode as string | undefined,
+      (req as any).user?.preferences?.activeMode
+    );
+
+    // Parse sections if provided, or use mode-specific sections
     let requestedSections: string[] | undefined;
     if (sections && typeof sections === 'string') {
       requestedSections = sections.split(',').map(s => s.trim());
+    } else {
+      // Use mode-specific default sections
+      requestedSections = modeService.getHomepageSections(activeMode);
     }
 
     // Parse location if provided
@@ -44,17 +55,19 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
 
     console.log('🏠 [Homepage Controller] Request params:', {
       userId: userId || 'anonymous',
+      mode: activeMode,
       sections: requestedSections?.join(', ') || 'all',
       limit: limitNumber || 'default',
       location: locationCoords ? `${locationCoords.lat},${locationCoords.lng}` : 'none'
     });
 
-    // Fetch homepage data
+    // Fetch homepage data with mode filtering
     const result = await getHomepageData({
       userId,
       sections: requestedSections,
       limit: limitNumber,
-      location: locationCoords
+      location: locationCoords,
+      mode: activeMode, // Pass mode to service
     });
 
     const duration = Date.now() - startTime;
@@ -69,10 +82,13 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
     console.log(`   Sections returned: ${Object.keys(result.data).length}`);
     console.log(`   Total items: ${Object.values(result.data).reduce((sum: number, arr: any) => sum + (Array.isArray(arr) ? arr.length : 0), 0)}`);
 
-    // Send response
+    // Send response with mode info
     sendSuccess(res, {
       ...result.data,
-      _metadata: result.metadata,
+      _metadata: {
+        ...result.metadata,
+        mode: activeMode,
+      },
       _errors: result.errors
     }, 'Homepage data retrieved successfully');
 

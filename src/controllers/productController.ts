@@ -15,6 +15,7 @@ import redisService from '../services/redisService';
 import { CacheTTL } from '../config/redis';
 import { CacheKeys, generateQueryCacheKey, withCache } from '../utils/cacheHelper';
 import { logProductSearch } from '../services/searchHistoryService';
+import { modeService, ModeId } from '../services/modeService';
 
 // Get all products with filtering and pagination
 export const getProducts = asyncHandler(async (req: Request, res: Response) => {
@@ -31,11 +32,18 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
     page = 1,
     limit = 20,
     excludeProducts,
-    diversityMode = 'none'
+    diversityMode = 'none',
+    mode // New: mode filter for 4-mode system
   } = req.query;
 
+  // Parse and validate mode
+  const activeMode: ModeId = modeService.getModeFromRequest(
+    mode as string | undefined,
+    (req as any).user?.preferences?.activeMode
+  );
+
   console.log('🔍 [GET PRODUCTS] Query params:', {
-    category, store, excludeProducts, diversityMode
+    category, store, excludeProducts, diversityMode, mode: activeMode
   });
 
   // Try to get from cache first (skip if excludeProducts or diversityMode is used)
@@ -58,9 +66,21 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
     'inventory.isAvailable': true
   };
 
+  // Apply mode-based store filter
+  if (activeMode !== 'near-u') {
+    // Get stores matching the mode criteria
+    const modeStoreFilter = modeService.getStoreFilter(activeMode);
+    const modeStores = await Store.find(modeStoreFilter).select('_id').lean();
+    const modeStoreIds = modeStores.map(s => s._id);
+
+    if (modeStoreIds.length > 0) {
+      query.store = store ? store : { $in: modeStoreIds };
+    }
+  }
+
   // Apply filters
   if (category) query.category = category;
-  if (store) query.store = store;
+  if (store) query.store = store; // Override mode filter if specific store requested
   if (featured !== undefined) query.isFeatured = featured === 'true';
   if (inStock === 'true') query['inventory.stock'] = { $gt: 0 };
 

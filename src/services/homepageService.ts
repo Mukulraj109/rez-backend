@@ -5,6 +5,7 @@ import Offer from '../models/Offer';
 import { Category } from '../models/Category';
 import { Video } from '../models/Video';
 import { Article } from '../models/Article';
+import { ModeId } from './modeService';
 
 /**
  * Homepage Service
@@ -34,6 +35,7 @@ interface HomepageQueryParams {
     lat: number;
     lng: number;
   };
+  mode?: ModeId;
 }
 
 interface HomepageResponse {

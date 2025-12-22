@@ -8,6 +8,7 @@ import { sendSuccess, sendError, sendBadRequest, sendCreated, sendNotFound } fro
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import redisService from '../services/redisService';
+import { modeService, ModeId } from '../services/modeService';
 
 /**
  * Calculate relevance score for search results
@@ -76,9 +77,9 @@ const normalizeProductName = (name: string, brand?: string): string => {
 };
 
 /**
- * Search products by query
+ * Search products by query with optional mode filtering
  */
-const searchProducts = async (query: string, limit: number): Promise<any> => {
+const searchProducts = async (query: string, limit: number, mode?: ModeId): Promise<any> => {
   try {
     const searchQuery: any = {
       isActive: true,
@@ -89,6 +90,16 @@ const searchProducts = async (query: string, limit: number): Promise<any> => {
         { tags: { $regex: query, $options: 'i' } }
       ]
     };
+
+    // Apply mode-based store filter
+    if (mode && mode !== 'near-u') {
+      const modeStoreFilter = modeService.getStoreFilter(mode);
+      const modeStores = await Store.find(modeStoreFilter).select('_id').lean();
+      const modeStoreIds = modeStores.map(s => s._id);
+      if (modeStoreIds.length > 0) {
+        searchQuery.store = { $in: modeStoreIds };
+      }
+    }
 
     const products = await Product.find(searchQuery)
       .populate('category', 'name slug')
@@ -415,7 +426,7 @@ const searchProductsGroupedInternal = async (
 /**
  * Search stores by query
  */
-const searchStores = async (query: string, limit: number): Promise<any> => {
+const searchStores = async (query: string, limit: number, mode?: ModeId): Promise<any> => {
   try {
     const searchQuery: any = {
       isActive: true,
@@ -427,6 +438,12 @@ const searchStores = async (query: string, limit: number): Promise<any> => {
         { 'location.city': { $regex: query, $options: 'i' } }
       ]
     };
+
+    // Apply mode-based store filter
+    if (mode && mode !== 'near-u') {
+      const modeStoreFilter = modeService.getStoreFilter(mode);
+      Object.assign(searchQuery, modeStoreFilter);
+    }
 
     const stores = await Store.find(searchQuery)
       .populate('category', 'name slug')
@@ -536,8 +553,15 @@ export const globalSearch = asyncHandler(async (req: Request, res: Response) => 
   const {
     q: query,
     types: typesParam,
-    limit: limitParam = 10
+    limit: limitParam = 10,
+    mode // New: mode filter for 4-mode system
   } = req.query;
+
+  // Parse and validate mode
+  const activeMode: ModeId = modeService.getModeFromRequest(
+    mode as string | undefined,
+    (req as any).user?.preferences?.activeMode
+  );
 
   // Validate query parameter
   if (!query || typeof query !== 'string') {
@@ -559,8 +583,8 @@ export const globalSearch = asyncHandler(async (req: Request, res: Response) => 
     return sendBadRequest(res, 'Invalid types parameter. Valid types: products, stores, articles');
   }
 
-  // Generate cache key
-  const cacheKey = `search:global:${query}:${validTypes.sort().join(',')}:${limit}`;
+  // Generate cache key (include mode)
+  const cacheKey = `search:global:${query}:${validTypes.sort().join(',')}:${limit}:${activeMode}`;
 
   try {
     // Check cache first
@@ -583,12 +607,12 @@ export const globalSearch = asyncHandler(async (req: Request, res: Response) => 
     const typeMap: string[] = [];
 
     if (validTypes.includes('products')) {
-      searchPromises.push(searchProducts(query, limit));
+      searchPromises.push(searchProducts(query, limit, activeMode));
       typeMap.push('products');
     }
 
     if (validTypes.includes('stores')) {
-      searchPromises.push(searchStores(query, limit));
+      searchPromises.push(searchStores(query, limit, activeMode));
       typeMap.push('stores');
     }
 
@@ -623,7 +647,8 @@ export const globalSearch = asyncHandler(async (req: Request, res: Response) => 
       results,
       totalResults,
       requestedTypes: validTypes,
-      limit
+      limit,
+      mode: activeMode // Include mode in response
     };
 
     // Cache the results for 10 minutes (600 seconds)
