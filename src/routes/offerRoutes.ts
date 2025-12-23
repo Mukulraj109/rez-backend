@@ -25,6 +25,19 @@ import {
   getOfferCategories,
   getHeroBanners
 } from '../controllers/offerController';
+import {
+  getHotspots,
+  getHotspotOffers,
+  getBOGOOffers,
+  getSaleOffers,
+  getFreeDeliveryOffers,
+  getBankOffers,
+  getExclusiveZones,
+  getExclusiveZoneOffers,
+  getSpecialProfiles,
+  getSpecialProfileOffers,
+  getFriendsRedeemed,
+} from '../controllers/offersPageController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, validate, commonSchemas } from '../middleware/validation';
 import { Joi } from '../middleware/validation';
@@ -294,6 +307,117 @@ router.get('/hero-banners',
     position: Joi.string().valid('top', 'middle', 'bottom').default('top')
   })),
   getHeroBanners
+);
+
+// =====================
+// NEW OFFERS PAGE ROUTES
+// =====================
+
+// Get hotspot areas
+router.get('/hotspots',
+  optionalAuth,
+  validateQuery(Joi.object({
+    lat: Joi.number().min(-90).max(90),
+    lng: Joi.number().min(-180).max(180),
+    limit: Joi.number().integer().min(1).max(50).default(10)
+  })),
+  getHotspots
+);
+
+// Get offers for a specific hotspot
+router.get('/hotspots/:slug/offers',
+  optionalAuth,
+  validateParams(Joi.object({
+    slug: Joi.string().required()
+  })),
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(50).default(20)
+  })),
+  getHotspotOffers
+);
+
+// Get BOGO offers
+router.get('/bogo',
+  optionalAuth,
+  validateQuery(Joi.object({
+    bogoType: Joi.string().valid('buy1get1', 'buy2get1', 'buy1get50', 'buy2get50'),
+    limit: Joi.number().integer().min(1).max(50).default(20)
+  })),
+  getBOGOOffers
+);
+
+// Get sale/clearance offers
+router.get('/sales-clearance',
+  optionalAuth,
+  validateQuery(Joi.object({
+    saleTag: Joi.string().valid('clearance', 'sale', 'last_pieces', 'mega_sale'),
+    limit: Joi.number().integer().min(1).max(50).default(20)
+  })),
+  getSaleOffers
+);
+
+// Get free delivery offers
+router.get('/free-delivery',
+  optionalAuth,
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(50).default(20)
+  })),
+  getFreeDeliveryOffers
+);
+
+// Get bank offers
+router.get('/bank-offers',
+  optionalAuth,
+  validateQuery(Joi.object({
+    cardType: Joi.string().valid('credit', 'debit', 'wallet', 'upi', 'bnpl'),
+    limit: Joi.number().integer().min(1).max(50).default(20)
+  })),
+  getBankOffers
+);
+
+// Get exclusive zones
+router.get('/exclusive-zones',
+  optionalAuth,
+  getExclusiveZones
+);
+
+// Get offers for a specific exclusive zone
+router.get('/exclusive-zones/:slug/offers',
+  optionalAuth,
+  validateParams(Joi.object({
+    slug: Joi.string().required()
+  })),
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(50).default(20)
+  })),
+  getExclusiveZoneOffers
+);
+
+// Get special profiles (Defence, Healthcare, etc.)
+router.get('/special-profiles',
+  optionalAuth,
+  getSpecialProfiles
+);
+
+// Get offers for a specific special profile
+router.get('/special-profiles/:slug/offers',
+  optionalAuth,
+  validateParams(Joi.object({
+    slug: Joi.string().required()
+  })),
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(50).default(20)
+  })),
+  getSpecialProfileOffers
+);
+
+// Get friends' redeemed offers (social proof)
+router.get('/friends-redeemed',
+  optionalAuth,
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(50).default(10)
+  })),
+  getFriendsRedeemed
 );
 
 // Get single offer by ID (must be last to avoid conflicts with specific routes)

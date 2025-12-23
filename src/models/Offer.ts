@@ -69,6 +69,27 @@ export interface IOffer extends Document {
   isFollowerExclusive: boolean;
   exclusiveUntil?: Date;
   visibleTo: 'all' | 'followers' | 'premium';
+
+  // Sale/Clearance fields
+  saleTag?: 'clearance' | 'sale' | 'last_pieces' | 'mega_sale';
+  salePrice?: number;
+
+  // BOGO (Buy One Get One) fields
+  bogoType?: 'buy1get1' | 'buy2get1' | 'buy1get50' | 'buy2get50';
+  bogoDetails?: string;
+
+  // Delivery fields
+  isFreeDelivery: boolean;
+  deliveryFee?: number;
+  deliveryTime?: string; // e.g., "25 min", "30-45 min"
+
+  // Exclusive zone fields
+  exclusiveZone?: 'corporate' | 'women' | 'birthday' | 'student' | 'senior' | 'defence' | 'healthcare';
+  eligibilityRequirement?: string;
+
+  // Redemption tracking
+  redemptionCount: number;
+
   createdBy: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -115,7 +136,13 @@ const OfferSchema = new Schema<IOffer>({
     required: [true, 'Offer image is required'],
     validate: {
       validator: function(v: string) {
-        return /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)$/i.test(v);
+        if (!v || typeof v !== 'string') return false;
+        try {
+          const url = new URL(v);
+          return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.length > 0;
+        } catch (e) {
+          return false;
+        }
       },
       message: 'Image must be a valid URL'
     }
@@ -184,7 +211,13 @@ const OfferSchema = new Schema<IOffer>({
       type: String,
       validate: {
         validator: function(v: string) {
-          return !v || /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)$/i.test(v);
+          if (!v || typeof v !== 'string') return true;
+          try {
+            const url = new URL(v);
+            return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.length > 0;
+          } catch (e) {
+            return false;
+          }
         },
         message: 'Logo must be a valid URL'
       }
@@ -351,6 +384,66 @@ const OfferSchema = new Schema<IOffer>({
     default: 'all',
     index: true
   },
+
+  // Sale/Clearance fields
+  saleTag: {
+    type: String,
+    enum: ['clearance', 'sale', 'last_pieces', 'mega_sale'],
+    index: true
+  },
+  salePrice: {
+    type: Number,
+    min: [0, 'Sale price cannot be negative']
+  },
+
+  // BOGO (Buy One Get One) fields
+  bogoType: {
+    type: String,
+    enum: ['buy1get1', 'buy2get1', 'buy1get50', 'buy2get50'],
+    index: true
+  },
+  bogoDetails: {
+    type: String,
+    trim: true,
+    maxlength: 200
+  },
+
+  // Delivery fields
+  isFreeDelivery: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  deliveryFee: {
+    type: Number,
+    min: [0, 'Delivery fee cannot be negative'],
+    default: 0
+  },
+  deliveryTime: {
+    type: String,
+    trim: true,
+    maxlength: 50
+  },
+
+  // Exclusive zone fields
+  exclusiveZone: {
+    type: String,
+    enum: ['corporate', 'women', 'birthday', 'student', 'senior', 'defence', 'healthcare'],
+    index: true
+  },
+  eligibilityRequirement: {
+    type: String,
+    trim: true,
+    maxlength: 200
+  },
+
+  // Redemption tracking
+  redemptionCount: {
+    type: Number,
+    default: 0,
+    min: [0, 'Redemption count cannot be negative']
+  },
+
   createdBy: {
     type: Schema.Types.ObjectId,
     ref: 'User',

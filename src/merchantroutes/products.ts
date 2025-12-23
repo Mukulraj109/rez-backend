@@ -700,14 +700,42 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
     console.log('✅ Merchant product created with ID:', product._id);
 
     // Automatically create product on user side (sync to user Product model)
+    let userProductId: string | null = null;
     try {
       await createUserSideProduct(product, req.merchantId!);
       console.log('✅ Product successfully synced to user-side');
+      
+      // Get the user-side product ID for cache invalidation
+      const UserProduct = require('../models/Product').Product;
+      const userProduct = await UserProduct.findOne({ 
+        name: product.name,
+        slug: product.slug 
+      });
+      if (userProduct) {
+        userProductId = userProduct._id.toString();
+      }
     } catch (syncError: any) {
       // Log error but don't fail the merchant product creation
       console.error('⚠️ Warning: Failed to sync product to user-side:', syncError.message);
       console.error('   Product was still created in merchant database');
       // Continue - merchant product creation should succeed even if sync fails
+    }
+
+    // Invalidate cache for new arrivals (since new product should appear there)
+    try {
+      const { CacheInvalidator } = require('../utils/cacheHelper');
+      if (userProductId) {
+        await CacheInvalidator.invalidateProduct(userProductId);
+        console.log('🗑️ Invalidated cache for new product (new arrivals will refresh)');
+      } else {
+        // If we don't have user product ID, invalidate all new arrivals cache
+        const redisService = require('../services/redisService').default;
+        await redisService.delPattern('product:new-arrivals:*');
+        console.log('🗑️ Invalidated all new arrivals cache');
+      }
+    } catch (cacheError: any) {
+      console.error('⚠️ Warning: Failed to invalidate cache:', cacheError.message);
+      // Don't fail product creation if cache invalidation fails
     }
 
     // Audit log: Product created

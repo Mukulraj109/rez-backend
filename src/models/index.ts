@@ -93,6 +93,17 @@ export { Refund } from './Refund';
 export { default as DailyCheckIn, calculateStreakBonus, getStreakMessage } from './DailyCheckIn';
 export { default as PriveOffer } from './PriveOffer';
 
+// Offers Page models
+export { default as HotspotArea } from './HotspotArea';
+export { default as DoubleCashbackCampaign } from './DoubleCashbackCampaign';
+export { default as CoinDrop } from './CoinDrop';
+export { default as UploadBillStore } from './UploadBillStore';
+export { default as BankOffer } from './BankOffer';
+export { default as ExclusiveZone } from './ExclusiveZone';
+export { default as SpecialProfile } from './SpecialProfile';
+export { default as LoyaltyMilestone } from './LoyaltyMilestone';
+export { default as FriendRedemption } from './FriendRedemption';
+
 // Export types for external use
 export type { IUser, IUserProfile, IUserPreferences, IUserWallet, IUserAuth } from './User';
 export type { ICategory, ICategoryMetadata } from './Category';
@@ -134,3 +145,14 @@ export type { IGameSession, IGameSessionModel } from './GameSession';
 // Privé types
 export type { IDailyCheckIn, IDailyCheckInModel } from './DailyCheckIn';
 export type { IPriveOffer, IPriveOfferModel } from './PriveOffer';
+
+// Offers Page types
+export type { IHotspotArea } from './HotspotArea';
+export type { IDoubleCashbackCampaign } from './DoubleCashbackCampaign';
+export type { ICoinDrop } from './CoinDrop';
+export type { IUploadBillStore } from './UploadBillStore';
+export type { IBankOffer } from './BankOffer';
+export type { IExclusiveZone } from './ExclusiveZone';
+export type { ISpecialProfile } from './SpecialProfile';
+export type { ILoyaltyMilestone } from './LoyaltyMilestone';
+export type { IFriendRedemption } from './FriendRedemption';

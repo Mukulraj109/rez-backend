@@ -181,3 +181,81 @@ export const getBestSellerCategories = asyncHandler(async (req: Request, res: Re
     throw new AppError('Failed to fetch best seller categories', 500);
   }
 });
+
+// Get category vibes
+export const getCategoryVibes = asyncHandler(async (req: Request, res: Response) => {
+  const { slug } = req.params;
+
+  try {
+    // Get category with embedded vibes
+    const category = await Category.findOne({ slug, isActive: true })
+      .select('vibes')
+      .lean();
+
+    if (!category) {
+      return sendNotFound(res, 'Category not found');
+    }
+
+    const vibes = category.vibes || [];
+
+    sendSuccess(res, { vibes }, 'Category vibes retrieved successfully');
+
+  } catch (error) {
+    throw new AppError('Failed to fetch category vibes', 500);
+  }
+});
+
+// Get category occasions
+export const getCategoryOccasions = asyncHandler(async (req: Request, res: Response) => {
+  const { slug } = req.params;
+
+  try {
+    // Get category with embedded occasions
+    const category = await Category.findOne({ slug, isActive: true })
+      .select('occasions')
+      .lean();
+
+    if (!category) {
+      return sendNotFound(res, 'Category not found');
+    }
+
+    const occasions = category.occasions || [];
+
+    sendSuccess(res, { occasions }, 'Category occasions retrieved successfully');
+
+  } catch (error) {
+    throw new AppError('Failed to fetch category occasions', 500);
+  }
+});
+
+// Get category hashtags
+export const getCategoryHashtags = asyncHandler(async (req: Request, res: Response) => {
+  const { slug } = req.params;
+  const { limit = 6 } = req.query;
+
+  try {
+    // Get category with embedded hashtags
+    const category = await Category.findOne({ slug, isActive: true })
+      .select('trendingHashtags')
+      .lean();
+
+    if (!category) {
+      return sendNotFound(res, 'Category not found');
+    }
+
+    let hashtags = category.trendingHashtags || [];
+
+    // Sort by trending first, then count
+    hashtags = hashtags
+      .sort((a: any, b: any) => {
+        if (a.trending !== b.trending) return b.trending ? 1 : -1;
+        return b.count - a.count;
+      })
+      .slice(0, Number(limit));
+
+    sendSuccess(res, { hashtags }, 'Category hashtags retrieved successfully');
+
+  } catch (error) {
+    throw new AppError('Failed to fetch category hashtags', 500);
+  }
+});

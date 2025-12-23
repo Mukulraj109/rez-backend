@@ -854,7 +854,17 @@ export const getNewArrivals = asyncHandler(async (req: Request, res: Response) =
         tags: product.tags || [],
         isNewArrival: true,
         arrivalDate: product.arrivalDate || product.createdAt.toISOString().split('T')[0], // Format as YYYY-MM-DD
-        store: product.store
+        store: product.store,
+        // Include cashback information
+        cashback: product.cashback?.percentage || (product.store as any)?.cashback?.percentage 
+          ? {
+              percentage: product.cashback?.percentage || (product.store as any)?.cashback?.percentage || 5,
+              maxAmount: product.cashback?.maxAmount || (product.store as any)?.cashback?.maxAmount
+            }
+          : {
+              percentage: 5, // Default cashback for new arrivals
+              maxAmount: 500
+            }
       };
     });
 
