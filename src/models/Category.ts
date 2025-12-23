@@ -10,6 +10,32 @@ export interface ICategoryMetadata {
   featured?: boolean;
 }
 
+// Embedded interfaces for category page data
+export interface ICategoryVibe {
+  id: string;
+  name: string;
+  icon: string; // emoji
+  color: string; // hex color
+  description: string;
+}
+
+export interface ICategoryOccasion {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  tag?: string | null; // "Hot", "Trending", etc.
+  discount: number; // percentage
+}
+
+export interface ICategoryHashtag {
+  id: string;
+  tag: string;
+  count: number;
+  color: string;
+  trending: boolean;
+}
+
 // Category interface
 export interface ICategory extends Document {
   name: string;
@@ -24,6 +50,10 @@ export interface ICategory extends Document {
   isActive: boolean;
   sortOrder: number;
   metadata: ICategoryMetadata;
+  // Embedded category page data
+  vibes?: ICategoryVibe[];
+  occasions?: ICategoryOccasion[];
+  trendingHashtags?: ICategoryHashtag[];
   productCount: number;
   storeCount: number;
   isBestDiscount: boolean;
@@ -148,7 +178,95 @@ const CategorySchema = new Schema<ICategory>({
     default: 0,
     min: 0,
     max: 100
-  }
+  },
+  // Embedded category page data
+  vibes: [{
+    id: {
+      type: String,
+      required: true
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    icon: {
+      type: String,
+      required: true
+    },
+    color: {
+      type: String,
+      required: true,
+      match: [/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Color must be a valid hex color']
+    },
+    description: {
+      type: String,
+      trim: true
+    }
+  }],
+  occasions: [{
+    id: {
+      type: String,
+      required: true
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    icon: {
+      type: String,
+      required: true
+    },
+    color: {
+      type: String,
+      required: true,
+      match: [/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Color must be a valid hex color']
+    },
+    tag: {
+      type: String,
+      trim: true,
+      default: null
+    },
+    discount: {
+      type: Number,
+      required: true,
+      min: 0,
+      max: 100
+    }
+  }],
+  trendingHashtags: [{
+    id: {
+      type: String,
+      required: true
+    },
+    tag: {
+      type: String,
+      required: true,
+      trim: true,
+      validate: {
+        validator: function(v: string) {
+          return /^#[\p{L}\p{N}\s\-_]+$/u.test(v);
+        },
+        message: 'Hashtag must start with # and contain only letters, numbers, spaces, hyphens, and underscores'
+      }
+    },
+    count: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0
+    },
+    color: {
+      type: String,
+      required: true,
+      match: [/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Color must be a valid hex color']
+    },
+    trending: {
+      type: Boolean,
+      default: false
+    }
+  }]
 }, {
   timestamps: true,
   toJSON: { virtuals: true },

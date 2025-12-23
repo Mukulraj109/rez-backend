@@ -7,7 +7,10 @@ import {
   getRootCategories,
   getFeaturedCategories,
   getBestDiscountCategories,
-  getBestSellerCategories
+  getBestSellerCategories,
+  getCategoryVibes,
+  getCategoryOccasions,
+  getCategoryHashtags
 } from '../controllers/categoryController';
 import { optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams } from '../middleware/validation';
@@ -99,6 +102,36 @@ router.get('/:slug',
     slug: Joi.string().required()
   })),
   getCategoryBySlug
+);
+
+// Get category vibes
+router.get('/:slug/vibes',
+  optionalAuth,
+  validateParams(Joi.object({
+    slug: Joi.string().required()
+  })),
+  getCategoryVibes
+);
+
+// Get category occasions
+router.get('/:slug/occasions',
+  optionalAuth,
+  validateParams(Joi.object({
+    slug: Joi.string().required()
+  })),
+  getCategoryOccasions
+);
+
+// Get category hashtags
+router.get('/:slug/hashtags',
+  optionalAuth,
+  validateParams(Joi.object({
+    slug: Joi.string().required()
+  })),
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(20).default(6)
+  })),
+  getCategoryHashtags
 );
 
 export default router;

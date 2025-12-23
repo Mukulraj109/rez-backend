@@ -109,6 +109,27 @@ export interface IPaymentPreferences {
   };
 }
 
+// Mode Types for 4-mode system
+export type ModeId = 'near-u' | 'mall' | 'cash' | 'prive';
+
+// Mode-specific settings
+export interface IModeSettings {
+  nearU: {
+    radius?: number; // km
+    showNotifications?: boolean;
+  };
+  mall: {
+    preferredCategories?: string[];
+  };
+  cash: {
+    minCashbackPercent?: number;
+  };
+  prive: {
+    tier?: 'none' | 'entry' | 'elite';
+    lastEligibilityCheck?: Date;
+  };
+}
+
 // App Preferences
 export interface IAppPreferences {
   startupScreen: 'HOME' | 'EXPLORE' | 'LAST_VIEWED';
@@ -120,6 +141,8 @@ export interface IAppPreferences {
   animations: boolean;
   sounds: boolean;
   hapticFeedback: boolean;
+  activeMode: ModeId;
+  modeSettings: IModeSettings;
 }
 
 // General Settings
@@ -367,7 +390,33 @@ const UserSettingsSchema = new Schema<IUserSettings>({
     highQualityImages: { type: Boolean, default: true },
     animations: { type: Boolean, default: true },
     sounds: { type: Boolean, default: true },
-    hapticFeedback: { type: Boolean, default: true }
+    hapticFeedback: { type: Boolean, default: true },
+    // 4-Mode System
+    activeMode: {
+      type: String,
+      enum: ['near-u', 'mall', 'cash', 'prive'],
+      default: 'near-u'
+    },
+    modeSettings: {
+      nearU: {
+        radius: { type: Number, default: 10 }, // km
+        showNotifications: { type: Boolean, default: true }
+      },
+      mall: {
+        preferredCategories: [{ type: String }]
+      },
+      cash: {
+        minCashbackPercent: { type: Number, default: 0 }
+      },
+      prive: {
+        tier: {
+          type: String,
+          enum: ['none', 'entry', 'elite'],
+          default: 'none'
+        },
+        lastEligibilityCheck: { type: Date }
+      }
+    }
   },
   courier: {
     preferredCourier: {

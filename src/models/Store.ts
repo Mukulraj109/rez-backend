@@ -243,6 +243,10 @@ export interface IStore extends Document {
   // Reward Rules (Merchant Sets)
   rewardRules?: IStoreRewardRules;
 
+  // Category page metadata
+  is60MinDelivery?: boolean;
+  hasStorePickup?: boolean;
+
   createdAt: Date;
   updatedAt: Date;
 
@@ -806,6 +810,18 @@ const StoreSchema = new Schema<IStore>({
         min: 0
       }
     }]
+  },
+
+  // Category page metadata
+  is60MinDelivery: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  hasStorePickup: {
+    type: Boolean,
+    default: false,
+    index: true
   }
 }, {
   timestamps: true,

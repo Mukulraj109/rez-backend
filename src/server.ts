@@ -118,9 +118,13 @@ import searchRoutes from './routes/searchRoutes';
 import mallRoutes from './routes/mallRoutes';  // ReZ Mall routes
 import mallAffiliateRoutes from './routes/mallAffiliateRoutes';  // Mall Affiliate tracking routes (legacy - use cashstore/affiliate)
 import cashStoreAffiliateRoutes from './routes/cashStoreAffiliateRoutes';  // Cash Store affiliate tracking routes
+import priveRoutes from './routes/priveRoutes';  // Privé eligibility and reputation routes
 import webhookRoutes from './routes/webhookRoutes';
 import storeGalleryRoutes from './routes/storeGallery';  // Public store gallery routes
 import productGalleryRoutes from './routes/productGallery';  // Public product gallery routes
+import offersRoutes from './routes/offersRoutes';  // Bank and exclusive offers routes
+import loyaltyRoutes from './routes/loyaltyRoutes';  // User loyalty routes
+import statsRoutes from './routes/statsRoutes';  // Social proof stats routes
 import authRoutes1 from './merchantroutes/auth';  // Temporarily disabled
 import merchantRoutes from './merchantroutes/merchants';  // Temporarily disabled
 import merchantProfileRoutes from './merchantroutes/merchant-profile'; // Disabled due to missing properties
@@ -613,6 +617,8 @@ app.use(`${API_PREFIX}/support`, supportRoutes);
 app.use(`${API_PREFIX}/messages`, messageRoutes);
 console.log('✅ Messaging routes registered at /api/messages');
 app.use(`${API_PREFIX}/cashback`, cashbackRoutes);
+app.use(`${API_PREFIX}/loyalty`, loyaltyRoutes);
+console.log('✅ Loyalty routes registered at /api/loyalty');
 app.use(`${API_PREFIX}/user-products`, userProductRoutes);
 app.use(`${API_PREFIX}/discounts`, discountRoutes);
 app.use(`${API_PREFIX}/store-vouchers`, storeVoucherRoutes);
@@ -688,6 +694,18 @@ console.log('✅ Store visit routes registered at /api/store-visits');
 app.use(`${API_PREFIX}/homepage`, homepageRoutes);
 console.log('✅ Homepage routes registered at /api/homepage');
 
+// Offers Routes - Bank offers and exclusive offers
+app.use(`${API_PREFIX}/offers`, offersRoutes);
+console.log('✅ Offers routes registered at /api/offers');
+
+// Loyalty Routes - User loyalty, streaks, missions, coins
+app.use(`${API_PREFIX}/users/loyalty`, loyaltyRoutes);
+console.log('✅ Loyalty routes registered at /api/users/loyalty');
+
+// Stats Routes - Social proof stats
+app.use(`${API_PREFIX}/stats`, statsRoutes);
+console.log('✅ Stats routes registered at /api/stats');
+
 // // Search Routes - Global search across products, stores, and articles
 app.use(`${API_PREFIX}/search`, searchRoutes);
 console.log('✅ Search routes registered at /api/search');
@@ -703,6 +721,10 @@ console.log('✅ Mall Affiliate routes registered at /api/mall/affiliate (legacy
 // Cash Store Affiliate Routes - External brand cashback tracking
 app.use(`${API_PREFIX}/cashstore/affiliate`, cashStoreAffiliateRoutes);
 console.log('✅ Cash Store Affiliate routes registered at /api/cashstore/affiliate');
+
+// Privé Routes - Eligibility, reputation, and exclusive access
+app.use(`${API_PREFIX}/prive`, priveRoutes);
+console.log('✅ Privé routes registered at /api/prive');
 
 // Store Gallery Routes - Public gallery viewing
 app.use(`${API_PREFIX}/stores`, storeGalleryRoutes);

@@ -9,6 +9,11 @@ import {
   forecastCashback,
   getCashbackStatistics,
 } from '../controllers/cashbackController';
+import {
+  getDoubleCashbackCampaigns,
+  getCoinDrops,
+  getUploadBillStores,
+} from '../controllers/offersPageController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validateQuery, validate, commonSchemas } from '../middleware/validation';
 import { Joi } from '../middleware/validation';
@@ -85,6 +90,39 @@ router.get('/statistics',
     period: Joi.string().valid('day', 'week', 'month', 'year').default('month'),
   })),
   getCashbackStatistics
+);
+
+// =====================
+// NEW OFFERS PAGE ROUTES
+// =====================
+
+// Get double cashback campaigns
+router.get('/double-campaigns',
+  optionalAuth,
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(50).default(10),
+  })),
+  getDoubleCashbackCampaigns
+);
+
+// Get coin drops (boosted cashback events)
+router.get('/coin-drops',
+  optionalAuth,
+  validateQuery(Joi.object({
+    category: Joi.string(),
+    limit: Joi.number().integer().min(1).max(50).default(20),
+  })),
+  getCoinDrops
+);
+
+// Get upload bill stores
+router.get('/upload-bill-stores',
+  optionalAuth,
+  validateQuery(Joi.object({
+    category: Joi.string(),
+    limit: Joi.number().integer().min(1).max(50).default(20),
+  })),
+  getUploadBillStores
 );
 
 export default router;

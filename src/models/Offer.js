@@ -73,7 +73,13 @@ var OfferSchema = new mongoose_1.Schema({
         required: [true, 'Offer image is required'],
         validate: {
             validator: function (v) {
-                return /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)$/i.test(v);
+                if (!v || typeof v !== 'string') return false;
+                try {
+                    const url = new URL(v);
+                    return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.length > 0;
+                } catch (e) {
+                    return false;
+                }
             },
             message: 'Image must be a valid URL'
         }
@@ -142,7 +148,13 @@ var OfferSchema = new mongoose_1.Schema({
             type: String,
             validate: {
                 validator: function (v) {
-                    return !v || /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)$/i.test(v);
+                    if (!v || typeof v !== 'string') return true;
+                    try {
+                        const url = new URL(v);
+                        return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.length > 0;
+                    } catch (e) {
+                        return false;
+                    }
                 },
                 message: 'Logo must be a valid URL'
             }

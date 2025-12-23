@@ -5,6 +5,7 @@ import Offer from '../models/Offer';
 import { Category } from '../models/Category';
 import { Video } from '../models/Video';
 import { Article } from '../models/Article';
+import { ModeId } from './modeService';
 
 /**
  * Homepage Service
@@ -34,6 +35,7 @@ interface HomepageQueryParams {
     lat: number;
     lng: number;
   };
+  mode?: ModeId;
 }
 
 interface HomepageResponse {
@@ -96,18 +98,64 @@ async function fetchNewArrivals(limit: number): Promise<any[]> {
       createdAt: { $gte: thirtyDaysAgo }
     })
       .populate('category', 'name slug')
-      .populate('store', 'name slug logo')
-      .select('name slug images pricing inventory ratings badges tags createdAt')
+      .populate('store', 'name slug logo location cashback')
+      .select('name title slug images pricing inventory ratings badges tags createdAt cashback')
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
 
-    const duration = Date.now() - startTime;
-    console.log(`✅ [Homepage Service] Fetched ${products.length} new arrivals in ${duration}ms`);
-    return products;
+    // Transform products to match frontend format with cashback
+    const transformedProducts = products.map((product: any) => ({
+      _id: product._id,
+      id: product._id,
+      name: product.name,
+      title: product.title || product.name,
+      brand: product.brand || 'Generic',
+      image: product.image || product.images?.[0] || '',
+      images: product.images || [],
+      description: product.description || '',
+      pricing: product.pricing || {
+        selling: product.price?.current || 0,
+        original: product.price?.original || 0,
+        currency: product.price?.currency || 'INR',
+        discount: product.price?.discount || 0
+      },
+      price: product.price || {
+        current: product.pricing?.selling || 0,
+        original: product.pricing?.original || 0,
+        currency: product.pricing?.currency || 'INR',
+        discount: product.pricing?.discount || 0
+      },
+      category: product.category,
+      ratings: product.ratings || {
+        average: product.rating?.value || 0,
+        count: product.rating?.count || 0
+      },
+      rating: product.rating || {
+        value: product.ratings?.average || 0,
+        count: product.ratings?.count || 0
+      },
+      inventory: product.inventory,
+      availabilityStatus: product.availabilityStatus || (product.inventory?.stock > 0 ? 'in_stock' : 'out_of_stock'),
+      tags: product.tags || [],
+      isNewArrival: true,
+      arrivalDate: product.arrivalDate || product.createdAt?.toISOString().split('T')[0],
+      createdAt: product.createdAt,
+      store: product.store,
+      // Include cashback information
+      cashback: product.cashback?.percentage || (product.store as any)?.cashback?.percentage 
+        ? {
+            percentage: product.cashback?.percentage || (product.store as any)?.cashback?.percentage || 5,
+            maxAmount: product.cashback?.maxAmount || (product.store as any)?.cashback?.maxAmount || 500
+          }
+        : {
+            percentage: 5, // Default cashback for new arrivals
+            maxAmount: 500
+          }
+    }));
+
+    return transformedProducts;
   } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`❌ [Homepage Service] Failed to fetch new arrivals in ${duration}ms:`, error);
     throw error;
   }
 }
