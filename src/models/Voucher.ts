@@ -1,107 +1,34 @@
-import mongoose, { Document, Schema, Model } from 'mongoose';
+import mongoose, { Document, Schema, Types, Model } from 'mongoose';
 
-// UserVoucher instance methods interface
-interface IUserVoucherMethods {
-  isValid(): boolean;
-  markAsUsed(usageLocation?: string): Promise<any>;
-}
-
-// UserVoucher static methods interface
-interface IUserVoucherModel extends Model<IUserVoucher, {}, IUserVoucherMethods> {
-  updateExpiredVouchers(): Promise<any>;
-  getUserActiveVouchers(userId: string): any;
-}
-
-// Voucher Brand interface (for frontend voucher page)
+// VoucherBrand interfaces
 export interface IVoucherBrand extends Document {
-  // Brand info
   name: string;
-  logo: string; // Can be emoji or image URL
-  backgroundColor?: string;
-  logoColor?: string;
-  description?: string;
-
-  // Cashback
-  cashbackRate: number; // Percentage
-
-  // Rating
-  rating?: number;
-  ratingCount?: number;
-
-  // Category
-  category: string; // E.g., 'shopping', 'food', 'travel', etc.
-
-  // Store link (optional - not all vouchers need to be linked to stores)
-  store?: mongoose.Types.ObjectId; // Reference to Store
-
-  // Flags
+  logo: string;
+  backgroundColor: string;
+  logoColor: string;
+  description: string;
+  cashbackRate: number;
+  rating: number;
+  ratingCount: number;
+  category: 'shopping' | 'food' | 'travel' | 'entertainment' | 'lifestyle' | 'electronics' | 'fashion' | 'health' | 'education' | 'other';
   isNewlyAdded: boolean;
   isFeatured: boolean;
   isActive: boolean;
-
-  // Available denominations
-  denominations: number[]; // E.g., [100, 500, 1000, 2000]
-
-  // Terms
+  denominations: number[];
   termsAndConditions: string[];
-
-  // Analytics
   purchaseCount: number;
   viewCount: number;
-
-  // Metadata
+  store?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// User Voucher Purchase (actual voucher instance owned by user)
-export interface IUserVoucher extends Document, IUserVoucherMethods {
-  // User & Brand
-  user: mongoose.Types.ObjectId;
-  brand: mongoose.Types.ObjectId; // Reference to VoucherBrand
-
-  // Voucher details
-  voucherCode: string; // Unique code for this voucher
-  denomination: number; // Amount (e.g., 500)
-  purchasePrice: number; // What user paid (may include discount)
-
-  // Validity
-  purchaseDate: Date;
-  expiryDate: Date;
-  validityDays: number; // Days from purchase
-
-  // Status
-  status: 'active' | 'used' | 'expired' | 'cancelled';
-  usedDate?: Date;
-  usedAt?: string; // Where it was used
-
-  // Delivery
-  deliveryMethod: 'email' | 'sms' | 'app' | 'physical';
-  deliveryStatus: 'pending' | 'delivered' | 'failed';
-  deliveredAt?: Date;
-
-  // Payment
-  paymentMethod: 'wallet' | 'card' | 'upi' | 'netbanking';
-  transactionId?: string;
-
-  // QR Code for in-store use
-  qrCode?: string;
-
-  // Metadata
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// VoucherBrand Schema
 const VoucherBrandSchema = new Schema<IVoucherBrand>(
   {
-    // Brand info
     name: {
       type: String,
       required: true,
       trim: true,
-      unique: true,
-      index: true,
     },
     logo: {
       type: String,
@@ -109,148 +36,139 @@ const VoucherBrandSchema = new Schema<IVoucherBrand>(
     },
     backgroundColor: {
       type: String,
-      default: '#F3F4F6',
+      required: true,
+      default: '#000000',
     },
     logoColor: {
       type: String,
-      default: '#000000',
+      required: true,
+      default: '#FFFFFF',
     },
     description: {
       type: String,
-      trim: true,
-      maxlength: 500,
+      required: true,
     },
-
-    // Cashback
     cashbackRate: {
       type: Number,
       required: true,
+      default: 0,
       min: 0,
       max: 100,
-      default: 0,
     },
-
-    // Rating
     rating: {
       type: Number,
+      default: 0,
       min: 0,
       max: 5,
-      default: 4.5,
     },
     ratingCount: {
       type: Number,
       default: 0,
-      min: 0,
     },
-
-    // Category
     category: {
       type: String,
+      enum: ['shopping', 'food', 'travel', 'entertainment', 'lifestyle', 'electronics', 'fashion', 'health', 'education', 'other'],
       required: true,
-      trim: true,
-      lowercase: true,
-      index: true,
     },
-
-    // Store link (optional - not all vouchers need to be linked to stores)
-    store: {
-      type: Schema.Types.ObjectId,
-      ref: 'Store',
-      index: true,
-    },
-
-    // Flags
     isNewlyAdded: {
       type: Boolean,
-      default: true,
-      index: true,
+      default: false,
     },
     isFeatured: {
       type: Boolean,
       default: false,
-      index: true,
     },
     isActive: {
       type: Boolean,
       default: true,
-      index: true,
     },
-
-    // Denominations
-    denominations: [{
-      type: Number,
-      min: 1,
-    }],
-
-    // Terms
-    termsAndConditions: [{
-      type: String,
-      trim: true,
-    }],
-
-    // Analytics
+    denominations: {
+      type: [Number],
+      required: true,
+      validate: {
+        validator: function (v: number[]) {
+          return v.length > 0;
+        },
+        message: 'At least one denomination is required',
+      },
+    },
+    termsAndConditions: {
+      type: [String],
+      default: [],
+    },
     purchaseCount: {
       type: Number,
       default: 0,
-      min: 0,
     },
     viewCount: {
       type: Number,
       default: 0,
-      min: 0,
+    },
+    store: {
+      type: Schema.Types.ObjectId,
+      ref: 'Store',
     },
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
   }
 );
 
-// Indexes
+// Indexes for VoucherBrand
 VoucherBrandSchema.index({ category: 1, isActive: 1 });
 VoucherBrandSchema.index({ isFeatured: 1, isActive: 1 });
 VoucherBrandSchema.index({ isNewlyAdded: 1, isActive: 1 });
-VoucherBrandSchema.index({ store: 1, isActive: 1 });
 VoucherBrandSchema.index({ name: 'text', description: 'text' });
 
-// UserVoucher Schema
+// UserVoucher interfaces
+export interface IUserVoucher extends Document {
+  user: Types.ObjectId;
+  brand: Types.ObjectId;
+  voucherCode: string;
+  denomination: number;
+  purchasePrice: number;
+  purchaseDate: Date;
+  expiryDate: Date;
+  validityDays: number;
+  status: 'active' | 'used' | 'expired' | 'refunded';
+  deliveryMethod: 'email' | 'sms' | 'app';
+  deliveryStatus: 'pending' | 'delivered' | 'failed';
+  deliveredAt?: Date;
+  paymentMethod: 'wallet' | 'card' | 'upi' | 'netbanking';
+  usedAt?: Date;
+  usageLocation?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  // Instance methods
+  isValid(): boolean;
+  markAsUsed(usageLocation?: string): Promise<IUserVoucher>;
+}
+
 const UserVoucherSchema = new Schema<IUserVoucher>(
   {
-    // User & Brand
     user: {
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      index: true,
     },
     brand: {
       type: Schema.Types.ObjectId,
       ref: 'VoucherBrand',
       required: true,
-      index: true,
     },
-
-    // Voucher details
     voucherCode: {
       type: String,
       required: true,
       unique: true,
-      uppercase: true,
-      index: true,
     },
     denomination: {
       type: Number,
       required: true,
-      min: 1,
     },
     purchasePrice: {
       type: Number,
       required: true,
-      min: 0,
     },
-
-    // Validity
     purchaseDate: {
       type: Date,
       required: true,
@@ -263,27 +181,16 @@ const UserVoucherSchema = new Schema<IUserVoucher>(
     validityDays: {
       type: Number,
       required: true,
-      default: 365, // 1 year default
+      default: 365,
     },
-
-    // Status
     status: {
       type: String,
-      enum: ['active', 'used', 'expired', 'cancelled'],
+      enum: ['active', 'used', 'expired', 'refunded'],
       default: 'active',
-      index: true,
     },
-    usedDate: {
-      type: Date,
-    },
-    usedAt: {
-      type: String,
-    },
-
-    // Delivery
     deliveryMethod: {
       type: String,
-      enum: ['email', 'sms', 'app', 'physical'],
+      enum: ['email', 'sms', 'app'],
       default: 'app',
     },
     deliveryStatus: {
@@ -294,100 +201,78 @@ const UserVoucherSchema = new Schema<IUserVoucher>(
     deliveredAt: {
       type: Date,
     },
-
-    // Payment
     paymentMethod: {
       type: String,
       enum: ['wallet', 'card', 'upi', 'netbanking'],
       required: true,
     },
-    transactionId: {
-      type: String,
-      index: true,
+    usedAt: {
+      type: Date,
     },
-
-    // QR Code
-    qrCode: {
+    usageLocation: {
       type: String,
     },
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
   }
 );
 
-// Indexes
+// Indexes for UserVoucher
 UserVoucherSchema.index({ user: 1, status: 1 });
+UserVoucherSchema.index({ user: 1, brand: 1 });
 UserVoucherSchema.index({ voucherCode: 1 }, { unique: true });
 UserVoucherSchema.index({ expiryDate: 1 });
-UserVoucherSchema.index({ purchaseDate: 1 });
+UserVoucherSchema.index({ status: 1, expiryDate: 1 });
 
-// Pre-save middleware to generate voucher code if not provided
+// Pre-save middleware to check expiry
 UserVoucherSchema.pre('save', function (next) {
-  if (!this.voucherCode) {
-    // Generate unique voucher code: BRAND-DENOMINATION-RANDOM
-    const brandPrefix = this.brand.toString().substring(0, 6).toUpperCase();
-    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-    this.voucherCode = `${brandPrefix}-${this.denomination}-${random}`;
+  if (this.status === 'active' && this.expiryDate < new Date()) {
+    this.status = 'expired';
   }
-
-  // Set expiry date if not set
-  if (!this.expiryDate && this.validityDays) {
-    const expiry = new Date(this.purchaseDate);
-    expiry.setDate(expiry.getDate() + this.validityDays);
-    this.expiryDate = expiry;
-  }
-
   next();
 });
 
-// Method to check if voucher is valid
-UserVoucherSchema.methods.isValid = function (): boolean {
-  return (
-    this.status === 'active' &&
-    new Date() <= this.expiryDate
-  );
-};
-
-// Method to mark voucher as used
-UserVoucherSchema.methods.markAsUsed = async function (usageLocation?: string) {
-  this.status = 'used';
-  this.usedDate = new Date();
-  if (usageLocation) {
-    this.usedAt = usageLocation;
-  }
-  return this.save();
-};
-
-// Static method to check expiry and update status
-UserVoucherSchema.statics.updateExpiredVouchers = async function () {
-  const now = new Date();
-  return this.updateMany(
+// Static method to expire vouchers
+UserVoucherSchema.statics.expireOldVouchers = async function () {
+  const result = await this.updateMany(
     {
       status: 'active',
-      expiryDate: { $lt: now },
+      expiryDate: { $lt: new Date() },
     },
     {
       $set: { status: 'expired' },
     }
   );
+  return result.modifiedCount;
 };
 
-// Static method to get user's active vouchers
-UserVoucherSchema.statics.getUserActiveVouchers = function (userId: string) {
-  return this.find({
-    user: userId,
-    status: 'active',
-    expiryDate: { $gte: new Date() },
-  })
-    .populate('brand', 'name logo backgroundColor cashbackRate')
-    .sort({ purchaseDate: -1 });
+// Instance method: Check if voucher is valid
+UserVoucherSchema.methods.isValid = function (): boolean {
+  return this.status === 'active' && this.expiryDate > new Date();
 };
 
-const VoucherBrand = mongoose.model<IVoucherBrand>('VoucherBrand', VoucherBrandSchema);
-const UserVoucher = mongoose.model<IUserVoucher, IUserVoucherModel>('UserVoucher', UserVoucherSchema);
+// Instance method: Mark voucher as used
+UserVoucherSchema.methods.markAsUsed = async function (usageLocation?: string): Promise<IUserVoucher> {
+  this.status = 'used';
+  this.usedAt = new Date();
+  if (usageLocation) {
+    this.usageLocation = usageLocation;
+  }
+  return this.save();
+};
 
-export { VoucherBrand, UserVoucher };
-export default VoucherBrand;
+// Model interface with static methods
+export interface IUserVoucherModel extends Model<IUserVoucher> {
+  expireOldVouchers(): Promise<number>;
+}
+
+// Generate unique voucher code
+export function generateVoucherCode(prefix: string = 'VCH'): string {
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+  return `${prefix}-${timestamp}-${random}`;
+}
+
+export const VoucherBrand = mongoose.model<IVoucherBrand>('VoucherBrand', VoucherBrandSchema);
+export const UserVoucher = mongoose.model<IUserVoucher, IUserVoucherModel>('UserVoucher', UserVoucherSchema);
