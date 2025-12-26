@@ -58,10 +58,9 @@ async function seedStoreMetadata(): Promise<number> {
     }
 
     // Set location coordinates if missing
-    const coords = store.location?.coordinates as unknown;
-    if (!coords || !Array.isArray(coords) || (coords as any[]).length === 0) {
-      const newCoords = getRandomCoordinates(store.location?.city);
-      updates['location.coordinates'] = newCoords;
+     if (!store.location?.coordinates || store.location.coordinates.length < 2) {
+      const coords = getRandomCoordinates(store.location.city);
+      updates['location.coordinates'] = coords;
     }
 
     if (Object.keys(updates).length > 0) {
