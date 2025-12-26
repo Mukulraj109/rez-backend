@@ -1,11 +1,39 @@
 import { Request, Response } from 'express';
 import UserLoyalty from '../models/UserLoyalty';
-import { 
-  sendSuccess, 
+import { Store } from '../models/Store';
+import { Product } from '../models/Product';
+import {
+  sendSuccess,
   sendNotFound
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+
+// Interface for homepage loyalty section response
+interface LoyaltyHubStats {
+  activeBrands: number;
+  streaks: number;
+  unlocked: number;
+  tiers: number;
+}
+
+interface FeaturedProduct {
+  productId: string;
+  name: string;
+  image: string;
+  originalPrice: number;
+  sellingPrice: number;
+  savings: number;
+  cashbackCoins: number;
+  storeName: string;
+  storeId: string;
+}
+
+interface HomepageLoyaltySummary {
+  loyaltyHub: LoyaltyHubStats | null;
+  featuredLockProduct: FeaturedProduct | null;
+  trendingService: FeaturedProduct | null;
+}
 
 // Get user's loyalty data
 export const getUserLoyalty = asyncHandler(async (req: Request, res: Response) => {
@@ -194,7 +222,7 @@ export const getCoinBalance = asyncHandler(async (req: Request, res: Response) =
       .lean();
 
     if (!loyalty) {
-      return sendSuccess(res, { 
+      return sendSuccess(res, {
         coins: {
           available: 0,
           expiring: 0,
@@ -206,6 +234,141 @@ export const getCoinBalance = asyncHandler(async (req: Request, res: Response) =
     sendSuccess(res, { coins: loyalty.coins }, 'Coin balance retrieved successfully');
   } catch (error) {
     throw new AppError('Failed to fetch coin balance', 500);
+  }
+});
+
+// Get homepage loyalty section summary (loyalty hub stats + featured products/services)
+export const getHomepageLoyaltySummary = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?._id || (req as any).user?.id;
+  const { latitude, longitude } = req.query;
+
+  // Default coordinates (Bangalore) if not provided
+  const lat = latitude ? parseFloat(latitude as string) : 12.9716;
+  const lng = longitude ? parseFloat(longitude as string) : 77.5946;
+  const coordinates: [number, number] = [lng, lat]; // [longitude, latitude] for MongoDB
+
+  const result: HomepageLoyaltySummary = {
+    loyaltyHub: null,
+    featuredLockProduct: null,
+    trendingService: null
+  };
+
+  try {
+    // Run all queries in parallel for performance
+    const [loyaltyData, nearbyStores] = await Promise.all([
+      // Get loyalty stats only if user is authenticated
+      userId ? UserLoyalty.findOne({ userId }).lean() : Promise.resolve(null),
+      // Get nearby stores (10km radius)
+      Store.find({
+        'location.coordinates': {
+          $geoWithin: {
+            $centerSphere: [coordinates, 10 / 6378.1] // 10km radius, Earth radius in km
+          }
+        },
+        isActive: true
+      })
+        .select('_id name logo')
+        .limit(50)
+        .lean()
+    ]);
+
+    // Calculate loyalty hub stats if user is authenticated
+    if (loyaltyData) {
+      const completedMissions = loyaltyData.missions?.filter(m => m.completedAt)?.length || 0;
+      const spentCoinsHistory = loyaltyData.coins?.history?.filter(h => h.type === 'spent')?.length || 0;
+      const uniqueTiers = new Set(loyaltyData.brandLoyalty?.map(b => b.tier) || []);
+
+      result.loyaltyHub = {
+        activeBrands: loyaltyData.brandLoyalty?.length || 0,
+        streaks: loyaltyData.streak?.current || 0,
+        unlocked: completedMissions + spentCoinsHistory, // Combined: completed missions + redeemed rewards
+        tiers: uniqueTiers.size || 0
+      };
+    }
+
+    // Get store IDs for product queries
+    const storeIds = nearbyStores.map(s => s._id);
+    const storeMap = new Map(nearbyStores.map(s => [s._id.toString(), s]));
+
+    if (storeIds.length > 0) {
+      // Get featured lock product (highest discount physical product)
+      const [featuredProduct, trendingService]: [any, any] = await Promise.all([
+        Product.findOne({
+          store: { $in: storeIds },
+          productType: 'product',
+          isActive: true,
+          isDeleted: { $ne: true },
+          'inventory.isAvailable': true,
+          'pricing.original': { $gt: 0 },
+          'pricing.selling': { $gt: 0 }
+        })
+          .sort({ 'pricing.discount': -1 }) // Sort by discount percentage
+          .select('name images pricing cashback store')
+          .lean(),
+
+        // Get trending service (by views + purchases)
+        Product.findOne({
+          store: { $in: storeIds },
+          productType: 'service',
+          isActive: true,
+          isDeleted: { $ne: true },
+          'inventory.isAvailable': true,
+          'pricing.selling': { $gt: 0 }
+        })
+          .sort({
+            'analytics.purchases': -1,
+            'analytics.views': -1,
+            'ratings.average': -1
+          })
+          .select('name images pricing cashback store analytics')
+          .lean()
+      ]);
+
+      // Format featured lock product
+      if (featuredProduct) {
+        const store = storeMap.get(featuredProduct.store.toString());
+        const savings = (featuredProduct.pricing?.original || 0) - (featuredProduct.pricing?.selling || 0);
+        const cashbackPercent = featuredProduct.cashback?.percentage || 0;
+        const cashbackCoins = Math.floor((featuredProduct.pricing?.selling || 0) * cashbackPercent / 100);
+
+        result.featuredLockProduct = {
+          productId: featuredProduct._id.toString(),
+          name: featuredProduct.name,
+          image: featuredProduct.images?.[0] || '',
+          originalPrice: featuredProduct.pricing?.original || 0,
+          sellingPrice: featuredProduct.pricing?.selling || 0,
+          savings: savings > 0 ? savings : 0,
+          cashbackCoins: cashbackCoins,
+          storeName: store?.name || '',
+          storeId: featuredProduct.store.toString()
+        };
+      }
+
+      // Format trending service
+      if (trendingService) {
+        const store = storeMap.get(trendingService.store.toString());
+        const savings = (trendingService.pricing?.original || trendingService.pricing?.selling || 0) - (trendingService.pricing?.selling || 0);
+        const cashbackPercent = trendingService.cashback?.percentage || 0;
+        const cashbackCoins = Math.floor((trendingService.pricing?.selling || 0) * cashbackPercent / 100);
+
+        result.trendingService = {
+          productId: trendingService._id.toString(),
+          name: trendingService.name,
+          image: trendingService.images?.[0] || '',
+          originalPrice: trendingService.pricing?.original || trendingService.pricing?.selling || 0,
+          sellingPrice: trendingService.pricing?.selling || 0,
+          savings: savings > 0 ? savings : 0,
+          cashbackCoins: cashbackCoins,
+          storeName: store?.name || '',
+          storeId: trendingService.store.toString()
+        };
+      }
+    }
+
+    sendSuccess(res, result, 'Homepage loyalty summary retrieved successfully');
+  } catch (error) {
+    console.error('Error fetching homepage loyalty summary:', error);
+    throw new AppError('Failed to fetch homepage loyalty summary', 500);
   }
 });
 

@@ -85,6 +85,7 @@ import securityRoutes from './routes/securityRoutes';
 import eventRoutes from './routes/eventRoutes';
 import referralRoutes from './routes/referralRoutes';
 import profileRoutes from './routes/profileRoutes';
+import verificationRoutes from './routes/verificationRoutes';
 import scratchCardRoutes from './routes/scratchCardRoutes';
 import couponRoutes from './routes/couponRoutes';
 // storePromoCoinRoutes removed - using wallet.brandedCoins instead
@@ -607,6 +608,8 @@ app.use(`${API_PREFIX}/security`, securityRoutes);
 app.use(`${API_PREFIX}/events`, eventRoutes);
 app.use(`${API_PREFIX}/referral`, referralRoutes);
 app.use(`${API_PREFIX}/user/profile`, profileRoutes);
+app.use(`${API_PREFIX}/user/verifications`, verificationRoutes);
+console.log('✅ User verification routes registered at /api/user/verifications');
 app.use(`${API_PREFIX}/scratch-cards`, scratchCardRoutes);
 app.use(`${API_PREFIX}/coupons`, couponRoutes);
 // store-promo-coins route removed - using wallet.brandedCoins instead

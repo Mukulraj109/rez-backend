@@ -10,6 +10,9 @@ export { storeSeeds, storeIds, getStoreInfo } from './storeSeeds';
 // Offer seeds
 export { offerSeeds } from './offerSeeds';
 
+// Flash Sale seeds (Lightning Deals)
+export { flashSaleSeeds } from './flashSaleSeeds';
+
 // Hotspot seeds
 export { hotspotSeeds } from './hotspotSeeds';
 
@@ -27,6 +30,9 @@ export { specialProfileSeeds } from './specialProfileSeeds';
 
 // Loyalty seeds
 export { loyaltyMilestoneSeeds } from './loyaltyMilestoneSeeds';
+
+// Seed runner - use: npx ts-node src/seeds/offersPageSeeds/runOffersPageSeeds.ts
+// This will seed Flash Sales, Coupons, and Friend Redemptions
 
 // Re-export all for convenience
 // Note: All exports are named exports above. Default export removed to avoid TypeScript private name issues.

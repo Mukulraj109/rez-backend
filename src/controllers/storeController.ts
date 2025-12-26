@@ -1221,9 +1221,10 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
       query.category = category;
     }
 
-    // Get stores with analytics
+    // Get stores with analytics - populate category to get name
     const stores = await Store.find(query)
-      .select('name logo banner category location ratings analytics contact createdAt description')
+      .select('name logo banner category location ratings analytics contact createdAt description offers rewardRules')
+      .populate('category', 'name slug icon')
       .lean();
 
     // Calculate trending score for each store
@@ -1912,5 +1913,169 @@ export const getBNPLStores = asyncHandler(async (req: Request, res: Response) =>
   } catch (error) {
     console.error('❌ [GET BNPL STORES] Error:', error);
     throw new AppError('Failed to fetch BNPL stores', 500);
+  }
+});
+
+// Get nearby stores for homepage - optimized endpoint with all computed fields
+// GET /api/stores/nearby-homepage
+export const getNearbyStoresForHomepage = asyncHandler(async (req: Request, res: Response) => {
+  const { latitude, longitude, radius = 2, limit = 5 } = req.query;
+
+  // Validate coordinates
+  if (!latitude || !longitude) {
+    return sendBadRequest(res, 'Latitude and longitude are required');
+  }
+
+  const userLat = Number(latitude);
+  const userLng = Number(longitude);
+
+  if (isNaN(userLat) || isNaN(userLng) || userLat < -90 || userLat > 90 || userLng < -180 || userLng > 180) {
+    return sendBadRequest(res, 'Invalid coordinates provided');
+  }
+
+  try {
+    // Import StoreVisit model for queue data
+    const { StoreVisit } = require('../models/StoreVisit');
+
+    // Use $geoWithin with $centerSphere for geospatial query
+    const radiusInRadians = Number(radius) / 6371; // Earth's radius is ~6371 km
+
+    const stores = await Store.find({
+      isActive: true,
+      'location.coordinates': {
+        $geoWithin: {
+          $centerSphere: [[userLng, userLat], radiusInRadians]
+        }
+      }
+    })
+    .select('name slug logo location operationalInfo offers rewardRules storeVisitConfig isActive')
+    .limit(Number(limit) * 2) // Fetch more to filter closed stores if needed
+    .lean();
+
+    // Get current date/time info for calculations
+    const now = new Date();
+    const dayName = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
+    const currentMinutes = parseInt(currentTime.split(':')[0]) * 60 + parseInt(currentTime.split(':')[1]);
+
+    // Get today's date range for queue query
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Get store IDs for queue aggregation
+    const storeIds = stores.map((s: any) => s._id);
+
+    // Aggregate queue counts for all stores in one query
+    const queueCounts = await StoreVisit.aggregate([
+      {
+        $match: {
+          storeId: { $in: storeIds },
+          visitType: 'queue',
+          status: { $in: ['pending', 'checked_in'] },
+          visitDate: { $gte: today, $lt: tomorrow }
+        }
+      },
+      {
+        $group: {
+          _id: '$storeId',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Create a map of store ID to queue count
+    const queueCountMap = new Map<string, number>(
+      queueCounts.map((q: any) => [q._id.toString(), q.count as number])
+    );
+
+    // Helper function to format distance
+    const formatDistance = (distanceKm: number): string => {
+      if (distanceKm < 1) {
+        return `${Math.round(distanceKm * 1000)}m`;
+      }
+      return `${distanceKm.toFixed(1)}km`;
+    };
+
+    // Helper function to get wait time string
+    const getWaitTimeString = (queueCount: number): string => {
+      if (queueCount === 0) return 'No wait';
+      if (queueCount <= 2) return '5 min';
+      if (queueCount <= 5) return '15 min';
+      return `${queueCount * 5} min`;
+    };
+
+    // Process stores with computed fields
+    const processedStores = stores.map((store: any) => {
+      // Calculate distance
+      let distance = null;
+      let distanceFormatted = '';
+      if (store.location?.coordinates && Array.isArray(store.location.coordinates) && store.location.coordinates.length === 2) {
+        distance = calculateDistance([userLng, userLat], store.location.coordinates);
+        distanceFormatted = formatDistance(distance);
+      }
+
+      // Check if store is open
+      const todayHours = store.operationalInfo?.hours?.[dayName];
+      let isOpen = false;
+      let isClosingSoon = false;
+      let status = 'Closed';
+
+      if (todayHours && !todayHours.closed && todayHours.open && todayHours.close) {
+        isOpen = currentTime >= todayHours.open && currentTime <= todayHours.close;
+
+        if (isOpen) {
+          // Check if closing soon (within 30 minutes)
+          const closeTime = todayHours.close;
+          const closingMinutes = parseInt(closeTime.split(':')[0]) * 60 + parseInt(closeTime.split(':')[1]);
+          isClosingSoon = closingMinutes - currentMinutes <= 30 && closingMinutes > currentMinutes;
+
+          status = isClosingSoon ? 'Closing soon' : 'Open';
+        }
+      }
+
+      // Get queue count for wait time
+      const queueCount: number = queueCountMap.get(store._id.toString()) || 0;
+      const waitTime = getWaitTimeString(queueCount);
+
+      // Get cashback percentage
+      const cashbackPercent = store.offers?.cashback || store.rewardRules?.baseCashbackPercent || 5;
+      const cashback = `${cashbackPercent}% cashback`;
+
+      // Check if store is live (has live_availability feature)
+      const isLive = store.isActive &&
+        (store.storeVisitConfig?.features?.includes('live_availability') ||
+         store.storeVisitConfig?.enabled === true);
+
+      return {
+        id: store._id.toString(),
+        name: store.name,
+        distance: distanceFormatted,
+        distanceValue: distance, // For sorting
+        isLive,
+        status,
+        waitTime,
+        cashback,
+        closingSoon: isClosingSoon
+      };
+    });
+
+    // Filter out stores without valid coordinates and sort by distance
+    const validStores = processedStores
+      .filter((s: any) => s.distanceValue !== null)
+      .sort((a: any, b: any) => a.distanceValue - b.distanceValue)
+      .slice(0, Number(limit))
+      .map((s: any) => {
+        // Remove distanceValue from response (internal use only)
+        const { distanceValue, ...rest } = s;
+        return rest;
+      });
+
+    sendSuccess(res, { stores: validStores }, 'Nearby stores for homepage retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [GET NEARBY STORES HOMEPAGE] Error:', error);
+    throw new AppError('Failed to fetch nearby stores for homepage', 500);
   }
 });

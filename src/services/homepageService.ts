@@ -5,6 +5,7 @@ import Offer from '../models/Offer';
 import { Category } from '../models/Category';
 import { Video } from '../models/Video';
 import { Article } from '../models/Article';
+import { MallBrand } from '../models/MallBrand';
 import { ModeId } from './modeService';
 
 /**
@@ -24,7 +25,16 @@ const DEFAULT_LIMITS = {
   studentOffers: 5,
   categories: 12,
   trendingVideos: 6,
-  latestArticles: 4
+  latestArticles: 4,
+  brandPartnerships: 6
+};
+
+// Gradient colors based on brand tier
+const TIER_GRADIENTS: Record<string, [string, string]> = {
+  luxury: ['#1a1a2e', '#16213e'],
+  exclusive: ['#4a0072', '#8e2de2'],
+  premium: ['#DBEAFE', '#E9D5FF'],
+  standard: ['#D1FAE5', '#FED7AA']
 };
 
 interface HomepageQueryParams {
@@ -372,6 +382,63 @@ async function fetchLatestArticles(limit: number): Promise<any[]> {
 }
 
 /**
+ * Format deal text from cashback info
+ */
+function formatDeal(cashback: any): string {
+  if (!cashback) return 'Special Offer';
+
+  if (cashback.maxAmount && cashback.maxAmount >= 1000) {
+    return `Up to ₹${Math.floor(cashback.maxAmount / 1000)}k cashback`;
+  }
+  if (cashback.percentage >= 10) {
+    return `${cashback.percentage}% cashback`;
+  }
+  return `Up to ${cashback.percentage}% off`;
+}
+
+/**
+ * Fetch brand partnerships for homepage
+ */
+async function fetchBrandPartnerships(limit: number): Promise<any[]> {
+  const startTime = Date.now();
+  try {
+    const brands = await MallBrand.find({
+      isFeatured: true,
+      isActive: true,
+      'cashback.percentage': { $gt: 0 }
+    })
+      .populate('mallCategory', 'name slug color')
+      .select('name slug logo tier cashback badges ratings analytics')
+      .sort({ 'ratings.average': -1, 'analytics.clicks': -1 })
+      .limit(limit)
+      .lean();
+
+    // Transform to frontend-friendly format
+    const transformedBrands = brands.map((brand: any) => ({
+      id: brand._id,
+      name: brand.name,
+      slug: brand.slug,
+      logo: brand.logo,
+      tier: brand.tier,
+      deal: formatDeal(brand.cashback),
+      cashback: brand.cashback,
+      badges: brand.badges || [],
+      rating: brand.ratings?.average || 4.0,
+      category: brand.mallCategory?.name,
+      gradientColors: TIER_GRADIENTS[brand.tier] || TIER_GRADIENTS.standard
+    }));
+
+    const duration = Date.now() - startTime;
+    console.log(`✅ [Homepage Service] Fetched ${transformedBrands.length} brand partnerships in ${duration}ms`);
+    return transformedBrands;
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error(`❌ [Homepage Service] Failed to fetch brand partnerships in ${duration}ms:`, error);
+    throw error;
+  }
+}
+
+/**
  * Main function to fetch all homepage data
  * Executes all queries in parallel for optimal performance
  */
@@ -390,7 +457,8 @@ export async function getHomepageData(params: HomepageQueryParams): Promise<Home
     'studentOffers',
     'categories',
     'trendingVideos',
-    'latestArticles'
+    'latestArticles',
+    'brandPartnerships'
   ];
 
   // Prepare promises for parallel execution
@@ -474,6 +542,14 @@ export async function getHomepageData(params: HomepageQueryParams): Promise<Home
     promises.latestArticles = fetchLatestArticles(params.limit || DEFAULT_LIMITS.latestArticles)
       .catch(err => {
         errors.latestArticles = err.message;
+        return [];
+      });
+  }
+
+  if (requestedSections.includes('brandPartnerships')) {
+    promises.brandPartnerships = fetchBrandPartnerships(params.limit || DEFAULT_LIMITS.brandPartnerships)
+      .catch(err => {
+        errors.brandPartnerships = err.message;
         return [];
       });
   }

@@ -18,6 +18,12 @@ import {
   getPriveOfferById,
   getPriveHighlights,
   trackOfferClick,
+  getEarnings,
+  getTransactions,
+  redeemCoins,
+  getVouchers,
+  getVoucherById,
+  markVoucherUsed,
 } from '../controllers/priveController';
 import { authenticate } from '../middleware/auth';
 
@@ -129,5 +135,55 @@ router.post('/offers/:id/click', trackOfferClick);
  * @access  Private
  */
 router.get('/highlights', getPriveHighlights);
+
+// ==========================================
+// Earnings & Transactions
+// ==========================================
+
+/**
+ * @route   GET /api/prive/earnings
+ * @desc    Get user's coin earning history
+ * @access  Private
+ */
+router.get('/earnings', getEarnings);
+
+/**
+ * @route   GET /api/prive/transactions
+ * @desc    Get user's coin transaction history
+ * @access  Private
+ */
+router.get('/transactions', getTransactions);
+
+// ==========================================
+// Redemption & Vouchers
+// ==========================================
+
+/**
+ * @route   POST /api/prive/redeem
+ * @desc    Redeem coins for a voucher
+ * @access  Private
+ */
+router.post('/redeem', redeemCoins);
+
+/**
+ * @route   GET /api/prive/vouchers
+ * @desc    Get user's voucher history
+ * @access  Private
+ */
+router.get('/vouchers', getVouchers);
+
+/**
+ * @route   GET /api/prive/vouchers/:id
+ * @desc    Get single voucher details
+ * @access  Private
+ */
+router.get('/vouchers/:id', getVoucherById);
+
+/**
+ * @route   POST /api/prive/vouchers/:id/use
+ * @desc    Mark a voucher as used
+ * @access  Private
+ */
+router.post('/vouchers/:id/use', markVoucherUsed);
 
 export default router;

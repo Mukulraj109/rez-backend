@@ -10,11 +10,13 @@ import { reputationService } from '../services/reputationService';
 import { UserReputation } from '../models/UserReputation';
 import DailyCheckIn, { calculateStreakBonus, getStreakMessage } from '../models/DailyCheckIn';
 import PriveOffer, { IPriveOffer } from '../models/PriveOffer';
+import PriveVoucher, { calculateVoucherValue, getDefaultExpiry, VoucherType } from '../models/PriveVoucher';
 import { User } from '../models/User';
 import { Wallet } from '../models/Wallet';
 import { Order } from '../models/Order';
 import { Review } from '../models/Review';
 import Referral from '../models/Referral';
+import { CoinTransaction } from '../models/CoinTransaction';
 
 // Helper function to calculate expires in string from a date
 const calculateExpiresIn = (expiresAt: Date): string => {
@@ -950,6 +952,643 @@ export const getPriveHighlights = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to get highlights',
+      message: error.message,
+    });
+  }
+};
+
+// ==========================================
+// Earnings & Transactions
+// ==========================================
+
+/**
+ * GET /api/prive/earnings
+ * Get user's coin earning history
+ */
+export const getEarnings = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+      });
+    }
+
+    const { page = 1, limit = 20, type } = req.query;
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    // Build query for earnings (positive transactions)
+    const query: any = {
+      userId: userObjectId,
+      amount: { $gt: 0 },
+    };
+
+    // Filter by type if specified
+    if (type && type !== 'all') {
+      query.type = type;
+    }
+
+    // Get total count
+    const total = await CoinTransaction.countDocuments(query);
+
+    // Get earnings with pagination
+    const earnings = await CoinTransaction.find(query)
+      .sort({ createdAt: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum)
+      .lean();
+
+    // Calculate summary stats
+    const now = new Date();
+    const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [weeklyTotal, monthlyTotal, totalEarned] = await Promise.all([
+      CoinTransaction.aggregate([
+        { $match: { userId: userObjectId, amount: { $gt: 0 }, createdAt: { $gte: weekStart } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      CoinTransaction.aggregate([
+        { $match: { userId: userObjectId, amount: { $gt: 0 }, createdAt: { $gte: monthStart } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      CoinTransaction.aggregate([
+        { $match: { userId: userObjectId, amount: { $gt: 0 } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+    ]);
+
+    // Format earnings
+    const formattedEarnings = earnings.map((txn: any) => ({
+      id: txn._id.toString(),
+      type: txn.type,
+      amount: txn.amount,
+      coinType: txn.coinType || 'rez',
+      description: txn.description || getTransactionDescription(txn.type),
+      source: txn.source,
+      createdAt: txn.createdAt,
+      date: new Date(txn.createdAt).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }),
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        earnings: formattedEarnings,
+        summary: {
+          thisWeek: weeklyTotal[0]?.total || 0,
+          thisMonth: monthlyTotal[0]?.total || 0,
+          allTime: totalEarned[0]?.total || 0,
+        },
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          pages: Math.ceil(total / limitNum),
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error('[PRIVE] Error getting earnings:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get earnings',
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * GET /api/prive/transactions
+ * Get user's coin transaction history (all transactions)
+ */
+export const getTransactions = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+      });
+    }
+
+    const { page = 1, limit = 20, type, coinType } = req.query;
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    // Build query
+    const query: any = { userId: userObjectId };
+
+    if (type && type !== 'all') {
+      query.type = type;
+    }
+
+    if (coinType && coinType !== 'all') {
+      query.coinType = coinType;
+    }
+
+    // Get total count
+    const total = await CoinTransaction.countDocuments(query);
+
+    // Get transactions with pagination
+    const transactions = await CoinTransaction.find(query)
+      .sort({ createdAt: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum)
+      .lean();
+
+    // Format transactions
+    const formattedTransactions = transactions.map((txn: any) => ({
+      id: txn._id.toString(),
+      type: txn.type,
+      amount: txn.amount,
+      coinType: txn.coinType || 'rez',
+      description: txn.description || getTransactionDescription(txn.type),
+      source: txn.source,
+      status: txn.status || 'completed',
+      createdAt: txn.createdAt,
+      date: new Date(txn.createdAt).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }),
+      time: new Date(txn.createdAt).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        transactions: formattedTransactions,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          pages: Math.ceil(total / limitNum),
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error('[PRIVE] Error getting transactions:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get transactions',
+      message: error.message,
+    });
+  }
+};
+
+// Helper to get description for transaction types
+const getTransactionDescription = (type: string): string => {
+  const descriptions: Record<string, string> = {
+    check_in: 'Daily check-in reward',
+    purchase: 'Purchase reward',
+    referral: 'Referral bonus',
+    campaign: 'Campaign reward',
+    content: 'Content creation reward',
+    review: 'Review reward',
+    redemption: 'Coin redemption',
+    transfer: 'Coin transfer',
+    bonus: 'Bonus reward',
+    cashback: 'Cashback earned',
+  };
+  return descriptions[type] || 'Coin transaction';
+};
+
+// ==========================================
+// Redemption & Vouchers
+// ==========================================
+
+/**
+ * POST /api/prive/redeem
+ * Redeem coins for a voucher
+ */
+export const redeemCoins = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+      });
+    }
+
+    const { coinAmount, type, category, partnerId, partnerName, partnerLogo } = req.body;
+
+    // Validate inputs
+    if (!coinAmount || coinAmount < 100) {
+      return res.status(400).json({
+        success: false,
+        error: 'Minimum 100 coins required for redemption',
+      });
+    }
+
+    if (!type || !['gift_card', 'bill_pay', 'experience', 'charity'].includes(type)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid redemption type',
+      });
+    }
+
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    // Get user's wallet
+    const wallet = await Wallet.findOne({ user: userObjectId });
+
+    if (!wallet) {
+      return res.status(404).json({
+        success: false,
+        error: 'Wallet not found',
+      });
+    }
+
+    // Check sufficient balance
+    const availableCoins = wallet.balance?.available || 0;
+    if (availableCoins < coinAmount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Insufficient coin balance',
+        available: availableCoins,
+        required: coinAmount,
+      });
+    }
+
+    // Calculate voucher value
+    const voucherValue = calculateVoucherValue(coinAmount, type as VoucherType);
+    const expiresAt = getDefaultExpiry(type as VoucherType);
+
+    // Generate unique voucher code
+    const voucherCode = await PriveVoucher.generateUniqueCode();
+
+    // Create voucher
+    const voucher = await PriveVoucher.create({
+      userId: userObjectId,
+      code: voucherCode,
+      type,
+      coinAmount,
+      coinType: 'rez',
+      value: voucherValue,
+      currency: 'INR',
+      status: 'active',
+      expiresAt,
+      category,
+      partnerId: partnerId ? new mongoose.Types.ObjectId(partnerId) : undefined,
+      partnerName,
+      partnerLogo,
+      terms: getVoucherTerms(type as VoucherType),
+      howToUse: getVoucherInstructions(type as VoucherType),
+    });
+
+    // Debit coins from wallet
+    wallet.balance.total -= coinAmount;
+    wallet.balance.available -= coinAmount;
+    wallet.statistics.totalSpent = (wallet.statistics.totalSpent || 0) + coinAmount;
+    wallet.lastTransactionAt = new Date();
+
+    // Update ReZ coin balance
+    const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+    if (rezCoin) {
+      rezCoin.amount = Math.max(0, rezCoin.amount - coinAmount);
+      rezCoin.lastUsed = new Date();
+    }
+
+    await wallet.save();
+
+    // Create transaction record
+    await CoinTransaction.create({
+      userId: userObjectId,
+      type: 'redemption',
+      amount: -coinAmount,
+      coinType: 'rez',
+      description: `Redeemed ${coinAmount} coins for ${type.replace('_', ' ')}`,
+      source: {
+        type: 'voucher',
+        id: voucher._id,
+      },
+      balanceAfter: wallet.balance.available,
+      status: 'completed',
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        voucher: {
+          id: voucher._id.toString(),
+          code: voucher.code,
+          type: voucher.type,
+          value: voucher.value,
+          currency: voucher.currency,
+          coinAmount: voucher.coinAmount,
+          expiresAt: voucher.expiresAt,
+          expiresIn: calculateExpiresIn(voucher.expiresAt),
+          status: voucher.status,
+          partnerName: voucher.partnerName,
+          partnerLogo: voucher.partnerLogo,
+          category: voucher.category,
+          terms: voucher.terms,
+          howToUse: voucher.howToUse,
+        },
+        wallet: {
+          available: wallet.balance.available,
+          total: wallet.balance.total,
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error('[PRIVE] Error redeeming coins:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to redeem coins',
+      message: error.message,
+    });
+  }
+};
+
+// Helper to get voucher terms
+const getVoucherTerms = (type: VoucherType): string[] => {
+  const terms: Record<VoucherType, string[]> = {
+    gift_card: [
+      'Valid for single use only',
+      'Cannot be combined with other offers',
+      'Non-transferable and non-refundable',
+      'Check partner terms for restrictions',
+    ],
+    bill_pay: [
+      'Apply at checkout to reduce bill amount',
+      'Valid for single use only',
+      'Cannot be exchanged for cash',
+      'Valid only at participating stores',
+    ],
+    experience: [
+      'Book your experience within validity period',
+      'Subject to availability',
+      'Non-refundable once booked',
+      'Valid for specified number of guests',
+    ],
+    charity: [
+      'Donation will be made within 7 days',
+      'Tax receipt will be emailed',
+      'Donation is non-refundable',
+      'Thank you for your generosity!',
+    ],
+  };
+  return terms[type];
+};
+
+// Helper to get voucher instructions
+const getVoucherInstructions = (type: VoucherType): string => {
+  const instructions: Record<VoucherType, string> = {
+    gift_card: 'Present this voucher code at checkout or enter it in the promo code field when shopping online.',
+    bill_pay: 'Show this voucher to the merchant at checkout. They will apply the discount to your bill.',
+    experience: 'Contact the experience provider with your voucher code to book your preferred date and time.',
+    charity: 'Your donation will be automatically processed. You will receive a confirmation email shortly.',
+  };
+  return instructions[type];
+};
+
+/**
+ * GET /api/prive/vouchers
+ * Get user's voucher history
+ */
+export const getVouchers = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+      });
+    }
+
+    const { status, type, page = 1, limit = 20 } = req.query;
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    // Build query
+    const query: any = { userId: userObjectId };
+
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    if (type && type !== 'all') {
+      query.type = type;
+    }
+
+    // Get total count
+    const total = await PriveVoucher.countDocuments(query);
+
+    // Get vouchers with pagination
+    const vouchers = await PriveVoucher.find(query)
+      .sort({ createdAt: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum)
+      .lean();
+
+    // Get active vouchers count
+    const activeCount = await PriveVoucher.countDocuments({
+      userId: userObjectId,
+      status: 'active',
+      expiresAt: { $gt: new Date() },
+    });
+
+    // Format vouchers
+    const formattedVouchers = vouchers.map((voucher: any) => ({
+      id: voucher._id.toString(),
+      code: voucher.code,
+      type: voucher.type,
+      value: voucher.value,
+      currency: voucher.currency,
+      coinAmount: voucher.coinAmount,
+      status: voucher.status,
+      expiresAt: voucher.expiresAt,
+      expiresIn: voucher.status === 'active' ? calculateExpiresIn(voucher.expiresAt) : null,
+      usedAt: voucher.usedAt,
+      partnerName: voucher.partnerName,
+      partnerLogo: voucher.partnerLogo,
+      category: voucher.category,
+      terms: voucher.terms,
+      howToUse: voucher.howToUse,
+      createdAt: voucher.createdAt,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        vouchers: formattedVouchers,
+        stats: {
+          active: activeCount,
+          total,
+        },
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          pages: Math.ceil(total / limitNum),
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error('[PRIVE] Error getting vouchers:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get vouchers',
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * GET /api/prive/vouchers/:id
+ * Get single voucher details
+ */
+export const getVoucherById = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { id } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid voucher ID',
+      });
+    }
+
+    const voucher = await PriveVoucher.findOne({
+      _id: new mongoose.Types.ObjectId(id),
+      userId: new mongoose.Types.ObjectId(userId),
+    });
+
+    if (!voucher) {
+      return res.status(404).json({
+        success: false,
+        error: 'Voucher not found',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        id: voucher._id.toString(),
+        code: voucher.code,
+        type: voucher.type,
+        value: voucher.value,
+        currency: voucher.currency,
+        coinAmount: voucher.coinAmount,
+        status: voucher.status,
+        expiresAt: voucher.expiresAt,
+        expiresIn: voucher.status === 'active' ? calculateExpiresIn(voucher.expiresAt) : null,
+        usedAt: voucher.usedAt,
+        partnerName: voucher.partnerName,
+        partnerLogo: voucher.partnerLogo,
+        category: voucher.category,
+        terms: voucher.terms,
+        howToUse: voucher.howToUse,
+        createdAt: voucher.createdAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('[PRIVE] Error getting voucher:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get voucher',
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * POST /api/prive/vouchers/:id/use
+ * Mark a voucher as used
+ */
+export const markVoucherUsed = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { id } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid voucher ID',
+      });
+    }
+
+    const voucher = await PriveVoucher.findOne({
+      _id: new mongoose.Types.ObjectId(id),
+      userId: new mongoose.Types.ObjectId(userId),
+    });
+
+    if (!voucher) {
+      return res.status(404).json({
+        success: false,
+        error: 'Voucher not found',
+      });
+    }
+
+    if (voucher.status !== 'active') {
+      return res.status(400).json({
+        success: false,
+        error: `Voucher is already ${voucher.status}`,
+      });
+    }
+
+    if (new Date() > voucher.expiresAt) {
+      voucher.status = 'expired';
+      await voucher.save();
+      return res.status(400).json({
+        success: false,
+        error: 'Voucher has expired',
+      });
+    }
+
+    // Mark as used
+    voucher.status = 'used';
+    voucher.usedAt = new Date();
+    await voucher.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Voucher marked as used',
+      data: {
+        id: voucher._id.toString(),
+        code: voucher.code,
+        status: voucher.status,
+        usedAt: voucher.usedAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('[PRIVE] Error marking voucher used:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to mark voucher as used',
       message: error.message,
     });
   }

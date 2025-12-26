@@ -60,6 +60,7 @@ export interface IFlashSale extends Document, IFlashSaleMethods {
   termsAndConditions: string[];
   minimumPurchase?: number;
   maximumDiscount?: number;
+  promoCode?: string; // Promo code for this flash sale
 
   // Analytics
   viewCount: number;
@@ -209,6 +210,11 @@ const FlashSaleSchema = new Schema(
     maximumDiscount: {
       type: Number,
       min: 0,
+    },
+    promoCode: {
+      type: String,
+      trim: true,
+      maxlength: 50,
     },
 
     // Analytics

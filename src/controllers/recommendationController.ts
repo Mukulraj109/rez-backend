@@ -330,6 +330,121 @@ export const getPersonalizedProductRecommendations = asyncHandler(async (req: Re
   }
 });
 
+// Get "Picked For You" recommendations (homepage section)
+// Works with or without authentication
+export const getPickedForYouRecommendations = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  const { location, limit = 10 } = req.query;
+
+  try {
+    // Parse location if provided
+    let userLocation: { lat: number; lng: number } | undefined;
+    if (location) {
+      const coords = location.toString().split(',').map(Number);
+      if (coords.length === 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {
+        userLocation = { lng: coords[0], lat: coords[1] };
+      }
+    }
+
+    let recommendations: any[];
+
+    if (userId) {
+      // Authenticated user: Get personalized recommendations
+      const options = {
+        limit: Number(limit),
+        excludeProducts: []
+      };
+
+      const personalizedRecs = await recommendationService.getPersonalizedProductRecommendations(
+        userId,
+        options
+      );
+
+      // Transform and add location boost if available
+      recommendations = personalizedRecs.map((rec: any) => {
+        const baseScore = rec.score / 100; // Normalize to 0-1
+        let finalScore = baseScore;
+        let reason = rec.reasons?.[0] || 'Recommended for you';
+
+        // Apply location boost if we have distance info
+        if (userLocation && rec.product?.store?.location?.coordinates) {
+          const storeCoords = rec.product.store.location.coordinates;
+          const distance = calculateDistance(
+            userLocation.lat,
+            userLocation.lng,
+            storeCoords[1],
+            storeCoords[0]
+          );
+
+          if (distance < 5) { // Within 5km
+            finalScore = Math.min(1, baseScore * 1.2);
+            reason = 'Near you & based on your preferences';
+          }
+        }
+
+        return {
+          ...rec.product,
+          recommendationScore: finalScore,
+          recommendationReason: reason,
+          confidence: rec.confidence,
+          personalizedFor: userId
+        };
+      });
+    } else {
+      // Anonymous user: Get popular/featured products
+      const { Product } = require('../models/Product');
+
+      const products = await Product.find({
+        isActive: true,
+        isFeatured: true,
+        'inventory.isAvailable': true
+      })
+        .populate('category', 'name slug')
+        .populate('store', 'name slug logo location')
+        .select('name slug images pricing inventory ratings badges tags analytics store')
+        .sort({ 'analytics.views': -1, 'ratings.average': -1 })
+        .limit(Number(limit))
+        .lean();
+
+      recommendations = products.map((product: any, index: number) => {
+        const baseScore = 0.7 + (0.3 * (1 - index / products.length)); // Higher score for first items
+
+        return {
+          ...product,
+          recommendationScore: baseScore,
+          recommendationReason: 'Popular item you might like',
+          confidence: 0.6,
+          personalizedFor: null
+        };
+      });
+    }
+
+    sendSuccess(res, {
+      recommendations,
+      total: recommendations.length,
+      userId: userId || null,
+      isPersonalized: !!userId
+    }, 'Picked for you recommendations retrieved successfully');
+
+  } catch (error) {
+    console.error('Get picked for you recommendations error:', error);
+    throw new AppError('Failed to get picked for you recommendations', 500);
+  }
+});
+
+// Helper function to calculate distance between two points (Haversine formula)
+function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 // Track product view
 export const trackProductView = asyncHandler(async (req: Request, res: Response) => {
   const { productId } = req.params;

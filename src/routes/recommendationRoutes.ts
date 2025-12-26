@@ -10,6 +10,7 @@ import {
   getFrequentlyBoughtTogether,
   getBundleDeals,
   getPersonalizedProductRecommendations,
+  getPickedForYouRecommendations,
   trackProductView
 } from '../controllers/recommendationController';
 import { getDiverseRecommendations } from '../controllers/diverseRecommendationController';
@@ -148,6 +149,17 @@ router.get('/products/personalized',   // recommendationLimiter,, // Disabled fo
     excludeProducts: Joi.string() // Comma-separated product IDs
   })),
   getPersonalizedProductRecommendations
+);
+
+// Get "Picked For You" recommendations for homepage
+// Works with or without authentication
+router.get('/picked-for-you',
+  optionalAuth,
+  validateQuery(Joi.object({
+    location: Joi.string().pattern(/^-?\d+\.?\d*,-?\d+\.?\d*$/), // "lng,lat" format
+    limit: Joi.number().integer().min(1).max(20).default(10)
+  })),
+  getPickedForYouRecommendations
 );
 
 // Track product view

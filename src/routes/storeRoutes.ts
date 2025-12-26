@@ -22,7 +22,8 @@ import {
   getUserStoreVisits,
   getRecentEarnings,
   getTopCashbackStores,
-  getBNPLStores
+  getBNPLStores,
+  getNearbyStoresForHomepage
 } from '../controllers/storeController';
 import { getStoreReviews } from '../controllers/reviewController';
 import {
@@ -159,6 +160,19 @@ router.get('/bnpl',
     limit: Joi.number().integer().min(1).max(50).default(10)
   })),
   getBNPLStores
+);
+
+// Get nearby stores for homepage - optimized endpoint with all computed fields
+router.get('/nearby-homepage',
+  // generalLimiter, // Disabled for development
+  optionalAuth,
+  validateQuery(Joi.object({
+    latitude: Joi.number().min(-90).max(90).required(),
+    longitude: Joi.number().min(-180).max(180).required(),
+    radius: Joi.number().min(0.1).max(10).default(2),
+    limit: Joi.number().integer().min(1).max(10).default(5)
+  })),
+  getNearbyStoresForHomepage
 );
 
 // Get stores by category

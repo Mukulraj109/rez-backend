@@ -89,9 +89,12 @@ async function clearData(): Promise<void> {
     log.info(`Deleted ${result.deletedCount} ${name} documents`);
   }
 
-  // Clear offers with specific tags (our seeded ones)
+  // Clear offers with specific tags OR exclusiveZone (our seeded ones)
   const offerResult = await Offer.deleteMany({
-    'metadata.tags': { $in: ['flash-sale', 'bogo', 'clearance', 'exclusive'] },
+    $or: [
+      { 'metadata.tags': { $in: ['flash-sale', 'bogo', 'clearance', 'exclusive', 'student', 'corporate', 'women', 'defence', 'healthcare', 'senior'] } },
+      { exclusiveZone: { $exists: true, $ne: null } },
+    ],
   });
   log.info(`Deleted ${offerResult.deletedCount} seeded Offer documents`);
 

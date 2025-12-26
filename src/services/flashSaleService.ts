@@ -1,6 +1,8 @@
 import FlashSale, { IFlashSale } from '../models/FlashSale';
+import FlashSalePurchase, { IFlashSalePurchase } from '../models/FlashSalePurchase';
 import mongoose from 'mongoose';
 import stockSocketService from './stockSocketService'; // Import socket service instead
+import stripeService from './stripeService';
 
 interface CreateFlashSaleData {
   title: string;
@@ -532,6 +534,337 @@ class FlashSaleService {
       };
     } catch (error) {
       console.error('❌ [FlashSaleService] Error getting flash sale stats:', error);
+      throw error;
+    }
+  }
+
+  // ============================================
+  // FLASH SALE PURCHASE METHODS
+  // ============================================
+
+  /**
+   * Check user's purchase count for a flash sale
+   */
+  async checkUserPurchaseLimit(userId: string, flashSaleId: string): Promise<{
+    currentCount: number;
+    limitPerUser: number;
+    canPurchase: boolean;
+  }> {
+    try {
+      const flashSale = await FlashSale.findById(flashSaleId);
+      if (!flashSale) {
+        throw new Error('Flash sale not found');
+      }
+
+      const currentCount = await FlashSalePurchase.getUserPurchaseCount(userId, flashSaleId);
+      const canPurchase = currentCount < flashSale.limitPerUser;
+
+      return {
+        currentCount,
+        limitPerUser: flashSale.limitPerUser,
+        canPurchase,
+      };
+    } catch (error) {
+      console.error('❌ [FlashSaleService] Error checking user purchase limit:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Initiate a flash sale purchase - validates and creates Stripe checkout session
+   */
+  async initiateFlashSalePurchase(
+    userId: string,
+    flashSaleId: string,
+    quantity: number = 1,
+    metadata?: {
+      ipAddress?: string;
+      userAgent?: string;
+      successUrl?: string;
+      cancelUrl?: string;
+      customerEmail?: string;
+    }
+  ): Promise<{
+    purchaseId: string;
+    stripeSessionId: string;
+    stripeCheckoutUrl: string;
+    amount: number;
+    currency: string;
+    flashSale: {
+      title: string;
+      image: string;
+      originalPrice: number;
+      flashSalePrice: number;
+      discountPercentage: number;
+    };
+  }> {
+    try {
+      // 1. Get and validate flash sale
+      const flashSale = await FlashSale.findById(flashSaleId).populate('stores', 'name logo');
+      if (!flashSale) {
+        throw new Error('Flash sale not found');
+      }
+
+      // 2. Check if flash sale is active
+      const now = new Date();
+      if (now < flashSale.startTime || now > flashSale.endTime) {
+        throw new Error('Flash sale is not active');
+      }
+
+      if (flashSale.status === 'ended' || flashSale.status === 'sold_out') {
+        throw new Error('Flash sale has ended or sold out');
+      }
+
+      // 3. Check stock
+      if (flashSale.soldQuantity + quantity > flashSale.maxQuantity) {
+        throw new Error('Insufficient stock available');
+      }
+
+      // 4. Check user purchase limit
+      const purchaseLimitCheck = await this.checkUserPurchaseLimit(userId, flashSaleId);
+      if (!purchaseLimitCheck.canPurchase) {
+        throw new Error(`You have already purchased the maximum allowed (${purchaseLimitCheck.limitPerUser}) for this deal`);
+      }
+
+      // 5. Calculate amount
+      const amount = flashSale.flashSalePrice ||
+        (flashSale.originalPrice ? flashSale.originalPrice * (1 - flashSale.discountPercentage / 100) : 0);
+
+      if (!amount || amount <= 0) {
+        throw new Error('Invalid flash sale price');
+      }
+
+      const totalAmount = amount * quantity;
+
+      // 6. Create FlashSalePurchase record with pending status first
+      const purchase: IFlashSalePurchase = new FlashSalePurchase({
+        user: new mongoose.Types.ObjectId(userId),
+        flashSale: new mongoose.Types.ObjectId(flashSaleId),
+        store: flashSale.stores?.[0]?._id,
+        amount: totalAmount,
+        originalPrice: flashSale.originalPrice || 0,
+        discountPercentage: flashSale.discountPercentage,
+        quantity,
+        paymentStatus: 'pending',
+        paymentMethod: 'stripe',
+        promoCode: flashSale.promoCode,
+        ipAddress: metadata?.ipAddress,
+        userAgent: metadata?.userAgent,
+      });
+
+      await purchase.save();
+
+      // 7. Create Stripe checkout session
+      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:8081';
+      const purchaseIdStr = (purchase._id as any).toString();
+
+      // Replace {purchaseId} placeholder with actual ID, and ensure session_id placeholder exists
+      let successUrl = metadata?.successUrl || `${baseUrl}/flash-sale-success?purchaseId=${purchaseIdStr}&session_id={CHECKOUT_SESSION_ID}`;
+      successUrl = successUrl.replace('{purchaseId}', purchaseIdStr);
+      // Ensure Stripe's session_id placeholder is included
+      if (!successUrl.includes('{CHECKOUT_SESSION_ID}') && !successUrl.includes('session_id=')) {
+        successUrl += (successUrl.includes('?') ? '&' : '?') + 'session_id={CHECKOUT_SESSION_ID}';
+      }
+
+      const cancelUrl = metadata?.cancelUrl || `${baseUrl}/flash-sales/${flashSaleId}?cancelled=true`;
+
+      const stripeSession = await stripeService.createCheckoutSessionForOrder({
+        orderId: purchaseIdStr,
+        amount: totalAmount,
+        currency: 'inr',
+        customerEmail: metadata?.customerEmail,
+        successUrl,
+        cancelUrl,
+        items: [{
+          name: flashSale.title,
+          description: `${flashSale.discountPercentage}% OFF - Limited Time Deal`,
+          amount: totalAmount,
+          quantity: 1,
+        }],
+        metadata: {
+          purchaseId: purchaseIdStr,
+          flashSaleId,
+          userId,
+          type: 'flash_sale_purchase',
+        },
+      });
+
+      // 8. Update purchase with Stripe session ID
+      purchase.razorpayOrderId = stripeSession.id; // Using this field for Stripe session ID
+      await purchase.save();
+
+      console.log('✅ [FlashSaleService] Flash sale purchase initiated with Stripe:', {
+        purchaseId: purchaseIdStr,
+        stripeSessionId: stripeSession.id,
+        amount: totalAmount,
+      });
+
+      return {
+        purchaseId: purchaseIdStr,
+        stripeSessionId: stripeSession.id,
+        stripeCheckoutUrl: stripeSession.url || '',
+        amount: totalAmount,
+        currency: 'INR',
+        flashSale: {
+          title: flashSale.title,
+          image: flashSale.image,
+          originalPrice: flashSale.originalPrice || 0,
+          flashSalePrice: amount,
+          discountPercentage: flashSale.discountPercentage,
+        },
+      };
+    } catch (error) {
+      console.error('❌ [FlashSaleService] Error initiating flash sale purchase:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Complete/Verify flash sale payment (for Stripe)
+   */
+  async completeFlashSalePurchase(
+    purchaseId: string,
+    paymentDetails: {
+      stripeSessionId: string;
+    }
+  ): Promise<{
+    success: boolean;
+    purchase: IFlashSalePurchase;
+    voucherCode: string;
+    promoCode?: string;
+    expiresAt: Date;
+  }> {
+    try {
+      // 1. Get purchase record
+      const purchase = await FlashSalePurchase.findById(purchaseId);
+      if (!purchase) {
+        throw new Error('Purchase record not found');
+      }
+
+      // 2. Verify this purchase hasn't already been completed
+      if (purchase.paymentStatus === 'paid') {
+        return {
+          success: true,
+          purchase,
+          voucherCode: purchase.voucherCode,
+          promoCode: purchase.promoCode,
+          expiresAt: purchase.voucherExpiresAt,
+        };
+      }
+
+      // 3. Verify Stripe session ID matches
+      if (purchase.razorpayOrderId !== paymentDetails.stripeSessionId) {
+        throw new Error('Session ID mismatch');
+      }
+
+      // 4. Verify Stripe checkout session
+      const sessionStatus = await stripeService.verifyCheckoutSession(paymentDetails.stripeSessionId);
+
+      if (!sessionStatus.verified || sessionStatus.paymentStatus !== 'paid') {
+        // Mark purchase as failed
+        purchase.paymentStatus = 'failed';
+        purchase.failureReason = 'Payment not completed';
+        await purchase.save();
+        throw new Error('Payment verification failed: Session not paid');
+      }
+
+      // 5. Update purchase record
+      purchase.paymentStatus = 'paid';
+      purchase.razorpayPaymentId = sessionStatus.paymentIntentId || paymentDetails.stripeSessionId;
+      purchase.paidAt = new Date();
+      purchase.purchasedAt = new Date();
+      await purchase.save();
+
+      // 6. Update flash sale stock and counters
+      await this.updateSoldQuantity(
+        purchase.flashSale.toString(),
+        purchase.quantity,
+        purchase.user.toString()
+      );
+
+      console.log('✅ [FlashSaleService] Flash sale purchase completed:', {
+        purchaseId: purchase._id,
+        voucherCode: purchase.voucherCode,
+        amount: purchase.amount,
+      });
+
+      // 7. Emit socket event
+      const io = stockSocketService.getIO();
+      if (io) {
+        io.emit('flashsale:purchase_completed', {
+          flashSaleId: purchase.flashSale,
+          purchaseId: purchase._id,
+          userId: purchase.user,
+        });
+      }
+
+      return {
+        success: true,
+        purchase,
+        voucherCode: purchase.voucherCode,
+        promoCode: purchase.promoCode,
+        expiresAt: purchase.voucherExpiresAt,
+      };
+    } catch (error) {
+      console.error('❌ [FlashSaleService] Error completing flash sale purchase:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mark flash sale purchase as failed
+   */
+  async failFlashSalePurchase(purchaseId: string, reason: string): Promise<void> {
+    try {
+      const purchase = await FlashSalePurchase.findById(purchaseId);
+      if (!purchase) {
+        throw new Error('Purchase record not found');
+      }
+
+      if (purchase.paymentStatus === 'paid') {
+        throw new Error('Cannot fail a completed purchase');
+      }
+
+      purchase.paymentStatus = 'failed';
+      purchase.failureReason = reason;
+      await purchase.save();
+
+      console.log('⚠️ [FlashSaleService] Flash sale purchase failed:', {
+        purchaseId,
+        reason,
+      });
+    } catch (error) {
+      console.error('❌ [FlashSaleService] Error failing flash sale purchase:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get user's flash sale purchases
+   */
+  async getUserFlashSalePurchases(userId: string): Promise<IFlashSalePurchase[]> {
+    try {
+      const purchases = await FlashSalePurchase.getUserPurchases(userId);
+      return purchases;
+    } catch (error) {
+      console.error('❌ [FlashSaleService] Error getting user flash sale purchases:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get flash sale purchase by ID
+   */
+  async getFlashSalePurchaseById(purchaseId: string): Promise<IFlashSalePurchase | null> {
+    try {
+      const purchase = await FlashSalePurchase.findById(purchaseId)
+        .populate('flashSale', 'title image discountPercentage stores promoCode')
+        .populate('store', 'name logo')
+        .populate('user', 'name email');
+
+      return purchase;
+    } catch (error) {
+      console.error('❌ [FlashSaleService] Error getting flash sale purchase:', error);
       throw error;
     }
   }

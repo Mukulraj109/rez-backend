@@ -9,7 +9,7 @@ export interface IOffer extends Document {
   subtitle?: string;
   description?: string;
   image: string;
-  category: 'mega' | 'student' | 'new_arrival' | 'trending' | 'food' | 'fashion' | 'electronics' | 'general';
+  category: 'mega' | 'student' | 'new_arrival' | 'trending' | 'food' | 'fashion' | 'electronics' | 'general' | 'entertainment' | 'beauty' | 'wellness';
   type: 'cashback' | 'discount' | 'voucher' | 'combo' | 'special' | 'walk_in';
   cashbackPercentage: number;
   originalPrice?: number;
@@ -84,7 +84,7 @@ export interface IOffer extends Document {
   deliveryTime?: string; // e.g., "25 min", "30-45 min"
 
   // Exclusive zone fields
-  exclusiveZone?: 'corporate' | 'women' | 'birthday' | 'student' | 'senior' | 'defence' | 'healthcare';
+  exclusiveZone?: 'corporate' | 'women' | 'birthday' | 'student' | 'senior' | 'defence' | 'healthcare' | 'teacher' | 'government' | 'differently-abled' | 'first-time';
   eligibilityRequirement?: string;
 
   // Redemption tracking
@@ -149,7 +149,7 @@ const OfferSchema = new Schema<IOffer>({
   },
   category: {
     type: String,
-    enum: ['mega', 'student', 'new_arrival', 'trending', 'food', 'fashion', 'electronics', 'general'],
+    enum: ['mega', 'student', 'new_arrival', 'trending', 'food', 'fashion', 'electronics', 'general', 'entertainment', 'beauty', 'wellness'],
     required: [true, 'Offer category is required'],
     index: true
   },
@@ -428,7 +428,7 @@ const OfferSchema = new Schema<IOffer>({
   // Exclusive zone fields
   exclusiveZone: {
     type: String,
-    enum: ['corporate', 'women', 'birthday', 'student', 'senior', 'defence', 'healthcare'],
+    enum: ['corporate', 'women', 'birthday', 'student', 'senior', 'defence', 'healthcare', 'teacher', 'government', 'differently-abled', 'first-time'],
     index: true
   },
   eligibilityRequirement: {
