@@ -397,6 +397,195 @@ class FlashSaleController {
       });
     }
   }
+
+  // ============================================
+  // FLASH SALE PURCHASE ENDPOINTS
+  // ============================================
+
+  /**
+   * Initiate flash sale purchase - creates Stripe checkout session
+   * POST /api/flash-sales/purchase/initiate
+   */
+  async initiateFlashSalePurchase(req: Request, res: Response): Promise<void> {
+    try {
+      const { flashSaleId, quantity = 1, successUrl, cancelUrl } = req.body;
+      const userId = (req as any).user.userId;
+      const userEmail = (req as any).user.email;
+
+      if (!flashSaleId) {
+        res.status(400).json({
+          success: false,
+          message: 'Flash sale ID is required',
+        });
+        return;
+      }
+
+      // Get metadata from request
+      const metadata = {
+        ipAddress: req.ip || req.connection?.remoteAddress,
+        userAgent: req.headers['user-agent'],
+        successUrl,
+        cancelUrl,
+        customerEmail: userEmail,
+      };
+
+      const result = await flashSaleService.initiateFlashSalePurchase(
+        userId,
+        flashSaleId,
+        quantity,
+        metadata
+      );
+
+      res.status(200).json({
+        success: true,
+        message: 'Flash sale purchase initiated',
+        data: result,
+      });
+    } catch (error) {
+      console.error('❌ [FlashSaleController] Error initiating purchase:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to initiate flash sale purchase',
+      });
+    }
+  }
+
+  /**
+   * Verify flash sale payment - completes the purchase (for Stripe)
+   * POST /api/flash-sales/purchase/verify
+   */
+  async verifyFlashSalePayment(req: Request, res: Response): Promise<void> {
+    try {
+      const { purchaseId, stripeSessionId } = req.body;
+
+      if (!purchaseId || !stripeSessionId) {
+        res.status(400).json({
+          success: false,
+          message: 'Missing required payment verification fields (purchaseId, stripeSessionId)',
+        });
+        return;
+      }
+
+      const result = await flashSaleService.completeFlashSalePurchase(purchaseId, {
+        stripeSessionId,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Payment verified successfully',
+        data: {
+          voucherCode: result.voucherCode,
+          promoCode: result.promoCode,
+          expiresAt: result.expiresAt,
+          amount: result.purchase.amount,
+        },
+      });
+    } catch (error) {
+      console.error('❌ [FlashSaleController] Error verifying payment:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to verify payment',
+      });
+    }
+  }
+
+  /**
+   * Mark flash sale purchase as failed
+   * POST /api/flash-sales/purchase/fail
+   */
+  async failFlashSalePurchase(req: Request, res: Response): Promise<void> {
+    try {
+      const { purchaseId, reason } = req.body;
+
+      if (!purchaseId) {
+        res.status(400).json({
+          success: false,
+          message: 'Purchase ID is required',
+        });
+        return;
+      }
+
+      await flashSaleService.failFlashSalePurchase(purchaseId, reason || 'Payment failed');
+
+      res.status(200).json({
+        success: true,
+        message: 'Purchase marked as failed',
+      });
+    } catch (error) {
+      console.error('❌ [FlashSaleController] Error failing purchase:', error);
+      res.status(500).json({
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to update purchase status',
+      });
+    }
+  }
+
+  /**
+   * Get user's flash sale purchases
+   * GET /api/flash-sales/purchases
+   */
+  async getUserFlashSalePurchases(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = (req as any).user.userId;
+
+      const purchases = await flashSaleService.getUserFlashSalePurchases(userId);
+
+      res.status(200).json({
+        success: true,
+        data: purchases,
+        count: purchases.length,
+      });
+    } catch (error) {
+      console.error('❌ [FlashSaleController] Error getting user purchases:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch flash sale purchases',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * Get flash sale purchase by ID
+   * GET /api/flash-sales/purchases/:purchaseId
+   */
+  async getFlashSalePurchaseById(req: Request, res: Response): Promise<void> {
+    try {
+      const { purchaseId } = req.params;
+      const userId = (req as any).user.userId;
+
+      const purchase = await flashSaleService.getFlashSalePurchaseById(purchaseId);
+
+      if (!purchase) {
+        res.status(404).json({
+          success: false,
+          message: 'Purchase not found',
+        });
+        return;
+      }
+
+      // Verify the purchase belongs to the user
+      if (purchase.user.toString() !== userId) {
+        res.status(403).json({
+          success: false,
+          message: 'Unauthorized to view this purchase',
+        });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        data: purchase,
+      });
+    } catch (error) {
+      console.error('❌ [FlashSaleController] Error getting purchase:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch purchase details',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
 }
 
 export default new FlashSaleController();

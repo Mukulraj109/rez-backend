@@ -49,6 +49,7 @@
     "test:events": "node scripts/test-event-system.js",
     "test:new-arrivals": "node scripts/test-new-arrivals.js",
     "seed:challenges": "ts-node src/scripts/seedChallenges.ts",
+    "seed:mall-brands": "ts-node src/scripts/seedMallBrands.ts",
     "seed:creators": "ts-node src/scripts/seed-user-creators.ts",
     "seed:payment-methods": "ts-node scripts/update-store-payment-methods.ts",
     "seed:bnpl-stores": "ts-node scripts/seed-store-bnpl.ts",

@@ -13,6 +13,7 @@ import {
   getDoubleCashbackCampaigns,
   getCoinDrops,
   getUploadBillStores,
+  getSuperCashbackStores,
 } from '../controllers/offersPageController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validateQuery, validate, commonSchemas } from '../middleware/validation';
@@ -123,6 +124,16 @@ router.get('/upload-bill-stores',
     limit: Joi.number().integer().min(1).max(50).default(20),
   })),
   getUploadBillStores
+);
+
+// Get super cashback stores (stores with 10%+ cashback)
+router.get('/super-cashback-stores',
+  optionalAuth,
+  validateQuery(Joi.object({
+    minCashback: Joi.number().integer().min(1).max(100).default(10),
+    limit: Joi.number().integer().min(1).max(50).default(20),
+  })),
+  getSuperCashbackStores
 );
 
 export default router;

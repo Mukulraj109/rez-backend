@@ -369,6 +369,63 @@ export const redeemOffer = async (req: Request, res: Response) => {
       return sendError(res, 'Offer is no longer valid', 400);
     }
 
+    // Check exclusive zone eligibility
+    if (offer.exclusiveZone) {
+      const user = await User.findById(userId);
+      if (!user) {
+        return sendError(res, 'User not found', 404);
+      }
+
+      const zone = offer.exclusiveZone;
+      let isEligible = false;
+      let eligibilityMessage = '';
+
+      switch (zone) {
+        case 'student':
+          isEligible = user.verifications?.student?.verified === true;
+          eligibilityMessage = 'This offer is exclusive to verified students. Please verify your student status to redeem.';
+          break;
+        case 'corporate':
+          isEligible = user.verifications?.corporate?.verified === true;
+          eligibilityMessage = 'This offer is exclusive to verified corporate employees. Please verify your corporate email to redeem.';
+          break;
+        case 'defence':
+          isEligible = user.verifications?.defence?.verified === true;
+          eligibilityMessage = 'This offer is exclusive to verified defence personnel. Please verify your service ID to redeem.';
+          break;
+        case 'healthcare':
+          isEligible = user.verifications?.healthcare?.verified === true;
+          eligibilityMessage = 'This offer is exclusive to verified healthcare workers. Please verify your medical ID to redeem.';
+          break;
+        case 'senior':
+          // Check if user is 60+ based on dateOfBirth
+          if (user.profile?.dateOfBirth) {
+            const age = Math.floor((Date.now() - new Date(user.profile.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+            isEligible = age >= 60;
+          }
+          eligibilityMessage = 'This offer is exclusive to senior citizens (60+). Please update your date of birth in profile.';
+          break;
+        case 'women':
+          isEligible = user.profile?.gender === 'female';
+          eligibilityMessage = 'This offer is exclusive to women. Please update your gender in profile.';
+          break;
+        case 'birthday':
+          if (user.profile?.dateOfBirth) {
+            const birthMonth = new Date(user.profile.dateOfBirth).getMonth();
+            const currentMonth = new Date().getMonth();
+            isEligible = birthMonth === currentMonth;
+          }
+          eligibilityMessage = 'This offer is only valid during your birthday month. Please update your date of birth in profile.';
+          break;
+        default:
+          isEligible = true; // Unknown zone, allow by default
+      }
+
+      if (!isEligible) {
+        return sendError(res, eligibilityMessage, 403);
+      }
+    }
+
     // Check if user already has an active redemption for this offer
     const existingActiveRedemption = await OfferRedemption.findOne({
       user: userId,

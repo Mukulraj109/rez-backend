@@ -86,6 +86,45 @@ router.post('/apply-offer', authMiddleware, flashSaleController.applyOffer);
  */
 router.post('/validate-promo', authMiddleware, flashSaleController.validatePromoCode);
 
+// ============================================
+// FLASH SALE PURCHASE ROUTES
+// ============================================
+
+/**
+ * @route   POST /api/flash-sales/purchase/initiate
+ * @desc    Initiate flash sale purchase - creates Stripe checkout session
+ * @access  Private
+ */
+router.post('/purchase/initiate', authMiddleware, flashSaleController.initiateFlashSalePurchase);
+
+/**
+ * @route   POST /api/flash-sales/purchase/verify
+ * @desc    Verify flash sale payment - completes the purchase
+ * @access  Private
+ */
+router.post('/purchase/verify', authMiddleware, flashSaleController.verifyFlashSalePayment);
+
+/**
+ * @route   POST /api/flash-sales/purchase/fail
+ * @desc    Mark flash sale purchase as failed
+ * @access  Private
+ */
+router.post('/purchase/fail', authMiddleware, flashSaleController.failFlashSalePurchase);
+
+/**
+ * @route   GET /api/flash-sales/purchases
+ * @desc    Get user's flash sale purchases
+ * @access  Private
+ */
+router.get('/purchases', authMiddleware, flashSaleController.getUserFlashSalePurchases);
+
+/**
+ * @route   GET /api/flash-sales/purchases/:purchaseId
+ * @desc    Get flash sale purchase by ID
+ * @access  Private
+ */
+router.get('/purchases/:purchaseId', authMiddleware, flashSaleController.getFlashSalePurchaseById);
+
 // Admin routes (require admin authentication)
 // Note: Add admin middleware when available
 

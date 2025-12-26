@@ -85,6 +85,59 @@ export interface IUserReferral {
   referralEarnings: number; // Total cashback earned from referrals
 }
 
+// User verifications interface (for exclusive zones)
+export interface IUserVerifications {
+  student?: {
+    verified: boolean;
+    verifiedAt?: Date;
+    instituteName?: string;
+    documentType?: 'student_id' | 'edu_email' | 'enrollment_letter';
+    expiresAt?: Date;
+  };
+  corporate?: {
+    verified: boolean;
+    verifiedAt?: Date;
+    companyName?: string;
+    corporateEmail?: string;
+    expiresAt?: Date;
+  };
+  defence?: {
+    verified: boolean;
+    verifiedAt?: Date;
+    documentType?: 'military_id' | 'service_card' | 'canteen_card' | 'ex_servicemen_card';
+    serviceType?: 'army' | 'navy' | 'airforce' | 'paramilitary';
+  };
+  healthcare?: {
+    verified: boolean;
+    verifiedAt?: Date;
+    documentType?: 'hospital_id' | 'medical_council' | 'nursing_license';
+    profession?: 'doctor' | 'nurse' | 'paramedic' | 'pharmacist';
+  };
+  senior?: {
+    verified: boolean;
+    verifiedAt?: Date;
+    dateOfBirth?: Date;
+  };
+  teacher?: {
+    verified: boolean;
+    verifiedAt?: Date;
+    instituteName?: string;
+    documentType?: 'school_id' | 'college_id' | 'ugc_id';
+  };
+  government?: {
+    verified: boolean;
+    verifiedAt?: Date;
+    department?: string;
+    documentType?: 'govt_id' | 'pay_slip';
+  };
+  differentlyAbled?: {
+    verified: boolean;
+    verifiedAt?: Date;
+    documentType?: 'disability_certificate' | 'udid_card';
+    disabilityType?: string;
+  };
+}
+
 // Main User interface
 export interface IUser extends Document {
   phoneNumber: string;
@@ -95,6 +148,7 @@ export interface IUser extends Document {
   wallet: IUserWallet;
   auth: IUserAuth;
   referral: IUserReferral;
+  verifications?: IUserVerifications;
   socialLogin?: {
     googleId?: string;
     facebookId?: string;
@@ -394,6 +448,57 @@ const UserSchema = new Schema<IUser>({
     provider: {
       type: String,
       enum: ['google', 'facebook']
+    }
+  },
+  verifications: {
+    student: {
+      verified: { type: Boolean, default: false },
+      verifiedAt: Date,
+      instituteName: String,
+      documentType: { type: String, enum: ['student_id', 'edu_email', 'enrollment_letter'] },
+      expiresAt: Date
+    },
+    corporate: {
+      verified: { type: Boolean, default: false },
+      verifiedAt: Date,
+      companyName: String,
+      corporateEmail: String,
+      expiresAt: Date
+    },
+    defence: {
+      verified: { type: Boolean, default: false },
+      verifiedAt: Date,
+      documentType: { type: String, enum: ['military_id', 'service_card', 'canteen_card', 'ex_servicemen_card'] },
+      serviceType: { type: String, enum: ['army', 'navy', 'airforce', 'paramilitary'] }
+    },
+    healthcare: {
+      verified: { type: Boolean, default: false },
+      verifiedAt: Date,
+      documentType: { type: String, enum: ['hospital_id', 'medical_council', 'nursing_license'] },
+      profession: { type: String, enum: ['doctor', 'nurse', 'paramedic', 'pharmacist'] }
+    },
+    senior: {
+      verified: { type: Boolean, default: false },
+      verifiedAt: Date,
+      dateOfBirth: Date
+    },
+    teacher: {
+      verified: { type: Boolean, default: false },
+      verifiedAt: Date,
+      instituteName: String,
+      documentType: { type: String, enum: ['school_id', 'college_id', 'ugc_id'] }
+    },
+    government: {
+      verified: { type: Boolean, default: false },
+      verifiedAt: Date,
+      department: String,
+      documentType: { type: String, enum: ['govt_id', 'pay_slip'] }
+    },
+    differentlyAbled: {
+      verified: { type: Boolean, default: false },
+      verifiedAt: Date,
+      documentType: { type: String, enum: ['disability_certificate', 'udid_card'] },
+      disabilityType: String
     }
   },
   role: {

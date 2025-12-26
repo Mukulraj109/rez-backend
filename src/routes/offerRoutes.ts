@@ -37,6 +37,10 @@ import {
   getSpecialProfiles,
   getSpecialProfileOffers,
   getFriendsRedeemed,
+  getLoyaltyMilestones,
+  getLoyaltyProgress,
+  getFlashSaleOffers,
+  getDiscountBuckets,
 } from '../controllers/offersPageController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, validate, commonSchemas } from '../middleware/validation';
@@ -313,6 +317,12 @@ router.get('/hero-banners',
 // NEW OFFERS PAGE ROUTES
 // =====================
 
+// Get discount buckets (real-time aggregation counts)
+router.get('/discount-buckets',
+  optionalAuth,
+  getDiscountBuckets
+);
+
 // Get hotspot areas
 router.get('/hotspots',
   optionalAuth,
@@ -354,6 +364,15 @@ router.get('/sales-clearance',
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),
   getSaleOffers
+);
+
+// Get flash sale offers (from offers with metadata.flashSale.isActive)
+router.get('/flash-sales',
+  optionalAuth,
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(50).default(10)
+  })),
+  getFlashSaleOffers
 );
 
 // Get free delivery offers
@@ -418,6 +437,18 @@ router.get('/friends-redeemed',
     limit: Joi.number().integer().min(1).max(50).default(10)
   })),
   getFriendsRedeemed
+);
+
+// Get loyalty milestones
+router.get('/loyalty/milestones',
+  optionalAuth,
+  getLoyaltyMilestones
+);
+
+// Get user's loyalty progress
+router.get('/loyalty/progress',
+  optionalAuth,
+  getLoyaltyProgress
 );
 
 // Get single offer by ID (must be last to avoid conflicts with specific routes)

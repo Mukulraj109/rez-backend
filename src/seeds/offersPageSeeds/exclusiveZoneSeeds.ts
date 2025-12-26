@@ -68,7 +68,7 @@ export const exclusiveZoneSeeds: Partial<IExclusiveZone>[] = [
   },
   {
     name: 'Senior Citizen',
-    slug: 'senior-citizen',
+    slug: 'senior',
     icon: 'heart',
     iconColor: '#10B981',
     backgroundColor: '#D1FAE5',
