@@ -238,6 +238,154 @@ class GameController {
       });
     }
   }
+
+  // ======== MEMORY MATCH ========
+
+  // POST /api/games/memory-match/start
+  async startMemoryMatch(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const { difficulty = 'easy' } = req.body;
+
+      const result = await gameService.startMemoryMatch(userId, difficulty);
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Memory Match game started'
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // POST /api/games/memory-match/complete
+  async completeMemoryMatch(req: Request, res: Response) {
+    try {
+      const { sessionId, score, timeSpent, moves } = req.body;
+
+      const result = await gameService.completeMemoryMatch(sessionId, score, timeSpent, moves);
+
+      res.json({
+        success: true,
+        data: result,
+        message: `You earned ${result.coins} coins!`
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // ======== COIN HUNT ========
+
+  // POST /api/games/coin-hunt/start
+  async startCoinHunt(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+
+      const result = await gameService.startCoinHunt(userId);
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Coin Hunt game started'
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // POST /api/games/coin-hunt/complete
+  async completeCoinHunt(req: Request, res: Response) {
+    try {
+      const { sessionId, coinsCollected, score } = req.body;
+
+      const result = await gameService.completeCoinHunt(sessionId, coinsCollected, score);
+
+      res.json({
+        success: true,
+        data: result,
+        message: `You collected ${result.coinsEarned} coins!`
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // ======== GUESS THE PRICE ========
+
+  // POST /api/games/guess-price/start
+  async startGuessPrice(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+
+      const result = await gameService.startGuessPrice(userId);
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Guess the Price game started'
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // POST /api/games/guess-price/submit
+  async submitGuessPrice(req: Request, res: Response) {
+    try {
+      const { sessionId, guessedPrice } = req.body;
+
+      const result = await gameService.submitGuessPrice(sessionId, guessedPrice);
+
+      res.json({
+        success: true,
+        data: result,
+        message: result.message
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // ======== DAILY LIMITS ========
+
+  // GET /api/games/daily-limits
+  async getDailyLimits(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+
+      const limits = await gameService.getDailyLimits(userId);
+
+      res.json({
+        success: true,
+        data: limits
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
 }
 
 export default new GameController();

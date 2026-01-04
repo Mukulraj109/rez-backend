@@ -15,6 +15,9 @@ import quizService from '../services/quizService';
 import scratchCardService from '../services/scratchCardService';
 import SurpriseCoinDrop from '../models/SurpriseCoinDrop';
 import UserStreak from '../models/UserStreak';
+import { Order } from '../models/Order';
+import Review from '../models/Review';
+import type { ISocialMediaPost } from '../models/SocialMediaPost';
 
 // ========================================
 // CHALLENGES
@@ -65,6 +68,64 @@ export const getUserAchievements = asyncHandler(async (req: Request, res: Respon
     .sort({ unlocked: -1, progress: -1 });
 
   sendSuccess(res, achievements, 'User achievements retrieved successfully');
+});
+
+/**
+ * Get current user's achievements (JWT-based, no userId param)
+ * GET /api/gamification/achievements/me
+ */
+export const getMyAchievements = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const userId = (req.user._id as Types.ObjectId).toString();
+
+  // Get user's achievement records
+  let userAchievements = await UserAchievement.find({ user: userId })
+    .sort({ unlocked: -1, progress: -1 });
+
+  // If user has no achievement records, initialize them from definitions
+  if (userAchievements.length === 0) {
+    const activeDefinitions = ACHIEVEMENT_DEFINITIONS.filter(d => d.isActive);
+
+    // Create achievement records for this user
+    const achievementDocs = activeDefinitions.map(def => ({
+      user: userId,
+      type: def.type,
+      title: def.title,
+      description: def.description,
+      icon: def.icon,
+      color: def.color,
+      unlocked: false,
+      progress: 0,
+      targetValue: def.requirement.target
+    }));
+
+    if (achievementDocs.length > 0) {
+      await UserAchievement.insertMany(achievementDocs, { ordered: false }).catch(() => {
+        // Ignore duplicate key errors
+      });
+      userAchievements = await UserAchievement.find({ user: userId })
+        .sort({ unlocked: -1, progress: -1 });
+    }
+  }
+
+  // Calculate summary
+  const total = userAchievements.length;
+  const unlocked = userAchievements.filter(a => a.unlocked).length;
+  const inProgress = userAchievements.filter(a => !a.unlocked && a.progress > 0).length;
+
+  sendSuccess(res, {
+    summary: {
+      total,
+      unlocked,
+      inProgress,
+      locked: total - unlocked - inProgress,
+      completionPercentage: total > 0 ? Math.round((unlocked / total) * 100) : 0
+    },
+    achievements: userAchievements
+  }, 'User achievements retrieved successfully');
 });
 
 export const unlockAchievement = asyncHandler(async (req: Request, res: Response) => {
@@ -997,4 +1058,327 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
       ? `Congratulations! You reached Day ${milestoneReached.day} milestone!`
       : `Day ${streak.currentStreak} streak! +${coinsEarned} coins`
   }, 'Streak check-in successful');
+});
+
+// ========================================
+// AFFILIATE / SHARE ENDPOINTS
+// ========================================
+
+/**
+ * Get affiliate performance stats
+ * GET /api/gamification/affiliate/stats
+ */
+export const getAffiliateStats = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const userId = (req.user._id as Types.ObjectId).toString();
+
+  // Import models
+  const Referral = (await import('../models/Referral')).default;
+  const SocialMediaPost = (await import('../models/SocialMediaPost')).default;
+
+  // Get referral stats
+  const referrals = await Referral.find({ referrer: userId });
+  const completedReferrals = referrals.filter(r => r.status === 'completed' || r.status === 'qualified');
+
+  // Get social media post stats
+  const posts = await SocialMediaPost.find({ user: userId });
+  const approvedPosts = posts.filter(p => p.status === 'approved' || p.status === 'credited');
+
+  // Calculate stats
+  const totalShares = posts.length;
+  const appDownloads = referrals.filter(r => r.status !== 'pending').length;
+  const purchases = completedReferrals.length;
+  const commissionEarned = completedReferrals.reduce((sum, r) => sum + (r.rewards?.referrerAmount || 0), 0) +
+    approvedPosts.reduce((sum, p) => sum + (p.cashbackAmount || 0), 0);
+
+  sendSuccess(res, {
+    totalShares,
+    appDownloads,
+    purchases,
+    commissionEarned,
+  }, 'Affiliate stats retrieved successfully');
+});
+
+/**
+ * Get promotional posters for sharing
+ * GET /api/gamification/promotional-posters
+ */
+export const getPromotionalPosters = asyncHandler(async (req: Request, res: Response) => {
+  // Import HeroBanner model
+  const HeroBanner = (await import('../models/HeroBanner')).default;
+
+  // Get active banners that can be used as promotional posters
+  const now = new Date();
+  const banners = await HeroBanner.find({
+    isActive: true,
+    validFrom: { $lte: now },
+    validUntil: { $gte: now },
+    'metadata.tags': { $in: ['promotional', 'shareable', 'poster'] }
+  }).sort({ priority: -1 }).limit(10);
+
+  // If no promotional banners found, get any active banners
+  let posters = banners;
+  if (posters.length === 0) {
+    posters = await HeroBanner.find({
+      isActive: true,
+      validFrom: { $lte: now },
+      validUntil: { $gte: now },
+    }).sort({ priority: -1 }).limit(4);
+  }
+
+  // Transform to frontend format
+  const formattedPosters = posters.map(banner => ({
+    id: banner._id.toString(),
+    title: banner.title,
+    subtitle: banner.subtitle || banner.description || '',
+    image: banner.image,
+    colors: [banner.backgroundColor, banner.backgroundColor], // Use single color as gradient
+    shareBonus: 50, // Default share bonus
+    isActive: banner.isActive,
+  }));
+
+  // If still no posters, return default promotional posters
+  if (formattedPosters.length === 0) {
+    const defaultPosters = [
+      { id: '1', title: 'Mega Sale', subtitle: 'Up to 70% off + Extra Cashback', image: 'https://images.unsplash.com/photo-1607083206968-13611e3d76db?w=500', colors: ['#F97316', '#EF4444'], shareBonus: 50, isActive: true },
+      { id: '2', title: 'Weekend Bonanza', subtitle: '3X Coins on All Purchases', image: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=500', colors: ['#A855F7', '#EC4899'], shareBonus: 30, isActive: true },
+      { id: '3', title: 'New User Special', subtitle: 'Get Rs.500 Welcome Bonus', image: 'https://images.unsplash.com/photo-1607082349566-187342175e2f?w=500', colors: ['#3B82F6', '#06B6D4'], shareBonus: 100, isActive: true },
+      { id: '4', title: 'Flash Sale Today', subtitle: 'Limited Time Mega Deals', image: 'https://images.unsplash.com/photo-1607082350899-7e105aa886ae?w=500', colors: ['#22C55E', '#14B8A6'], shareBonus: 40, isActive: true },
+    ];
+    return sendSuccess(res, { posters: defaultPosters }, 'Default promotional posters retrieved');
+  }
+
+  sendSuccess(res, { posters: formattedPosters }, 'Promotional posters retrieved successfully');
+});
+
+/**
+ * Get user's share submissions history
+ * GET /api/gamification/affiliate/submissions
+ */
+export const getShareSubmissions = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const userId = (req.user._id as Types.ObjectId).toString();
+
+  // Import SocialMediaPost model
+  const SocialMediaPost = (await import('../models/SocialMediaPost')).default;
+
+  // Get user's submissions
+  const posts = await SocialMediaPost.find({ user: userId })
+    .sort({ submittedAt: -1 })
+    .limit(50) as ISocialMediaPost[];
+
+  // Transform to frontend format
+  const submissions = posts.map(post => ({
+    id: (post._id as string).toString(),
+    posterTitle: post.metadata?.orderNumber ? `Order #${post.metadata.orderNumber}` : 'Promotional Poster',
+    posterId: post.metadata?.postId,
+    postUrl: post.postUrl,
+    platform: post.platform,
+    status: post.status === 'credited' ? 'approved' : post.status,
+    submittedAt: post.submittedAt.toISOString(),
+    approvedAt: post.reviewedAt?.toISOString(),
+    shareBonus: post.cashbackAmount || 0,
+    rejectionReason: post.rejectionReason,
+  }));
+
+  sendSuccess(res, { submissions }, 'Share submissions retrieved successfully');
+});
+
+/**
+ * Submit a shared post for review
+ * POST /api/gamification/affiliate/submit
+ */
+export const submitSharePost = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const userId = (req.user._id as Types.ObjectId).toString();
+  const { posterId, posterTitle, postUrl, platform, shareBonus } = req.body;
+
+  if (!postUrl || !platform) {
+    return sendBadRequest(res, 'Post URL and platform are required');
+  }
+
+  // Validate URL
+  try {
+    new URL(postUrl);
+  } catch {
+    return sendBadRequest(res, 'Invalid post URL');
+  }
+
+  // Import SocialMediaPost model
+  const SocialMediaPost = (await import('../models/SocialMediaPost')).default;
+
+  // Check for duplicate submission
+  const existingPost = await SocialMediaPost.findOne({
+    user: userId,
+    postUrl: postUrl,
+    status: { $in: ['pending', 'approved', 'credited'] }
+  });
+
+  if (existingPost) {
+    return sendBadRequest(res, 'This post has already been submitted');
+  }
+
+  // Create new submission
+  const newPost = new SocialMediaPost({
+    user: userId,
+    platform: platform.toLowerCase(),
+    postUrl,
+    status: 'pending',
+    cashbackAmount: shareBonus || 50,
+    cashbackPercentage: 5,
+    submittedAt: new Date(),
+    metadata: {
+      postId: posterId,
+      orderNumber: posterTitle,
+    }
+  }) as ISocialMediaPost;
+
+  await newPost.save();
+
+  // Return formatted submission
+  const submission = {
+    id: (newPost._id as string).toString(),
+    posterTitle: posterTitle || 'Promotional Poster',
+    posterId,
+    postUrl,
+    platform,
+    status: 'pending',
+    submittedAt: newPost.submittedAt.toISOString(),
+    shareBonus: newPost.cashbackAmount,
+  };
+
+  sendSuccess(res, { submission }, 'Post submitted for review successfully', 201);
+});
+
+/**
+ * Get streak bonus milestones
+ * GET /api/gamification/streak/bonuses
+ */
+export const getStreakBonuses = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const userId = (req.user._id as Types.ObjectId).toString();
+
+  // Get user's streak
+  const streak = await UserStreak.findOne({ user: userId, type: 'app_open' }) ||
+                 await UserStreak.findOne({ user: userId, type: 'login' });
+
+  const currentStreak = streak?.currentStreak || 0;
+
+  // Define streak bonuses with achieved status
+  const bonuses = [
+    { days: 7, reward: 100, achieved: currentStreak >= 7 },
+    { days: 30, reward: 500, achieved: currentStreak >= 30 },
+    { days: 100, reward: 2000, achieved: currentStreak >= 100 },
+  ];
+
+  // If user has milestones, use those instead
+  if (streak?.milestones && streak.milestones.length > 0) {
+    const userBonuses = streak.milestones
+      .filter(m => [7, 30, 100].includes(m.day))
+      .map(m => ({
+        days: m.day,
+        reward: m.coinsReward,
+        achieved: m.rewardsClaimed || currentStreak >= m.day,
+      }));
+
+    if (userBonuses.length > 0) {
+      return sendSuccess(res, { bonuses: userBonuses }, 'Streak bonuses retrieved successfully');
+    }
+  }
+
+  sendSuccess(res, { bonuses }, 'Streak bonuses retrieved successfully');
+});
+
+/**
+ * Get reviewable items for user
+ * Items the user has purchased/visited but hasn't reviewed yet
+ * GET /api/gamification/reviewable-items
+ */
+export const getReviewableItems = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const userId = (req.user._id as Types.ObjectId).toString();
+
+  // Get user's completed orders
+  const completedOrders = await Order.find({
+    user: userId,
+    status: { $in: ['completed', 'delivered'] }
+  })
+    .populate('store', 'name logo category images')
+    .populate('items.product', 'name images category pricing')
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean();
+
+  // Get user's existing reviews to filter out already reviewed items
+  const existingReviews = await Review.find({ user: userId }).select('store product').lean();
+  const reviewedStoreIds = new Set(existingReviews.map(r => r.store?.toString()).filter(Boolean));
+  const reviewedProductIds = new Set(existingReviews.map(r => r.product?.toString()).filter(Boolean));
+
+  const reviewableItems: any[] = [];
+
+  // Process orders to find reviewable stores and products
+  for (const order of completedOrders) {
+    const store = (order as any).store;
+    const orderDate = new Date(order.createdAt);
+    const daysAgo = Math.floor((Date.now() - orderDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Add store if not reviewed
+    if (store && !reviewedStoreIds.has(store._id.toString())) {
+      reviewedStoreIds.add(store._id.toString()); // Prevent duplicates
+      reviewableItems.push({
+        id: store._id.toString(),
+        type: 'store',
+        name: store.name || 'Store',
+        image: store.logo || store.images?.[0]?.url || null,
+        category: store.category || 'General',
+        visitDate: `${daysAgo} days ago`,
+        coins: 50, // Base coins for store review
+        hasReceipt: true,
+      });
+    }
+
+    // Add products from the order if not reviewed
+    if (order.items && Array.isArray(order.items)) {
+      for (const item of order.items) {
+        const product = item.product as any;
+        if (product && !reviewedProductIds.has(product._id.toString())) {
+          reviewedProductIds.add(product._id.toString()); // Prevent duplicates
+          reviewableItems.push({
+            id: product._id.toString(),
+            type: 'product',
+            name: product.name || 'Product',
+            image: product.images?.[0]?.url || null,
+            category: product.category || 'General',
+            purchaseDate: `${daysAgo} days ago`,
+            coins: 75, // Higher coins for product review
+            brand: product.brand || null,
+          });
+        }
+      }
+    }
+  }
+
+  // Calculate potential earnings
+  const potentialEarnings = reviewableItems.reduce((sum, item) => sum + (item.coins || 0), 0);
+
+  sendSuccess(res, {
+    items: reviewableItems.slice(0, 20), // Limit to 20 items
+    totalPending: reviewableItems.length,
+    potentialEarnings,
+  }, 'Reviewable items retrieved successfully');
 });

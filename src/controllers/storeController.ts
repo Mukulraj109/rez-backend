@@ -1223,7 +1223,7 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
 
     // Get stores with analytics - populate category to get name
     const stores = await Store.find(query)
-      .select('name logo banner category location ratings analytics contact createdAt description offers rewardRules')
+      .select('name logo banner videos category location ratings analytics contact createdAt description offers rewardRules')
       .populate('category', 'name slug icon')
       .lean();
 
@@ -2077,5 +2077,85 @@ export const getNearbyStoresForHomepage = asyncHandler(async (req: Request, res:
   } catch (error) {
     console.error('❌ [GET NEARBY STORES HOMEPAGE] Error:', error);
     throw new AppError('Failed to fetch nearby stores for homepage', 500);
+  }
+});
+
+/**
+ * Get new stores (recently added stores for homepage NewOnRezSection)
+ * GET /api/stores/new
+ */
+export const getNewStores = asyncHandler(async (req: Request, res: Response) => {
+  const { limit = 4, days = 30, latitude, longitude } = req.query;
+
+  try {
+    console.log('🔍 [GET NEW STORES] Fetching recently added stores...');
+
+    // Calculate the date threshold (stores added within the last X days)
+    const dateThreshold = new Date();
+    dateThreshold.setDate(dateThreshold.getDate() - Number(days));
+
+    const query: any = {
+      isActive: true,
+      createdAt: { $gte: dateThreshold }
+    };
+
+    let stores = await Store.find(query)
+      .populate('category', 'name slug icon')
+      .sort({ createdAt: -1 })
+      .limit(Number(limit))
+      .lean();
+
+    // If not enough stores from recent days, get any stores sorted by newest
+    if (stores.length < Number(limit)) {
+      stores = await Store.find({ isActive: true })
+        .populate('category', 'name slug icon')
+        .sort({ createdAt: -1 })
+        .limit(Number(limit))
+        .lean();
+    }
+
+    // Calculate distance if location provided
+    if (latitude && longitude) {
+      const userLat = Number(latitude);
+      const userLon = Number(longitude);
+
+      stores = stores.map((store: any) => {
+        if (store.location?.coordinates && store.location.coordinates.length === 2) {
+          const [storeLon, storeLat] = store.location.coordinates;
+          const distance = calculateDistance([userLon, userLat], [storeLon, storeLat]);
+          return { ...store, distance: Math.round(distance * 10) / 10 };
+        }
+        return store;
+      });
+    }
+
+    // Format for frontend NewOnRezSection
+    const formattedStores = stores.map((store: any, index: number) => ({
+      id: store._id,
+      name: store.name,
+      slug: store.slug,
+      category: store.category?.name || 'General',
+      image: store.logo || store.banner?.[0] || `https://images.unsplash.com/photo-${1441984904996 + index}-e0b6ba687e04?w=400`,
+      people: Math.floor(Math.random() * 300) + 50, // Simulated active users
+      cashback: `${store.offers?.cashback || 10}%`,
+      rating: store.ratings?.average || 4.0,
+      distance: store.distance,
+      isNew: true
+    }));
+
+    console.log(`✅ [GET NEW STORES] Found ${formattedStores.length} new stores`);
+
+    sendSuccess(res, {
+      stores: formattedStores,
+      total: formattedStores.length,
+      // Separate into featured (first store) and small stores for UI
+      featuredStore: formattedStores[0] || null,
+      smallStores: formattedStores.slice(1, 3),
+      horizontalStore: formattedStores[3] || null
+    }, 'New stores retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [GET NEW STORES] Error:', error);
+    throw new AppError('Failed to fetch new stores', 500);
   }
 });

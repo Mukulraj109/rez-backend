@@ -16,6 +16,7 @@ export interface IGameSession extends Document {
     };
     score?: number;
   };
+  metadata?: Record<string, any>;
   earnedFrom?: string; // e.g., 'daily_free', 'order_123', 'premium_membership'
   expiresAt: Date;
   createdAt: Date;
@@ -73,6 +74,9 @@ const GameSessionSchema: Schema = new Schema(
       score: Number
     },
     earnedFrom: String,
+    metadata: {
+      type: Schema.Types.Mixed
+    },
     expiresAt: {
       type: Date,
       required: true,

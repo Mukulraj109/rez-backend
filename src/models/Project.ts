@@ -54,6 +54,30 @@ export interface IProjectLimits {
   startDate?: Date;
 }
 
+// Survey question interface
+export interface ISurveyQuestion {
+  id: string;
+  type: 'multiple_choice' | 'single_choice' | 'rating' | 'text' | 'scale';
+  question: string;
+  options?: string[];
+  required: boolean;
+  order: number;
+  minLength?: number; // For text questions
+  maxLength?: number;
+  minValue?: number; // For scale questions
+  maxValue?: number;
+}
+
+// Survey config interface
+export interface ISurveyConfig {
+  questions: ISurveyQuestion[];
+  estimatedTime: number; // minutes
+  targetResponses: number;
+  allowSkip: boolean;
+  randomizeQuestions: boolean;
+  showProgress: boolean;
+}
+
 // Project submission interface
 export interface IProjectSubmission {
   _id?: Types.ObjectId;
@@ -144,6 +168,7 @@ export interface IProject extends Document {
     demographics?: string;
     interests?: string[];
   };
+  surveyConfig?: ISurveyConfig; // Survey-specific configuration
   likedBy: Types.ObjectId[]; // Users who liked this project
   comments: Array<{
     user: Types.ObjectId;
@@ -475,6 +500,29 @@ const ProjectSchema = new Schema<IProject>({
     size: { type: Number, min: 1 },
     demographics: String,
     interests: [String]
+  },
+  surveyConfig: {
+    questions: [{
+      id: { type: String, required: true },
+      type: {
+        type: String,
+        enum: ['multiple_choice', 'single_choice', 'rating', 'text', 'scale'],
+        required: true
+      },
+      question: { type: String, required: true },
+      options: [String],
+      required: { type: Boolean, default: true },
+      order: { type: Number, required: true },
+      minLength: Number,
+      maxLength: Number,
+      minValue: Number,
+      maxValue: Number
+    }],
+    estimatedTime: { type: Number, min: 1 },
+    targetResponses: { type: Number, min: 1 },
+    allowSkip: { type: Boolean, default: false },
+    randomizeQuestions: { type: Boolean, default: false },
+    showProgress: { type: Boolean, default: true }
   },
   createdBy: {
     type: Schema.Types.ObjectId,
