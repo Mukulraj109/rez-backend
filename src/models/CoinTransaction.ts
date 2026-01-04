@@ -5,7 +5,7 @@ export interface ICoinTransaction extends Document {
   type: 'earned' | 'spent' | 'expired' | 'refunded' | 'bonus';
   amount: number;
   balance: number; // Balance after transaction
-  source: 'spin_wheel' | 'scratch_card' | 'quiz_game' | 'challenge' | 'achievement' | 'referral' | 'order' | 'review' | 'bill_upload' | 'daily_login' | 'admin' | 'purchase' | 'redemption' | 'expiry';
+  source: 'spin_wheel' | 'scratch_card' | 'quiz_game' | 'challenge' | 'achievement' | 'referral' | 'order' | 'review' | 'bill_upload' | 'daily_login' | 'admin' | 'purchase' | 'redemption' | 'expiry' | 'survey';
   description: string;
   metadata?: {
     gameId?: mongoose.Types.ObjectId;
@@ -76,7 +76,8 @@ const CoinTransactionSchema: Schema = new Schema(
         'admin',
         'purchase',
         'redemption',
-        'expiry'
+        'expiry',
+        'survey'
       ],
       required: true,
       index: true

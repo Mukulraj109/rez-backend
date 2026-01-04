@@ -158,3 +158,11 @@ export type { IExclusiveZone } from './ExclusiveZone';
 export type { ISpecialProfile } from './SpecialProfile';
 export type { ILoyaltyMilestone } from './LoyaltyMilestone';
 export type { IFriendRedemption } from './FriendRedemption';
+
+// Homepage Section models
+export { default as Campaign } from './Campaign';
+export { default as StoreExperience } from './StoreExperience';
+
+// Homepage Section types
+export type { ICampaign, ICampaignDeal } from './Campaign';
+export type { IStoreExperience } from './StoreExperience';

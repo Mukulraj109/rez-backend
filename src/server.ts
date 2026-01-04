@@ -85,6 +85,14 @@ import securityRoutes from './routes/securityRoutes';
 import eventRoutes from './routes/eventRoutes';
 import referralRoutes from './routes/referralRoutes';
 import profileRoutes from './routes/profileRoutes';
+import gameRoutes from './routes/gameRoutes';
+import leaderboardRoutes from './routes/leaderboardRoutes';
+import streakRoutes from './routes/streakRoutes';
+import shareRoutes from './routes/shareRoutes';
+import tournamentRoutes from './routes/tournamentRoutes';
+import programRoutes from './routes/programRoutes';
+import sponsorRoutes from './routes/sponsorRoutes';
+import surveyRoutes from './routes/surveyRoutes';
 import verificationRoutes from './routes/verificationRoutes';
 import scratchCardRoutes from './routes/scratchCardRoutes';
 import couponRoutes from './routes/couponRoutes';
@@ -126,6 +134,8 @@ import productGalleryRoutes from './routes/productGallery';  // Public product g
 import offersRoutes from './routes/offersRoutes';  // Bank and exclusive offers routes
 import loyaltyRoutes from './routes/loyaltyRoutes';  // User loyalty routes
 import statsRoutes from './routes/statsRoutes';  // Social proof stats routes
+import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
+import experienceRoutes from './routes/experienceRoutes';  // Store experience routes
 import authRoutes1 from './merchantroutes/auth';  // Temporarily disabled
 import merchantRoutes from './merchantroutes/merchants';  // Temporarily disabled
 import merchantProfileRoutes from './merchantroutes/merchant-profile'; // Disabled due to missing properties
@@ -608,6 +618,22 @@ app.use(`${API_PREFIX}/security`, securityRoutes);
 app.use(`${API_PREFIX}/events`, eventRoutes);
 app.use(`${API_PREFIX}/referral`, referralRoutes);
 app.use(`${API_PREFIX}/user/profile`, profileRoutes);
+app.use(`${API_PREFIX}/games`, gameRoutes);
+console.log('✅ Game routes registered at /api/games');
+app.use(`${API_PREFIX}/leaderboard`, leaderboardRoutes);
+console.log('✅ Leaderboard routes registered at /api/leaderboard');
+app.use(`${API_PREFIX}/streak`, streakRoutes);
+console.log('✅ Streak routes registered at /api/streak');
+app.use(`${API_PREFIX}/share`, shareRoutes);
+console.log('✅ Share routes registered at /api/share');
+app.use(`${API_PREFIX}/tournaments`, tournamentRoutes);
+console.log('✅ Tournament routes registered at /api/tournaments');
+app.use(`${API_PREFIX}/programs`, programRoutes);
+console.log('✅ Program routes registered at /api/programs');
+app.use(`${API_PREFIX}/sponsors`, sponsorRoutes);
+console.log('✅ Sponsor routes registered at /api/sponsors');
+app.use(`${API_PREFIX}/surveys`, surveyRoutes);
+console.log('✅ Survey routes registered at /api/surveys');
 app.use(`${API_PREFIX}/user/verifications`, verificationRoutes);
 console.log('✅ User verification routes registered at /api/user/verifications');
 app.use(`${API_PREFIX}/scratch-cards`, scratchCardRoutes);
@@ -708,6 +734,14 @@ console.log('✅ Loyalty routes registered at /api/users/loyalty');
 // Stats Routes - Social proof stats
 app.use(`${API_PREFIX}/stats`, statsRoutes);
 console.log('✅ Stats routes registered at /api/stats');
+
+// Campaign Routes - Homepage exciting deals
+app.use(`${API_PREFIX}/campaigns`, campaignRoutes);
+console.log('✅ Campaign routes registered at /api/campaigns');
+
+// Experience Routes - Store experiences
+app.use(`${API_PREFIX}/experiences`, experienceRoutes);
+console.log('✅ Experience routes registered at /api/experiences');
 
 // // Search Routes - Global search across products, stores, and articles
 app.use(`${API_PREFIX}/search`, searchRoutes);

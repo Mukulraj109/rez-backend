@@ -197,6 +197,12 @@ export interface IProduct {
   deletedBy?: Types.ObjectId; // Reference to User or Merchant who deleted
   deletedByModel?: 'User' | 'Merchant'; // Model reference for deletedBy
 
+  // Admin Control Fields
+  adminApproved?: boolean;
+  adminNotes?: string;
+  isSuspended?: boolean;
+  suspensionReason?: string;
+
   // Methods
   isInStock(): boolean;
   getVariantByType(type: string, value: string): IProductVariant | null;
@@ -700,6 +706,28 @@ const ProductSchema = new Schema<IProduct>({
     type: String,
     enum: ['User', 'Merchant'],
     default: null
+  },
+
+  // Admin Control Fields
+  adminApproved: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  adminNotes: {
+    type: String,
+    trim: true,
+    maxlength: 1000
+  },
+  isSuspended: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  suspensionReason: {
+    type: String,
+    trim: true,
+    maxlength: 500
   }
 }, {
   timestamps: true,

@@ -90,10 +90,16 @@ export interface IOffer extends Document {
   // Redemption tracking
   redemptionCount: number;
 
+  // Admin Control Fields
+  adminApproved?: boolean;
+  adminNotes?: string;
+  isSuspended?: boolean;
+  suspensionReason?: string;
+
   createdBy: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
-  
+
   // Instance methods
   calculateDistance(userLocation: [number, number]): number;
   isExpired(): boolean;
@@ -449,6 +455,28 @@ const OfferSchema = new Schema<IOffer>({
     ref: 'User',
     required: [true, 'Created by user is required'],
     index: true
+  },
+
+  // Admin Control Fields
+  adminApproved: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  adminNotes: {
+    type: String,
+    trim: true,
+    maxlength: 1000
+  },
+  isSuspended: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  suspensionReason: {
+    type: String,
+    trim: true,
+    maxlength: 500
   }
 }, {
   timestamps: true

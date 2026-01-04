@@ -8,6 +8,7 @@ import {
   claimChallengeReward,
   getAchievements,
   getUserAchievements,
+  getMyAchievements,
   unlockAchievement,
   getBadges,
   getUserBadges,
@@ -35,7 +36,14 @@ import {
   getGamificationStats,
   getPlayAndEarnData,
   claimSurpriseDrop,
-  streakCheckin
+  streakCheckin,
+  // Affiliate / Share endpoints
+  getAffiliateStats,
+  getPromotionalPosters,
+  getShareSubmissions,
+  submitSharePost,
+  getStreakBonuses,
+  getReviewableItems
 } from '../controllers/gamificationController';
 
 // Import streak controller
@@ -58,6 +66,7 @@ router.post('/challenges/:id/claim', claimChallengeReward);
 // ACHIEVEMENTS
 // ========================================
 router.get('/achievements', getAchievements);
+router.get('/achievements/me', getMyAchievements); // Current user's achievements
 router.get('/achievements/user/:userId', getUserAchievements);
 router.post('/achievements/unlock', unlockAchievement);
 
@@ -131,5 +140,21 @@ router.post('/surprise-drop/claim', claimSurpriseDrop);
 
 // Daily Streak Check-in
 router.post('/streak/checkin', streakCheckin);
+
+// ========================================
+// AFFILIATE / SHARE
+// ========================================
+router.get('/affiliate/stats', getAffiliateStats);
+router.get('/affiliate/submissions', getShareSubmissions);
+router.post('/affiliate/submit', submitSharePost);
+
+// Promotional Posters (for sharing)
+router.get('/promotional-posters', getPromotionalPosters);
+
+// Streak Bonuses
+router.get('/streak/bonuses', getStreakBonuses);
+
+// REVIEWABLE ITEMS
+router.get('/reviewable-items', getReviewableItems);
 
 export default router;

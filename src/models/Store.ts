@@ -247,6 +247,15 @@ export interface IStore extends Document {
   is60MinDelivery?: boolean;
   hasStorePickup?: boolean;
 
+  // Admin Control Fields
+  adminApproved?: boolean;
+  adminNotes?: string;
+  adminApprovedAt?: Date;
+  adminApprovedBy?: Types.ObjectId;
+  isSuspended?: boolean;
+  suspensionReason?: string;
+  isTrending?: boolean;
+
   createdAt: Date;
   updatedAt: Date;
 
@@ -819,6 +828,40 @@ const StoreSchema = new Schema<IStore>({
     index: true
   },
   hasStorePickup: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+
+  // Admin Control Fields
+  adminApproved: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  adminNotes: {
+    type: String,
+    trim: true,
+    maxlength: 1000
+  },
+  adminApprovedAt: {
+    type: Date
+  },
+  adminApprovedBy: {
+    type: Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  isSuspended: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  suspensionReason: {
+    type: String,
+    trim: true,
+    maxlength: 500
+  },
+  isTrending: {
     type: Boolean,
     default: false,
     index: true

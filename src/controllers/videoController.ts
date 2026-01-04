@@ -654,14 +654,17 @@ export const getVideoComments = asyncHandler(async (req: Request, res: Response)
       return sendNotFound(res, 'Video not found');
     }
 
+    // Handle case where comments array is undefined or empty
+    const allComments = (video as any).comments || [];
+
     // Pagination for comments
     const skip = (Number(page) - 1) * Number(limit);
-    const comments = (video as any).comments
-      .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    const comments = allComments
+      .sort((a: any, b: any) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime())
       .slice(skip, skip + Number(limit));
 
-    const total = (video as any).comments.length;
-    const totalPages = Math.ceil(total / Number(limit));
+    const total = allComments.length;
+    const totalPages = Math.ceil(total / Number(limit)) || 1;
 
     sendSuccess(res, {
       comments,

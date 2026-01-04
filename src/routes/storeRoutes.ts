@@ -23,7 +23,8 @@ import {
   getRecentEarnings,
   getTopCashbackStores,
   getBNPLStores,
-  getNearbyStoresForHomepage
+  getNearbyStoresForHomepage,
+  getNewStores
 } from '../controllers/storeController';
 import { getStoreReviews } from '../controllers/reviewController';
 import {
@@ -135,6 +136,19 @@ router.get('/trending',
     days: Joi.number().integer().min(1).max(30).default(7)
   })),
   getTrendingStores
+);
+
+// Get new stores - FOR FRONTEND NEW ON REZ SECTION
+router.get('/new',
+  // generalLimiter, // Disabled for development
+  optionalAuth,
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(10).default(4),
+    days: Joi.number().integer().min(1).max(90).default(30),
+    latitude: Joi.number().min(-90).max(90),
+    longitude: Joi.number().min(-180).max(180)
+  })),
+  getNewStores
 );
 
 // Get top cashback stores - FOR FRONTEND DISCOVERY UI
