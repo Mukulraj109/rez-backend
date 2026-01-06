@@ -5,6 +5,7 @@ export interface IStoreComparison extends Document {
   user: mongoose.Types.ObjectId;
   stores: mongoose.Types.ObjectId[];
   name?: string; // Custom comparison name
+  isFeaturedOnExplore: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -47,6 +48,11 @@ const StoreComparisonSchema = new Schema<IStoreComparison>({
     type: String,
     trim: true,
     maxlength: 100
+  },
+  isFeaturedOnExplore: {
+    type: Boolean,
+    default: false,
+    index: true
   }
 }, {
   timestamps: true,

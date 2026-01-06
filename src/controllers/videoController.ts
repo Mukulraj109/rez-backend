@@ -422,6 +422,7 @@ export const getVideosByCategory = asyncHandler(async (req: Request, res: Respon
 // Get trending videos
 export const getTrendingVideos = asyncHandler(async (req: Request, res: Response) => {
   const { limit = 20, timeframe = '7d' } = req.query;
+  const userId = req.userId; // From optional auth middleware
 
   try {
     // Calculate date for timeframe
@@ -433,15 +434,16 @@ export const getTrendingVideos = asyncHandler(async (req: Request, res: Response
       isPublished: true,
       createdAt: { $gte: sinceDate }
     })
-    .populate('creator', 'profile.firstName profile.lastName profile.avatar')
+    .populate('creator', 'profile.firstName profile.lastName profile.avatar username')
     .populate({
       path: 'products',
       select: 'name images description pricing inventory rating category store',
       populate: {
         path: 'store',
-        select: 'name slug logo'
+        select: 'name slug logo _id'
       }
     })
+    .populate('stores', 'name slug logo _id')
     .sort({
       'analytics.engagement': -1,
       'analytics.views': -1,
@@ -450,7 +452,36 @@ export const getTrendingVideos = asyncHandler(async (req: Request, res: Response
     .limit(Number(limit))
     .lean();
 
-    sendSuccess(res, videos, 'Trending videos retrieved successfully');
+    // Transform videos to include isLiked status and flatten data
+    const transformedVideos = videos.map((video: any) => {
+      // Check if current user has liked this video
+      const isLiked = userId && video.engagement?.likes
+        ? video.engagement.likes.some((likeId: any) => likeId.toString() === userId)
+        : false;
+
+      // Get store from either stores array or products
+      const store = video.stores?.[0] || video.products?.[0]?.store || null;
+
+      return {
+        ...video,
+        id: video._id,
+        isLiked,
+        likesCount: video.engagement?.likes?.length || 0,
+        commentsCount: video.engagement?.comments || 0,
+        sharesCount: video.engagement?.shares || 0,
+        viewsCount: video.engagement?.views || 0,
+        store: store ? {
+          id: store._id,
+          name: store.name,
+          slug: store.slug,
+          logo: store.logo
+        } : null,
+        storeId: store?._id || null,
+        storeName: store?.name || null
+      };
+    });
+
+    sendSuccess(res, transformedVideos, 'Trending videos retrieved successfully');
 
   } catch (error) {
     throw new AppError('Failed to fetch trending videos', 500);
