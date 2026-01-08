@@ -1,4 +1,5 @@
 import { CoinTransaction } from '../models/CoinTransaction';
+import { Wallet } from '../models/Wallet';
 import mongoose from 'mongoose';
 
 /**
@@ -82,6 +83,40 @@ export async function awardCoins(
     metadata
   );
 
+  // Also update the Wallet model to keep balances in sync
+  try {
+    let wallet = await Wallet.findOne({ user: userId });
+
+    if (!wallet) {
+      // Create wallet if it doesn't exist
+      wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
+    }
+
+    if (wallet) {
+      // Update ReZ coins in the coins array
+      const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+      if (rezCoin) {
+        rezCoin.amount += amount;
+        rezCoin.lastUsed = new Date();
+      }
+
+      // Update balance
+      wallet.balance.available += amount;
+      wallet.balance.total += amount;
+
+      // Update statistics
+      wallet.statistics.totalEarned += amount;
+
+      wallet.lastTransactionAt = new Date();
+      await wallet.save();
+
+      console.log(`✅ [COIN SERVICE] Wallet updated: +${amount} coins, new balance: ${wallet.balance.total}`);
+    }
+  } catch (walletError) {
+    console.error('❌ [COIN SERVICE] Failed to update wallet:', walletError);
+    // Don't throw - transaction was created successfully, wallet sync is secondary
+  }
+
   return {
     transactionId: transaction._id,
     amount: transaction.amount,
@@ -119,6 +154,35 @@ export async function deductCoins(
     description,
     metadata
   );
+
+  // Also update the Wallet model to keep balances in sync
+  try {
+    const wallet = await Wallet.findOne({ user: userId });
+
+    if (wallet) {
+      // Update ReZ coins in the coins array
+      const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+      if (rezCoin) {
+        rezCoin.amount = Math.max(0, rezCoin.amount - amount);
+        rezCoin.lastUsed = new Date();
+      }
+
+      // Update balance
+      wallet.balance.available = Math.max(0, wallet.balance.available - amount);
+      wallet.balance.total = Math.max(0, wallet.balance.total - amount);
+
+      // Update statistics
+      wallet.statistics.totalSpent += amount;
+
+      wallet.lastTransactionAt = new Date();
+      await wallet.save();
+
+      console.log(`✅ [COIN SERVICE] Wallet updated: -${amount} coins, new balance: ${wallet.balance.total}`);
+    }
+  } catch (walletError) {
+    console.error('❌ [COIN SERVICE] Failed to update wallet:', walletError);
+    // Don't throw - transaction was created successfully, wallet sync is secondary
+  }
 
   return {
     transactionId: transaction._id,

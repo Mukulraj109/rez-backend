@@ -2,7 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IGameSession extends Document {
   user: mongoose.Types.ObjectId;
-  gameType: 'spin_wheel' | 'scratch_card' | 'quiz' | 'daily_trivia';
+  gameType: 'spin_wheel' | 'scratch_card' | 'quiz' | 'daily_trivia' | 'memory_match' | 'coin_hunt' | 'guess_price';
   sessionId: string;
   status: 'pending' | 'playing' | 'completed' | 'expired';
   startedAt: Date;
@@ -40,7 +40,7 @@ const GameSessionSchema: Schema = new Schema(
     },
     gameType: {
       type: String,
-      enum: ['spin_wheel', 'scratch_card', 'quiz', 'daily_trivia'],
+      enum: ['spin_wheel', 'scratch_card', 'quiz', 'daily_trivia', 'memory_match', 'coin_hunt', 'guess_price'],
       required: true,
       index: true
     },

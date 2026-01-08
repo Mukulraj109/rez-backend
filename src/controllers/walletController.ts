@@ -1072,3 +1072,70 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
     sendError(res, error.message, 500);
   }
 });
+
+/**
+ * @desc    Sync wallet balance from CoinTransaction (fixes discrepancies)
+ * @route   POST /api/wallet/sync-balance
+ * @access  Private
+ */
+export const syncWalletBalance = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+
+  console.log('🔄 [WALLET SYNC] Syncing wallet balance from CoinTransaction');
+
+  if (!userId) {
+    return sendError(res, 'User not authenticated', 401);
+  }
+
+  try {
+    // Import CoinTransaction to get the true balance
+    const { CoinTransaction } = require('../models/CoinTransaction');
+
+    // Get accurate balance from CoinTransaction
+    const coinTransactionBalance = await CoinTransaction.getUserBalance(userId);
+
+    console.log('📊 [WALLET SYNC] CoinTransaction balance:', coinTransactionBalance);
+
+    // Get or create wallet
+    let wallet = await Wallet.findOne({ user: userId });
+
+    if (!wallet) {
+      wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
+    }
+
+    if (!wallet) {
+      return sendError(res, 'Failed to create wallet', 500);
+    }
+
+    const oldBalance = wallet.balance.available;
+
+    // Update ReZ coins in the coins array
+    const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+    if (rezCoin) {
+      rezCoin.amount = coinTransactionBalance;
+      rezCoin.lastUsed = new Date();
+    }
+
+    // Update wallet balance to match CoinTransaction
+    wallet.balance.available = coinTransactionBalance;
+    wallet.balance.total = coinTransactionBalance + (wallet.balance.pending || 0) + (wallet.balance.cashback || 0);
+
+    await wallet.save();
+
+    console.log(`✅ [WALLET SYNC] Balance synced: ${oldBalance} → ${coinTransactionBalance}`);
+
+    sendSuccess(res, {
+      previousBalance: oldBalance,
+      newBalance: coinTransactionBalance,
+      wallet: {
+        balance: wallet.balance,
+        coins: wallet.coins,
+        currency: wallet.currency
+      },
+      synced: true
+    }, 'Wallet balance synced successfully');
+  } catch (error: any) {
+    console.error('❌ [WALLET SYNC] Error:', error);
+    sendError(res, error.message, 500);
+  }
+});

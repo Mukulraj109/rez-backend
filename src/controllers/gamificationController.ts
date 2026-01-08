@@ -18,6 +18,9 @@ import UserStreak from '../models/UserStreak';
 import { Order } from '../models/Order';
 import Review from '../models/Review';
 import type { ISocialMediaPost } from '../models/SocialMediaPost';
+import Challenge from '../models/Challenge';
+import Campaign from '../models/Campaign';
+import CoinDrop from '../models/CoinDrop';
 
 // ========================================
 // CHALLENGES
@@ -1381,4 +1384,141 @@ export const getReviewableItems = asyncHandler(async (req: Request, res: Respons
     totalPending: reviewableItems.length,
     potentialEarnings,
   }, 'Reviewable items retrieved successfully');
+});
+
+// ========================================
+// BONUS OPPORTUNITIES
+// ========================================
+
+/**
+ * Get active bonus opportunities (time-limited)
+ * Returns active challenges ending soon, coin drops, and campaigns
+ */
+export const getBonusOpportunities = asyncHandler(async (req: Request, res: Response) => {
+  const now = new Date();
+  const in24Hours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+  // Helper to calculate time remaining
+  const getTimeRemaining = (endDate: Date): string => {
+    const diff = endDate.getTime() - now.getTime();
+    if (diff <= 0) return 'Expired';
+
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (hours >= 24) {
+      const days = Math.floor(hours / 24);
+      return `${days}d ${hours % 24}h`;
+    }
+    return `${hours}h ${minutes}m`;
+  };
+
+  try {
+    // Fetch all bonus data in parallel
+    const [
+      urgentChallenges,
+      activeCoinDrops,
+      activeCampaigns
+    ] = await Promise.all([
+      // Get challenges ending within 24 hours
+      Challenge.find({
+        isActive: true,
+        endDate: { $gte: now, $lte: in24Hours }
+      }).sort({ endDate: 1 }).limit(5).lean(),
+
+      // Get active coin drops
+      CoinDrop.find({
+        isActive: true,
+        endTime: { $gte: now }
+      }).sort({ priority: -1, endTime: 1 }).limit(5).lean(),
+
+      // Get active campaigns
+      Campaign.find({
+        isActive: true,
+        startTime: { $lte: now },
+        endTime: { $gte: now }
+      }).sort({ priority: -1 }).limit(5).lean()
+    ]);
+
+    const opportunities: any[] = [];
+
+    // Format challenges as bonus opportunities
+    for (const challenge of urgentChallenges) {
+      opportunities.push({
+        id: challenge._id.toString(),
+        title: challenge.title || 'Challenge',
+        description: challenge.description || 'Complete the challenge',
+        reward: `+${(challenge as any).rewards?.coins || 100} Coins`,
+        timeLeft: getTimeRemaining(challenge.endDate),
+        icon: 'trophy',
+        type: 'challenge',
+        priority: 3 // High priority for ending soon
+      });
+    }
+
+    // Format coin drops as bonus opportunities
+    for (const drop of activeCoinDrops) {
+      opportunities.push({
+        id: drop._id.toString(),
+        title: `${drop.multiplier}X Cashback`,
+        description: `${drop.storeName || 'Partner Store'} - ${drop.boostedCashback || drop.multiplier * (drop.normalCashback || 5)}% back`,
+        reward: `${drop.multiplier}X Earnings`,
+        timeLeft: getTimeRemaining(drop.endTime),
+        icon: 'flash',
+        type: 'drop',
+        priority: drop.priority || 2
+      });
+    }
+
+    // Format campaigns as bonus opportunities
+    for (const campaign of activeCampaigns) {
+      opportunities.push({
+        id: campaign._id.toString(),
+        title: campaign.title || 'Special Offer',
+        description: campaign.subtitle || campaign.description || 'Limited time offer',
+        reward: campaign.badge || 'Bonus',
+        timeLeft: getTimeRemaining(campaign.endTime),
+        icon: campaign.icon || 'gift',
+        type: campaign.type || 'promotion',
+        priority: campaign.priority || 1
+      });
+    }
+
+    // Sort by priority (higher first) and time remaining
+    opportunities.sort((a, b) => b.priority - a.priority);
+
+    // If no opportunities found, return default suggestions
+    if (opportunities.length === 0) {
+      opportunities.push(
+        {
+          id: 'daily-spin',
+          title: 'Daily Spin',
+          description: 'Spin the wheel for free coins',
+          reward: 'Up to 200 Coins',
+          timeLeft: '24h',
+          icon: 'refresh-circle',
+          type: 'game',
+          priority: 1
+        },
+        {
+          id: 'daily-checkin',
+          title: 'Daily Check-in',
+          description: 'Check in daily for streak bonuses',
+          reward: '10-100 Coins',
+          timeLeft: '24h',
+          icon: 'calendar',
+          type: 'streak',
+          priority: 1
+        }
+      );
+    }
+
+    sendSuccess(res, {
+      opportunities: opportunities.slice(0, 10),
+      total: opportunities.length
+    }, 'Bonus opportunities retrieved successfully');
+  } catch (error: any) {
+    console.error('[GAMIFICATION] Error fetching bonus opportunities:', error);
+    sendError(res, error.message || 'Failed to fetch bonus opportunities', 500);
+  }
 });

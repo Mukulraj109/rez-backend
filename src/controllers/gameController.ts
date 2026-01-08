@@ -247,7 +247,18 @@ class GameController {
       const userId = req.user?.id;
       const { difficulty = 'easy' } = req.body;
 
+      console.log('[MEMORY MATCH START] userId:', userId, 'difficulty:', difficulty);
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'User not authenticated'
+        });
+      }
+
       const result = await gameService.startMemoryMatch(userId, difficulty);
+
+      console.log('[MEMORY MATCH START] Session created:', result.sessionId);
 
       res.json({
         success: true,
@@ -255,6 +266,7 @@ class GameController {
         message: 'Memory Match game started'
       });
     } catch (error: any) {
+      console.error('[MEMORY MATCH START] Error:', error.message);
       res.status(400).json({
         success: false,
         message: error.message
@@ -267,7 +279,11 @@ class GameController {
     try {
       const { sessionId, score, timeSpent, moves } = req.body;
 
+      console.log('[MEMORY MATCH COMPLETE] sessionId:', sessionId, 'score:', score, 'timeSpent:', timeSpent, 'moves:', moves);
+
       const result = await gameService.completeMemoryMatch(sessionId, score, timeSpent, moves);
+
+      console.log('[MEMORY MATCH COMPLETE] Result:', JSON.stringify(result));
 
       res.json({
         success: true,
@@ -275,6 +291,7 @@ class GameController {
         message: `You earned ${result.coins} coins!`
       });
     } catch (error: any) {
+      console.error('[MEMORY MATCH COMPLETE] Error:', error.message);
       res.status(400).json({
         success: false,
         message: error.message
@@ -378,6 +395,31 @@ class GameController {
       res.json({
         success: true,
         data: limits
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // GET /api/games/available
+  // Returns all available games with play status (supports optional auth)
+  async getAvailableGames(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+
+      const games = await gameService.getAvailableGames(userId);
+
+      res.json({
+        success: true,
+        data: {
+          games,
+          total: games.length,
+          todaysEarnings: games[0]?.todaysEarnings || 0
+        },
+        message: 'Available games fetched'
       });
     } catch (error: any) {
       res.status(500).json({

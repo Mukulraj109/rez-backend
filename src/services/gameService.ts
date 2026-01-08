@@ -1,6 +1,7 @@
 import GameSession, { IGameSession } from '../models/GameSession';
 // @ts-ignore
 import { v4 as uuidv4 } from 'uuid';
+import coinService from './coinService';
 
 // Spin Wheel Prize Configuration
 const SPIN_WHEEL_PRIZES = [
@@ -483,6 +484,7 @@ class GameService {
       throw new Error('Game already completed');
     }
 
+    const userId = session.user.toString();
     const metadata = session.metadata as any;
     const difficulty = metadata?.difficulty || 'easy';
     const prizes = MEMORY_MATCH_PRIZES[difficulty as keyof typeof MEMORY_MATCH_PRIZES];
@@ -513,6 +515,19 @@ class GameService {
 
     await session.complete(result);
 
+    // Credit coins to user's wallet
+    let newBalance = 0;
+    if (coins > 0) {
+      const coinResult = await coinService.awardCoins(
+        userId,
+        coins,
+        'memory_match',
+        `Memory Match game: ${coins} coins earned!`,
+        { sessionId, timeSpent, moves, perfectMatch: moves === pairs }
+      );
+      newBalance = coinResult.newBalance;
+    }
+
     return {
       sessionId,
       coins,
@@ -520,7 +535,8 @@ class GameService {
       timeSpent,
       moves,
       perfectMatch: moves === pairs,
-      timeBonus: timeSpent < 30
+      timeBonus: timeSpent < 30,
+      newBalance // Return updated wallet balance
     };
   }
 
@@ -583,6 +599,8 @@ class GameService {
       throw new Error('Game already completed');
     }
 
+    const userId = session.user.toString();
+
     const result = {
       won: coinsCollected > 0,
       prize: coinsCollected > 0 ? {
@@ -595,11 +613,25 @@ class GameService {
 
     await session.complete(result);
 
+    // Credit coins to user's wallet
+    let newBalance = 0;
+    if (score > 0) {
+      const coinResult = await coinService.awardCoins(
+        userId,
+        score,
+        'coin_hunt',
+        `Coin Hunt game: ${score} coins collected!`,
+        { sessionId, coinsCollected }
+      );
+      newBalance = coinResult.newBalance;
+    }
+
     return {
       sessionId,
       coinsCollected,
       coinsEarned: score,
-      success: true
+      success: true,
+      newBalance // Return updated wallet balance
     };
   }
 
@@ -672,6 +704,7 @@ class GameService {
       throw new Error('Game already completed');
     }
 
+    const userId = session.user.toString();
     const metadata = session.metadata as any;
     const actualPrice = metadata?.actualPrice || 0;
 
@@ -712,6 +745,19 @@ class GameService {
 
     await session.complete(result);
 
+    // Credit coins to user's wallet
+    let newBalance = 0;
+    if (coins > 0) {
+      const coinResult = await coinService.awardCoins(
+        userId,
+        coins,
+        'guess_price',
+        `Guess the Price game: ${coins} coins earned!`,
+        { sessionId, accuracy: Math.round(accuracy), guessedPrice, actualPrice }
+      );
+      newBalance = coinResult.newBalance;
+    }
+
     return {
       sessionId,
       guessedPrice,
@@ -719,7 +765,8 @@ class GameService {
       accuracy: Math.round(accuracy),
       coins,
       message,
-      productName: metadata?.productName
+      productName: metadata?.productName,
+      newBalance // Return updated wallet balance
     };
   }
 
@@ -781,6 +828,119 @@ class GameService {
   async expireOldSessions(): Promise<number> {
     const result = await GameSession.expireSessions();
     return result.modifiedCount || 0;
+  }
+
+  // Get today's total earnings for a user
+  async getTodaysEarnings(userId: string): Promise<number> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const result = await GameSession.aggregate([
+      {
+        $match: {
+          user: userId,
+          status: 'completed',
+          createdAt: { $gte: today },
+          'result.prize.type': 'coins'
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$result.prize.value' }
+        }
+      }
+    ]);
+
+    return result[0]?.total || 0;
+  }
+
+  // Get available games with status (for frontend display)
+  async getAvailableGames(userId?: string): Promise<any[]> {
+    const games = [
+      {
+        id: 'spin-wheel',
+        title: 'Spin & Win',
+        description: 'Spin the wheel to win coins and rewards',
+        icon: '🎰',
+        path: '/explore/spin-win',
+        maxDaily: DAILY_GAME_LIMITS.spin_wheel,
+        reward: 'Up to 1000 coins'
+      },
+      {
+        id: 'memory-match',
+        title: 'Memory Match',
+        description: 'Match pairs to earn coins',
+        icon: '🧠',
+        path: '/playandearn/memorymatch',
+        maxDaily: DAILY_GAME_LIMITS.memory_match,
+        reward: 'Up to 170 coins'
+      },
+      {
+        id: 'coin-hunt',
+        title: 'Coin Hunt',
+        description: 'Collect coins before time runs out',
+        icon: '🪙',
+        path: '/playandearn/coinhunt',
+        maxDaily: DAILY_GAME_LIMITS.coin_hunt,
+        reward: 'Up to 50 coins'
+      },
+      {
+        id: 'guess-price',
+        title: 'Guess the Price',
+        description: 'Guess product prices to win',
+        icon: '🏷️',
+        path: '/playandearn/guessprice',
+        maxDaily: DAILY_GAME_LIMITS.guess_price,
+        reward: 'Up to 50 coins'
+      },
+      {
+        id: 'quiz',
+        title: 'Daily Quiz',
+        description: 'Test your knowledge',
+        icon: '❓',
+        path: '/playandearn/quiz',
+        maxDaily: DAILY_GAME_LIMITS.quiz,
+        reward: 'Up to 150 coins'
+      },
+      {
+        id: 'scratch-card',
+        title: 'Scratch & Win',
+        description: 'Scratch to reveal prizes',
+        icon: '🎫',
+        path: '/playandearn/luckydraw',
+        maxDaily: 0, // Earned through other activities
+        reward: 'Up to 250 coins'
+      }
+    ];
+
+    // If user is authenticated, add their remaining plays
+    if (userId) {
+      const limits = await this.getDailyLimits(userId);
+      const todaysEarnings = await this.getTodaysEarnings(userId);
+
+      return games.map(game => {
+        const gameTypeKey = game.id.replace('-', '_');
+        const limitData = limits[gameTypeKey];
+
+        return {
+          ...game,
+          playsRemaining: limitData?.remaining ?? game.maxDaily,
+          playsUsed: limitData?.played ?? 0,
+          isAvailable: limitData ? limitData.remaining > 0 : true,
+          todaysEarnings: todaysEarnings
+        };
+      });
+    }
+
+    // For unauthenticated users, return games with default availability
+    return games.map(game => ({
+      ...game,
+      playsRemaining: game.maxDaily,
+      playsUsed: 0,
+      isAvailable: true,
+      todaysEarnings: 0
+    }));
   }
 }
 

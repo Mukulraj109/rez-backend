@@ -1,10 +1,14 @@
 import { Router } from 'express';
 import gameController from '../controllers/gameController';
-import { authenticate } from '../middleware/auth';
+import { authenticate, optionalAuth } from '../middleware/auth';
 
 const router = Router();
 
-// All routes require authentication
+// ======== PUBLIC/OPTIONAL AUTH ROUTES ========
+// Get available games with status (works for logged in and anonymous users)
+router.get('/available', optionalAuth, gameController.getAvailableGames.bind(gameController));
+
+// All routes below require authentication
 router.use(authenticate);
 
 // ======== SPIN WHEEL ========

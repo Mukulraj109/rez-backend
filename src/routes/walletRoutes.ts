@@ -14,7 +14,8 @@ import {
   getPaymentMethods,
   handlePaymentWebhook,
   creditLoyaltyPoints,
-  devTopup
+  devTopup,
+  syncWalletBalance
 } from '../controllers/walletController';
 import { authenticate } from '../middleware/auth';
 
@@ -136,5 +137,12 @@ router.post('/webhook/:gateway', handlePaymentWebhook);
  * @access  Private
  */
 router.post('/dev-topup', devTopup);
+
+/**
+ * @route   POST /api/wallet/sync-balance
+ * @desc    Sync wallet balance from CoinTransaction (fixes discrepancies)
+ * @access  Private
+ */
+router.post('/sync-balance', syncWalletBalance);
 
 export default router;

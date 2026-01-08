@@ -300,6 +300,115 @@ class TournamentService {
       .limit(limit)
       .exec();
   }
+
+  // Get live tournaments for the Play & Earn hub
+  async getLiveTournaments(userId?: string, limit: number = 5): Promise<any[]> {
+    const tournaments = await Tournament.find({
+      status: { $in: ['upcoming', 'active'] }
+    })
+      .sort({ featured: -1, status: 1, startDate: 1 })
+      .limit(limit)
+      .exec();
+
+    const now = new Date();
+
+    return tournaments.map(tournament => {
+      // Calculate time remaining
+      const endDate = new Date(tournament.endDate);
+      const startDate = new Date(tournament.startDate);
+      let endsIn = '';
+      let startsIn = '';
+
+      if (tournament.status === 'active') {
+        const diffMs = endDate.getTime() - now.getTime();
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffHours / 24);
+
+        if (diffDays > 0) {
+          endsIn = `${diffDays}d ${diffHours % 24}h`;
+        } else if (diffHours > 0) {
+          endsIn = `${diffHours}h`;
+        } else {
+          const diffMins = Math.floor(diffMs / (1000 * 60));
+          endsIn = `${diffMins}m`;
+        }
+      } else {
+        const diffMs = startDate.getTime() - now.getTime();
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffHours / 24);
+
+        if (diffDays > 0) {
+          startsIn = `${diffDays}d ${diffHours % 24}h`;
+        } else if (diffHours > 0) {
+          startsIn = `${diffHours}h`;
+        } else {
+          const diffMins = Math.floor(diffMs / (1000 * 60));
+          startsIn = `${diffMins}m`;
+        }
+      }
+
+      // Check if user is participating and get their rank
+      let userRank: number | null = null;
+      let userScore: number | null = null;
+      let isParticipant = false;
+
+      if (userId) {
+        const participant = tournament.participants.find(
+          p => p.user.toString() === userId
+        );
+
+        if (participant) {
+          isParticipant = true;
+          userScore = participant.score;
+
+          // Calculate rank
+          const sortedParticipants = [...tournament.participants].sort((a, b) => b.score - a.score);
+          userRank = sortedParticipants.findIndex(
+            p => p.user.toString() === userId
+          ) + 1;
+        }
+      }
+
+      // Get prize pool total
+      const totalPrizeValue = tournament.prizes.reduce((sum, prize) => {
+        return sum + (prize.coins || 0);
+      }, 0);
+
+      // Determine icon based on game type
+      const iconMap: Record<string, string> = {
+        'spin_wheel': '🎰',
+        'memory_match': '🧠',
+        'coin_hunt': '🪙',
+        'guess_price': '🏷️',
+        'quiz': '❓',
+        'general': '🏆'
+      };
+
+      return {
+        id: tournament._id,
+        title: tournament.name,
+        description: tournament.description,
+        type: tournament.type,
+        gameType: tournament.gameType,
+        status: tournament.status,
+        icon: iconMap[tournament.gameType] || '🏆',
+        prize: `${totalPrizeValue.toLocaleString()} coins`,
+        prizePool: tournament.prizes,
+        participants: tournament.participants.length,
+        maxParticipants: tournament.maxParticipants,
+        endsIn: endsIn || undefined,
+        startsIn: startsIn || undefined,
+        startDate: tournament.startDate,
+        endDate: tournament.endDate,
+        featured: tournament.featured,
+        path: `/explore/tournaments/${tournament._id}`,
+        // User-specific data
+        isParticipant,
+        userRank,
+        userScore
+      };
+    });
+  }
 }
 
 export default new TournamentService();

@@ -3,6 +3,7 @@
 
 import { UserAchievement, ACHIEVEMENT_DEFINITIONS } from '../models/Achievement';
 import { Types } from 'mongoose';
+import coinService from './coinService';
 
 class AchievementService {
   /**
@@ -98,6 +99,22 @@ class AchievementService {
           achievement.unlocked = true;
           achievement.unlockedDate = new Date();
           console.log(`🎉 [ACHIEVEMENT] User ${userId} unlocked achievement: ${achievement.title}`);
+
+          // Award coins for unlocking achievement
+          if (definition.reward?.coins && definition.reward.coins > 0) {
+            try {
+              await coinService.awardCoins(
+                userId.toString(),
+                definition.reward.coins,
+                'achievement',
+                `Achievement unlocked: ${achievement.title}`,
+                { achievementType: achievement.type, achievementId: achievement._id }
+              );
+              console.log(`💰 [ACHIEVEMENT] Awarded ${definition.reward.coins} coins for achievement: ${achievement.title}`);
+            } catch (coinError) {
+              console.error(`❌ [ACHIEVEMENT] Failed to award coins for ${achievement.title}:`, coinError);
+            }
+          }
         }
 
         return achievement.save();

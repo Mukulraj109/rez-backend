@@ -111,6 +111,7 @@ import billRoutes from './routes/billRoutes';
 import billingRoutes from './routes/billingRoutes';
 import activityFeedRoutes from './routes/activityFeedRoutes';
 import unifiedGamificationRoutes from './routes/unifiedGamificationRoutes';
+import creatorRoutes from './routes/creatorRoutes';
 import socialProofRoutes from './routes/socialProofRoutes';
 import partnerRoutes from './routes/partnerRoutes';
 import earningsRoutes from './routes/earningsRoutes';
@@ -581,6 +582,7 @@ app.use(`${API_PREFIX}/stores`, storeRoutes);
 app.use(`${API_PREFIX}/stores`, followerStatsRoutes); // Follower stats for merchants
 app.use(`${API_PREFIX}/orders`, orderRoutes);
 app.use(`${API_PREFIX}/videos`, videoRoutes);
+app.use(`${API_PREFIX}/creators`, creatorRoutes);
 app.use(`${API_PREFIX}/ugc`, ugcRoutes);
 app.use(`${API_PREFIX}/articles`, articleRoutes);
 app.use(`${API_PREFIX}/projects`, projectRoutes);

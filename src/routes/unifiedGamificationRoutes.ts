@@ -43,7 +43,8 @@ import {
   getShareSubmissions,
   submitSharePost,
   getStreakBonuses,
-  getReviewableItems
+  getReviewableItems,
+  getBonusOpportunities
 } from '../controllers/gamificationController';
 
 // Import streak controller
@@ -134,6 +135,9 @@ router.get('/stats', getGamificationStats);
 // ========================================
 // Get all play & earn data in one call (spin, challenges, streak, surprise drops)
 router.get('/play-and-earn', getPlayAndEarnData);
+
+// Bonus Opportunities (time-limited challenges, drops, campaigns)
+router.get('/bonus-opportunities', getBonusOpportunities);
 
 // Surprise Coin Drops
 router.post('/surprise-drop/claim', claimSurpriseDrop);

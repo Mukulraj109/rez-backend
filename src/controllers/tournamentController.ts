@@ -184,6 +184,34 @@ class TournamentController {
       });
     }
   }
+
+  // GET /api/tournaments/live
+  // Returns live and upcoming tournaments (supports optional auth)
+  async getLiveTournaments(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const { limit = 5 } = req.query;
+
+      const tournaments = await tournamentService.getLiveTournaments(
+        userId,
+        parseInt(limit as string)
+      );
+
+      res.json({
+        success: true,
+        data: {
+          tournaments,
+          total: tournaments.length
+        },
+        message: 'Live tournaments fetched'
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
 }
 
 export default new TournamentController();

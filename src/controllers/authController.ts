@@ -384,6 +384,14 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
         referrerUser.referral.totalReferrals += 1;
         await referrerUser.save();
 
+        // Trigger achievement update for the REFERRER (not the new user)
+        try {
+          await achievementService.triggerAchievementUpdate(String(referrerUser._id), 'referral_completed');
+          console.log(`🏆 [REFERRAL] Achievement update triggered for referrer: ${referrerUser._id}`);
+        } catch (achievementError) {
+          console.error('❌ [REFERRAL] Error triggering referrer achievement:', achievementError);
+        }
+
         // Update referrer's partner referral task progress
         try {
           const Partner = require('../models/Partner').default;
