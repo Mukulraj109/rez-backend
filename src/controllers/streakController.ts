@@ -124,9 +124,23 @@ class StreakController {
       // Get login streak specifically
       const loginStreak = await streakService.getOrCreateStreak(userId, 'login');
 
+      // Get total earned from all check-ins
+      const DailyCheckIn = require('../models/DailyCheckIn').default;
+      const totalEarnedResult = await DailyCheckIn.aggregate([
+        { $match: { userId: new (require('mongoose').Types.ObjectId)(userId) } },
+        { $group: { _id: null, total: { $sum: '$totalEarned' } } }
+      ]);
+      const totalEarned = totalEarnedResult.length > 0 ? totalEarnedResult[0].total : 0;
+
+      // Check if user has checked in today
+      const hasCheckedInToday = await DailyCheckIn.hasCheckedInToday(
+        new (require('mongoose').Types.ObjectId)(userId)
+      );
+
       // Format response to match expected structure
       const streakData = {
         streak: loginStreak.currentStreak || 0,
+        currentStreak: loginStreak.currentStreak || 0,
         lastLogin: loginStreak.lastActivityDate,
         type: 'login',
         // Additional useful information
@@ -134,7 +148,10 @@ class StreakController {
         totalDays: loginStreak.totalDays || 0,
         frozen: loginStreak.frozen || false,
         freezeExpiresAt: loginStreak.freezeExpiresAt || null,
-        streakStartDate: loginStreak.streakStartDate || loginStreak.lastActivityDate
+        streakStartDate: loginStreak.streakStartDate || loginStreak.lastActivityDate,
+        // Include total earned and check-in status
+        totalEarned: totalEarned,
+        hasCheckedInToday: hasCheckedInToday
       };
 
       res.json({

@@ -1,3 +1,4 @@
+// Force restart - Deleted stale JS files from src
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -122,6 +123,8 @@ import serviceAppointmentRoutes from './routes/serviceAppointmentRoutes';
 import serviceCategoryRoutes from './routes/serviceCategoryRoutes';
 import serviceRoutes from './routes/serviceRoutes';
 import serviceBookingRoutes from './routes/serviceBookingRoutes';
+import healthRecordRoutes from './routes/healthRecordRoutes';
+import emergencyRoutes from './routes/emergencyRoutes';
 import storeVisitRoutes from './routes/storeVisitRoutes';
 import homepageRoutes from './routes/homepageRoutes';
 import searchRoutes from './routes/searchRoutes';
@@ -716,6 +719,14 @@ console.log('✅ Service booking routes registered at /api/service-bookings');
 // // Consultation Routes - Medical/Professional consultation bookings
 app.use(`${API_PREFIX}/consultations`, consultationRoutes);
 console.log('✅ Consultation routes registered at /api/consultations');
+
+// Health Records Routes - User health document management
+app.use(`${API_PREFIX}/health-records`, healthRecordRoutes);
+console.log('✅ Health records routes registered at /api/health-records');
+
+// Emergency Routes - Emergency contacts and ambulance booking
+app.use(`${API_PREFIX}/emergency`, emergencyRoutes);
+console.log('✅ Emergency routes registered at /api/emergency');
 
 // // Store Visit Routes - Retail store visits and queue system
 app.use(`${API_PREFIX}/store-visits`, storeVisitRoutes);

@@ -56,6 +56,25 @@ export const claimChallengeReward = asyncHandler(async (req: Request, res: Respo
   sendSuccess(res, result, 'Challenge reward claimed successfully');
 });
 
+export const getChallengeLeaderboard = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { limit = 10 } = req.query;
+
+  const leaderboard = await challengeService.getChallengeLeaderboard(id, parseInt(limit as string));
+
+  // Format leaderboard with ranks
+  const formattedLeaderboard = leaderboard.map((entry: any, index: number) => ({
+    rank: index + 1,
+    user: entry.user,
+    progress: entry.progress,
+    target: entry.target,
+    completed: entry.completed,
+    completedAt: entry.completedAt
+  }));
+
+  sendSuccess(res, formattedLeaderboard, 'Challenge leaderboard retrieved successfully');
+});
+
 // ========================================
 // ACHIEVEMENTS
 // ========================================
@@ -191,39 +210,62 @@ export const getUserBadges = asyncHandler(async (req: Request, res: Response) =>
 // LEADERBOARD
 // ========================================
 
+// Map frontend period values to backend service format
+const mapPeriodToBackend = (period: string): 'day' | 'week' | 'month' | 'all' => {
+  switch (period) {
+    case 'daily':
+    case 'day':
+      return 'day';
+    case 'weekly':
+    case 'week':
+      return 'week';
+    case 'monthly':
+    case 'month':
+      return 'month';
+    case 'all-time':
+    case 'all':
+    default:
+      return 'all';
+  }
+};
+
 export const getLeaderboard = asyncHandler(async (req: Request, res: Response) => {
-  const { period = 'monthly', type = 'spending', limit = 10 } = req.query;
+  const { period = 'weekly', type = 'spending', limit = 10 } = req.query;
+
+  // Map frontend period format to backend format
+  const backendPeriod = mapPeriodToBackend(period as string);
 
   let leaderboard;
 
   switch (type) {
     case 'spending':
       leaderboard = await leaderboardService.getSpendingLeaderboard(
-        period as any,
+        backendPeriod,
         parseInt(limit as string)
       );
       break;
     case 'reviews':
       leaderboard = await leaderboardService.getReviewLeaderboard(
-        period as any,
+        backendPeriod,
         parseInt(limit as string)
       );
       break;
     case 'referrals':
       leaderboard = await leaderboardService.getReferralLeaderboard(
-        period as any,
+        backendPeriod,
         parseInt(limit as string)
       );
       break;
     case 'cashback':
       leaderboard = await leaderboardService.getCashbackLeaderboard(
-        period as any,
+        backendPeriod,
         parseInt(limit as string)
       );
       break;
     case 'coins':
+      // coinService uses frontend period format directly (daily, weekly, monthly, all-time)
       leaderboard = await coinService.getCoinLeaderboard(
-        period as any,
+        period as 'daily' | 'weekly' | 'monthly' | 'all-time',
         parseInt(limit as string)
       );
       break;
@@ -236,9 +278,12 @@ export const getLeaderboard = asyncHandler(async (req: Request, res: Response) =
 
 export const getUserRank = asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
-  const { period = 'monthly' } = req.query;
+  const { period = 'weekly' } = req.query;
 
-  const ranks = await leaderboardService.getAllUserRanks(userId, period as any);
+  // Map frontend period format to backend format
+  const backendPeriod = mapPeriodToBackend(period as string);
+
+  const ranks = await leaderboardService.getAllUserRanks(userId, backendPeriod);
 
   sendSuccess(res, ranks, 'User rank retrieved successfully');
 });
@@ -1050,11 +1095,35 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
     { streakDay: streak.currentStreak, milestone: milestoneReached }
   );
 
+  // Create DailyCheckIn record to track earnings
+  const DailyCheckIn = (await import('../models/DailyCheckIn')).default;
+  const todayDate = new Date();
+  todayDate.setUTCHours(0, 0, 0, 0);
+
+  try {
+    await DailyCheckIn.findOneAndUpdate(
+      { userId: new Types.ObjectId(userId), date: todayDate },
+      {
+        userId: new Types.ObjectId(userId),
+        date: todayDate,
+        streak: streak.currentStreak,
+        coinsEarned: 10, // Base coins
+        bonusEarned: milestoneReached ? milestoneReached.coins : 0,
+        totalEarned: coinsEarned,
+        coinType: 'rez'
+      },
+      { upsert: true, new: true }
+    );
+  } catch (checkInError) {
+    console.error('[STREAK CHECKIN] Error creating DailyCheckIn record:', checkInError);
+  }
+
   sendSuccess(res, {
     streakUpdated: true,
     currentStreak: streak.currentStreak,
     longestStreak: streak.longestStreak,
     coinsEarned,
+    totalEarned: coinsEarned,
     milestoneReached,
     newBalance: result.balance,
     message: milestoneReached
@@ -1138,8 +1207,8 @@ export const getPromotionalPosters = asyncHandler(async (req: Request, res: Resp
     title: banner.title,
     subtitle: banner.subtitle || banner.description || '',
     image: banner.image,
-    colors: [banner.backgroundColor, banner.backgroundColor], // Use single color as gradient
-    shareBonus: 50, // Default share bonus
+    colors: banner.metadata?.colors || [banner.backgroundColor || '#3B82F6', banner.backgroundColor || '#8B5CF6'],
+    shareBonus: banner.metadata?.shareBonus || 50,
     isActive: banner.isActive,
   }));
 

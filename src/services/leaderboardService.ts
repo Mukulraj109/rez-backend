@@ -14,7 +14,7 @@ interface LeaderboardEntry {
 class LeaderboardService {
   // Get spending leaderboard
   async getSpendingLeaderboard(
-    period: 'week' | 'month' | 'all' = 'month',
+    period: 'day' | 'week' | 'month' | 'all' = 'month',
     limit: number = 10
   ): Promise<LeaderboardEntry[]> {
     const dateFilter = this.getDateFilter(period);
@@ -31,7 +31,8 @@ class LeaderboardService {
       {
         $group: {
           _id: '$user',
-          totalSpent: { $sum: '$totalPrice' },
+          // Order model uses totals.total, not totalPrice
+          totalSpent: { $sum: '$totals.total' },
           orderCount: { $sum: 1 }
         }
       },
@@ -56,7 +57,9 @@ class LeaderboardService {
         $project: {
           user: {
             id: '$userData._id',
-            name: '$userData.name',
+            // User model has fullName, profile.firstName, username, email
+            name: { $ifNull: ['$userData.fullName', { $ifNull: ['$userData.profile.firstName', { $ifNull: ['$userData.username', '$userData.email'] }] }] },
+            email: '$userData.email',
             avatar: '$userData.profilePicture'
           },
           value: '$totalSpent',
@@ -70,7 +73,7 @@ class LeaderboardService {
 
   // Get review leaderboard
   async getReviewLeaderboard(
-    period: 'week' | 'month' | 'all' = 'month',
+    period: 'day' | 'week' | 'month' | 'all' = 'month',
     limit: number = 10
   ): Promise<LeaderboardEntry[]> {
     const dateFilter = this.getDateFilter(period);
@@ -120,7 +123,9 @@ class LeaderboardService {
         $project: {
           user: {
             id: '$userData._id',
-            name: '$userData.name',
+            // User model has fullName, profile.firstName, username, email
+            name: { $ifNull: ['$userData.fullName', { $ifNull: ['$userData.profile.firstName', { $ifNull: ['$userData.username', '$userData.email'] }] }] },
+            email: '$userData.email',
             avatar: '$userData.profilePicture'
           },
           value: '$totalReviews',
@@ -136,7 +141,7 @@ class LeaderboardService {
 
   // Get referral leaderboard
   async getReferralLeaderboard(
-    period: 'week' | 'month' | 'all' = 'month',
+    period: 'day' | 'week' | 'month' | 'all' = 'month',
     limit: number = 10
   ): Promise<LeaderboardEntry[]> {
     const dateFilter = this.getDateFilter(period, 'referral.referrals.joinedAt');
@@ -172,7 +177,9 @@ class LeaderboardService {
         $project: {
           user: {
             id: '$userData._id',
-            name: '$userData.name',
+            // User model has fullName, profile.firstName, username, email
+            name: { $ifNull: ['$userData.fullName', { $ifNull: ['$userData.profile.firstName', { $ifNull: ['$userData.username', '$userData.email'] }] }] },
+            email: '$userData.email',
             avatar: '$userData.profilePicture'
           },
           value: '$totalReferrals'
@@ -185,7 +192,7 @@ class LeaderboardService {
 
   // Get cashback leaderboard
   async getCashbackLeaderboard(
-    period: 'week' | 'month' | 'all' = 'month',
+    period: 'day' | 'week' | 'month' | 'all' = 'month',
     limit: number = 10
   ): Promise<LeaderboardEntry[]> {
     const dateFilter = this.getDateFilter(period);
@@ -196,14 +203,15 @@ class LeaderboardService {
       {
         $match: {
           status: 'delivered',
-          'cashback.amount': { $gt: 0 },
+          // Order model uses totals.cashback
+          'totals.cashback': { $gt: 0 },
           ...dateFilter
         }
       },
       {
         $group: {
           _id: '$user',
-          totalCashback: { $sum: '$cashback.amount' },
+          totalCashback: { $sum: '$totals.cashback' },
           orderCount: { $sum: 1 }
         }
       },
@@ -228,7 +236,9 @@ class LeaderboardService {
         $project: {
           user: {
             id: '$userData._id',
-            name: '$userData.name',
+            // User model has fullName, profile.firstName, username, email
+            name: { $ifNull: ['$userData.fullName', { $ifNull: ['$userData.profile.firstName', { $ifNull: ['$userData.username', '$userData.email'] }] }] },
+            email: '$userData.email',
             avatar: '$userData.profilePicture'
           },
           value: '$totalCashback',
@@ -270,7 +280,9 @@ class LeaderboardService {
         $project: {
           user: {
             id: '$userData._id',
-            name: '$userData.name',
+            // User model has fullName, profile.firstName, username, email
+            name: { $ifNull: ['$userData.fullName', { $ifNull: ['$userData.profile.firstName', { $ifNull: ['$userData.username', '$userData.email'] }] }] },
+            email: '$userData.email',
             avatar: '$userData.profilePicture'
           },
           value: '$currentStreak',
@@ -286,7 +298,7 @@ class LeaderboardService {
   async getUserRank(
     userId: string,
     leaderboardType: 'spending' | 'reviews' | 'referrals' | 'cashback' | 'streak',
-    period: 'week' | 'month' | 'all' = 'month'
+    period: 'day' | 'week' | 'month' | 'all' = 'month'
   ): Promise<{ rank: number; total: number; value: number } | null> {
     let allUsers: any[] = [];
 
@@ -324,7 +336,7 @@ class LeaderboardService {
   // Get all leaderboards for user
   async getAllUserRanks(
     userId: string,
-    period: 'week' | 'month' | 'all' = 'month'
+    period: 'day' | 'week' | 'month' | 'all' = 'month'
   ): Promise<any> {
     const [spending, reviews, referrals, cashback, streak] = await Promise.all([
       this.getUserRank(userId, 'spending', period),
@@ -345,7 +357,7 @@ class LeaderboardService {
 
   // Helper: Get date filter based on period
   private getDateFilter(
-    period: 'week' | 'month' | 'all',
+    period: 'day' | 'day' | 'week' | 'month' | 'all',
     dateField: string = 'createdAt'
   ): any {
     if (period === 'all') {
@@ -355,7 +367,10 @@ class LeaderboardService {
     const now = new Date();
     const startDate = new Date();
 
-    if (period === 'week') {
+    if (period === 'day') {
+      // Daily: last 24 hours
+      startDate.setDate(now.getDate() - 1);
+    } else if (period === 'week') {
       startDate.setDate(now.getDate() - 7);
     } else if (period === 'month') {
       startDate.setMonth(now.getMonth() - 1);

@@ -1,9 +1,13 @@
 import sgMail from '@sendgrid/mail';
 
-// Configure SendGrid
+// Configure SendGrid - only if valid API key is provided
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
-if (SENDGRID_API_KEY) {
+const isValidSendGridKey: boolean = !!(SENDGRID_API_KEY && SENDGRID_API_KEY.startsWith('SG.'));
+
+if (isValidSendGridKey && SENDGRID_API_KEY) {
   sgMail.setApiKey(SENDGRID_API_KEY);
+} else if (SENDGRID_API_KEY && !SENDGRID_API_KEY.startsWith('SG.')) {
+  console.log('⚠️ SendGrid API key is invalid (must start with "SG."). Email service disabled.');
 }
 
 export interface EmailOptions {
@@ -25,8 +29,8 @@ export class EmailService {
    */
   static async send(options: EmailOptions): Promise<void> {
     try {
-      // Check if SendGrid is configured
-      if (!SENDGRID_API_KEY) {
+      // Check if SendGrid is properly configured with a valid key
+      if (!isValidSendGridKey) {
         console.log('\n📧 EMAIL (SendGrid not configured - logging to console):');
         console.log('═══════════════════════════════════════════════════════');
         console.log(`To: ${Array.isArray(options.to) ? options.to.join(', ') : options.to}`);
@@ -1756,7 +1760,7 @@ export class EmailService {
    * Check if email service is configured
    */
   static isConfigured(): boolean {
-    return !!SENDGRID_API_KEY;
+    return isValidSendGridKey;
   }
 }
 

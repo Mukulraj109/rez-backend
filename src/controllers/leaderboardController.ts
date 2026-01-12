@@ -5,7 +5,7 @@ class LeaderboardController {
   // GET /api/leaderboard/spending
   async getSpendingLeaderboard(req: Request, res: Response) {
     try {
-      const period = (req.query.period as 'week' | 'month' | 'all') || 'month';
+      const period = (req.query.period as 'day' | 'week' | 'month' | 'all') || 'month';
       const limit = parseInt(req.query.limit as string) || 10;
 
       const leaderboard = await leaderboardService.getSpendingLeaderboard(period, limit);
@@ -26,7 +26,7 @@ class LeaderboardController {
   // GET /api/leaderboard/reviews
   async getReviewLeaderboard(req: Request, res: Response) {
     try {
-      const period = (req.query.period as 'week' | 'month' | 'all') || 'month';
+      const period = (req.query.period as 'day' | 'week' | 'month' | 'all') || 'month';
       const limit = parseInt(req.query.limit as string) || 10;
 
       const leaderboard = await leaderboardService.getReviewLeaderboard(period, limit);
@@ -47,7 +47,7 @@ class LeaderboardController {
   // GET /api/leaderboard/referrals
   async getReferralLeaderboard(req: Request, res: Response) {
     try {
-      const period = (req.query.period as 'week' | 'month' | 'all') || 'month';
+      const period = (req.query.period as 'day' | 'week' | 'month' | 'all') || 'month';
       const limit = parseInt(req.query.limit as string) || 10;
 
       const leaderboard = await leaderboardService.getReferralLeaderboard(period, limit);
@@ -68,7 +68,7 @@ class LeaderboardController {
   // GET /api/leaderboard/cashback
   async getCashbackLeaderboard(req: Request, res: Response) {
     try {
-      const period = (req.query.period as 'week' | 'month' | 'all') || 'month';
+      const period = (req.query.period as 'day' | 'week' | 'month' | 'all') || 'month';
       const limit = parseInt(req.query.limit as string) || 10;
 
       const leaderboard = await leaderboardService.getCashbackLeaderboard(period, limit);
@@ -128,7 +128,7 @@ class LeaderboardController {
   async getMyRank(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
-      const period = (req.query.period as 'week' | 'month' | 'all') || 'month';
+      const period = (req.query.period as 'day' | 'week' | 'month' | 'all') || 'month';
 
       const ranks = await leaderboardService.getAllUserRanks(userId, period);
 

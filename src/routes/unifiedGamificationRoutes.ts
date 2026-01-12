@@ -6,6 +6,7 @@ import {
   getChallenges,
   getActiveChallenge,
   claimChallengeReward,
+  getChallengeLeaderboard,
   getAchievements,
   getUserAchievements,
   getMyAchievements,
@@ -61,6 +62,7 @@ router.use(authenticate);
 router.get('/challenges', getChallenges);
 router.get('/challenges/active', getActiveChallenge);
 router.get('/challenges/my-progress', getMyChallengeProgress);
+router.get('/challenges/:id/leaderboard', getChallengeLeaderboard);
 router.post('/challenges/:id/claim', claimChallengeReward);
 
 // ========================================
@@ -97,6 +99,8 @@ router.post('/coins/deduct', deductCoins);
 // ========================================
 // DAILY STREAK
 // ========================================
+// Streak Bonuses - MUST be before /streak/:userId to avoid route conflict
+router.get('/streak/bonuses', getStreakBonuses);
 router.get('/streak/:userId', getDailyStreak);
 router.post('/streak/increment', incrementStreak);
 // New endpoint: Get current user's streak (JWT-based, no userId param)
@@ -154,9 +158,6 @@ router.post('/affiliate/submit', submitSharePost);
 
 // Promotional Posters (for sharing)
 router.get('/promotional-posters', getPromotionalPosters);
-
-// Streak Bonuses
-router.get('/streak/bonuses', getStreakBonuses);
 
 // REVIEWABLE ITEMS
 router.get('/reviewable-items', getReviewableItems);

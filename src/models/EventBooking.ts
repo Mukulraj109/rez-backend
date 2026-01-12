@@ -72,11 +72,34 @@ const EventBookingSchema = new Schema<IEventBooking>({
     default: '₹' 
   },
   attendeeInfo: {
-    name: { type: String, required: true },
-    email: { type: String, required: true },
-    phone: { type: String },
-    age: { type: Number },
-    specialRequirements: { type: String }
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      minlength: [2, 'Name must be at least 2 characters'],
+      maxlength: [100, 'Name cannot exceed 100 characters']
+    },
+    email: {
+      type: String,
+      required: true,
+      lowercase: true,
+      trim: true,
+      match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please provide a valid email address']
+    },
+    phone: {
+      type: String,
+      trim: true,
+      match: [/^\+?[\d\s\-()]{10,}$/, 'Please provide a valid phone number']
+    },
+    age: {
+      type: Number,
+      min: [0, 'Age cannot be negative'],
+      max: [150, 'Invalid age']
+    },
+    specialRequirements: {
+      type: String,
+      maxlength: [500, 'Special requirements cannot exceed 500 characters']
+    }
   },
   bookingReference: { 
     type: String, 
@@ -86,9 +109,25 @@ const EventBookingSchema = new Schema<IEventBooking>({
   qrCode: { type: String },
   checkInTime: { type: Date },
   checkOutTime: { type: Date },
-  notes: { type: String },
-  refundAmount: { type: Number },
-  refundReason: { type: String },
+  notes: {
+    type: String,
+    maxlength: [1000, 'Notes cannot exceed 1000 characters']
+  },
+  refundAmount: {
+    type: Number,
+    min: [0, 'Refund amount cannot be negative'],
+    validate: {
+      validator: function(this: any, value: number) {
+        // Refund amount cannot exceed booking amount
+        return !value || value <= (this.amount || 0);
+      },
+      message: 'Refund amount cannot exceed booking amount'
+    }
+  },
+  refundReason: {
+    type: String,
+    maxlength: [500, 'Refund reason cannot exceed 500 characters']
+  },
   refundedAt: { type: Date }
 }, {
   timestamps: true,

@@ -3,10 +3,11 @@ import UserChallengeProgress, { IUserChallengeProgress } from '../models/UserCha
 import CHALLENGE_TEMPLATES from '../config/challengeTemplates';
 import { Wallet } from '../models/Wallet';
 import { Transaction } from '../models/Transaction';
+import { CoinTransaction } from '../models/CoinTransaction';
 import mongoose from 'mongoose';
 
 class ChallengeService {
-  // Get active challenges
+  // Get active challenges with auto-regeneration
   async getActiveChallenges(type?: string): Promise<IChallenge[]> {
     const now = new Date();
     const query: any = {
@@ -19,9 +20,91 @@ class ChallengeService {
       query.type = type;
     }
 
-    return Challenge.find(query)
+    let challenges = await Challenge.find(query)
       .sort({ featured: -1, difficulty: 1, endDate: 1 })
       .exec();
+
+    // Auto-regenerate if no active challenges found
+    if (challenges.length === 0) {
+      console.log('📅 [CHALLENGE SERVICE] No active challenges found, auto-regenerating...');
+      await this.regenerateExpiredChallenges();
+
+      // Fetch again after regeneration
+      challenges = await Challenge.find(query)
+        .sort({ featured: -1, difficulty: 1, endDate: 1 })
+        .exec();
+
+      console.log(`✅ [CHALLENGE SERVICE] Regenerated ${challenges.length} active challenges`);
+    }
+
+    return challenges;
+  }
+
+  // Regenerate expired challenges with fresh dates
+  async regenerateExpiredChallenges(): Promise<number> {
+    const now = new Date();
+    let regeneratedCount = 0;
+
+    try {
+      // Find all expired challenges
+      const expiredChallenges = await Challenge.find({
+        endDate: { $lt: now }
+      });
+
+      console.log(`📅 [CHALLENGE SERVICE] Found ${expiredChallenges.length} expired challenges to regenerate`);
+
+      for (const challenge of expiredChallenges) {
+        const { startDate, endDate } = this.getDateRangeForType(challenge.type);
+
+        challenge.startDate = startDate;
+        challenge.endDate = endDate;
+        challenge.active = true;
+        challenge.participantCount = 0;
+        challenge.completionCount = 0;
+
+        await challenge.save();
+        regeneratedCount++;
+      }
+
+      console.log(`✅ [CHALLENGE SERVICE] Regenerated ${regeneratedCount} challenges`);
+    } catch (error) {
+      console.error('❌ [CHALLENGE SERVICE] Error regenerating challenges:', error);
+    }
+
+    return regeneratedCount;
+  }
+
+  // Helper to get date range based on challenge type
+  private getDateRangeForType(type: string): { startDate: Date; endDate: Date } {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const startDate = new Date(now);
+    const endDate = new Date(now);
+
+    switch (type) {
+      case 'daily':
+        endDate.setDate(endDate.getDate() + 1);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      case 'weekly':
+        endDate.setDate(endDate.getDate() + 7);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      case 'monthly':
+        endDate.setDate(endDate.getDate() + 30);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      case 'special':
+        endDate.setDate(endDate.getDate() + 14);
+        endDate.setHours(23, 59, 59, 999);
+        break;
+      default:
+        endDate.setDate(endDate.getDate() + 7);
+        endDate.setHours(23, 59, 59, 999);
+    }
+
+    return { startDate, endDate };
   }
 
   // Get today's daily challenges
@@ -273,6 +356,26 @@ class ChallengeService {
           } catch (txError) {
             console.error('❌ [CHALLENGE SERVICE] Failed to create transaction:', txError);
             // Don't fail the whole operation if transaction creation fails
+          }
+
+          // CRITICAL: Also create CoinTransaction record for auto-sync to work
+          try {
+            await CoinTransaction.createTransaction(
+              userId,
+              'earned',
+              coinsReward,
+              'challenge_reward',
+              `Challenge reward: ${challenge.title}`,
+              {
+                challengeId: String(challenge._id),
+                challengeTitle: challenge.title,
+                progressId: String(progress._id)
+              }
+            );
+            console.log('✅ [CHALLENGE SERVICE] CoinTransaction record created for auto-sync');
+          } catch (coinTxError) {
+            console.error('❌ [CHALLENGE SERVICE] Failed to create CoinTransaction:', coinTxError);
+            // Don't fail - wallet was already updated directly
           }
         }
       } catch (walletError) {

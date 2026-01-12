@@ -84,6 +84,9 @@ export interface IEvent extends Document {
   analytics: IEventAnalytics;
   featured: boolean; // For homepage display
   priority: number; // For sorting
+  rating: number; // Average rating (1-5)
+  reviewCount: number; // Total number of reviews
+  cashback: number; // Cashback percentage (merchant-configured)
   createdAt: Date;
   updatedAt: Date;
   publishedAt?: Date;
@@ -183,10 +186,15 @@ const EventSchema = new Schema<IEvent>({
     required: true 
   },
   endTime: { type: String },
-  category: { 
-    type: String, 
+  category: {
+    type: String,
     required: true,
-    enum: ['Music', 'Technology', 'Wellness', 'Sports', 'Education', 'Business', 'Arts', 'Food', 'Entertainment', 'Other']
+    enum: [
+      // New categories (lowercase)
+      'movies', 'concerts', 'parks', 'workshops', 'gaming', 'sports', 'entertainment',
+      // Legacy categories (title case)
+      'Music', 'Technology', 'Wellness', 'Sports', 'Education', 'Business', 'Arts', 'Food', 'Entertainment', 'Other'
+    ]
   },
   subcategory: { type: String },
   organizer: { 
@@ -224,13 +232,29 @@ const EventSchema = new Schema<IEvent>({
     type: EventAnalyticsSchema, 
     default: () => ({}) 
   },
-  featured: { 
-    type: Boolean, 
-    default: false 
+  featured: {
+    type: Boolean,
+    default: false
   },
-  priority: { 
-    type: Number, 
-    default: 0 
+  priority: {
+    type: Number,
+    default: 0
+  },
+  rating: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 5
+  },
+  reviewCount: {
+    type: Number,
+    default: 0
+  },
+  cashback: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 100 // Percentage (0-100%)
   },
   publishedAt: { type: Date },
   expiresAt: { type: Date }
@@ -248,6 +272,14 @@ EventSchema.index({ featured: 1, status: 1 });
 EventSchema.index({ tags: 1 });
 EventSchema.index({ title: 'text', description: 'text' });
 EventSchema.index({ date: 1, status: 1, featured: 1 });
+
+// Additional indexes for production performance
+EventSchema.index({ merchantId: 1 }); // For merchant event queries
+EventSchema.index({ subcategory: 1, status: 1 }); // For subcategory filtering
+EventSchema.index({ publishedAt: 1, status: 1 }); // For time-based queries
+EventSchema.index({ 'organizer.email': 1 }); // For organizer lookups
+EventSchema.index({ rating: -1, status: 1 }); // For sorting by rating
+EventSchema.index({ cashback: -1, status: 1 }); // For sorting by cashback
 
 // Virtual for available capacity
 EventSchema.virtual('availableCapacity').get(function() {

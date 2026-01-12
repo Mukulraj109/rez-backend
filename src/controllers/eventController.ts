@@ -7,6 +7,17 @@ import { IEvent } from '../models/Event';
 import { IEventBooking } from '../models/EventBooking';
 import paymentGatewayService from '../services/paymentGatewayService';
 
+// Helper function to escape regex special characters to prevent ReDoS attacks
+const escapeRegex = (str: string): string => {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+// Helper function to create a safe regex query
+const safeRegexQuery = (value: string): RegExp => {
+  const escapedValue = escapeRegex(value.trim());
+  return new RegExp(escapedValue, 'i');
+};
+
 // @desc    Get all published events
 // @route   GET /api/events
 // @access  Public
@@ -31,7 +42,7 @@ export const getAllEvents = asyncHandler(async (req: Request, res: Response) => 
   }
 
   if (location) {
-    query['location.city'] = new RegExp(location as string, 'i');
+    query['location.city'] = safeRegexQuery(location as string);
   }
 
   if (date) {
@@ -140,21 +151,32 @@ export const getEventById = asyncHandler(async (req: Request, res: Response) => 
 // @access  Public
 export const getEventsByCategory = asyncHandler(async (req: Request, res: Response) => {
   const { category } = req.params;
-  const { limit = 20, offset = 0 } = req.query;
+  const { limit = 20, offset = 0, subcategory, tags } = req.query;
 
-  const events = await Event.find({
-    category: new RegExp(category, 'i'),
+  // Build query for category filtering
+  const query: any = {
+    category: safeRegexQuery(category),
     status: 'published'
-  })
-    .sort({ date: 1 })
+  };
+
+  // Add subcategory filter if provided
+  if (subcategory) {
+    query.subcategory = safeRegexQuery(subcategory as string);
+  }
+
+  // Add tags filter if provided (useful for frontend category mapping)
+  if (tags) {
+    const tagArray = (tags as string).split(',').map(t => t.trim().toLowerCase());
+    query.tags = { $in: tagArray };
+  }
+
+  const events = await Event.find(query)
+    .sort({ featured: -1, priority: -1, date: 1 })
     .limit(Number(limit))
     .skip(Number(offset))
     .lean();
 
-  const total = await Event.countDocuments({
-    category: new RegExp(category, 'i'),
-    status: 'published'
-  });
+  const total = await Event.countDocuments(query);
 
   res.json({
     success: true,
@@ -194,7 +216,7 @@ export const searchEvents = asyncHandler(async (req: Request, res: Response) => 
   }
 
   if (location) {
-    query['location.city'] = new RegExp(location as string, 'i');
+    query['location.city'] = safeRegexQuery(location as string);
   }
 
   if (date) {
@@ -280,6 +302,53 @@ export const bookEventSlot = asyncHandler(async (req: Request, res: Response) =>
       message: 'Authentication required'
     });
   }
+
+  // Validate attendeeInfo
+  if (!attendeeInfo || typeof attendeeInfo !== 'object') {
+    return res.status(400).json({
+      success: false,
+      message: 'Attendee information is required'
+    });
+  }
+
+  // Validate required fields
+  if (!attendeeInfo.name || typeof attendeeInfo.name !== 'string' || attendeeInfo.name.trim().length < 2) {
+    return res.status(400).json({
+      success: false,
+      message: 'Valid attendee name is required (minimum 2 characters)'
+    });
+  }
+
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!attendeeInfo.email || !emailRegex.test(attendeeInfo.email)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Valid email address is required'
+    });
+  }
+
+  // Validate phone format if provided
+  if (attendeeInfo.phone && !/^\+?[\d\s\-()]{10,}$/.test(attendeeInfo.phone)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid phone number format'
+    });
+  }
+
+  // Validate age if provided
+  if (attendeeInfo.age !== undefined && (typeof attendeeInfo.age !== 'number' || attendeeInfo.age < 0 || attendeeInfo.age > 150)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid age (must be between 0 and 150)'
+    });
+  }
+
+  // Sanitize input
+  attendeeInfo.name = attendeeInfo.name.trim();
+  attendeeInfo.email = attendeeInfo.email.toLowerCase().trim();
+  if (attendeeInfo.phone) attendeeInfo.phone = attendeeInfo.phone.trim();
+  if (attendeeInfo.specialRequirements) attendeeInfo.specialRequirements = attendeeInfo.specialRequirements.trim().substring(0, 500);
 
   // Find event
   const event = await Event.findById(id);
@@ -448,10 +517,15 @@ export const bookEventSlot = asyncHandler(async (req: Request, res: Response) =>
         throw new Error('Payment gateway did not return client secret');
       }
 
+      // Safely extract payment data with proper null checks
+      const sessionId = paymentResponse.paymentUrl && typeof paymentResponse.paymentUrl === 'string'
+        ? paymentResponse.paymentUrl.split('/').pop() || null
+        : null;
+
       paymentData = {
-        paymentIntentId: paymentResponse.gatewayResponse?.paymentIntentId || paymentResponse.paymentId,
+        paymentIntentId: paymentResponse.gatewayResponse?.paymentIntentId || paymentResponse.paymentId || '',
         clientSecret: paymentResponse.gatewayResponse?.clientSecret || '',
-        sessionId: paymentResponse.paymentUrl ? paymentResponse.paymentUrl.split('/').pop() : null,
+        sessionId,
       };
 
       console.log('✅ [EVENT BOOKING] Payment intent created successfully:', {

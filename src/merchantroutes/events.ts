@@ -53,6 +53,9 @@ const createEventSchema = Joi.object({
   time: Joi.string().required(),
   endTime: Joi.string().optional(),
   category: Joi.string().valid(
+    // Lowercase categories (new)
+    'movies', 'concerts', 'parks', 'workshops', 'gaming', 'sports', 'entertainment',
+    // Legacy title-case categories
     'Music', 'Technology', 'Wellness', 'Sports', 'Education',
     'Business', 'Arts', 'Food', 'Entertainment', 'Other'
   ).required(),
@@ -78,7 +81,8 @@ const createEventSchema = Joi.object({
   tags: Joi.array().items(Joi.string()).optional(),
   status: Joi.string().valid('draft', 'published').default('draft'),
   featured: Joi.boolean().default(false),
-  priority: Joi.number().min(0).default(0)
+  priority: Joi.number().min(0).default(0),
+  cashback: Joi.number().min(0).max(100).default(0) // Cashback percentage (0-100%)
 });
 
 const updateEventSchema = createEventSchema.fork(

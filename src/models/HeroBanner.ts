@@ -38,6 +38,8 @@ export interface IHeroBanner extends Document {
     size: 'small' | 'medium' | 'large' | 'full';
     animation?: string;
     tags: string[];
+    colors?: string[];
+    shareBonus?: number;
   };
   createdBy: Types.ObjectId;
   createdAt: Date;
@@ -217,7 +219,16 @@ const HeroBannerSchema = new Schema<IHeroBanner>({
       type: String,
       trim: true,
       lowercase: true
-    }]
+    }],
+    colors: [{
+      type: String,
+      trim: true
+    }],
+    shareBonus: {
+      type: Number,
+      default: 50,
+      min: [0, 'Share bonus cannot be negative']
+    }
   },
   createdBy: {
     type: Schema.Types.ObjectId,
