@@ -62,6 +62,8 @@
     "seed:offers-page:clear": "ts-node src/scripts/seedOffersPage.ts --clear",
     "seed:category-page": "ts-node src/scripts/seedCategoryPageData.ts",
     "seed:category-page:clear": "ts-node src/scripts/seedCategoryPageData.ts --clear",
+    "seed:home-services": "ts-node src/scripts/seedHomeServices.ts",
+    "seed:home-services:clear": "ts-node src/scripts/seedHomeServices.ts --clear",
     "validate:discovery": "ts-node scripts/validate-discovery-data.ts",
     "test:all": "node run-all-tests.js",
     "test:relationships": "node test-relationships.js",

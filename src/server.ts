@@ -123,6 +123,7 @@ import serviceAppointmentRoutes from './routes/serviceAppointmentRoutes';
 import serviceCategoryRoutes from './routes/serviceCategoryRoutes';
 import serviceRoutes from './routes/serviceRoutes';
 import serviceBookingRoutes from './routes/serviceBookingRoutes';
+import homeServicesRoutes from './routes/homeServicesRoutes';
 import healthRecordRoutes from './routes/healthRecordRoutes';
 import emergencyRoutes from './routes/emergencyRoutes';
 import storeVisitRoutes from './routes/storeVisitRoutes';
@@ -711,6 +712,10 @@ console.log('✅ Service category routes registered at /api/service-categories')
 // Services Routes - Services (products with type 'service')
 app.use(`${API_PREFIX}/services`, serviceRoutes);
 console.log('✅ Service routes registered at /api/services');
+
+// Home Services Routes - Home services specific endpoints
+app.use(`${API_PREFIX}/home-services`, homeServicesRoutes);
+console.log('✅ Home services routes registered at /api/home-services');
 
 // Service Bookings Routes - User service bookings
 app.use(`${API_PREFIX}/service-bookings`, serviceBookingRoutes);
