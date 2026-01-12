@@ -21,6 +21,7 @@ export interface IReview extends Document {
     respondedAt: Date;
     respondedBy?: mongoose.Types.ObjectId;
   };
+  isFeaturedOnExplore: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -153,6 +154,11 @@ const ReviewSchema = new Schema<IReview>({
       type: Schema.Types.ObjectId,
       ref: 'Merchant'
     }
+  },
+  isFeaturedOnExplore: {
+    type: Boolean,
+    default: false,
+    index: true
   }
 }, {
   timestamps: true,
