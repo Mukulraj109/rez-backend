@@ -139,6 +139,8 @@ import productGalleryRoutes from './routes/productGallery';  // Public product g
 import offersRoutes from './routes/offersRoutes';  // Bank and exclusive offers routes
 import loyaltyRoutes from './routes/loyaltyRoutes';  // User loyalty routes
 import statsRoutes from './routes/statsRoutes';  // Social proof stats routes
+import exploreRoutes from './routes/exploreRoutes';  // Explore page routes
+import adminExploreRoutes from './routes/adminExploreRoutes';  // Admin explore management routes
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
 import experienceRoutes from './routes/experienceRoutes';  // Store experience routes
 import authRoutes1 from './merchantroutes/auth';  // Temporarily disabled
@@ -751,7 +753,14 @@ console.log('✅ Loyalty routes registered at /api/users/loyalty');
 
 // Stats Routes - Social proof stats
 app.use(`${API_PREFIX}/stats`, statsRoutes);
-console.log('✅ Stats routes registered at /api/stats');
+
+// Explore page routes
+app.use(`${API_PREFIX}/explore`, exploreRoutes);
+console.log('✅ Explore routes registered at /api/explore');
+
+// Admin explore management routes
+app.use(`${API_PREFIX}/admin/explore`, adminExploreRoutes);
+console.log('✅ Admin explore routes registered at /api/admin/explore');
 
 // Campaign Routes - Homepage exciting deals
 app.use(`${API_PREFIX}/campaigns`, campaignRoutes);
