@@ -567,7 +567,7 @@ async function seedTravelServices(categories: any[], stores: any[]): Promise<num
     {
       name: 'Volvo AC Sleeper Bus',
       slug: 'volvo-ac-sleeper-bus',
-      description: 'Luxury Volvo AC sleeper bus for intercity travel. Comfortable journey.',
+      description: 'Luxury Volvo AC sleeper bus for intercity travel. Comfortable journey with reclining seats.',
       category: categories.find(c => c.slug === 'bus'),
       store: stores.find(s => s.slug === 'roadrunner-bus'),
       price: 999,
@@ -586,7 +586,7 @@ async function seedTravelServices(categories: any[], stores: any[]): Promise<num
     {
       name: 'Economy Seater Bus',
       slug: 'economy-seater-bus',
-      description: 'Affordable economy seater bus for budget travelers.',
+      description: 'Affordable economy seater bus for budget travelers. Clean and comfortable.',
       category: categories.find(c => c.slug === 'bus'),
       store: stores.find(s => s.slug === 'roadrunner-bus'),
       price: 499,
@@ -601,6 +601,63 @@ async function seedTravelServices(categories: any[], stores: any[]): Promise<num
         serviceArea: { radius: 0 }
       },
       cashback: 10
+    },
+    {
+      name: 'Delhi to Jaipur AC Bus',
+      slug: 'delhi-jaipur-ac-bus',
+      description: 'Premium AC bus service from Delhi to Jaipur. Fast and comfortable journey.',
+      category: categories.find(c => c.slug === 'bus'),
+      store: stores.find(s => s.slug === 'roadrunner-bus'),
+      price: 799,
+      originalPrice: 999,
+      images: ['https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=400'],
+      serviceDetails: {
+        duration: 300, // 5 hours
+        serviceType: 'online',
+        maxBookingsPerSlot: 45,
+        requiresAddress: false,
+        requiresPaymentUpfront: true,
+        serviceArea: { radius: 0 }
+      },
+      cashback: 12
+    },
+    {
+      name: 'Bangalore to Mumbai Sleeper Bus',
+      slug: 'bangalore-mumbai-sleeper-bus',
+      description: 'Overnight sleeper bus from Bangalore to Mumbai. Perfect for long journeys.',
+      category: categories.find(c => c.slug === 'bus'),
+      store: stores.find(s => s.slug === 'roadrunner-bus'),
+      price: 1299,
+      originalPrice: 1599,
+      images: ['https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?w=400'],
+      serviceDetails: {
+        duration: 600, // 10 hours
+        serviceType: 'online',
+        maxBookingsPerSlot: 35,
+        requiresAddress: false,
+        requiresPaymentUpfront: true,
+        serviceArea: { radius: 0 }
+      },
+      cashback: 18
+    },
+    {
+      name: 'Semi Sleeper AC Bus',
+      slug: 'semi-sleeper-ac-bus',
+      description: 'Comfortable semi-sleeper AC bus with reclining seats. Great value for money.',
+      category: categories.find(c => c.slug === 'bus'),
+      store: stores.find(s => s.slug === 'roadrunner-bus'),
+      price: 699,
+      originalPrice: 899,
+      images: ['https://images.unsplash.com/photo-1570125909232-eb263c188f7e?w=400'],
+      serviceDetails: {
+        duration: 420, // 7 hours
+        serviceType: 'online',
+        maxBookingsPerSlot: 42,
+        requiresAddress: false,
+        requiresPaymentUpfront: true,
+        serviceArea: { radius: 0 }
+      },
+      cashback: 14
     },
     // Cab
     {

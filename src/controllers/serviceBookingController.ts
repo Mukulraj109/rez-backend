@@ -130,7 +130,7 @@ export const createBooking = async (req: Request, res: Response) => {
     }
 
     // Calculate pricing
-    const basePrice = service.pricing.selling;
+    const basePrice = service.pricing?.selling || service.pricing?.basePrice || service.price?.current || 0;
     const cashbackPercentage = service.cashback?.percentage || 0;
     
     // Parse customerNotes to extract totalPrice if available
@@ -152,9 +152,9 @@ export const createBooking = async (req: Request, res: Response) => {
       }
     }
     
-    // Validate maximum passengers/guests if specified in booking details
-    if (bookingDetails.passengers || bookingDetails.guests) {
-      const passengers = bookingDetails.passengers || bookingDetails.guests;
+    // Validate maximum passengers/guests/travelers if specified in booking details
+    if (bookingDetails.passengers || bookingDetails.guests || bookingDetails.travelers) {
+      const passengers = bookingDetails.passengers || bookingDetails.guests || bookingDetails.travelers;
       const totalPassengers = (passengers.adults || 0) + (passengers.children || 0);
       
       // Check service-specific limits (if defined in serviceDetails)
@@ -189,17 +189,33 @@ export const createBooking = async (req: Request, res: Response) => {
       if (categorySlug === 'hotels') return 'HTL';
       if (categorySlug === 'trains') return 'TRN';
       if (categorySlug === 'cab') return 'CAB';
+      if (categorySlug === 'bus') return 'BUS';
+      if (categorySlug === 'packages') return 'PKG';
       return 'SB';
     })();
     
     const bookingNumber = await (ServiceBooking as any).generateBookingNumber(bookingNumberPrefix);
 
     // Get customer info (phoneNumber and email are on user object, not profile)
-    const customerName = req.user?.profile?.firstName
+    // Try to get from customerNotes first (for bookings with custom contact info), then fallback to user profile
+    let customerName = req.user?.profile?.firstName
       ? `${req.user.profile.firstName} ${req.user.profile.lastName || ''}`.trim()
       : 'Customer';
-    const customerPhone = req.user?.phoneNumber || '';
-    const customerEmail = req.user?.email;
+    let customerPhone = req.user?.phoneNumber || '';
+    let customerEmail = req.user?.email;
+    
+    // Extract contact info from customerNotes if available (for packages, flights, etc. with custom contact)
+    if (customerNotes && bookingDetails.contactInfo) {
+      if (bookingDetails.contactInfo.name) {
+        customerName = bookingDetails.contactInfo.name;
+      }
+      if (bookingDetails.contactInfo.phone) {
+        customerPhone = bookingDetails.contactInfo.phone;
+      }
+      if (bookingDetails.contactInfo.email) {
+        customerEmail = bookingDetails.contactInfo.email;
+      }
+    }
 
     // Create booking
     const booking = new ServiceBooking({

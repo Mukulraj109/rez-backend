@@ -47,19 +47,18 @@ export const getFeaturedTravelServices = asyncHandler(async (req: Request, res: 
     const { limit = '6' } = req.query;
     const limitNum = parseInt(limit as string, 10);
 
-    // Get travel services category
-    const travelCategory = await ServiceCategory.findOne({ slug: 'travel' });
-    if (!travelCategory) {
-      return sendSuccess(res, [], 'No travel services found');
-    }
-
-    // Get child categories
-    const childCategories = await ServiceCategory.find({
-      parentCategory: travelCategory._id,
+    // Get travel service categories directly (flights, hotels, trains, bus, cab, packages)
+    const travelCategorySlugs = ['flights', 'hotels', 'trains', 'bus', 'cab', 'packages'];
+    const travelCategories = await ServiceCategory.find({
+      slug: { $in: travelCategorySlugs },
       isActive: true
     }).select('_id');
 
-    const categoryIds = [travelCategory._id, ...childCategories.map(c => c._id)];
+    if (travelCategories.length === 0) {
+      return sendSuccess(res, [], 'No travel services found');
+    }
+
+    const categoryIds = travelCategories.map(c => c._id);
 
     const services = await Product.find({
       productType: 'service',
@@ -189,55 +188,54 @@ export const getTravelServicesByCategory = asyncHandler(async (req: Request, res
  */
 export const getTravelServicesStats = asyncHandler(async (req: Request, res: Response) => {
   try {
-    const travelCategory = await ServiceCategory.findOne({ slug: 'travel' });
-    if (!travelCategory) {
+    // Get travel service categories directly (flights, hotels, trains, bus, cab, packages)
+    const travelCategorySlugs = ['flights', 'hotels', 'trains', 'bus', 'cab', 'packages'];
+    const travelCategories = await ServiceCategory.find({
+      slug: { $in: travelCategorySlugs },
+      isActive: true
+    }).select('_id cashbackPercentage');
+
+    if (travelCategories.length === 0) {
       return sendSuccess(res, {
         hotels: 0,
         maxCashback: 0,
-        serviceCount: 0
+        serviceCount: 0,
+        coinMultiplier: 2
       }, 'Travel services stats');
     }
 
-    const categoryIds = await ServiceCategory.find({
-      $or: [
-        { _id: travelCategory._id },
-        { parentCategory: travelCategory._id }
-      ],
-      isActive: true
-    }).select('_id');
+    const categoryIds = travelCategories.map(c => c._id);
 
     const serviceCount = await Product.countDocuments({
       productType: 'service',
       isActive: true,
       isDeleted: { $ne: true },
-      serviceCategory: { $in: categoryIds.map(c => c._id) }
+      serviceCategory: { $in: categoryIds }
     });
 
     // Get hotel count specifically
-    const hotelsCategory = await ServiceCategory.findOne({ slug: 'hotels' });
-    const hotelCount = hotelsCategory ? await Product.countDocuments({
+    const hotelsCategory = travelCategories.find(c => {
+      const cat = travelCategories.find(tc => tc._id.toString() === c._id.toString());
+      return cat;
+    });
+    const hotelsCategoryId = await ServiceCategory.findOne({ slug: 'hotels' }).select('_id');
+    const hotelCount = hotelsCategoryId ? await Product.countDocuments({
       productType: 'service',
       isActive: true,
       isDeleted: { $ne: true },
-      serviceCategory: hotelsCategory._id
+      serviceCategory: hotelsCategoryId._id
     }) : 0;
 
-    const maxCashback = await ServiceCategory.find({
-      $or: [
-        { _id: travelCategory._id },
-        { parentCategory: travelCategory._id }
-      ],
-      isActive: true
-    })
-      .sort({ cashbackPercentage: -1 })
-      .limit(1)
-      .select('cashbackPercentage')
-      .lean();
+    // Get max cashback from travel categories
+    const maxCashback = travelCategories.length > 0
+      ? Math.max(...travelCategories.map(c => c.cashbackPercentage || 0))
+      : 0;
 
     return sendSuccess(res, {
-      hotels: hotelCount || 50000,
-      maxCashback: maxCashback[0]?.cashbackPercentage || 25,
-      serviceCount
+      hotels: hotelCount,
+      maxCashback,
+      serviceCount,
+      coinMultiplier: 2 // Default coin multiplier for travel bookings
     }, 'Travel services stats fetched successfully');
   } catch (error: any) {
     logger.error('Error fetching travel services stats:', error);
@@ -254,24 +252,24 @@ export const getPopularTravelServices = asyncHandler(async (req: Request, res: R
     const { limit = '10' } = req.query;
     const limitNum = parseInt(limit as string, 10);
 
-    const travelCategory = await ServiceCategory.findOne({ slug: 'travel' });
-    if (!travelCategory) {
+    // Get travel service categories directly (flights, hotels, trains, bus, cab, packages)
+    const travelCategorySlugs = ['flights', 'hotels', 'trains', 'bus', 'cab', 'packages'];
+    const travelCategories = await ServiceCategory.find({
+      slug: { $in: travelCategorySlugs },
+      isActive: true
+    }).select('_id');
+
+    if (travelCategories.length === 0) {
       return sendSuccess(res, [], 'No travel services found');
     }
 
-    const categoryIds = await ServiceCategory.find({
-      $or: [
-        { _id: travelCategory._id },
-        { parentCategory: travelCategory._id }
-      ],
-      isActive: true
-    }).select('_id');
+    const categoryIds = travelCategories.map(c => c._id);
 
     const services = await Product.find({
       productType: 'service',
       isActive: true,
       isDeleted: { $ne: true },
-      serviceCategory: { $in: categoryIds.map(c => c._id) }
+      serviceCategory: { $in: categoryIds }
     })
       .populate('store', 'name logo location')
       .populate('serviceCategory', 'name icon cashbackPercentage slug')

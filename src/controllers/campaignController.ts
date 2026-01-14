@@ -92,7 +92,16 @@ export const getCampaignById = asyncHandler(async (req: Request, res: Response) 
       return sendNotFound(res, 'Campaign not found');
     }
 
-    sendSuccess(res, campaign, 'Campaign retrieved successfully');
+    // Transform storeId ObjectIds to strings in deals
+    const transformedCampaign: any = {
+      ...campaign,
+      deals: campaign.deals.map((deal: any) => ({
+        ...deal,
+        storeId: deal.storeId ? (deal.storeId.toString ? deal.storeId.toString() : String(deal.storeId)) : undefined,
+      })),
+    };
+
+    sendSuccess(res, transformedCampaign, 'Campaign retrieved successfully');
 
   } catch (error) {
     console.error('❌ [CAMPAIGNS] Error fetching campaign:', error);
@@ -171,6 +180,12 @@ export const getExcitingDeals = asyncHandler(async (req: Request, res: Response)
     const dealCategories = campaigns.map(campaign => {
       // Calculate remaining time for flash drops
       const deals = campaign.deals.map((deal: any) => {
+        // Convert storeId ObjectId to string if it exists
+        const transformedDeal: any = {
+          ...deal,
+          storeId: deal.storeId ? (deal.storeId.toString ? deal.storeId.toString() : String(deal.storeId)) : undefined,
+        };
+
         if (campaign.type === 'drop' || campaign.type === 'flash') {
           const now = new Date();
           const endTime = campaign.endTime;
@@ -181,17 +196,17 @@ export const getExcitingDeals = asyncHandler(async (req: Request, res: Response)
             const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
             
             if (hours > 0) {
-              deal.endsIn = `${hours}h`;
+              transformedDeal.endsIn = `${hours}h`;
             } else if (minutes > 0) {
-              deal.endsIn = `${minutes}m`;
+              transformedDeal.endsIn = `${minutes}m`;
             } else {
-              deal.endsIn = 'Ending soon';
+              transformedDeal.endsIn = 'Ending soon';
             }
           } else {
-            deal.endsIn = 'Ended';
+            transformedDeal.endsIn = 'Ended';
           }
         }
-        return deal;
+        return transformedDeal;
       });
 
       return {
@@ -214,5 +229,58 @@ export const getExcitingDeals = asyncHandler(async (req: Request, res: Response)
   } catch (error) {
     console.error('❌ [CAMPAIGNS] Error fetching exciting deals:', error);
     throw new AppError('Failed to fetch exciting deals', 500);
+  }
+});
+
+/**
+ * Track deal interaction (view, redeem, like, share)
+ * POST /api/campaigns/deals/track
+ */
+export const trackDealInteraction = asyncHandler(async (req: Request, res: Response) => {
+  const { campaignId, dealIndex, action } = req.body;
+  const userId = req.user?.id;
+
+  try {
+    // Validate inputs
+    if (!campaignId || dealIndex === undefined || !action) {
+      return sendBadRequest(res, 'campaignId, dealIndex, and action are required');
+    }
+
+    // Find campaign
+    const query = campaignId.match(/^[0-9a-fA-F]{24}$/)
+      ? { _id: campaignId }
+      : { campaignId: campaignId.toLowerCase() };
+
+    const campaign = await Campaign.findOne(query).lean();
+
+    if (!campaign) {
+      return sendNotFound(res, 'Campaign not found');
+    }
+
+    // Validate deal index
+    if (dealIndex < 0 || dealIndex >= campaign.deals.length) {
+      return sendBadRequest(res, 'Invalid deal index');
+    }
+
+    // Log the interaction (in production, you might want to store this in a separate collection)
+    console.log(`📊 [DEAL TRACK] ${action} - Campaign: ${campaign.title}, Deal: ${campaign.deals[dealIndex].store}, User: ${userId || 'anonymous'}`);
+
+    // In the future, you can store this in a DealInteraction collection:
+    // await DealInteraction.create({
+    //   user: userId,
+    //   campaign: campaign._id,
+    //   dealIndex,
+    //   action,
+    //   timestamp: new Date(),
+    // });
+
+    sendSuccess(res, {
+      success: true,
+      message: 'Deal interaction tracked',
+    }, 'Interaction tracked successfully');
+
+  } catch (error) {
+    console.error('❌ [CAMPAIGNS] Error tracking deal interaction:', error);
+    throw new AppError('Failed to track deal interaction', 500);
   }
 });

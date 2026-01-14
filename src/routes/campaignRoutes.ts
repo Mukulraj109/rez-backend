@@ -5,6 +5,7 @@ import {
   getCampaignById,
   getAllCampaigns,
   getExcitingDeals,
+  trackDealInteraction,
 } from '../controllers/campaignController';
 import { optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, Joi } from '../middleware/validation';
@@ -80,6 +81,16 @@ router.get('/:campaignId',
     campaignId: Joi.string().required(),
   })),
   getCampaignById
+);
+
+/**
+ * @route   POST /api/campaigns/deals/track
+ * @desc    Track deal interaction (view, redeem, like, share)
+ * @access  Public (optional auth)
+ */
+router.post('/deals/track',
+  optionalAuth,
+  trackDealInteraction
 );
 
 export default router;

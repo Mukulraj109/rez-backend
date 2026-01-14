@@ -112,6 +112,18 @@ async function seedCampaigns(): Promise<number> {
           cashback: '45%',
           image: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=400&h=300&fit=crop',
         },
+        {
+          store: 'Sports Zone',
+          storeId: storeMap.get('sports-zone') || storeMap.values().next().value,
+          cashback: '42%',
+          image: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=400&h=300&fit=crop',
+        },
+        {
+          store: 'Grocery Mart',
+          storeId: storeMap.get('grocery-mart') || storeMap.values().next().value,
+          cashback: '38%',
+          image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&h=300&fit=crop',
+        },
       ],
       startTime: new Date(),
       endTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
@@ -123,6 +135,7 @@ async function seedCampaigns(): Promise<number> {
         'Cashback credited within 24 hours',
         'Valid only on weekends',
       ],
+      bannerImage: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d0?w=800&h=300&fit=crop',
     },
     {
       campaignId: 'triple-coin-day',
