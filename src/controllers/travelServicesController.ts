@@ -1,0 +1,295 @@
+import { Request, Response } from 'express';
+import { Product } from '../models/Product';
+import { ServiceCategory } from '../models/ServiceCategory';
+import { Store } from '../models/Store';
+import { logger } from '../config/logger';
+import mongoose from 'mongoose';
+import { sendSuccess, sendError, sendNotFound } from '../utils/response';
+import { asyncHandler } from '../utils/asyncHandler';
+
+/**
+ * Get travel service categories for homepage section
+ * GET /api/travel-services/categories
+ */
+export const getTravelServicesCategories = asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const categories = await ServiceCategory.find({
+      isActive: true,
+      slug: { $in: ['flights', 'hotels', 'trains', 'bus', 'cab', 'packages'] }
+    })
+      .select('name slug icon iconType cashbackPercentage serviceCount metadata')
+      .sort({ sortOrder: 1 })
+      .lean();
+
+    // Transform to match frontend format
+    const transformed = categories.map(cat => ({
+      id: cat.slug,
+      title: cat.name,
+      icon: cat.icon,
+      color: cat.metadata?.color || '#3B82F6',
+      count: `${cat.serviceCount || 0}+ options`,
+      cashback: cat.cashbackPercentage
+    }));
+
+    return sendSuccess(res, transformed, 'Travel service categories fetched successfully');
+  } catch (error: any) {
+    logger.error('Error fetching travel service categories:', error);
+    return sendError(res, 'Failed to fetch travel service categories', 500);
+  }
+});
+
+/**
+ * Get featured travel services for homepage section
+ * GET /api/travel-services/featured
+ */
+export const getFeaturedTravelServices = asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { limit = '6' } = req.query;
+    const limitNum = parseInt(limit as string, 10);
+
+    // Get travel services category
+    const travelCategory = await ServiceCategory.findOne({ slug: 'travel' });
+    if (!travelCategory) {
+      return sendSuccess(res, [], 'No travel services found');
+    }
+
+    // Get child categories
+    const childCategories = await ServiceCategory.find({
+      parentCategory: travelCategory._id,
+      isActive: true
+    }).select('_id');
+
+    const categoryIds = [travelCategory._id, ...childCategories.map(c => c._id)];
+
+    const services = await Product.find({
+      productType: 'service',
+      isActive: true,
+      isFeatured: true,
+      isDeleted: { $ne: true },
+      serviceCategory: { $in: categoryIds }
+    })
+      .populate('store', 'name logo location contact operationalInfo')
+      .populate('serviceCategory', 'name icon cashbackPercentage slug')
+      .sort({ 'ratings.average': -1, 'analytics.purchases': -1 })
+      .limit(limitNum)
+      .lean();
+
+    return sendSuccess(res, services, 'Featured travel services fetched successfully');
+  } catch (error: any) {
+    logger.error('Error fetching featured travel services:', error);
+    return sendError(res, 'Failed to fetch featured travel services', 500);
+  }
+});
+
+/**
+ * Get travel services by category slug
+ * GET /api/travel-services/category/:slug
+ */
+export const getTravelServicesByCategory = asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+    const {
+      page = '1',
+      limit = '20',
+      sortBy = 'rating',
+      minPrice,
+      maxPrice,
+      rating
+    } = req.query;
+
+    // Find category
+    const category = await ServiceCategory.findOne({ slug, isActive: true });
+    if (!category) {
+      return sendNotFound(res, 'Category not found');
+    }
+
+    // Build query
+    const query: any = {
+      productType: 'service',
+      isActive: true,
+      isDeleted: { $ne: true },
+      serviceCategory: category._id
+    };
+
+    // Price filter
+    if (minPrice || maxPrice) {
+      query['pricing.selling'] = {};
+      if (minPrice) query['pricing.selling'].$gte = Number(minPrice);
+      if (maxPrice) query['pricing.selling'].$lte = Number(maxPrice);
+    }
+
+    // Rating filter
+    if (rating) {
+      query['ratings.average'] = { $gte: Number(rating) };
+    }
+
+    // Sorting
+    let sortOptions: any = {};
+    switch (sortBy) {
+      case 'price_low':
+        sortOptions = { 'pricing.selling': 1 };
+        break;
+      case 'price_high':
+        sortOptions = { 'pricing.selling': -1 };
+        break;
+      case 'rating':
+        sortOptions = { 'ratings.average': -1 };
+        break;
+      case 'newest':
+        sortOptions = { createdAt: -1 };
+        break;
+      case 'popular':
+        sortOptions = { 'analytics.purchases': -1 };
+        break;
+      default:
+        sortOptions = { 'ratings.average': -1, createdAt: -1 };
+    }
+
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [services, total] = await Promise.all([
+      Product.find(query)
+        .populate('store', 'name logo location contact operationalInfo')
+        .populate('serviceCategory', 'name icon cashbackPercentage slug')
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Product.countDocuments(query)
+    ]);
+
+    return sendSuccess(res, {
+      services,
+      category: {
+        id: category._id,
+        name: category.name,
+        slug: category.slug,
+        icon: category.icon,
+        description: category.description,
+        cashbackPercentage: category.cashbackPercentage
+      },
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum)
+      }
+    }, 'Travel services fetched successfully');
+  } catch (error: any) {
+    logger.error('Error fetching travel services by category:', error);
+    return sendError(res, 'Failed to fetch travel services', 500);
+  }
+});
+
+/**
+ * Get travel services stats for homepage
+ * GET /api/travel-services/stats
+ */
+export const getTravelServicesStats = asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const travelCategory = await ServiceCategory.findOne({ slug: 'travel' });
+    if (!travelCategory) {
+      return sendSuccess(res, {
+        hotels: 0,
+        maxCashback: 0,
+        serviceCount: 0
+      }, 'Travel services stats');
+    }
+
+    const categoryIds = await ServiceCategory.find({
+      $or: [
+        { _id: travelCategory._id },
+        { parentCategory: travelCategory._id }
+      ],
+      isActive: true
+    }).select('_id');
+
+    const serviceCount = await Product.countDocuments({
+      productType: 'service',
+      isActive: true,
+      isDeleted: { $ne: true },
+      serviceCategory: { $in: categoryIds.map(c => c._id) }
+    });
+
+    // Get hotel count specifically
+    const hotelsCategory = await ServiceCategory.findOne({ slug: 'hotels' });
+    const hotelCount = hotelsCategory ? await Product.countDocuments({
+      productType: 'service',
+      isActive: true,
+      isDeleted: { $ne: true },
+      serviceCategory: hotelsCategory._id
+    }) : 0;
+
+    const maxCashback = await ServiceCategory.find({
+      $or: [
+        { _id: travelCategory._id },
+        { parentCategory: travelCategory._id }
+      ],
+      isActive: true
+    })
+      .sort({ cashbackPercentage: -1 })
+      .limit(1)
+      .select('cashbackPercentage')
+      .lean();
+
+    return sendSuccess(res, {
+      hotels: hotelCount || 50000,
+      maxCashback: maxCashback[0]?.cashbackPercentage || 25,
+      serviceCount
+    }, 'Travel services stats fetched successfully');
+  } catch (error: any) {
+    logger.error('Error fetching travel services stats:', error);
+    return sendError(res, 'Failed to fetch travel services stats', 500);
+  }
+});
+
+/**
+ * Get popular travel services (for homepage section)
+ * GET /api/travel-services/popular
+ */
+export const getPopularTravelServices = asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { limit = '10' } = req.query;
+    const limitNum = parseInt(limit as string, 10);
+
+    const travelCategory = await ServiceCategory.findOne({ slug: 'travel' });
+    if (!travelCategory) {
+      return sendSuccess(res, [], 'No travel services found');
+    }
+
+    const categoryIds = await ServiceCategory.find({
+      $or: [
+        { _id: travelCategory._id },
+        { parentCategory: travelCategory._id }
+      ],
+      isActive: true
+    }).select('_id');
+
+    const services = await Product.find({
+      productType: 'service',
+      isActive: true,
+      isDeleted: { $ne: true },
+      serviceCategory: { $in: categoryIds.map(c => c._id) }
+    })
+      .populate('store', 'name logo location')
+      .populate('serviceCategory', 'name icon cashbackPercentage slug')
+      .sort({ 'analytics.purchases': -1, 'ratings.average': -1 })
+      .limit(limitNum)
+      .lean();
+
+    return sendSuccess(res, services, 'Popular travel services fetched successfully');
+  } catch (error: any) {
+    logger.error('Error fetching popular travel services:', error);
+    return sendError(res, 'Failed to fetch popular travel services', 500);
+  }
+});
+
+export default {
+  getTravelServicesCategories,
+  getFeaturedTravelServices,
+  getTravelServicesByCategory,
+  getTravelServicesStats,
+  getPopularTravelServices
+};

@@ -24,6 +24,8 @@
     "seed:videos": "ts-node src/scripts/seedVideos.ts",
     "seed:ugc-videos": "ts-node src/scripts/seedUGCVideos.ts",
     "seed:reviews": "ts-node src/scripts/seedReviews.ts",
+    "seed:financial-services": "ts-node src/seeds/financialServicesSeeds.ts",
+    "verify:financial-services": "ts-node src/scripts/verifyFinancialServices.ts",
     "seed:wishlists": "ts-node src/scripts/seedWishlists.ts",
     "seed:notifications": "ts-node src/scripts/seedNotifications.ts",
     "seed:coupons": "ts-node src/scripts/seedCoupons.ts",

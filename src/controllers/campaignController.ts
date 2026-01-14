@@ -168,16 +168,43 @@ export const getExcitingDeals = asyncHandler(async (req: Request, res: Response)
       .lean();
 
     // Transform to match frontend ExcitingDealsSection format
-    const dealCategories = campaigns.map(campaign => ({
-      id: campaign.campaignId,
-      title: campaign.title,
-      subtitle: campaign.subtitle,
-      badge: campaign.badge,
-      gradientColors: campaign.gradientColors,
-      badgeBg: campaign.badgeBg,
-      badgeColor: campaign.badgeColor,
-      deals: campaign.deals,
-    }));
+    const dealCategories = campaigns.map(campaign => {
+      // Calculate remaining time for flash drops
+      const deals = campaign.deals.map((deal: any) => {
+        if (campaign.type === 'drop' || campaign.type === 'flash') {
+          const now = new Date();
+          const endTime = campaign.endTime;
+          const timeLeft = endTime.getTime() - now.getTime();
+          
+          if (timeLeft > 0) {
+            const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+            const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+            
+            if (hours > 0) {
+              deal.endsIn = `${hours}h`;
+            } else if (minutes > 0) {
+              deal.endsIn = `${minutes}m`;
+            } else {
+              deal.endsIn = 'Ending soon';
+            }
+          } else {
+            deal.endsIn = 'Ended';
+          }
+        }
+        return deal;
+      });
+
+      return {
+        id: campaign.campaignId,
+        title: campaign.title,
+        subtitle: campaign.subtitle,
+        badge: campaign.badge,
+        gradientColors: campaign.gradientColors,
+        badgeBg: campaign.badgeBg,
+        badgeColor: campaign.badgeColor,
+        deals,
+      };
+    });
 
     sendSuccess(res, {
       dealCategories,

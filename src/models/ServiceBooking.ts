@@ -444,10 +444,10 @@ ServiceBookingSchema.virtual('canBeRescheduled').get(function() {
 });
 
 // Static method: Generate booking number
-ServiceBookingSchema.statics.generateBookingNumber = async function(): Promise<string> {
+ServiceBookingSchema.statics.generateBookingNumber = async function(prefix: string = 'SB'): Promise<string> {
   const timestamp = Date.now();
   const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-  return `SB-${timestamp}-${random}`;
+  return `${prefix}-${timestamp.toString().slice(-8)}`;
 };
 
 // Static method: Find booking by booking number

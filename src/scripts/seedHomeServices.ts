@@ -196,7 +196,19 @@ async function seedServiceCategories(): Promise<any[]> {
       });
       log.success(`Created category: ${catData.name}`);
     } else {
-      log.info(`Category already exists: ${catData.name}`);
+      // Update existing category to ensure it's linked to parent
+      if (!category.parentCategory || category.parentCategory.toString() !== homeServicesCategory._id.toString()) {
+        await ServiceCategory.findByIdAndUpdate(category._id, {
+          parentCategory: homeServicesCategory._id,
+          sortOrder: catData.sortOrder,
+          isActive: true,
+        });
+        log.success(`Updated category: ${catData.name} (linked to parent)`);
+      } else {
+        log.info(`Category already exists: ${catData.name}`);
+      }
+      // Refresh category to get updated data
+      category = await ServiceCategory.findById(category._id);
     }
     createdCategories.push(category);
   }

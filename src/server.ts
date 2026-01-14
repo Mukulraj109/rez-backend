@@ -124,6 +124,8 @@ import serviceCategoryRoutes from './routes/serviceCategoryRoutes';
 import serviceRoutes from './routes/serviceRoutes';
 import serviceBookingRoutes from './routes/serviceBookingRoutes';
 import homeServicesRoutes from './routes/homeServicesRoutes';
+import travelServicesRoutes from './routes/travelServicesRoutes';
+import financialServicesRoutes from './routes/financialServicesRoutes';
 import healthRecordRoutes from './routes/healthRecordRoutes';
 import emergencyRoutes from './routes/emergencyRoutes';
 import storeVisitRoutes from './routes/storeVisitRoutes';
@@ -718,6 +720,14 @@ console.log('✅ Service routes registered at /api/services');
 // Home Services Routes - Home services specific endpoints
 app.use(`${API_PREFIX}/home-services`, homeServicesRoutes);
 console.log('✅ Home services routes registered at /api/home-services');
+
+// Travel Services Routes - Travel services specific endpoints (flights, hotels, trains, bus, cab, packages)
+app.use(`${API_PREFIX}/travel-services`, travelServicesRoutes);
+console.log('✅ Travel services routes registered at /api/travel-services');
+
+// Financial Services Routes - Financial services endpoints (bills, OTT, recharge, gold, insurance)
+app.use(`${API_PREFIX}/financial-services`, financialServicesRoutes);
+console.log('✅ Financial services routes registered at /api/financial-services');
 
 // Service Bookings Routes - User service bookings
 app.use(`${API_PREFIX}/service-bookings`, serviceBookingRoutes);

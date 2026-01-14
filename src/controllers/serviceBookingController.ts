@@ -95,13 +95,104 @@ export const createBooking = async (req: Request, res: Response) => {
       });
     }
 
+    // Check maxBookingsPerSlot limit
+    const maxBookingsPerSlot = service.serviceDetails?.maxBookingsPerSlot;
+    if (maxBookingsPerSlot) {
+      const bookingsOnSlot = await ServiceBooking.countDocuments({
+        service: service._id,
+        store: service.store,
+        bookingDate: bookingDateObj,
+        'timeSlot.start': timeSlot.start,
+        status: { $in: ['pending', 'confirmed', 'assigned', 'in_progress'] }
+      });
+
+      if (bookingsOnSlot >= maxBookingsPerSlot) {
+        return res.status(400).json({
+          success: false,
+          message: `Maximum ${maxBookingsPerSlot} bookings allowed for this time slot`
+        });
+      }
+    }
+
+    // Check for duplicate booking (same user, same service, same date)
+    const existingBooking = await ServiceBooking.findOne({
+      user: userId,
+      service: service._id,
+      bookingDate: bookingDateObj,
+      status: { $in: ['pending', 'confirmed', 'assigned'] }
+    });
+
+    if (existingBooking) {
+      return res.status(400).json({
+        success: false,
+        message: 'You already have a booking for this service on this date'
+      });
+    }
+
     // Calculate pricing
     const basePrice = service.pricing.selling;
     const cashbackPercentage = service.cashback?.percentage || 0;
-    const cashbackEarned = Math.round((basePrice * cashbackPercentage) / 100);
+    
+    // Parse customerNotes to extract totalPrice if available
+    let totalPrice = basePrice; // Default to base price
+    let bookingDetails: any = {};
+    
+    if (customerNotes) {
+      try {
+        bookingDetails = JSON.parse(customerNotes);
+        // Use totalPrice from customerNotes if provided and valid
+        if (bookingDetails.totalPrice && typeof bookingDetails.totalPrice === 'number' && bookingDetails.totalPrice > 0) {
+          totalPrice = bookingDetails.totalPrice;
+          logger.info(`[CREATE BOOKING] Using totalPrice from customerNotes: ${totalPrice} (basePrice: ${basePrice})`);
+        } else {
+          logger.warn(`[CREATE BOOKING] totalPrice in customerNotes is invalid, using basePrice: ${basePrice}`);
+        }
+      } catch (parseError) {
+        logger.warn(`[CREATE BOOKING] Failed to parse customerNotes JSON, using basePrice: ${basePrice}`, parseError);
+      }
+    }
+    
+    // Validate maximum passengers/guests if specified in booking details
+    if (bookingDetails.passengers || bookingDetails.guests) {
+      const passengers = bookingDetails.passengers || bookingDetails.guests;
+      const totalPassengers = (passengers.adults || 0) + (passengers.children || 0);
+      
+      // Check service-specific limits (if defined in serviceDetails)
+      const maxPassengers = service.serviceDetails?.maxPassengers;
+      if (maxPassengers && totalPassengers > maxPassengers) {
+        return res.status(400).json({
+          success: false,
+          message: `Maximum ${maxPassengers} passengers allowed for this service`
+        });
+      }
+    }
+    
+    // Validate minimum advance booking time (if specified)
+    const minAdvanceHours = service.serviceDetails?.minAdvanceBookingHours;
+    if (minAdvanceHours) {
+      const hoursUntilBooking = (bookingDateObj.getTime() - Date.now()) / (1000 * 60 * 60);
+      if (hoursUntilBooking < minAdvanceHours) {
+        return res.status(400).json({
+          success: false,
+          message: `Booking must be made at least ${minAdvanceHours} hours in advance`
+        });
+      }
+    }
+    
+    // Calculate cashback based on total price (not base price)
+    const cashbackEarned = Math.round((totalPrice * cashbackPercentage) / 100);
 
-    // Generate booking number
-    const bookingNumber = await (ServiceBooking as any).generateBookingNumber();
+    // Generate booking number with category-specific prefix
+    const categorySlug = (service.serviceCategory as any)?.slug || 'SB';
+    const bookingNumberPrefix = (() => {
+      if (categorySlug === 'flights') return 'FLT';
+      if (categorySlug === 'hotels') return 'HTL';
+      if (categorySlug === 'trains') return 'TRN';
+      if (categorySlug === 'cab') return 'CAB';
+      return 'SB';
+    })();
+    
+    const bookingNumber = await (ServiceBooking as any).generateBookingNumber(bookingNumberPrefix);
 
     // Get customer info (phoneNumber and email are on user object, not profile)
     const customerName = req.user?.profile?.firstName
@@ -128,7 +219,7 @@ export const createBooking = async (req: Request, res: Response) => {
       serviceAddress: svcType === 'home' ? serviceAddress : undefined,
       pricing: {
         basePrice,
-        total: basePrice,
+        total: totalPrice, // Use calculated total price
         cashbackEarned,
         cashbackPercentage,
         currency: service.pricing.currency || 'INR'

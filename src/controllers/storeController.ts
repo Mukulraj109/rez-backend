@@ -4,6 +4,7 @@ import { Store } from '../models/Store';
 import { Product } from '../models/Product';
 import { Order } from '../models/Order';
 import { Transaction } from '../models/Transaction';
+import { Category } from '../models/Category';
 import {
   sendSuccess,
   sendNotFound,
@@ -703,14 +704,66 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
 
       // Populate products for each store
       for (const store of stores) {
-        const products = await Product.find({
-          store: store._id,
-          isActive: true
-        })
-        .select('name title slug pricing price images image ratings rating inventory tags brand category')
-        .populate('category', 'name slug')
-        .limit(4) // Limit to 4 products per store
-        .lean();
+        // Use aggregation to safely populate category and filter out invalid category references
+        const products = await Product.aggregate([
+          {
+            $match: {
+              store: store._id,
+              isActive: true,
+              category: { $exists: true, $type: 'objectId' } // Only include products with valid ObjectId category
+            }
+          },
+          {
+            $project: {
+              name: 1,
+              title: 1,
+              slug: 1,
+              pricing: 1,
+              price: 1,
+              images: 1,
+              image: 1,
+              ratings: 1,
+              rating: 1,
+              inventory: 1,
+              tags: 1,
+              brand: 1,
+              category: 1,
+              variants: 1,
+              description: 1,
+              subcategory: 1
+            }
+          },
+          {
+            $lookup: {
+              from: 'categories',
+              let: { categoryId: '$category' },
+              pipeline: [
+                {
+                  $match: {
+                    $expr: {
+                      $eq: ['$_id', '$$categoryId']
+                    },
+                    isActive: true
+                  }
+                },
+                {
+                  $project: {
+                    name: 1,
+                    slug: 1
+                  }
+                }
+              ],
+              as: 'category'
+            }
+          },
+          {
+            $unwind: {
+              path: '$category',
+              preserveNullAndEmptyArrays: true
+            }
+          },
+          { $limit: 4 }
+        ]);
 
         // Transform products to match frontend ProductItem type
         const transformedProducts = products.map((product: any) => {
@@ -730,8 +783,8 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
             imageAlt: product.name,
             hasRezPay: true,
             inStock: product.inventory?.isAvailable !== false,
-            category: product.category?.name || '',
-            subcategory: product.subcategory?.name || '',
+            category: (product.category && typeof product.category === 'object' ? product.category.name : null) || '',
+            subcategory: (product.subcategory && typeof product.subcategory === 'object' ? product.subcategory.name : null) || '',
             brand: product.brand || '',
             rating: product.ratings?.average || product.rating?.value || 0,
             reviewCount: product.ratings?.count || product.rating?.count || 0,
@@ -1217,15 +1270,110 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
       isActive: true
     };
 
+    // Handle category conversion if provided (can be string name/slug or ObjectId)
     if (category) {
-      query.category = category;
+      if (typeof category === 'string' && !mongoose.Types.ObjectId.isValid(category)) {
+        // Category is a string name/slug, need to find the ObjectId
+        const categoryDoc = await Category.findOne({
+          $or: [
+            { name: { $regex: new RegExp(`^${category}$`, 'i') } },
+            { slug: category.toLowerCase() }
+          ],
+          isActive: true
+        });
+        
+        if (!categoryDoc) {
+          console.log('❌ [TRENDING STORES] Category not found:', category);
+          // If category not found, return empty results instead of error
+          const result = {
+            stores: [],
+            pagination: {
+              total: 0,
+              page: Number(page),
+              limit: Number(limit),
+              pages: 0
+            }
+          };
+          await redisService.set(cacheKey, result, 1800);
+          return sendSuccess(res, result, 'Trending stores retrieved successfully');
+        }
+        
+        query.category = categoryDoc._id;
+        console.log('✅ [TRENDING STORES] Category converted to ObjectId:', categoryDoc.name, categoryDoc._id);
+      } else if (mongoose.Types.ObjectId.isValid(category as string)) {
+        // Already a valid ObjectId, convert to ObjectId type
+        query.category = new mongoose.Types.ObjectId(category as string);
+      }
     }
 
-    // Get stores with analytics - populate category to get name
-    const stores = await Store.find(query)
-      .select('name logo banner videos category location ratings analytics contact createdAt description offers rewardRules')
-      .populate('category', 'name slug icon')
-      .lean();
+    // Get stores with analytics - use aggregation to safely populate category
+    // This prevents errors when some stores have string category values instead of ObjectIds
+    const matchStage: any = {
+      ...query
+    };
+    
+    // Add condition to only include stores with valid ObjectId category references
+    // This filters out stores with string category values like "Salon"
+    const categoryTypeCheck = { category: { $exists: true, $type: 'objectId' } };
+    
+    if (matchStage.$and) {
+      matchStage.$and.push(categoryTypeCheck);
+    } else {
+      matchStage.$and = [categoryTypeCheck];
+    }
+    
+    const stores = await Store.aggregate([
+      { $match: matchStage },
+      {
+        $project: {
+          name: 1,
+          logo: 1,
+          banner: 1,
+          videos: 1,
+          category: 1,
+          location: 1,
+          ratings: 1,
+          analytics: 1,
+          contact: 1,
+          createdAt: 1,
+          description: 1,
+          offers: 1,
+          rewardRules: 1
+        }
+      },
+      {
+        $lookup: {
+          from: 'categories',
+          let: { categoryId: '$category' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$categoryId'] },
+                    { $eq: ['$isActive', true] }
+                  ]
+                }
+              }
+            },
+            {
+              $project: {
+                name: 1,
+                slug: 1,
+                icon: 1
+              }
+            }
+          ],
+          as: 'category'
+        }
+      },
+      {
+        $unwind: {
+          path: '$category',
+          preserveNullAndEmptyArrays: true
+        }
+      }
+    ]);
 
     // Calculate trending score for each store
     const storesWithScore = stores
