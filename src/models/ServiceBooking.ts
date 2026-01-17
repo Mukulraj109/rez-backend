@@ -121,6 +121,28 @@ export interface IServiceBooking extends Document {
   addRating(score: number, review?: string): Promise<IServiceBooking>;
 }
 
+// Service Booking Model interface for static methods
+export interface IServiceBookingModel extends mongoose.Model<IServiceBooking> {
+  generateBookingNumber(prefix?: string): Promise<string>;
+  findByBookingNumber(bookingNumber: string): Promise<IServiceBooking | null>;
+  findUserBookings(userId: Types.ObjectId, status?: string): Promise<IServiceBooking[]>;
+  findMerchantBookings(merchantId: Types.ObjectId, date?: Date, status?: string): Promise<IServiceBooking[]>;
+  checkSlotAvailability(
+    serviceId: Types.ObjectId,
+    storeId: Types.ObjectId,
+    date: Date,
+    timeSlot: ITimeSlot,
+    duration: number,
+    excludeBookingId?: Types.ObjectId
+  ): Promise<boolean>;
+  getAvailableSlots(
+    storeId: Types.ObjectId,
+    date: Date,
+    duration: number,
+    storeHours: { open: string; close: string }
+  ): Promise<ITimeSlot[]>;
+}
+
 const ServiceBookingSchema = new Schema<IServiceBooking>(
   {
     bookingNumber: {
@@ -395,7 +417,7 @@ ServiceBookingSchema.index({ serviceCategory: 1, status: 1 });
 ServiceBookingSchema.index({ service: 1, bookingDate: 1 });
 
 // Virtual: Formatted date and time
-ServiceBookingSchema.virtual('formattedDateTime').get(function() {
+ServiceBookingSchema.virtual('formattedDateTime').get(function () {
   const date = new Date(this.bookingDate);
   const dateStr = date.toLocaleDateString('en-IN', {
     weekday: 'short',
@@ -407,7 +429,7 @@ ServiceBookingSchema.virtual('formattedDateTime').get(function() {
 });
 
 // Virtual: Is upcoming
-ServiceBookingSchema.virtual('isUpcoming').get(function() {
+ServiceBookingSchema.virtual('isUpcoming').get(function () {
   const now = new Date();
   const bookingDateTime = new Date(this.bookingDate);
   const [hours, minutes] = this.timeSlot.start.split(':').map(Number);
@@ -416,7 +438,7 @@ ServiceBookingSchema.virtual('isUpcoming').get(function() {
 });
 
 // Virtual: Can be cancelled
-ServiceBookingSchema.virtual('canBeCancelled').get(function() {
+ServiceBookingSchema.virtual('canBeCancelled').get(function () {
   const now = new Date();
   const bookingDateTime = new Date(this.bookingDate);
   const [hours, minutes] = this.timeSlot.start.split(':').map(Number);
@@ -428,7 +450,7 @@ ServiceBookingSchema.virtual('canBeCancelled').get(function() {
 });
 
 // Virtual: Can be rescheduled
-ServiceBookingSchema.virtual('canBeRescheduled').get(function() {
+ServiceBookingSchema.virtual('canBeRescheduled').get(function () {
   // Check reschedule limits
   if (this.rescheduleCount >= this.maxReschedules) return false;
   if (!['pending', 'confirmed'].includes(this.status)) return false;
@@ -444,14 +466,14 @@ ServiceBookingSchema.virtual('canBeRescheduled').get(function() {
 });
 
 // Static method: Generate booking number
-ServiceBookingSchema.statics.generateBookingNumber = async function(prefix: string = 'SB'): Promise<string> {
+ServiceBookingSchema.statics.generateBookingNumber = async function (prefix: string = 'SB'): Promise<string> {
   const timestamp = Date.now();
   const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
   return `${prefix}-${timestamp.toString().slice(-8)}`;
 };
 
 // Static method: Find booking by booking number
-ServiceBookingSchema.statics.findByBookingNumber = async function(
+ServiceBookingSchema.statics.findByBookingNumber = async function (
   bookingNumber: string
 ): Promise<IServiceBooking | null> {
   return this.findOne({ bookingNumber })
@@ -463,7 +485,7 @@ ServiceBookingSchema.statics.findByBookingNumber = async function(
 };
 
 // Static method: Get user's bookings
-ServiceBookingSchema.statics.findUserBookings = async function(
+ServiceBookingSchema.statics.findUserBookings = async function (
   userId: Types.ObjectId,
   status?: string
 ): Promise<IServiceBooking[]> {
@@ -481,7 +503,7 @@ ServiceBookingSchema.statics.findUserBookings = async function(
 };
 
 // Static method: Get merchant's bookings
-ServiceBookingSchema.statics.findMerchantBookings = async function(
+ServiceBookingSchema.statics.findMerchantBookings = async function (
   merchantId: Types.ObjectId,
   date?: Date,
   status?: string
@@ -509,7 +531,7 @@ ServiceBookingSchema.statics.findMerchantBookings = async function(
 };
 
 // Static method: Check slot availability
-ServiceBookingSchema.statics.checkSlotAvailability = async function(
+ServiceBookingSchema.statics.checkSlotAvailability = async function (
   serviceId: Types.ObjectId,
   storeId: Types.ObjectId,
   date: Date,
@@ -559,7 +581,7 @@ ServiceBookingSchema.statics.checkSlotAvailability = async function(
 };
 
 // Static method: Get available time slots for a date
-ServiceBookingSchema.statics.getAvailableSlots = async function(
+ServiceBookingSchema.statics.getAvailableSlots = async function (
   storeId: Types.ObjectId,
   date: Date,
   duration: number,
@@ -625,7 +647,7 @@ ServiceBookingSchema.statics.getAvailableSlots = async function(
 };
 
 // Instance method: Update status
-ServiceBookingSchema.methods.updateStatus = async function(
+ServiceBookingSchema.methods.updateStatus = async function (
   newStatus: string,
   updatedBy?: Types.ObjectId,
   note?: string
@@ -651,7 +673,7 @@ ServiceBookingSchema.methods.updateStatus = async function(
 };
 
 // Instance method: Cancel booking
-ServiceBookingSchema.methods.cancel = async function(
+ServiceBookingSchema.methods.cancel = async function (
   reason: string,
   cancelledBy: 'user' | 'merchant' | 'system'
 ): Promise<IServiceBooking> {
@@ -671,7 +693,7 @@ ServiceBookingSchema.methods.cancel = async function(
 };
 
 // Instance method: Confirm booking
-ServiceBookingSchema.methods.confirm = async function(
+ServiceBookingSchema.methods.confirm = async function (
   assignedStaff?: string
 ): Promise<IServiceBooking> {
   this.status = 'confirmed';
@@ -694,7 +716,7 @@ ServiceBookingSchema.methods.confirm = async function(
 };
 
 // Instance method: Start service
-ServiceBookingSchema.methods.start = async function(): Promise<IServiceBooking> {
+ServiceBookingSchema.methods.start = async function (): Promise<IServiceBooking> {
   this.status = 'in_progress';
   this.startedAt = new Date();
 
@@ -709,7 +731,7 @@ ServiceBookingSchema.methods.start = async function(): Promise<IServiceBooking> 
 };
 
 // Instance method: Complete service
-ServiceBookingSchema.methods.complete = async function(): Promise<IServiceBooking> {
+ServiceBookingSchema.methods.complete = async function (): Promise<IServiceBooking> {
   this.status = 'completed';
   this.completedAt = new Date();
 
@@ -729,7 +751,7 @@ ServiceBookingSchema.methods.complete = async function(): Promise<IServiceBookin
 };
 
 // Instance method: Reschedule booking
-ServiceBookingSchema.methods.reschedule = async function(
+ServiceBookingSchema.methods.reschedule = async function (
   newDate: Date,
   newTimeSlot: ITimeSlot
 ): Promise<IServiceBooking> {
@@ -759,7 +781,7 @@ ServiceBookingSchema.methods.reschedule = async function(
 };
 
 // Instance method: Add rating
-ServiceBookingSchema.methods.addRating = async function(
+ServiceBookingSchema.methods.addRating = async function (
   score: number,
   review?: string
 ): Promise<IServiceBooking> {
@@ -778,7 +800,7 @@ ServiceBookingSchema.methods.addRating = async function(
 };
 
 // Pre-save hook to add initial status to history
-ServiceBookingSchema.pre('save', function(next) {
+ServiceBookingSchema.pre('save', function (next) {
   if (this.isNew && this.statusHistory.length === 0) {
     this.statusHistory.push({
       status: 'pending',
@@ -789,4 +811,4 @@ ServiceBookingSchema.pre('save', function(next) {
   next();
 });
 
-export const ServiceBooking = mongoose.model<IServiceBooking>('ServiceBooking', ServiceBookingSchema);
+export const ServiceBooking = mongoose.model<IServiceBooking, IServiceBookingModel>('ServiceBooking', ServiceBookingSchema);

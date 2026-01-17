@@ -20,6 +20,7 @@ export interface IStoreExperience extends Document {
   gradientColors?: string[];
   image?: string;
   bannerImage?: string;
+  benefits?: string[];
 
   // Store filtering criteria
   filterCriteria: {
@@ -111,6 +112,10 @@ const StoreExperienceSchema = new Schema<IStoreExperience>({
   bannerImage: {
     type: String,
   },
+  benefits: {
+    type: [String],
+    default: []
+  },
   filterCriteria: {
     tags: [{ type: String, trim: true }],
     maxDeliveryTime: { type: Number, min: 0 },
@@ -153,11 +158,11 @@ StoreExperienceSchema.index({ type: 1, isActive: 1 });
 StoreExperienceSchema.index({ isFeatured: 1, sortOrder: 1 });
 
 // Static methods
-StoreExperienceSchema.statics.getActiveExperiences = function() {
+StoreExperienceSchema.statics.getActiveExperiences = function () {
   return this.find({ isActive: true }).sort({ sortOrder: 1 });
 };
 
-StoreExperienceSchema.statics.getFeaturedExperiences = function() {
+StoreExperienceSchema.statics.getFeaturedExperiences = function () {
   return this.find({ isActive: true, isFeatured: true }).sort({ sortOrder: 1 });
 };
 

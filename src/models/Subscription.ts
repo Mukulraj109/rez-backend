@@ -352,12 +352,11 @@ const SubscriptionSchema = new Schema<ISubscription, ISubscriptionModel>({
 SubscriptionSchema.index({ user: 1, status: 1 });
 SubscriptionSchema.index({ tier: 1, status: 1 });
 SubscriptionSchema.index({ endDate: 1, status: 1 });
-SubscriptionSchema.index({ razorpaySubscriptionId: 1 });
 SubscriptionSchema.index({ 'metadata.campaign': 1 });
 SubscriptionSchema.index({ createdAt: -1 });
 
 // Virtual for days remaining
-SubscriptionSchema.virtual('daysRemaining').get(function(this: ISubscription) {
+SubscriptionSchema.virtual('daysRemaining').get(function (this: ISubscription) {
   if (this.status === 'cancelled' || this.status === 'expired') return 0;
   const now = new Date();
   const end = new Date(this.endDate);
@@ -366,7 +365,7 @@ SubscriptionSchema.virtual('daysRemaining').get(function(this: ISubscription) {
 });
 
 // Instance method to check if subscription is active
-SubscriptionSchema.methods.isActive = function(this: ISubscription): boolean {
+SubscriptionSchema.methods.isActive = function (this: ISubscription): boolean {
   const now = new Date();
   return (
     this.status === 'active' &&
@@ -376,14 +375,14 @@ SubscriptionSchema.methods.isActive = function(this: ISubscription): boolean {
 };
 
 // Instance method to check if in trial period
-SubscriptionSchema.methods.isInTrial = function(this: ISubscription): boolean {
+SubscriptionSchema.methods.isInTrial = function (this: ISubscription): boolean {
   if (!this.trialEndDate) return false;
   const now = new Date();
   return this.status === 'trial' && this.trialEndDate > now;
 };
 
 // Instance method to check if in grace period
-SubscriptionSchema.methods.isInGracePeriod = function(this: ISubscription): boolean {
+SubscriptionSchema.methods.isInGracePeriod = function (this: ISubscription): boolean {
   if (!this.gracePeriodStartDate) return false;
   const now = new Date();
   const gracePeriodEnd = new Date(this.gracePeriodStartDate);
@@ -392,26 +391,26 @@ SubscriptionSchema.methods.isInGracePeriod = function(this: ISubscription): bool
 };
 
 // Instance method to check if can upgrade
-SubscriptionSchema.methods.canUpgrade = function(this: ISubscription): boolean {
+SubscriptionSchema.methods.canUpgrade = function (this: ISubscription): boolean {
   if (!this.isActive()) return false;
   return this.tier === 'free' || this.tier === 'premium';
 };
 
 // Instance method to check if can downgrade
-SubscriptionSchema.methods.canDowngrade = function(this: ISubscription): boolean {
+SubscriptionSchema.methods.canDowngrade = function (this: ISubscription): boolean {
   if (!this.isActive()) return false;
   return this.tier === 'premium' || this.tier === 'vip';
 };
 
 // Instance method to calculate ROI
-SubscriptionSchema.methods.calculateROI = function(this: ISubscription): number {
+SubscriptionSchema.methods.calculateROI = function (this: ISubscription): number {
   if (this.price === 0) return 0;
   const totalValue = this.usage.totalSavings + this.usage.cashbackEarned + this.usage.deliveryFeesSaved;
   return ((totalValue - this.price) / this.price) * 100;
 };
 
 // Instance method to get remaining days
-SubscriptionSchema.methods.getRemainingDays = function(this: ISubscription): number {
+SubscriptionSchema.methods.getRemainingDays = function (this: ISubscription): number {
   const now = new Date();
   const end = new Date(this.endDate);
   const diff = end.getTime() - now.getTime();
@@ -419,7 +418,7 @@ SubscriptionSchema.methods.getRemainingDays = function(this: ISubscription): num
 };
 
 // Static method to get tier configuration
-SubscriptionSchema.statics.getTierConfig = function(tier: SubscriptionTier): {
+SubscriptionSchema.statics.getTierConfig = function (tier: SubscriptionTier): {
   tier: SubscriptionTier;
   name: string;
   pricing: ISubscriptionPricing;
@@ -531,7 +530,7 @@ SubscriptionSchema.statics.getTierConfig = function(tier: SubscriptionTier): {
 };
 
 // Static method to calculate prorated amount
-SubscriptionSchema.statics.calculateProratedAmount = function(
+SubscriptionSchema.statics.calculateProratedAmount = function (
   this: ISubscriptionModel,
   currentTier: SubscriptionTier,
   newTier: SubscriptionTier,
@@ -555,7 +554,7 @@ SubscriptionSchema.statics.calculateProratedAmount = function(
 };
 
 // Pre-save hook to set end date if not provided
-SubscriptionSchema.pre('save', function(this: ISubscription, next) {
+SubscriptionSchema.pre('save', function (this: ISubscription, next) {
   if (this.isNew && !this.endDate) {
     const start = this.startDate || new Date();
     const end = new Date(start);

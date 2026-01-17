@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import { Category } from '../models/Category';
-import { 
-  sendSuccess, 
+import { Order } from '../models/Order';
+import {
+  sendSuccess,
   sendNotFound
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -13,7 +14,7 @@ export const getCategories = asyncHandler(async (req: Request, res: Response) =>
 
   try {
     const query: any = { isActive: true };
-    
+
     if (type) query.type = type;
     if (featured !== undefined) query['metadata.featured'] = featured === 'true';
     if (parent === 'null' || parent === 'root') {
@@ -61,13 +62,13 @@ export const getCategoryBySlug = asyncHandler(async (req: Request, res: Response
   const { slug } = req.params;
 
   try {
-    const category = await Category.findOne({ 
-      slug, 
-      isActive: true 
+    const category = await Category.findOne({
+      slug,
+      isActive: true
     })
-    .populate('parentCategory', 'name slug')
-    .populate('childCategories', 'name slug image sortOrder')
-    .lean();
+      .populate('parentCategory', 'name slug')
+      .populate('childCategories', 'name slug image sortOrder')
+      .lean();
 
     if (!category) {
       return sendNotFound(res, 'Category not found');
@@ -257,5 +258,172 @@ export const getCategoryHashtags = asyncHandler(async (req: Request, res: Respon
 
   } catch (error) {
     throw new AppError('Failed to fetch category hashtags', 500);
+  }
+});
+
+// Get category AI suggestions
+export const getCategoryAISuggestions = asyncHandler(async (req: Request, res: Response) => {
+  const { slug } = req.params;
+
+  try {
+    const category = await Category.findOne({ slug, isActive: true })
+      .select('aiSuggestions aiPlaceholders')
+      .lean();
+
+    if (!category) {
+      return sendNotFound(res, 'Category not found');
+    }
+
+    sendSuccess(res, {
+      suggestions: category.aiSuggestions || [],
+      placeholders: category.aiPlaceholders || []
+    }, 'Category AI suggestions retrieved successfully');
+
+  } catch (error) {
+    throw new AppError('Failed to fetch AI suggestions', 500);
+  }
+});
+
+// Get category loyalty stats for a user
+export const getCategoryLoyaltyStats = asyncHandler(async (req: Request, res: Response) => {
+  const { slug } = req.params;
+  const userId = (req as any).userId;
+
+  try {
+    const category = await Category.findOne({ slug, isActive: true }).lean();
+
+    if (!category) {
+      return sendNotFound(res, 'Category not found');
+    }
+
+    // If no user, return zeros
+    if (!userId) {
+      return sendSuccess(res, { ordersCount: 0, brandsCount: 0 }, 'Category loyalty stats retrieved successfully');
+    }
+
+    // Aggregate user's orders for this category
+    const stats = await Order.aggregate([
+      { $match: { user: userId } },
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'items.product',
+          foreignField: '_id',
+          as: 'orderProducts'
+        }
+      },
+      {
+        $match: {
+          'orderProducts.category': category._id
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          ordersCount: { $sum: 1 },
+          brands: { $addToSet: '$items.store' }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          ordersCount: 1,
+          brandsCount: {
+            $size: {
+              $reduce: {
+                input: '$brands',
+                initialValue: [],
+                in: { $setUnion: ['$$value', '$$this'] }
+              }
+            }
+          }
+        }
+      }
+    ]);
+
+    const result = stats[0] || { ordersCount: 0, brandsCount: 0 };
+    sendSuccess(res, result, 'Category loyalty stats retrieved successfully');
+
+  } catch (error) {
+    console.error('Loyalty Stats Error:', error);
+    throw new AppError('Failed to fetch loyalty stats', 500);
+  }
+});
+
+// Get recent orders for a category (for social proof ticker)
+export const getRecentOrders = asyncHandler(async (req: Request, res: Response) => {
+  const { slug } = req.params;
+  const limit = parseInt(req.query.limit as string) || 5;
+
+  try {
+    const category = await Category.findOne({ slug, isActive: true }).lean();
+
+    if (!category) {
+      return sendNotFound(res, 'Category not found');
+    }
+
+    const recentOrders = await Order.aggregate([
+      { $sort: { createdAt: -1 } },
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'items.product',
+          foreignField: '_id',
+          as: 'orderProducts'
+        }
+      },
+      {
+        $match: {
+          'orderProducts.category': category._id
+        }
+      },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'user',
+          foreignField: '_id',
+          as: 'userInfo'
+        }
+      },
+      {
+        $lookup: {
+          from: 'stores',
+          localField: 'items.store',
+          foreignField: '_id',
+          as: 'storeInfo'
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          userName: { $arrayElemAt: ['$userInfo.name', 0] },
+          storeName: { $arrayElemAt: ['$storeInfo.name', 0] },
+          createdAt: 1
+        }
+      }
+    ]);
+
+    const formattedOrders = recentOrders.map(order => {
+      const minutesAgo = Math.floor((Date.now() - new Date(order.createdAt).getTime()) / 60000);
+      let timeAgo = '';
+      if (minutesAgo < 1) timeAgo = 'just now';
+      else if (minutesAgo < 60) timeAgo = `${minutesAgo}m ago`;
+      else if (minutesAgo < 1440) timeAgo = `${Math.floor(minutesAgo / 60)}h ago`;
+      else timeAgo = `${Math.floor(minutesAgo / 1440)}d ago`;
+
+      return {
+        id: order._id,
+        userName: order.userName?.split(' ')[0] || 'Someone',
+        storeName: order.storeName || 'a store',
+        timeAgo
+      };
+    });
+
+    sendSuccess(res, { orders: formattedOrders }, 'Recent orders retrieved successfully');
+
+  } catch (error) {
+    console.error('Recent Orders Error:', error);
+    throw new AppError('Failed to fetch recent orders', 500);
   }
 });

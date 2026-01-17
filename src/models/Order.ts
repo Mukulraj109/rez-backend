@@ -566,7 +566,6 @@ const OrderSchema = new Schema<IOrder>({
 });
 
 // Indexes for performance
-OrderSchema.index({ orderNumber: 1 });
 OrderSchema.index({ user: 1, createdAt: -1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
 OrderSchema.index({ 'payment.status': 1 });
@@ -586,40 +585,40 @@ OrderSchema.index({ 'items.store': 1, user: 1, createdAt: -1 }); // Customer ins
 OrderSchema.index({ 'payment.method': 1, 'items.store': 1 }); // Payment analytics
 
 // Virtual for order age in hours
-OrderSchema.virtual('ageInHours').get(function() {
+OrderSchema.virtual('ageInHours').get(function () {
   return Math.floor((Date.now() - this.createdAt.getTime()) / (1000 * 60 * 60));
 });
 
 // Virtual for estimated delivery date
-OrderSchema.virtual('estimatedDeliveryDate').get(function() {
+OrderSchema.virtual('estimatedDeliveryDate').get(function () {
   return this.delivery.estimatedTime || new Date(Date.now() + 24 * 60 * 60 * 1000);
 });
 
 // Virtual properties for compatibility with controller
-OrderSchema.virtual('paymentStatus').get(function() {
+OrderSchema.virtual('paymentStatus').get(function () {
   return this.payment.status;
 });
 
-OrderSchema.virtual('estimatedDeliveryTime').get(function() {
+OrderSchema.virtual('estimatedDeliveryTime').get(function () {
   return this.delivery.estimatedTime;
 });
 
-OrderSchema.virtual('deliveredAt').get(function() {
+OrderSchema.virtual('deliveredAt').get(function () {
   return this.delivery.deliveredAt;
 });
 
-OrderSchema.virtual('totalAmount').get(function() {
+OrderSchema.virtual('totalAmount').get(function () {
   return this.totals.total;
 });
 
 // Pre-save hook to generate order number and add timeline entry
-OrderSchema.pre('save', async function(next) {
+OrderSchema.pre('save', async function (next) {
   // Generate order number for new orders
   if (this.isNew && !this.orderNumber) {
     const count = await (this.constructor as any).countDocuments();
     this.orderNumber = `ORD${Date.now()}${String(count + 1).padStart(4, '0')}`;
   }
-  
+
   // Add timeline entry for status changes
   if (this.isModified('status') && !this.isNew) {
     const statusMessages = {
@@ -633,25 +632,25 @@ OrderSchema.pre('save', async function(next) {
       returned: 'Order has been returned',
       refunded: 'Order amount has been refunded'
     };
-    
+
     this.timeline.push({
       status: this.status,
       message: statusMessages[this.status] || `Order status updated to ${this.status}`,
       timestamp: new Date()
     });
   }
-  
+
   next();
 });
 
 // Method to update order status
-OrderSchema.methods.updateStatus = async function(
-  newStatus: string, 
-  message?: string, 
+OrderSchema.methods.updateStatus = async function (
+  newStatus: string,
+  message?: string,
   updatedBy?: string
 ): Promise<void> {
   this.status = newStatus;
-  
+
   // Update delivery status based on order status
   const deliveryStatusMap: { [key: string]: string } = {
     confirmed: 'confirmed',
@@ -662,11 +661,11 @@ OrderSchema.methods.updateStatus = async function(
     cancelled: 'failed',
     returned: 'returned'
   };
-  
+
   if (deliveryStatusMap[newStatus]) {
     this.delivery.status = deliveryStatusMap[newStatus];
   }
-  
+
   // Set timestamps for specific statuses
   if (newStatus === 'dispatched') {
     this.delivery.dispatchedAt = new Date();
@@ -678,7 +677,7 @@ OrderSchema.methods.updateStatus = async function(
   } else if (newStatus === 'returned') {
     this.returnedAt = new Date();
   }
-  
+
   // Add custom timeline message if provided
   if (message) {
     this.timeline.push({
@@ -688,19 +687,19 @@ OrderSchema.methods.updateStatus = async function(
       updatedBy
     });
   }
-  
+
   await this.save();
 };
 
 // Method to calculate refund amount
-OrderSchema.methods.calculateRefund = function(): number {
+OrderSchema.methods.calculateRefund = function (): number {
   let refundAmount = this.totals.paidAmount;
-  
+
   // Deduct delivery charges if order was dispatched
   if (this.status === 'dispatched' || this.status === 'delivered') {
     refundAmount -= this.totals.delivery;
   }
-  
+
   // Apply cancellation charges based on timing
   const ageInHours = this.ageInHours;
   if (ageInHours > 24) {
@@ -708,43 +707,43 @@ OrderSchema.methods.calculateRefund = function(): number {
   } else if (ageInHours > 2) {
     refundAmount *= 0.95; // 5% cancellation fee after 2 hours
   }
-  
+
   return Math.max(0, Math.round(refundAmount * 100) / 100);
 };
 
 // Method to check if order can be cancelled
-OrderSchema.methods.canBeCancelled = function(): boolean {
+OrderSchema.methods.canBeCancelled = function (): boolean {
   const cancellableStatuses = ['placed', 'confirmed', 'preparing'];
   return cancellableStatuses.includes(this.status);
 };
 
 // Method to check if order can be returned
-OrderSchema.methods.canBeReturned = function(): boolean {
+OrderSchema.methods.canBeReturned = function (): boolean {
   if (this.status !== 'delivered') return false;
-  
+
   const deliveredAt = this.delivery.deliveredAt;
   if (!deliveredAt) return false;
-  
+
   const hoursSinceDelivery = (Date.now() - deliveredAt.getTime()) / (1000 * 60 * 60);
   return hoursSinceDelivery <= 24; // 24 hours return window
 };
 
 // Method to generate invoice (placeholder)
-OrderSchema.methods.generateInvoice = async function(): Promise<string> {
+OrderSchema.methods.generateInvoice = async function (): Promise<string> {
   // This would typically generate a PDF invoice
   return `Invoice for order ${this.orderNumber}`;
 };
 
 // Method to send status update (placeholder)
-OrderSchema.methods.sendStatusUpdate = async function(): Promise<void> {
+OrderSchema.methods.sendStatusUpdate = async function (): Promise<void> {
   // This would typically send push notification, SMS, or email
   console.log(`Status update sent for order ${this.orderNumber}: ${this.status}`);
 };
 
 // Static method to get user orders
-OrderSchema.statics.getUserOrders = function(
-  userId: string, 
-  status?: string, 
+OrderSchema.statics.getUserOrders = function (
+  userId: string,
+  status?: string,
   limit: number = 20,
   skip: number = 0
 ) {
@@ -752,7 +751,7 @@ OrderSchema.statics.getUserOrders = function(
   if (status) {
     query.status = status;
   }
-  
+
   return this.find(query)
     .populate('items.product', 'name images')
     .populate('items.store', 'name logo')
@@ -762,8 +761,8 @@ OrderSchema.statics.getUserOrders = function(
 };
 
 // Static method to get store orders
-OrderSchema.statics.getStoreOrders = function(
-  storeId: string, 
+OrderSchema.statics.getStoreOrders = function (
+  storeId: string,
   status?: string,
   limit: number = 50
 ) {
@@ -771,7 +770,7 @@ OrderSchema.statics.getStoreOrders = function(
   if (status) {
     query.status = status;
   }
-  
+
   return this.find(query)
     .populate('user', 'profile.firstName profile.lastName')
     .sort({ createdAt: -1 })
@@ -779,7 +778,7 @@ OrderSchema.statics.getStoreOrders = function(
 };
 
 // Static method to get orders by date range
-OrderSchema.statics.getOrdersByDateRange = function(
+OrderSchema.statics.getOrdersByDateRange = function (
   startDate: Date,
   endDate: Date,
   filters: any = {}
@@ -788,7 +787,7 @@ OrderSchema.statics.getOrdersByDateRange = function(
     createdAt: { $gte: startDate, $lte: endDate },
     ...filters
   };
-  
+
   return this.find(query)
     .populate('user', 'profile.firstName profile.lastName')
     .populate('items.store', 'name')

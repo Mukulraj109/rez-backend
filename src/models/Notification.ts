@@ -318,7 +318,7 @@ NotificationSchema.index({ user: 1, isRead: 1, createdAt: -1 });
 NotificationSchema.index({ user: 1, category: 1, createdAt: -1 });
 NotificationSchema.index({ user: 1, type: 1, createdAt: -1 });
 NotificationSchema.index({ scheduledAt: 1 });
-NotificationSchema.index({ expiresAt: 1 });
+NotificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 NotificationSchema.index({ batchId: 1 });
 NotificationSchema.index({ campaignId: 1 });
 NotificationSchema.index({ priority: 1, createdAt: -1 });
@@ -330,27 +330,27 @@ NotificationSchema.index({ user: 1, isRead: 1, isArchived: 1, deletedAt: 1, crea
 NotificationSchema.index({ category: 1, priority: 1, createdAt: -1 });
 
 // Virtual for age in hours
-NotificationSchema.virtual('ageInHours').get(function() {
+NotificationSchema.virtual('ageInHours').get(function () {
   return Math.floor((Date.now() - this.createdAt.getTime()) / (1000 * 60 * 60));
 });
 
 // Virtual for delivery success rate
-NotificationSchema.virtual('deliverySuccessRate').get(function() {
+NotificationSchema.virtual('deliverySuccessRate').get(function () {
   const channels = this.deliveryChannels.length;
   if (channels === 0) return 0;
-  
+
   let successful = 0;
-  
+
   if (this.deliveryChannels.includes('push') && this.deliveryStatus.push?.delivered) successful++;
   if (this.deliveryChannels.includes('email') && this.deliveryStatus.email?.delivered) successful++;
   if (this.deliveryChannels.includes('sms') && this.deliveryStatus.sms?.delivered) successful++;
   if (this.deliveryChannels.includes('in_app') && this.deliveryStatus.inApp?.delivered) successful++;
-  
+
   return (successful / channels) * 100;
 });
 
 // Pre-save hook
-NotificationSchema.pre('save', function(next) {
+NotificationSchema.pre('save', function (next) {
   // Set default push settings if not provided but push is in delivery channels
   if (this.deliveryChannels.includes('push') && !this.pushSettings) {
     this.pushSettings = {
@@ -358,18 +358,18 @@ NotificationSchema.pre('save', function(next) {
       body: this.message
     };
   }
-  
+
   // Set default expiry (30 days for regular, 7 days for promotional)
   if (!this.expiresAt) {
     const daysToExpire = this.category === 'promotional' ? 7 : 30;
     this.expiresAt = new Date(Date.now() + daysToExpire * 24 * 60 * 60 * 1000);
   }
-  
+
   next();
 });
 
 // Method to mark notification as read
-NotificationSchema.methods.markAsRead = async function(): Promise<void> {
+NotificationSchema.methods.markAsRead = async function (): Promise<void> {
   if (!this.isRead) {
     this.isRead = true;
     this.readAt = new Date();
@@ -380,9 +380,9 @@ NotificationSchema.methods.markAsRead = async function(): Promise<void> {
 };
 
 // Method to mark as delivered for specific channel
-NotificationSchema.methods.markAsDelivered = async function(channel: string): Promise<void> {
+NotificationSchema.methods.markAsDelivered = async function (channel: string): Promise<void> {
   const now = new Date();
-  
+
   switch (channel) {
     case 'push':
       if (this.deliveryStatus.push) {
@@ -403,18 +403,18 @@ NotificationSchema.methods.markAsDelivered = async function(channel: string): Pr
       }
       break;
   }
-  
+
   if (!this.sentAt) {
     this.sentAt = now;
   }
-  
+
   await this.save();
 };
 
 // Method to mark as clicked for specific channel
-NotificationSchema.methods.markAsClicked = async function(channel: string): Promise<void> {
+NotificationSchema.methods.markAsClicked = async function (channel: string): Promise<void> {
   const now = new Date();
-  
+
   switch (channel) {
     case 'push':
       if (this.deliveryStatus.push) {
@@ -429,58 +429,58 @@ NotificationSchema.methods.markAsClicked = async function(channel: string): Prom
       }
       break;
   }
-  
+
   // Mark as read when clicked
   if (!this.isRead) {
     await this.markAsRead();
   }
-  
+
   await this.save();
 };
 
 // Method to archive notification
-NotificationSchema.methods.archive = async function(): Promise<void> {
+NotificationSchema.methods.archive = async function (): Promise<void> {
   this.isArchived = true;
   this.archivedAt = new Date();
   await this.save();
 };
 
 // Method to check if notification can be delivered
-NotificationSchema.methods.canBeDelivered = function(): boolean {
+NotificationSchema.methods.canBeDelivered = function (): boolean {
   // Check if scheduled time has passed
   if (this.scheduledAt && this.scheduledAt > new Date()) {
     return false;
   }
-  
+
   // Check if expired
   if (this.expiresAt && this.expiresAt < new Date()) {
     return false;
   }
-  
+
   // Check if already sent
   if (this.sentAt) {
     return false;
   }
-  
+
   return true;
 };
 
 // Method to get formatted message with variables replaced
-NotificationSchema.methods.getFormattedMessage = function(): string {
+NotificationSchema.methods.getFormattedMessage = function (): string {
   let message = this.message;
-  
+
   if (this.variables) {
     this.variables.forEach((value: any, key: any) => {
       const placeholder = `{{${key}}}`;
       message = message.replace(new RegExp(placeholder, 'g'), value);
     });
   }
-  
+
   return message;
 };
 
 // Static method to get user notifications
-NotificationSchema.statics.getUserNotifications = function(
+NotificationSchema.statics.getUserNotifications = function (
   userId: string,
   filters: any = {},
   limit: number = 50,
@@ -491,23 +491,23 @@ NotificationSchema.statics.getUserNotifications = function(
     isArchived: false,
     deletedAt: { $exists: false }
   };
-  
+
   if (filters.category) {
     query.category = filters.category;
   }
-  
+
   if (filters.type) {
     query.type = filters.type;
   }
-  
+
   if (filters.isRead !== undefined) {
     query.isRead = filters.isRead;
   }
-  
+
   if (filters.priority) {
     query.priority = filters.priority;
   }
-  
+
   return this.find(query)
     .sort({ priority: -1, createdAt: -1 })
     .limit(limit)
@@ -515,34 +515,34 @@ NotificationSchema.statics.getUserNotifications = function(
 };
 
 // Static method to get unread count
-NotificationSchema.statics.getUnreadCount = function(userId: string, category?: string) {
+NotificationSchema.statics.getUnreadCount = function (userId: string, category?: string) {
   const query: any = {
     user: userId,
     isRead: false,
     isArchived: false,
     deletedAt: { $exists: false }
   };
-  
+
   if (category) {
     query.category = category;
   }
-  
+
   return this.countDocuments(query);
 };
 
 // Static method to mark all as read
-NotificationSchema.statics.markAllAsRead = function(userId: string, category?: string) {
+NotificationSchema.statics.markAllAsRead = function (userId: string, category?: string) {
   const query: any = {
     user: userId,
     isRead: false,
     isArchived: false,
     deletedAt: { $exists: false }
   };
-  
+
   if (category) {
     query.category = category;
   }
-  
+
   return this.updateMany(query, {
     $set: {
       isRead: true,
@@ -554,18 +554,18 @@ NotificationSchema.statics.markAllAsRead = function(userId: string, category?: s
 };
 
 // Static method to get scheduled notifications ready for delivery
-NotificationSchema.statics.getScheduledForDelivery = function(limit: number = 100) {
+NotificationSchema.statics.getScheduledForDelivery = function (limit: number = 100) {
   return this.find({
     scheduledAt: { $lte: new Date() },
     sentAt: { $exists: false },
     expiresAt: { $gt: new Date() }
   })
-  .limit(limit)
-  .sort({ priority: -1, scheduledAt: 1 });
+    .limit(limit)
+    .sort({ priority: -1, scheduledAt: 1 });
 };
 
 // Static method to cleanup expired notifications
-NotificationSchema.statics.cleanupExpired = function() {
+NotificationSchema.statics.cleanupExpired = function () {
   return this.deleteMany({
     expiresAt: { $lt: new Date() },
     isRead: true,
@@ -574,38 +574,38 @@ NotificationSchema.statics.cleanupExpired = function() {
 };
 
 // Static method to create bulk notifications
-NotificationSchema.statics.createBulkNotifications = async function(
+NotificationSchema.statics.createBulkNotifications = async function (
   notifications: Partial<INotification>[],
   batchId?: string
 ) {
   const batch = batchId || `BATCH_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  
+
   const notificationDocs = notifications.map(notification => ({
     ...notification,
     batchId: batch,
     source: notification.source || 'system'
   }));
-  
+
   return this.insertMany(notificationDocs);
 };
 
 // Static method to get notification analytics
-NotificationSchema.statics.getAnalytics = function(
+NotificationSchema.statics.getAnalytics = function (
   filters: any = {},
   dateRange: { start: Date; end: Date }
 ) {
   const matchStage: any = {
     createdAt: { $gte: dateRange.start, $lte: dateRange.end }
   };
-  
+
   if (filters.category) {
     matchStage.category = filters.category;
   }
-  
+
   if (filters.source) {
     matchStage.source = filters.source;
   }
-  
+
   return this.aggregate([
     { $match: matchStage },
     {

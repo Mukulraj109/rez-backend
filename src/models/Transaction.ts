@@ -254,7 +254,6 @@ const TransactionSchema = new Schema<ITransaction>({
 });
 
 // Indexes for performance
-TransactionSchema.index({ transactionId: 1 });
 TransactionSchema.index({ user: 1, createdAt: -1 });
 TransactionSchema.index({ user: 1, type: 1, createdAt: -1 });
 TransactionSchema.index({ user: 1, category: 1, createdAt: -1 });
@@ -269,17 +268,17 @@ TransactionSchema.index({ user: 1, 'status.current': 1, createdAt: -1 });
 TransactionSchema.index({ type: 1, category: 1, createdAt: -1 });
 
 // Virtual for transaction age in hours
-TransactionSchema.virtual('ageInHours').get(function() {
+TransactionSchema.virtual('ageInHours').get(function () {
   return Math.floor((Date.now() - this.createdAt.getTime()) / (1000 * 60 * 60));
 });
 
 // Virtual for formatted amount with currency
-TransactionSchema.virtual('formattedAmount').get(function() {
+TransactionSchema.virtual('formattedAmount').get(function () {
   return this.getFormattedAmount();
 });
 
 // Virtual for status display
-TransactionSchema.virtual('statusDisplay').get(function() {
+TransactionSchema.virtual('statusDisplay').get(function () {
   const statusMap = {
     pending: 'Pending',
     processing: 'Processing',
@@ -292,22 +291,22 @@ TransactionSchema.virtual('statusDisplay').get(function() {
 });
 
 // Pre-save hook to generate transaction ID and calculate net amount
-TransactionSchema.pre('save', async function(next) {
+TransactionSchema.pre('save', async function (next) {
   // Generate transaction ID for new transactions
   if (this.isNew && !this.transactionId) {
     const count = await (this.constructor as any).countDocuments();
     const prefix = this.type === 'credit' ? 'CR' : 'DR';
     this.transactionId = `${prefix}${Date.now()}${String(count + 1).padStart(4, '0')}`;
   }
-  
+
   // Calculate net amount
   this.netAmount = this.amount - (this.fees || 0) - (this.tax || 0);
-  
+
   // Set expiry for pending transactions (24 hours)
   if (this.status.current === 'pending' && !this.expiresAt) {
     this.expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
   }
-  
+
   // Add status history entry for status changes
   if (this.isModified('status.current') && !this.isNew) {
     this.status.history.push({
@@ -315,25 +314,25 @@ TransactionSchema.pre('save', async function(next) {
       timestamp: new Date()
     });
   }
-  
+
   // Set processing time when completed
   if (this.isModified('status.current') && this.status.current === 'completed') {
     this.processedAt = new Date();
     this.processingTime = Math.floor((Date.now() - this.createdAt.getTime()) / 1000);
   }
-  
+
   next();
 });
 
 // Method to update transaction status
-TransactionSchema.methods.updateStatus = async function(
+TransactionSchema.methods.updateStatus = async function (
   newStatus: string,
   reason?: string,
   updatedBy?: string
 ): Promise<void> {
   const oldStatus = this.status.current;
   this.status.current = newStatus;
-  
+
   // Add to status history
   this.status.history.push({
     status: newStatus,
@@ -341,31 +340,31 @@ TransactionSchema.methods.updateStatus = async function(
     reason,
     updatedBy: updatedBy ? new mongoose.Types.ObjectId(updatedBy) : undefined
   });
-  
+
   // Handle specific status transitions
   if (newStatus === 'failed' && reason) {
     this.failureReason = reason;
   }
-  
+
   if (newStatus === 'completed') {
     this.processedAt = new Date();
     this.processingTime = Math.floor((Date.now() - this.createdAt.getTime()) / 1000);
-    
+
     // Clear expiry date
     this.expiresAt = undefined;
   }
-  
+
   if (newStatus === 'cancelled') {
     this.expiresAt = undefined;
   }
-  
+
   await this.save();
-  
+
   // Update user wallet balance if transaction is completed
   if (newStatus === 'completed' && oldStatus !== 'completed') {
     const User = this.model('User');
     const user = await User.findById(this.user);
-    
+
     if (user) {
       if (this.type === 'credit') {
         user.wallet.balance += this.netAmount;
@@ -374,18 +373,18 @@ TransactionSchema.methods.updateStatus = async function(
         user.wallet.balance -= this.amount;
         user.wallet.totalSpent += this.amount;
       }
-      
+
       await user.save();
     }
   }
 };
 
 // Method to reverse transaction
-TransactionSchema.methods.reverse = async function(reason: string): Promise<ITransaction> {
+TransactionSchema.methods.reverse = async function (reason: string): Promise<ITransaction> {
   if (!this.canBeReversed()) {
     throw new Error('Transaction cannot be reversed');
   }
-  
+
   // Create reversal transaction
   const TransactionModel = this.constructor as any;
   const reversalTransaction = new TransactionModel({
@@ -411,35 +410,35 @@ TransactionSchema.methods.reverse = async function(reason: string): Promise<ITra
       }]
     }
   });
-  
+
   await reversalTransaction.save();
-  
+
   // Update original transaction
   this.reversedAt = new Date();
   this.reversalReason = reason;
   this.reversalTransactionId = reversalTransaction.transactionId;
   await this.updateStatus('reversed', reason);
-  
+
   return reversalTransaction;
 };
 
 // Method to retry failed transaction
-TransactionSchema.methods.retry = async function(): Promise<void> {
+TransactionSchema.methods.retry = async function (): Promise<void> {
   if (this.status.current !== 'failed') {
     throw new Error('Only failed transactions can be retried');
   }
-  
+
   if (this.retryCount >= this.maxRetries) {
     throw new Error('Maximum retry attempts exceeded');
   }
-  
+
   this.retryCount += 1;
   this.failureReason = undefined;
   await this.updateStatus('pending', 'Transaction retry attempt');
 };
 
 // Method to generate receipt (placeholder)
-TransactionSchema.methods.generateReceipt = async function(): Promise<string> {
+TransactionSchema.methods.generateReceipt = async function (): Promise<string> {
   // This would typically generate a PDF receipt
   const receiptId = `RCP${this.transactionId}${Date.now()}`;
   this.receiptUrl = `/receipts/${receiptId}.pdf`;
@@ -448,60 +447,60 @@ TransactionSchema.methods.generateReceipt = async function(): Promise<string> {
 };
 
 // Method to check if transaction can be reversed
-TransactionSchema.methods.canBeReversed = function(): boolean {
+TransactionSchema.methods.canBeReversed = function (): boolean {
   if (!this.isReversible) return false;
   if (this.reversedAt) return false;
   if (this.status.current !== 'completed') return false;
-  
+
   // Check time limit (e.g., 30 days)
   const timeLimitHours = 30 * 24; // 30 days
   const ageInHours = (Date.now() - this.processedAt?.getTime()) / (1000 * 60 * 60);
-  
+
   return ageInHours <= timeLimitHours;
 };
 
 // Method to get formatted amount
-TransactionSchema.methods.getFormattedAmount = function(): string {
+TransactionSchema.methods.getFormattedAmount = function (): string {
   const symbol = this.currency === 'INR' ? '₹' : '$';
   const sign = this.type === 'credit' ? '+' : '-';
   return `${sign}${symbol}${this.amount.toFixed(2)}`;
 };
 
 // Static method to get user transactions
-TransactionSchema.statics.getUserTransactions = function(
+TransactionSchema.statics.getUserTransactions = function (
   userId: string,
   filters: any = {},
   limit: number = 50,
   skip: number = 0
 ) {
   const query: any = { user: userId };
-  
+
   if (filters.type) {
     query.type = filters.type;
   }
-  
+
   if (filters.category) {
     query.category = filters.category;
   }
-  
+
   if (filters.status) {
     query['status.current'] = filters.status;
   }
-  
+
   if (filters.dateRange) {
     query.createdAt = {
       $gte: filters.dateRange.start,
       $lte: filters.dateRange.end
     };
   }
-  
+
   if (filters.amountRange) {
     query.amount = {
       $gte: filters.amountRange.min,
       $lte: filters.amountRange.max
     };
   }
-  
+
   return this.find(query)
     .sort({ createdAt: -1 })
     .limit(limit)
@@ -509,13 +508,13 @@ TransactionSchema.statics.getUserTransactions = function(
 };
 
 // Static method to get transaction summary
-TransactionSchema.statics.getUserTransactionSummary = function(
+TransactionSchema.statics.getUserTransactionSummary = function (
   userId: string,
   period: 'day' | 'week' | 'month' | 'year' = 'month'
 ) {
   const now = new Date();
   let startDate: Date;
-  
+
   switch (period) {
     case 'day':
       startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -530,7 +529,7 @@ TransactionSchema.statics.getUserTransactionSummary = function(
       startDate = new Date(now.getFullYear(), 0, 1);
       break;
   }
-  
+
   return this.aggregate([
     {
       $match: {
@@ -565,7 +564,7 @@ TransactionSchema.statics.getUserTransactionSummary = function(
 };
 
 // Static method to cleanup expired transactions
-TransactionSchema.statics.cleanupExpired = function() {
+TransactionSchema.statics.cleanupExpired = function () {
   return this.updateMany(
     {
       'status.current': 'pending',

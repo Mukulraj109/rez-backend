@@ -16,7 +16,7 @@ jest.mock('../models/Product');
 jest.mock('../models/Store');
 jest.mock('../models/ServiceCategory');
 
-const mockServiceBooking = ServiceBooking as jest.Mocked<typeof ServiceBooking>;
+const mockServiceBooking = ServiceBooking as any;
 const mockProduct = Product as jest.Mocked<typeof Product>;
 const mockStore = Store as jest.Mocked<typeof Store>;
 
@@ -38,7 +38,7 @@ describe('Service Booking Controller', () => {
           firstName: 'John',
           lastName: 'Doe',
         },
-      },
+      } as any,
     };
 
     mockResponse = {
@@ -75,7 +75,7 @@ describe('Service Booking Controller', () => {
       mockServiceBooking.countDocuments = jest.fn().mockResolvedValue(0);
       mockServiceBooking.findOne = jest.fn().mockResolvedValue(null);
       mockServiceBooking.generateBookingNumber = jest.fn().mockResolvedValue('FLT-12345678');
-      
+
       const mockBookingInstance = {
         save: jest.fn().mockResolvedValue({ _id: 'booking_123' }),
       };

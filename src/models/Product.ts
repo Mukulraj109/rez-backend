@@ -736,8 +736,6 @@ const ProductSchema = new Schema<IProduct>({
 });
 
 // Indexes for performance
-ProductSchema.index({ slug: 1 });
-ProductSchema.index({ sku: 1 });
 ProductSchema.index({ category: 1, isActive: 1 });
 ProductSchema.index({ subSubCategory: 1, isActive: 1 });
 ProductSchema.index({ store: 1, isActive: 1 });
@@ -784,25 +782,25 @@ ProductSchema.index({ store: 1, isDeleted: 1 }); // For merchant queries with de
 ProductSchema.index({ merchantId: 1, isDeleted: 1 }); // For merchant queries with deleted filter
 
 // Virtual for discount percentage
-ProductSchema.virtual('discountPercentage').get(function(this: IProduct) {
+ProductSchema.virtual('discountPercentage').get(function (this: IProduct) {
   if (this.pricing.original <= this.pricing.selling) return 0;
   return Math.round(((this.pricing.original - this.pricing.selling) / this.pricing.original) * 100);
 });
 
 // Virtual for low stock status
-ProductSchema.virtual('isLowStock').get(function(this: IProduct) {
+ProductSchema.virtual('isLowStock').get(function (this: IProduct) {
   if (this.inventory.unlimited) return false;
   return this.inventory.stock <= (this.inventory.lowStockThreshold || 5);
 });
 
 // Virtual for out of stock status
-ProductSchema.virtual('isOutOfStock').get(function(this: IProduct) {
+ProductSchema.virtual('isOutOfStock').get(function (this: IProduct) {
   if (this.inventory.unlimited) return false;
   return this.inventory.stock === 0;
 });
 
 // Pre-find middleware to exclude soft-deleted products by default
-ProductSchema.pre(/^find/, function(this: any, next) {
+ProductSchema.pre(/^find/, function (this: any, next) {
   // Only apply filter if not explicitly querying for deleted products
   if (!this.getQuery().hasOwnProperty('isDeleted')) {
     // Use $ne: true to include products where isDeleted is false OR doesn't exist (for backward compatibility)
@@ -812,7 +810,7 @@ ProductSchema.pre(/^find/, function(this: any, next) {
 });
 
 // Pre-findOne middleware
-ProductSchema.pre('findOne', function(this: any, next) {
+ProductSchema.pre('findOne', function (this: any, next) {
   // Only apply filter if not explicitly querying for deleted products
   if (!this.getQuery().hasOwnProperty('isDeleted')) {
     // Use $ne: true to include products where isDeleted is false OR doesn't exist (for backward compatibility)
@@ -822,7 +820,7 @@ ProductSchema.pre('findOne', function(this: any, next) {
 });
 
 // Pre-count middleware
-ProductSchema.pre('countDocuments', function(this: any, next) {
+ProductSchema.pre('countDocuments', function (this: any, next) {
   // Only apply filter if not explicitly querying for deleted products
   if (!this.getQuery().hasOwnProperty('isDeleted')) {
     // Use $ne: true to include products where isDeleted is false OR doesn't exist (for backward compatibility)
@@ -832,7 +830,7 @@ ProductSchema.pre('countDocuments', function(this: any, next) {
 });
 
 // Pre-save hook to generate slug and calculate discount
-ProductSchema.pre('save', function(this: IProduct, next) {
+ProductSchema.pre('save', function (this: IProduct, next) {
   // Generate slug if not provided
   if (!this.slug && this.name) {
     this.slug = this.name
@@ -860,37 +858,37 @@ ProductSchema.pre('save', function(this: IProduct, next) {
 });
 
 // Method to check if product is in stock
-ProductSchema.methods.isInStock = function(): boolean {
+ProductSchema.methods.isInStock = function (): boolean {
   if (this.inventory.unlimited) return true;
   return this.inventory.isAvailable && this.inventory.stock > 0;
 };
 
 // Method to get variant by type and value
-ProductSchema.methods.getVariantByType = function(type: string, value: string): IProductVariant | null {
+ProductSchema.methods.getVariantByType = function (type: string, value: string): IProductVariant | null {
   if (!this.inventory.variants) return null;
-  
-  const variant = this.inventory.variants.find((v: IProductVariant) => 
-    v.type.toLowerCase() === type.toLowerCase() && 
+
+  const variant = this.inventory.variants.find((v: IProductVariant) =>
+    v.type.toLowerCase() === type.toLowerCase() &&
     v.value.toLowerCase() === value.toLowerCase()
   );
-  
+
   return variant || null;
 };
 
 // Method to calculate discounted price
-ProductSchema.methods.calculateDiscountedPrice = function(): number {
+ProductSchema.methods.calculateDiscountedPrice = function (): number {
   return this.pricing.selling;
 };
 
 // Method to update ratings
-ProductSchema.methods.updateRatings = async function(): Promise<void> {
+ProductSchema.methods.updateRatings = async function (): Promise<void> {
   const Review = this.model('Review');
-  const reviews = await Review.find({ 
-    targetType: 'Product', 
+  const reviews = await Review.find({
+    targetType: 'Product',
     targetId: this._id,
-    isApproved: true 
+    isApproved: true
   });
-  
+
   if (reviews.length === 0) {
     this.ratings = {
       average: 0,
@@ -899,28 +897,28 @@ ProductSchema.methods.updateRatings = async function(): Promise<void> {
     };
     return;
   }
-  
+
   const distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
   let totalRating = 0;
-  
+
   reviews.forEach((review: any) => {
     const rating = Math.round(review.rating) as keyof typeof distribution;
     distribution[rating]++;
     totalRating += review.rating;
   });
-  
+
   this.ratings = {
     average: Math.round((totalRating / reviews.length) * 10) / 10,
     count: reviews.length,
     distribution
   };
-  
+
   // Update analytics
   this.analytics.avgRating = this.ratings.average;
 };
 
 // Method to increment views
-ProductSchema.methods.incrementViews = async function(): Promise<void> {
+ProductSchema.methods.incrementViews = async function (): Promise<void> {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const lastReset = new Date(this.analytics.lastResetDate || Date.now());
@@ -956,7 +954,7 @@ ProductSchema.methods.incrementViews = async function(): Promise<void> {
 };
 
 // Method to increment today's purchases
-ProductSchema.methods.incrementTodayPurchases = async function(): Promise<void> {
+ProductSchema.methods.incrementTodayPurchases = async function (): Promise<void> {
   this.analytics.purchases += 1;
   this.analytics.todayPurchases = (this.analytics.todayPurchases || 0) + 1;
 
@@ -976,7 +974,7 @@ ProductSchema.methods.incrementTodayPurchases = async function(): Promise<void> 
 };
 
 // Method to reset daily analytics
-ProductSchema.methods.resetDailyAnalytics = async function(): Promise<void> {
+ProductSchema.methods.resetDailyAnalytics = async function (): Promise<void> {
   this.analytics.todayPurchases = 0;
   this.analytics.todayViews = 0;
   this.analytics.lastResetDate = new Date();
@@ -984,11 +982,11 @@ ProductSchema.methods.resetDailyAnalytics = async function(): Promise<void> {
 };
 
 // Method to calculate cashback
-ProductSchema.methods.calculateCashback = function(purchaseAmount?: number): number {
+ProductSchema.methods.calculateCashback = function (purchaseAmount?: number): number {
   // Handle both pricing and price field structures
   const amount = purchaseAmount ||
-                 this.pricing?.selling || this.pricing?.original ||
-                 this.price?.current || this.price?.original || 0;
+    this.pricing?.selling || this.pricing?.original ||
+    this.price?.current || this.price?.original || 0;
 
   // If amount is 0 or invalid, return 0
   if (!amount || amount <= 0 || isNaN(amount)) {
@@ -1018,7 +1016,7 @@ ProductSchema.methods.calculateCashback = function(purchaseAmount?: number): num
 };
 
 // Method to get estimated delivery time
-ProductSchema.methods.getEstimatedDelivery = function(userLocation?: any): string {
+ProductSchema.methods.getEstimatedDelivery = function (userLocation?: any): string {
   // If express is available and user is in same city
   if (this.deliveryInfo?.expressAvailable && userLocation?.city === this.store?.location?.city) {
     return this.deliveryInfo.expressDeliveryTime || 'Under 30min';
@@ -1034,7 +1032,7 @@ ProductSchema.methods.getEstimatedDelivery = function(userLocation?: any): strin
 };
 
 // Method to soft delete product
-ProductSchema.methods.softDelete = async function(deletedBy: Types.ObjectId): Promise<void> {
+ProductSchema.methods.softDelete = async function (deletedBy: Types.ObjectId): Promise<void> {
   this.isDeleted = true;
   this.deletedAt = new Date();
   this.deletedBy = deletedBy;
@@ -1044,7 +1042,7 @@ ProductSchema.methods.softDelete = async function(deletedBy: Types.ObjectId): Pr
 };
 
 // Method to restore soft-deleted product
-ProductSchema.methods.restore = async function(): Promise<void> {
+ProductSchema.methods.restore = async function (): Promise<void> {
   // Check if product was deleted within 30 days
   if (this.deletedAt) {
     const daysSinceDeletion = Math.floor((Date.now() - this.deletedAt.getTime()) / (1000 * 60 * 60 * 24));
@@ -1062,12 +1060,12 @@ ProductSchema.methods.restore = async function(): Promise<void> {
 };
 
 // Method to permanently delete product (admin only)
-ProductSchema.methods.permanentDelete = async function(): Promise<void> {
+ProductSchema.methods.permanentDelete = async function (): Promise<void> {
   await this.deleteOne();
 };
 
 // Static method to search products
-ProductSchema.statics.searchProducts = function(
+ProductSchema.statics.searchProducts = function (
   searchText: string,
   filters: any = {},
   options: any = {}
@@ -1076,35 +1074,35 @@ ProductSchema.statics.searchProducts = function(
     $text: { $search: searchText },
     isActive: true
   };
-  
+
   if (filters.category) {
     query.category = filters.category;
   }
-  
+
   if (filters.store) {
     query.store = filters.store;
   }
-  
+
   if (filters.brand) {
     query.brand = new RegExp(filters.brand, 'i');
   }
-  
+
   if (filters.priceRange) {
     query['pricing.selling'] = {
       $gte: filters.priceRange.min || 0,
       $lte: filters.priceRange.max || Number.MAX_VALUE
     };
   }
-  
+
   if (filters.inStock) {
     query['inventory.isAvailable'] = true;
     query['inventory.stock'] = { $gt: 0 };
   }
-  
+
   if (filters.rating) {
     query['ratings.average'] = { $gte: filters.rating };
   }
-  
+
   return this.find(query, { score: { $meta: 'textScore' } })
     .sort({ score: { $meta: 'textScore' } })
     .populate('category store')
@@ -1113,27 +1111,27 @@ ProductSchema.statics.searchProducts = function(
 };
 
 // Static method to get featured products
-ProductSchema.statics.getFeatured = function(limit: number = 10) {
-  return this.find({ 
-    isFeatured: true, 
+ProductSchema.statics.getFeatured = function (limit: number = 10) {
+  return this.find({
+    isFeatured: true,
     isActive: true,
-    'inventory.isAvailable': true 
+    'inventory.isAvailable': true
   })
-  .populate('category store')
-  .sort({ 'ratings.average': -1, createdAt: -1 })
-  .limit(limit);
+    .populate('category store')
+    .sort({ 'ratings.average': -1, createdAt: -1 })
+    .limit(limit);
 };
 
 // Static method to get products by category
-ProductSchema.statics.getByCategory = function(categoryId: string, options: any = {}) {
-  const query: any = { 
-    category: categoryId, 
+ProductSchema.statics.getByCategory = function (categoryId: string, options: any = {}) {
+  const query: any = {
+    category: categoryId,
     isActive: true,
-    'inventory.isAvailable': true 
+    'inventory.isAvailable': true
   };
-  
+
   let sortOptions: any = {};
-  
+
   switch (options.sortBy) {
     case 'price_low':
       sortOptions = { 'pricing.selling': 1 };
@@ -1150,7 +1148,7 @@ ProductSchema.statics.getByCategory = function(categoryId: string, options: any 
     default:
       sortOptions = { 'ratings.average': -1, createdAt: -1 };
   }
-  
+
   return this.find(query)
     .populate('category store')
     .sort(sortOptions)

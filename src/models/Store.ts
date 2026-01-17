@@ -352,7 +352,7 @@ const StoreSchema = new Schema<IStore>({
       type: [Number], // [longitude, latitude]
       index: '2dsphere',
       validate: {
-        validator: function(v: number[] | null | undefined) {
+        validator: function (v: number[] | null | undefined) {
           // Allow null/undefined/empty coordinates
           if (!v || v.length === 0) return true;
           return v.length === 2 && v[0] >= -180 && v[0] <= 180 && v[1] >= -90 && v[1] <= 90;
@@ -873,7 +873,6 @@ const StoreSchema = new Schema<IStore>({
 });
 
 // Indexes for performance
-StoreSchema.index({ slug: 1 });
 StoreSchema.index({ category: 1, isActive: 1 });
 StoreSchema.index({ 'location.coordinates': '2dsphere' });
 StoreSchema.index({ 'location.city': 1, isActive: 1 });
@@ -885,7 +884,6 @@ StoreSchema.index({ tags: 1, isActive: 1 });
 StoreSchema.index({ createdAt: -1 });
 StoreSchema.index({ hasMenu: 1, isActive: 1 }); // Menu index
 StoreSchema.index({ bookingType: 1, isActive: 1 }); // Booking type index
-StoreSchema.index({ 'storeQR.code': 1 }); // QR code lookup index
 StoreSchema.index({ 'paymentSettings.upiId': 1 }); // UPI ID lookup index
 
 // Delivery category indexes
@@ -903,12 +901,12 @@ StoreSchema.index({ category: 1, 'location.city': 1, isActive: 1 });
 StoreSchema.index({ 'offers.isPartner': 1, 'ratings.average': -1 });
 
 // Virtual for current operational status
-StoreSchema.virtual('isCurrentlyOpen').get(function() {
+StoreSchema.virtual('isCurrentlyOpen').get(function () {
   return this.isOpen();
 });
 
 // Pre-save hook to generate slug
-StoreSchema.pre('save', function(next) {
+StoreSchema.pre('save', function (next) {
   if (!this.slug && this.name) {
     this.slug = this.name
       .toLowerCase()
@@ -920,54 +918,54 @@ StoreSchema.pre('save', function(next) {
 });
 
 // Method to check if store is currently open
-StoreSchema.methods.isOpen = function(): boolean {
+StoreSchema.methods.isOpen = function (): boolean {
   const now = new Date();
   const dayName = now.toLocaleDateString('en-US', { weekday: 'long' as 'long' }) as keyof typeof this.operationalInfo.hours;
   const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
-  
+
   const todayHours = this.operationalInfo.hours[dayName];
   if (!todayHours || todayHours.closed) {
     return false;
   }
-  
+
   return currentTime >= todayHours.open && currentTime <= todayHours.close;
 };
 
 // Method to calculate distance from user coordinates
-StoreSchema.methods.calculateDistance = function(userCoordinates: [number, number]): number {
+StoreSchema.methods.calculateDistance = function (userCoordinates: [number, number]): number {
   if (!this.location.coordinates) return Infinity;
-  
+
   const [lon1, lat1] = userCoordinates;
   const [lon2, lat2] = this.location.coordinates;
-  
+
   const R = 6371; // Radius of Earth in kilometers
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const distance = R * c;
-  
+
   return Math.round(distance * 100) / 100; // Round to 2 decimal places
 };
 
 // Method to check delivery eligibility
-StoreSchema.methods.isEligibleForDelivery = function(userCoordinates: [number, number]): boolean {
+StoreSchema.methods.isEligibleForDelivery = function (userCoordinates: [number, number]): boolean {
   const distance = this.calculateDistance(userCoordinates);
   return distance <= (this.location.deliveryRadius || 5);
 };
 
 // Method to update ratings
-StoreSchema.methods.updateRatings = async function(): Promise<void> {
+StoreSchema.methods.updateRatings = async function (): Promise<void> {
   const Review = this.model('Review');
-  const reviews = await Review.find({ 
-    targetType: 'Store', 
+  const reviews = await Review.find({
+    targetType: 'Store',
     targetId: this._id,
-    isApproved: true 
+    isApproved: true
   });
-  
+
   if (reviews.length === 0) {
     this.ratings = {
       average: 0,
@@ -976,16 +974,16 @@ StoreSchema.methods.updateRatings = async function(): Promise<void> {
     };
     return;
   }
-  
+
   const distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
   let totalRating = 0;
-  
+
   reviews.forEach((review: any) => {
     const rating = Math.round(review.rating) as keyof typeof distribution;
     distribution[rating]++;
     totalRating += review.rating;
   });
-  
+
   this.ratings = {
     average: Math.round((totalRating / reviews.length) * 10) / 10,
     count: reviews.length,
@@ -994,8 +992,8 @@ StoreSchema.methods.updateRatings = async function(): Promise<void> {
 };
 
 // Static method to find nearby stores
-StoreSchema.statics.findNearby = function(
-  coordinates: [number, number], 
+StoreSchema.statics.findNearby = function (
+  coordinates: [number, number],
   radius: number = 10,
   options: any = {}
 ) {
@@ -1011,15 +1009,15 @@ StoreSchema.statics.findNearby = function(
     },
     isActive: true
   };
-  
+
   if (options.category) {
     query.category = options.category;
   }
-  
+
   if (options.isPartner !== undefined) {
     query['offers.isPartner'] = options.isPartner;
   }
-  
+
   return this.find(query)
     .populate('category')
     .sort({ 'ratings.average': -1 })
@@ -1027,14 +1025,14 @@ StoreSchema.statics.findNearby = function(
 };
 
 // Static method to get featured stores
-StoreSchema.statics.getFeatured = function(limit: number = 10) {
-  return this.find({ 
-    isFeatured: true, 
-    isActive: true 
+StoreSchema.statics.getFeatured = function (limit: number = 10) {
+  return this.find({
+    isFeatured: true,
+    isActive: true
   })
-  .populate('category')
-  .sort({ 'ratings.average': -1 })
-  .limit(limit);
+    .populate('category')
+    .sort({ 'ratings.average': -1 })
+    .limit(limit);
 };
 
 // Use existing model if already registered, otherwise create new one

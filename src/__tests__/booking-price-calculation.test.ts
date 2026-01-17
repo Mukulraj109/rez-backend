@@ -12,7 +12,7 @@ jest.mock('../models/ServiceBooking');
 jest.mock('../models/Product');
 jest.mock('../models/Store');
 
-const mockServiceBooking = ServiceBooking as jest.Mocked<typeof ServiceBooking>;
+const mockServiceBooking = ServiceBooking as any;
 const mockProduct = Product as jest.Mocked<typeof Product>;
 const mockStore = Store as jest.Mocked<typeof Store>;
 

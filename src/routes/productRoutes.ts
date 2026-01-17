@@ -32,7 +32,7 @@ import { Joi } from '../middleware/validation';
 const router = Router();
 
 // Get all products with filtering
-router.get('/', 
+router.get('/',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateQuery(productSchemas.getProducts),
@@ -40,7 +40,7 @@ router.get('/',
 );
 
 // Get featured products - FOR FRONTEND "Just for You" SECTION
-router.get('/featured', 
+router.get('/featured',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateQuery(Joi.object({
@@ -50,7 +50,7 @@ router.get('/featured',
 );
 
 // Get new arrival products - FOR FRONTEND "New Arrivals" SECTION
-router.get('/new-arrivals', 
+router.get('/new-arrivals',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateQuery(Joi.object({
@@ -167,7 +167,7 @@ router.get('/:id',
 );
 
 // Get product recommendations
-router.get('/:productId/recommendations', 
+router.get('/:productId/recommendations',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateParams(Joi.object({
@@ -191,7 +191,7 @@ router.get('/category/:categorySlug',
     maxPrice: Joi.number().min(0),
     rating: Joi.number().min(1).max(5),
     sortBy: Joi.string().valid('price_low', 'price_high', 'rating', 'newest'),
-    ...commonSchemas.pagination
+    ...commonSchemas.pagination()
   })),
   getProductsByCategory
 );

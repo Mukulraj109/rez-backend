@@ -4,6 +4,7 @@ import {
   getExperienceById,
   getStoresByExperience,
   getHomepageExperiences,
+  getUniqueFinds,
 } from '../controllers/experienceController';
 import { optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, Joi } from '../middleware/validation';
@@ -38,6 +39,21 @@ router.get('/homepage',
 );
 
 /**
+ * @route   GET /api/experiences/unique-finds
+ * @desc    Get unique finds for Think Outside the Box
+ * @access  Public
+ */
+router.get('/unique-finds',
+  optionalAuth, // Public access
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(20).default(10),
+    experience: Joi.string().optional(),
+    q: Joi.string().optional(),
+  })),
+  getUniqueFinds
+);
+
+/**
  * @route   GET /api/experiences/:experienceId
  * @desc    Get single experience by ID or slug
  * @access  Public
@@ -64,6 +80,7 @@ router.get('/:experienceId/stores',
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20),
     location: Joi.string().pattern(/^-?\d+\.?\d*,-?\d+\.?\d*$/),
+    q: Joi.string().optional(),
   })),
   getStoresByExperience
 );

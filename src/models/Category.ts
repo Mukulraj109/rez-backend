@@ -36,6 +36,31 @@ export interface ICategoryHashtag {
   trending: boolean;
 }
 
+export interface ICategoryAISuggestion {
+  id: string;
+  title: string;
+  icon: string;
+  link: string;
+}
+
+export interface ICategoryPromotion {
+  id: string;
+  type: 'flash_sale' | 'banner' | 'hero';
+  title: string;
+  subtitle?: string;
+  image?: string;
+  backgroundColor?: string; // Gradient start or solid
+  backgroundColorEnd?: string; // Gradient end
+  emoji?: string;
+  action?: {
+    type: 'navigate' | 'link';
+    target: string;
+    label: string;
+  };
+  isActive: boolean;
+  validUntil?: Date;
+}
+
 // Category interface
 export interface ICategory extends Document {
   name: string;
@@ -54,11 +79,14 @@ export interface ICategory extends Document {
   vibes?: ICategoryVibe[];
   occasions?: ICategoryOccasion[];
   trendingHashtags?: ICategoryHashtag[];
+  aiSuggestions?: ICategoryAISuggestion[];
+  aiPlaceholders?: string[];
   productCount: number;
   storeCount: number;
   isBestDiscount: boolean;
   isBestSeller: boolean;
   maxCashback?: number;
+  promotions?: ICategoryPromotion[];
   createdAt: Date;
   updatedAt: Date;
   _fullPath?: string;
@@ -245,7 +273,7 @@ const CategorySchema = new Schema<ICategory>({
       required: true,
       trim: true,
       validate: {
-        validator: function(v: string) {
+        validator: function (v: string) {
           return /^#[\p{L}\p{N}\s\-_]+$/u.test(v);
         },
         message: 'Hashtag must start with # and contain only letters, numbers, spaces, hyphens, and underscores'
@@ -266,6 +294,33 @@ const CategorySchema = new Schema<ICategory>({
       type: Boolean,
       default: false
     }
+  }],
+  aiSuggestions: [{
+    id: { type: String, required: true },
+    title: { type: String, required: true },
+    icon: { type: String, required: true },
+    link: { type: String, required: true }
+  }],
+  aiPlaceholders: [{
+    type: String,
+    trim: true
+  }],
+  promotions: [{
+    id: { type: String, required: true },
+    type: { type: String, enum: ['flash_sale', 'banner', 'hero'], required: true },
+    title: { type: String, required: true },
+    subtitle: String,
+    image: String,
+    backgroundColor: String,
+    backgroundColorEnd: String,
+    emoji: String,
+    action: {
+      type: { type: String, enum: ['navigate', 'link'] },
+      target: String,
+      label: String
+    },
+    isActive: { type: Boolean, default: true },
+    validUntil: Date
   }]
 }, {
   timestamps: true,
@@ -274,7 +329,6 @@ const CategorySchema = new Schema<ICategory>({
 });
 
 // Indexes for performance
-CategorySchema.index({ slug: 1 });
 CategorySchema.index({ type: 1, isActive: 1 });
 CategorySchema.index({ parentCategory: 1 });
 CategorySchema.index({ sortOrder: 1 });
@@ -289,20 +343,20 @@ CategorySchema.index({ isBestDiscount: 1, isActive: 1, maxCashback: -1, sortOrde
 CategorySchema.index({ isBestSeller: 1, isActive: 1, productCount: -1, sortOrder: 1 });
 
 // Virtual for level (root = 0, child = 1, etc.)
-CategorySchema.virtual('level').get(function() {
+CategorySchema.virtual('level').get(function () {
   return this.parentCategory ? 1 : 0; // Simplified - could be recursive for deeper levels
 });
 
 // Virtual for full category path
-CategorySchema.virtual('fullPath').get(function() {
+CategorySchema.virtual('fullPath').get(function () {
   // This will be populated by the method below
   return this._fullPath;
 });
 
 // Method to get full category path
-CategorySchema.methods.getFullPath = async function(): Promise<string> {
+CategorySchema.methods.getFullPath = async function (): Promise<string> {
   let path = this.name;
-  
+
   if (this.parentCategory) {
     const parent = await this.model('Category').findById(this.parentCategory);
     if (parent) {
@@ -310,30 +364,30 @@ CategorySchema.methods.getFullPath = async function(): Promise<string> {
       path = `${parentPath} > ${path}`;
     }
   }
-  
+
   return path;
 };
 
 // Method to get all child categories recursively
-CategorySchema.methods.getAllChildren = async function(): Promise<ICategory[]> {
-  const children = await this.model('Category').find({ 
+CategorySchema.methods.getAllChildren = async function (): Promise<ICategory[]> {
+  const children = await this.model('Category').find({
     parentCategory: this._id,
-    isActive: true 
+    isActive: true
   }).sort({ sortOrder: 1 });
-  
+
   let allChildren = [...children];
-  
+
   // Recursively get children of children
   for (const child of children) {
     const grandChildren = await child.getAllChildren();
     allChildren = [...allChildren, ...grandChildren];
   }
-  
+
   return allChildren;
 };
 
 // Pre-save hook to generate slug if not provided
-CategorySchema.pre('save', function(next) {
+CategorySchema.pre('save', function (next) {
   if (!this.slug && this.name) {
     this.slug = this.name
       .toLowerCase()
@@ -345,7 +399,7 @@ CategorySchema.pre('save', function(next) {
 });
 
 // Pre-save hook to update parent's childCategories array
-CategorySchema.pre('save', async function(next) {
+CategorySchema.pre('save', async function (next) {
   if (this.isNew && this.parentCategory) {
     await this.model('Category').findByIdAndUpdate(
       this.parentCategory,
@@ -356,7 +410,7 @@ CategorySchema.pre('save', async function(next) {
 });
 
 // Pre-remove hook to clean up references
-CategorySchema.pre('deleteOne', { document: true, query: false }, async function(next) {
+CategorySchema.pre('deleteOne', { document: true, query: false }, async function (next) {
   // Remove from parent's childCategories array
   if (this.parentCategory) {
     await this.model('Category').findByIdAndUpdate(
@@ -364,18 +418,18 @@ CategorySchema.pre('deleteOne', { document: true, query: false }, async function
       { $pull: { childCategories: this._id } }
     );
   }
-  
+
   // Update child categories to remove parent reference
   await this.model('Category').updateMany(
     { parentCategory: this._id },
     { $unset: { parentCategory: 1 } }
   );
-  
+
   next();
 });
 
 // Static method to get root categories
-CategorySchema.statics.getRootCategories = function(type?: string) {
+CategorySchema.statics.getRootCategories = function (type?: string) {
   const query: any = { parentCategory: null, isActive: true };
   if (type) {
     query.type = type;
@@ -384,26 +438,26 @@ CategorySchema.statics.getRootCategories = function(type?: string) {
 };
 
 // Static method to get category tree
-CategorySchema.statics.getCategoryTree = async function(type?: string) {
+CategorySchema.statics.getCategoryTree = async function (type?: string) {
   const query: any = { isActive: true };
   if (type) {
     query.type = type;
   }
-  
+
   const categories = await this.find(query)
     .sort({ sortOrder: 1 })
     .populate('childCategories')
     .lean();
-    
+
   // Build tree structure
   const categoryMap = new Map();
   const rootCategories: any[] = [];
-  
+
   // First pass: create map of all categories
   categories.forEach((cat: any) => {
     categoryMap.set(cat._id.toString(), { ...cat, children: [] });
   });
-  
+
   // Second pass: build tree structure
   categories.forEach((cat: any) => {
     if (cat.parentCategory) {
@@ -415,12 +469,12 @@ CategorySchema.statics.getCategoryTree = async function(type?: string) {
       rootCategories.push(categoryMap.get(cat._id.toString()));
     }
   });
-  
+
   return rootCategories;
 };
 
 // Static method to get categories by type with counts
-CategorySchema.statics.getCategoriesWithCounts = function(type: string) {
+CategorySchema.statics.getCategoriesWithCounts = function (type: string) {
   return this.aggregate([
     { $match: { type, isActive: true } },
     {

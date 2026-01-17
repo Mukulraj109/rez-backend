@@ -10,7 +10,10 @@ import {
   getBestSellerCategories,
   getCategoryVibes,
   getCategoryOccasions,
-  getCategoryHashtags
+  getCategoryHashtags,
+  getCategoryAISuggestions,
+  getCategoryLoyaltyStats,
+  getRecentOrders
 } from '../controllers/categoryController';
 import { optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams } from '../middleware/validation';
@@ -20,7 +23,7 @@ import { Joi } from '../middleware/validation';
 const router = Router();
 
 // Get all categories
-router.get('/', 
+router.get('/',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateQuery(Joi.object({
@@ -36,7 +39,7 @@ router.get('/',
 );
 
 // Get category tree
-router.get('/tree', 
+router.get('/tree',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateQuery(Joi.object({
@@ -46,7 +49,7 @@ router.get('/tree',
 );
 
 // Get root categories
-router.get('/root', 
+router.get('/root',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateQuery(Joi.object({
@@ -56,7 +59,7 @@ router.get('/root',
 );
 
 // Get featured categories
-router.get('/featured', 
+router.get('/featured',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateQuery(Joi.object({
@@ -95,7 +98,7 @@ router.get('/best-seller',
 );
 
 // Get category by slug  
-router.get('/:slug', 
+router.get('/:slug',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateParams(Joi.object({
@@ -132,6 +135,36 @@ router.get('/:slug/hashtags',
     limit: Joi.number().integer().min(1).max(20).default(6)
   })),
   getCategoryHashtags
+);
+
+// Get category AI suggestions
+router.get('/:slug/ai-suggestions',
+  optionalAuth,
+  validateParams(Joi.object({
+    slug: Joi.string().required()
+  })),
+  getCategoryAISuggestions
+);
+
+// Get category loyalty stats
+router.get('/:slug/loyalty-stats',
+  optionalAuth,
+  validateParams(Joi.object({
+    slug: Joi.string().required()
+  })),
+  getCategoryLoyaltyStats
+);
+
+// Get recent orders for social proof ticker
+router.get('/:slug/recent-orders',
+  optionalAuth,
+  validateParams(Joi.object({
+    slug: Joi.string().required()
+  })),
+  validateQuery(Joi.object({
+    limit: Joi.number().integer().min(1).max(10).default(5)
+  })),
+  getRecentOrders
 );
 
 export default router;
