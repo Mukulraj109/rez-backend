@@ -186,6 +186,7 @@ export interface IStore extends Document {
   slug: string;
   description?: string;
   logo?: string; // Single logo image
+  image?: string; // Store image URL (fallback)
   banner?: string[]; // Array of banner image URLs
   videos?: IStoreVideo[]; // Store promotional videos
   category: Types.ObjectId;
@@ -288,6 +289,10 @@ const StoreSchema = new Schema<IStore>({
     maxlength: 1000
   },
   logo: {
+    type: String,
+    trim: true
+  },
+  image: {
     type: String,
     trim: true
   },
