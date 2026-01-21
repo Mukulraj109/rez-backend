@@ -11,34 +11,35 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import activityService from '../services/activityService';
 import achievementService from '../services/achievementService';
+import coinService from '../services/coinService';
 import { Types } from 'mongoose';
 
 // Get reviews for a store
 export const getStoreReviews = asyncHandler(async (req: Request, res: Response) => {
   const { storeId } = req.params;
-  const { 
-    page = 1, 
-    limit = 20, 
-    rating, 
+  const {
+    page = 1,
+    limit = 20,
+    rating,
     sortBy = 'newest',
     sort = 'newest' // Support both sortBy and sort for compatibility
   } = req.query;
-  
+
   // Use sort if provided, otherwise use sortBy
   const sortParam = (sort || sortBy) as string;
 
   try {
     const userId = req.user?.id;
-    
+
     // Base query: show approved reviews to all users
     // Also show user's own pending reviews if they're the reviewer
-    const query: any = { 
-      store: storeId, 
+    const query: any = {
+      store: storeId,
       isActive: true,
       $or: [
         { moderationStatus: 'approved' }, // Show approved reviews to everyone
-        ...(userId ? [{ 
-          moderationStatus: 'pending', 
+        ...(userId ? [{
+          moderationStatus: 'pending',
           user: userId // Show user's own pending reviews
         }] : [])
       ]
@@ -75,7 +76,7 @@ export const getStoreReviews = asyncHandler(async (req: Request, res: Response) 
 
     // Pagination
     const skip = (Number(page) - 1) * Number(limit);
-    
+
     const reviews = await Review.find(query)
       .populate('user', 'profile.firstName profile.lastName profile.avatar')
       .sort(sortOptions)
@@ -97,7 +98,7 @@ export const getStoreReviews = asyncHandler(async (req: Request, res: Response) 
         isActive: true,
         moderationStatus: 'pending'
       });
-      
+
       if (userPendingCount > 0) {
         // Add pending reviews to total count for user's view
         adjustedStats.count = ratingStats.count + userPendingCount;
@@ -111,7 +112,7 @@ export const getStoreReviews = asyncHandler(async (req: Request, res: Response) 
       const firstName = review.user?.profile?.firstName || '';
       const lastName = review.user?.profile?.lastName || '';
       const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || review.userName || 'Anonymous';
-      
+
       return {
         id: review._id.toString(),
         _id: review._id.toString(),
@@ -194,10 +195,10 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
     }
 
     // Check if user has already reviewed this store
-    const existingReview = await Review.findOne({ 
-      store: storeId, 
+    const existingReview = await Review.findOne({
+      store: storeId,
       user: userId,
-      isActive: true 
+      isActive: true
     });
 
     if (existingReview) {
@@ -238,6 +239,8 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
       console.error('❌ [REVIEW] Error triggering achievement update:', error);
     }
 
+    // Coin award moved to moderateReview (merchant approval)
+
     sendCreated(res, {
       review
     }, 'Review submitted successfully. It will be visible after merchant approval.');
@@ -251,6 +254,90 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
   }
 });
 
+/**
+ * Moderate a review (Approve/Reject)
+ * Awards coins if approved
+ */
+export const moderateReview = asyncHandler(async (req: Request, res: Response) => {
+  const { reviewId } = req.params;
+  const { status, reason } = req.body;
+  const userId = req.user?.id; // Merchant/Admin ID
+
+  if (!userId) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  if (!['approved', 'rejected'].includes(status)) {
+    throw new AppError('Invalid status. Must be "approved" or "rejected"', 400);
+  }
+
+  try {
+    const review = await Review.findById(reviewId)
+      .populate('user', 'profile.name profile.avatar')
+      .populate('store', 'name rewardRules');
+
+    if (!review) {
+      throw new AppError('Review not found', 404);
+    }
+
+    // Update moderation status
+    review.moderationStatus = status;
+    review.moderatedBy = new Types.ObjectId(userId);
+    review.moderatedAt = new Date();
+    if (reason) review.moderationReason = reason;
+
+    await review.save();
+
+    // If approved, update store ratings and award coins
+    if (status === 'approved') {
+      // 1. Update store rating statistics
+      const ratingStats = await Review.getStoreRatingStats(review.store._id.toString());
+      await Store.findByIdAndUpdate(review.store._id, {
+        'ratings.average': ratingStats.average,
+        'ratings.count': ratingStats.count,
+        'ratings.distribution': ratingStats.distribution
+      });
+
+      // 2. Award review bonus coins
+      try {
+        const store = review.store as any;
+        const reviewBonusCoins = store.rewardRules?.reviewBonusCoins || 20;
+
+        if (reviewBonusCoins > 0 && review.user) {
+          await coinService.awardCoins(
+            (review.user as any)._id,
+            reviewBonusCoins,
+            'review',
+            `Review bonus for ${store.name}`,
+            {
+              storeId: store._id,
+              storeName: store.name,
+              reviewId: review._id
+            }
+          );
+          console.log(`💰 [MODERATION] Awarded ${reviewBonusCoins} coins to user ${(review.user as any)._id} for approved review`);
+        }
+      } catch (coinError) {
+        console.error('❌ [MODERATION] Error awarding review coins:', coinError);
+        // Don't fail the moderation if coin award fails
+      }
+    }
+
+    sendSuccess(res, {
+      review
+    }, `Review ${status} successfully`);
+
+  } catch (error) {
+    console.error('Moderate review error:', error);
+    if (error instanceof AppError) {
+      throw error;
+    }
+    throw new AppError('Failed to moderate review', 500);
+  }
+});
+
+
+
 // Update a review
 export const updateReview = asyncHandler(async (req: Request, res: Response) => {
   const { reviewId } = req.params;
@@ -262,10 +349,10 @@ export const updateReview = asyncHandler(async (req: Request, res: Response) => 
   }
 
   try {
-    const review = await Review.findOne({ 
-      _id: reviewId, 
+    const review = await Review.findOne({
+      _id: reviewId,
       user: userId,
-      isActive: true 
+      isActive: true
     });
 
     if (!review) {
@@ -274,13 +361,13 @@ export const updateReview = asyncHandler(async (req: Request, res: Response) => 
 
     // Store previous moderation status
     const wasApproved = review.moderationStatus === 'approved';
-    
+
     // Update review
     review.rating = rating || review.rating;
     review.title = title || review.title;
     review.comment = comment || review.comment;
     review.images = images || review.images;
-    
+
     // If review was approved and is being updated, reset to pending for re-approval
     if (wasApproved) {
       review.moderationStatus = 'pending';
@@ -328,10 +415,10 @@ export const deleteReview = asyncHandler(async (req: Request, res: Response) => 
   }
 
   try {
-    const review = await Review.findOne({ 
-      _id: reviewId, 
+    const review = await Review.findOne({
+      _id: reviewId,
       user: userId,
-      isActive: true 
+      isActive: true
     });
 
     if (!review) {
@@ -404,9 +491,9 @@ export const getUserReviews = asyncHandler(async (req: Request, res: Response) =
 
   try {
     const skip = (Number(page) - 1) * Number(limit);
-    
-    const reviews = await Review.find({ 
-      user: userId, 
+
+    const reviews = await Review.find({
+      user: userId,
       isActive: true,
       moderationStatus: 'approved' // Only show approved reviews to users
     })
@@ -416,8 +503,8 @@ export const getUserReviews = asyncHandler(async (req: Request, res: Response) =
       .limit(Number(limit))
       .lean();
 
-    const total = await Review.countDocuments({ 
-      user: userId, 
+    const total = await Review.countDocuments({
+      user: userId,
       isActive: true,
       moderationStatus: 'approved'
     });
@@ -450,7 +537,7 @@ export const canUserReviewStore = asyncHandler(async (req: Request, res: Respons
 
   try {
     const hasReviewed = await Review.hasUserReviewed(storeId, userId);
-    
+
     sendSuccess(res, {
       canReview: !hasReviewed,
       hasReviewed

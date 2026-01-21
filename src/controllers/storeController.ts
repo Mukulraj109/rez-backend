@@ -17,43 +17,43 @@ import { logStoreSearch } from '../services/searchHistoryService';
 
 // Get all stores with filtering and pagination
 export const getStores = asyncHandler(async (req: Request, res: Response) => {
-  const { 
-    category, 
-    location, 
-    radius = 10, 
-    rating, 
-    isOpen, 
+  const {
+    category,
+    location,
+    radius = 10,
+    rating,
+    isOpen,
     search,
     tags,
     isFeatured,
-    sortBy = 'rating', 
-    page = 1, 
-    limit = 20 
+    sortBy = 'rating',
+    page = 1,
+    limit = 20
   } = req.query;
 
   try {
     const query: any = { isActive: true };
-    
+
     // Apply filters
     if (category) query.category = category;
     if (rating) query['ratings.average'] = { $gte: Number(rating) };
-    
+
     // Filter by tags
     if (tags) {
       // tags can be a string or array - handle both
       const tagArray = Array.isArray(tags) ? tags : [tags];
       query.tags = { $in: tagArray.map(tag => new RegExp(tag as string, 'i')) };
     }
-    
+
     // Filter by featured status
     if (isFeatured !== undefined) {
       // Convert query parameter to boolean
-      const isFeaturedValue = typeof isFeatured === 'string' 
+      const isFeaturedValue = typeof isFeatured === 'string'
         ? isFeatured.toLowerCase() === 'true'
         : Boolean(isFeatured);
       query.isFeatured = isFeaturedValue;
     }
-    
+
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
@@ -230,10 +230,10 @@ export const getStoreById = asyncHandler(async (req: Request, res: Response) => 
       store: store._id,
       isActive: true
     })
-    .populate('category', 'name slug')
-    .limit(20)
-    .sort({ createdAt: -1 })
-    .lean();
+      .populate('category', 'name slug')
+      .limit(20)
+      .sort({ createdAt: -1 })
+      .lean();
 
     console.log('✅ [GET STORE] Found', products.length, 'products');
 
@@ -256,12 +256,12 @@ export const getStoreById = asyncHandler(async (req: Request, res: Response) => 
 // Get store products
 export const getStoreProducts = asyncHandler(async (req: Request, res: Response) => {
   const { storeId } = req.params;
-  const { 
-    category, 
-    search, 
-    sortBy = 'newest', 
-    page = 1, 
-    limit = 20 
+  const {
+    category,
+    search,
+    sortBy = 'newest',
+    page = 1,
+    limit = 20
   } = req.query;
 
   try {
@@ -271,7 +271,7 @@ export const getStoreProducts = asyncHandler(async (req: Request, res: Response)
     }
 
     const query: any = { store: storeId, isActive: true };
-    
+
     if (category) query.category = category;
     if (search) {
       query.$or = [
@@ -379,9 +379,9 @@ export const getNearbyStores = asyncHandler(async (req: Request, res: Response) 
         }
       }
     })
-    .populate('category', 'name slug icon')
-    .limit(Number(limit))
-    .lean();
+      .populate('category', 'name slug icon')
+      .limit(Number(limit))
+      .lean();
 
     // Calculate distances for each store
     const storesWithDistance = stores.map((store: any) => {
@@ -421,20 +421,20 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
       isActive: true,
       isFeatured: true
     })
-    .populate('category', 'name slug icon')
-    .sort({ 'ratings.average': -1, createdAt: -1 })
-    .limit(Number(limit))
-    .lean();
+      .populate('category', 'name slug icon')
+      .sort({ 'ratings.average': -1, createdAt: -1 })
+      .limit(Number(limit))
+      .lean();
 
     // If no featured stores, get all active stores sorted by rating
     if (stores.length === 0) {
       stores = await Store.find({
         isActive: true
       })
-      .populate('category', 'name slug icon')
-      .sort({ 'ratings.average': -1, createdAt: -1 })
-      .limit(Number(limit))
-      .lean();
+        .populate('category', 'name slug icon')
+        .sort({ 'ratings.average': -1, createdAt: -1 })
+        .limit(Number(limit))
+        .lean();
     }
     // If featured stores exist but less than limit, fill with other active stores
     else if (stores.length < Number(limit)) {
@@ -443,10 +443,10 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
         isActive: true,
         _id: { $nin: featuredIds }
       })
-      .populate('category', 'name slug icon')
-      .sort({ 'ratings.average': -1, createdAt: -1 })
-      .limit(Number(limit) - stores.length)
-      .lean();
+        .populate('category', 'name slug icon')
+        .sort({ 'ratings.average': -1, createdAt: -1 })
+        .limit(Number(limit) - stores.length)
+        .lean();
 
       stores = [...stores, ...additionalStores];
     }
@@ -460,14 +460,14 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
 
 // Search stores
 export const searchStores = asyncHandler(async (req: Request, res: Response) => {
-  const { q: searchText, page = 1, limit = 20 } = req.query;
+  const { q: searchText, category, page = 1, limit = 20 } = req.query;
 
   if (!searchText) {
     return sendBadRequest(res, 'Search query is required');
   }
 
   try {
-    const query = {
+    const query: any = {
       isActive: true,
       $or: [
         { name: { $regex: searchText, $options: 'i' } },
@@ -477,6 +477,37 @@ export const searchStores = asyncHandler(async (req: Request, res: Response) => 
         { tags: { $regex: searchText, $options: 'i' } }
       ]
     };
+
+    // Filter by category if provided
+    if (category) {
+      if (typeof category === 'string' && !mongoose.Types.ObjectId.isValid(category)) {
+        // Category is a string slug, find the ObjectId
+        const categoryDoc = await Category.findOne({
+          slug: category.toLowerCase(),
+          isActive: true
+        });
+
+        if (categoryDoc) {
+          query.category = categoryDoc._id;
+        } else {
+          // Category not found, return empty results
+          return sendSuccess(res, {
+            stores: [],
+            pagination: {
+              page: Number(page),
+              limit: Number(limit),
+              total: 0,
+              totalPages: 0,
+              hasNext: false,
+              hasPrev: false
+            }
+          }, 'Store search completed successfully');
+        }
+      } else {
+        // Assume it's an ObjectId
+        query.category = category;
+      }
+    }
 
     const skip = (Number(page) - 1) * Number(limit);
 
@@ -606,7 +637,7 @@ export const getStoreOperatingStatus = asyncHandler(async (req: Request, res: Re
 
   try {
     const store = await Store.findById(storeId).select('operationalInfo name').lean();
-    
+
     if (!store) {
       return sendNotFound(res, 'Store not found');
     }
@@ -617,9 +648,9 @@ export const getStoreOperatingStatus = asyncHandler(async (req: Request, res: Re
     const currentTime = now.toTimeString().slice(0, 5);
 
     const todayHours = (store as any).operationalInfo?.hours?.[currentDay];
-    const isOpen = todayHours && !todayHours.closed && 
-                   currentTime >= todayHours.open && 
-                   currentTime <= todayHours.close;
+    const isOpen = todayHours && !todayHours.closed &&
+      currentTime >= todayHours.open &&
+      currentTime <= todayHours.close;
 
     sendSuccess(res, {
       storeId: store._id,
@@ -638,10 +669,10 @@ export const getStoreOperatingStatus = asyncHandler(async (req: Request, res: Re
 // Search stores by delivery category
 export const searchStoresByCategory = asyncHandler(async (req: Request, res: Response) => {
   const { category } = req.params;
-  const { 
-    location, 
-    radius = 10, 
-    page = 1, 
+  const {
+    location,
+    radius = 10,
+    page = 1,
     limit = 20,
     sortBy = 'rating'
   } = req.query;
@@ -659,7 +690,7 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
     }
 
     console.log('🔍 [SEARCH BY CATEGORY] Final query:', JSON.stringify(query));
-    
+
     // Add location filtering - use a simpler approach for now
     // Note: We'll calculate distances after fetching stores to avoid $nearSphere pagination issues
 
@@ -862,18 +893,18 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
 
 // Search stores by delivery time range
 export const searchStoresByDeliveryTime = asyncHandler(async (req: Request, res: Response) => {
-  const { 
-    minTime = 15, 
-    maxTime = 60, 
-    location, 
-    radius = 10, 
-    page = 1, 
-    limit = 20 
+  const {
+    minTime = 15,
+    maxTime = 60,
+    location,
+    radius = 10,
+    page = 1,
+    limit = 20
   } = req.query;
 
   try {
     const query: any = { isActive: true };
-    
+
     // Add location filtering
     if (location) {
       const [lng, lat] = location.toString().split(',').map(Number);
@@ -898,7 +929,7 @@ export const searchStoresByDeliveryTime = asyncHandler(async (req: Request, res:
     const filteredStores = stores.filter((store: any) => {
       const deliveryTime = store.operationalInfo?.deliveryTime;
       if (!deliveryTime) return false;
-      
+
       // Extract time range from string like "30-45 mins"
       const timeMatch = deliveryTime.match(/(\d+)-(\d+)/);
       if (timeMatch) {
@@ -906,14 +937,14 @@ export const searchStoresByDeliveryTime = asyncHandler(async (req: Request, res:
         const maxDeliveryTime = parseInt(timeMatch[2]);
         return minDeliveryTime >= Number(minTime) && maxDeliveryTime <= Number(maxTime);
       }
-      
+
       // Handle single time like "30 mins"
       const singleTimeMatch = deliveryTime.match(/(\d+)/);
       if (singleTimeMatch) {
         const deliveryTime = parseInt(singleTimeMatch[1]);
         return deliveryTime >= Number(minTime) && deliveryTime <= Number(maxTime);
       }
-      
+
       return false;
     });
 
@@ -957,7 +988,7 @@ export const advancedStoreSearch = asyncHandler(async (req: Request, res: Respon
 
   try {
     const query: any = { isActive: true };
-    
+
     // Text search
     if (search) {
       query.$or = [
@@ -1072,7 +1103,7 @@ export const advancedStoreSearch = asyncHandler(async (req: Request, res: Respon
 
     // Pagination
     const skip = (Number(page) - 1) * Number(limit);
-    
+
     const stores = await Store.find(query)
       .sort(sort)
       .skip(skip)
@@ -1281,7 +1312,7 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
           ],
           isActive: true
         });
-        
+
         if (!categoryDoc) {
           console.log('❌ [TRENDING STORES] Category not found:', category);
           // If category not found, return empty results instead of error
@@ -1297,7 +1328,7 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
           await redisService.set(cacheKey, result, 1800);
           return sendSuccess(res, result, 'Trending stores retrieved successfully');
         }
-        
+
         query.category = categoryDoc._id;
         console.log('✅ [TRENDING STORES] Category converted to ObjectId:', categoryDoc.name, categoryDoc._id);
       } else if (mongoose.Types.ObjectId.isValid(category as string)) {
@@ -1311,17 +1342,17 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
     const matchStage: any = {
       ...query
     };
-    
+
     // Add condition to only include stores with valid ObjectId category references
     // This filters out stores with string category values like "Salon"
     const categoryTypeCheck = { category: { $exists: true, $type: 'objectId' } };
-    
+
     if (matchStage.$and) {
       matchStage.$and.push(categoryTypeCheck);
     } else {
       matchStage.$and = [categoryTypeCheck];
     }
-    
+
     const stores = await Store.aggregate([
       { $match: matchStage },
       {
@@ -1852,10 +1883,10 @@ export const getRecentEarnings = asyncHandler(async (req: Request, res: Response
       'status.current': 'completed',
       category: { $in: ['spending', 'paybill', 'cashback', 'earning'] }
     })
-    .populate('user', 'name firstName lastName avatar profilePicture')
-    .sort({ createdAt: -1 })
-    .limit(limit)
-    .lean();
+      .populate('user', 'name firstName lastName avatar profilePicture')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
 
     // Format the response
     const recentEarnings = recentTransactions.map((tx: any) => {
@@ -1910,10 +1941,10 @@ function calculateDistance(coord1: [number, number], coord2: [number, number]): 
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a =
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const distance = R * c;
 
   return distance;
@@ -2034,7 +2065,7 @@ export const getBNPLStores = asyncHandler(async (req: Request, res: Response) =>
       // Extract BNPL options from payment methods
       const paymentMethods = store.operationalInfo?.paymentMethods || [];
       const bnplOptions: string[] = [];
-      
+
       if (paymentMethods.includes('bnpl') || paymentMethods.includes('pay-later') || paymentMethods.includes('paylater')) {
         bnplOptions.push('3 months', '6 months');
       }
@@ -2096,9 +2127,9 @@ export const getNearbyStoresForHomepage = asyncHandler(async (req: Request, res:
         }
       }
     })
-    .select('name slug logo location operationalInfo offers rewardRules storeVisitConfig isActive')
-    .limit(Number(limit) * 2) // Fetch more to filter closed stores if needed
-    .lean();
+      .select('name slug logo location operationalInfo offers rewardRules storeVisitConfig isActive')
+      .limit(Number(limit) * 2) // Fetch more to filter closed stores if needed
+      .lean();
 
     // Get current date/time info for calculations
     const now = new Date();
@@ -2194,7 +2225,7 @@ export const getNearbyStoresForHomepage = asyncHandler(async (req: Request, res:
       // Check if store is live (has live_availability feature)
       const isLive = store.isActive &&
         (store.storeVisitConfig?.features?.includes('live_availability') ||
-         store.storeVisitConfig?.enabled === true);
+          store.storeVisitConfig?.enabled === true);
 
       return {
         id: store._id.toString(),
@@ -2305,5 +2336,161 @@ export const getNewStores = asyncHandler(async (req: Request, res: Response) => 
   } catch (error) {
     console.error('❌ [GET NEW STORES] Error:', error);
     throw new AppError('Failed to fetch new stores', 500);
+  }
+});
+
+/**
+ * Get stores by tag (cuisine) for Browse by Cuisine feature
+ * GET /api/stores/by-tag/:tag
+ */
+export const getStoresByTag = asyncHandler(async (req: Request, res: Response) => {
+  const { tag } = req.params;
+  const { page = 1, limit = 20, sortBy = 'rating' } = req.query;
+
+  try {
+    console.log(`🔍 [GET STORES BY TAG] Searching for tag: ${tag}`);
+
+    // Build query to find stores with matching tag (case insensitive)
+    const tagLower = tag.toLowerCase();
+    const query: any = {
+      isActive: true,
+      $or: [
+        { tags: { $elemMatch: { $regex: new RegExp(tagLower, 'i') } } },
+        { name: { $regex: new RegExp(tagLower, 'i') } }
+      ]
+    };
+
+    // Sorting options
+    const sortOptions: any = {};
+    switch (sortBy) {
+      case 'rating':
+        sortOptions['ratings.average'] = -1;
+        break;
+      case 'cashback':
+        sortOptions['offers.cashback'] = -1;
+        break;
+      case 'name':
+        sortOptions.name = 1;
+        break;
+      case 'newest':
+        sortOptions.createdAt = -1;
+        break;
+      default:
+        sortOptions['ratings.average'] = -1;
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [stores, total] = await Promise.all([
+      Store.find(query)
+        .populate('category', 'name slug icon')
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      Store.countDocuments(query)
+    ]);
+
+    console.log(`📦 [GET STORES BY TAG] Found ${stores.length} stores for tag: ${tag}`);
+
+    // Format response
+    const formattedStores = stores.map((store: any) => ({
+      _id: store._id,
+      name: store.name,
+      slug: store.slug,
+      logo: store.logo,
+      banner: store.banner,
+      rating: store.ratings?.average || 0,
+      reviewCount: store.ratings?.count || 0,
+      cashback: store.offers?.cashback || 0,
+      tags: store.tags || [],
+      location: store.location?.address || 'Multiple Locations',
+      deliveryTime: store.operationalInfo?.deliveryTime || '30-45 mins',
+      isVerified: store.verification?.isVerified || store.isVerified || false,
+      category: store.category
+    }));
+
+    const totalPages = Math.ceil(total / Number(limit));
+
+    sendSuccess(res, {
+      stores: formattedStores,
+      tag: tag,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        totalPages,
+        hasNext: Number(page) < totalPages,
+        hasPrev: Number(page) > 1
+      }
+    }, `Found ${total} stores for tag: ${tag}`);
+
+  } catch (error) {
+    console.error('❌ [GET STORES BY TAG] Error:', error);
+    throw new AppError('Failed to get stores by tag', 500);
+  }
+});
+
+/**
+ * Get cuisine counts for Browse by Cuisine section
+ * GET /api/stores/cuisine-counts
+ * Returns count of stores for each common cuisine tag
+ */
+export const getCuisineCounts = asyncHandler(async (req: Request, res: Response) => {
+  try {
+    console.log('🔍 [GET CUISINE COUNTS] Aggregating cuisine counts...');
+
+    // Define the cuisines we want to count
+    const cuisines = [
+      { id: 'pizza', name: 'Pizza', icon: '🍕' },
+      { id: 'biryani', name: 'Biryani', icon: '🍗' },
+      { id: 'burgers', name: 'Burgers', icon: '🍔' },
+      { id: 'chinese', name: 'Chinese', icon: '🥡' },
+      { id: 'desserts', name: 'Desserts', icon: '🍰' },
+      { id: 'healthy', name: 'Healthy', icon: '🥗' },
+      { id: 'south-indian', name: 'South Indian', icon: '🍛' },
+      { id: 'north-indian', name: 'North Indian', icon: '🍛' },
+      { id: 'cafe', name: 'Café', icon: '☕' },
+      { id: 'street-food', name: 'Street Food', icon: '🌮' },
+      { id: 'ice-cream', name: 'Ice Cream', icon: '🍦' },
+      { id: 'thali', name: 'Thali', icon: '🍱' },
+    ];
+
+    // Count stores for each cuisine
+    const cuisineCounts = await Promise.all(
+      cuisines.map(async (cuisine) => {
+        const count = await Store.countDocuments({
+          isActive: true,
+          $or: [
+            { tags: { $elemMatch: { $regex: new RegExp(cuisine.id, 'i') } } },
+            { name: { $regex: new RegExp(cuisine.id, 'i') } }
+          ]
+        });
+
+        return {
+          id: cuisine.id,
+          name: cuisine.name,
+          icon: cuisine.icon,
+          count: count,
+          displayCount: count > 0 ? `${count}+ places` : '0 places'
+        };
+      })
+    );
+
+    // Sort by count (most popular first) and filter out zeros
+    const sortedCounts = cuisineCounts
+      .filter(c => c.count > 0)
+      .sort((a, b) => b.count - a.count);
+
+    console.log(`✅ [GET CUISINE COUNTS] Found ${sortedCounts.length} cuisines with stores`);
+
+    sendSuccess(res, {
+      cuisines: sortedCounts,
+      total: sortedCounts.reduce((sum, c) => sum + c.count, 0)
+    }, 'Cuisine counts retrieved successfully');
+
+  } catch (error) {
+    console.error('❌ [GET CUISINE COUNTS] Error:', error);
+    throw new AppError('Failed to get cuisine counts', 500);
   }
 });

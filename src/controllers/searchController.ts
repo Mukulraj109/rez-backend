@@ -56,9 +56,9 @@ const calculateDistance = (
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
@@ -142,6 +142,18 @@ const searchProductsGroupedInternal = async (
   userLocation?: { latitude: number; longitude: number }
 ): Promise<any> => {
   try {
+    // First, find stores that match the query (by name or tags)
+    // This allows searching for "Biryani" and getting products from "Paradise Biryani" store
+    const matchingStores = await Store.find({
+      isActive: true,
+      $or: [
+        { name: { $regex: query, $options: 'i' } },
+        { tags: { $regex: query, $options: 'i' } }
+      ]
+    }).select('_id');
+
+    const matchingStoreIds = matchingStores.map(s => s._id);
+
     const searchQuery: any = {
       isActive: true,
       'inventory.isAvailable': true,
@@ -152,6 +164,11 @@ const searchProductsGroupedInternal = async (
         { tags: { $regex: query, $options: 'i' } }
       ]
     };
+
+    // If we found matching stores, include their products in the search
+    if (matchingStoreIds.length > 0) {
+      searchQuery.$or.push({ store: { $in: matchingStoreIds } });
+    }
 
     // Fetch products with full store details
     const products = await Product.find(searchQuery)
@@ -200,46 +217,46 @@ const searchProductsGroupedInternal = async (
         const currentPrice = product.pricing?.selling || product.pricing?.original || product.pricing?.mrp || 0;
         const originalPrice = product.pricing?.original || product.pricing?.mrp || currentPrice;
         const savings = originalPrice > currentPrice ? originalPrice - currentPrice : 0;
-        
+
         // Skip if price is 0 or invalid
         if (!currentPrice || currentPrice <= 0) {
           console.warn(`[SEARCH] Product ${product._id} has invalid price: ${currentPrice}`);
           continue;
         }
-        
+
         // Calculate cashback - check product cashback first, then store reward rules, then default
         let cashbackPercentage = 0;
-        
+
         // Check if product has active cashback
-        if (product.cashback?.percentage && 
-            product.cashback.percentage > 0 &&
-            (product.cashback.isActive !== false) && // Active by default unless explicitly false
-            (!product.cashback.validUntil || new Date(product.cashback.validUntil) > new Date())) {
+        if (product.cashback?.percentage &&
+          product.cashback.percentage > 0 &&
+          (product.cashback.isActive !== false) && // Active by default unless explicitly false
+          (!product.cashback.validUntil || new Date(product.cashback.validUntil) > new Date())) {
           cashbackPercentage = product.cashback.percentage;
         }
-        
+
         // Fallback to store reward rules if product doesn't have cashback
         if (cashbackPercentage === 0 && store.rewardRules?.baseCashbackPercent) {
           cashbackPercentage = store.rewardRules.baseCashbackPercent;
         }
-        
+
         // Default to 5% if still no cashback (matching Product model's calculateCashback method)
         if (cashbackPercentage === 0) {
           cashbackPercentage = 5;
         }
-        
+
         // Calculate cashback amount
         let cashbackAmount = Math.round((currentPrice * cashbackPercentage) / 100);
-        
+
         // Apply max amount limit if specified in product cashback
         if (product.cashback?.maxAmount && cashbackAmount > product.cashback.maxAmount) {
           cashbackAmount = product.cashback.maxAmount;
         }
-        
+
         // Calculate coins (5% of product price - rezcoins earned on every purchase)
         // Ensure minimum 1 coin if price > 0
         const coins = currentPrice > 0 ? Math.max(1, Math.round((currentPrice * 5) / 100)) : 0;
-        
+
         // Debug logging for first product in first group
         if (groupedProducts.length === 0 && sellers.length === 0) {
           console.log(`[SEARCH] First product cashback calculation:`, {
@@ -282,11 +299,11 @@ const searchProductsGroupedInternal = async (
 
         // Get delivery info
         const deliveryInfo = product.deliveryInfo || store.operationalInfo;
-        const deliveryTime = deliveryInfo?.estimatedDays || 
-                           deliveryInfo?.deliveryTime || 
-                           deliveryInfo?.standardDeliveryTime || 
-                           '2-3 days';
-        
+        const deliveryTime = deliveryInfo?.estimatedDays ||
+          deliveryInfo?.deliveryTime ||
+          deliveryInfo?.standardDeliveryTime ||
+          '2-3 days';
+
         let deliveryType: 'express' | 'standard' | 'pickup' = 'standard';
         if (deliveryInfo?.expressAvailable || deliveryTime.includes('min')) {
           deliveryType = 'express';
@@ -306,18 +323,18 @@ const searchProductsGroupedInternal = async (
 
         // Determine badges
         const badges: string[] = [];
-        
+
         // Hot Deal: Show if there's any discount (savings > 0) or if price is competitive
         // Lowered threshold to 5% to show on more cards
         if (savings > 0 && savings > currentPrice * 0.05) {
           badges.push('Hot Deal');
         }
-        
+
         // Limited Stock: Show when stock is low
         if (availability === 'low_stock') {
           badges.push('Limited Stock');
         }
-        
+
         // Lock Available: Show on ALL cards - all products have cashback/rezcoins available
         // This badge indicates cashback/rezcoins are available on every purchase
         badges.push('Lock Available');
@@ -354,7 +371,7 @@ const searchProductsGroupedInternal = async (
 
         sellers.push(sellerOption);
         totalSellers++;
-        
+
         if (currentPrice < minPrice) minPrice = currentPrice;
         if (cashbackAmount > maxCashback) maxCashback = cashbackAmount;
       }
@@ -363,15 +380,15 @@ const searchProductsGroupedInternal = async (
         // Sort sellers by best value (price, cashback, rating, distance)
         sellers.sort((a, b) => {
           // Best value score = lower price + higher cashback + higher rating + closer distance
-          const scoreA = 
-            (a.price.current * 0.4) - 
-            (a.cashback.amount * 0.3) - 
-            (a.rating * 100 * 0.2) + 
+          const scoreA =
+            (a.price.current * 0.4) -
+            (a.cashback.amount * 0.3) -
+            (a.rating * 100 * 0.2) +
             ((a.distance || 999) * 0.1);
-          const scoreB = 
-            (b.price.current * 0.4) - 
-            (b.cashback.amount * 0.3) - 
-            (b.rating * 100 * 0.2) + 
+          const scoreB =
+            (b.price.current * 0.4) -
+            (b.cashback.amount * 0.3) -
+            (b.rating * 100 * 0.2) +
             ((b.distance || 999) * 0.1);
           return scoreA - scoreB;
         });
@@ -388,7 +405,7 @@ const searchProductsGroupedInternal = async (
     }
 
     // Calculate summary
-    const prices = groupedProducts.flatMap(gp => 
+    const prices = groupedProducts.flatMap(gp =>
       gp.sellers.map((s: any) => s.price.current)
     );
     const priceRange = {
@@ -751,7 +768,7 @@ export const searchProductsGrouped = asyncHandler(async (req: Request, res: Resp
 
     const executionTime = Date.now() - startTime;
     console.log(`✅ [GROUPED SEARCH] Completed in ${executionTime}ms. Products: ${result.total}, Sellers: ${result.summary.sellerCount}`);
-    
+
     // Debug: Log first seller's cashback data
     if (result.groupedProducts && result.groupedProducts.length > 0) {
       const firstProduct = result.groupedProducts[0];
@@ -933,7 +950,7 @@ export const getPopularSearches = asyncHandler(async (req: Request, res: Respons
       },
       { $sort: { count: -1, lastSearched: -1 } },
       { $limit: limitNum }
-    ]).then(results => 
+    ]).then(results =>
       results.map(item => ({
         query: item._id,
         count: item.count,
@@ -1258,11 +1275,11 @@ export const getAutocomplete = asyncHandler(async (req: Request, res: Response) 
           { description: searchRegex }
         ]
       })
-      .select('_id name title price pricing image images brand store')
-      .populate('store', 'name')
-      .sort({ 'analytics.views': -1, 'analytics.purchases': -1 })
-      .limit(5)
-      .lean(),
+        .select('_id name title price pricing image images brand store')
+        .populate('store', 'name')
+        .sort({ 'analytics.views': -1, 'analytics.purchases': -1 })
+        .limit(5)
+        .lean(),
 
       Store.find({
         isActive: true,
@@ -1271,10 +1288,10 @@ export const getAutocomplete = asyncHandler(async (req: Request, res: Response) 
           { description: searchRegex }
         ]
       })
-      .select('_id name logo')
-      .sort({ 'ratings.average': -1, 'ratings.count': -1 })
-      .limit(3)
-      .lean(),
+        .select('_id name logo')
+        .sort({ 'ratings.average': -1, 'ratings.count': -1 })
+        .limit(3)
+        .lean(),
 
       (async () => {
         try {
@@ -1286,10 +1303,10 @@ export const getAutocomplete = asyncHandler(async (req: Request, res: Response) 
               { description: searchRegex }
             ]
           })
-          .select('_id name')
-          .sort({ productCount: -1 })
-          .limit(3)
-          .lean();
+            .select('_id name')
+            .sort({ productCount: -1 })
+            .limit(3)
+            .lean();
         } catch (error) {
           console.warn('⚠️ [AUTOCOMPLETE] Category search failed:', error);
           return [];

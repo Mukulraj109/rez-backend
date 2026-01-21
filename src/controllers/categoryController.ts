@@ -397,7 +397,8 @@ export const getRecentOrders = asyncHandler(async (req: Request, res: Response) 
       {
         $project: {
           _id: 1,
-          userName: { $arrayElemAt: ['$userInfo.name', 0] },
+          userFirstName: { $arrayElemAt: ['$userInfo.profile.firstName', 0] },
+          userLastName: { $arrayElemAt: ['$userInfo.profile.lastName', 0] },
           storeName: { $arrayElemAt: ['$storeInfo.name', 0] },
           createdAt: 1
         }
@@ -412,9 +413,14 @@ export const getRecentOrders = asyncHandler(async (req: Request, res: Response) 
       else if (minutesAgo < 1440) timeAgo = `${Math.floor(minutesAgo / 60)}h ago`;
       else timeAgo = `${Math.floor(minutesAgo / 1440)}d ago`;
 
+      // Construct display name from firstName and lastName
+      const firstName = order.userFirstName || '';
+      const lastInitial = order.userLastName ? order.userLastName[0] : '';
+      const userName = firstName ? (lastInitial ? `${firstName} ${lastInitial}` : firstName) : 'Someone';
+
       return {
         id: order._id,
-        userName: order.userName?.split(' ')[0] || 'Someone',
+        userName,
         storeName: order.storeName || 'a store',
         timeAgo
       };

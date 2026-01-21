@@ -24,7 +24,9 @@ import {
   getTopCashbackStores,
   getBNPLStores,
   getNearbyStoresForHomepage,
-  getNewStores
+  getNewStores,
+  getStoresByTag,
+  getCuisineCounts
 } from '../controllers/storeController';
 import { getStoreReviews } from '../controllers/reviewController';
 import {
@@ -41,7 +43,7 @@ import { Joi } from '../middleware/validation';
 const router = Router();
 
 // Get all stores with filtering
-router.get('/', 
+router.get('/',
   // generalLimiter, // Disabled for development
   optionalAuth,
   validateQuery(Joi.object({
@@ -67,11 +69,12 @@ router.get('/',
 );
 
 // Search stores
-router.get('/search', 
+router.get('/search',
   // searchLimiter, // Disabled for development
   optionalAuth,
   validateQuery(Joi.object({
     q: Joi.string().trim().min(2).max(100).required(),
+    category: Joi.string().trim().max(100),
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),
@@ -79,7 +82,7 @@ router.get('/search',
 );
 
 // Advanced store search with filters
-router.get('/search/advanced', 
+router.get('/search/advanced',
   // searchLimiter, // Disabled for development
   optionalAuth,
   validateQuery(Joi.object({
@@ -100,7 +103,7 @@ router.get('/search/advanced',
 );
 
 // Get nearby stores
-router.get('/nearby', 
+router.get('/nearby',
   // generalLimiter, // Disabled for development
   optionalAuth,
   validateQuery(Joi.object({
@@ -219,6 +222,26 @@ router.get('/by-category-slug/:slug',
   getStoresByCategorySlug
 );
 
+// Get stores by tag (for Browse by Cuisine feature)
+router.get('/by-tag/:tag',
+  optionalAuth,
+  validateParams(Joi.object({
+    tag: Joi.string().required()
+  })),
+  validateQuery(Joi.object({
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(50).default(20),
+    sortBy: Joi.string().valid('rating', 'cashback', 'name', 'newest').default('rating')
+  })),
+  getStoresByTag
+);
+
+// Get cuisine counts (for Browse by Cuisine place counts)
+router.get('/cuisine-counts',
+  optionalAuth,
+  getCuisineCounts
+);
+
 // Get single store by ID or slug
 router.get('/:storeId',
   // generalLimiter, // Disabled for development
@@ -230,7 +253,7 @@ router.get('/:storeId',
 );
 
 // Get store products
-router.get('/:storeId/products', 
+router.get('/:storeId/products',
   // generalLimiter, // Disabled for development
   optionalAuth,
   validateParams(Joi.object({
@@ -247,7 +270,7 @@ router.get('/:storeId/products',
 );
 
 // Get store operating status
-router.get('/:storeId/status', 
+router.get('/:storeId/status',
   // generalLimiter, // Disabled for development
   optionalAuth,
   validateParams(Joi.object({
@@ -273,14 +296,14 @@ router.get('/:storeId/reviews',
 );
 
 // Get available store categories
-router.get('/categories/list', 
+router.get('/categories/list',
   // generalLimiter, // Disabled for development
   optionalAuth,
   getStoreCategories
 );
 
 // Search stores by delivery category
-router.get('/search-by-category/:category', 
+router.get('/search-by-category/:category',
   // generalLimiter, // Disabled for development
   optionalAuth,
   validateParams(Joi.object({

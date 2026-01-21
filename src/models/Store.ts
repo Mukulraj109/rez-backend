@@ -247,6 +247,7 @@ export interface IStore extends Document {
   // Category page metadata
   is60MinDelivery?: boolean;
   hasStorePickup?: boolean;
+  priceForTwo?: number;  // Average cost for two people
 
   // Admin Control Fields
   adminApproved?: boolean;
@@ -836,6 +837,11 @@ const StoreSchema = new Schema<IStore>({
     type: Boolean,
     default: false,
     index: true
+  },
+  priceForTwo: {
+    type: Number,
+    min: 0,
+    default: 350  // Default average price for two
   },
 
   // Admin Control Fields

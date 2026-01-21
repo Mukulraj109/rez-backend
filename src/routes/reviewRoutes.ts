@@ -6,7 +6,8 @@ import {
   deleteReview,
   markReviewHelpful,
   getUserReviews,
-  canUserReviewStore
+  canUserReviewStore,
+  moderateReview
 } from '../controllers/reviewController';
 import { uploadReviewImage as uploadReviewImageController } from '../controllers/uploadController';
 import { uploadReviewImage as uploadReviewImageMiddleware } from '../middleware/upload';
@@ -18,7 +19,7 @@ import { Joi } from '../middleware/validation';
 const router = Router();
 
 // Get reviews for a store
-router.get('/store/:storeId', 
+router.get('/store/:storeId',
   // generalLimiter,, // Disabled for development
   validateParams(Joi.object({
     storeId: commonSchemas.objectId()
@@ -33,7 +34,7 @@ router.get('/store/:storeId',
 );
 
 // Check if user can review a store
-router.get('/store/:storeId/can-review', 
+router.get('/store/:storeId/can-review',
   // generalLimiter,, // Disabled for development
   requireAuth,
   validateParams(Joi.object({
@@ -43,7 +44,7 @@ router.get('/store/:storeId/can-review',
 );
 
 // Create a new review
-router.post('/store/:storeId', 
+router.post('/store/:storeId',
   // reviewLimiter,, // Disabled for development
   requireAuth,
   validateParams(Joi.object({
@@ -58,8 +59,21 @@ router.post('/store/:storeId',
   createReview
 );
 
+// Moderate a review (Merchant/Admin)
+router.put('/:reviewId/moderate',
+  requireAuth, // Add role check middleware here in production
+  validateParams(Joi.object({
+    reviewId: commonSchemas.objectId()
+  })),
+  validateBody(Joi.object({
+    status: Joi.string().valid('approved', 'rejected').required(),
+    reason: Joi.string().trim().max(500)
+  })),
+  moderateReview
+);
+
 // Update a review
-router.put('/:reviewId', 
+router.put('/:reviewId',
   // reviewLimiter,, // Disabled for development
   requireAuth,
   validateParams(Joi.object({
@@ -75,7 +89,7 @@ router.put('/:reviewId',
 );
 
 // Delete a review
-router.delete('/:reviewId', 
+router.delete('/:reviewId',
   // reviewLimiter,, // Disabled for development
   requireAuth,
   validateParams(Joi.object({
@@ -85,7 +99,7 @@ router.delete('/:reviewId',
 );
 
 // Mark review as helpful
-router.post('/:reviewId/helpful', 
+router.post('/:reviewId/helpful',
   // reviewLimiter,, // Disabled for development
   requireAuth,
   validateParams(Joi.object({
@@ -95,7 +109,7 @@ router.post('/:reviewId/helpful',
 );
 
 // Get user's reviews
-router.get('/user/my-reviews', 
+router.get('/user/my-reviews',
   // generalLimiter,, // Disabled for development
   requireAuth,
   validateQuery(Joi.object({

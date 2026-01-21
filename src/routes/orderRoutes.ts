@@ -49,25 +49,26 @@ router.get('/reorder/frequently-ordered',
 );
 
 // Get user's orders
-router.get('/', 
+router.get('/',
   // generalLimiter,, // Disabled for development
   validateQuery(Joi.object({
     status: Joi.string().valid('pending', 'confirmed', 'preparing', 'shipped', 'delivered', 'cancelled'),
     page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(50).default(20)
+    limit: Joi.number().integer().min(1).max(50).default(20),
+    sort: Joi.string().allow('').optional()
   })),
   getUserOrders
 );
 
 // Create new order
-router.post('/', 
+router.post('/',
   // generalLimiter,, // Disabled for development
   validate(orderSchemas.createOrder),
   createOrder
 );
 
 // Get single order by ID
-router.get('/:orderId', 
+router.get('/:orderId',
   // generalLimiter,, // Disabled for development
   validateParams(Joi.object({
     orderId: commonSchemas.objectId().required()
@@ -76,7 +77,7 @@ router.get('/:orderId',
 );
 
 // Cancel order
-router.patch('/:orderId/cancel', 
+router.patch('/:orderId/cancel',
   // generalLimiter,, // Disabled for development
   validateParams(Joi.object({
     orderId: commonSchemas.objectId().required()
@@ -88,7 +89,7 @@ router.patch('/:orderId/cancel',
 );
 
 // Get order tracking
-router.get('/:orderId/tracking', 
+router.get('/:orderId/tracking',
   // generalLimiter,, // Disabled for development
   validateParams(Joi.object({
     orderId: commonSchemas.objectId().required()
@@ -181,7 +182,7 @@ router.get('/refunds/:refundId',
 
 // Admin/Store Owner Routes
 // Update order status
-router.patch('/:orderId/status', 
+router.patch('/:orderId/status',
   // generalLimiter,, // Disabled for development
   requireAdmin,
   validateParams(Joi.object({
