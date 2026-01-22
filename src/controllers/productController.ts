@@ -16,6 +16,7 @@ import { CacheTTL } from '../config/redis';
 import { CacheKeys, generateQueryCacheKey, withCache } from '../utils/cacheHelper';
 import { logProductSearch } from '../services/searchHistoryService';
 import { modeService, ModeId } from '../services/modeService';
+import { regionService, isValidRegion, RegionId, getRegionConfig } from '../services/regionService';
 
 // Get all products with filtering and pagination
 export const getProducts = asyncHandler(async (req: Request, res: Response) => {
@@ -33,7 +34,8 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
     limit = 20,
     excludeProducts,
     diversityMode = 'none',
-    mode // New: mode filter for 4-mode system
+    mode, // New: mode filter for 4-mode system
+    region // Region filter parameter
   } = req.query;
 
   // Parse and validate mode
@@ -75,6 +77,48 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
 
     if (modeStoreIds.length > 0) {
       query.store = store ? store : { $in: modeStoreIds };
+    }
+  }
+
+  // Apply region-based store filter
+  const regionHeader = req.headers['x-rez-region'] as string;
+  const effectiveRegion = (region as string) || regionHeader;
+
+  if (effectiveRegion && isValidRegion(effectiveRegion)) {
+    // Get stores in the region
+    const regionStoreFilter = regionService.getStoreFilter(effectiveRegion as RegionId);
+    const regionStores = await Store.find({
+      ...regionStoreFilter,
+      isActive: true
+    }).select('_id').lean();
+
+    const regionStoreIds = regionStores.map(s => s._id);
+    console.log('🌍 [GET PRODUCTS] Region filter applied:', effectiveRegion, '- Found', regionStoreIds.length, 'stores');
+
+    if (regionStoreIds.length > 0) {
+      // Merge with existing store filter if present
+      if (query.store) {
+        if (query.store.$in) {
+          // Intersect with mode store filter
+          query.store.$in = query.store.$in.filter((id: any) =>
+            regionStoreIds.some((rid: any) => rid.toString() === id.toString())
+          );
+        } else {
+          // Specific store requested, check if it's in the region
+          const storeInRegion = regionStoreIds.some((id: any) =>
+            id.toString() === query.store.toString()
+          );
+          if (!storeInRegion) {
+            // Store not in region - return empty result
+            return sendPaginated(res, [], Number(page), Number(limit), 0);
+          }
+        }
+      } else {
+        query.store = { $in: regionStoreIds };
+      }
+    } else {
+      // No stores in region - return empty result
+      return sendPaginated(res, [], Number(page), Number(limit), 0);
     }
   }
 
@@ -660,36 +704,43 @@ export const getFeaturedProducts = asyncHandler(async (req: Request, res: Respon
   const { limit = 10 } = req.query;
 
   try {
-    console.log('🔍 [FEATURED PRODUCTS] Starting query with limit:', limit);
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
 
-    // Try to get from cache first
-    const cacheKey = CacheKeys.productFeatured(Number(limit));
+    console.log('🔍 [FEATURED PRODUCTS] Starting query with limit:', limit, 'region:', region || 'none');
+
+    // Try to get from cache first (cache key includes region)
+    const cacheKey = `${CacheKeys.productFeatured(Number(limit))}:${region || 'all'}`;
     const cachedProducts = await redisService.get<any[]>(cacheKey);
 
     if (cachedProducts) {
-      console.log('✅ [FEATURED PRODUCTS] Returning from cache');
+      console.log('✅ [FEATURED PRODUCTS] Returning from cache for region:', region || 'all');
       return sendSuccess(res, cachedProducts, 'Featured products retrieved successfully');
     }
 
-    // First, let's check what products exist
-    const totalProducts = await Product.countDocuments();
-    console.log('📊 [FEATURED PRODUCTS] Total products in database:', totalProducts);
+    // Build base query with region filter
+    const baseQuery: Record<string, any> = {
+      isActive: true,
+      'inventory.isAvailable': true
+    };
 
-    const featuredCount = await Product.countDocuments({ isFeatured: true });
-    console.log('📊 [FEATURED PRODUCTS] Products with isFeatured=true:', featuredCount);
-
-    const activeCount = await Product.countDocuments({ isActive: true });
-    console.log('📊 [FEATURED PRODUCTS] Products with isActive=true:', activeCount);
-
-    const inventoryCount = await Product.countDocuments({ 'inventory.isAvailable': true });
-    console.log('📊 [FEATURED PRODUCTS] Products with inventory.isAvailable=true:', inventoryCount);
+    // Add region filter by finding stores in region first
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      baseQuery.store = { $in: storeIds };
+      console.log('📊 [FEATURED PRODUCTS] Found', storeIds.length, 'stores in region', region);
+    }
 
     // Try the full query for featured products first
     console.log('🔍 [FEATURED PRODUCTS] Executing main query...');
     let products = await Product.find({
-      isActive: true,
-      isFeatured: true,
-      'inventory.isAvailable': true
+      ...baseQuery,
+      isFeatured: true
     })
       .populate('category', 'name slug')
       .populate('store', 'name slug logo location')
@@ -702,10 +753,7 @@ export const getFeaturedProducts = asyncHandler(async (req: Request, res: Respon
     // Fallback: If no featured products, get any active products with good ratings
     if (products.length === 0) {
       console.log('⚠️ [FEATURED PRODUCTS] No featured products found, falling back to top-rated active products');
-      products = await Product.find({
-        isActive: true,
-        'inventory.isAvailable': true
-      })
+      products = await Product.find(baseQuery)
         .populate('category', 'name slug')
         .populate('store', 'name slug logo location')
         .sort({ 'ratings.average': -1, 'ratings.count': -1, createdAt: -1 })
@@ -714,12 +762,12 @@ export const getFeaturedProducts = asyncHandler(async (req: Request, res: Respon
       console.log('✅ [FEATURED PRODUCTS] Fallback query found:', products.length, 'products');
     }
 
-    // Second fallback: If still no products, get any active products
+    // Second fallback: If still no products in region, get any active products (still respecting region)
     if (products.length === 0) {
       console.log('⚠️ [FEATURED PRODUCTS] Still no products, trying without inventory filter');
-      products = await Product.find({
-        isActive: true
-      })
+      const fallbackQuery = { ...baseQuery };
+      delete fallbackQuery['inventory.isAvailable'];
+      products = await Product.find(fallbackQuery)
         .populate('category', 'name slug')
         .populate('store', 'name slug logo location')
         .sort({ createdAt: -1 })
@@ -786,33 +834,41 @@ export const getNewArrivals = asyncHandler(async (req: Request, res: Response) =
   const { limit = 10 } = req.query;
 
   try {
-    console.log('🔍 [NEW ARRIVALS] Starting query with limit:', limit);
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
 
-    // Try to get from cache first
-    const cacheKey = CacheKeys.productNewArrivals(Number(limit));
+    console.log('🔍 [NEW ARRIVALS] Starting query with limit:', limit, 'region:', region || 'none');
+
+    // Try to get from cache first (cache key includes region)
+    const cacheKey = `${CacheKeys.productNewArrivals(Number(limit))}:${region || 'all'}`;
     const cachedProducts = await redisService.get<any[]>(cacheKey);
 
     if (cachedProducts) {
-      console.log('✅ [NEW ARRIVALS] Returning from cache');
+      console.log('✅ [NEW ARRIVALS] Returning from cache for region:', region || 'all');
       return sendSuccess(res, cachedProducts, 'New arrival products retrieved successfully');
     }
 
-    // First, let's check what products exist
-    const totalProducts = await Product.countDocuments();
-    console.log('📊 [NEW ARRIVALS] Total products in database:', totalProducts);
-
-    const activeCount = await Product.countDocuments({ isActive: true });
-    console.log('📊 [NEW ARRIVALS] Products with isActive=true:', activeCount);
-
-    const inventoryCount = await Product.countDocuments({ 'inventory.isAvailable': true });
-    console.log('📊 [NEW ARRIVALS] Products with inventory.isAvailable=true:', inventoryCount);
-
-    // Try the query
-    console.log('🔍 [NEW ARRIVALS] Executing main query...');
-    const products = await Product.find({
+    // Build query with region filter
+    const query: Record<string, any> = {
       isActive: true,
       'inventory.isAvailable': true
-    })
+    };
+
+    // Add region filter by finding stores in region first
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      query.store = { $in: storeIds };
+      console.log('📊 [NEW ARRIVALS] Found', storeIds.length, 'stores in region', region);
+    }
+
+    // Execute query
+    console.log('🔍 [NEW ARRIVALS] Executing main query...');
+    const products = await Product.find(query)
       .populate('category', 'name slug')
       .populate('store', 'name slug logo location')
       .sort({ createdAt: -1 }) // Most recent first

@@ -7,6 +7,14 @@ export interface ITournamentParticipant {
   rank?: number;
   joinedAt: Date;
   lastPlayedAt?: Date;
+  prizeAwarded?: boolean;
+  prizeDetails?: {
+    rank: number;
+    coins: number;
+    badge?: string;
+    exclusiveDeal?: string;
+    awardedAt: Date;
+  };
 }
 
 export interface ITournament extends Document {
@@ -26,6 +34,7 @@ export interface ITournament extends Document {
     coins: number;
     badge?: string;
     description: string;
+    exclusiveDeal?: string;
   }>;
   rules: string[];
   totalPrizePool: number;
@@ -54,7 +63,18 @@ const TournamentParticipantSchema = new Schema({
     type: Date,
     default: Date.now
   },
-  lastPlayedAt: Date
+  lastPlayedAt: Date,
+  prizeAwarded: {
+    type: Boolean,
+    default: false
+  },
+  prizeDetails: {
+    rank: Number,
+    coins: Number,
+    badge: String,
+    exclusiveDeal: String,
+    awardedAt: Date
+  }
 });
 
 const TournamentSchema: Schema = new Schema(
@@ -121,7 +141,8 @@ const TournamentSchema: Schema = new Schema(
       description: {
         type: String,
         required: true
-      }
+      },
+      exclusiveDeal: String
     }],
     rules: [{
       type: String

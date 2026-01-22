@@ -320,7 +320,7 @@ const ProductSchema = new Schema<IProduct>({
     currency: {
       type: String,
       default: 'INR',
-      enum: ['INR', 'USD', 'EUR']
+      enum: ['INR', 'USD', 'EUR', 'AED', 'CNY']
     },
     bulk: [{
       minQuantity: { type: Number, min: 1 },

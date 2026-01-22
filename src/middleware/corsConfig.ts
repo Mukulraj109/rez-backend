@@ -98,7 +98,8 @@ export const strictCorsOptions: CorsOptions = {
     'X-Requested-With',
     'X-API-Key',
     'Accept',
-    'Origin'
+    'Origin',
+    'X-Rez-Region'
   ],
   exposedHeaders: [
     'X-Total-Count',
@@ -184,7 +185,7 @@ export const dynamicCors = (customOrigins?: string[]) => {
       }
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Rez-Region'],
     credentials: true,
     maxAge: 86400
   });

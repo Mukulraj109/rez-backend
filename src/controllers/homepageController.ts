@@ -3,6 +3,7 @@ import { getHomepageData } from '../services/homepageService';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess, sendInternalError } from '../utils/response';
 import { modeService, ModeId } from '../services/modeService';
+import { isValidRegion, RegionId, DEFAULT_REGION } from '../services/regionService';
 
 /**
  * Homepage Controller
@@ -23,8 +24,21 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
 
   try {
     // Parse query parameters
-    const { sections, limit, location, mode } = req.query;
+    const { sections, limit, location, mode, region: regionQuery } = req.query;
     const userId = (req as any).userId; // From optionalAuth middleware
+
+    // Get region from X-Rez-Region header or query param
+    const regionHeader = req.headers['x-rez-region'] as string;
+    let region: RegionId | undefined;
+
+    // Priority: header > query param > user preference
+    if (regionHeader && isValidRegion(regionHeader)) {
+      region = regionHeader as RegionId;
+    } else if (regionQuery && typeof regionQuery === 'string' && isValidRegion(regionQuery)) {
+      region = regionQuery as RegionId;
+    } else if ((req as any).user?.preferences?.region && isValidRegion((req as any).user.preferences.region)) {
+      region = (req as any).user.preferences.region;
+    }
 
     // Parse and validate mode
     const activeMode: ModeId = modeService.getModeFromRequest(
@@ -56,18 +70,23 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
     console.log('🏠 [Homepage Controller] Request params:', {
       userId: userId || 'anonymous',
       mode: activeMode,
+      region: region || 'none',
+      regionHeader: regionHeader || 'NOT_RECEIVED',
+      regionQuery: regionQuery || 'none',
       sections: requestedSections?.join(', ') || 'all',
       limit: limitNumber || 'default',
-      location: locationCoords ? `${locationCoords.lat},${locationCoords.lng}` : 'none'
+      location: locationCoords ? `${locationCoords.lat},${locationCoords.lng}` : 'none',
+      allHeaders: JSON.stringify(req.headers)
     });
 
-    // Fetch homepage data with mode filtering
+    // Fetch homepage data with mode and region filtering
     const result = await getHomepageData({
       userId,
       sections: requestedSections,
       limit: limitNumber,
       location: locationCoords,
-      mode: activeMode, // Pass mode to service
+      mode: activeMode,
+      region, // Pass region to service for filtering
     });
 
     const duration = Date.now() - startTime;
@@ -82,12 +101,13 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
     console.log(`   Sections returned: ${Object.keys(result.data).length}`);
     console.log(`   Total items: ${Object.values(result.data).reduce((sum: number, arr: any) => sum + (Array.isArray(arr) ? arr.length : 0), 0)}`);
 
-    // Send response with mode info
+    // Send response with mode and region info
     sendSuccess(res, {
       ...result.data,
       _metadata: {
         ...result.metadata,
         mode: activeMode,
+        region: region || null,
       },
       _errors: result.errors
     }, 'Homepage data retrieved successfully');

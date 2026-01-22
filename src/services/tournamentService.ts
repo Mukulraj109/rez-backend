@@ -1,4 +1,5 @@
 import Tournament, { ITournament } from '../models/Tournament';
+import { Wallet } from '../models/Wallet';
 import mongoose from 'mongoose';
 
 class TournamentService {
@@ -283,10 +284,82 @@ class TournamentService {
       tournament.status = 'completed';
       await tournament.save();
 
-      // TODO: Distribute prizes to winners
+      // Distribute prizes to winners
+      await this.distributeTournamentPrizes(tournament);
     }
 
     return tournaments.length;
+  }
+
+  /**
+   * Distribute prizes to tournament winners
+   */
+  private async distributeTournamentPrizes(tournament: ITournament): Promise<void> {
+    console.log(`🏆 [TOURNAMENT] Distributing prizes for tournament: ${tournament.name}`);
+
+    const sortedParticipants = [...tournament.participants].sort((a, b) => b.score - a.score);
+    const prizes = tournament.prizes || [];
+
+    for (let i = 0; i < Math.min(sortedParticipants.length, prizes.length); i++) {
+      const participant = sortedParticipants[i];
+      const prize = prizes[i];
+
+      if (!participant || !prize) continue;
+
+      try {
+        const userId = participant.user.toString();
+
+        // Credit prize coins to winner's wallet
+        if (prize.coins && prize.coins > 0) {
+          const wallet = await Wallet.findOne({ user: userId });
+
+          if (wallet) {
+            // Find or create promotion coin type
+            let promoCoin = wallet.coins.find((c: any) => c.type === 'promotion');
+            if (!promoCoin) {
+              wallet.coins.push({
+                type: 'promotion',
+                amount: 0,
+                label: 'Promo Coins',
+                color: '#FF6B35',
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+              } as any);
+              promoCoin = wallet.coins[wallet.coins.length - 1];
+            }
+
+            promoCoin.amount += prize.coins;
+            promoCoin.lastEarned = new Date();
+
+            // Update wallet statistics
+            wallet.balance.available += prize.coins;
+            wallet.balance.total += prize.coins;
+            wallet.statistics.totalEarned += prize.coins;
+            wallet.lastTransactionAt = new Date();
+
+            await wallet.save();
+
+            console.log(`✅ [TOURNAMENT] Awarded ${prize.coins} coins to rank ${i + 1} (${userId})`);
+          }
+        }
+
+        // Update participant with prize awarded flag
+        participant.prizeAwarded = true;
+        participant.prizeDetails = {
+          rank: i + 1,
+          coins: prize.coins || 0,
+          badge: prize.badge,
+          exclusiveDeal: prize.exclusiveDeal,
+          awardedAt: new Date()
+        };
+      } catch (prizeError) {
+        console.error(`❌ [TOURNAMENT] Failed to award prize to rank ${i + 1}:`, prizeError);
+        // Continue to next winner even if one fails
+      }
+    }
+
+    // Save updated participant prize statuses
+    await tournament.save();
+    console.log(`✅ [TOURNAMENT] Prize distribution complete for: ${tournament.name}`);
   }
 
   // Get featured tournaments

@@ -36,6 +36,7 @@ export interface ICoinBalance {
   isActive: boolean;
   earnedDate?: Date;
   lastUsed?: Date;
+  lastEarned?: Date; // Last time coins were earned
   expiryDate?: Date; // 30 days for ReZ Coins, campaign-based for Promo
   color: string; // #00C06A for ReZ, merchant color for Branded, #FFC857 for Promo
   // For Branded Coins
@@ -161,7 +162,7 @@ const WalletSchema = new Schema<IWallet>({
   coins: [{
     type: {
       type: String,
-      enum: ['rez', 'prive', 'promo'],
+      enum: ['rez', 'prive', 'promo', 'promotion'],
       required: true
     },
     amount: {
@@ -169,6 +170,7 @@ const WalletSchema = new Schema<IWallet>({
       default: 0,
       min: 0
     },
+    label: String,
     isActive: {
       type: Boolean,
       default: true
@@ -179,7 +181,9 @@ const WalletSchema = new Schema<IWallet>({
     },
     earnedDate: Date,
     lastUsed: Date,
+    lastEarned: Date, // Last time coins were earned
     expiryDate: Date, // 30 days for ReZ, campaign-based for Promo
+    expiresAt: Date, // Alias for expiryDate
     // For Promo Coins
     promoDetails: {
       campaignId: String,

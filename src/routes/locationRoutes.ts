@@ -10,10 +10,13 @@ import {
   getNearbyStores,
   getLocationStats,
 } from '../controllers/locationController';
-import { authenticate } from '../middleware/auth';
+import { authenticate, optionalAuth } from '../middleware/auth';
 import { validateQuery, validate, validateParams, commonSchemas } from '../middleware/validation';
 // // import { generalLimiter, searchLimiter } from '../middleware/rateLimiter'; // Disabled for development // Disabled for development
 import { Joi } from '../middleware/validation';
+import { sendSuccess } from '../utils/response';
+import { asyncHandler } from '../utils/asyncHandler';
+import { regionService, getRegionConfig, getActiveRegions, isValidRegion, RegionId } from '../services/regionService';
 
 const router = Router();
 
@@ -97,6 +100,89 @@ router.get('/nearby-stores',  // generalLimiter,, // Disabled for development
 router.get('/stats',  // generalLimiter,, // Disabled for development
   authenticate,
   getLocationStats
+);
+
+// ==================== REGION ROUTES ====================
+
+// Get all available regions
+router.get('/regions', asyncHandler(async (req, res) => {
+  const regions = getActiveRegions().map(config => ({
+    id: config.id,
+    name: config.name,
+    displayName: config.displayName,
+    currency: config.currency,
+    currencySymbol: config.currencySymbol,
+    locale: config.locale,
+    timezone: config.timezone,
+    countryCode: config.countryCode,
+    defaultCoordinates: {
+      longitude: config.defaultCoordinates[0],
+      latitude: config.defaultCoordinates[1]
+    }
+  }));
+
+  sendSuccess(res, { regions }, 'Available regions retrieved successfully');
+}));
+
+// Detect user region from IP/headers/coordinates
+router.get('/region/detect',
+  optionalAuth,
+  asyncHandler(async (req, res) => {
+    const detectedRegion = await regionService.detectRegionFromRequest(req);
+    const config = getRegionConfig(detectedRegion);
+
+    sendSuccess(res, {
+      region: detectedRegion,
+      config: {
+        id: config.id,
+        name: config.name,
+        displayName: config.displayName,
+        currency: config.currency,
+        currencySymbol: config.currencySymbol,
+        locale: config.locale,
+        timezone: config.timezone,
+        countryCode: config.countryCode,
+        defaultCoordinates: {
+          longitude: config.defaultCoordinates[0],
+          latitude: config.defaultCoordinates[1]
+        }
+      }
+    }, 'Region detected successfully');
+  })
+);
+
+// Get region config by ID
+router.get('/region/:regionId',
+  validateParams(Joi.object({
+    regionId: Joi.string().required()
+  })),
+  asyncHandler(async (req, res) => {
+    const { regionId } = req.params;
+
+    if (!isValidRegion(regionId)) {
+      return sendSuccess(res, null, 'Invalid region ID', 400);
+    }
+
+    const config = getRegionConfig(regionId as RegionId);
+
+    sendSuccess(res, {
+      region: {
+        id: config.id,
+        name: config.name,
+        displayName: config.displayName,
+        currency: config.currency,
+        currencySymbol: config.currencySymbol,
+        locale: config.locale,
+        timezone: config.timezone,
+        countryCode: config.countryCode,
+        defaultCoordinates: {
+          longitude: config.defaultCoordinates[0],
+          latitude: config.defaultCoordinates[1]
+        },
+        deliveryRadius: config.deliveryRadius
+      }
+    }, 'Region config retrieved successfully');
+  })
 );
 
 export default router;

@@ -7,6 +7,7 @@ import { Video } from '../models/Video';
 import { Article } from '../models/Article';
 import { MallBrand } from '../models/MallBrand';
 import { ModeId } from './modeService';
+import { regionService, RegionId, isValidRegion, DEFAULT_REGION } from './regionService';
 
 /**
  * Homepage Service
@@ -46,6 +47,7 @@ interface HomepageQueryParams {
     lng: number;
   };
   mode?: ModeId;
+  region?: RegionId;
 }
 
 interface HomepageResponse {
@@ -67,23 +69,34 @@ interface HomepageResponse {
 /**
  * Fetch featured products
  */
-async function fetchFeaturedProducts(limit: number): Promise<any[]> {
+async function fetchFeaturedProducts(limit: number, region?: RegionId): Promise<any[]> {
   const startTime = Date.now();
   try {
-    const products: any = await (Product as any).find({
+    // Build base query
+    const query: Record<string, any> = {
       isActive: true,
       isFeatured: true,
       'inventory.isAvailable': true
-    })
+    };
+
+    // Add region filter by finding stores in region first
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      query.store = { $in: storeIds };
+    }
+
+    const products: any = await (Product as any).find(query)
       .populate('category', 'name slug')
-      .populate('store', 'name slug logo')
+      .populate('store', 'name slug logo location')
       .select('name slug images pricing inventory ratings badges tags analytics')
       .sort({ 'analytics.views': -1, 'ratings.average': -1 })
       .limit(limit)
       .lean();
 
     const duration = Date.now() - startTime;
-    console.log(`✅ [Homepage Service] Fetched ${products.length} featured products in ${duration}ms`);
+    console.log(`✅ [Homepage Service] Fetched ${products.length} featured products (region: ${region || 'all'}) in ${duration}ms`);
     return products;
   } catch (error) {
     const duration = Date.now() - startTime;
@@ -95,18 +108,29 @@ async function fetchFeaturedProducts(limit: number): Promise<any[]> {
 /**
  * Fetch new arrival products
  */
-async function fetchNewArrivals(limit: number): Promise<any[]> {
+async function fetchNewArrivals(limit: number, region?: RegionId): Promise<any[]> {
   const startTime = Date.now();
   try {
     // Products created in the last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const products: any = await (Product as any).find({
+    // Build base query
+    const query: Record<string, any> = {
       isActive: true,
       'inventory.isAvailable': true,
       createdAt: { $gte: thirtyDaysAgo }
-    })
+    };
+
+    // Add region filter by finding stores in region first
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      query.store = { $in: storeIds };
+    }
+
+    const products: any = await (Product as any).find(query)
       .populate('category', 'name slug')
       .populate('store', 'name slug logo location cashback')
       .select('name title slug images pricing inventory ratings badges tags createdAt cashback')
@@ -173,13 +197,22 @@ async function fetchNewArrivals(limit: number): Promise<any[]> {
 /**
  * Fetch featured stores
  */
-async function fetchFeaturedStores(limit: number): Promise<any[]> {
+async function fetchFeaturedStores(limit: number, region?: RegionId): Promise<any[]> {
   const startTime = Date.now();
   try {
-    const stores = await Store.find({
+    // Build query with region filter
+    const query: Record<string, any> = {
       isActive: true,
       isFeatured: true
-    })
+    };
+
+    // Add region filter if specified
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      Object.assign(query, regionFilter);
+    }
+
+    const stores = await Store.find(query)
       .populate('category', 'name slug')
       .select('name slug logo images ratings location deliveryCategories tags operationalInfo offers')
       .sort({ 'ratings.average': -1 })
@@ -187,7 +220,7 @@ async function fetchFeaturedStores(limit: number): Promise<any[]> {
       .lean();
 
     const duration = Date.now() - startTime;
-    console.log(`✅ [Homepage Service] Fetched ${stores.length} featured stores in ${duration}ms`);
+    console.log(`✅ [Homepage Service] Fetched ${stores.length} featured stores (region: ${region || 'all'}) in ${duration}ms`);
     return stores;
   } catch (error) {
     const duration = Date.now() - startTime;
@@ -199,12 +232,21 @@ async function fetchFeaturedStores(limit: number): Promise<any[]> {
 /**
  * Fetch trending stores
  */
-async function fetchTrendingStores(limit: number): Promise<any[]> {
+async function fetchTrendingStores(limit: number, region?: RegionId): Promise<any[]> {
   const startTime = Date.now();
   try {
-    const stores = await Store.find({
+    // Build query with region filter
+    const query: Record<string, any> = {
       isActive: true
-    })
+    };
+
+    // Add region filter if specified
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      Object.assign(query, regionFilter);
+    }
+
+    const stores = await Store.find(query)
       .populate('category', 'name slug')
       .select('name slug logo images ratings location tags operationalInfo offers analytics')
       .sort({ 'analytics.totalOrders': -1, 'ratings.average': -1 })
@@ -212,7 +254,7 @@ async function fetchTrendingStores(limit: number): Promise<any[]> {
       .lean();
 
     const duration = Date.now() - startTime;
-    console.log(`✅ [Homepage Service] Fetched ${stores.length} trending stores in ${duration}ms`);
+    console.log(`✅ [Homepage Service] Fetched ${stores.length} trending stores (region: ${region || 'all'}) in ${duration}ms`);
     return stores;
   } catch (error) {
     const duration = Date.now() - startTime;
@@ -465,9 +507,13 @@ export async function getHomepageData(params: HomepageQueryParams): Promise<Home
   const promises: Record<string, Promise<any>> = {};
   const errors: Record<string, string> = {};
 
+  // Get region for filtering (if specified)
+  const region = params.region;
+  console.log(`🌍 [Homepage Service] Region filter: ${region || 'none'}`);
+
   // Add each requested section to promises
   if (requestedSections.includes('featuredProducts')) {
-    promises.featuredProducts = fetchFeaturedProducts(params.limit || DEFAULT_LIMITS.featuredProducts)
+    promises.featuredProducts = fetchFeaturedProducts(params.limit || DEFAULT_LIMITS.featuredProducts, region)
       .catch(err => {
         errors.featuredProducts = err.message;
         return [];
@@ -475,7 +521,7 @@ export async function getHomepageData(params: HomepageQueryParams): Promise<Home
   }
 
   if (requestedSections.includes('newArrivals')) {
-    promises.newArrivals = fetchNewArrivals(params.limit || DEFAULT_LIMITS.newArrivals)
+    promises.newArrivals = fetchNewArrivals(params.limit || DEFAULT_LIMITS.newArrivals, region)
       .catch(err => {
         errors.newArrivals = err.message;
         return [];
@@ -483,7 +529,7 @@ export async function getHomepageData(params: HomepageQueryParams): Promise<Home
   }
 
   if (requestedSections.includes('featuredStores')) {
-    promises.featuredStores = fetchFeaturedStores(params.limit || DEFAULT_LIMITS.featuredStores)
+    promises.featuredStores = fetchFeaturedStores(params.limit || DEFAULT_LIMITS.featuredStores, region)
       .catch(err => {
         errors.featuredStores = err.message;
         return [];
@@ -491,7 +537,7 @@ export async function getHomepageData(params: HomepageQueryParams): Promise<Home
   }
 
   if (requestedSections.includes('trendingStores')) {
-    promises.trendingStores = fetchTrendingStores(params.limit || DEFAULT_LIMITS.trendingStores)
+    promises.trendingStores = fetchTrendingStores(params.limit || DEFAULT_LIMITS.trendingStores, region)
       .catch(err => {
         errors.trendingStores = err.message;
         return [];

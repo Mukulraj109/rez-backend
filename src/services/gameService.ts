@@ -184,23 +184,34 @@ class GameService {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 1); // 1 hour expiry
 
+    // Store correct answers server-side for secure validation
+    const correctAnswers = questions.map(q => ({
+      questionId: q.id,
+      answer: q.correctAnswer
+    }));
+
     const session = await GameSession.create({
       user: userId,
       gameType: 'quiz',
       sessionId: uuidv4(),
       status: 'pending',
       earnedFrom: 'daily_quiz',
-      expiresAt
+      expiresAt,
+      // Store correct answers in metadata (never returned to client)
+      metadata: {
+        questionCount: questions.length,
+        correctAnswers: correctAnswers
+      }
     });
 
     return session;
   }
 
-  // Submit quiz answers
+  // Submit quiz answers - SECURE: uses server-side stored answers
   async submitQuizAnswers(
     sessionId: string,
     answers: { questionId: string; answer: string }[],
-    correctAnswers: { questionId: string; answer: string }[]
+    _clientCorrectAnswers?: { questionId: string; answer: string }[] // Ignored for security
   ): Promise<IGameSession> {
     const session = await GameSession.findOne({ sessionId });
 
@@ -218,11 +229,17 @@ class GameService {
       throw new Error('Quiz session expired');
     }
 
-    // Calculate score
+    // SECURITY: Retrieve correct answers from stored session metadata, NOT from client
+    const storedCorrectAnswers = session.metadata?.correctAnswers || [];
+    if (storedCorrectAnswers.length === 0) {
+      throw new Error('Quiz session data corrupted - no answer key found');
+    }
+
+    // Calculate score using server-side stored answers
     let correct = 0;
     answers.forEach(userAnswer => {
-      const correctAnswer = correctAnswers.find(
-        ca => ca.questionId === userAnswer.questionId
+      const correctAnswer = storedCorrectAnswers.find(
+        (ca: any) => ca.questionId === userAnswer.questionId
       );
       if (correctAnswer && correctAnswer.answer === userAnswer.answer) {
         correct++;
@@ -230,7 +247,7 @@ class GameService {
     });
 
     const score = correct;
-    const total = correctAnswers.length;
+    const total = storedCorrectAnswers.length;
     const percentage = (correct / total) * 100;
 
     // Calculate coins based on score

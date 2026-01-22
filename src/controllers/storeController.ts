@@ -14,6 +14,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import redisService from '../services/redisService';
 import { logStoreSearch } from '../services/searchHistoryService';
+import { regionService, isValidRegion, RegionId, getRegionConfig } from '../services/regionService';
 
 // Get all stores with filtering and pagination
 export const getStores = asyncHandler(async (req: Request, res: Response) => {
@@ -28,11 +29,22 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
     isFeatured,
     sortBy = 'rating',
     page = 1,
-    limit = 20
+    limit = 20,
+    region // Region filter parameter
   } = req.query;
 
   try {
     const query: any = { isActive: true };
+
+    // Apply region filter if provided
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const effectiveRegion = (region as string) || regionHeader;
+
+    if (effectiveRegion && isValidRegion(effectiveRegion)) {
+      const regionFilter = regionService.getStoreFilter(effectiveRegion as RegionId);
+      Object.assign(query, regionFilter);
+      console.log('🌍 [GET STORES] Region filter applied:', effectiveRegion);
+    }
 
     // Apply filters
     if (category) query.category = category;
@@ -213,6 +225,18 @@ export const getStoreById = asyncHandler(async (req: Request, res: Response) => 
       return sendNotFound(res, 'Store not found');
     }
 
+    // Validate region access
+    const regionHeader = req.headers['x-rez-region'] as string;
+    if (regionHeader && isValidRegion(regionHeader)) {
+      const storeCity = store.location?.city;
+      if (!regionService.validateStoreAccess(storeCity, regionHeader as RegionId)) {
+        const suggestedRegion = regionService.getSuggestedRegion(storeCity);
+        const suggestedConfig = getRegionConfig(suggestedRegion);
+        console.log('🚫 [GET STORE] Region mismatch - store region:', suggestedRegion, 'user region:', regionHeader);
+        return sendBadRequest(res, `This store is not available in your region. It's located in ${suggestedConfig.displayName}.`);
+      }
+    }
+
     // Debug: Log what fields are available in the store
     console.log('✅ [GET STORE] Store retrieved:', store.name);
     console.log('📋 [GET STORE] Store fields check:', {
@@ -371,14 +395,28 @@ export const getNearbyStores = asyncHandler(async (req: Request, res: Response) 
     // Use $geoWithin with $centerSphere for better compatibility with legacy coordinate arrays
     const radiusInRadians = Number(radius) / 6371; // Earth's radius is ~6371 km
 
-    const stores = await Store.find({
+    // Build query with region filter
+    const query: any = {
       isActive: true,
       'location.coordinates': {
         $geoWithin: {
           $centerSphere: [[userLng, userLat], radiusInRadians]
         }
       }
-    })
+    };
+
+    // Apply region filter if provided
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const regionParam = req.query.region as string;
+    const effectiveRegion = regionParam || regionHeader;
+
+    if (effectiveRegion && isValidRegion(effectiveRegion)) {
+      const regionFilter = regionService.getStoreFilter(effectiveRegion as RegionId);
+      Object.assign(query, regionFilter);
+      console.log('🌍 [NEARBY STORES] Region filter applied:', effectiveRegion);
+    }
+
+    const stores = await Store.find(query)
       .populate('category', 'name slug icon')
       .limit(Number(limit))
       .lean();

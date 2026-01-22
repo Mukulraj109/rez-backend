@@ -170,23 +170,120 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
 
     // Handle different webhook events
     switch (event.event) {
-      case 'payment.captured':
+      case 'payment.captured': {
         // Payment successful
-        console.log('✅ [RAZORPAY WEBHOOK] Payment captured:', event.payload.payment.entity.id);
-        // Update order status in database
-        break;
+        const paymentEntity = event.payload.payment.entity;
+        console.log('✅ [RAZORPAY WEBHOOK] Payment captured:', paymentEntity.id);
 
-      case 'payment.failed':
+        // Find order by Razorpay order ID (stored in notes or as gatewayOrderId)
+        const razorpayOrderId = paymentEntity.order_id;
+        const order = await Order.findOne({
+          $or: [
+            { 'paymentGateway.gatewayOrderId': razorpayOrderId },
+            { 'payment.transactionId': razorpayOrderId }
+          ]
+        });
+
+        if (order) {
+          // Update order payment status
+          order.payment.status = 'paid';
+          order.payment.transactionId = paymentEntity.id;
+          order.payment.paidAt = new Date();
+          order.totals.paidAmount = paymentEntity.amount / 100; // Convert paise to rupees
+
+          // Update payment gateway details
+          if (!order.paymentGateway) {
+            order.paymentGateway = {} as any;
+          }
+          order.paymentGateway!.gatewayPaymentId = paymentEntity.id;
+          order.paymentGateway!.amountPaid = paymentEntity.amount / 100;
+          order.paymentGateway!.paidAt = new Date();
+          order.paymentGateway!.gateway = 'razorpay';
+
+          // Update order status to confirmed
+          if (order.status === 'placed') {
+            order.status = 'confirmed';
+            order.timeline.push({
+              status: 'confirmed',
+              message: 'Payment received and order confirmed',
+              timestamp: new Date()
+            });
+          }
+
+          await order.save();
+          console.log('✅ [RAZORPAY WEBHOOK] Order updated:', order.orderNumber);
+        } else {
+          console.warn('⚠️ [RAZORPAY WEBHOOK] Order not found for Razorpay order:', razorpayOrderId);
+        }
+        break;
+      }
+
+      case 'payment.failed': {
         // Payment failed
-        console.log('❌ [RAZORPAY WEBHOOK] Payment failed:', event.payload.payment.entity.id);
-        // Update order status in database
-        break;
+        const failedPayment = event.payload.payment.entity;
+        console.log('❌ [RAZORPAY WEBHOOK] Payment failed:', failedPayment.id);
 
-      case 'refund.created':
-        // Refund created
-        console.log('💰 [RAZORPAY WEBHOOK] Refund created:', event.payload.refund.entity.id);
-        // Update order status in database
+        const razorpayOrderId = failedPayment.order_id;
+        const order = await Order.findOne({
+          $or: [
+            { 'paymentGateway.gatewayOrderId': razorpayOrderId },
+            { 'payment.transactionId': razorpayOrderId }
+          ]
+        });
+
+        if (order) {
+          order.payment.status = 'failed';
+          order.payment.failureReason = failedPayment.error_description || 'Payment failed';
+
+          order.timeline.push({
+            status: 'payment_failed',
+            message: `Payment failed: ${failedPayment.error_description || 'Unknown error'}`,
+            timestamp: new Date()
+          });
+
+          await order.save();
+          console.log('✅ [RAZORPAY WEBHOOK] Order marked as payment failed:', order.orderNumber);
+        }
         break;
+      }
+
+      case 'refund.created': {
+        // Refund created
+        const refundEntity = event.payload.refund.entity;
+        console.log('💰 [RAZORPAY WEBHOOK] Refund created:', refundEntity.id);
+
+        const paymentId = refundEntity.payment_id;
+        const order = await Order.findOne({
+          $or: [
+            { 'paymentGateway.gatewayPaymentId': paymentId },
+            { 'payment.transactionId': paymentId }
+          ]
+        });
+
+        if (order) {
+          const refundAmount = refundEntity.amount / 100;
+          order.payment.status = 'refunded';
+          order.payment.refundId = refundEntity.id;
+          order.payment.refundedAt = new Date();
+          order.totals.refundAmount = (order.totals.refundAmount || 0) + refundAmount;
+
+          if (order.paymentGateway) {
+            order.paymentGateway.refundId = refundEntity.id;
+            order.paymentGateway.refundedAt = new Date();
+            order.paymentGateway.refundAmount = refundAmount;
+          }
+
+          order.timeline.push({
+            status: 'refunded',
+            message: `Refund of ₹${refundAmount} processed`,
+            timestamp: new Date()
+          });
+
+          await order.save();
+          console.log('✅ [RAZORPAY WEBHOOK] Order refund recorded:', order.orderNumber);
+        }
+        break;
+      }
 
       default:
         console.log('ℹ️ [RAZORPAY WEBHOOK] Unhandled event:', event.event);

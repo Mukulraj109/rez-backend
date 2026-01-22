@@ -41,6 +41,7 @@ import { globalErrorHandler, notFoundHandler } from './middleware/errorHandler';
 import { logger, requestLogger, correlationIdMiddleware } from './config/logger';
 import { initSentry, sentryRequestHandler, sentryTracingHandler, sentryErrorHandler } from './config/sentry';
 import { setCsrfToken, validateCsrfToken } from './middleware/csrf';
+import { metricsMiddleware, metricsEndpoint } from './config/prometheus';
 // DEV: import { generalLimiter } from './middleware/rateLimiter';
 // Import routes
 import authRoutes from './routes/authRoutes';
@@ -283,7 +284,7 @@ const corsOptions = {
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-Rez-Region'],
   exposedHeaders: ['X-CSRF-Token'],
   credentials: true,
   optionsSuccessStatus: 200
@@ -327,6 +328,9 @@ console.log('⚠️  CSRF protection middleware available but not enabled (requi
 
 // Compression middleware
 app.use(compression());
+
+// Prometheus metrics middleware - tracks all HTTP requests
+app.use(metricsMiddleware);
 
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
@@ -429,6 +433,9 @@ app.get('/health', async (req, res) => {
 app.get('/test', (req, res) => {
   res.json({ message: 'Test endpoint working' });
 });
+
+// Prometheus metrics endpoint - for scraping by Prometheus server
+app.get('/metrics', metricsEndpoint);
 
 // CSRF Token endpoint
 // Returns a new CSRF token for web clients

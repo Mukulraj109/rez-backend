@@ -9,6 +9,7 @@ import { CacheTTL } from '../config/redis';
 
 /**
  * Cache key generators
+ * Region-aware keys include region prefix to prevent cross-region cache pollution
  */
 export const CacheKeys = {
   // Product keys
@@ -21,6 +22,15 @@ export const CacheKeys = {
   productSearch: (query: string, filters: string) => `product:search:${query}:${filters}`,
   productRecommendations: (productId: string, limit: number) => `product:recommendations:${productId}:${limit}`,
 
+  // Region-aware product keys (include region in cache key to prevent cross-region pollution)
+  productListByRegion: (region: string, filters: string) => `region:${region}:product:list:${filters}`,
+  productsByCategoryByRegion: (region: string, categorySlug: string, filters: string) =>
+    `region:${region}:product:category:${categorySlug}:${filters}`,
+  productFeaturedByRegion: (region: string, limit: number) => `region:${region}:product:featured:${limit}`,
+  productNewArrivalsByRegion: (region: string, limit: number) => `region:${region}:product:new-arrivals:${limit}`,
+  productSearchByRegion: (region: string, query: string, filters: string) =>
+    `region:${region}:product:search:${query}:${filters}`,
+
   // Category keys
   categoryList: () => `category:list`,
   category: (id: string) => `category:${id}`,
@@ -30,6 +40,13 @@ export const CacheKeys = {
   storeList: (filters: string) => `store:list:${filters}`,
   store: (id: string) => `store:${id}`,
   storeProducts: (storeId: string) => `store:${storeId}:products`,
+
+  // Region-aware store keys
+  storeListByRegion: (region: string, filters: string) => `region:${region}:store:list:${filters}`,
+  storesByRegion: (region: string) => `region:${region}:stores`,
+
+  // Homepage keys by region
+  homepageByRegion: (region: string, section: string) => `region:${region}:homepage:${section}`,
 
   // Cart keys
   cart: (userId: string) => `cart:user:${userId}`,

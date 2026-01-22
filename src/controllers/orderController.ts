@@ -62,6 +62,60 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       return sendBadRequest(res, 'Cart is empty');
     }
 
+    // Validate payment method
+    const validPaymentMethods = ['cod', 'wallet', 'razorpay', 'upi', 'card', 'netbanking', 'stripe'];
+    if (!paymentMethod || !validPaymentMethods.includes(paymentMethod)) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendBadRequest(res, `Invalid payment method. Allowed: ${validPaymentMethods.join(', ')}`);
+    }
+
+    // Validate delivery address
+    if (!deliveryAddress) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendBadRequest(res, 'Delivery address is required');
+    }
+
+    const requiredAddressFields = ['name', 'phone', 'addressLine1', 'city', 'state', 'pincode'];
+    const missingFields = requiredAddressFields.filter(field => !deliveryAddress[field]);
+    if (missingFields.length > 0) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendBadRequest(res, `Missing required address fields: ${missingFields.join(', ')}`);
+    }
+
+    // Validate phone number format (Indian format)
+    const phoneRegex = /^(\+91|91)?[6-9]\d{9}$/;
+    const cleanPhone = deliveryAddress.phone.replace(/[\s-]/g, '');
+    if (!phoneRegex.test(cleanPhone)) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendBadRequest(res, 'Invalid phone number format');
+    }
+
+    // Validate pincode format (6 digits for India)
+    const pincodeRegex = /^\d{6}$/;
+    if (!pincodeRegex.test(deliveryAddress.pincode)) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendBadRequest(res, 'Invalid pincode format (must be 6 digits)');
+    }
+
+    // Validate all items belong to the same store
+    const storeIds = new Set(cart.items.map((item: any) => {
+      const store = item.store;
+      return typeof store === 'object' ? store._id?.toString() : store?.toString();
+    }).filter(Boolean));
+
+    if (storeIds.size > 1) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendBadRequest(res, 'All items must be from the same store. Please create separate orders for different stores.');
+    }
+
+    console.log('✅ [CREATE ORDER] Validation passed: payment method, address, and store check');
+
     // Validate coin balances if coins are being used
     if (coinsUsed && (coinsUsed.wasilCoins > 0 || coinsUsed.storePromoCoins > 0)) {
       console.log('💰 [CREATE ORDER] Validating coin balances:', coinsUsed);
