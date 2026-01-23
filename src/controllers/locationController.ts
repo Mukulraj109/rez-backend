@@ -1,14 +1,15 @@
 import { Request, Response } from 'express';
 import { User } from '../models/User';
-import { 
-  sendSuccess, 
-  sendNotFound, 
+import {
+  sendSuccess,
+  sendNotFound,
   sendBadRequest,
-  sendUnauthorized 
+  sendUnauthorized
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { geocodingService, GeocodeRequest, SearchAddressRequest } from '../services/geocodingService';
+import { regionService, isValidRegion, RegionId } from '../services/regionService';
 
 // Update user location
 export const updateUserLocation = asyncHandler(async (req: Request, res: Response) => {
@@ -298,8 +299,15 @@ export const getNearbyStores = asyncHandler(async (req: Request, res: Response) 
   try {
     // Import Store model dynamically to avoid circular dependency
     const { Store } = await import('../models/Store');
-    
-    const stores = await Store.find({
+
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
+    // Build query with region filter
+    const storeQuery: any = {
       isActive: true,
       'location.coordinates': {
         $near: {
@@ -307,7 +315,15 @@ export const getNearbyStores = asyncHandler(async (req: Request, res: Response) 
           $maxDistance: Number(radius) * 1000, // Convert km to meters
         },
       },
-    })
+    };
+
+    // Add region filter
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      Object.assign(storeQuery, regionFilter);
+    }
+
+    const stores = await Store.find(storeQuery)
     .populate('categories', 'name slug')
     .limit(Number(limit))
     .lean();

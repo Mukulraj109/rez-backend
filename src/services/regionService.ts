@@ -74,6 +74,31 @@ class RegionService {
   }
 
   /**
+   * Get MongoDB query filter for events based on region
+   * Filters events by location.city matching region's cities
+   * Online events are always included regardless of region
+   */
+  getEventFilter(regionId: RegionId): Record<string, any> {
+    const config = REGIONS[regionId];
+    if (!config) {
+      return {};
+    }
+
+    // Create case-insensitive regex patterns for each city
+    const cityPatterns = config.cities.map(city => new RegExp(`^${city}$`, 'i'));
+
+    // Include both: region-specific events AND online events (visible to everyone)
+    return {
+      $or: [
+        { 'location.city': { $in: cityPatterns } },
+        { isOnline: true },
+        { 'location.isOnline': true },
+        { 'location.city': { $regex: /^online$/i } }
+      ]
+    };
+  }
+
+  /**
    * Detect region from Express request
    * Priority: header > user preference > IP > coordinates > default
    */

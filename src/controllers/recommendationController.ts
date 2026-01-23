@@ -1,11 +1,13 @@
 import { Request, Response } from 'express';
 import { recommendationService } from '../services/recommendationService';
-import { 
-  sendSuccess, 
-  sendBadRequest 
+import {
+  sendSuccess,
+  sendBadRequest
 } from '../utils/response';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+import { regionService, isValidRegion, RegionId } from '../services/regionService';
+import { Store } from '../models/Store';
 
 // Get personalized store recommendations
 export const getPersonalizedRecommendations = asyncHandler(async (req: Request, res: Response) => {
@@ -394,11 +396,28 @@ export const getPickedForYouRecommendations = asyncHandler(async (req: Request, 
       // Anonymous user: Get popular/featured products
       const { Product } = require('../models/Product');
 
-      const products = await Product.find({
+      // Get region from header for filtering
+      const regionHeader = req.headers['x-rez-region'] as string;
+      const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+        ? regionHeader as RegionId
+        : undefined;
+
+      // Build query with region filter
+      const query: Record<string, any> = {
         isActive: true,
         isFeatured: true,
         'inventory.isAvailable': true
-      })
+      };
+
+      // Add region filter by finding stores in region first
+      if (region) {
+        const regionFilter = regionService.getStoreFilter(region);
+        const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+        const storeIds = storesInRegion.map((s: any) => s._id);
+        query.store = { $in: storeIds };
+      }
+
+      const products = await Product.find(query)
         .populate('category', 'name slug')
         .populate('store', 'name slug logo location')
         .select('name slug images pricing inventory ratings badges tags analytics store')

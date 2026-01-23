@@ -76,9 +76,10 @@ async function seedCampaigns(): Promise<number> {
   const stores = await Store.find({ isActive: true }).limit(10).select('_id name slug').lean();
   const storeMap = new Map(stores.map(s => [s.slug || s.name.toLowerCase(), s._id]));
 
-  const campaigns = [
+  // Bangalore (India) region campaigns
+  const bangaloreCampaigns = [
     {
-      campaignId: 'super-cashback-weekend',
+      campaignId: 'super-cashback-weekend-bangalore',
       title: 'Super Cashback Weekend',
       subtitle: 'Up to 50% cashback',
       description: 'Get amazing cashback on all purchases this weekend. Limited time offer!',
@@ -87,6 +88,7 @@ async function seedCampaigns(): Promise<number> {
       badgeColor: '#0B2240',
       gradientColors: ['rgba(16, 185, 129, 0.2)', 'rgba(20, 184, 166, 0.1)'],
       type: 'cashback' as const,
+      region: 'bangalore' as const,
       deals: [
         {
           store: 'Electronics Hub',
@@ -106,27 +108,9 @@ async function seedCampaigns(): Promise<number> {
           cashback: '35%',
           image: 'https://images.unsplash.com/photo-1556228453-efd6c1ff04f6?w=400&h=300&fit=crop',
         },
-        {
-          store: 'Beauty Palace',
-          storeId: storeMap.get('beauty-palace') || storeMap.values().next().value,
-          cashback: '45%',
-          image: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=400&h=300&fit=crop',
-        },
-        {
-          store: 'Sports Zone',
-          storeId: storeMap.get('sports-zone') || storeMap.values().next().value,
-          cashback: '42%',
-          image: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=400&h=300&fit=crop',
-        },
-        {
-          store: 'Grocery Mart',
-          storeId: storeMap.get('grocery-mart') || storeMap.values().next().value,
-          cashback: '38%',
-          image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&h=300&fit=crop',
-        },
       ],
       startTime: new Date(),
-      endTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+      endTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       isActive: true,
       priority: 100,
       eligibleCategories: ['electronics', 'fashion', 'home', 'beauty'],
@@ -135,10 +119,9 @@ async function seedCampaigns(): Promise<number> {
         'Cashback credited within 24 hours',
         'Valid only on weekends',
       ],
-      bannerImage: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d0?w=800&h=300&fit=crop',
     },
     {
-      campaignId: 'triple-coin-day',
+      campaignId: 'triple-coin-day-bangalore',
       title: 'Triple Coin Day',
       subtitle: '3X coins on all spends',
       description: 'Earn triple the coins on every purchase today!',
@@ -147,6 +130,7 @@ async function seedCampaigns(): Promise<number> {
       badgeColor: '#0B2240',
       gradientColors: ['rgba(245, 158, 11, 0.2)', 'rgba(249, 115, 22, 0.1)'],
       type: 'coins' as const,
+      region: 'bangalore' as const,
       deals: [
         {
           store: 'Grocery Mart',
@@ -168,20 +152,21 @@ async function seedCampaigns(): Promise<number> {
         },
       ],
       startTime: new Date(),
-      endTime: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000), // 1 day from now
+      endTime: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000),
       isActive: true,
       priority: 90,
     },
     {
-      campaignId: 'mega-bank-offers',
+      campaignId: 'mega-bank-offers-bangalore',
       title: 'Mega Bank Offers',
       subtitle: 'HDFC, ICICI, SBI, Axis',
-      description: 'Exclusive bank offers with amazing discounts',
+      description: 'Exclusive Indian bank offers with amazing discounts',
       badge: 'BANKS',
       badgeBg: '#0B2240',
       badgeColor: '#FFFFFF',
       gradientColors: ['rgba(59, 130, 246, 0.2)', 'rgba(99, 102, 241, 0.1)'],
       type: 'bank' as const,
+      region: 'bangalore' as const,
       deals: [
         {
           store: 'HDFC Exclusive',
@@ -200,12 +185,12 @@ async function seedCampaigns(): Promise<number> {
         },
       ],
       startTime: new Date(),
-      endTime: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+      endTime: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       isActive: true,
       priority: 85,
     },
     {
-      campaignId: 'upload-bill-bonanza',
+      campaignId: 'upload-bill-bonanza-bangalore',
       title: 'Upload Bill Bonanza',
       subtitle: 'Extra ₹100 on every bill',
       description: 'Upload your offline purchase bills and earn extra rewards',
@@ -214,6 +199,7 @@ async function seedCampaigns(): Promise<number> {
       badgeColor: '#8B5CF6',
       gradientColors: ['rgba(139, 92, 246, 0.2)', 'rgba(236, 72, 153, 0.1)'],
       type: 'bill' as const,
+      region: 'bangalore' as const,
       deals: [
         {
           store: 'Any Restaurant',
@@ -237,6 +223,218 @@ async function seedCampaigns(): Promise<number> {
       priority: 80,
     },
     {
+      campaignId: 'new-user-bonanza-bangalore',
+      title: 'New User Bonanza',
+      subtitle: 'First purchase rewards',
+      description: 'Special rewards for new users on their first purchase',
+      badge: 'NEW',
+      badgeBg: '#06B6D4',
+      badgeColor: '#FFFFFF',
+      gradientColors: ['rgba(34, 197, 94, 0.2)', 'rgba(16, 185, 129, 0.1)'],
+      type: 'new-user' as const,
+      region: 'bangalore' as const,
+      deals: [
+        {
+          store: 'First Order',
+          bonus: '₹500 off',
+          image: 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=400&h=300&fit=crop',
+        },
+        {
+          store: 'First Visit',
+          bonus: '1000 coins',
+          image: 'https://images.unsplash.com/photo-1555529902-5261145633bf?w=400&h=300&fit=crop',
+        },
+        {
+          store: 'Sign Up Bonus',
+          bonus: '₹300 cashback',
+          image: 'https://images.unsplash.com/photo-1607082349566-187342175e2f?w=400&h=300&fit=crop',
+        },
+      ],
+      startTime: new Date(),
+      endTime: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+      isActive: true,
+      priority: 70,
+    },
+  ];
+
+  // Dubai (UAE) region campaigns
+  const dubaiCampaigns = [
+    {
+      campaignId: 'super-cashback-weekend-dubai',
+      title: 'Super Cashback Weekend',
+      subtitle: 'Up to 50% cashback',
+      description: 'Get amazing cashback on all purchases this weekend. Limited time offer!',
+      badge: '50%',
+      badgeBg: '#FFFFFF',
+      badgeColor: '#0B2240',
+      gradientColors: ['rgba(16, 185, 129, 0.2)', 'rgba(20, 184, 166, 0.1)'],
+      type: 'cashback' as const,
+      region: 'dubai' as const,
+      deals: [
+        {
+          store: 'Sharaf DG',
+          cashback: '40%',
+          image: 'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=400&h=300&fit=crop',
+        },
+        {
+          store: 'Dubai Mall Fashion',
+          cashback: '50%',
+          image: 'https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=400&h=300&fit=crop',
+        },
+        {
+          store: 'Home Centre',
+          cashback: '35%',
+          image: 'https://images.unsplash.com/photo-1556228453-efd6c1ff04f6?w=400&h=300&fit=crop',
+        },
+      ],
+      startTime: new Date(),
+      endTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      isActive: true,
+      priority: 100,
+      eligibleCategories: ['electronics', 'fashion', 'home', 'beauty'],
+      terms: [
+        'Minimum order value: AED 100',
+        'Cashback credited within 24 hours',
+        'Valid only on weekends',
+      ],
+    },
+    {
+      campaignId: 'triple-coin-day-dubai',
+      title: 'Triple Coin Day',
+      subtitle: '3X coins on all spends',
+      description: 'Earn triple the coins on every purchase today!',
+      badge: '3X',
+      badgeBg: '#FFFFFF',
+      badgeColor: '#0B2240',
+      gradientColors: ['rgba(245, 158, 11, 0.2)', 'rgba(249, 115, 22, 0.1)'],
+      type: 'coins' as const,
+      region: 'dubai' as const,
+      deals: [
+        {
+          store: 'Carrefour',
+          coins: '3000',
+          image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&h=300&fit=crop',
+        },
+        {
+          store: 'Sephora',
+          coins: '2500',
+          image: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=400&h=300&fit=crop',
+        },
+        {
+          store: 'Fitness First',
+          coins: '1800',
+          image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400&h=300&fit=crop',
+        },
+      ],
+      startTime: new Date(),
+      endTime: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000),
+      isActive: true,
+      priority: 90,
+    },
+    {
+      campaignId: 'mega-bank-offers-dubai',
+      title: 'Mega Bank Offers',
+      subtitle: 'Emirates NBD, FAB, Mashreq',
+      description: 'Exclusive UAE bank offers with amazing discounts',
+      badge: 'BANKS',
+      badgeBg: '#0B2240',
+      badgeColor: '#FFFFFF',
+      gradientColors: ['rgba(59, 130, 246, 0.2)', 'rgba(99, 102, 241, 0.1)'],
+      type: 'bank' as const,
+      region: 'dubai' as const,
+      deals: [
+        {
+          store: 'Emirates NBD',
+          cashback: 'AED 500 off',
+          image: 'https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=400&h=300&fit=crop',
+        },
+        {
+          store: 'FAB Rewards',
+          cashback: 'AED 300 off',
+          image: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=300&fit=crop',
+        },
+        {
+          store: 'Mashreq Specials',
+          cashback: '20% cashback',
+          image: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=400&h=300&fit=crop',
+        },
+      ],
+      startTime: new Date(),
+      endTime: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      isActive: true,
+      priority: 85,
+    },
+    {
+      campaignId: 'upload-bill-bonanza-dubai',
+      title: 'Upload Bill Bonanza',
+      subtitle: 'Extra 10 AED on every bill',
+      description: 'Upload your offline purchase bills and earn extra rewards',
+      badge: '+10 AED',
+      badgeBg: '#FFFFFF',
+      badgeColor: '#8B5CF6',
+      gradientColors: ['rgba(139, 92, 246, 0.2)', 'rgba(236, 72, 153, 0.1)'],
+      type: 'bill' as const,
+      region: 'dubai' as const,
+      deals: [
+        {
+          store: 'Any Restaurant',
+          bonus: '+100 coins',
+          image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop',
+        },
+        {
+          store: 'Any Salon',
+          bonus: '+150 coins',
+          image: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=400&h=300&fit=crop',
+        },
+        {
+          store: 'Any Store',
+          bonus: '+100 coins',
+          image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=400&h=300&fit=crop',
+        },
+      ],
+      startTime: new Date(),
+      endTime: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      isActive: true,
+      priority: 80,
+    },
+    {
+      campaignId: 'new-user-bonanza-dubai',
+      title: 'New User Bonanza',
+      subtitle: 'First purchase rewards',
+      description: 'Special rewards for new users on their first purchase',
+      badge: 'NEW',
+      badgeBg: '#06B6D4',
+      badgeColor: '#FFFFFF',
+      gradientColors: ['rgba(34, 197, 94, 0.2)', 'rgba(16, 185, 129, 0.1)'],
+      type: 'new-user' as const,
+      region: 'dubai' as const,
+      deals: [
+        {
+          store: 'First Order',
+          bonus: 'AED 50 off',
+          image: 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=400&h=300&fit=crop',
+        },
+        {
+          store: 'First Visit',
+          bonus: '1000 coins',
+          image: 'https://images.unsplash.com/photo-1555529902-5261145633bf?w=400&h=300&fit=crop',
+        },
+        {
+          store: 'Sign Up Bonus',
+          bonus: 'AED 30 cashback',
+          image: 'https://images.unsplash.com/photo-1607082349566-187342175e2f?w=400&h=300&fit=crop',
+        },
+      ],
+      startTime: new Date(),
+      endTime: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+      isActive: true,
+      priority: 70,
+    },
+  ];
+
+  // Global campaigns (available in all regions)
+  const globalCampaigns = [
+    {
       campaignId: 'flash-coin-drops',
       title: 'Flash Coin Drops',
       subtitle: 'Limited time only',
@@ -246,6 +444,7 @@ async function seedCampaigns(): Promise<number> {
       badgeColor: '#EC4899',
       gradientColors: ['rgba(239, 68, 68, 0.2)', 'rgba(249, 115, 22, 0.1)'],
       type: 'drop' as const,
+      region: 'all' as const,
       deals: [
         {
           store: 'Nike Store',
@@ -267,43 +466,14 @@ async function seedCampaigns(): Promise<number> {
         },
       ],
       startTime: new Date(),
-      endTime: new Date(Date.now() + 12 * 60 * 60 * 1000), // 12 hours from now
+      endTime: new Date(Date.now() + 12 * 60 * 60 * 1000),
       isActive: true,
       priority: 75,
     },
-    {
-      campaignId: 'new-user-bonanza',
-      title: 'New User Bonanza',
-      subtitle: 'First purchase rewards',
-      description: 'Special rewards for new users on their first purchase',
-      badge: 'NEW',
-      badgeBg: '#06B6D4',
-      badgeColor: '#FFFFFF',
-      gradientColors: ['rgba(34, 197, 94, 0.2)', 'rgba(16, 185, 129, 0.1)'],
-      type: 'new-user' as const,
-      deals: [
-        {
-          store: 'First Order',
-          bonus: '₹500 off',
-          image: 'https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=400&h=300&fit=crop',
-        },
-        {
-          store: 'First Visit',
-          bonus: '1000 coins',
-          image: 'https://images.unsplash.com/photo-1555529902-5261145633bf?w=400&h=300&fit=crop',
-        },
-        {
-          store: 'Sign Up Bonus',
-          bonus: '₹300 cashback',
-          image: 'https://images.unsplash.com/photo-1607082349566-187342175e2f?w=400&h=300&fit=crop',
-        },
-      ],
-      startTime: new Date(),
-      endTime: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days from now
-      isActive: true,
-      priority: 70,
-    },
   ];
+
+  // Combine all campaigns
+  const campaigns = [...bangaloreCampaigns, ...dubaiCampaigns, ...globalCampaigns];
 
   let createdCount = 0;
   for (const campaignData of campaigns) {

@@ -6,6 +6,7 @@ import { Product } from '../models/Product';
 import { sendSuccess, sendNotFound } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+import { regionService, isValidRegion, RegionId } from '../services/regionService';
 
 /**
  * Get all active store experiences
@@ -87,9 +88,21 @@ export const getStoresByExperience = asyncHandler(async (req: Request, res: Resp
       return sendNotFound(res, 'Experience not found');
     }
 
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
     // Build store query based on filter criteria
     const storeQuery: any = { isActive: true };
     const filterCriteria = experience.filterCriteria;
+
+    // Add region filter
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      Object.assign(storeQuery, regionFilter);
+    }
 
     if (filterCriteria) {
       if (filterCriteria.tags && filterCriteria.tags.length > 0) {
@@ -245,11 +258,25 @@ export const getUniqueFinds = asyncHandler(async (req: Request, res: Response) =
   const { limit = 10, experience } = req.query;
 
   try {
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
     // Strategy: Find products with stock that are active
     const query: any = {
       isActive: true,
       'inventory.stock': { $gt: 0 },
     };
+
+    // Add region filter by finding stores in region first
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      query.store = { $in: storeIds };
+    }
 
     // Filter by experience type if provided
     if (experience) {

@@ -6,6 +6,7 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { IEvent } from '../models/Event';
 import { IEventBooking } from '../models/EventBooking';
 import paymentGatewayService from '../services/paymentGatewayService';
+import { regionService, isValidRegion, RegionId } from '../services/regionService';
 
 // Helper function to escape regex special characters to prevent ReDoS attacks
 const escapeRegex = (str: string): string => {
@@ -36,6 +37,14 @@ export const getAllEvents = asyncHandler(async (req: Request, res: Response) => 
 
   // Build query
   const query: any = { status: 'published' };
+
+  // Apply region filtering from X-Rez-Region header
+  const regionHeader = req.headers['x-rez-region'] as string;
+  if (regionHeader && isValidRegion(regionHeader)) {
+    const regionFilter = regionService.getEventFilter(regionHeader as RegionId);
+    Object.assign(query, regionFilter);
+    console.log(`🌍 [EVENTS] Region filter applied: ${regionHeader}`);
+  }
 
   if (category) {
     query.category = category;
@@ -159,6 +168,13 @@ export const getEventsByCategory = asyncHandler(async (req: Request, res: Respon
     status: 'published'
   };
 
+  // Apply region filtering from X-Rez-Region header
+  const regionHeader = req.headers['x-rez-region'] as string;
+  if (regionHeader && isValidRegion(regionHeader)) {
+    const regionFilter = regionService.getEventFilter(regionHeader as RegionId);
+    Object.assign(query, regionFilter);
+  }
+
   // Add subcategory filter if provided
   if (subcategory) {
     query.subcategory = safeRegexQuery(subcategory as string);
@@ -206,6 +222,13 @@ export const searchEvents = asyncHandler(async (req: Request, res: Response) => 
 
   // Build search query
   const query: any = { status: 'published' };
+
+  // Apply region filtering from X-Rez-Region header
+  const regionHeader = req.headers['x-rez-region'] as string;
+  if (regionHeader && isValidRegion(regionHeader)) {
+    const regionFilter = regionService.getEventFilter(regionHeader as RegionId);
+    Object.assign(query, regionFilter);
+  }
 
   if (q) {
     query.$text = { $search: q as string };
@@ -273,11 +296,21 @@ export const searchEvents = asyncHandler(async (req: Request, res: Response) => 
 export const getFeaturedEvents = asyncHandler(async (req: Request, res: Response) => {
   const { limit = 10 } = req.query;
 
-  const events = await Event.find({
+  // Build query
+  const query: any = {
     featured: true,
     status: 'published',
     date: { $gte: new Date() }
-  })
+  };
+
+  // Apply region filtering from X-Rez-Region header
+  const regionHeader = req.headers['x-rez-region'] as string;
+  if (regionHeader && isValidRegion(regionHeader)) {
+    const regionFilter = regionService.getEventFilter(regionHeader as RegionId);
+    Object.assign(query, regionFilter);
+  }
+
+  const events = await Event.find(query)
     .sort({ priority: -1, date: 1 })
     .limit(Number(limit))
     .lean();

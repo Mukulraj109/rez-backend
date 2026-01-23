@@ -3,6 +3,7 @@ import Campaign from '../models/Campaign';
 import { sendSuccess, sendNotFound, sendBadRequest } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+import { isValidRegion, RegionId } from '../services/regionService';
 
 /**
  * Get all active campaigns
@@ -10,6 +11,12 @@ import { AppError } from '../middleware/errorHandler';
  */
 export const getActiveCampaigns = asyncHandler(async (req: Request, res: Response) => {
   const { type, limit = 10 } = req.query;
+
+  // Get region from header
+  const regionHeader = req.headers['x-rez-region'] as string;
+  const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+    ? regionHeader as RegionId
+    : undefined;
 
   try {
     const now = new Date();
@@ -23,7 +30,16 @@ export const getActiveCampaigns = asyncHandler(async (req: Request, res: Respons
       query.type = type;
     }
 
-    console.log('🔍 [CAMPAIGNS] Fetching active campaigns...');
+    // Filter by region: show campaigns for specific region OR 'all' regions
+    if (region) {
+      query.$or = [
+        { region: region },
+        { region: 'all' },
+        { region: { $exists: false } }, // Legacy campaigns without region field
+      ];
+    }
+
+    console.log(`🔍 [CAMPAIGNS] Fetching active campaigns for region: ${region || 'all'}...`);
 
     const campaigns = await Campaign.find(query)
       .sort({ priority: -1 })
@@ -51,14 +67,31 @@ export const getCampaignsByType = asyncHandler(async (req: Request, res: Respons
   const { type } = req.params;
   const { limit = 10 } = req.query;
 
+  // Get region from header
+  const regionHeader = req.headers['x-rez-region'] as string;
+  const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+    ? regionHeader as RegionId
+    : undefined;
+
   try {
     const now = new Date();
-    const campaigns = await Campaign.find({
+    const query: any = {
       type,
       isActive: true,
       startTime: { $lte: now },
       endTime: { $gte: now },
-    })
+    };
+
+    // Filter by region: show campaigns for specific region OR 'all' regions
+    if (region) {
+      query.$or = [
+        { region: region },
+        { region: 'all' },
+        { region: { $exists: false } }, // Legacy campaigns without region field
+      ];
+    }
+
+    const campaigns = await Campaign.find(query)
       .sort({ priority: -1 })
       .limit(Number(limit))
       .lean();
@@ -116,6 +149,12 @@ export const getCampaignById = asyncHandler(async (req: Request, res: Response) 
 export const getAllCampaigns = asyncHandler(async (req: Request, res: Response) => {
   const { page = 1, limit = 20, active = 'true' } = req.query;
 
+  // Get region from header
+  const regionHeader = req.headers['x-rez-region'] as string;
+  const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+    ? regionHeader as RegionId
+    : undefined;
+
   try {
     const query: any = {};
 
@@ -124,6 +163,15 @@ export const getAllCampaigns = asyncHandler(async (req: Request, res: Response) 
       query.isActive = true;
       query.startTime = { $lte: now };
       query.endTime = { $gte: now };
+    }
+
+    // Filter by region: show campaigns for specific region OR 'all' regions
+    if (region) {
+      query.$or = [
+        { region: region },
+        { region: 'all' },
+        { region: { $exists: false } }, // Legacy campaigns without region field
+      ];
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -164,14 +212,33 @@ export const getAllCampaigns = asyncHandler(async (req: Request, res: Response) 
 export const getExcitingDeals = asyncHandler(async (req: Request, res: Response) => {
   const { limit = 6 } = req.query;
 
+  // Get region from header
+  const regionHeader = req.headers['x-rez-region'] as string;
+  const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+    ? regionHeader as RegionId
+    : undefined;
+
   try {
     const now = new Date();
 
-    const campaigns = await Campaign.find({
+    const query: any = {
       isActive: true,
       startTime: { $lte: now },
       endTime: { $gte: now },
-    })
+    };
+
+    // Filter by region: show campaigns for specific region OR 'all' regions
+    if (region) {
+      query.$or = [
+        { region: region },
+        { region: 'all' },
+        { region: { $exists: false } }, // Legacy campaigns without region field
+      ];
+    }
+
+    console.log(`🔍 [EXCITING DEALS] Fetching deals for region: ${region || 'all'}...`);
+
+    const campaigns = await Campaign.find(query)
       .sort({ priority: -1 })
       .limit(Number(limit))
       .lean();

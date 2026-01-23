@@ -7,6 +7,7 @@ import { sendSuccess } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import redisService from '../services/redisService';
+import { regionService, isValidRegion, RegionId } from '../services/regionService';
 
 /**
  * Diverse Recommendation Controller
@@ -231,8 +232,14 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
     priceRanges = 3
   } = options;
 
-  // Generate cache key
-  const cacheKey = `diverse-recommendations:${context}:${userId || 'anon'}:${requestLimit}:${JSON.stringify(options)}`;
+  // Get region from X-Rez-Region header for cache key
+  const regionHeaderForCache = req.headers['x-rez-region'] as string;
+  const regionForCache: string = regionHeaderForCache && isValidRegion(regionHeaderForCache)
+    ? regionHeaderForCache
+    : 'all';
+
+  // Generate cache key (include region for region-specific caching)
+  const cacheKey = `diverse-recommendations:${context}:${userId || 'anon'}:${requestLimit}:${regionForCache}:${JSON.stringify(options)}`;
 
   try {
     // Try to get from cache first
@@ -271,6 +278,12 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
       stores: excludedStoreIds.length
     });
 
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
     // Build query
     const query: any = {
       isActive: true,
@@ -285,6 +298,19 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
 
     if (excludedStoreIds.length > 0) {
       query.store = { $nin: excludedStoreIds };
+    }
+
+    // Add region filter by finding stores in region first
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      // Combine with any excluded stores
+      if (query.store && query.store.$nin) {
+        query.store = { $in: storeIds, $nin: query.store.$nin };
+      } else {
+        query.store = { $in: storeIds };
+      }
     }
 
     // Fetch candidates (5x limit to have good selection pool)

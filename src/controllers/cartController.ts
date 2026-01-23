@@ -17,6 +17,17 @@ import redisService from '../services/redisService';
 import { CacheTTL } from '../config/redis';
 import { CacheKeys, CacheInvalidator } from '../utils/cacheHelper';
 import reservationService from '../services/reservationService';
+import { regionService, isValidRegion, RegionId, getRegionConfig } from '../services/regionService';
+
+// Helper to get currency symbol from request
+const getCurrencySymbolFromRequest = (req: Request): string => {
+  const regionHeader = req.headers['x-rez-region'] as string;
+  if (regionHeader && isValidRegion(regionHeader)) {
+    const config = getRegionConfig(regionHeader as RegionId);
+    return config?.currencySymbol || '₹';
+  }
+  return '₹'; // Default to INR
+};
 
 
 // Get user's active cart
@@ -1303,8 +1314,9 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
 
     // Check balance
     if (availableBalance < lockFee) {
+      const currencySymbol = getCurrencySymbolFromRequest(req);
       return sendBadRequest(res,
-        `Insufficient wallet balance. Required: ₹${lockFee}, Available: ₹${availableBalance}`
+        `Insufficient wallet balance. Required: ${currencySymbol}${lockFee}, Available: ${currencySymbol}${availableBalance}`
       );
     }
 
@@ -1405,6 +1417,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
     }
 
     // Add new locked item (duplicates are blocked earlier in the function)
+    const currencySymbol = getCurrencySymbolFromRequest(req);
     cart.lockedItems.push({
       product: productId,
       store: storeId,
@@ -1414,7 +1427,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
       originalPrice: product.pricing?.original || product.price?.original || productPrice,
       lockedAt: new Date(),
       expiresAt,
-      notes: `Paid lock - ₹${lockFee} deposit (${lockFeePercentage}%)`,
+      notes: `Paid lock - ${currencySymbol}${lockFee} deposit (${lockFeePercentage}%)`,
       lockFee,
       lockFeePercentage,
       lockDuration: duration,
@@ -1447,7 +1460,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
         expiresAt,
         transactionId: transaction.transactionId,
         paymentMethod: 'wallet',
-        message: `Price locked for ${LOCK_FEE_CONFIG[duration].label}. ₹${lockFee} will be deducted from your final payment.`
+        message: `Price locked for ${LOCK_FEE_CONFIG[duration].label}. ${currencySymbol}${lockFee} will be deducted from your final payment.`
       }
     }, 'Item locked successfully with payment');
 

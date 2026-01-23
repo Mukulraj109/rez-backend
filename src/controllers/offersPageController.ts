@@ -15,6 +15,7 @@ import SpecialProfile from '../models/SpecialProfile';
 import LoyaltyMilestone from '../models/LoyaltyMilestone';
 import FriendRedemption from '../models/FriendRedemption';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
+import { regionService, isValidRegion, RegionId } from '../services/regionService';
 
 // Helper: Common date filters for active items
 const getActiveFilter = () => ({
@@ -440,16 +441,33 @@ export const getFriendsRedeemed = async (req: Request, res: Response) => {
 
 /**
  * GET /api/cashback/double-campaigns
- * Get active double cashback campaigns
+ * Get active double cashback campaigns (region-filtered)
  */
 export const getDoubleCashbackCampaigns = async (req: Request, res: Response) => {
   try {
     const { limit = 10 } = req.query;
 
-    const campaigns = await DoubleCashbackCampaign.find({
+    // Get region from header for filtering
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
+    const filter: any = {
       isActive: true,
       endTime: { $gte: new Date() },
-    })
+    };
+
+    // Filter by region if specified (campaigns can have region field or be global)
+    if (region) {
+      filter.$or = [
+        { region: region },
+        { region: 'all' },
+        { region: { $exists: false } },
+      ];
+    }
+
+    const campaigns = await DoubleCashbackCampaign.find(filter)
       .sort({ startTime: 1 })
       .limit(parseInt(limit as string))
       .lean();
@@ -463,11 +481,17 @@ export const getDoubleCashbackCampaigns = async (req: Request, res: Response) =>
 
 /**
  * GET /api/cashback/coin-drops
- * Get active coin drop events
+ * Get active coin drop events (region-filtered)
  */
 export const getCoinDrops = async (req: Request, res: Response) => {
   try {
     const { limit = 20, category } = req.query;
+
+    // Get region from header for filtering
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
 
     const filter: any = {
       isActive: true,
@@ -476,6 +500,15 @@ export const getCoinDrops = async (req: Request, res: Response) => {
 
     if (category) {
       filter.category = category;
+    }
+
+    // If region specified, filter by stores in that region
+    if (region) {
+      const { Store } = await import('../models/Store');
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      filter.storeId = { $in: storeIds };
     }
 
     const coinDrops = await CoinDrop.find(filter)
@@ -493,16 +526,31 @@ export const getCoinDrops = async (req: Request, res: Response) => {
 
 /**
  * GET /api/cashback/upload-bill-stores
- * Get stores that accept bill uploads for cashback
+ * Get stores that accept bill uploads for cashback (region-filtered)
  */
 export const getUploadBillStores = async (req: Request, res: Response) => {
   try {
     const { limit = 20, category } = req.query;
 
+    // Get region from header for filtering
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
     const filter: any = { isActive: true };
 
     if (category) {
       filter.category = category;
+    }
+
+    // If region specified, filter by stores in that region
+    if (region) {
+      const { Store } = await import('../models/Store');
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      filter.storeId = { $in: storeIds };
     }
 
     const stores = await UploadBillStore.find(filter)
@@ -658,16 +706,31 @@ export const getSuperCashbackStores = async (req: Request, res: Response) => {
     const { limit = 20, minCashback = 10 } = req.query;
     const { Store } = await import('../models/Store');
 
-    console.log('🔥 [SUPER CASHBACK] Fetching stores with high cashback');
+    // Get region from header for filtering
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
 
-    // Find stores with cashback >= minCashback percentage
-    const stores = await Store.find({
+    console.log('🔥 [SUPER CASHBACK] Fetching stores with high cashback', { region: region || 'all' });
+
+    // Build store filter
+    const storeFilter: any = {
       isActive: true,
       $or: [
         { 'paymentInfo.cashback': { $gte: parseInt(minCashback as string) } },
         { 'paymentInfo.baseCashbackPercent': { $gte: parseInt(minCashback as string) } },
       ],
-    })
+    };
+
+    // Add region filter if specified
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      Object.assign(storeFilter, regionFilter);
+    }
+
+    // Find stores with cashback >= minCashback percentage
+    const stores = await Store.find(storeFilter)
       .select('name logo description category location paymentInfo ratings stats')
       .sort({ 'paymentInfo.cashback': -1, 'paymentInfo.baseCashbackPercent': -1 })
       .limit(parseInt(limit as string))

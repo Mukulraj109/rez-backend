@@ -8,9 +8,11 @@ import OfferRedemption from '../models/OfferRedemption';
 import Favorite from '../models/Favorite';
 import { User } from '../models/User';
 import { Wallet } from '../models/Wallet';
+import { Store } from '../models/Store';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import { filterExclusiveOffers, getUserFollowedStores } from '../middleware/exclusiveOfferMiddleware';
 import { recordExclusiveOfferView, recordExclusiveOfferRedemption } from '../services/followerAnalyticsService';
+import { regionService, isValidRegion, RegionId } from '../services/regionService';
 
 /**
  * GET /api/offers
@@ -34,12 +36,31 @@ export const getOffers = async (req: Request, res: Response) => {
       order = 'desc',
     } = req.query;
 
+    // Get region from header for filtering
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
     // Build filter query
     const filter: any = {
       'validity.isActive': true,
       'validity.startDate': { $lte: new Date() },
       'validity.endDate': { $gte: new Date() },
     };
+
+    // Add region filter by finding stores in region first
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      // Filter offers: either from stores in region OR global offers (no store)
+      filter.$or = [
+        { 'store.id': { $in: storeIds } },
+        { 'store.id': { $exists: false } },
+        { 'store.id': null }
+      ];
+    }
 
     if (category) {
       filter.category = category;
@@ -121,12 +142,33 @@ export const getFeaturedOffers = async (req: Request, res: Response) => {
   try {
     const { limit = 10 } = req.query;
 
-    const offers = await Offer.find({
+    // Get region from header for filtering
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
+    // Build filter
+    const filter: any = {
       'metadata.featured': true,
       'validity.isActive': true,
       'validity.startDate': { $lte: new Date() },
       'validity.endDate': { $gte: new Date() }
-    })
+    };
+
+    // Add region filter
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      filter.$or = [
+        { 'store.id': { $in: storeIds } },
+        { 'store.id': { $exists: false } },
+        { 'store.id': null }
+      ];
+    }
+
+    const offers = await Offer.find(filter)
     .sort({ 'metadata.priority': -1, createdAt: -1 })
     .limit(Number(limit))
     .populate('store.id', 'name logo rating')

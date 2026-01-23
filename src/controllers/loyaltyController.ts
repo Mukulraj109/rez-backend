@@ -8,6 +8,7 @@ import {
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+import { regionService, isValidRegion, RegionId } from '../services/regionService';
 
 // Interface for homepage loyalty section response
 interface LoyaltyHubStats {
@@ -242,6 +243,12 @@ export const getHomepageLoyaltySummary = asyncHandler(async (req: Request, res: 
   const userId = (req as any).user?._id || (req as any).user?.id;
   const { latitude, longitude } = req.query;
 
+  // Get region from header for filtering
+  const regionHeader = req.headers['x-rez-region'] as string;
+  const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+    ? regionHeader as RegionId
+    : undefined;
+
   // Default coordinates (Bangalore) if not provided
   const lat = latitude ? parseFloat(latitude as string) : 12.9716;
   const lng = longitude ? parseFloat(longitude as string) : 77.5946;
@@ -254,19 +261,28 @@ export const getHomepageLoyaltySummary = asyncHandler(async (req: Request, res: 
   };
 
   try {
+    // Build store filter combining geo and region
+    const storeFilter: any = {
+      'location.coordinates': {
+        $geoWithin: {
+          $centerSphere: [coordinates, 10 / 6378.1] // 10km radius, Earth radius in km
+        }
+      },
+      isActive: true
+    };
+
+    // Add region filter if specified
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      Object.assign(storeFilter, regionFilter);
+    }
+
     // Run all queries in parallel for performance
     const [loyaltyData, nearbyStores] = await Promise.all([
       // Get loyalty stats only if user is authenticated
       userId ? UserLoyalty.findOne({ userId }).lean() : Promise.resolve(null),
-      // Get nearby stores (10km radius)
-      Store.find({
-        'location.coordinates': {
-          $geoWithin: {
-            $centerSphere: [coordinates, 10 / 6378.1] // 10km radius, Earth radius in km
-          }
-        },
-        isActive: true
-      })
+      // Get nearby stores (10km radius) filtered by region
+      Store.find(storeFilter)
         .select('_id name logo')
         .limit(50)
         .lean()

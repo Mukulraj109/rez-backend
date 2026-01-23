@@ -454,9 +454,18 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
   const { limit = 10 } = req.query;
 
   try {
+    // Get region from header for filtering
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const baseQuery: Record<string, any> = { isActive: true };
+
+    if (regionHeader && isValidRegion(regionHeader)) {
+      const regionFilter = regionService.getStoreFilter(regionHeader as RegionId);
+      Object.assign(baseQuery, regionFilter);
+    }
+
     // First, try to get featured stores
     let stores = await Store.find({
-      isActive: true,
+      ...baseQuery,
       isFeatured: true
     })
       .populate('category', 'name slug icon')
@@ -466,9 +475,7 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
 
     // If no featured stores, get all active stores sorted by rating
     if (stores.length === 0) {
-      stores = await Store.find({
-        isActive: true
-      })
+      stores = await Store.find(baseQuery)
         .populate('category', 'name slug icon')
         .sort({ 'ratings.average': -1, createdAt: -1 })
         .limit(Number(limit))
@@ -478,7 +485,7 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
     else if (stores.length < Number(limit)) {
       const featuredIds = stores.map(s => s._id);
       const additionalStores = await Store.find({
-        isActive: true,
+        ...baseQuery,
         _id: { $nin: featuredIds }
       })
         .populate('category', 'name slug icon')
@@ -505,6 +512,9 @@ export const searchStores = asyncHandler(async (req: Request, res: Response) => 
   }
 
   try {
+    // Get region from header for filtering
+    const regionHeader = req.headers['x-rez-region'] as string;
+
     const query: any = {
       isActive: true,
       $or: [
@@ -515,6 +525,12 @@ export const searchStores = asyncHandler(async (req: Request, res: Response) => 
         { tags: { $regex: searchText, $options: 'i' } }
       ]
     };
+
+    // Apply region filter
+    if (regionHeader && isValidRegion(regionHeader)) {
+      const regionFilter = regionService.getStoreFilter(regionHeader as RegionId);
+      Object.assign(query, regionFilter);
+    }
 
     // Filter by category if provided
     if (category) {
@@ -1285,15 +1301,20 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
   } = req.query;
 
   try {
+    // Get region from header for filtering
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region = regionHeader && isValidRegion(regionHeader) ? regionHeader : 'all';
+
     console.log('🔥 [TRENDING STORES] Getting trending stores:', {
       category,
       limit,
       page,
-      days
+      days,
+      region
     });
 
-    // Try to get from cache first
-    const cacheKey = `store:trending:${category || 'all'}:${limit}:${page}:${days}`;
+    // Try to get from cache first (cache key includes region)
+    const cacheKey = `store:trending:${category || 'all'}:${limit}:${page}:${days}:${region}`;
     const cachedStores = await redisService.get<any>(cacheKey);
 
     if (cachedStores) {
@@ -1338,6 +1359,12 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
     const query: any = {
       isActive: true
     };
+
+    // Apply region filter
+    if (region !== 'all') {
+      const regionFilter = regionService.getStoreFilter(region as RegionId);
+      Object.assign(query, regionFilter);
+    }
 
     // Handle category conversion if provided (can be string name/slug or ObjectId)
     if (category) {
@@ -1733,6 +1760,14 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
           { subCategories: { $elemMatch: { $in: categoryIds } } }
         ]
       };
+    }
+
+    // Apply region filtering
+    const regionHeader = req.headers['x-rez-region'] as string;
+    if (regionHeader && isValidRegion(regionHeader)) {
+      const regionFilter = regionService.getStoreFilter(regionHeader as RegionId);
+      Object.assign(query, regionFilter);
+      console.log(`🌍 [GET STORES BY SLUG] Region filter applied: ${regionHeader}`);
     }
 
     // Sorting

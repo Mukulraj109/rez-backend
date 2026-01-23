@@ -4,6 +4,7 @@ import { ServiceCategory } from '../models/ServiceCategory';
 import { Store } from '../models/Store';
 import { logger } from '../config/logger';
 import mongoose from 'mongoose';
+import { regionService, isValidRegion, RegionId } from '../services/regionService';
 
 /**
  * Get all services with filters
@@ -23,12 +24,26 @@ export const getServices = async (req: Request, res: Response) => {
       storeId
     } = req.query;
 
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
     // Build query
     const query: any = {
       productType: 'service',
       isActive: true,
       isDeleted: { $ne: true }
     };
+
+    // Add region filter by finding stores in region first
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      query.store = { $in: storeIds };
+    }
 
     // Category filter
     if (category) {
@@ -126,11 +141,28 @@ export const getPopularServices = async (req: Request, res: Response) => {
     const { limit = '10' } = req.query;
     const limitNum = parseInt(limit as string, 10);
 
-    const services = await Product.find({
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
+    // Build query with region filter
+    const query: any = {
       productType: 'service',
       isActive: true,
       isDeleted: { $ne: true }
-    })
+    };
+
+    // Add region filter by finding stores in region first
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      query.store = { $in: storeIds };
+    }
+
+    const services = await Product.find(query)
       .populate('store', 'name logo location contact operationalInfo')
       .populate('serviceCategory', 'name icon cashbackPercentage slug')
       .sort({ 'analytics.purchases': -1, 'ratings.average': -1 })
@@ -178,8 +210,14 @@ export const getNearbyServices = async (req: Request, res: Response) => {
     const radiusKm = parseFloat(radius as string);
     const limitNum = parseInt(limit as string, 10);
 
-    // Find nearby stores first
-    const nearbyStores = await Store.find({
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
+    // Build store query with region filter
+    const storeQuery: any = {
       'location.coordinates': {
         $nearSphere: {
           $geometry: {
@@ -190,7 +228,16 @@ export const getNearbyServices = async (req: Request, res: Response) => {
         }
       },
       isActive: true
-    }).select('_id');
+    };
+
+    // Add region filter
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      Object.assign(storeQuery, regionFilter);
+    }
+
+    // Find nearby stores first
+    const nearbyStores = await Store.find(storeQuery).select('_id');
 
     const storeIds = nearbyStores.map(store => store._id);
 
@@ -352,12 +399,29 @@ export const getFeaturedServices = async (req: Request, res: Response) => {
     const { limit = '6' } = req.query;
     const limitNum = parseInt(limit as string, 10);
 
-    const services = await Product.find({
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
+    // Build query with region filter
+    const query: any = {
       productType: 'service',
       isActive: true,
       isFeatured: true,
       isDeleted: { $ne: true }
-    })
+    };
+
+    // Add region filter by finding stores in region first
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      query.store = { $in: storeIds };
+    }
+
+    const services = await Product.find(query)
       .populate('store', 'name logo location')
       .populate('serviceCategory', 'name icon cashbackPercentage slug')
       .sort({ 'ratings.average': -1 })
@@ -404,6 +468,12 @@ export const searchServices = async (req: Request, res: Response) => {
 
     const searchText = (q as string).trim();
 
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
     // Build query
     const query: any = {
       productType: 'service',
@@ -411,6 +481,14 @@ export const searchServices = async (req: Request, res: Response) => {
       isDeleted: { $ne: true },
       $text: { $search: searchText }
     };
+
+    // Add region filter by finding stores in region first
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      query.store = { $in: storeIds };
+    }
 
     // Category filter
     if (category) {

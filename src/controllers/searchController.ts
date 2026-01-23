@@ -9,6 +9,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import redisService from '../services/redisService';
 import { modeService, ModeId } from '../services/modeService';
+import { regionService, isValidRegion, RegionId } from '../services/regionService';
 
 /**
  * Calculate relevance score for search results
@@ -77,9 +78,9 @@ const normalizeProductName = (name: string, brand?: string): string => {
 };
 
 /**
- * Search products by query with optional mode filtering
+ * Search products by query with optional mode and region filtering
  */
-const searchProducts = async (query: string, limit: number, mode?: ModeId): Promise<any> => {
+const searchProducts = async (query: string, limit: number, mode?: ModeId, region?: RegionId): Promise<any> => {
   try {
     const searchQuery: any = {
       isActive: true,
@@ -91,13 +92,30 @@ const searchProducts = async (query: string, limit: number, mode?: ModeId): Prom
       ]
     };
 
+    // Build store filter combining mode and region
+    let storeFilter: any = { isActive: true };
+
     // Apply mode-based store filter
     if (mode && mode !== 'near-u') {
       const modeStoreFilter = modeService.getStoreFilter(mode);
-      const modeStores = await Store.find(modeStoreFilter).select('_id').lean();
-      const modeStoreIds = modeStores.map(s => s._id);
-      if (modeStoreIds.length > 0) {
-        searchQuery.store = { $in: modeStoreIds };
+      Object.assign(storeFilter, modeStoreFilter);
+    }
+
+    // Apply region-based store filter
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      Object.assign(storeFilter, regionFilter);
+    }
+
+    // If we have any store filters, find matching stores
+    if (mode || region) {
+      const filteredStores = await Store.find(storeFilter).select('_id').lean();
+      const storeIds = filteredStores.map(s => s._id);
+      if (storeIds.length > 0) {
+        searchQuery.store = { $in: storeIds };
+      } else if (region) {
+        // If region specified but no stores found, return empty
+        return { items: [], total: 0, hasMore: false };
       }
     }
 
@@ -139,13 +157,21 @@ const searchProducts = async (query: string, limit: number, mode?: ModeId): Prom
 const searchProductsGroupedInternal = async (
   query: string,
   limit: number,
-  userLocation?: { latitude: number; longitude: number }
+  userLocation?: { latitude: number; longitude: number },
+  region?: RegionId
 ): Promise<any> => {
   try {
-    // First, find stores that match the query (by name or tags)
+    // Build base store query with region filter
+    const baseStoreQuery: any = { isActive: true };
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      Object.assign(baseStoreQuery, regionFilter);
+    }
+
+    // First, find stores that match the query (by name or tags) AND are in region
     // This allows searching for "Biryani" and getting products from "Paradise Biryani" store
     const matchingStores = await Store.find({
-      isActive: true,
+      ...baseStoreQuery,
       $or: [
         { name: { $regex: query, $options: 'i' } },
         { tags: { $regex: query, $options: 'i' } }
@@ -153,6 +179,13 @@ const searchProductsGroupedInternal = async (
     }).select('_id');
 
     const matchingStoreIds = matchingStores.map(s => s._id);
+
+    // Get all stores in region for product filtering
+    let regionStoreIds: any[] = [];
+    if (region) {
+      const regionStores = await Store.find(baseStoreQuery).select('_id').lean();
+      regionStoreIds = regionStores.map(s => s._id);
+    }
 
     const searchQuery: any = {
       isActive: true,
@@ -164,6 +197,19 @@ const searchProductsGroupedInternal = async (
         { tags: { $regex: query, $options: 'i' } }
       ]
     };
+
+    // Apply region filter to products
+    if (region && regionStoreIds.length > 0) {
+      searchQuery.store = { $in: regionStoreIds };
+    } else if (region) {
+      // No stores in region, return empty
+      return {
+        groupedProducts: [],
+        summary: { sellerCount: 0, minPrice: 0, maxCashback: 0, priceRange: { min: 0, max: 0 } },
+        total: 0,
+        hasMore: false
+      };
+    }
 
     // If we found matching stores, include their products in the search
     if (matchingStoreIds.length > 0) {
@@ -441,9 +487,9 @@ const searchProductsGroupedInternal = async (
 };
 
 /**
- * Search stores by query
+ * Search stores by query with optional mode and region filtering
  */
-const searchStores = async (query: string, limit: number, mode?: ModeId): Promise<any> => {
+const searchStores = async (query: string, limit: number, mode?: ModeId, region?: RegionId): Promise<any> => {
   try {
     const searchQuery: any = {
       isActive: true,
@@ -460,6 +506,12 @@ const searchStores = async (query: string, limit: number, mode?: ModeId): Promis
     if (mode && mode !== 'near-u') {
       const modeStoreFilter = modeService.getStoreFilter(mode);
       Object.assign(searchQuery, modeStoreFilter);
+    }
+
+    // Apply region-based store filter
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      Object.assign(searchQuery, regionFilter);
     }
 
     const stores = await Store.find(searchQuery)
@@ -580,6 +632,12 @@ export const globalSearch = asyncHandler(async (req: Request, res: Response) => 
     (req as any).user?.preferences?.activeMode
   );
 
+  // Get region from X-Rez-Region header
+  const regionHeader = req.headers['x-rez-region'] as string;
+  const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+    ? regionHeader as RegionId
+    : undefined;
+
   // Validate query parameter
   if (!query || typeof query !== 'string') {
     return sendBadRequest(res, 'Search query (q) is required');
@@ -600,8 +658,8 @@ export const globalSearch = asyncHandler(async (req: Request, res: Response) => 
     return sendBadRequest(res, 'Invalid types parameter. Valid types: products, stores, articles');
   }
 
-  // Generate cache key (include mode)
-  const cacheKey = `search:global:${query}:${validTypes.sort().join(',')}:${limit}:${activeMode}`;
+  // Generate cache key (include mode AND region)
+  const cacheKey = `search:global:${query}:${validTypes.sort().join(',')}:${limit}:${activeMode}:${region || 'all'}`;
 
   try {
     // Check cache first
@@ -624,12 +682,12 @@ export const globalSearch = asyncHandler(async (req: Request, res: Response) => 
     const typeMap: string[] = [];
 
     if (validTypes.includes('products')) {
-      searchPromises.push(searchProducts(query, limit, activeMode));
+      searchPromises.push(searchProducts(query, limit, activeMode, region));
       typeMap.push('products');
     }
 
     if (validTypes.includes('stores')) {
-      searchPromises.push(searchStores(query, limit, activeMode));
+      searchPromises.push(searchStores(query, limit, activeMode, region));
       typeMap.push('stores');
     }
 
@@ -723,6 +781,12 @@ export const searchProductsGrouped = asyncHandler(async (req: Request, res: Resp
     lon
   } = req.query;
 
+  // Get region from X-Rez-Region header
+  const regionHeader = req.headers['x-rez-region'] as string;
+  const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+    ? regionHeader as RegionId
+    : undefined;
+
   // Validate query parameter
   if (!query || typeof query !== 'string') {
     return sendBadRequest(res, 'Search query (q) is required');
@@ -741,8 +805,8 @@ export const searchProductsGrouped = asyncHandler(async (req: Request, res: Resp
     }
   }
 
-  // Generate cache key
-  const cacheKey = `search:grouped:${query}:${limit}:${userLocation ? `${userLocation.latitude},${userLocation.longitude}` : 'noloc'}`;
+  // Generate cache key (include region)
+  const cacheKey = `search:grouped:${query}:${limit}:${userLocation ? `${userLocation.latitude},${userLocation.longitude}` : 'noloc'}:${region || 'all'}`;
 
   try {
     // Check cache first
@@ -757,10 +821,10 @@ export const searchProductsGrouped = asyncHandler(async (req: Request, res: Resp
       }, 'Grouped product search completed successfully (cached)');
     }
 
-    console.log(`🔍 [GROUPED SEARCH] Searching for: "${query}" with limit: ${limit}`);
+    console.log(`🔍 [GROUPED SEARCH] Searching for: "${query}" with limit: ${limit}, region: ${region || 'all'}`);
 
-    // Perform grouped search
-    const result = await searchProductsGroupedInternal(query, limit, userLocation);
+    // Perform grouped search with region filtering
+    const result = await searchProductsGroupedInternal(query, limit, userLocation, region);
 
     // Cache the results for 10 minutes (600 seconds)
     const CACHE_TTL = 600;
@@ -1251,10 +1315,17 @@ export const getAutocomplete = asyncHandler(async (req: Request, res: Response) 
 
   const normalizedQuery = searchQuery.trim();
 
-  try {
-    console.log('🔍 [AUTOCOMPLETE] Processing query:', normalizedQuery);
+  // Get region from X-Rez-Region header
+  const regionHeader = req.headers['x-rez-region'] as string;
+  const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+    ? regionHeader as RegionId
+    : undefined;
 
-    const cacheKey = `search:autocomplete:${normalizedQuery.toLowerCase()}`;
+  try {
+    console.log('🔍 [AUTOCOMPLETE] Processing query:', normalizedQuery, 'region:', region || 'all');
+
+    // Include region in cache key
+    const cacheKey = `search:autocomplete:${normalizedQuery.toLowerCase()}:${region || 'all'}`;
     const cachedResults = await redisService.get<any>(cacheKey);
 
     if (cachedResults) {
@@ -1264,30 +1335,53 @@ export const getAutocomplete = asyncHandler(async (req: Request, res: Response) 
 
     const searchRegex = new RegExp(normalizedQuery, 'i');
 
+    // Get stores in region for filtering products
+    let regionStoreIds: any[] = [];
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const regionStores = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      regionStoreIds = regionStores.map(s => s._id);
+    }
+
+    // Build product query with region filter
+    const productQuery: any = {
+      isActive: true,
+      'inventory.isAvailable': true,
+      $or: [
+        { name: searchRegex },
+        { title: searchRegex },
+        { brand: searchRegex },
+        { description: searchRegex }
+      ]
+    };
+
+    if (region && regionStoreIds.length > 0) {
+      productQuery.store = { $in: regionStoreIds };
+    }
+
+    // Build store query with region filter
+    const storeQuery: any = {
+      isActive: true,
+      $or: [
+        { name: searchRegex },
+        { description: searchRegex }
+      ]
+    };
+
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      Object.assign(storeQuery, regionFilter);
+    }
+
     const [products, stores, categories, brands] = await Promise.all([
-      Product.find({
-        isActive: true,
-        'inventory.isAvailable': true,
-        $or: [
-          { name: searchRegex },
-          { title: searchRegex },
-          { brand: searchRegex },
-          { description: searchRegex }
-        ]
-      })
+      Product.find(productQuery)
         .select('_id name title price pricing image images brand store')
         .populate('store', 'name')
         .sort({ 'analytics.views': -1, 'analytics.purchases': -1 })
         .limit(5)
         .lean(),
 
-      Store.find({
-        isActive: true,
-        $or: [
-          { name: searchRegex },
-          { description: searchRegex }
-        ]
-      })
+      Store.find(storeQuery)
         .select('_id name logo')
         .sort({ 'ratings.average': -1, 'ratings.count': -1 })
         .limit(3)

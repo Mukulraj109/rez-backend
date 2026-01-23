@@ -2,9 +2,11 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Product } from '../models/Product';
 import { ServiceCategory } from '../models/ServiceCategory';
+import { Store } from '../models/Store';
 import { logger } from '../config/logger';
 import { sendSuccess, sendError, sendNotFound } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
+import { regionService, isValidRegion, RegionId } from '../services/regionService';
 
 // Financial service category slugs
 const FINANCIAL_CATEGORY_SLUGS = ['bills', 'ott', 'recharge', 'gold', 'insurance', 'offers'];
@@ -54,6 +56,12 @@ export const getFeaturedFinancialServices = asyncHandler(async (req: Request, re
     const { limit = '6' } = req.query;
     const limitNum = parseInt(limit as string, 10);
 
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
     // Get financial service categories
     const financialCategories = await ServiceCategory.find({
       slug: { $in: FINANCIAL_CATEGORY_SLUGS },
@@ -62,13 +70,24 @@ export const getFeaturedFinancialServices = asyncHandler(async (req: Request, re
 
     const categoryIds = financialCategories.map(c => c._id);
 
-    const services = await Product.find({
+    // Build query with region filter
+    const query: any = {
       productType: 'service',
       isActive: true,
       isFeatured: true,
       isDeleted: { $ne: true },
       serviceCategory: { $in: categoryIds }
-    })
+    };
+
+    // Add region filter by finding stores in region first
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      query.store = { $in: storeIds };
+    }
+
+    const services = await Product.find(query)
       .populate('store', 'name logo')
       .populate('serviceCategory', 'name icon cashbackPercentage slug')
       .select('name slug description shortDescription images pricing cashback ratings serviceDetails serviceCategory store')
@@ -157,6 +176,12 @@ export const getFinancialServicesByCategory = asyncHandler(async (req: Request, 
     const limitNum = parseInt(limit as string, 10);
     const skip = (pageNum - 1) * limitNum;
 
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
     // Validate category slug
     if (!FINANCIAL_CATEGORY_SLUGS.includes(slug)) {
       return sendNotFound(res, 'Financial service category not found');
@@ -179,6 +204,14 @@ export const getFinancialServicesByCategory = asyncHandler(async (req: Request, 
       isDeleted: { $ne: true },
       serviceCategory: category._id
     };
+
+    // Add region filter by finding stores in region first
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      query.store = { $in: storeIds };
+    }
 
     // Price filters
     if (minPrice) {
@@ -312,6 +345,12 @@ export const searchFinancialServices = asyncHandler(async (req: Request, res: Re
     const limitNum = parseInt(limit as string, 10);
     const skip = (pageNum - 1) * limitNum;
 
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
     // Get financial service categories
     let categoryIds: any[] = [];
     if (category) {
@@ -343,6 +382,14 @@ export const searchFinancialServices = asyncHandler(async (req: Request, res: Re
         { tags: { $in: [new RegExp(q as string, 'i')] } }
       ]
     };
+
+    // Add region filter by finding stores in region first
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      searchQuery.store = { $in: storeIds };
+    }
 
     // Build sort
     let sort: any = {};

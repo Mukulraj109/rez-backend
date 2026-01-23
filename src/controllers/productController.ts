@@ -48,10 +48,14 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
     category, store, excludeProducts, diversityMode, mode: activeMode
   });
 
+  // Get region for cache key
+  const regionHeader = req.headers['x-rez-region'] as string;
+  const effectiveRegionForCache = (region as string) || regionHeader || 'all';
+
   // Try to get from cache first (skip if excludeProducts or diversityMode is used)
   if (!excludeProducts && diversityMode === 'none') {
     const filterHash = generateQueryCacheKey({
-      category, store, minPrice, maxPrice, rating, inStock, featured, search, sortBy, page, limit
+      category, store, minPrice, maxPrice, rating, inStock, featured, search, sortBy, page, limit, mode: activeMode, region: effectiveRegionForCache
     });
     const cacheKey = CacheKeys.productList(filterHash);
     const cachedData = await redisService.get<any>(cacheKey);
@@ -80,8 +84,7 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
-  // Apply region-based store filter
-  const regionHeader = req.headers['x-rez-region'] as string;
+  // Apply region-based store filter (use already extracted regionHeader)
   const effectiveRegion = (region as string) || regionHeader;
 
   if (effectiveRegion && isValidRegion(effectiveRegion)) {
@@ -1706,13 +1709,31 @@ export const getPopularProducts = asyncHandler(async (req: Request, res: Respons
   const { limit = 10 } = req.query;
 
   try {
-    console.log('🔥 [POPULAR PRODUCTS] Getting popular products with limit:', limit);
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
 
-    // Query products sorted by purchases (most ordered first)
-    const products = await Product.find({
+    console.log('🔥 [POPULAR PRODUCTS] Getting popular products with limit:', limit, 'region:', region || 'all');
+
+    // Build query with region filtering
+    const query: any = {
       isActive: true,
       'inventory.isAvailable': true
-    })
+    };
+
+    // Filter by stores in region if region specified
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+      const storeIds = storesInRegion.map((s: any) => s._id);
+      query.store = { $in: storeIds };
+      console.log(`🔥 [POPULAR PRODUCTS] Filtering by ${storeIds.length} stores in ${region}`);
+    }
+
+    // Query products sorted by purchases (most ordered first)
+    const products = await Product.find(query)
       .populate('category', 'name slug')
       .populate('store', 'name logo operationalInfo location')
       .sort({ 'analytics.purchases': -1, 'analytics.views': -1 })

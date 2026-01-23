@@ -40,6 +40,7 @@ export interface ICampaign extends Document {
   maxBenefit?: number;
   icon?: string;
   bannerImage?: string;
+  region?: 'bangalore' | 'dubai' | 'china' | 'all'; // Region restriction - 'all' means available everywhere
   createdAt: Date;
   updatedAt: Date;
 
@@ -157,6 +158,12 @@ const CampaignSchema = new Schema<ICampaign>({
   bannerImage: {
     type: String,
   },
+  region: {
+    type: String,
+    enum: ['bangalore', 'dubai', 'china', 'all'],
+    default: 'all', // Available in all regions by default
+    index: true,
+  },
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -167,6 +174,7 @@ const CampaignSchema = new Schema<ICampaign>({
 CampaignSchema.index({ isActive: 1, startTime: 1, endTime: 1 });
 CampaignSchema.index({ type: 1, isActive: 1 });
 CampaignSchema.index({ priority: -1 });
+CampaignSchema.index({ region: 1, isActive: 1 }); // Region-based filtering
 
 // Virtual to check if campaign is currently running
 CampaignSchema.virtual('isRunning').get(function() {
@@ -175,23 +183,45 @@ CampaignSchema.virtual('isRunning').get(function() {
 });
 
 // Static methods
-CampaignSchema.statics.getActiveCampaigns = function() {
+CampaignSchema.statics.getActiveCampaigns = function(region?: string) {
   const now = new Date();
-  return this.find({
+  const query: any = {
     isActive: true,
     startTime: { $lte: now },
     endTime: { $gte: now },
-  }).sort({ priority: -1 });
+  };
+
+  // Filter by region: show campaigns for specific region OR 'all' regions
+  if (region && region !== 'all') {
+    query.$or = [
+      { region: region },
+      { region: 'all' },
+      { region: { $exists: false } }, // Legacy campaigns without region field
+    ];
+  }
+
+  return this.find(query).sort({ priority: -1 });
 };
 
-CampaignSchema.statics.getCampaignsByType = function(type: string) {
+CampaignSchema.statics.getCampaignsByType = function(type: string, region?: string) {
   const now = new Date();
-  return this.find({
+  const query: any = {
     type,
     isActive: true,
     startTime: { $lte: now },
     endTime: { $gte: now },
-  }).sort({ priority: -1 });
+  };
+
+  // Filter by region: show campaigns for specific region OR 'all' regions
+  if (region && region !== 'all') {
+    query.$or = [
+      { region: region },
+      { region: 'all' },
+      { region: { $exists: false } }, // Legacy campaigns without region field
+    ];
+  }
+
+  return this.find(query).sort({ priority: -1 });
 };
 
 const Campaign = mongoose.model<ICampaign>('Campaign', CampaignSchema);

@@ -91,9 +91,11 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
 
     const duration = Date.now() - startTime;
 
-    // Set cache headers (5 minutes)
+    // Set cache headers - use private cache since response varies by region header
+    // Browser should not cache this publicly as it depends on X-Rez-Region header
     res.set({
-      'Cache-Control': 'public, max-age=300',
+      'Cache-Control': 'private, max-age=60',
+      'Vary': 'X-Rez-Region',
       'X-Response-Time': `${duration}ms`
     });
 
