@@ -179,7 +179,7 @@ export const authSchemas = {
 // Product validation schemas
 export const productSchemas = {
   getProducts: Joi.object({
-    category: commonSchemas.objectId,
+    category: Joi.string().trim().max(100), // Allow category slug (string) or ObjectId
     store: commonSchemas.objectId,
     minPrice: Joi.number().min(0),
     maxPrice: Joi.number().min(0),
@@ -191,6 +191,16 @@ export const productSchemas = {
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(100).default(20),
     sort: Joi.string().valid('createdAt', '-createdAt', 'updatedAt', '-updatedAt', 'name', '-name'),
+    // Vibe/Tag filtering for Shop by Vibe feature
+    tags: Joi.string().trim().max(100),
+    // Occasion filtering for Shop by Occasion feature
+    occasion: Joi.string().trim().max(100),
+    // Brand filtering
+    brand: Joi.string().trim().max(100),
+    // Mode system filter (4-mode system)
+    mode: Joi.string().valid('near-u', 'explore', 'deals', 'premium'),
+    // Region filter
+    region: Joi.string().valid('bangalore', 'dubai', 'china'),
     // Diversity enhancement fields
     excludeProducts: Joi.string().optional().pattern(/^[0-9a-fA-F]{24}(,[0-9a-fA-F]{24})*$/).messages({
       'string.pattern.base': 'excludeProducts must be comma-separated valid MongoDB ObjectIds'
@@ -257,7 +267,8 @@ export const orderSchemas = {
     specialInstructions: Joi.string().trim().max(500).allow(''), // Allow empty string
     couponCode: Joi.string().trim().uppercase(),
     coinsUsed: Joi.object({ // Add coinsUsed validation
-      wasilCoins: Joi.number().min(0).default(0),
+      rezCoins: Joi.number().min(0).default(0), // Primary field for REZ coins
+      wasilCoins: Joi.number().min(0).default(0), // Legacy field
       promoCoins: Joi.number().min(0).default(0),
       storePromoCoins: Joi.number().min(0).default(0),
       totalCoinsValue: Joi.number().min(0).default(0)

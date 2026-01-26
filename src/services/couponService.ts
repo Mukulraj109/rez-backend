@@ -390,52 +390,125 @@ class CouponService {
   }
 
   /**
-   * Mark coupon as used in an order
+   * Mark coupon as used in an order with atomic check-and-increment
+   * This prevents race conditions where multiple concurrent users could exceed the usage limit
    */
   async markCouponAsUsed(
     userId: Types.ObjectId,
     couponCode: string,
     orderId: Types.ObjectId
-  ): Promise<void> {
+  ): Promise<{ success: boolean; error?: string }> {
     try {
-      const coupon = await Coupon.findOne({ couponCode: couponCode.toUpperCase() });
+      const upperCouponCode = couponCode.toUpperCase();
 
-      if (!coupon) {
-        console.error('❌ [COUPON SERVICE] Coupon not found:', couponCode);
-        return;
+      // Use atomic findOneAndUpdate to check limit and increment in a single operation
+      // This prevents race conditions where multiple requests pass the check before any increments
+      const now = new Date();
+      const updatedCoupon = await Coupon.findOneAndUpdate(
+        {
+          couponCode: upperCouponCode,
+          status: 'active',
+          validFrom: { $lte: now },
+          validTo: { $gte: now },
+          // Only update if usage limit not reached (or unlimited when totalUsage is 0)
+          $or: [
+            { 'usageLimit.totalUsage': 0 }, // Unlimited usage
+            { $expr: { $lt: ['$usageLimit.usedCount', '$usageLimit.totalUsage'] } }
+          ]
+        },
+        {
+          $inc: {
+            'usageLimit.usedCount': 1,
+            usageCount: 1
+          }
+        },
+        {
+          new: true, // Return the updated document
+          runValidators: true
+        }
+      );
+
+      if (!updatedCoupon) {
+        // Either coupon not found, expired, inactive, or usage limit reached
+        const existingCoupon = await Coupon.findOne({ couponCode: upperCouponCode });
+
+        if (!existingCoupon) {
+          console.error('❌ [COUPON SERVICE] Coupon not found:', couponCode);
+          return { success: false, error: 'COUPON_NOT_FOUND' };
+        }
+
+        if (existingCoupon.status !== 'active') {
+          console.error('❌ [COUPON SERVICE] Coupon is inactive:', couponCode);
+          return { success: false, error: 'COUPON_INACTIVE' };
+        }
+
+        if (existingCoupon.usageLimit.totalUsage > 0 &&
+            existingCoupon.usageLimit.usedCount >= existingCoupon.usageLimit.totalUsage) {
+          console.error('❌ [COUPON SERVICE] Coupon usage limit reached:', couponCode);
+          return { success: false, error: 'USAGE_LIMIT_REACHED' };
+        }
+
+        console.error('❌ [COUPON SERVICE] Coupon validation failed:', couponCode);
+        return { success: false, error: 'COUPON_VALIDATION_FAILED' };
       }
 
-      // Find user's claimed coupon
-      let userCoupon = await UserCoupon.findOne({
-        user: userId,
-        coupon: coupon._id,
-        status: 'available',
-      });
+      // Check if the coupon should be deactivated after this usage
+      if (updatedCoupon.usageLimit.totalUsage > 0 &&
+          updatedCoupon.usageLimit.usedCount >= updatedCoupon.usageLimit.totalUsage) {
+        await Coupon.updateOne(
+          { _id: updatedCoupon._id },
+          { $set: { status: 'inactive' } }
+        );
+        console.log(`⚠️ [COUPON SERVICE] Coupon ${couponCode} deactivated - usage limit reached`);
+      }
 
-      if (userCoupon) {
-        // Mark existing claimed coupon as used
-        await (userCoupon as any).markAsUsed(orderId);
-      } else {
-        // User used coupon without claiming first - create a 'used' record to track usage
-        // This prevents the same user from using the coupon again
-        await UserCoupon.create({
+      // Atomically update user coupon record to prevent duplicate usage by same user
+      const userCouponUpdate = await UserCoupon.findOneAndUpdate(
+        {
           user: userId,
-          coupon: coupon._id,
-          claimedDate: new Date(),
-          expiryDate: coupon.validTo,
-          status: 'used',
-          usedDate: new Date(),
-          usedInOrder: orderId,
-        });
+          coupon: updatedCoupon._id,
+          status: 'available',
+        },
+        {
+          $set: {
+            status: 'used',
+            usedDate: new Date(),
+            usedInOrder: orderId,
+          }
+        },
+        { new: true }
+      );
+
+      if (!userCouponUpdate) {
+        // User used coupon without claiming first - create a 'used' record atomically
+        // Use findOneAndUpdate with upsert to prevent duplicate records in concurrent requests
+        await UserCoupon.findOneAndUpdate(
+          {
+            user: userId,
+            coupon: updatedCoupon._id,
+            usedInOrder: orderId, // Use orderId to ensure uniqueness for this specific order
+          },
+          {
+            $setOnInsert: {
+              user: userId,
+              coupon: updatedCoupon._id,
+              claimedDate: new Date(),
+              expiryDate: updatedCoupon.validTo,
+              status: 'used',
+              usedDate: new Date(),
+              usedInOrder: orderId,
+            }
+          },
+          { upsert: true, new: true }
+        );
         console.log(`✅ [COUPON SERVICE] Created used UserCoupon record for unclaimed coupon ${couponCode}`);
       }
 
-      // Increment coupon usage count
-      await (coupon as any).incrementUsageCount();
-
       console.log(`✅ [COUPON SERVICE] Coupon ${couponCode} marked as used by user ${userId}`);
+      return { success: true };
     } catch (error) {
       console.error('❌ [COUPON SERVICE] Error marking coupon as used:', error);
+      return { success: false, error: 'INTERNAL_ERROR' };
     }
   }
 

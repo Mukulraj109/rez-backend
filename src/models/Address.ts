@@ -12,6 +12,7 @@ export interface IAddress extends Document {
   user: Types.ObjectId;
   type: AddressType;
   title: string;
+  phone?: string;
   addressLine1: string;
   addressLine2?: string;
   city: string;
@@ -47,6 +48,11 @@ const AddressSchema = new Schema<IAddress>({
     required: true,
     trim: true,
     maxlength: 50
+  },
+  phone: {
+    type: String,
+    trim: true,
+    maxlength: 20
   },
   addressLine1: {
     type: String,

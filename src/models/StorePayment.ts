@@ -11,6 +11,7 @@ import mongoose, { Schema, Document, Types, Model } from 'mongoose';
 export interface ICoinRedemption {
   rezCoins: number;
   promoCoins: number;
+  brandedCoins: number;  // Merchant-specific coins
   payBill: number;
   totalAmount: number;
 }
@@ -121,6 +122,7 @@ const StorePaymentSchema = new Schema<IStorePayment>(
     coinRedemption: {
       rezCoins: { type: Number, default: 0, min: 0 },
       promoCoins: { type: Number, default: 0, min: 0 },
+      brandedCoins: { type: Number, default: 0, min: 0 },  // Merchant-specific coins
       payBill: { type: Number, default: 0, min: 0 },
       totalAmount: { type: Number, default: 0, min: 0 },
     },

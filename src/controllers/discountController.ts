@@ -632,11 +632,14 @@ export const validateCardForOffers = async (req: Request, res: Response) => {
     }
 
     // Extract card BIN (first 6 digits)
-    const cardBin = cardNumber.replace(/\s/g, '').substring(0, 6);
-    
-    // Detect card type (simplified: check if it's a known credit/debit pattern)
-    // In production, use a proper card validation library
-    const cardType = cardNumber.length >= 16 ? 'credit' : 'debit';
+    const cleanCardNumber = cardNumber.replace(/\s/g, '');
+    const cardBin = cleanCardNumber.substring(0, 6);
+
+    // Card type detection using BIN ranges
+    // Credit card BINs typically start with: 4 (Visa), 5 (Mastercard), 3 (Amex), 6 (Discover)
+    // Note: In production, use a proper BIN database for accurate detection
+    // For now, we use 'all' to match both credit and debit offers
+    const cardType = req.body.cardType || 'all';
 
     const now = new Date();
     
@@ -670,7 +673,7 @@ export const validateCardForOffers = async (req: Request, res: Response) => {
           $or: [
             { bankNames: { $exists: false }, cardBins: { $exists: false } }, // No restrictions
             { bankNames: { $size: 0 }, cardBins: { $size: 0 } }, // Empty arrays
-            { cardBins: cardBin }, // Card BIN matches
+            { cardBins: { $in: [cardBin] } }, // Card BIN matches (cardBins is an array)
           ]
         }
       ]

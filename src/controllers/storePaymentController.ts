@@ -11,11 +11,12 @@
 import { Request, Response } from 'express';
 import { Store, IStorePaymentSettings } from '../models/Store';
 import { QRCodeService } from '../services/qrCodeService';
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import { StorePayment, IPaymentRewards } from '../models/StorePayment';
 import stripeService from '../services/stripeService';
 import { Wallet } from '../models/Wallet';
 import { Transaction } from '../models/Transaction';
+import Discount from '../models/Discount';
 // Note: StorePromoCoin model removed - using wallet.brandedCoins instead
 
 // ==================== QR CODE HANDLERS ====================
@@ -468,26 +469,96 @@ export const getStorePaymentOffers = async (req: Request, res: Response) => {
       });
     }
 
-    // TODO: Fetch bank offers from offers/discounts system
+    // Fetch bank/card offers from Discount model
     const bankOffers: any[] = [];
+    try {
+      const cardDiscounts = await Discount.find({
+        isActive: true,
+        validFrom: { $lte: new Date() },
+        validUntil: { $gte: new Date() },
+        applicableOn: { $in: ['card_payment', 'bill_payment', 'all'] },
+        $or: [
+          { scope: 'global' },
+          { scope: 'store', storeId: storeId },
+          { scope: 'merchant', merchantId: store.merchantId },
+        ],
+        minOrderValue: { $lte: billAmount || 0 },
+      }).sort({ priority: -1 }).limit(5);
 
-    // TODO: Fetch ReZ platform offers
+      for (const discount of cardDiscounts) {
+        const calculatedDiscount = discount.calculateDiscount(billAmount || 0);
+        bankOffers.push({
+          id: discount._id.toString(),
+          type: discount.type === 'percentage' ? 'PERCENTAGE' : 'FIXED',
+          title: discount.name,
+          description: discount.description || `Get ${discount.type === 'percentage' ? discount.value + '%' : '₹' + discount.value} off`,
+          value: discount.value,
+          valueType: discount.type === 'percentage' ? 'PERCENTAGE' : 'FIXED',
+          minAmount: discount.minOrderValue,
+          maxDiscount: discount.maxDiscountAmount,
+          calculatedDiscount,
+          bankNames: discount.bankNames || [],
+          cardType: discount.cardType || 'all',
+          paymentMethod: discount.paymentMethod || 'card',
+          metadata: discount.metadata,
+        });
+      }
+    } catch (discountError) {
+      console.error('Failed to fetch bank offers:', discountError);
+    }
+
+    // Fetch ReZ platform offers (global discounts without store/merchant restriction)
     const rezOffers: any[] = [];
+    try {
+      const platformDiscounts = await Discount.find({
+        isActive: true,
+        validFrom: { $lte: new Date() },
+        validUntil: { $gte: new Date() },
+        scope: 'global',
+        applicableOn: { $in: ['bill_payment', 'all'] },
+        minOrderValue: { $lte: billAmount || 0 },
+      }).sort({ priority: -1 }).limit(3);
 
-    // Calculate best offer for the amount
+      for (const discount of platformDiscounts) {
+        // Skip if already added to bank offers
+        if (bankOffers.some(o => o.id === discount._id.toString())) continue;
+
+        const calculatedDiscount = discount.calculateDiscount(billAmount || 0);
+        rezOffers.push({
+          id: discount._id.toString(),
+          type: discount.type === 'percentage' ? 'PERCENTAGE' : 'FIXED',
+          title: discount.name,
+          description: discount.description || `ReZ Offer: ${discount.type === 'percentage' ? discount.value + '%' : '₹' + discount.value} off`,
+          value: discount.value,
+          valueType: discount.type === 'percentage' ? 'PERCENTAGE' : 'FIXED',
+          minAmount: discount.minOrderValue,
+          maxDiscount: discount.maxDiscountAmount,
+          calculatedDiscount,
+          isRezOffer: true,
+          metadata: discount.metadata,
+        });
+      }
+    } catch (discountError) {
+      console.error('Failed to fetch ReZ offers:', discountError);
+    }
+
+    // Calculate best offer from all offer types
     let bestOffer = null;
-    if (billAmount > 0 && storeOffers.length > 0) {
-      const eligibleOffers = storeOffers.filter((offer) => billAmount >= (offer.minAmount || 0));
+    if (billAmount > 0) {
+      // Combine all offers
+      const allOffers = [
+        ...storeOffers.map(o => ({ ...o, source: 'store' })),
+        ...bankOffers.map(o => ({ ...o, source: 'bank' })),
+        ...rezOffers.map(o => ({ ...o, source: 'rez' })),
+      ].filter((offer) => billAmount >= (offer.minAmount || 0));
 
-      if (eligibleOffers.length > 0) {
-        // Find offer with highest value
-        bestOffer = eligibleOffers.reduce((best, current) => {
-          const bestValue =
-            best.valueType === 'PERCENTAGE' ? (billAmount * best.value) / 100 : best.value;
-          const currentValue =
-            current.valueType === 'PERCENTAGE'
-              ? (billAmount * current.value) / 100
-              : current.value;
+      if (allOffers.length > 0) {
+        // Find offer with highest calculated discount value
+        bestOffer = allOffers.reduce((best, current) => {
+          const bestValue = best.calculatedDiscount ||
+            (best.valueType === 'PERCENTAGE' ? (billAmount * best.value) / 100 : best.value);
+          const currentValue = current.calculatedDiscount ||
+            (current.valueType === 'PERCENTAGE' ? (billAmount * current.value) / 100 : current.value);
           return currentValue > bestValue ? current : best;
         });
       }
@@ -573,6 +644,7 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
     const coinRedemption = {
       rezCoins: coinsToRedeem?.rezCoins || 0,
       promoCoins: coinsToRedeem?.promoCoins || 0,
+      brandedCoins: coinsToRedeem?.brandedCoins || 0,  // Merchant-specific coins
       payBill: coinsToRedeem?.payBill || 0,
       totalAmount: 0,
     };
@@ -593,9 +665,12 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
           message: 'This store does not accept Promo Coins',
         });
       }
+
+      // Calculate total coin redemption (ReZ + Promo + Branded)
       coinRedemptionAmount =
         coinRedemption.rezCoins +
-        coinRedemption.promoCoins;
+        coinRedemption.promoCoins +
+        coinRedemption.brandedCoins;
 
       coinRedemption.totalAmount = coinRedemptionAmount;
 
@@ -617,12 +692,32 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
         }
 
         // Check ReZ coins + Promo coins (from available balance)
-        const coinsNeeded = coinRedemption.rezCoins + coinRedemption.promoCoins;
-        if (coinsNeeded > wallet.balance.available) {
+        const universalCoinsNeeded = coinRedemption.rezCoins + coinRedemption.promoCoins;
+        if (universalCoinsNeeded > wallet.balance.available) {
           return res.status(400).json({
             success: false,
-            message: `Insufficient coin balance. You have ₹${wallet.balance.available} but trying to use ₹${coinsNeeded}`,
+            message: `Insufficient coin balance. You have ₹${wallet.balance.available} but trying to use ₹${universalCoinsNeeded}`,
           });
+        }
+
+        // Validate branded coins balance if being used
+        if (coinRedemption.brandedCoins > 0) {
+          // Find branded coins for this specific store/merchant
+          const storeMerchantId = (store as any).merchantId?.toString() || storeId;
+          const merchantBrandedCoin = wallet.brandedCoins?.find(
+            (bc: any) => {
+              const bcMerchantId = bc.merchantId?.toString();
+              return bcMerchantId === storeId || bcMerchantId === storeMerchantId;
+            }
+          );
+
+          const availableBrandedCoins = merchantBrandedCoin?.amount || 0;
+          if (coinRedemption.brandedCoins > availableBrandedCoins) {
+            return res.status(400).json({
+              success: false,
+              message: `Insufficient branded coins. You have ₹${availableBrandedCoins} but trying to use ₹${coinRedemption.brandedCoins}`,
+            });
+          }
         }
       }
     }
@@ -636,6 +731,25 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
     // Determine effective payment method
     const effectivePaymentMethod = remainingAmount === 0 ? 'coins_only' : paymentMethod;
 
+    // Calculate discount from applied offers
+    let discountAmount = 0;
+    if (offersApplied && offersApplied.length > 0) {
+      for (const offer of offersApplied) {
+        if (offer.type === 'PERCENTAGE' || offer.valueType === 'PERCENTAGE') {
+          let offerDiscount = Math.floor((amount * (offer.value || 0)) / 100);
+          // Apply max discount cap if specified
+          if (offer.maxDiscount && offerDiscount > offer.maxDiscount) {
+            offerDiscount = offer.maxDiscount;
+          }
+          discountAmount += offerDiscount;
+        } else if (offer.type === 'FIXED' || offer.valueType === 'FIXED') {
+          discountAmount += offer.value || 0;
+        } else if (offer.calculatedDiscount) {
+          discountAmount += offer.calculatedDiscount;
+        }
+      }
+    }
+
     // Create store payment record
     const storePayment = new StorePayment({
       paymentId,
@@ -643,13 +757,13 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
       storeId: new Types.ObjectId(storeId),
       storeName: store.name,
       billAmount: amount,
-      discountAmount: 0, // Could be calculated from offers
+      discountAmount,
       coinRedemption,
       remainingAmount,
       paymentMethod: effectivePaymentMethod,
       offersApplied: offersApplied || [],
       status: 'initiated',
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes expiry
     });
 
     // If there's an amount to pay, create Stripe PaymentIntent
@@ -723,8 +837,14 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
 /**
  * Confirm store payment
  * POST /api/store-payment/confirm
+ *
+ * IMPORTANT: This function uses MongoDB sessions for atomic operations.
+ * All coin deductions and payment updates happen within a single transaction.
  */
 export const confirmStorePayment = async (req: Request, res: Response) => {
+  // Start a MongoDB session for atomic operations
+  const session = await mongoose.startSession();
+
   try {
     const { paymentId, transactionId } = req.body;
     const userId = (req as any).user?.id;
@@ -774,7 +894,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
 
     // Verify Stripe payment if applicable (only for card payments, not UPI)
     const isCardPayment = storePayment.paymentMethod.includes('card');
-    
+
     if (storePayment.stripePaymentIntentId && storePayment.remainingAmount > 0 && isCardPayment) {
       console.log('🔐 [STORE PAYMENT] Verifying Stripe payment:', storePayment.stripePaymentIntentId);
 
@@ -803,135 +923,282 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
       console.log('📱 [STORE PAYMENT] UPI payment confirmation - Transaction ID:', transactionId);
     }
 
-    // Update payment status to processing
-    storePayment.status = 'processing';
-    await storePayment.save();
+    // Start the atomic transaction
+    session.startTransaction();
 
-    // Deduct coins from user's wallet
-    if (storePayment.coinRedemption.totalAmount > 0) {
-      console.log('💰 [STORE PAYMENT] Deducting coins:', storePayment.coinRedemption);
+    try {
+      // Update payment status to processing
+      storePayment.status = 'processing';
+      await storePayment.save({ session });
 
-      try {
-        const wallet = await Wallet.findOne({ user: storePayment.userId });
+      // Deduct coins from user's wallet (ATOMIC)
+      if (storePayment.coinRedemption.totalAmount > 0) {
+        console.log('💰 [STORE PAYMENT] Deducting coins:', storePayment.coinRedemption);
 
-        if (wallet) {
-          // Deduct ReZ coins + Promo coins (from available balance)
-          const coinsToDeduce = storePayment.coinRedemption.rezCoins + storePayment.coinRedemption.promoCoins;
-          if (coinsToDeduce > 0) {
-            await wallet.deductFunds(coinsToDeduce);
-            console.log('✅ Deducted coins:', coinsToDeduce);
+        const wallet = await Wallet.findOne({ user: storePayment.userId }).session(session);
+
+        if (!wallet) {
+          throw new Error('Wallet not found for coin deduction');
+        }
+
+        // Re-validate coin balances before deduction (prevent race conditions)
+        const rezCoinsToDeduct = storePayment.coinRedemption.rezCoins || 0;
+        const promoCoinsToDeduct = storePayment.coinRedemption.promoCoins || 0;
+        const brandedCoinsToDeduct = storePayment.coinRedemption.brandedCoins || 0;
+        const universalCoinsToDeduct = rezCoinsToDeduct + promoCoinsToDeduct;
+
+        // Validate universal coins (ReZ + Promo) balance
+        if (universalCoinsToDeduct > 0) {
+          if (wallet.balance.available < universalCoinsToDeduct) {
+            throw new Error(`Insufficient coin balance. Available: ${wallet.balance.available}, Required: ${universalCoinsToDeduct}`);
           }
 
-          // Create transaction record for coin spending
-          await Transaction.create({
-            user: storePayment.userId,
-            type: 'debit',
-            category: 'spending',
-            amount: storePayment.coinRedemption.totalAmount,
-            balance: wallet.balance.available,
-            description: `Store payment at ${storePayment.storeName}`,
-            reference: {
-              type: 'store_payment',
-              id: storePayment._id,
-            },
-            status: 'completed',
-            source: {
-              type: 'store_payment',
-              store: storePayment.storeId,
-            },
-          });
+          // Deduct ReZ + Promo coins from available balance
+          wallet.balance.available -= universalCoinsToDeduct;
+          wallet.balance.total -= universalCoinsToDeduct;
+          wallet.statistics.totalSpent += universalCoinsToDeduct;
+          wallet.limits.dailySpent += universalCoinsToDeduct;
+          console.log('✅ Deducted universal coins (ReZ + Promo):', universalCoinsToDeduct);
         }
-      } catch (walletError: any) {
-        console.error('❌ [STORE PAYMENT] Wallet deduction failed:', walletError.message);
-        // Continue - payment was successful, coin deduction is secondary
+
+        // Deduct Branded Coins (merchant-specific) - CRITICAL FIX
+        if (brandedCoinsToDeduct > 0) {
+          // Find the merchant's branded coin entry
+          const store = await Store.findById(storePayment.storeId).select('merchantId').session(session);
+          const storeMerchantId = store?.merchantId?.toString() || storePayment.storeId.toString();
+
+          const merchantCoinIndex = wallet.brandedCoins?.findIndex(
+            (bc: any) => {
+              const bcMerchantId = bc.merchantId?.toString();
+              return bcMerchantId === storePayment.storeId.toString() || bcMerchantId === storeMerchantId;
+            }
+          );
+
+          if (merchantCoinIndex === undefined || merchantCoinIndex === -1) {
+            throw new Error('Branded coins not found for this merchant');
+          }
+
+          const merchantCoin = wallet.brandedCoins[merchantCoinIndex];
+          if (merchantCoin.amount < brandedCoinsToDeduct) {
+            throw new Error(`Insufficient branded coins. Available: ${merchantCoin.amount}, Required: ${brandedCoinsToDeduct}`);
+          }
+
+          // Deduct branded coins
+          merchantCoin.amount -= brandedCoinsToDeduct;
+          merchantCoin.lastUsed = new Date();
+
+          // Remove entry if balance is zero
+          if (merchantCoin.amount <= 0) {
+            wallet.brandedCoins.splice(merchantCoinIndex, 1);
+          }
+
+          // Update total balance
+          wallet.balance.total -= brandedCoinsToDeduct;
+          wallet.statistics.totalSpent += brandedCoinsToDeduct;
+
+          console.log('✅ Deducted branded coins:', brandedCoinsToDeduct);
+        }
+
+        wallet.lastTransactionAt = new Date();
+        await wallet.save({ session });
+
+        // Create transaction record for coin spending
+        await Transaction.create([{
+          user: storePayment.userId,
+          type: 'debit',
+          category: 'spending',
+          amount: storePayment.coinRedemption.totalAmount,
+          balanceBefore: wallet.balance.available + universalCoinsToDeduct,
+          balanceAfter: wallet.balance.available,
+          description: `Store payment at ${storePayment.storeName} (ReZ: ${rezCoinsToDeduct}, Promo: ${promoCoinsToDeduct}, Branded: ${brandedCoinsToDeduct})`,
+          source: {
+            type: 'paybill',
+            reference: storePayment._id,
+            description: `Coins used for store payment`,
+            metadata: {
+              storeInfo: {
+                name: storePayment.storeName,
+                id: storePayment.storeId,
+              },
+            },
+          },
+          status: {
+            current: 'completed',
+            history: [{
+              status: 'completed',
+              timestamp: new Date(),
+            }],
+          },
+          isReversible: false,
+          retryCount: 0,
+          maxRetries: 0,
+        }], { session });
       }
-    }
 
-    // Calculate rewards
-    const store = await Store.findById(storePayment.storeId).select('rewardRules');
-    const rewardRules = store?.rewardRules;
+      // Calculate rewards
+      const store = await Store.findById(storePayment.storeId).select('rewardRules merchantId').session(session);
+      const rewardRules = store?.rewardRules;
 
-    const rewards: IPaymentRewards = {
-      cashbackEarned: 0,
-      coinsEarned: 0,
-      bonusCoins: 0,
-      loyaltyProgress: {
-        currentVisits: 1,
-        nextMilestone: 5,
-        milestoneReward: 'Loyalty Reward',
-      },
-    };
+      // Get user's actual visit count at this store
+      const visitCount = await StorePayment.countDocuments({
+        userId: storePayment.userId,
+        storeId: storePayment.storeId,
+        status: 'completed',
+      }).session(session);
 
-    // Calculate cashback (percentage of bill)
-    if (rewardRules?.baseCashbackPercent && storePayment.billAmount >= (rewardRules.minimumAmountForReward || 0)) {
-      rewards.cashbackEarned = Math.floor((storePayment.billAmount * rewardRules.baseCashbackPercent) / 100);
-    }
+      // Calculate loyalty progress
+      const currentVisits = visitCount + 1; // Including this payment
+      let nextMilestone = 5;
+      let milestoneReward = 'Bronze Member';
 
-    // Calculate coins earned (1 coin per ₹10 spent, for example)
-    rewards.coinsEarned = Math.floor(storePayment.billAmount / 10);
+      // Use store's visit milestone rewards if configured
+      if (rewardRules?.visitMilestoneRewards && rewardRules.visitMilestoneRewards.length > 0) {
+        const milestones = rewardRules.visitMilestoneRewards.sort((a: any, b: any) => a.visits - b.visits);
+        const nextMilestoneConfig = milestones.find((m: any) => m.visits > currentVisits);
+        if (nextMilestoneConfig) {
+          nextMilestone = nextMilestoneConfig.visits;
+          milestoneReward = `${nextMilestoneConfig.coinsReward} Bonus Coins`;
+        }
+      } else {
+        // Default milestones: 5, 10, 20
+        if (currentVisits < 5) {
+          nextMilestone = 5;
+          milestoneReward = 'Bronze Member';
+        } else if (currentVisits < 10) {
+          nextMilestone = 10;
+          milestoneReward = 'Silver Member';
+        } else if (currentVisits < 20) {
+          nextMilestone = 20;
+          milestoneReward = 'Gold Member';
+        } else {
+          nextMilestone = currentVisits;
+          milestoneReward = 'Gold Member (Max)';
+        }
+      }
 
-    // Extra reward for spending above threshold
-    if (rewardRules?.extraRewardThreshold && storePayment.billAmount >= rewardRules.extraRewardThreshold) {
-      rewards.bonusCoins = rewardRules.extraRewardCoins || 0;
-    }
+      const rewards: IPaymentRewards = {
+        cashbackEarned: 0,
+        coinsEarned: 0,
+        bonusCoins: 0,
+        loyaltyProgress: {
+          currentVisits,
+          nextMilestone,
+          milestoneReward,
+        },
+      };
 
-    // Credit reward coins to user's wallet
-    const totalRewardCoins = rewards.coinsEarned + rewards.bonusCoins;
-    if (totalRewardCoins > 0) {
-      try {
-        const wallet = await Wallet.findOne({ user: storePayment.userId });
+      // Calculate cashback (percentage of bill)
+      if (rewardRules?.baseCashbackPercent && storePayment.billAmount >= (rewardRules.minimumAmountForReward || 0)) {
+        rewards.cashbackEarned = Math.floor((storePayment.billAmount * rewardRules.baseCashbackPercent) / 100);
+      }
+
+      // Calculate coins earned based on store's reward rules or default (1 coin per ₹10 spent)
+      const coinsPerRupee = rewardRules?.coinsPerRupee || 0.1; // Default: 1 coin per ₹10
+      const minAmountForCoins = rewardRules?.minimumAmountForReward || 0;
+
+      if (storePayment.billAmount >= minAmountForCoins) {
+        rewards.coinsEarned = Math.floor(storePayment.billAmount * coinsPerRupee);
+      }
+
+      // Extra reward for spending above threshold
+      if (rewardRules?.extraRewardThreshold && storePayment.billAmount >= rewardRules.extraRewardThreshold) {
+        rewards.bonusCoins = rewardRules.extraRewardCoins || 0;
+      }
+
+      // Credit reward coins to user's wallet (ATOMIC)
+      const totalRewardCoins = rewards.coinsEarned + rewards.bonusCoins;
+      if (totalRewardCoins > 0) {
+        const wallet = await Wallet.findOne({ user: storePayment.userId }).session(session);
         if (wallet) {
-          await wallet.addFunds(totalRewardCoins, 'cashback');
+          // Add to available balance
+          wallet.balance.available += totalRewardCoins;
+          wallet.balance.total += totalRewardCoins;
+          wallet.statistics.totalEarned += totalRewardCoins;
+          wallet.statistics.totalCashback += totalRewardCoins;
+          wallet.lastTransactionAt = new Date();
+          await wallet.save({ session });
+
           console.log('✅ [STORE PAYMENT] Credited reward coins:', totalRewardCoins);
 
           // Create transaction record for reward
-          await Transaction.create({
+          await Transaction.create([{
             user: storePayment.userId,
             type: 'credit',
             category: 'cashback',
             amount: totalRewardCoins,
-            balance: wallet.balance.available,
+            balanceBefore: wallet.balance.available - totalRewardCoins,
+            balanceAfter: wallet.balance.available,
             description: `Rewards for payment at ${storePayment.storeName}`,
-            reference: {
-              type: 'store_payment',
-              id: storePayment._id,
-            },
-            status: 'completed',
             source: {
-              type: 'store_payment',
-              store: storePayment.storeId,
+              type: 'cashback',
+              reference: storePayment._id,
+              description: `Store payment rewards`,
+              metadata: {
+                storeInfo: {
+                  name: storePayment.storeName,
+                  id: storePayment.storeId,
+                },
+              },
             },
-          });
+            status: {
+              current: 'completed',
+              history: [{
+                status: 'completed',
+                timestamp: new Date(),
+              }],
+            },
+            isReversible: false,
+            retryCount: 0,
+            maxRetries: 0,
+          }], { session });
         }
-      } catch (rewardError: any) {
-        console.error('❌ [STORE PAYMENT] Failed to credit rewards:', rewardError.message);
-        // Continue - payment was successful
       }
+
+      // Mark payment as completed
+      const finalTransactionId = transactionId || storePayment.stripePaymentIntentId || `TXN-${Date.now()}`;
+      storePayment.status = 'completed';
+      storePayment.transactionId = finalTransactionId;
+      storePayment.completedAt = new Date();
+      storePayment.rewards = rewards;
+      await storePayment.save({ session });
+
+      // Commit the transaction
+      await session.commitTransaction();
+      console.log('✅ [STORE PAYMENT] Payment completed (atomic):', paymentId);
+
+      res.status(200).json({
+        success: true,
+        message: 'Payment confirmed successfully',
+        data: {
+          paymentId,
+          status: 'COMPLETED',
+          transactionId: finalTransactionId,
+          completedAt: storePayment.completedAt,
+          rewards,
+        },
+      });
+    } catch (atomicError: any) {
+      // Abort the transaction on any error
+      await session.abortTransaction();
+      console.error('❌ [STORE PAYMENT] Atomic transaction failed:', atomicError.message);
+
+      // Revert payment status if it was changed
+      if (storePayment.status === 'processing') {
+        storePayment.status = 'initiated';
+        await storePayment.save();
+      }
+
+      throw atomicError;
     }
-
-    // Mark payment as completed
-    const finalTransactionId = transactionId || storePayment.stripePaymentIntentId || `TXN-${Date.now()}`;
-    await storePayment.markCompleted(finalTransactionId, rewards);
-
-    console.log('✅ [STORE PAYMENT] Payment completed:', paymentId);
-
-    res.status(200).json({
-      success: true,
-      message: 'Payment confirmed successfully',
-      data: {
-        paymentId,
-        status: 'COMPLETED',
-        transactionId: finalTransactionId,
-        completedAt: storePayment.completedAt,
-        rewards,
-      },
-    });
   } catch (error: any) {
     console.error('Error confirming store payment:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to confirm payment',
     });
+  } finally {
+    // End the session
+    session.endSession();
   }
 };
 

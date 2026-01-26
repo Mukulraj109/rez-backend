@@ -1167,3 +1167,150 @@ export const syncWalletBalance = asyncHandler(async (req: Request, res: Response
     sendError(res, error.message, 500);
   }
 });
+
+/**
+ * @desc    Refund a wallet payment (used when order creation fails after payment)
+ * @route   POST /api/wallet/refund
+ * @access  Private
+ */
+export const refundPayment = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  const { transactionId, amount, reason } = req.body;
+
+  console.log('💸 [WALLET REFUND] Processing refund:', { transactionId, amount, reason });
+
+  if (!userId) {
+    return sendError(res, 'User not authenticated', 401);
+  }
+
+  if (!transactionId || !amount || amount <= 0) {
+    return sendBadRequest(res, 'Transaction ID and positive amount are required');
+  }
+
+  // Start a MongoDB session for atomic operation
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // Find the original transaction
+    const originalTransaction = await Transaction.findOne({
+      transactionId,
+      user: userId,
+      type: 'debit',
+    }).session(session);
+
+    if (!originalTransaction) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendNotFound(res, 'Original transaction not found');
+    }
+
+    // Validate amount doesn't exceed original transaction
+    if (amount > originalTransaction.amount) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendBadRequest(res, `Refund amount cannot exceed original transaction amount of ₹${originalTransaction.amount}`);
+    }
+
+    // Check if already refunded
+    if (originalTransaction.status.current === 'reversed') {
+      await session.abortTransaction();
+      session.endSession();
+      return sendBadRequest(res, 'Transaction has already been refunded');
+    }
+
+    // Get user's wallet
+    const wallet = await Wallet.findOne({ user: userId }).session(session);
+
+    if (!wallet) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendNotFound(res, 'Wallet not found');
+    }
+
+    // Credit the refund amount back to wallet
+    const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+    if (rezCoin) {
+      rezCoin.amount += amount;
+    }
+
+    wallet.balance.available += amount;
+    wallet.balance.total += amount;
+    wallet.statistics.totalRefunds += amount;
+    wallet.lastTransactionAt = new Date();
+
+    await wallet.save({ session });
+
+    // Create refund transaction record
+    const refundTransaction = await Transaction.create([{
+      user: userId,
+      type: 'credit',
+      category: 'refund',
+      amount,
+      balanceBefore: wallet.balance.available - amount,
+      balanceAfter: wallet.balance.available,
+      description: `Refund for transaction ${transactionId}: ${reason || 'Order creation failed'}`,
+      source: {
+        type: 'refund',
+        reference: originalTransaction._id,
+        description: reason || 'Order creation failed',
+        metadata: {
+          originalTransactionId: transactionId,
+          refundReason: reason,
+        },
+      },
+      status: {
+        current: 'completed',
+        history: [{
+          status: 'completed',
+          timestamp: new Date(),
+          reason: 'Automatic refund',
+        }],
+      },
+      isReversible: false,
+      retryCount: 0,
+      maxRetries: 0,
+    }], { session });
+
+    // Mark original transaction as reversed
+    originalTransaction.status.current = 'reversed';
+    originalTransaction.status.history.push({
+      status: 'reversed',
+      timestamp: new Date(),
+      reason: reason || 'Refund processed',
+    });
+    originalTransaction.reversedAt = new Date();
+    originalTransaction.reversalReason = reason || 'Order creation failed';
+    originalTransaction.reversalTransactionId = (refundTransaction[0] as any)._id.toString();
+
+    await originalTransaction.save({ session });
+
+    // Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    console.log('✅ [WALLET REFUND] Refund processed successfully:', {
+      refundId: (refundTransaction[0] as any)._id,
+      amount,
+    });
+
+    sendSuccess(res, {
+      refundId: (refundTransaction[0] as any)._id.toString(),
+      refundedAmount: amount,
+      wallet: {
+        balance: {
+          total: wallet.balance.total,
+          available: wallet.balance.available,
+          pending: wallet.balance.pending,
+        },
+      },
+      status: 'success',
+    }, 'Refund processed successfully');
+
+  } catch (error: any) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error('❌ [WALLET REFUND] Error:', error);
+    sendError(res, error.message || 'Failed to process refund', 500);
+  }
+});

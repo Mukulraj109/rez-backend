@@ -117,23 +117,40 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     console.log('✅ [CREATE ORDER] Validation passed: payment method, address, and store check');
 
     // Validate coin balances if coins are being used
-    if (coinsUsed && (coinsUsed.wasilCoins > 0 || coinsUsed.storePromoCoins > 0)) {
+    if (coinsUsed && (coinsUsed.rezCoins > 0 || coinsUsed.storePromoCoins > 0 || coinsUsed.promoCoins > 0)) {
       console.log('💰 [CREATE ORDER] Validating coin balances:', coinsUsed);
 
-      // Validate REZ coins (wasilCoins)
-      if (coinsUsed.wasilCoins > 0) {
+      // Validate REZ coins
+      if (coinsUsed.rezCoins > 0) {
         const coinService = require('../services/coinService').default;
         const userCoinBalance = await coinService.getCoinBalance(userId);
-        if (userCoinBalance < coinsUsed.wasilCoins) {
+        if (userCoinBalance < coinsUsed.rezCoins) {
           await session.abortTransaction();
           session.endSession();
           console.error('❌ [CREATE ORDER] Insufficient REZ coin balance:', {
-            required: coinsUsed.wasilCoins,
+            required: coinsUsed.rezCoins,
             available: userCoinBalance
           });
-          return sendBadRequest(res, `Insufficient REZ coin balance. Required: ${coinsUsed.wasilCoins}, Available: ${userCoinBalance}`);
+          return sendBadRequest(res, `Insufficient REZ coin balance. Required: ${coinsUsed.rezCoins}, Available: ${userCoinBalance}`);
         }
-        console.log('✅ [CREATE ORDER] REZ coin balance validated:', { required: coinsUsed.wasilCoins, available: userCoinBalance });
+        console.log('✅ [CREATE ORDER] REZ coin balance validated:', { required: coinsUsed.rezCoins, available: userCoinBalance });
+      }
+
+      // Validate promo coins
+      if (coinsUsed.promoCoins > 0) {
+        const wallet = await Wallet.findOne({ user: userId });
+        const promoCoin = wallet?.coins?.find((c: any) => c.type === 'promo');
+        const promoBalance = promoCoin?.amount || 0;
+        if (promoBalance < coinsUsed.promoCoins) {
+          await session.abortTransaction();
+          session.endSession();
+          console.error('❌ [CREATE ORDER] Insufficient promo coin balance:', {
+            required: coinsUsed.promoCoins,
+            available: promoBalance
+          });
+          return sendBadRequest(res, `Insufficient promo coin balance. Required: ${coinsUsed.promoCoins}, Available: ${promoBalance}`);
+        }
+        console.log('✅ [CREATE ORDER] Promo coin balance validated:', { required: coinsUsed.promoCoins, available: promoBalance });
       }
 
       // Validate store promo coins
@@ -382,8 +399,20 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
     // Calculate coin discount from coinsUsed
     const coinDiscount = coinsUsed
-      ? (coinsUsed.wasilCoins || 0) + (coinsUsed.promoCoins || 0) + (coinsUsed.storePromoCoins || 0)
+      ? (coinsUsed.rezCoins || 0) + (coinsUsed.promoCoins || 0) + (coinsUsed.storePromoCoins || 0)
       : 0;
+
+    // Validate coin discount doesn't exceed order total (prevent negative payment)
+    const maxAllowedCoinDiscount = subtotal + tax + deliveryFee - discount;
+    if (coinDiscount > maxAllowedCoinDiscount) {
+      await session.abortTransaction();
+      session.endSession();
+      console.error('❌ [CREATE ORDER] Coin discount exceeds order total:', {
+        coinDiscount,
+        maxAllowedCoinDiscount
+      });
+      return sendBadRequest(res, `Coin discount (₹${coinDiscount}) exceeds order total (₹${maxAllowedCoinDiscount})`);
+    }
 
     // Calculate total with partner benefits, voucher, and coin discount
     let total = subtotal + tax + deliveryFee - discount - coinDiscount;
@@ -425,12 +454,12 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       },
       payment: {
         method: paymentMethod,
-        status: paymentMethod === 'cod' ? 'pending' : 'pending',
+        status: paymentMethod === 'cod' ? 'pending' : 'awaiting_payment',
         coinsUsed: coinsUsed ? {
-          wasilCoins: coinsUsed.wasilCoins || 0,
+          rezCoins: coinsUsed.rezCoins || 0,
           promoCoins: coinsUsed.promoCoins || 0,
           storePromoCoins: coinsUsed.storePromoCoins || 0,
-          totalCoinsValue: (coinsUsed.wasilCoins || 0) + (coinsUsed.promoCoins || 0) + (coinsUsed.storePromoCoins || 0)
+          totalCoinsValue: (coinsUsed.rezCoins || 0) + (coinsUsed.promoCoins || 0) + (coinsUsed.storePromoCoins || 0)
         } : undefined
       },
       delivery: {
@@ -453,72 +482,137 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
     console.log('📦 [CREATE ORDER] Order saved successfully:', order.orderNumber);
 
-    // Deduct coins for COD orders immediately (online payments deduct in PaymentService)
-    if (paymentMethod === 'cod' && coinsUsed && coinDiscount > 0) {
-      console.log('💰 [CREATE ORDER] Deducting coins for COD order:', coinsUsed);
+    // For COD orders, deduct stock immediately since payment confirmation never happens
+    if (paymentMethod === 'cod') {
+      console.log('📦 [CREATE ORDER] Deducting stock for COD order...');
 
-      // Deduct REZ coins (wasilCoins) from Wallet model
-      if (coinsUsed.wasilCoins && coinsUsed.wasilCoins > 0) {
+      for (const stockUpdate of stockUpdates) {
         try {
-          const { Wallet } = require('../models/Wallet');
-          const wallet = await Wallet.findOne({ user: userId });
-
-          if (wallet) {
-            // Find and update rez coin in coins array
-            const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-            if (rezCoin && rezCoin.amount >= coinsUsed.wasilCoins) {
-              rezCoin.amount -= coinsUsed.wasilCoins;
-              rezCoin.lastUsed = new Date();
-
-              // Update wallet balances
-              wallet.balance.available = Math.max(0, wallet.balance.available - coinsUsed.wasilCoins);
-              wallet.balance.total = Math.max(0, wallet.balance.total - coinsUsed.wasilCoins);
-              wallet.statistics.totalSpent += coinsUsed.wasilCoins;
-              wallet.lastTransactionAt = new Date();
-
-              await wallet.save();
-              console.log('✅ [CREATE ORDER] REZ coins deducted from wallet for COD:', coinsUsed.wasilCoins);
-            } else {
-              console.warn('⚠️ [CREATE ORDER] Insufficient rez coins in wallet');
+          const updateResult = await Product.findOneAndUpdate(
+            stockUpdate.stockCheckQuery,
+            stockUpdate.updateQuery,
+            {
+              session,
+              arrayFilters: stockUpdate.arrayFilters || undefined,
+              new: true
             }
+          );
+
+          if (!updateResult) {
+            // Stock became insufficient during transaction - rollback
+            await session.abortTransaction();
+            session.endSession();
+            console.error('❌ [CREATE ORDER] Stock became insufficient during order creation');
+            return sendBadRequest(res, 'Stock became unavailable. Please try again.');
           }
 
-          // Also create transaction record in CoinTransaction
-          const coinService = require('../services/coinService').default;
-          await coinService.deductCoins(
-            userId.toString(),
-            coinsUsed.wasilCoins,
-            'purchase',
-            `COD Order payment: ${order.orderNumber}`
-          );
-        } catch (coinError) {
-          console.error('❌ [CREATE ORDER] Failed to deduct REZ coins:', coinError);
+          // Emit real-time stock update
+          if (stockSocketService) {
+            const product = await Product.findById(stockUpdate.productId).select('inventory');
+            if (product) {
+              stockSocketService.emitStockUpdate(
+                stockUpdate.productId.toString(),
+                product.inventory?.stock || 0
+              );
+            }
+          }
+        } catch (stockError) {
+          console.error('❌ [CREATE ORDER] Failed to deduct stock:', stockError);
+          await session.abortTransaction();
+          session.endSession();
+          return sendBadRequest(res, 'Failed to process order. Please try again.');
         }
+      }
+
+      console.log('✅ [CREATE ORDER] Stock deducted successfully for COD order');
+    }
+
+    // Deduct coins for COD orders immediately (INSIDE TRANSACTION - ATOMIC)
+    // Online payments deduct coins in PaymentService after payment confirmation
+    if (paymentMethod === 'cod' && coinsUsed && coinDiscount > 0) {
+      console.log('💰 [CREATE ORDER] Deducting coins for COD order (atomic):', coinsUsed);
+
+      // Get wallet with session for atomic operation
+      const wallet = await Wallet.findOne({ user: userId }).session(session);
+
+      if (!wallet) {
+        await session.abortTransaction();
+        session.endSession();
+        console.error('❌ [CREATE ORDER] Wallet not found for coin deduction');
+        return sendBadRequest(res, 'Wallet not found. Cannot process coin payment.');
+      }
+
+      // Deduct REZ coins from Wallet model
+      if (coinsUsed.rezCoins && coinsUsed.rezCoins > 0) {
+        const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+        if (!rezCoin || rezCoin.amount < coinsUsed.rezCoins) {
+          await session.abortTransaction();
+          session.endSession();
+          console.error('❌ [CREATE ORDER] Insufficient rez coins in wallet at time of deduction');
+          return sendBadRequest(res, 'Insufficient REZ coins. Balance may have changed.');
+        }
+
+        rezCoin.amount -= coinsUsed.rezCoins;
+        rezCoin.lastUsed = new Date();
+
+        // Update wallet balances
+        wallet.balance.available = Math.max(0, wallet.balance.available - coinsUsed.rezCoins);
+        wallet.balance.total = Math.max(0, wallet.balance.total - coinsUsed.rezCoins);
+        wallet.statistics.totalSpent += coinsUsed.rezCoins;
+        wallet.lastTransactionAt = new Date();
+
+        console.log('✅ [CREATE ORDER] REZ coins deducted from wallet for COD:', coinsUsed.rezCoins);
+      }
+
+      // Deduct promo coins
+      if (coinsUsed.promoCoins && coinsUsed.promoCoins > 0) {
+        const promoCoin = wallet.coins.find((c: any) => c.type === 'promo');
+        if (!promoCoin || promoCoin.amount < coinsUsed.promoCoins) {
+          await session.abortTransaction();
+          session.endSession();
+          console.error('❌ [CREATE ORDER] Insufficient promo coins at time of deduction');
+          return sendBadRequest(res, 'Insufficient Promo coins. Balance may have changed.');
+        }
+
+        promoCoin.amount -= coinsUsed.promoCoins;
+        promoCoin.lastUsed = new Date();
+        wallet.lastTransactionAt = new Date();
+
+        console.log('✅ [CREATE ORDER] Promo coins deducted for COD:', coinsUsed.promoCoins);
       }
 
       // Deduct branded coins (store-specific coins)
       if (coinsUsed.storePromoCoins && coinsUsed.storePromoCoins > 0) {
-        try {
-          const firstItem = cart.items[0];
-          const storeId = typeof firstItem.store === 'object'
-            ? (firstItem.store as any)._id
-            : firstItem.store;
+        const firstItem = cart.items[0];
+        const storeId = typeof firstItem.store === 'object'
+          ? (firstItem.store as any)._id
+          : firstItem.store;
 
-          if (storeId) {
-            // Use branded coins from wallet
-            const wallet = await Wallet.findOne({ user: userId });
-            if (wallet) {
-              await wallet.useBrandedCoins(
-                new Types.ObjectId(storeId.toString()),
-                coinsUsed.storePromoCoins
-              );
-              console.log('✅ [CREATE ORDER] Branded coins deducted for COD:', coinsUsed.storePromoCoins);
-            }
+        if (storeId) {
+          const brandedCoin = wallet.brandedCoins?.find(
+            (bc: any) => bc.merchantId?.toString() === storeId.toString()
+          );
+
+          if (!brandedCoin || brandedCoin.amount < coinsUsed.storePromoCoins) {
+            await session.abortTransaction();
+            session.endSession();
+            console.error('❌ [CREATE ORDER] Insufficient branded coins at time of deduction');
+            return sendBadRequest(res, 'Insufficient store coins. Balance may have changed.');
           }
-        } catch (coinError) {
-          console.error('❌ [CREATE ORDER] Failed to deduct branded coins:', coinError);
+
+          brandedCoin.amount -= coinsUsed.storePromoCoins;
+          brandedCoin.lastUsed = new Date();
+          wallet.balance.total = Math.max(0, wallet.balance.total - coinsUsed.storePromoCoins);
+          wallet.statistics.totalSpent += coinsUsed.storePromoCoins;
+          wallet.lastTransactionAt = new Date();
+
+          console.log('✅ [CREATE ORDER] Branded coins deducted for COD:', coinsUsed.storePromoCoins);
         }
       }
+
+      // Save wallet with session (atomic)
+      await wallet.save({ session });
+      console.log('✅ [CREATE ORDER] All coins deducted atomically for COD order');
     }
 
     // Mark voucher as used if one was applied
@@ -572,11 +666,16 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     const appliedCouponCode = cart.coupon?.code || couponCode;
     if (appliedCouponCode) {
       console.log('🎟️ [CREATE ORDER] Marking coupon as used:', appliedCouponCode);
-      await couponService.markCouponAsUsed(
+      const couponResult = await couponService.markCouponAsUsed(
         new Types.ObjectId(userId),
         appliedCouponCode,
         order._id as Types.ObjectId
       );
+      if (!couponResult.success) {
+        console.warn(`⚠️ [CREATE ORDER] Failed to mark coupon as used: ${couponResult.error}`);
+        // Note: Order is already created, so we don't fail the request
+        // The discount was already applied to the order total
+      }
     }
 
     // Create activity for order placement
@@ -871,6 +970,91 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
           });
         } else {
           console.warn('⚠️ [CANCEL ORDER] Could not restore stock for product:', productId);
+        }
+      }
+    }
+
+    // Refund coins if they were used in this order
+    if (order.payment?.coinsUsed) {
+      console.log('💰 [CANCEL ORDER] Refunding coins used in order:', order.payment.coinsUsed);
+      const userId = order.user;
+
+      // Support both rezCoins (new) and wasilCoins (legacy) field names
+      const rezCoins = (order.payment.coinsUsed as any).rezCoins || (order.payment.coinsUsed as any).wasilCoins || 0;
+      const promoCoins = (order.payment.coinsUsed as any).promoCoins || 0;
+      const storePromoCoins = (order.payment.coinsUsed as any).storePromoCoins || 0;
+
+      // Refund REZ coins
+      if (rezCoins > 0) {
+        try {
+          const wallet = await Wallet.findOne({ user: userId }).session(session);
+          if (wallet) {
+            const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+            if (rezCoin) {
+              rezCoin.amount += rezCoins;
+              wallet.balance.available += rezCoins;
+              wallet.balance.total += rezCoins;
+              wallet.lastTransactionAt = new Date();
+              await wallet.save({ session });
+              console.log('✅ [CANCEL ORDER] REZ coins refunded:', rezCoins);
+            }
+          }
+
+          // Create refund transaction record
+          const coinService = require('../services/coinService').default;
+          await coinService.awardCoins(
+            userId.toString(),
+            rezCoins,
+            'refund',
+            `Refund for cancelled order: ${order.orderNumber}`
+          );
+        } catch (coinError) {
+          console.error('❌ [CANCEL ORDER] Failed to refund REZ coins:', coinError);
+        }
+      }
+
+      // Refund promo coins
+      if (promoCoins > 0) {
+        try {
+          const wallet = await Wallet.findOne({ user: userId }).session(session);
+          if (wallet) {
+            const promoCoin = wallet.coins.find((c: any) => c.type === 'promo');
+            if (promoCoin) {
+              promoCoin.amount += promoCoins;
+              wallet.lastTransactionAt = new Date();
+              await wallet.save({ session });
+              console.log('✅ [CANCEL ORDER] Promo coins refunded:', promoCoins);
+            }
+          }
+        } catch (coinError) {
+          console.error('❌ [CANCEL ORDER] Failed to refund promo coins:', coinError);
+        }
+      }
+
+      // Refund store promo coins (branded coins)
+      if (storePromoCoins > 0) {
+        try {
+          const firstItem = order.items[0];
+          const storeId = typeof firstItem.store === 'object'
+            ? (firstItem.store as any)._id
+            : firstItem.store;
+          const storeName = typeof firstItem.store === 'object'
+            ? (firstItem.store as any).name || 'Store'
+            : 'Store';
+
+          if (storeId) {
+            const wallet = await Wallet.findOne({ user: userId }).session(session);
+            if (wallet) {
+              await wallet.addBrandedCoins(
+                new Types.ObjectId(storeId.toString()),
+                storeName,
+                storePromoCoins
+              );
+              console.log('✅ [CANCEL ORDER] Store promo coins refunded:', storePromoCoins);
+            }
+          }
+        } catch (coinError) {
+          console.error('❌ [CANCEL ORDER] Failed to refund store promo coins:', coinError);
         }
       }
     }

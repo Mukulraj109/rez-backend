@@ -288,6 +288,8 @@ function calculateDiscount(coupon: any, subtotal: number): number {
 
 /**
  * Mark coupon as used after successful order
+ * Uses atomic operations to prevent race conditions where multiple users
+ * could exceed the usage limit
  */
 export async function markCouponAsUsed(
   couponId: string,
@@ -298,7 +300,58 @@ export async function markCouponAsUsed(
     const { UserCoupon } = await import('../models/UserCoupon');
     const { Coupon } = await import('../models/Coupon');
 
-    // Update user coupon status
+    const now = new Date();
+
+    // First, atomically check and increment the coupon usage count
+    // This prevents race conditions where multiple users exceed the limit
+    const updatedCoupon = await Coupon.findOneAndUpdate(
+      {
+        _id: couponId,
+        status: 'active',
+        validFrom: { $lte: now },
+        validTo: { $gte: now },
+        // Only update if usage limit not reached (or unlimited when totalUsage is 0)
+        $or: [
+          { 'usageLimit.totalUsage': 0 }, // Unlimited usage
+          { $expr: { $lt: ['$usageLimit.usedCount', '$usageLimit.totalUsage'] } }
+        ]
+      },
+      {
+        $inc: { usageCount: 1, 'usageLimit.usedCount': 1 }
+      },
+      { new: true }
+    );
+
+    if (!updatedCoupon) {
+      // Check why the update failed
+      const existingCoupon = await Coupon.findById(couponId);
+
+      if (!existingCoupon) {
+        console.error('❌ [COUPON_VALIDATION] Coupon not found:', couponId);
+        return false;
+      }
+
+      if (existingCoupon.usageLimit.totalUsage > 0 &&
+          existingCoupon.usageLimit.usedCount >= existingCoupon.usageLimit.totalUsage) {
+        console.error('❌ [COUPON_VALIDATION] Coupon usage limit reached:', couponId);
+        return false;
+      }
+
+      console.error('❌ [COUPON_VALIDATION] Coupon validation failed (inactive/expired):', couponId);
+      return false;
+    }
+
+    // Check if the coupon should be deactivated after this usage
+    if (updatedCoupon.usageLimit.totalUsage > 0 &&
+        updatedCoupon.usageLimit.usedCount >= updatedCoupon.usageLimit.totalUsage) {
+      await Coupon.updateOne(
+        { _id: updatedCoupon._id },
+        { $set: { status: 'inactive' } }
+      );
+      console.log(`⚠️ [COUPON_VALIDATION] Coupon ${couponId} deactivated - usage limit reached`);
+    }
+
+    // Update user coupon status atomically
     const userCoupon = await UserCoupon.findOneAndUpdate(
       {
         user: userId,
@@ -306,22 +359,21 @@ export async function markCouponAsUsed(
         status: 'available'
       },
       {
-        status: 'used',
-        usedAt: new Date(),
-        orderId: orderId
+        $set: {
+          status: 'used',
+          usedDate: new Date(),
+          usedInOrder: orderId
+        }
       },
       { new: true }
     );
 
     if (!userCoupon) {
-      console.error('❌ [COUPON_VALIDATION] User coupon not found or already used');
-      return false;
+      // User coupon not found - might have been used in another concurrent request
+      // or user used coupon without claiming first
+      // The global counter was already incremented, which is correct behavior
+      console.warn('⚠️ [COUPON_VALIDATION] User coupon not found or already used, but global usage recorded');
     }
-
-    // Increment coupon usage count
-    await Coupon.findByIdAndUpdate(couponId, {
-      $inc: { usageCount: 1, 'usageLimit.usedCount': 1 }
-    });
 
     console.log(`✅ [COUPON_VALIDATION] Coupon ${couponId} marked as used by user ${userId}`);
     return true;

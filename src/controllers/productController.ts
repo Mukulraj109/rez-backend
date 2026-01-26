@@ -35,7 +35,10 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
     excludeProducts,
     diversityMode = 'none',
     mode, // New: mode filter for 4-mode system
-    region // Region filter parameter
+    region, // Region filter parameter
+    tags, // Vibe/tag filtering for Shop by Vibe feature
+    occasion, // Occasion filtering for Shop by Occasion feature
+    brand // Brand filtering
   } = req.query;
 
   // Parse and validate mode
@@ -45,7 +48,7 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
   );
 
   console.log('🔍 [GET PRODUCTS] Query params:', {
-    category, store, excludeProducts, diversityMode, mode: activeMode
+    category, store, excludeProducts, diversityMode, mode: activeMode, tags, occasion, brand
   });
 
   // Get region for cache key
@@ -55,7 +58,7 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
   // Try to get from cache first (skip if excludeProducts or diversityMode is used)
   if (!excludeProducts && diversityMode === 'none') {
     const filterHash = generateQueryCacheKey({
-      category, store, minPrice, maxPrice, rating, inStock, featured, search, sortBy, page, limit, mode: activeMode, region: effectiveRegionForCache
+      category, store, minPrice, maxPrice, rating, inStock, featured, search, sortBy, page, limit, mode: activeMode, region: effectiveRegionForCache, tags, occasion, brand
     });
     const cacheKey = CacheKeys.productList(filterHash);
     const cachedData = await redisService.get<any>(cacheKey);
@@ -126,10 +129,73 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Apply filters
-  if (category) query.category = category;
+  if (category) {
+    // Category can be either an ObjectId or a slug
+    const categoryStr = category as string;
+    if (mongoose.isValidObjectId(categoryStr)) {
+      query.category = categoryStr;
+    } else {
+      // Treat as slug - look up the category
+      const categoryDoc = await Category.findOne({ slug: categoryStr }).select('_id').lean();
+      if (categoryDoc) {
+        query.category = categoryDoc._id;
+        console.log('📂 [GET PRODUCTS] Resolved category slug:', categoryStr, '→', categoryDoc._id);
+      } else {
+        console.log('⚠️ [GET PRODUCTS] Category slug not found:', categoryStr);
+        // Return empty results if category not found
+        return sendPaginated(res, [], Number(page), Number(limit), 0);
+      }
+    }
+  }
   if (store) query.store = store; // Override mode filter if specific store requested
   if (featured !== undefined) query.isFeatured = featured === 'true';
   if (inStock === 'true') query['inventory.stock'] = { $gt: 0 };
+
+  // Tag/Vibe filtering - for Shop by Vibe feature
+  if (tags) {
+    // Support comma-separated tags for multiple tag filtering
+    const tagList = (tags as string).split(',').map(t => t.trim().toLowerCase());
+    if (tagList.length === 1) {
+      // Single tag - use $regex for case-insensitive search
+      query.tags = { $regex: tagList[0], $options: 'i' };
+    } else {
+      // Multiple tags - use $or with regex for each tag
+      const tagConditions = tagList.map(t => ({ tags: { $regex: t, $options: 'i' } }));
+      if (query.$or) {
+        // If $or already exists, combine with $and
+        query.$and = query.$and || [];
+        query.$and.push({ $or: tagConditions });
+      } else {
+        query.$or = tagConditions;
+      }
+    }
+    console.log('🏷️ [GET PRODUCTS] Tag filter applied:', tagList);
+  }
+
+  // Occasion filtering - for Shop by Occasion feature
+  if (occasion) {
+    // Products may have occasion field or be tagged with occasion names
+    const occasionConditions = [
+      { occasion: { $regex: occasion as string, $options: 'i' } },
+      { tags: { $regex: occasion as string, $options: 'i' } },
+      { 'metadata.occasion': { $regex: occasion as string, $options: 'i' } }
+    ];
+
+    if (query.$or) {
+      // If $or already used (e.g., by tags), use $and to combine
+      query.$and = query.$and || [];
+      query.$and.push({ $or: occasionConditions });
+    } else {
+      query.$or = occasionConditions;
+    }
+    console.log('🎉 [GET PRODUCTS] Occasion filter applied:', occasion);
+  }
+
+  // Brand filtering
+  if (brand) {
+    query.brand = { $regex: brand as string, $options: 'i' };
+    console.log('🏪 [GET PRODUCTS] Brand filter applied:', brand);
+  }
 
   // Price range filter
   if (minPrice || maxPrice) {
@@ -264,7 +330,7 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
     // Cache the results (only if no excludeProducts or diversityMode)
     if (!excludeProducts && diversityMode === 'none') {
       const filterHash = generateQueryCacheKey({
-        category, store, minPrice, maxPrice, rating, inStock, featured, search, sortBy, page, limit
+        category, store, minPrice, maxPrice, rating, inStock, featured, search, sortBy, page, limit, tags, occasion, brand
       });
       const cacheKey = CacheKeys.productList(filterHash);
       await redisService.set(
@@ -640,7 +706,20 @@ export const getProductsByStore = asyncHandler(async (req: Request, res: Respons
     };
 
     // Apply filters
-    if (category) query.category = category;
+    if (category) {
+      // Category can be either an ObjectId or a slug
+      const categoryStr = category as string;
+      if (mongoose.isValidObjectId(categoryStr)) {
+        query.category = categoryStr;
+      } else {
+        // Treat as slug - look up the category
+        const categoryDoc = await Category.findOne({ slug: categoryStr }).select('_id').lean();
+        if (categoryDoc) {
+          query.category = categoryDoc._id;
+        }
+        // If category not found, skip the filter (will return all products for the store)
+      }
+    }
     if (minPrice || maxPrice) {
       query['pricing.selling'] = {};
       if (minPrice) query['pricing.selling'].$gte = Number(minPrice);
@@ -1455,7 +1534,18 @@ export const getTrendingProducts = asyncHandler(async (req: Request, res: Respon
     };
 
     if (category) {
-      query.category = category;
+      // Category can be either an ObjectId or a slug
+      const categoryStr = category as string;
+      if (mongoose.isValidObjectId(categoryStr)) {
+        query.category = categoryStr;
+      } else {
+        // Treat as slug - look up the category
+        const categoryDoc = await Category.findOne({ slug: categoryStr }).select('_id').lean();
+        if (categoryDoc) {
+          query.category = categoryDoc._id;
+        }
+        // If category not found, skip the filter
+      }
     }
 
     // Aggregate trending products with weighted scoring

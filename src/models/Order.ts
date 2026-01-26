@@ -59,7 +59,8 @@ export interface IOrderPayment {
   refundId?: string;
   refundedAt?: Date;
   coinsUsed?: {
-    wasilCoins?: number; // REZ coins used
+    rezCoins?: number; // REZ coins used (primary field)
+    wasilCoins?: number; // Legacy field - kept for backward compatibility
     promoCoins?: number; // Promo coins used
     storePromoCoins?: number; // Store promo coins used
     totalCoinsValue?: number; // Total value of coins used
@@ -368,8 +369,10 @@ const OrderSchema = new Schema<IOrder>({
     refundId: String,
     refundedAt: Date,
     coinsUsed: {
-      wasilCoins: { type: Number, default: 0, min: 0 },
+      rezCoins: { type: Number, default: 0, min: 0 }, // Primary field for REZ coins
+      wasilCoins: { type: Number, default: 0, min: 0 }, // Legacy field for backward compatibility
       promoCoins: { type: Number, default: 0, min: 0 },
+      storePromoCoins: { type: Number, default: 0, min: 0 },
       totalCoinsValue: { type: Number, default: 0, min: 0 }
     }
   },

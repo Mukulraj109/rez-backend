@@ -15,7 +15,8 @@ import {
   handlePaymentWebhook,
   creditLoyaltyPoints,
   devTopup,
-  syncWalletBalance
+  syncWalletBalance,
+  refundPayment
 } from '../controllers/walletController';
 import { authenticate } from '../middleware/auth';
 
@@ -144,5 +145,13 @@ router.post('/dev-topup', devTopup);
  * @access  Private
  */
 router.post('/sync-balance', syncWalletBalance);
+
+/**
+ * @route   POST /api/wallet/refund
+ * @desc    Refund a wallet payment (used when order creation fails after payment)
+ * @body    { transactionId, amount, reason }
+ * @access  Private
+ */
+router.post('/refund', refundPayment);
 
 export default router;

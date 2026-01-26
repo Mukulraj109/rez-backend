@@ -362,13 +362,16 @@ class PaymentService {
       // Clear user's cart after successful payment
       // Deduct coins if they were used in this order
       if (order.payment.coinsUsed) {
-        const { wasilCoins, storePromoCoins } = order.payment.coinsUsed;
+        // Support both rezCoins (new) and wasilCoins (legacy) field names
+        const rezCoins = (order.payment.coinsUsed as any).rezCoins || (order.payment.coinsUsed as any).wasilCoins || 0;
+        const promoCoins = (order.payment.coinsUsed as any).promoCoins || 0;
+        const storePromoCoins = (order.payment.coinsUsed as any).storePromoCoins || 0;
         const userId = order.user as Types.ObjectId;
 
-        // Deduct REZ coins (wasilCoins) from both Wallet model and CoinTransaction
-        if (wasilCoins && wasilCoins > 0) {
+        // Deduct REZ coins from both Wallet model and CoinTransaction
+        if (rezCoins && rezCoins > 0) {
           try {
-            console.log('💰 [PAYMENT SERVICE] Deducting REZ coins:', wasilCoins);
+            console.log('💰 [PAYMENT SERVICE] Deducting REZ coins:', rezCoins);
 
             // Update Wallet model (coins array)
             const { Wallet } = require('../models/Wallet');
@@ -376,31 +379,53 @@ class PaymentService {
 
             if (wallet) {
               const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-              if (rezCoin && rezCoin.amount >= wasilCoins) {
-                rezCoin.amount -= wasilCoins;
+              if (rezCoin && rezCoin.amount >= rezCoins) {
+                rezCoin.amount -= rezCoins;
                 rezCoin.lastUsed = new Date();
 
-                wallet.balance.available = Math.max(0, wallet.balance.available - wasilCoins);
-                wallet.balance.total = Math.max(0, wallet.balance.total - wasilCoins);
-                wallet.statistics.totalSpent += wasilCoins;
+                wallet.balance.available = Math.max(0, wallet.balance.available - rezCoins);
+                wallet.balance.total = Math.max(0, wallet.balance.total - rezCoins);
+                wallet.statistics.totalSpent += rezCoins;
                 wallet.lastTransactionAt = new Date();
 
                 await wallet.save();
-                console.log('✅ [PAYMENT SERVICE] Wallet rez coins updated:', wasilCoins);
+                console.log('✅ [PAYMENT SERVICE] Wallet rez coins updated:', rezCoins);
               }
             }
 
             // Also create transaction record
             await coinService.deductCoins(
               userId.toString(),
-              wasilCoins,
+              rezCoins,
               'purchase',
               `Order payment: ${order.orderNumber}`
             );
-            console.log('✅ [PAYMENT SERVICE] REZ coins deducted successfully:', wasilCoins);
+            console.log('✅ [PAYMENT SERVICE] REZ coins deducted successfully:', rezCoins);
           } catch (coinError) {
             console.error('❌ [PAYMENT SERVICE] Failed to deduct REZ coins:', coinError);
             // Don't fail payment if coin deduction fails - coins already validated
+          }
+        }
+
+        // Deduct promo coins
+        if (promoCoins && promoCoins > 0) {
+          try {
+            console.log('💰 [PAYMENT SERVICE] Deducting promo coins:', promoCoins);
+            const { Wallet } = require('../models/Wallet');
+            const wallet = await Wallet.findOne({ user: userId });
+
+            if (wallet) {
+              const promoCoin = wallet.coins.find((c: any) => c.type === 'promo');
+              if (promoCoin && promoCoin.amount >= promoCoins) {
+                promoCoin.amount -= promoCoins;
+                promoCoin.lastUsed = new Date();
+                wallet.lastTransactionAt = new Date();
+                await wallet.save();
+                console.log('✅ [PAYMENT SERVICE] Promo coins deducted:', promoCoins);
+              }
+            }
+          } catch (coinError) {
+            console.error('❌ [PAYMENT SERVICE] Failed to deduct promo coins:', coinError);
           }
         }
 

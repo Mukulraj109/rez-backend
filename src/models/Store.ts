@@ -93,6 +93,7 @@ export interface IStoreRewardRules {
   reviewBonusCoins: number;          // Bonus coins for review
   socialShareBonusCoins: number;     // Bonus coins for social share
   minimumAmountForReward: number;    // Min bill amount to earn rewards
+  coinsPerRupee?: number;            // Coins earned per rupee spent (e.g., 0.1 = 1 coin per ₹10)
   extraRewardThreshold?: number;     // e.g., Spend ₹400 → get extra coins
   extraRewardCoins?: number;         // Extra coins when threshold met
   visitMilestoneRewards?: {          // Rewards for visit milestones
