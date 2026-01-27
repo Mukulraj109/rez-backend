@@ -432,33 +432,32 @@ router.get('/:id', productGetLimiter, validateParams(productIdSchema), async (re
     
     // Convert to ObjectId for proper comparison
     const productObjectId = new mongoose.Types.ObjectId(productId);
-    const merchantObjectId = new mongoose.Types.ObjectId(merchantId);
-    
-    // First check if product exists at all
-    const productExists = await Product.findById(productObjectId);
-    console.log('   Product exists:', !!productExists);
-    if (productExists) {
-      console.log('   Product merchantId:', productExists.merchantId?.toString());
-      console.log('   Request merchantId:', merchantObjectId.toString());
-      console.log('   MerchantId match:', productExists.merchantId?.toString() === merchantObjectId.toString());
-    }
-    
+
+    // Find all stores belonging to this merchant (same approach as list endpoint)
+    const merchantStores = await Store.find({ merchantId: merchantId }).select('_id');
+    const storeIds = merchantStores.map(store => store._id);
+
+    console.log('   Merchant stores:', storeIds.length);
+
+    // Query product by ID, verifying ownership via store OR direct merchantId
     const product = await Product.findOne({
       _id: productObjectId,
-      merchantId: merchantObjectId
+      $or: [
+        { store: { $in: storeIds } },
+        { merchantId: merchantId }
+      ]
     })
-    .populate('category', 'name') // Populate category with name
-    .populate('store', 'name logo'); // Populate store with name and logo
+    .populate('category', 'name')
+    .populate('store', 'name logo');
 
     if (!product) {
-      console.log('❌ [GET PRODUCT] Product not found with merchantId filter');
-      
-      // Check if product exists but belongs to different merchant
-      const productWithDifferentMerchant = await Product.findById(productObjectId);
-      if (productWithDifferentMerchant) {
-        console.log('   Product exists but belongs to different merchant:', productWithDifferentMerchant.merchantId?.toString());
+      console.log('❌ [GET PRODUCT] Product not found or does not belong to merchant');
+
+      const productExists = await Product.findById(productObjectId);
+      if (productExists) {
+        console.log('   Product exists but belongs to different merchant. Store:', productExists.store?.toString(), 'MerchantId:', productExists.merchantId?.toString());
       }
-      
+
       return res.status(404).json({
         success: false,
         message: 'Product not found'

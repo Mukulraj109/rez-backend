@@ -8,6 +8,7 @@ import { User } from '../models/User';
 // Note: StorePromoCoin removed - using wallet.brandedCoins instead
 import { Wallet } from '../models/Wallet';
 import coinService from './coinService';
+import merchantWalletService from './merchantWalletService';
 import mongoose, { Types } from 'mongoose';
 import stockSocketService from './stockSocketService';
 import { SMSService } from './SMSService';
@@ -33,6 +34,7 @@ import {
 } from '../utils/razorpayUtils';
 import { PaymentLogger } from './logging/paymentLogger';
 import stripeService from './stripeService';
+import orderSocketService, { CoinsAwardedPayload, MerchantWalletUpdatedPayload } from './orderSocketService';
 // Wallet already imported above
 
 // Initialize Razorpay instance conditionally
@@ -591,6 +593,104 @@ class PaymentService {
       } catch (notificationError) {
         console.error('❌ [PAYMENT SERVICE] Error sending payment notification:', notificationError);
         // Don't fail the payment if notification fails
+      }
+
+      // ========================================
+      // POST-PAYMENT REWARDS & MERCHANT CREDIT
+      // ========================================
+
+      // 1. Award 5% purchase reward coins to customer (NO LIMITS)
+      try {
+        const purchaseRewardRate = 0.05; // 5% of order total
+        const coinsToAward = Math.floor(order.totals.total * purchaseRewardRate);
+
+        if (coinsToAward > 0) {
+          console.log('🪙 [PAYMENT SERVICE] Awarding 5% purchase reward:', coinsToAward, 'coins');
+
+          const coinResult = await coinService.awardCoins(
+            order.user.toString(),
+            coinsToAward,
+            'purchase_reward',
+            `5% purchase reward for order ${order.orderNumber}`,
+            { orderId: order._id }
+          );
+
+          console.log('✅ [PAYMENT SERVICE] Purchase reward coins awarded:', coinsToAward);
+
+          // Emit real-time notification to user
+          orderSocketService.emitCoinsAwarded({
+            userId: order.user.toString(),
+            amount: coinsToAward,
+            source: 'purchase_reward',
+            description: `5% purchase reward for order ${order.orderNumber}`,
+            newBalance: coinResult.newBalance,
+            orderId: (order._id as Types.ObjectId).toString(),
+            orderNumber: order.orderNumber,
+            timestamp: new Date()
+          });
+        }
+      } catch (coinError) {
+        console.error('❌ [PAYMENT SERVICE] Failed to award purchase reward coins:', coinError);
+        // Don't fail payment if coin award fails
+      }
+
+      // 2. Credit merchant wallet (immediate settlement)
+      try {
+        // Get merchant from the first order item's store
+        const firstItem = order.items[0];
+        if (firstItem && firstItem.store) {
+          const storeId = typeof firstItem.store === 'object'
+            ? (firstItem.store as any)._id
+            : firstItem.store;
+
+          // Get store to find merchant owner
+          const { Store } = require('../models/Store');
+          const store = await Store.findById(storeId);
+
+          if (store && store.owner) {
+            console.log('💰 [PAYMENT SERVICE] Crediting merchant wallet...');
+
+            const grossAmount = order.totals.subtotal || 0;
+            const platformFee = order.totals.platformFee || 0;
+
+            const walletResult = await merchantWalletService.creditOrderPayment(
+              store.owner.toString(),
+              order._id as Types.ObjectId,
+              order.orderNumber,
+              grossAmount,
+              platformFee,
+              storeId
+            );
+
+            console.log('✅ [PAYMENT SERVICE] Merchant wallet credited:', {
+              gross: grossAmount,
+              fee: platformFee,
+              net: grossAmount - platformFee
+            });
+
+            // Emit real-time notification to merchant
+            if (walletResult) {
+              orderSocketService.emitMerchantWalletUpdated({
+                merchantId: store.owner.toString(),
+                storeId: storeId.toString(),
+                storeName: store.name,
+                transactionType: 'credit',
+                amount: grossAmount - platformFee,
+                orderId: (order._id as Types.ObjectId).toString(),
+                orderNumber: order.orderNumber,
+                newBalance: {
+                  total: walletResult.balance?.total || 0,
+                  available: walletResult.balance?.available || 0,
+                  pending: walletResult.balance?.pending || 0
+                },
+                timestamp: new Date()
+              });
+            }
+          }
+        }
+      } catch (walletError) {
+        console.error('❌ [PAYMENT SERVICE] Failed to credit merchant wallet:', walletError);
+        // Don't fail payment if wallet credit fails
       }
 
       return order;

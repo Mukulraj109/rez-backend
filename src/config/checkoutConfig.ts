@@ -3,8 +3,15 @@
 // Update these values to change pricing/fee structure globally
 
 export const CHECKOUT_CONFIG = {
-  // Platform Fees
+  // Platform Fees (fixed fee - legacy)
   platformFee: 2, // in currency units (e.g., ₹2)
+
+  // Merchant Fee Configuration (15% commission)
+  merchantFee: {
+    percentage: 0.15,  // 15% of subtotal
+    minFee: 2,         // Minimum fee ₹2
+    maxFee: 10000,     // Maximum fee cap ₹10,000
+  },
 
   // Tax Rates
   taxRate: 0.05, // 5% tax

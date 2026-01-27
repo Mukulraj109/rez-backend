@@ -8,7 +8,8 @@ const SHARE_REWARDS = {
   offer: { baseCoins: 5, clickBonus: 1, conversionBonus: 30 },
   referral: { baseCoins: 20, clickBonus: 5, conversionBonus: 100 },
   video: { baseCoins: 3, clickBonus: 1, conversionBonus: 10 },
-  article: { baseCoins: 3, clickBonus: 1, conversionBonus: 10 }
+  article: { baseCoins: 3, clickBonus: 1, conversionBonus: 10 },
+  purchase: { baseCoins: 0, clickBonus: 0, conversionBonus: 0, sharePercentage: 0.05 } // 5% of order total
 };
 
 // Daily share limits
@@ -18,7 +19,8 @@ const DAILY_SHARE_LIMITS = {
   offer: 10,
   referral: 20,
   video: 10,
-  article: 10
+  article: 10,
+  purchase: 5  // Max 5 purchase shares per day
 };
 
 class ShareService {
@@ -268,6 +270,162 @@ class ShareService {
       };
       return acc;
     }, {} as any);
+  }
+
+  /**
+   * Share a purchase and earn 5% coins
+   * User earns 5% of order total as coins when sharing their purchase on social media
+   */
+  async sharePurchase(
+    userId: string,
+    orderId: string,
+    orderNumber: string,
+    orderTotal: number,
+    platform: 'whatsapp' | 'facebook' | 'twitter' | 'instagram' | 'copy_link' | 'other'
+  ): Promise<{ share: IShare; coinsEarned: number }> {
+    // Import Order to validate
+    const { Order } = require('../models/Order');
+    const { Types } = require('mongoose');
+
+    // Validate order belongs to user
+    const order = await Order.findById(orderId);
+    if (!order) {
+      throw new Error('Order not found');
+    }
+
+    if (order.user.toString() !== userId) {
+      throw new Error('Order does not belong to this user');
+    }
+
+    // Check if order already shared
+    const existingShare = await Share.findOne({
+      user: userId,
+      contentType: 'purchase',
+      orderId: new Types.ObjectId(orderId)
+    });
+
+    if (existingShare) {
+      throw new Error('This order has already been shared');
+    }
+
+    // Check daily limit
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const sharesToday = await Share.countDocuments({
+      user: userId,
+      contentType: 'purchase',
+      createdAt: { $gte: today }
+    });
+
+    const limit = DAILY_SHARE_LIMITS.purchase;
+    if (sharesToday >= limit) {
+      throw new Error(`Daily share limit (${limit}) reached for purchases`);
+    }
+
+    // Calculate 5% coin reward
+    const sharePercentage = SHARE_REWARDS.purchase.sharePercentage || 0.05;
+    const coinsEarned = Math.floor(orderTotal * sharePercentage);
+
+    // Generate tracking code
+    const trackingCode = `SHP${uuidv4().substring(0, 8).toUpperCase()}`;
+
+    // Generate share URL
+    const baseUrl = process.env.FRONTEND_URL || 'https://rez.app';
+    const shareUrl = `${baseUrl}/s/${trackingCode}`;
+
+    // Set expiry (30 days for purchase shares)
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    // Create share record with pending status (requires admin approval)
+    const share = await Share.create({
+      user: userId,
+      contentType: 'purchase',
+      contentId: orderNumber,
+      orderId: new Types.ObjectId(orderId),
+      orderTotal: orderTotal,
+      platform,
+      shareUrl,
+      trackingCode,
+      coinsEarned,
+      status: 'pending_approval',  // Requires admin approval for 5% coins
+      expiresAt
+    });
+
+    // Create pending coin reward for admin approval
+    const PendingCoinReward = require('../models/PendingCoinReward').default;
+    await PendingCoinReward.create({
+      user: new Types.ObjectId(userId),
+      amount: coinsEarned,
+      percentage: 5,
+      source: 'social_media_post',
+      referenceType: 'order',
+      referenceId: new Types.ObjectId(orderId),
+      status: 'pending',
+      submittedAt: new Date(),
+      metadata: {
+        orderNumber: orderNumber,
+        orderTotal: orderTotal,
+        platform: platform,
+        shareId: (share._id as string).toString(),
+        shareUrl: shareUrl
+      }
+    });
+
+    console.log(`🎉 [SHARE SERVICE] Purchase shared: ${orderNumber}, User ${userId} - ${coinsEarned} coins pending admin approval`);
+
+    // Emit socket event for admin notification
+    try {
+      const orderSocketService = require('./orderSocketService').default;
+      if (orderSocketService) {
+        orderSocketService.emitToAdmins('pending-reward:created', {
+          userId,
+          amount: coinsEarned,
+          source: 'social_media_post',
+          orderNumber,
+          platform
+        });
+      }
+    } catch (e) {
+      console.log('[SHARE SERVICE] Could not emit admin notification');
+    }
+
+    return { share, coinsEarned };
+  }
+
+  /**
+   * Check if an order can be shared
+   */
+  async canShareOrder(userId: string, orderId: string): Promise<{ canShare: boolean; reason?: string }> {
+    const { Types } = require('mongoose');
+
+    // Check if already shared
+    const existingShare = await Share.findOne({
+      user: userId,
+      contentType: 'purchase',
+      orderId: new Types.ObjectId(orderId)
+    });
+
+    if (existingShare) {
+      return { canShare: false, reason: 'Order already shared' };
+    }
+
+    // Check daily limit
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const sharesToday = await Share.countDocuments({
+      user: userId,
+      contentType: 'purchase',
+      createdAt: { $gte: today }
+    });
+
+    if (sharesToday >= DAILY_SHARE_LIMITS.purchase) {
+      return { canShare: false, reason: 'Daily purchase share limit reached' };
+    }
+
+    return { canShare: true };
   }
 }
 

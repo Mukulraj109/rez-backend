@@ -17,4 +17,8 @@ router.get('/history', shareController.getShareHistory.bind(shareController));
 router.get('/stats', shareController.getShareStats.bind(shareController));
 router.get('/daily-limits', shareController.getDailyLimits.bind(shareController));
 
+// Purchase sharing routes - 5% coin reward
+router.post('/purchase', shareController.sharePurchase.bind(shareController));
+router.get('/can-share/:orderId', shareController.canShareOrder.bind(shareController));
+
 export default router;

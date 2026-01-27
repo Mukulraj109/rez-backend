@@ -22,10 +22,10 @@ router.use(authMiddleware);
 const createStoreSchema = Joi.object({
   name: Joi.string().required().min(2).max(100),
   description: Joi.string().max(1000).optional(),
-  logo: Joi.string().uri().optional(),
+  logo: Joi.string().allow('').optional(),
   banner: Joi.alternatives().try(
-    Joi.string().uri(),
-    Joi.array().items(Joi.string().uri()).min(1).max(10) // Support 1-10 banner images
+    Joi.string().allow(''),
+    Joi.array().items(Joi.string().allow('')).min(1).max(10) // Support 1-10 banner images
   ).optional(),
   category: Joi.string().required(),
   location: Joi.object({
@@ -38,10 +38,10 @@ const createStoreSchema = Joi.object({
     landmark: Joi.string().optional()
   }).required(),
   contact: Joi.object({
-    phone: Joi.string().optional(),
-    email: Joi.string().email().optional(),
-    website: Joi.string().uri().optional(),
-    whatsapp: Joi.string().optional()
+    phone: Joi.string().allow('').optional(),
+    email: Joi.string().email().allow('').optional(),
+    website: Joi.string().allow('').optional(),
+    whatsapp: Joi.string().allow('').optional()
   }).optional(),
   operationalInfo: Joi.object({
     hours: Joi.object({
@@ -118,7 +118,7 @@ const createStoreSchema = Joi.object({
       label: Joi.string().max(30).optional(),
       destination: Joi.object({
         type: Joi.string().valid('phone', 'url', 'maps', 'internal').required(),
-        value: Joi.string().required()
+        value: Joi.string().allow('').required()
       }).optional(),
       order: Joi.number().min(0).default(0)
     })).max(5).optional()
@@ -608,20 +608,54 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
       if (updates.tags !== undefined) fieldsToUpdate.tags = store.tags;
       if (updates.isActive !== undefined) fieldsToUpdate.isActive = store.isActive;
       if (updates.isFeatured !== undefined) fieldsToUpdate.isFeatured = store.isFeatured;
+      if (updates.actionButtons !== undefined) fieldsToUpdate.actionButtons = (store as any).actionButtons;
       if (store.category) {
         // Ensure category is an ObjectId
-        fieldsToUpdate.category = store.category instanceof mongoose.Types.ObjectId 
-          ? store.category 
+        fieldsToUpdate.category = store.category instanceof mongoose.Types.ObjectId
+          ? store.category
           : new mongoose.Types.ObjectId(store.category);
       }
       if (store.slug) fieldsToUpdate.slug = store.slug;
-      
+
       if (Object.keys(fieldsToUpdate).length > 0) {
         await collection.updateOne({ _id: storeObjectId }, { $set: fieldsToUpdate });
       }
     } else {
-      // No banner update, safe to use normal save()
-      await store.save();
+      // Use raw MongoDB update to bypass Mongoose schema validation on existing data
+      // (existing stores may have paymentMethods values that don't match current enum)
+      if (mongoose.connection.db) {
+        const collection = mongoose.connection.db.collection('stores');
+        const storeObjectId = typeof store._id === 'string'
+          ? new mongoose.Types.ObjectId(store._id)
+          : store._id as mongoose.Types.ObjectId;
+
+        const fieldsToUpdate: any = {};
+
+        if (updates.name && store.name) fieldsToUpdate.name = store.name;
+        if (updates.description !== undefined) fieldsToUpdate.description = store.description;
+        if (updates.logo !== undefined) fieldsToUpdate.logo = store.logo;
+        if (updates.location) fieldsToUpdate.location = store.location;
+        if (updates.contact) fieldsToUpdate.contact = store.contact;
+        if (updates.operationalInfo) fieldsToUpdate.operationalInfo = store.operationalInfo;
+        if (updates.offers) fieldsToUpdate.offers = store.offers;
+        if (updates.deliveryCategories) fieldsToUpdate.deliveryCategories = store.deliveryCategories;
+        if (updates.tags !== undefined) fieldsToUpdate.tags = store.tags;
+        if (updates.isActive !== undefined) fieldsToUpdate.isActive = store.isActive;
+        if (updates.isFeatured !== undefined) fieldsToUpdate.isFeatured = store.isFeatured;
+        if (updates.actionButtons !== undefined) fieldsToUpdate.actionButtons = (store as any).actionButtons;
+        if (store.category) {
+          fieldsToUpdate.category = store.category instanceof mongoose.Types.ObjectId
+            ? store.category
+            : new mongoose.Types.ObjectId(store.category);
+        }
+        if (store.slug) fieldsToUpdate.slug = store.slug;
+
+        if (Object.keys(fieldsToUpdate).length > 0) {
+          await collection.updateOne({ _id: storeObjectId }, { $set: fieldsToUpdate });
+        }
+      } else {
+        await store.save({ validateBeforeSave: false });
+      }
     }
     
     // Reload store to get final state with populated category (for response)

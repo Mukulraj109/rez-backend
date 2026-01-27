@@ -88,6 +88,8 @@ export interface ICartTotals {
   cashback: number;
   total: number;
   savings: number; // Total amount saved
+  platformFee?: number;      // 15% of subtotal - platform commission (preview)
+  merchantPayout?: number;   // subtotal - platformFee - what merchant receives (preview)
 }
 
 // Cart coupon interface
@@ -831,7 +833,12 @@ CartSchema.methods.calculateTotals = async function(): Promise<void> {
   const finalCashback = Math.round((Number(cashback) || 0) * 100) / 100;
   const finalTotal = Math.max(0, Math.round((Number(total) || 0) * 100) / 100);
   const finalSavings = Math.round((Number(savings) || 0) * 100) / 100;
-  
+
+  // Calculate 15% platform fee preview (on subtotal only)
+  const platformFeeRate = 0.15;
+  const finalPlatformFee = Math.round((finalSubtotal * platformFeeRate) * 100) / 100;
+  const finalMerchantPayout = Math.round((finalSubtotal - finalPlatformFee) * 100) / 100;
+
   this.totals = {
     subtotal: finalSubtotal,
     tax: finalTax,
@@ -839,7 +846,9 @@ CartSchema.methods.calculateTotals = async function(): Promise<void> {
     discount: finalDiscount,
     cashback: finalCashback,
     total: finalTotal,
-    savings: finalSavings
+    savings: finalSavings,
+    platformFee: finalPlatformFee,
+    merchantPayout: finalMerchantPayout
   };
   
   console.log('✅ [CALCULATE TOTALS] Final totals set:', this.totals);

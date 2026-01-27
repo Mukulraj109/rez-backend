@@ -5,7 +5,7 @@ export interface ICoinTransaction extends Document {
   type: 'earned' | 'spent' | 'expired' | 'refunded' | 'bonus';
   amount: number;
   balance: number; // Balance after transaction
-  source: 'spin_wheel' | 'scratch_card' | 'quiz_game' | 'challenge' | 'achievement' | 'referral' | 'order' | 'review' | 'bill_upload' | 'daily_login' | 'admin' | 'purchase' | 'redemption' | 'expiry' | 'survey' | 'memory_match' | 'coin_hunt' | 'guess_price';
+  source: 'spin_wheel' | 'scratch_card' | 'quiz_game' | 'challenge' | 'achievement' | 'referral' | 'order' | 'review' | 'bill_upload' | 'daily_login' | 'admin' | 'purchase' | 'redemption' | 'expiry' | 'survey' | 'memory_match' | 'coin_hunt' | 'guess_price' | 'purchase_reward' | 'social_share_reward' | 'merchant_award';
   description: string;
   metadata?: {
     gameId?: mongoose.Types.ObjectId;
@@ -80,7 +80,10 @@ const CoinTransactionSchema: Schema = new Schema(
         'survey',
         'memory_match',
         'coin_hunt',
-        'guess_price'
+        'guess_price',
+        'purchase_reward',      // 5% auto coin after purchase
+        'social_share_reward',  // 5% coin on social sharing
+        'merchant_award'        // merchant gives coins to customer
       ],
       required: true,
       index: true

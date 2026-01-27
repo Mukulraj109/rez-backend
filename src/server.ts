@@ -144,7 +144,18 @@ import offersRoutes from './routes/offersRoutes';  // Bank and exclusive offers 
 import loyaltyRoutes from './routes/loyaltyRoutes';  // User loyalty routes
 import statsRoutes from './routes/statsRoutes';  // Social proof stats routes
 import exploreRoutes from './routes/exploreRoutes';  // Explore page routes
+import testRoutes from './routes/testRoutes';  // Integration test routes (dev/test only)
 import adminExploreRoutes from './routes/adminExploreRoutes';  // Admin explore management routes
+// Admin panel routes
+import {
+  adminDashboardRoutes,
+  adminOrdersRoutes,
+  adminCoinRewardsRoutes,
+  adminMerchantWalletsRoutes,
+  adminAuthRoutes,
+  adminUsersRoutes,
+  adminMerchantsRoutes
+} from './routes/admin';
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
 import experienceRoutes from './routes/experienceRoutes';  // Store experience routes
 import authRoutes1 from './merchantroutes/auth';  // Temporarily disabled
@@ -156,6 +167,8 @@ import uploadRoutes from './merchantroutes/uploads';  // Temporarily disabled
 import orderRoutes1 from './merchantroutes/orders';  // Temporarily disabled
 import merchantCashbackRoutes from './merchantroutes/cashback';  // Temporarily disabled
 import dashboardRoutes from './merchantroutes/dashboard';  // Temporarily disabled
+import merchantWalletRoutes from './merchantroutes/wallet';  // Merchant wallet routes
+import merchantCoinsRoutes from './merchantroutes/coins';  // Merchant coin award routes
 import analyticsRoutesM from './merchantroutes/analytics';  // Analytics with real data
 import merchantSyncRoutes from './merchantroutes/sync';
 import teamRoutes from './merchantroutes/team';
@@ -258,7 +271,9 @@ const getAllowedOrigins = (): string[] => {
   if (process.env.NODE_ENV !== 'production') {
     origins.push('http://localhost:3000');
     origins.push('http://localhost:19006'); // Expo default
-    origins.push('http://localhost:8081'); // React Native
+    origins.push('http://localhost:8081'); // React Native / Customer frontend
+    origins.push('http://localhost:8082'); // Merchant portal
+    origins.push('http://localhost:8083'); // Admin portal
     origins.push('http://localhost:19000'); // Expo web
     origins.push('http://127.0.0.1:19006'); // Expo alternative
     origins.push('http://127.0.0.1:19000'); // Expo web alternative
@@ -643,8 +658,8 @@ app.use(`${API_PREFIX}/leaderboard`, leaderboardRoutes);
 console.log('✅ Leaderboard routes registered at /api/leaderboard');
 app.use(`${API_PREFIX}/streak`, streakRoutes);
 console.log('✅ Streak routes registered at /api/streak');
-app.use(`${API_PREFIX}/share`, shareRoutes);
-console.log('✅ Share routes registered at /api/share');
+app.use(`${API_PREFIX}/shares`, shareRoutes);  // plural to match frontend
+console.log('✅ Share routes registered at /api/shares');
 app.use(`${API_PREFIX}/tournaments`, tournamentRoutes);
 console.log('✅ Tournament routes registered at /api/tournaments');
 app.use(`${API_PREFIX}/programs`, programRoutes);
@@ -775,11 +790,30 @@ app.use(`${API_PREFIX}/stats`, statsRoutes);
 
 // Explore page routes
 app.use(`${API_PREFIX}/explore`, exploreRoutes);
+app.use(`${API_PREFIX}/test`, testRoutes);  // Integration test routes (dev/test only)
 console.log('✅ Explore routes registered at /api/explore');
 
 // Admin explore management routes
 app.use(`${API_PREFIX}/admin/explore`, adminExploreRoutes);
 console.log('✅ Admin explore routes registered at /api/admin/explore');
+
+// Admin authentication routes (for rez-admin portal)
+app.use(`${API_PREFIX}/auth`, adminAuthRoutes);
+console.log('✅ Admin auth routes registered at /api/auth');
+
+// Admin panel routes
+app.use(`${API_PREFIX}/admin/dashboard`, adminDashboardRoutes);
+console.log('✅ Admin dashboard routes registered at /api/admin/dashboard');
+app.use(`${API_PREFIX}/admin/orders`, adminOrdersRoutes);
+console.log('✅ Admin orders routes registered at /api/admin/orders');
+app.use(`${API_PREFIX}/admin/coin-rewards`, adminCoinRewardsRoutes);
+console.log('✅ Admin coin rewards routes registered at /api/admin/coin-rewards');
+app.use(`${API_PREFIX}/admin/merchant-wallets`, adminMerchantWalletsRoutes);
+console.log('✅ Admin merchant wallets routes registered at /api/admin/merchant-wallets');
+app.use(`${API_PREFIX}/admin/users`, adminUsersRoutes);
+console.log('✅ Admin users routes registered at /api/admin/users');
+app.use(`${API_PREFIX}/admin/merchants`, adminMerchantsRoutes);
+console.log('✅ Admin merchants routes registered at /api/admin/merchants');
 
 // Campaign Routes - Homepage exciting deals
 app.use(`${API_PREFIX}/campaigns`, campaignRoutes);
@@ -837,6 +871,10 @@ app.use('/api/merchant/cashback-old', merchantCashbackRoutes);
 app.use('/api/merchant/cashback', merchantCashbackRoutesNew);
 console.log('✅ Enhanced merchant cashback routes registered at /api/merchant/cashback (Agent 5)');
 app.use('/api/merchant/dashboard', dashboardRoutes);
+app.use('/api/merchant/wallet', merchantWalletRoutes);  // Merchant wallet routes
+console.log('✅ Merchant wallet routes registered at /api/merchant/wallet');
+app.use('/api/merchant/coins', merchantCoinsRoutes);  // Merchant coin award routes
+console.log('✅ Merchant coin award routes registered at /api/merchant/coins');
 app.use('/api/merchant/analytics', analyticsRoutesM);  // Real-time analytics endpoints
 app.use('/api/merchant/stores', storeRoutesM);  // Merchant store management routes
 console.log('✅ Merchant store management routes registered at /api/merchant/stores');

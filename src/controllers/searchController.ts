@@ -174,9 +174,14 @@ const searchProductsGroupedInternal = async (
       ...baseStoreQuery,
       $or: [
         { name: { $regex: query, $options: 'i' } },
-        { tags: { $regex: query, $options: 'i' } }
+        { tags: { $regex: query, $options: 'i' } },
+        { description: { $regex: query, $options: 'i' } },
+        { 'location.city': { $regex: query, $options: 'i' } }
       ]
-    }).select('_id');
+    }).select('_id name slug logo description tags location ratings isVerified category')
+      .populate('category', 'name slug')
+      .limit(10)
+      .lean();
 
     const matchingStoreIds = matchingStores.map(s => s._id);
 
@@ -205,6 +210,7 @@ const searchProductsGroupedInternal = async (
       // No stores in region, return empty
       return {
         groupedProducts: [],
+        matchingStores: [],
         summary: { sellerCount: 0, minPrice: 0, maxCashback: 0, priceRange: { min: 0, max: 0 } },
         total: 0,
         hasMore: false
@@ -459,8 +465,42 @@ const searchProductsGroupedInternal = async (
       max: prices.length > 0 ? Math.max(...prices) : 0
     };
 
+    // Build store results for display (sorted by relevance)
+    const storeResults = sortByRelevance(
+      matchingStores,
+      query,
+      ['name', 'description']
+    ).slice(0, 5).map((store: any) => {
+      let distance: number | undefined;
+      if (userLocation && store.location?.coordinates) {
+        const [storeLon, storeLat] = store.location.coordinates;
+        distance = calculateDistance(
+          userLocation.latitude,
+          userLocation.longitude,
+          storeLat,
+          storeLon
+        );
+      }
+
+      return {
+        storeId: store._id?.toString(),
+        name: store.name,
+        slug: store.slug,
+        logo: store.logo || '',
+        description: store.description || '',
+        category: store.category?.name || '',
+        location: store.location?.city || store.location?.address || '',
+        distance: distance ? Math.round(distance * 10) / 10 : undefined,
+        rating: store.ratings?.average || 0,
+        reviewCount: store.ratings?.count || 0,
+        isVerified: store.isVerified || false,
+        tags: store.tags || []
+      };
+    });
+
     return {
       groupedProducts,
+      matchingStores: storeResults,
       summary: {
         sellerCount: totalSellers,
         minPrice: minPrice === Infinity ? 0 : minPrice,
@@ -474,6 +514,7 @@ const searchProductsGroupedInternal = async (
     console.error('Error searching grouped products:', error);
     return {
       groupedProducts: [],
+      matchingStores: [],
       summary: {
         sellerCount: 0,
         minPrice: 0,

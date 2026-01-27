@@ -163,6 +163,72 @@ class ShareController {
       });
     }
   }
+
+  // POST /api/share/purchase - Share a purchase and earn 5% coins
+  async sharePurchase(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const { orderId, orderNumber, orderTotal, platform } = req.body;
+
+      if (!orderId || !orderNumber || !orderTotal || !platform) {
+        return res.status(400).json({
+          success: false,
+          message: 'orderId, orderNumber, orderTotal, and platform are required'
+        });
+      }
+
+      const result = await shareService.sharePurchase(
+        userId,
+        orderId,
+        orderNumber,
+        orderTotal,
+        platform
+      );
+
+      res.json({
+        success: true,
+        data: {
+          shareUrl: result.share.shareUrl,
+          trackingCode: result.share.trackingCode,
+          coinsEarned: result.coinsEarned,
+          expiresAt: result.share.expiresAt
+        },
+        message: `Purchase shared! You earned ${result.coinsEarned} coins (5% of order total)`
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // GET /api/share/can-share/:orderId - Check if an order can be shared
+  async canShareOrder(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const { orderId } = req.params;
+
+      if (!orderId) {
+        return res.status(400).json({
+          success: false,
+          message: 'orderId is required'
+        });
+      }
+
+      const result = await shareService.canShareOrder(userId, orderId);
+
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
 }
 
 export default new ShareController();

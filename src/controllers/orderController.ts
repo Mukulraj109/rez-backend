@@ -23,6 +23,7 @@ import achievementService from '../services/achievementService';
 // Note: StorePromoCoin removed - using wallet.brandedCoins instead
 import { Wallet } from '../models/Wallet';
 import { calculatePromoCoinsEarned, calculatePromoCoinsWithTierBonus, getCoinsExpiryDate } from '../config/promoCoins.config';
+import { CHECKOUT_CONFIG } from '../config/checkoutConfig';
 import { Subscription } from '../models/Subscription';
 import { SMSService } from '../services/SMSService';
 import EmailService from '../services/EmailService';
@@ -349,7 +350,23 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     const subtotal = cart.totals.subtotal || 0;
     const tax = cart.totals.tax || 0;
     const baseDiscount = cart.totals.discount || 0;
-    
+
+    // Calculate 15% platform fee on SUBTOTAL ONLY (excludes tax and delivery)
+    const platformFeeRate = CHECKOUT_CONFIG.merchantFee?.percentage || 0.15;
+    const minFee = CHECKOUT_CONFIG.merchantFee?.minFee || 2;
+    const maxFee = CHECKOUT_CONFIG.merchantFee?.maxFee || 10000;
+    let platformFee = Math.round(subtotal * platformFeeRate * 100) / 100;
+    // Apply min/max constraints
+    platformFee = Math.max(minFee, Math.min(maxFee, platformFee));
+    const merchantPayout = Math.round((subtotal - platformFee) * 100) / 100;
+
+    console.log('💰 [PLATFORM FEE] Calculated merchant fees:', {
+      subtotal,
+      platformFeeRate: `${platformFeeRate * 100}%`,
+      platformFee,
+      merchantPayout
+    });
+
     // Apply partner benefits to order
     console.log('👥 [PARTNER BENEFITS] Applying partner benefits to order...');
     const partnerBenefitsService = require('../services/partnerBenefitsService').default;
@@ -450,7 +467,9 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         discount,
         cashback,
         total,
-        paidAmount: paymentMethod === 'cod' ? 0 : total
+        paidAmount: paymentMethod === 'cod' ? 0 : total,
+        platformFee,
+        merchantPayout
       },
       payment: {
         method: paymentMethod,

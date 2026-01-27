@@ -2,15 +2,17 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IShare extends Document {
   user: mongoose.Types.ObjectId;
-  contentType: 'product' | 'store' | 'offer' | 'referral' | 'video' | 'article';
+  contentType: 'product' | 'store' | 'offer' | 'referral' | 'video' | 'article' | 'purchase';
   contentId: string;
+  orderId?: mongoose.Types.ObjectId;  // For purchase shares
+  orderTotal?: number;                 // Order total for calculating 5% reward
   platform: 'whatsapp' | 'facebook' | 'twitter' | 'instagram' | 'copy_link' | 'other';
   shareUrl: string;
   trackingCode: string;
   clicks: number;
   conversions: number;
   coinsEarned: number;
-  status: 'pending' | 'verified' | 'rewarded' | 'expired';
+  status: 'pending' | 'verified' | 'rewarded' | 'expired' | 'pending_approval';
   verifiedAt?: Date;
   rewardedAt?: Date;
   expiresAt: Date;
@@ -28,12 +30,20 @@ const ShareSchema: Schema = new Schema(
     },
     contentType: {
       type: String,
-      enum: ['product', 'store', 'offer', 'referral', 'video', 'article'],
+      enum: ['product', 'store', 'offer', 'referral', 'video', 'article', 'purchase'],
       required: true
     },
     contentId: {
       type: String,
       required: true
+    },
+    orderId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Order'
+    },
+    orderTotal: {
+      type: Number,
+      min: 0
     },
     platform: {
       type: String,
@@ -67,7 +77,7 @@ const ShareSchema: Schema = new Schema(
     },
     status: {
       type: String,
-      enum: ['pending', 'verified', 'rewarded', 'expired'],
+      enum: ['pending', 'verified', 'rewarded', 'expired', 'pending_approval'],
       default: 'pending'
     },
     verifiedAt: Date,

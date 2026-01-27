@@ -46,6 +46,8 @@ export interface IOrderTotals {
   total: number;
   paidAmount: number;
   refundAmount?: number;
+  platformFee: number;      // 15% of subtotal - platform commission
+  merchantPayout: number;   // subtotal - platformFee - what merchant receives
 }
 
 // Payment information interface
@@ -345,6 +347,16 @@ const OrderSchema = new Schema<IOrder>({
       min: 0
     },
     refundAmount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    platformFee: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    merchantPayout: {
       type: Number,
       default: 0,
       min: 0

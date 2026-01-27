@@ -36,6 +36,15 @@ export enum OrderSocketEvent {
   // Subscription events (client -> server)
   SUBSCRIBE_ORDER = 'subscribe:order',
   UNSUBSCRIBE_ORDER = 'unsubscribe:order',
+
+  // Coin & Wallet events
+  COINS_AWARDED = 'coins:awarded',
+  WALLET_UPDATED = 'wallet:updated',
+  MERCHANT_WALLET_UPDATED = 'merchant:wallet:updated',
+
+  // Admin events
+  PENDING_REWARD_CREATED = 'admin:pending-reward:created',
+  PENDING_REWARD_UPDATED = 'admin:pending-reward:updated',
 }
 
 /**
@@ -114,6 +123,47 @@ export interface OrderDeliveredPayload {
     rating?: number;
     comment?: string;
   };
+  timestamp: Date;
+}
+
+/**
+ * Coin & Wallet Event Payloads
+ */
+export interface CoinsAwardedPayload {
+  userId: string;
+  amount: number;
+  source: string;
+  description: string;
+  newBalance: number;
+  orderId?: string;
+  orderNumber?: string;
+  timestamp: Date;
+}
+
+export interface MerchantWalletUpdatedPayload {
+  merchantId: string;
+  storeId: string;
+  storeName: string;
+  transactionType: 'credit' | 'debit' | 'withdrawal';
+  amount: number;
+  orderId?: string;
+  orderNumber?: string;
+  newBalance: {
+    total: number;
+    available: number;
+    pending: number;
+  };
+  timestamp: Date;
+}
+
+export interface PendingRewardPayload {
+  rewardId: string;
+  userId: string;
+  amount: number;
+  source: string;
+  status: 'pending' | 'approved' | 'rejected' | 'credited';
+  referenceType?: string;
+  referenceId?: string;
   timestamp: Date;
 }
 
@@ -355,6 +405,71 @@ class OrderSocketService {
     const orderRoom = SocketRoom.order(orderId);
     this.io.to(orderRoom).emit(event, data);
   }
+
+  /**
+   * Emit to a specific merchant room
+   */
+  public emitToMerchant(merchantId: string, event: string, data: any): void {
+    if (!this.io) {
+      console.warn('⚠️ Socket.IO not initialized. Cannot emit to merchant.');
+      return;
+    }
+
+    const merchantRoom = `merchant-${merchantId}`;
+    this.io.to(merchantRoom).emit(event, data);
+  }
+
+  /**
+   * Emit to admin room
+   */
+  public emitToAdmin(event: string, data: any): void {
+    if (!this.io) {
+      console.warn('⚠️ Socket.IO not initialized. Cannot emit to admin.');
+      return;
+    }
+
+    this.io.to('admin').emit(event, data);
+  }
+
+  /**
+   * Emit coins awarded event to user
+   */
+  public emitCoinsAwarded(payload: CoinsAwardedPayload): void {
+    if (!this.io) {
+      console.warn('⚠️ Socket.IO not initialized. Cannot emit coins awarded event.');
+      return;
+    }
+
+    this.emitToUser(payload.userId, OrderSocketEvent.COINS_AWARDED, payload);
+    console.log(`🪙 Coins awarded to user ${payload.userId}: +${payload.amount} (${payload.source})`);
+  }
+
+  /**
+   * Emit merchant wallet updated event
+   */
+  public emitMerchantWalletUpdated(payload: MerchantWalletUpdatedPayload): void {
+    if (!this.io) {
+      console.warn('⚠️ Socket.IO not initialized. Cannot emit merchant wallet update.');
+      return;
+    }
+
+    this.emitToMerchant(payload.merchantId, OrderSocketEvent.MERCHANT_WALLET_UPDATED, payload);
+    console.log(`💰 Merchant wallet updated: ${payload.merchantId} (${payload.transactionType}: ${payload.amount})`);
+  }
+
+  /**
+   * Emit pending reward created/updated event to admin
+   */
+  public emitPendingRewardUpdate(payload: PendingRewardPayload, isNew: boolean = false): void {
+    if (!this.io) {
+      console.warn('⚠️ Socket.IO not initialized. Cannot emit pending reward update.');
+      return;
+    }
+
+    const event = isNew ? OrderSocketEvent.PENDING_REWARD_CREATED : OrderSocketEvent.PENDING_REWARD_UPDATED;
+    this.emitToAdmin(event, payload);
+    console.log(`📋 Pending reward ${isNew ? 'created' : 'updated'}: ${payload.rewardId} (${payload.status})`);
+  }
 }
 
 // Add order room to SocketRoom if not exists
@@ -379,5 +494,10 @@ export const {
   emitOrderCreated,
   emitToUser,
   emitToOrder,
+  emitToMerchant,
+  emitToAdmin,
+  emitCoinsAwarded,
+  emitMerchantWalletUpdated,
+  emitPendingRewardUpdate,
   getIO,
 } = orderSocketService;
