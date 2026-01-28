@@ -168,20 +168,18 @@ class ShareController {
   async sharePurchase(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
-      const { orderId, orderNumber, orderTotal, platform } = req.body;
+      const { orderId, platform } = req.body;
 
-      if (!orderId || !orderNumber || !orderTotal || !platform) {
+      if (!orderId || !platform) {
         return res.status(400).json({
           success: false,
-          message: 'orderId, orderNumber, orderTotal, and platform are required'
+          message: 'orderId and platform are required'
         });
       }
 
       const result = await shareService.sharePurchase(
         userId,
         orderId,
-        orderNumber,
-        orderTotal,
         platform
       );
 

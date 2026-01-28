@@ -154,7 +154,8 @@ import {
   adminMerchantWalletsRoutes,
   adminAuthRoutes,
   adminUsersRoutes,
-  adminMerchantsRoutes
+  adminMerchantsRoutes,
+  adminWalletRoutes
 } from './routes/admin';
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
 import experienceRoutes from './routes/experienceRoutes';  // Store experience routes
@@ -814,6 +815,8 @@ app.use(`${API_PREFIX}/admin/users`, adminUsersRoutes);
 console.log('✅ Admin users routes registered at /api/admin/users');
 app.use(`${API_PREFIX}/admin/merchants`, adminMerchantsRoutes);
 console.log('✅ Admin merchants routes registered at /api/admin/merchants');
+app.use(`${API_PREFIX}/admin/wallet`, adminWalletRoutes);
+console.log('✅ Admin wallet routes registered at /api/admin/wallet');
 
 // Campaign Routes - Homepage exciting deals
 app.use(`${API_PREFIX}/campaigns`, campaignRoutes);

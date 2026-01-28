@@ -209,7 +209,7 @@ export const createCashbackRequest = asyncHandler(async (req: Request, res: Resp
 
     // Verify order belongs to merchant's store
     const Store = (await import('../../models/Store')).Store;
-    const merchantStores = await Store.find({ owner: merchantId }).select('_id').lean();
+    const merchantStores = await Store.find({ merchantId: merchantId }).select('_id').lean();
     const merchantStoreIds = merchantStores.map(s => s._id.toString());
     
     // Check if any order item belongs to merchant's stores

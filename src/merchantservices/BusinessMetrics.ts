@@ -1,6 +1,8 @@
-import { ProductModel } from '../models/MerchantProduct';
-import { OrderModel } from '../models/MerchantOrder';
+import { Order } from '../models/Order';
+import { Product } from '../models/Product';
+import { Store } from '../models/Store';
 import { CashbackModel } from '../models/Cashback';
+import mongoose from 'mongoose';
 
 export interface DashboardMetrics {
   // Revenue Metrics
@@ -8,7 +10,7 @@ export interface DashboardMetrics {
   monthlyRevenue: number;
   revenueGrowth: number;
   averageOrderValue: number;
-  
+
   // Order Metrics
   totalOrders: number;
   monthlyOrders: number;
@@ -16,7 +18,7 @@ export interface DashboardMetrics {
   pendingOrders: number;
   completedOrders: number;
   cancelledOrders: number;
-  
+
   // Product Metrics
   totalProducts: number;
   activeProducts: number;
@@ -27,19 +29,19 @@ export interface DashboardMetrics {
     totalSold: number;
     revenue: number;
   }>;
-  
+
   // Customer Metrics
   totalCustomers: number;
   monthlyCustomers: number;
   customerGrowth: number;
   returningCustomers: number;
-  
+
   // Cashback Metrics
   totalCashbackPaid: number;
   monthlyCashbackPaid: number;
   pendingCashback: number;
   cashbackROI: number;
-  
+
   // Performance Metrics
   averageOrderProcessingTime: number; // in hours
   customerSatisfactionScore: number;
@@ -79,85 +81,87 @@ export interface CustomerInsights {
 }
 
 export class BusinessMetricsService {
+  /**
+   * Get all store IDs belonging to a merchant
+   */
+  private static async getMerchantStoreIds(merchantId: string): Promise<mongoose.Types.ObjectId[]> {
+    const stores = await Store.find({ merchantId: new mongoose.Types.ObjectId(merchantId) }).select('_id').lean();
+    return stores.map(s => s._id as mongoose.Types.ObjectId);
+  }
+
   static async getDashboardMetrics(merchantId: string, storeId?: string): Promise<DashboardMetrics> {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-    // Build search criteria with optional storeId filter
-    const baseSearchCriteria: any = { merchantId };
-    if (storeId) {
-      baseSearchCriteria.storeId = storeId;
+    // Get merchant's store IDs, optionally filtered to a specific store
+    const allStoreIds = await this.getMerchantStoreIds(merchantId);
+    console.log('[DASHBOARD DEBUG] merchantId:', merchantId);
+    console.log('[DASHBOARD DEBUG] allStoreIds found:', allStoreIds.length, allStoreIds.map(id => id.toString()));
+    const filterStoreIds = storeId
+      ? allStoreIds.filter(id => id.toString() === storeId)
+      : allStoreIds;
+    console.log('[DASHBOARD DEBUG] storeId filter:', storeId || 'none');
+    console.log('[DASHBOARD DEBUG] filterStoreIds:', filterStoreIds.length);
+
+    if (filterStoreIds.length === 0) {
+      console.log('[DASHBOARD DEBUG] No stores found — returning empty metrics');
+      // No stores found — return empty metrics
+      return this.emptyMetrics();
     }
 
-    // Get all data
-    // Note: Orders don't have storeId yet, so we get all orders and filter by products' storeId later
+    const storeFilter = { 'items.store': { $in: filterStoreIds } };
+
+    // Get all data in parallel
     const [
       orders,
-      monthlyOrdersResult,
-      lastMonthOrdersResult,
+      monthlyOrders,
+      lastMonthOrders,
       products,
       cashbackRequests
     ] = await Promise.all([
-      OrderModel.findByMerchantId(merchantId),
-      OrderModel.search({ ...baseSearchCriteria, dateRange: { start: startOfMonth, end: now } }),
-      OrderModel.search({ ...baseSearchCriteria, dateRange: { start: startOfLastMonth, end: endOfLastMonth } }),
-      ProductModel.findByMerchantId(merchantId, storeId),
+      Order.find(storeFilter).populate('user', 'fullName email phone').lean(),
+      Order.find({ ...storeFilter, createdAt: { $gte: startOfMonth, $lte: now } }).populate('user', 'fullName email phone').lean(),
+      Order.find({ ...storeFilter, createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } }).populate('user', 'fullName email phone').lean(),
+      Product.find({ store: { $in: filterStoreIds } }).lean(),
       CashbackModel.findByMerchantId(merchantId)
     ]);
-    
-    // Filter orders by products' storeId if storeId is provided
-    let filteredOrders = orders;
-    let filteredMonthlyOrders = monthlyOrdersResult.orders;
-    let filteredLastMonthOrders = lastMonthOrdersResult.orders;
-    
-    if (storeId) {
-      const productIds = new Set(products.map((p: any) => p._id.toString()));
-      filteredOrders = orders.filter(order => 
-        order.items.some(item => productIds.has(item.productId))
-      );
-      filteredMonthlyOrders = monthlyOrdersResult.orders.filter((order: any) => 
-        order.items.some((item: any) => productIds.has(item.productId))
-      );
-      filteredLastMonthOrders = lastMonthOrdersResult.orders.filter((order: any) => 
-        order.items.some((item: any) => productIds.has(item.productId))
-      );
-    }
+    console.log('[DASHBOARD DEBUG] orders found:', orders.length);
+    console.log('[DASHBOARD DEBUG] products found:', products.length);
 
-    const monthlyOrders = filteredMonthlyOrders;
-    const lastMonthOrders = filteredLastMonthOrders;
-
-    // Calculate revenue metrics
-    const totalRevenue = filteredOrders.reduce((sum, order) => sum + order.total, 0);
-    const monthlyRevenue = monthlyOrders.reduce((sum, order) => sum + order.total, 0);
-    const lastMonthRevenue = lastMonthOrders.reduce((sum, order) => sum + order.total, 0);
+    // Calculate revenue metrics using real schema fields
+    const totalRevenue = orders.reduce((sum: number, order: any) => sum + (order.totals?.total || 0), 0);
+    const monthlyRevenue = monthlyOrders.reduce((sum: number, order: any) => sum + (order.totals?.total || 0), 0);
+    const lastMonthRevenue = lastMonthOrders.reduce((sum: number, order: any) => sum + (order.totals?.total || 0), 0);
     const revenueGrowth = lastMonthRevenue > 0 ? ((monthlyRevenue - lastMonthRevenue) / lastMonthRevenue) * 100 : 0;
     const averageOrderValue = orders.length > 0 ? totalRevenue / orders.length : 0;
 
-    // Calculate order metrics
-    const totalOrders = filteredOrders.length;
+    // Calculate order metrics — real orders use 'placed' instead of 'pending'
+    const totalOrders = orders.length;
     const ordersGrowth = lastMonthOrders.length > 0 ? ((monthlyOrders.length - lastMonthOrders.length) / lastMonthOrders.length) * 100 : 0;
-    const pendingOrders = filteredOrders.filter(order => order.status === 'pending').length;
-    const completedOrders = filteredOrders.filter(order => order.status === 'delivered').length;
-    const cancelledOrders = filteredOrders.filter(order => order.status === 'cancelled').length;
+    const pendingOrders = orders.filter((order: any) => order.status === 'placed').length;
+    const completedOrders = orders.filter((order: any) => order.status === 'delivered').length;
+    const cancelledOrders = orders.filter((order: any) => order.status === 'cancelled').length;
 
-    // Calculate product metrics
+    // Calculate product metrics — real products use isActive boolean
     const totalProducts = products.length;
-    const activeProducts = products.filter(product => product.status === 'active').length;
-    const lowStockProducts = products.filter(product => 
-      product.inventory.trackInventory && 
-      product.inventory.stock <= product.inventory.lowStockThreshold
+    const activeProducts = products.filter((product: any) => product.isActive === true).length;
+    const lowStockProducts = products.filter((product: any) =>
+      !product.inventory?.unlimited &&
+      product.inventory?.stock <= (product.inventory?.lowStockThreshold || 5)
     ).length;
 
-    // Calculate top selling products
+    // Calculate top selling products using real schema field names
     const productSales = new Map<string, { name: string; totalSold: number; revenue: number }>();
-    filteredOrders.forEach(order => {
-      order.items.forEach(item => {
-        const existing = productSales.get(item.productId) || { name: item.productName, totalSold: 0, revenue: 0 };
-        existing.totalSold += item.quantity;
-        existing.revenue += item.total;
-        productSales.set(item.productId, existing);
+    orders.forEach((order: any) => {
+      if (!order.items) return;
+      order.items.forEach((item: any) => {
+        const productId = item.product?.toString() || '';
+        const existing = productSales.get(productId) || { name: item.name || '', totalSold: 0, revenue: 0 };
+        existing.totalSold += item.quantity || 0;
+        existing.revenue += item.subtotal || 0;
+        productSales.set(productId, existing);
       });
     });
 
@@ -166,24 +170,35 @@ export class BusinessMetricsService {
       .sort((a, b) => b.totalSold - a.totalSold)
       .slice(0, 5);
 
-    // Calculate customer metrics
-    const uniqueCustomers = new Set(filteredOrders.map(order => order.customerId));
-    const monthlyUniqueCustomers = new Set(monthlyOrders.map(order => order.customerId));
-    const lastMonthUniqueCustomers = new Set(lastMonthOrders.map(order => order.customerId));
-    
+    // Calculate customer metrics — real orders use 'user' (ObjectId) for customer
+    const uniqueCustomers = new Set(orders.map((order: any) => {
+      const user = order.user;
+      return typeof user === 'object' && user?._id ? user._id.toString() : user?.toString() || '';
+    }));
+    const monthlyUniqueCustomers = new Set(monthlyOrders.map((order: any) => {
+      const user = order.user;
+      return typeof user === 'object' && user?._id ? user._id.toString() : user?.toString() || '';
+    }));
+    const lastMonthUniqueCustomers = new Set(lastMonthOrders.map((order: any) => {
+      const user = order.user;
+      return typeof user === 'object' && user?._id ? user._id.toString() : user?.toString() || '';
+    }));
+
     const totalCustomers = uniqueCustomers.size;
     const monthlyCustomers = monthlyUniqueCustomers.size;
-    const customerGrowth = lastMonthUniqueCustomers.size > 0 ? 
+    const customerGrowth = lastMonthUniqueCustomers.size > 0 ?
       ((monthlyCustomers - lastMonthUniqueCustomers.size) / lastMonthUniqueCustomers.size) * 100 : 0;
 
-    // Calculate returning customers (customers with more than one order)
+    // Calculate returning customers
     const customerOrderCounts = new Map<string, number>();
-    filteredOrders.forEach(order => {
-      customerOrderCounts.set(order.customerId, (customerOrderCounts.get(order.customerId) || 0) + 1);
+    orders.forEach((order: any) => {
+      const user = order.user;
+      const userId = typeof user === 'object' && user?._id ? user._id.toString() : user?.toString() || '';
+      customerOrderCounts.set(userId, (customerOrderCounts.get(userId) || 0) + 1);
     });
     const returningCustomers = Array.from(customerOrderCounts.values()).filter(count => count > 1).length;
 
-    // Calculate cashback metrics
+    // Calculate cashback metrics (unchanged — CashbackModel already queries correct collection)
     const paidCashback = cashbackRequests.filter(req => req.status === 'paid');
     const monthlyPaidCashback = paidCashback.filter(req => req.paidAt && req.paidAt >= startOfMonth);
     const pendingCashbackRequests = cashbackRequests.filter(req => req.status === 'pending');
@@ -194,55 +209,43 @@ export class BusinessMetricsService {
     const cashbackROI = totalCashbackPaid > 0 ? (totalRevenue / totalCashbackPaid) * 100 : 0;
 
     // Calculate performance metrics
-    const completedOrdersWithTimes = filteredOrders.filter(order => 
+    const completedOrdersWithTimes = orders.filter((order: any) =>
       order.status === 'delivered' && order.createdAt && order.updatedAt
     );
     const averageOrderProcessingTime = completedOrdersWithTimes.length > 0 ?
-      completedOrdersWithTimes.reduce((sum, order) => {
-        const processingTime = (order.updatedAt.getTime() - order.createdAt.getTime()) / (1000 * 60 * 60);
+      completedOrdersWithTimes.reduce((sum: number, order: any) => {
+        const processingTime = (new Date(order.updatedAt).getTime() - new Date(order.createdAt).getTime()) / (1000 * 60 * 60);
         return sum + processingTime;
       }, 0) / completedOrdersWithTimes.length : 0;
 
-    // Mock some metrics (would be calculated from real data in production)
-    const customerSatisfactionScore = 4.5; // Would come from reviews/ratings
-    const inventoryTurnover = totalRevenue > 0 ? totalRevenue / (products.length * 100) : 0; // Simplified calculation
-    const totalCost = filteredOrders.reduce((sum, order) => sum + (order.total * 0.7), 0); // Assuming 70% cost ratio
+    const customerSatisfactionScore = 4.5;
+    const inventoryTurnover = totalRevenue > 0 ? totalRevenue / (products.length * 100) : 0;
+    const totalCost = orders.reduce((sum: number, order: any) => sum + ((order.totals?.total || 0) * 0.7), 0);
     const profitMargin = totalRevenue > 0 ? ((totalRevenue - totalCost) / totalRevenue) * 100 : 0;
 
     return {
-      // Revenue Metrics
       totalRevenue,
       monthlyRevenue,
       revenueGrowth,
       averageOrderValue,
-      
-      // Order Metrics
       totalOrders,
       monthlyOrders: monthlyOrders.length,
       ordersGrowth,
       pendingOrders,
       completedOrders,
       cancelledOrders,
-      
-      // Product Metrics
       totalProducts,
       activeProducts,
       lowStockProducts,
       topSellingProducts,
-      
-      // Customer Metrics
       totalCustomers,
       monthlyCustomers,
       customerGrowth,
       returningCustomers,
-      
-      // Cashback Metrics
       totalCashbackPaid,
       monthlyCashbackPaid,
       pendingCashback,
       cashbackROI,
-      
-      // Performance Metrics
       averageOrderProcessingTime,
       customerSatisfactionScore,
       inventoryTurnover,
@@ -255,11 +258,18 @@ export class BusinessMetricsService {
     const startDate = new Date();
     startDate.setDate(endDate.getDate() - days);
 
-    const ordersResult = await OrderModel.search({
-      merchantId,
-      dateRange: { start: startDate, end: endDate }
-    });
-    const orders = ordersResult.orders;
+    // Get merchant's store IDs
+    const allStoreIds = await this.getMerchantStoreIds(merchantId);
+    const filterStoreIds = storeId
+      ? allStoreIds.filter(id => id.toString() === storeId)
+      : allStoreIds;
+
+    const orders = filterStoreIds.length > 0
+      ? await Order.find({
+          'items.store': { $in: filterStoreIds },
+          createdAt: { $gte: startDate, $lte: endDate }
+        }).populate('user', 'fullName').lean()
+      : [];
 
     const cashbackResult = await CashbackModel.search({
       merchantId,
@@ -290,16 +300,19 @@ export class BusinessMetricsService {
       });
     }
 
-    // Aggregate orders
-    orders.forEach(order => {
-      const dateKey = order.createdAt.toISOString().split('T')[0];
+    // Aggregate orders using real schema fields
+    orders.forEach((order: any) => {
+      const dateKey = new Date(order.createdAt).toISOString().split('T')[0];
       const dayData = dataByDay.get(dateKey);
       if (dayData) {
-        dayData.revenue += order.total;
+        dayData.revenue += order.totals?.total || 0;
         dayData.orders += 1;
-        dayData.customers.add(order.customerId);
 
-        // Calculate total items from order items
+        // Customer ID from populated user or raw ObjectId
+        const user = order.user;
+        const userId = typeof user === 'object' && user?._id ? user._id.toString() : user?.toString() || '';
+        dayData.customers.add(userId);
+
         if (order.items && Array.isArray(order.items)) {
           const totalItems = order.items.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0);
           dayData.items += totalItems;
@@ -332,18 +345,16 @@ export class BusinessMetricsService {
   }
 
   static async getCategoryPerformance(merchantId: string, storeId?: string): Promise<CategoryPerformance[]> {
-    const products = await ProductModel.findByMerchantId(merchantId, storeId);
-    const orders = await OrderModel.findByMerchantId(merchantId);
-    
-    // Filter orders by products' storeId if storeId is provided
-    // This is a simplified approach - in production, you might want to add storeId to orders
-    let filteredOrders = orders;
-    if (storeId) {
-      const productIds = new Set(products.map((p: any) => p._id.toString()));
-      filteredOrders = orders.filter(order => 
-        order.items.some(item => productIds.has(item.productId))
-      );
-    }
+    // Get merchant's store IDs
+    const allStoreIds = await this.getMerchantStoreIds(merchantId);
+    const filterStoreIds = storeId
+      ? allStoreIds.filter(id => id.toString() === storeId)
+      : allStoreIds;
+
+    if (filterStoreIds.length === 0) return [];
+
+    const products = await Product.find({ store: { $in: filterStoreIds } }).populate('category', 'name').lean();
+    const orders = await Order.find({ 'items.store': { $in: filterStoreIds } }).lean();
 
     // Calculate current month and last month data
     const now = new Date();
@@ -351,25 +362,31 @@ export class BusinessMetricsService {
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-    const thisMonthOrdersList = filteredOrders.filter(order => order.createdAt >= startOfMonth);
-    const lastMonthOrdersList = filteredOrders.filter(order => 
-      order.createdAt >= startOfLastMonth && order.createdAt <= endOfLastMonth
-    );
+    const thisMonthOrdersList = orders.filter((order: any) => new Date(order.createdAt) >= startOfMonth);
+    const lastMonthOrdersList = orders.filter((order: any) => {
+      const d = new Date(order.createdAt);
+      return d >= startOfLastMonth && d <= endOfLastMonth;
+    });
 
-    // Group products by category
+    // Group products by category (ObjectId)
     const categoriesMap = new Map<string, {
       categoryName: string;
       productIds: Set<string>;
     }>();
 
-    products.forEach(product => {
-      if (!categoriesMap.has(product.category)) {
-        categoriesMap.set(product.category, {
-          categoryName: product.category,
+    products.forEach((product: any) => {
+      const catId = product.category?._id?.toString() || product.category?.toString() || 'uncategorized';
+      const catName = (typeof product.category === 'object' && product.category?.name)
+        ? product.category.name
+        : catId;
+
+      if (!categoriesMap.has(catId)) {
+        categoriesMap.set(catId, {
+          categoryName: catName,
           productIds: new Set()
         });
       }
-      categoriesMap.get(product.category)!.productIds.add(product.id);
+      categoriesMap.get(catId)!.productIds.add(product._id.toString());
     });
 
     // Calculate performance for each category
@@ -378,42 +395,40 @@ export class BusinessMetricsService {
     categoriesMap.forEach((categoryData, categoryId) => {
       const categoryProductIds = categoryData.productIds;
 
-      // Calculate revenue and orders for this month
       let thisMonthRevenue = 0;
-      let thisMonthOrders = 0;
       let lastMonthRevenue = 0;
-      let lastMonthOrders = 0;
-
-      thisMonthOrdersList.forEach(order => {
-        order.items.forEach(item => {
-          if (categoryProductIds.has(item.productId)) {
-            thisMonthRevenue += item.total;
-            thisMonthOrders += 1;
-          }
-        });
-      });
-
-      lastMonthOrdersList.forEach(order => {
-        order.items.forEach(item => {
-          if (categoryProductIds.has(item.productId)) {
-            lastMonthRevenue += item.total;
-            lastMonthOrders += 1;
-          }
-        });
-      });
-
-      // Calculate total revenue and orders
       let totalRevenue = 0;
       let totalOrders = 0;
 
-      filteredOrders.forEach(order => {
-        order.items.forEach(item => {
-          if (categoryProductIds.has(item.productId)) {
-            totalRevenue += item.total;
-            totalOrders += 1;
-          }
+      // Helper to check items against category products
+      const processOrders = (orderList: any[], accRevenue: { value: number }, accOrders: { value: number }) => {
+        orderList.forEach((order: any) => {
+          if (!order.items) return;
+          order.items.forEach((item: any) => {
+            const pid = item.product?.toString() || '';
+            if (categoryProductIds.has(pid)) {
+              accRevenue.value += item.subtotal || 0;
+              accOrders.value += 1;
+            }
+          });
         });
-      });
+      };
+
+      const tmr = { value: 0 };
+      const tmo = { value: 0 };
+      processOrders(thisMonthOrdersList, tmr, tmo);
+      thisMonthRevenue = tmr.value;
+
+      const lmr = { value: 0 };
+      const lmo = { value: 0 };
+      processOrders(lastMonthOrdersList, lmr, lmo);
+      lastMonthRevenue = lmr.value;
+
+      const tr = { value: 0 };
+      const to = { value: 0 };
+      processOrders(orders, tr, to);
+      totalRevenue = tr.value;
+      totalOrders = to.value;
 
       const growth = lastMonthRevenue > 0 ? ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100 : 0;
 
@@ -431,21 +446,24 @@ export class BusinessMetricsService {
   }
 
   static async getCustomerInsights(merchantId: string, storeId?: string): Promise<CustomerInsights> {
-    let orders = await OrderModel.findByMerchantId(merchantId);
-    
-    // Filter orders by products' storeId if storeId is provided
-    if (storeId) {
-      const products = await ProductModel.findByMerchantId(merchantId, storeId);
-      const productIds = new Set(products.map((p: any) => p._id.toString()));
-      orders = orders.filter(order => 
-        order.items.some(item => productIds.has(item.productId))
-      );
+    // Get merchant's store IDs
+    const allStoreIds = await this.getMerchantStoreIds(merchantId);
+    const filterStoreIds = storeId
+      ? allStoreIds.filter(id => id.toString() === storeId)
+      : allStoreIds;
+
+    if (filterStoreIds.length === 0) {
+      return { newCustomers: 0, returningCustomers: 0, customerLifetimeValue: 0, averageOrdersPerCustomer: 0, topCustomers: [] };
     }
-    
+
+    const orders = await Order.find({ 'items.store': { $in: filterStoreIds } })
+      .populate('user', 'fullName email phone')
+      .lean();
+
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    // Group orders by customer
+    // Group orders by customer (user)
     const customerData = new Map<string, {
       name: string;
       totalSpent: number;
@@ -453,21 +471,25 @@ export class BusinessMetricsService {
       firstOrderDate: Date;
     }>();
 
-    orders.forEach(order => {
-      const existing = customerData.get(order.customerId) || {
-        name: order.customerName,
+    orders.forEach((order: any) => {
+      const user = order.user;
+      const customerId = typeof user === 'object' && user?._id ? user._id.toString() : user?.toString() || '';
+      const customerName = typeof user === 'object' && user?.fullName ? user.fullName : 'Unknown Customer';
+
+      const existing = customerData.get(customerId) || {
+        name: customerName,
         totalSpent: 0,
         orderCount: 0,
-        firstOrderDate: order.createdAt
+        firstOrderDate: new Date(order.createdAt)
       };
 
-      existing.totalSpent += order.total;
+      existing.totalSpent += order.totals?.total || 0;
       existing.orderCount += 1;
-      if (order.createdAt < existing.firstOrderDate) {
-        existing.firstOrderDate = order.createdAt;
+      if (new Date(order.createdAt) < existing.firstOrderDate) {
+        existing.firstOrderDate = new Date(order.createdAt);
       }
 
-      customerData.set(order.customerId, existing);
+      customerData.set(customerId, existing);
     });
 
     // Calculate metrics
@@ -482,7 +504,7 @@ export class BusinessMetricsService {
       .reduce((sum, customer) => sum + customer.totalSpent, 0);
 
     const customerLifetimeValue = totalCustomers > 0 ? totalRevenue / totalCustomers : 0;
-    const averageOrdersPerCustomer = totalCustomers > 0 ? 
+    const averageOrdersPerCustomer = totalCustomers > 0 ?
       Array.from(customerData.values()).reduce((sum, customer) => sum + customer.orderCount, 0) / totalCustomers : 0;
 
     // Get top customers
@@ -560,5 +582,19 @@ export class BusinessMetricsService {
     }
 
     return { insights, recommendations, alerts };
+  }
+
+  /**
+   * Returns empty metrics when merchant has no stores
+   */
+  private static emptyMetrics(): DashboardMetrics {
+    return {
+      totalRevenue: 0, monthlyRevenue: 0, revenueGrowth: 0, averageOrderValue: 0,
+      totalOrders: 0, monthlyOrders: 0, ordersGrowth: 0, pendingOrders: 0, completedOrders: 0, cancelledOrders: 0,
+      totalProducts: 0, activeProducts: 0, lowStockProducts: 0, topSellingProducts: [],
+      totalCustomers: 0, monthlyCustomers: 0, customerGrowth: 0, returningCustomers: 0,
+      totalCashbackPaid: 0, monthlyCashbackPaid: 0, pendingCashback: 0, cashbackROI: 0,
+      averageOrderProcessingTime: 0, customerSatisfactionScore: 0, inventoryTurnover: 0, profitMargin: 0
+    };
   }
 }

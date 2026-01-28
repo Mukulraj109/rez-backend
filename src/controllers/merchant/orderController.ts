@@ -12,6 +12,7 @@ import EmailService from '../../services/EmailService';
 import stripeService from '../../services/stripeService';
 import { Wallet } from '../../models/Wallet';
 import { Refund } from '../../models/Refund';
+import { Store } from '../../models/Store';
 
 /**
  * Helper function to send order status notifications to customers
@@ -121,7 +122,14 @@ export const getMerchantOrderById = asyncHandler(async (req: Request, res: Respo
   console.log('🔍 [ORDER DETAIL] getMerchantOrderById called:', { id, merchantId });
 
   try {
-    const order = await Order.findById(id)
+    // Verify the order belongs to one of this merchant's stores
+    const merchantStores = await Store.find({ merchantId: new Types.ObjectId(merchantId) }).select('_id').lean();
+    const merchantStoreIds = merchantStores.map(s => s._id);
+
+    const order = await Order.findOne({
+      _id: new Types.ObjectId(id),
+      'items.store': { $in: merchantStoreIds }
+    })
       .populate({
         path: 'user',
         select: 'profile.firstName profile.lastName profile.email phoneNumber'
@@ -226,12 +234,23 @@ export const getMerchantOrders = asyncHandler(async (req: Request, res: Response
       limit
     });
 
-    // Build query
-    const query: any = {};
+    // Build query - always filter by merchant's stores
+    const merchantId = (req as any).merchantId;
+    const merchantStores = await Store.find({ merchantId: new Types.ObjectId(merchantId) }).select('_id').lean();
+    const merchantStoreIds = merchantStores.map(s => s._id);
 
-    // Store filter (if merchant manages specific stores)
+    const query: any = {
+      'items.store': { $in: merchantStoreIds }
+    };
+
+    // Further filter by specific store (if merchant manages multiple stores)
     if (storeId) {
-      query['items.store'] = new Types.ObjectId(storeId as string);
+      // Ensure the requested store belongs to this merchant
+      const storeObjId = new Types.ObjectId(storeId as string);
+      if (!merchantStoreIds.some(id => id.toString() === storeObjId.toString())) {
+        return sendBadRequest(res, 'Store not found or does not belong to this merchant');
+      }
+      query['items.store'] = storeObjId;
     }
 
     // Status filter
@@ -346,11 +365,21 @@ export const getMerchantOrderAnalytics = asyncHandler(async (req: Request, res: 
       interval
     });
 
-    // Build base query
-    const baseQuery: any = {};
+    // Build base query - always filter by merchant's stores
+    const merchantId = (req as any).merchantId;
+    const merchantStores = await Store.find({ merchantId: new Types.ObjectId(merchantId) }).select('_id').lean();
+    const merchantStoreIds = merchantStores.map(s => s._id);
+
+    const baseQuery: any = {
+      'items.store': { $in: merchantStoreIds }
+    };
 
     if (storeId) {
-      baseQuery['items.store'] = new Types.ObjectId(storeId as string);
+      const storeObjId = new Types.ObjectId(storeId as string);
+      if (!merchantStoreIds.some(id => id.toString() === storeObjId.toString())) {
+        return sendBadRequest(res, 'Store not found or does not belong to this merchant');
+      }
+      baseQuery['items.store'] = storeObjId;
     }
 
     // Default to last 30 days if no date range provided

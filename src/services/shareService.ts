@@ -279,15 +279,13 @@ class ShareService {
   async sharePurchase(
     userId: string,
     orderId: string,
-    orderNumber: string,
-    orderTotal: number,
     platform: 'whatsapp' | 'facebook' | 'twitter' | 'instagram' | 'copy_link' | 'other'
   ): Promise<{ share: IShare; coinsEarned: number }> {
     // Import Order to validate
     const { Order } = require('../models/Order');
     const { Types } = require('mongoose');
 
-    // Validate order belongs to user
+    // Validate order exists and belongs to user
     const order = await Order.findById(orderId);
     if (!order) {
       throw new Error('Order not found');
@@ -296,6 +294,15 @@ class ShareService {
     if (order.user.toString() !== userId) {
       throw new Error('Order does not belong to this user');
     }
+
+    // Require delivered status before sharing
+    if (order.status !== 'delivered') {
+      throw new Error('Order must be delivered before sharing');
+    }
+
+    // Use order data from DB (not client) for security
+    const orderNumber: string = order.orderNumber;
+    const orderTotal: number = order.totals.total;
 
     // Check if order already shared
     const existingShare = await Share.findOne({
@@ -398,7 +405,23 @@ class ShareService {
    * Check if an order can be shared
    */
   async canShareOrder(userId: string, orderId: string): Promise<{ canShare: boolean; reason?: string }> {
+    const { Order } = require('../models/Order');
     const { Types } = require('mongoose');
+
+    // Check order exists and belongs to user
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return { canShare: false, reason: 'Order not found' };
+    }
+
+    if (order.user.toString() !== userId) {
+      return { canShare: false, reason: 'Order does not belong to this user' };
+    }
+
+    // Check order is delivered
+    if (order.status !== 'delivered') {
+      return { canShare: false, reason: 'Order not yet delivered' };
+    }
 
     // Check if already shared
     const existingShare = await Share.findOne({

@@ -1036,17 +1036,89 @@ export const unlockItem = asyncHandler(async (req: Request, res: Response) => {
     }
 
     console.log('🔓 [UNLOCK ITEM] Cart found, locked items count:', cart.lockedItems?.length || 0);
-    console.log('🔓 [UNLOCK ITEM] Locked items:', cart.lockedItems?.map((item: any) => ({
-      productId: item.product?.toString(),
-      variant: item.variant
-    })));
+
+    // Find the locked item BEFORE removing it (to check if it's a paid lock)
+    const lockedItem = cart.lockedItems.find((item: any) => {
+      const itemProductId = typeof item.product === 'object' && item.product._id
+        ? item.product._id.toString()
+        : item.product?.toString();
+      const productMatch = itemProductId === productId;
+      const variantMatch = !variant || (item.variant?.type === variant?.type && item.variant?.value === variant?.value);
+      return productMatch && variantMatch;
+    });
+
+    // Refund lock fee for paid locks
+    if (lockedItem?.isPaidLock && lockedItem?.lockFee && lockedItem.lockFee > 0) {
+      console.log('🔓💰 [UNLOCK ITEM] Refunding paid lock fee:', lockedItem.lockFee);
+
+      const { Wallet } = await import('../models/Wallet');
+      const { Transaction } = await import('../models/Transaction');
+
+      const wallet = await Wallet.findOne({ user: req.userId });
+      if (wallet) {
+        // Refund to wallet balance
+        await wallet.addFunds(lockedItem.lockFee, 'refund');
+
+        // Also update coins array
+        const rezCoin = wallet.coins?.find((c: any) => c.type === 'rez');
+        if (rezCoin) {
+          rezCoin.amount += lockedItem.lockFee;
+          rezCoin.lastUsed = new Date();
+          await wallet.save();
+        }
+
+        // Create CoinTransaction for refund
+        try {
+          const { CoinTransaction } = await import('../models/CoinTransaction');
+          await CoinTransaction.createTransaction(
+            req.userId,
+            'refunded',
+            lockedItem.lockFee,
+            'purchase',
+            `Lock fee refund - lock cancelled`,
+            { productId }
+          );
+        } catch (coinTxError) {
+          console.error('⚠️ [UNLOCK ITEM] CoinTransaction refund failed (non-blocking):', coinTxError);
+        }
+
+        // Create refund transaction record
+        await Transaction.create({
+          user: req.userId,
+          type: 'credit',
+          category: 'refund',
+          amount: lockedItem.lockFee,
+          currency: 'INR',
+          description: `Lock fee refund - lock cancelled`,
+          source: {
+            type: 'order',
+            reference: productId,
+            description: 'Lock fee refund',
+          },
+          status: { current: 'completed', history: [{ status: 'completed', timestamp: new Date() }] },
+          balanceBefore: wallet.balance.total - lockedItem.lockFee,
+          balanceAfter: wallet.balance.total,
+          isReversible: false,
+          notes: `Refund for cancelled lock on product ${productId}`
+        });
+
+        // Update lock payment status
+        lockedItem.lockPaymentStatus = 'refunded';
+        await cart.save();
+
+        console.log('✅ [UNLOCK ITEM] Lock fee refunded:', lockedItem.lockFee);
+      }
+    }
 
     await cart.unlockItem(productId, variant);
 
     console.log('✅ [UNLOCK ITEM] Item unlocked successfully');
     console.log('✅ [UNLOCK ITEM] Remaining locked items:', cart.lockedItems?.length || 0);
 
-    sendSuccess(res, cart, 'Item unlocked successfully');
+    sendSuccess(res, cart, lockedItem?.isPaidLock
+      ? `Item unlocked. Lock fee of ₹${lockedItem.lockFee} has been refunded to your wallet.`
+      : 'Item unlocked successfully'
+    );
 
   } catch (error) {
     console.error('❌ [UNLOCK ITEM] Error:', error);
@@ -1320,9 +1392,36 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
       );
     }
 
-    // 4. Deduct from wallet
+    // 4. Deduct from wallet (balance + coins array + CoinTransaction)
     const balanceBefore = wallet.balance.total;
     await wallet.deductFunds(lockFee);
+
+    // Also update coins array (deductFunds only updates balance, not coins)
+    // This mirrors how orderController deducts coins at checkout
+    const rezCoin = wallet.coins?.find((c: any) => c.type === 'rez');
+    if (rezCoin) {
+      rezCoin.amount = Math.max(0, rezCoin.amount - lockFee);
+      rezCoin.lastUsed = new Date();
+      await wallet.save();
+    }
+
+    // Create CoinTransaction record so auto-sync stays consistent
+    // (GET /wallet/balance auto-syncs from CoinTransaction as source of truth)
+    try {
+      const { CoinTransaction } = await import('../models/CoinTransaction');
+      await CoinTransaction.createTransaction(
+        req.userId,
+        'spent',
+        lockFee,
+        'purchase',
+        `Lock fee for ${product.name} (${duration}h lock)`,
+        { productId: product._id, lockDuration: duration }
+      );
+      console.log('🔒💰 [LOCK WITH PAYMENT] CoinTransaction created for lock fee');
+    } catch (coinTxError) {
+      console.error('⚠️ [LOCK WITH PAYMENT] CoinTransaction creation failed (non-blocking):', coinTxError);
+      // Non-blocking: wallet already deducted, transaction record will be created below
+    }
 
     const balanceAfter = wallet.balance.total;
     console.log('🔒💰 [LOCK WITH PAYMENT] Payment deducted:', { balanceBefore, balanceAfter, lockFee });

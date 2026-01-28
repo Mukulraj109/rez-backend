@@ -6,3 +6,4 @@ export { default as adminMerchantWalletsRoutes } from './merchantWallets';
 export { default as adminAuthRoutes } from './auth';
 export { default as adminUsersRoutes } from './users';
 export { default as adminMerchantsRoutes } from './merchants';
+export { default as adminWalletRoutes } from './adminWallet';

@@ -1,8 +1,17 @@
 import { Router, Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { Order } from '../../models/Order';
 import { User } from '../../models/User';
 import { Product } from '../../models/Product';
+import { Wallet } from '../../models/Wallet';
+import { Subscription } from '../../models/Subscription';
+import activityService from '../../services/activityService';
+import referralService from '../../services/referralService';
+import cashbackService from '../../services/cashbackService';
+import userProductService from '../../services/userProductService';
+import achievementService from '../../services/achievementService';
+import { calculatePromoCoinsEarned, calculatePromoCoinsWithTierBonus } from '../../config/promoCoins.config';
 
 const router = Router();
 
@@ -40,7 +49,12 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Status filter
     if (req.query.status) {
-      filter.status = req.query.status;
+      // "pending" should also match "placed" orders (new orders start as 'placed')
+      if (req.query.status === 'pending') {
+        filter.status = { $in: ['pending', 'placed'] };
+      } else {
+        filter.status = req.query.status;
+      }
     }
 
     // Payment status filter
@@ -71,7 +85,7 @@ router.get('/', async (req: Request, res: Response) => {
         .limit(limit)
         .populate('user', 'profile.firstName profile.lastName phoneNumber email')
         .populate('items.store', 'name slug logo')
-        .select('orderNumber status totals payment.status payment.method createdAt user items'),
+        .select('orderNumber status totals payment.status payment.method payment.coinsUsed createdAt user items'),
       Order.countDocuments(filter)
     ]);
 
@@ -534,6 +548,127 @@ router.put('/:id/status', async (req: Request, res: Response) => {
     }
 
     console.log(`✅ [ADMIN ORDERS] Order ${order.orderNumber} status updated from '${previousStatus}' to '${status}'`);
+
+    // If status changed to 'delivered', trigger all delivery rewards
+    if (status === 'delivered') {
+      const populatedOrder = await Order.findById(order._id)
+        .populate('items.product', 'name images')
+        .populate('items.store', 'name logo')
+        .populate('user', 'profile.firstName profile.lastName');
+
+      if (populatedOrder) {
+        const storeData = populatedOrder.items[0]?.store as any;
+        const storeName = storeData?.name || 'Store';
+        const userIdObj = typeof populatedOrder.user === 'object' ? (populatedOrder.user as any)._id : populatedOrder.user;
+
+        // 1. Activity logging
+        try {
+          await activityService.order.onOrderDelivered(
+            userIdObj as Types.ObjectId,
+            populatedOrder._id as Types.ObjectId,
+            storeName
+          );
+        } catch (err) {
+          console.error('[ADMIN ORDERS] Activity logging failed:', err);
+        }
+
+        // 2. Referral rewards
+        try {
+          await referralService.processFirstOrder({
+            refereeId: userIdObj as Types.ObjectId,
+            orderId: populatedOrder._id as Types.ObjectId,
+            orderAmount: populatedOrder.totals.total,
+          });
+          const deliveredOrdersCount = await Order.countDocuments({ user: userIdObj, status: 'delivered' });
+          if (deliveredOrdersCount >= 3) {
+            await referralService.processMilestoneBonus(userIdObj as Types.ObjectId, deliveredOrdersCount);
+          }
+        } catch (err) {
+          console.error('[ADMIN ORDERS] Referral rewards failed:', err);
+        }
+
+        // 3. Award 5% purchase reward coins (5% of subtotal)
+        try {
+          const coinService = require('../../services/coinService');
+          const coinsToAward = Math.floor(populatedOrder.totals.subtotal * 0.05);
+          if (coinsToAward > 0) {
+            await coinService.awardCoins(
+              userIdObj.toString(),
+              coinsToAward,
+              'purchase_reward',
+              `5% purchase reward for order ${populatedOrder.orderNumber}`,
+              { orderId: populatedOrder._id }
+            );
+            console.log(`[ADMIN ORDERS] Awarded ${coinsToAward} purchase reward coins`);
+          }
+        } catch (err) {
+          console.error('[ADMIN ORDERS] Purchase reward coins failed:', err);
+        }
+
+        // 4. Create cashback
+        try {
+          await cashbackService.createCashbackFromOrder(populatedOrder._id as Types.ObjectId);
+        } catch (err) {
+          console.error('[ADMIN ORDERS] Cashback creation failed:', err);
+        }
+
+        // 5. Create user products
+        try {
+          await userProductService.createUserProductsFromOrder(populatedOrder._id as Types.ObjectId);
+        } catch (err) {
+          console.error('[ADMIN ORDERS] User products creation failed:', err);
+        }
+
+        // 6. Award store branded coins
+        try {
+          let userTier = 'free';
+          try {
+            const subscription = await Subscription.findOne({ user: userIdObj, status: 'active' }).select('tier');
+            if (subscription?.tier) userTier = subscription.tier;
+          } catch (tierErr) { /* use free */ }
+
+          const orderValue = populatedOrder.totals.total;
+          const coinsToEarn = calculatePromoCoinsWithTierBonus(orderValue, userTier);
+          if (coinsToEarn > 0) {
+            const storeId = typeof storeData === 'object' ? storeData._id : storeData;
+            const storeLogo = typeof storeData === 'object' ? storeData.logo : undefined;
+            if (storeId) {
+              const wallet = await Wallet.findOne({ user: userIdObj });
+              if (wallet) {
+                await wallet.addBrandedCoins(
+                  new Types.ObjectId(storeId.toString()),
+                  storeName,
+                  coinsToEarn,
+                  storeLogo
+                );
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[ADMIN ORDERS] Branded coins failed:', err);
+        }
+
+        // 7. Achievement update
+        try {
+          await achievementService.triggerAchievementUpdate(populatedOrder.user, 'order_delivered');
+        } catch (err) {
+          console.error('[ADMIN ORDERS] Achievement update failed:', err);
+        }
+
+        // 8. Partner progress
+        try {
+          const partnerService = require('../../services/partnerService').default;
+          await partnerService.updatePartnerProgress(
+            userIdObj.toString(),
+            (populatedOrder._id as Types.ObjectId).toString()
+          );
+        } catch (err) {
+          console.error('[ADMIN ORDERS] Partner progress failed:', err);
+        }
+
+        console.log(`✅ [ADMIN ORDERS] All delivery rewards processed for order ${order.orderNumber}`);
+      }
+    }
 
     res.json({
       success: true,

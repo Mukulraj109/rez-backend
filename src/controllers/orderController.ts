@@ -29,6 +29,7 @@ import { SMSService } from '../services/SMSService';
 import EmailService from '../services/EmailService';
 import { Store } from '../models/Store';
 import { Refund } from '../models/Refund';
+import merchantWalletService from '../services/merchantWalletService';
 
 // Create new order from cart
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
@@ -228,8 +229,12 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       let updateQuery: any = {};
       let stockCheckQuery: any = { _id: product._id };
 
-      // Handle variant stock
-      if (cartItem.variant && product.inventory?.variants?.length > 0) {
+      // Skip stock deduction for unlimited products (digital goods, etc.)
+      if (product.inventory?.unlimited) {
+        console.log('📦 [CREATE ORDER] Skipping stock check for unlimited product:', product.name);
+        // No stock update needed for unlimited products
+      } else if (cartItem.variant && product.inventory?.variants?.length > 0) {
+        // Handle variant stock
         const variant = product.inventory.variants.find((v: any) =>
           v.type === cartItem.variant?.type && v.value === cartItem.variant?.value
         );
@@ -257,10 +262,13 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
           );
         }
 
-        // Prepare atomic update for variant stock
+        // Prepare atomic update for variant stock AND main product stock
+        const mainStock = product.inventory?.stock || 0;
+        const newMainStock = mainStock - requestedQuantity;
         updateQuery = {
           $inc: {
-            'inventory.variants.$[variant].stock': -requestedQuantity
+            'inventory.variants.$[variant].stock': -requestedQuantity,
+            'inventory.stock': -requestedQuantity
           }
         };
         stockCheckQuery['inventory.variants'] = {
@@ -270,6 +278,13 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
             stock: { $gte: requestedQuantity }
           }
         };
+
+        // Set isAvailable to false if main stock becomes 0
+        if (newMainStock <= 0) {
+          updateQuery.$set = {
+            'inventory.isAvailable': false
+          };
+        }
 
         stockUpdates.push({
           productId: product._id,
@@ -670,6 +685,39 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     console.log('✅ [CREATE ORDER] Transaction committed successfully');
     console.log('💳 [CREATE ORDER] Order created with status "pending_payment"');
     console.log('📌 [CREATE ORDER] Stock will be deducted after payment confirmation');
+
+    // Credit merchant wallet for COD orders (online payments are handled by PaymentService webhook)
+    if (paymentMethod === 'cod') {
+      try {
+        const firstItem = orderItems[0];
+        if (firstItem && firstItem.store) {
+          const storeId = firstItem.store;
+          const store = await Store.findById(storeId).select('merchantId');
+
+          if (store && store.merchantId) {
+            console.log('[MERCHANT WALLET] Crediting merchant wallet for COD order...');
+            await merchantWalletService.creditOrderPayment(
+              store.merchantId.toString(),
+              order._id as Types.ObjectId,
+              order.orderNumber,
+              subtotal,
+              platformFee,
+              storeId
+            );
+            console.log('[MERCHANT WALLET] Merchant wallet credited for COD order:', {
+              gross: subtotal,
+              fee: platformFee,
+              net: subtotal - platformFee
+            });
+          } else {
+            console.warn('[MERCHANT WALLET] Store or merchantId not found for COD wallet credit, storeId:', storeId);
+          }
+        }
+      } catch (walletError) {
+        console.error('[MERCHANT WALLET] Failed to credit merchant wallet for COD order:', walletError);
+        // Don't fail order creation if wallet crediting fails
+      }
+    }
 
     // Populate order for response
     const populatedOrder = await Order.findById(order._id)
@@ -1210,6 +1258,26 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
       } catch (error) {
         console.error('❌ [ORDER] Error processing referral rewards:', error);
         // Don't fail the order update if referral processing fails
+      }
+
+      // Award 5% purchase reward coins on delivery (5% of subtotal, NOT total)
+      try {
+        const coinService = require('../services/coinService');
+        const purchaseRewardRate = 0.05;
+        const coinsToAward = Math.floor(populatedOrder.totals.subtotal * purchaseRewardRate);
+        if (coinsToAward > 0) {
+          console.log('🪙 [ORDER] Awarding 5% purchase reward on delivery:', coinsToAward, 'coins');
+          await coinService.awardCoins(
+            userIdObj.toString(),
+            coinsToAward,
+            'purchase_reward',
+            `5% purchase reward for order ${populatedOrder.orderNumber}`,
+            { orderId: populatedOrder._id }
+          );
+          console.log('✅ [ORDER] Purchase reward coins awarded:', coinsToAward);
+        }
+      } catch (coinError) {
+        console.error('[ORDER] Failed to award purchase reward coins:', coinError);
       }
 
       // Create cashback for delivered order

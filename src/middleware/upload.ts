@@ -112,6 +112,36 @@ export const uploadProjectFile = multer({
   },
 });
 
+// Create storage engine for social media proof uploads (images/videos)
+const socialMediaProofStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: async (req, file) => {
+    console.log(`📤 [CLOUDINARY] Uploading social media proof for user: ${req.user?._id}`);
+    const resourceType = file.mimetype.startsWith('video/') ? 'video' : 'image';
+    return {
+      folder: 'rez-app/social-media-proofs',
+      resource_type: resourceType,
+      public_id: `social_proof_${req.user?._id}_${Date.now()}`,
+      timeout: 120000,
+    };
+  },
+});
+
+// Create multer upload instance for social media proof files (images/videos)
+export const uploadSocialMediaProof = multer({
+  storage: socialMediaProofStorage,
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB limit for videos
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept images and videos only
+    if (!file.mimetype.startsWith('image/') && !file.mimetype.startsWith('video/')) {
+      return cb(new Error('Only image and video files are allowed!') as any, false);
+    }
+    cb(null, true);
+  },
+});
+
 // Create multer upload instance for review images
 export const uploadReviewImage = multer({
   storage: reviewStorage,

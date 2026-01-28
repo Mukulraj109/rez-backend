@@ -3,9 +3,11 @@ import { authMiddleware } from '../middleware/merchantauth';
 import { BusinessMetricsService } from '../merchantservices/BusinessMetrics';
 import { ExportService } from '../merchantservices/ExportService';
 import { ReportService } from '../merchantservices/ReportService';
-import { ProductModel } from '../models/MerchantProduct';
-import { OrderModel } from '../models/MerchantOrder';
+import { Order } from '../models/Order';
+import { Product } from '../models/Product';
+import { Store } from '../models/Store';
 import { CashbackModel } from '../models/Cashback';
+import mongoose from 'mongoose';
 
 const router = Router();
 
@@ -302,10 +304,9 @@ router.get('/overview', async (req, res) => {
     if (!merchantId) {
       return res.status(400).json({ success: false, message: 'Merchant ID required' });
     }
-    if (!merchantId) {
-      return res.status(400).json({ success: false, message: 'Merchant ID required' });
-    }
-    
+
+    const storeIds = await getMerchantStoreIds(merchantId);
+
     // Get basic counts for quick overview
     const [
       totalProducts,
@@ -313,28 +314,23 @@ router.get('/overview', async (req, res) => {
       pendingOrders,
       totalCashback
     ] = await Promise.all([
-      ProductModel.countByMerchant(merchantId),
-      OrderModel.countByMerchant(merchantId),
-      OrderModel.countByStatus(merchantId, 'pending'),
+      Product.countDocuments({ store: { $in: storeIds } }),
+      Order.countDocuments({ 'items.store': { $in: storeIds } }),
+      Order.countDocuments({ 'items.store': { $in: storeIds }, status: 'placed' }),
       CashbackModel.getMetrics(merchantId)
     ]);
 
     // Get recent activity
-    const recentOrdersResult = await OrderModel.search({
-      merchantId,
-      sortBy: 'created',
-      sortOrder: 'desc',
-      limit: 5
-    });
-    const recentOrders = recentOrdersResult.orders;
+    const recentOrders = await Order.find({ 'items.store': { $in: storeIds } })
+      .populate('user', 'fullName email')
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean();
 
-    const recentProductsResult = await ProductModel.search({
-      merchantId,
-      sortBy: 'created',
-      sortOrder: 'desc',
-      limit: 5
-    });
-    const recentProducts = recentProductsResult.products;
+    const recentProducts = await Product.find({ store: { $in: storeIds } })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean();
 
     return res.json({
       success: true,
@@ -347,19 +343,19 @@ router.get('/overview', async (req, res) => {
         },
         recentActivity: {
           orders: recentOrders.map((order: any) => ({
-            id: order.id,
+            id: order._id,
             orderNumber: order.orderNumber,
-            customerName: order.customerName,
-            total: order.total,
+            customerName: typeof order.user === 'object' && order.user?.fullName ? order.user.fullName : 'Unknown',
+            total: order.totals?.total || 0,
             status: order.status,
             createdAt: order.createdAt
           })),
-          products: recentProducts.map(product => ({
-            id: product.id,
+          products: recentProducts.map((product: any) => ({
+            id: product._id,
             name: product.name,
-            price: product.price,
-            status: product.status,
-            stock: product.inventory.stock,
+            price: product.pricing?.selling || 0,
+            status: product.isActive ? 'active' : 'inactive',
+            stock: product.inventory?.stock || 0,
             createdAt: product.createdAt
           }))
         }
@@ -418,21 +414,21 @@ router.get('/recent-orders', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Merchant ID required' });
     }
     const { limit = '10' } = req.query;
-    
-    // Get recent orders
-    const recentOrdersResult = await OrderModel.search({
-      merchantId,
-      sortBy: 'created',
-      sortOrder: 'desc',
-      limit: parseInt(limit as string)
-    });
-    
-    const recentOrders = recentOrdersResult.orders.map((order: any) => ({
-      id: order.id,
+
+    const storeIds = await getMerchantStoreIds(merchantId);
+
+    const orders = await Order.find({ 'items.store': { $in: storeIds } })
+      .populate('user', 'fullName email')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit as string))
+      .lean();
+
+    const recentOrders = orders.map((order: any) => ({
+      id: order._id,
       orderNumber: order.orderNumber,
-      customerName: order.customerName,
-      customerEmail: order.customerEmail,
-      total: order.total,
+      customerName: typeof order.user === 'object' && order.user?.fullName ? order.user.fullName : 'Unknown',
+      customerEmail: typeof order.user === 'object' && order.user?.email ? order.user.email : '',
+      total: order.totals?.total || 0,
       status: order.status,
       items: order.items?.length || 0,
       createdAt: order.createdAt,
@@ -641,13 +637,22 @@ router.get('/notifications', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Merchant ID required' });
     }
     
+    const storeIds = await getMerchantStoreIds(merchantId);
+
     // Get various alerts and notifications
-    const lowStockProducts = await ProductModel.findLowStock(merchantId);
-    const pendingOrders = await OrderModel.findByStatus(merchantId, 'pending');
+    const lowStockProducts = await Product.find({
+      store: { $in: storeIds },
+      'inventory.unlimited': { $ne: true },
+      $expr: { $lte: ['$inventory.stock', { $ifNull: ['$inventory.lowStockThreshold', 5] }] }
+    }).lean();
+    const pendingOrders = await Order.find({ 'items.store': { $in: storeIds }, status: 'placed' }).lean();
     const pendingCashbackResult = await CashbackModel.search({ merchantId, status: 'pending', flaggedOnly: true });
     const pendingCashback = pendingCashbackResult.requests || [];
-    const recentOrdersResult = await OrderModel.search({ merchantId, sortBy: 'created', sortOrder: 'desc', limit: 10 });
-    const recentOrders = recentOrdersResult.orders;
+    const recentOrders = await Order.find({ 'items.store': { $in: storeIds } })
+      .populate('user', 'fullName email')
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
 
     const notifications = [];
 
@@ -819,12 +824,8 @@ router.post('/sample-data', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Merchant ID required' });
     }
     
-    // Generate sample data across all models
-    await Promise.all([
-      ProductModel.createSampleProducts(merchantId),
-      OrderModel.createSampleOrders(merchantId),
-      CashbackModel.createSampleRequests(merchantId)
-    ]);
+    // Generate sample cashback data (Product/Order sample creation removed — real data exists in orders/products collections)
+    await CashbackModel.createSampleRequests(merchantId);
 
     return res.json({
       success: true,
@@ -1384,62 +1385,67 @@ router.post('/reports/sample-schedules', async (req, res) => {
 // ==================== HELPER FUNCTIONS ====================
 
 /**
+ * Get merchant's store IDs for filtering
+ */
+async function getMerchantStoreIds(merchantId: string): Promise<mongoose.Types.ObjectId[]> {
+  const stores = await Store.find({ merchantId: new mongoose.Types.ObjectId(merchantId) }).select('_id').lean();
+  return stores.map(s => s._id as mongoose.Types.ObjectId);
+}
+
+/**
  * Get recent activity feed combining orders, products, and other actions
  */
 async function getRecentActivity(merchantId: string, limit: number = 20, storeId?: string): Promise<any[]> {
   try {
     const activity: any[] = [];
 
-    // Get recent orders (orders don't have storeId, so we get all orders for now)
-    // TODO: Filter orders by products' storeId in future enhancement
-    const recentOrdersResult = await OrderModel.search({
-      merchantId,
-      sortBy: 'created',
-      sortOrder: 'desc',
-      limit: limit
-    });
-    const recentOrders = recentOrdersResult.orders;
+    const allStoreIds = await getMerchantStoreIds(merchantId);
+    const filterStoreIds = storeId
+      ? allStoreIds.filter(id => id.toString() === storeId)
+      : allStoreIds;
 
-    // Get recent products (filtered by storeId if provided)
-    const productSearchParams: any = {
-      merchantId,
-      sortBy: 'created',
-      sortOrder: 'desc',
-      limit: Math.floor(limit / 2)
-    };
-    const recentProductsResult = await ProductModel.search(productSearchParams);
-    let recentProducts = recentProductsResult.products;
-    
-    // Filter products by storeId if provided
-    if (storeId) {
-      recentProducts = recentProducts.filter((product: any) => 
-        product.storeId && product.storeId.toString() === storeId
-      );
-    }
+    if (filterStoreIds.length === 0) return [];
 
-    // Format orders as activity
+    // Get recent orders from real orders collection
+    const recentOrders = await Order.find({ 'items.store': { $in: filterStoreIds } })
+      .populate('user', 'fullName email')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    // Get recent products from real products collection
+    const recentProducts = await Product.find({ store: { $in: filterStoreIds } })
+      .sort({ createdAt: -1 })
+      .limit(Math.floor(limit / 2))
+      .lean();
+
+    // Format orders as activity — map real schema fields
     recentOrders.forEach((order: any) => {
+      const customerName = typeof order.user === 'object' && order.user?.fullName
+        ? order.user.fullName
+        : 'Unknown Customer';
+
       activity.push({
-        id: `order-${order.id}`,
+        id: `order-${order._id}`,
         type: 'order',
-        action: order.status === 'pending' ? 'New Order Received' : `Order ${order.status}`,
-        description: `Order #${order.orderNumber} from ${order.customerName}`,
+        action: order.status === 'placed' ? 'New Order Received' : `Order ${order.status}`,
+        description: `Order #${order.orderNumber} from ${customerName}`,
         timestamp: order.createdAt,
-        user: order.customerName,
+        user: customerName,
         icon: 'shopping-cart',
         metadata: {
-          orderId: order.id,
+          orderId: order._id,
           orderNumber: order.orderNumber,
-          total: order.total,
+          total: order.totals?.total || 0,
           status: order.status
         }
       });
     });
 
-    // Format products as activity
+    // Format products as activity — map real schema fields
     recentProducts.forEach((product: any) => {
       activity.push({
-        id: `product-${product.id}`,
+        id: `product-${product._id}`,
         type: 'product',
         action: 'Product Created',
         description: `Added "${product.name}" to catalog`,
@@ -1447,10 +1453,10 @@ async function getRecentActivity(merchantId: string, limit: number = 20, storeId
         user: 'Merchant',
         icon: 'package',
         metadata: {
-          productId: product.id,
+          productId: product._id,
           productName: product.name,
-          price: product.price,
-          status: product.status
+          price: product.pricing?.selling || 0,
+          status: product.isActive ? 'active' : 'inactive'
         }
       });
     });
@@ -1499,14 +1505,16 @@ async function getTopProductsByPeriod(
     const startDate = new Date();
     startDate.setDate(endDate.getDate() - days);
 
-    // Get orders in the period
-    const ordersResult = await OrderModel.search({
-      merchantId,
-      dateRange: { start: startDate, end: endDate }
-    });
-    const orders = ordersResult.orders;
+    const storeIds = await getMerchantStoreIds(merchantId);
+    if (storeIds.length === 0) return [];
 
-    // Calculate product performance
+    // Get orders in the period from real orders collection
+    const orders = await Order.find({
+      'items.store': { $in: storeIds },
+      createdAt: { $gte: startDate, $lte: endDate }
+    }).lean();
+
+    // Calculate product performance using real schema field names
     const productStats = new Map<string, {
       name: string;
       revenue: number;
@@ -1515,18 +1523,20 @@ async function getTopProductsByPeriod(
       image: string | null;
     }>();
 
-    orders.forEach(order => {
-      order.items.forEach(item => {
-        const existing = productStats.get(item.productId) || {
-          name: item.productName,
+    orders.forEach((order: any) => {
+      if (!order.items) return;
+      order.items.forEach((item: any) => {
+        const productId = item.product?.toString() || '';
+        const existing = productStats.get(productId) || {
+          name: item.name || '',
           revenue: 0,
           quantity: 0,
           category: '',
-          image: null
+          image: item.image || null
         };
-        existing.revenue += item.total;
-        existing.quantity += item.quantity;
-        productStats.set(item.productId, existing);
+        existing.revenue += item.subtotal || 0;
+        existing.quantity += item.quantity || 0;
+        productStats.set(productId, existing);
       });
     });
 
@@ -1633,22 +1643,30 @@ async function getSalesChartData(
  */
 async function getLowStockProducts(merchantId: string, threshold: number = 10, storeId?: string): Promise<any[]> {
   try {
-    const products = await ProductModel.findByMerchantId(merchantId, storeId);
+    const allStoreIds = await getMerchantStoreIds(merchantId);
+    const filterStoreIds = storeId
+      ? allStoreIds.filter(id => id.toString() === storeId)
+      : allStoreIds;
+
+    if (filterStoreIds.length === 0) return [];
+
+    // Query real products collection — filter by stock <= threshold and not unlimited
+    const products = await Product.find({
+      store: { $in: filterStoreIds },
+      'inventory.unlimited': { $ne: true },
+      'inventory.stock': { $lte: threshold }
+    }).lean();
 
     return products
-      .filter(product =>
-        product.inventory.trackInventory &&
-        product.inventory.stock <= threshold
-      )
-      .map(product => ({
-        id: product.id,
+      .map((product: any) => ({
+        id: product._id,
         name: product.name,
-        currentStock: product.inventory.stock,
-        sku: product.sku,
-        reorderPoint: product.inventory.lowStockThreshold,
-        category: product.category,
-        image: product.images?.[0]?.url || null,
-        status: product.status
+        currentStock: product.inventory?.stock || 0,
+        sku: product.sku || '',
+        reorderPoint: product.inventory?.lowStockThreshold || 5,
+        category: product.category?.toString() || '',
+        image: product.images?.[0] || null,
+        status: product.isActive ? 'active' : 'inactive'
       }))
       .sort((a, b) => a.currentStock - b.currentStock);
   } catch (error) {

@@ -10,6 +10,8 @@ export interface ISocialMediaPost extends Document {
   merchant?: Types.ObjectId; // Merchant who owns the store
   platform: 'instagram' | 'facebook' | 'twitter' | 'tiktok';
   postUrl: string;
+  submissionType: 'url' | 'media';
+  proofMedia?: { type: 'image' | 'video'; url: string; publicId: string }[];
   status: 'pending' | 'approved' | 'rejected' | 'credited';
   cashbackAmount: number;
   cashbackPercentage: number;
@@ -89,15 +91,38 @@ const SocialMediaPostSchema = new Schema<ISocialMediaPost>({
   },
   postUrl: {
     type: String,
-    required: [true, 'Post URL is required'],
+    required: [function(this: any) { return this.submissionType !== 'media'; }, 'Post URL is required'],
     trim: true,
     validate: {
       validator: function(url: string) {
+        if (!url) return true; // Allow empty for media submissions
         return /^https?:\/\/.+/.test(url);
       },
       message: 'Invalid URL format'
     }
   },
+  submissionType: {
+    type: String,
+    enum: ['url', 'media'],
+    default: 'url'
+  },
+  proofMedia: [{
+    type: {
+      type: String,
+      enum: ['image', 'video'],
+      required: true
+    },
+    url: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    publicId: {
+      type: String,
+      required: true,
+      trim: true
+    }
+  }],
   status: {
     type: String,
     required: true,

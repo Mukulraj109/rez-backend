@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { Notification } from '../models/Notification';
 import { UserSettings } from '../models/UserSettings';
 import { sendSuccess, sendNotFound, sendError } from '../utils/response';
@@ -78,14 +79,21 @@ export const getMerchantNotifications = asyncHandler(async (req: Request, res: R
       deletedAt: { $exists: false }
     });
 
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
+    const totalPages = Math.ceil((total || 0) / limitNum);
+
     return sendSuccess(res, {
+      items: notifications || [],
       notifications: notifications || [],
       unreadCount: unreadCount || 0,
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: pageNum,
+        limit: limitNum,
         total: total || 0,
-        totalPages: Math.ceil((total || 0) / Number(limit))
+        totalPages,
+        hasNext: pageNum < totalPages,
+        hasPrev: pageNum > 1
       }
     }, 'Notifications retrieved successfully');
   } catch (error: any) {
@@ -630,12 +638,14 @@ export const getNotificationStats = asyncHandler(async (req: Request, res: Respo
   }
 
   try {
+    const userObjectId = new Types.ObjectId(userId);
+
     const [totalStats, categoryStats, priorityStats, recentActivity] = await Promise.all([
       // Total counts
       Notification.aggregate([
         {
           $match: {
-            user: userId,
+            user: userObjectId,
             deletedAt: { $exists: false }
           }
         },
@@ -660,7 +670,7 @@ export const getNotificationStats = asyncHandler(async (req: Request, res: Respo
       Notification.aggregate([
         {
           $match: {
-            user: userId,
+            user: userObjectId,
             deletedAt: { $exists: false }
           }
         },
@@ -682,7 +692,7 @@ export const getNotificationStats = asyncHandler(async (req: Request, res: Respo
       Notification.aggregate([
         {
           $match: {
-            user: userId,
+            user: userObjectId,
             isRead: false,
             deletedAt: { $exists: false }
           }
@@ -702,7 +712,7 @@ export const getNotificationStats = asyncHandler(async (req: Request, res: Respo
       Notification.aggregate([
         {
           $match: {
-            user: userId,
+            user: userObjectId,
             createdAt: {
               $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
             },

@@ -4,6 +4,8 @@ import { Wallet } from '../models/Wallet';
 import { CoinTransaction } from '../models/CoinTransaction';
 import { Store } from '../models/Store';
 import { User } from '../models/User';
+import { Order } from '../models/Order';
+import { merchantWalletService } from '../services/merchantWalletService';
 import mongoose from 'mongoose';
 
 const router = Router();
@@ -90,6 +92,23 @@ router.post('/award', async (req: Request, res: Response) => {
       });
     }
 
+    // Deduct coins from merchant's wallet first (1 coin = ₹1)
+    let walletDebitResult;
+    try {
+      walletDebitResult = await merchantWalletService.debitForCoinAward(
+        merchantId,
+        storeId,
+        coinAmount,
+        userId,
+        reason || `Branded coins awarded to customer for ${store.name}`
+      );
+    } catch (debitError: any) {
+      return res.status(400).json({
+        success: false,
+        message: debitError.message || 'Failed to debit merchant wallet'
+      });
+    }
+
     // Add branded coins to user's wallet
     await wallet.addBrandedCoins(
       new mongoose.Types.ObjectId(storeId),
@@ -99,10 +118,11 @@ router.post('/award', async (req: Request, res: Response) => {
       '#6366F1'  // Default brand color for merchant coins
     );
 
-    // Create a coin transaction record for tracking
+    // Create a coin transaction record for tracking (type 'branded_award' does NOT
+    // affect the running ReZ balance — branded coins are tracked in wallet.brandedCoins)
     await CoinTransaction.createTransaction(
       userId,
-      'earned',
+      'branded_award',
       coinAmount,
       'merchant_award',
       reason || `Bonus coins from ${store.name}`,
@@ -127,7 +147,8 @@ router.post('/award', async (req: Request, res: Response) => {
         reason: reason || 'Bonus coins',
         newBrandedBalance: wallet.brandedCoins.find(
           (c: any) => c.merchantId.toString() === storeId
-        )?.amount || coinAmount
+        )?.amount || coinAmount,
+        merchantWalletBalance: walletDebitResult.newBalance
       }
     });
   } catch (error: any) {
@@ -324,7 +345,7 @@ router.get('/stats', async (req: Request, res: Response) => {
 
 /**
  * @route   GET /api/merchant/coins/search-customer
- * @desc    Search for a customer to award coins
+ * @desc    Search for a customer by name, phone, or email
  * @access  Merchant
  */
 router.get('/search-customer', async (req: Request, res: Response) => {
@@ -334,25 +355,46 @@ router.get('/search-customer', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Merchant ID missing' });
     }
 
-    const { phone, email } = req.query;
+    const { q, phone, email } = req.query;
+    const searchTerm = (q as string || '').trim();
 
-    if (!phone && !email) {
+    // Support both new unified `q` param and legacy phone/email params
+    if (!searchTerm && !phone && !email) {
       return res.status(400).json({
         success: false,
-        message: 'Phone number or email is required'
+        message: 'Search query is required'
       });
     }
 
-    const query: any = { isActive: true };
+    let query: any = { isActive: true };
 
-    if (phone) {
-      // Clean phone number - remove spaces and country code
-      const cleanPhone = (phone as string).replace(/\s+/g, '').replace(/^\+91/, '');
-      query.phoneNumber = { $regex: cleanPhone, $options: 'i' };
-    }
+    if (searchTerm) {
+      // Detect if the input looks like a phone number, email, or name
+      const isPhone = /^\d+$/.test(searchTerm.replace(/[\s+\-]/g, ''));
+      const isEmail = searchTerm.includes('@');
 
-    if (email) {
-      query.email = { $regex: email as string, $options: 'i' };
+      if (isPhone) {
+        const cleanPhone = searchTerm.replace(/\s+/g, '').replace(/^\+91/, '');
+        query.phoneNumber = { $regex: cleanPhone, $options: 'i' };
+      } else if (isEmail) {
+        query.email = { $regex: searchTerm, $options: 'i' };
+      } else {
+        // Name search - match against firstName or lastName
+        const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        query.$or = [
+          { 'profile.firstName': { $regex: escaped, $options: 'i' } },
+          { 'profile.lastName': { $regex: escaped, $options: 'i' } }
+        ];
+      }
+    } else {
+      // Legacy params
+      if (phone) {
+        const cleanPhone = (phone as string).replace(/\s+/g, '').replace(/^\+91/, '');
+        query.phoneNumber = { $regex: cleanPhone, $options: 'i' };
+      }
+      if (email) {
+        query.email = { $regex: email as string, $options: 'i' };
+      }
     }
 
     const users = await User.find(query)
@@ -375,6 +417,126 @@ router.get('/search-customer', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to search customers'
+    });
+  }
+});
+
+/**
+ * @route   GET /api/merchant/coins/recent-customers
+ * @desc    Get customers who have purchased from this merchant's store
+ * @access  Merchant
+ */
+router.get('/recent-customers', async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) {
+      return res.status(400).json({ success: false, message: 'Merchant ID missing' });
+    }
+
+    // Find ALL stores owned by this merchant
+    const merchantObjId = new mongoose.Types.ObjectId(merchantId);
+    const merchantStores = await Store.find({ merchantId: merchantObjId }).select('_id').lean();
+
+    if (merchantStores.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const storeIds = merchantStores.map(s => s._id as mongoose.Types.ObjectId);
+
+    // Aggregate unique customers from orders across all merchant stores
+    const recentCustomers = await Order.aggregate([
+      {
+        $match: {
+          'items.store': { $in: storeIds },
+          status: { $nin: ['cancelled', 'refunded'] }
+        }
+      },
+      {
+        $group: {
+          _id: '$user',
+          orderCount: { $sum: 1 },
+          totalSpent: { $sum: '$totals.total' },
+          lastOrderAt: { $max: '$createdAt' }
+        }
+      },
+      { $sort: { lastOrderAt: -1 } },
+      { $limit: 20 },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'userInfo'
+        }
+      },
+      { $unwind: '$userInfo' },
+      {
+        $project: {
+          _id: 0,
+          id: '$_id',
+          name: {
+            $trim: {
+              input: {
+                $concat: [
+                  { $ifNull: ['$userInfo.profile.firstName', ''] },
+                  ' ',
+                  { $ifNull: ['$userInfo.profile.lastName', ''] }
+                ]
+              }
+            }
+          },
+          phoneNumber: '$userInfo.phoneNumber',
+          email: '$userInfo.email',
+          avatar: '$userInfo.avatar',
+          orderCount: 1,
+          totalSpent: { $round: ['$totalSpent', 0] },
+          lastOrderAt: 1
+        }
+      }
+    ]);
+
+    // Fix empty names
+    const data = recentCustomers.map(c => ({
+      ...c,
+      name: c.name?.trim() || 'Unknown'
+    }));
+
+    return res.json({ success: true, data });
+  } catch (error: any) {
+    console.error('❌ [MERCHANT COINS] Error fetching recent customers:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch recent customers'
+    });
+  }
+});
+
+/**
+ * @route   GET /api/merchant/coins/wallet-balance
+ * @desc    Get merchant's current wallet balance for the coins page
+ * @access  Merchant
+ */
+router.get('/wallet-balance', async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) {
+      return res.status(400).json({ success: false, message: 'Merchant ID missing' });
+    }
+
+    const wallet = await merchantWalletService.getOrCreateWallet(merchantId);
+
+    return res.json({
+      success: true,
+      data: {
+        available: wallet.balance.available,
+        total: wallet.balance.total
+      }
+    });
+  } catch (error: any) {
+    console.error('❌ [MERCHANT COINS] Error fetching wallet balance:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch wallet balance'
     });
   }
 });

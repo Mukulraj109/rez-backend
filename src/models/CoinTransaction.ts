@@ -46,7 +46,7 @@ const CoinTransactionSchema: Schema = new Schema(
     },
     type: {
       type: String,
-      enum: ['earned', 'spent', 'expired', 'refunded', 'bonus'],
+      enum: ['earned', 'spent', 'expired', 'refunded', 'bonus', 'branded_award'],
       required: true,
       index: true
     },

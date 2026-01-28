@@ -4,6 +4,7 @@
 import { Router } from 'express';
 import {
   submitPost,
+  submitPostWithMedia,
   getUserPosts,
   getUserEarnings,
   getPostById,
@@ -17,6 +18,7 @@ import {
 import { requireAuth, requireAdmin } from '../middleware/auth';
 import { validateBody, validateParams, validateQuery, commonSchemas } from '../middleware/validation';
 import { Joi } from '../middleware/validation';
+import { uploadSocialMediaProof } from '../middleware/upload';
 
 const router = Router();
 
@@ -41,6 +43,28 @@ router.post('/submit',
     }).optional()
   })),
   submitPost
+);
+
+// Submit a social media post with media files (photo/video proof)
+router.post('/submit-media',
+  uploadSocialMediaProof.array('files', 5),
+  validateBody(Joi.object({
+    platform: Joi.string().valid('instagram', 'facebook', 'twitter', 'tiktok').required(),
+    orderId: commonSchemas.objectId(),
+    fraudMetadata: Joi.alternatives().try(
+      Joi.object({
+        deviceId: Joi.string().optional(),
+        trustScore: Joi.number().optional(),
+        riskScore: Joi.number().optional(),
+        riskLevel: Joi.string().valid('low', 'medium', 'high', 'critical').optional(),
+        checksPassed: Joi.number().optional(),
+        totalChecks: Joi.number().optional(),
+        warnings: Joi.array().items(Joi.string()).optional()
+      }),
+      Joi.string() // Allow JSON string from FormData
+    ).optional()
+  })),
+  submitPostWithMedia
 );
 
 // Get user's posts

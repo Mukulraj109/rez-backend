@@ -659,30 +659,25 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
     }
     
     // Reload store to get final state with populated category (for response)
-    // If banner was updated, get it from raw MongoDB collection since Mongoose might not retrieve Mixed types correctly
-    const finalStore = await Store.findById(store._id).populate('category', 'name slug');
-    
+    // Use the reloaded Mongoose document directly (not Object.assign) to preserve methods/virtuals
+    let updatedStore = await Store.findById(store._id).populate('category', 'name slug');
+
     // If banner was updated, get it from raw MongoDB to ensure it's correct
-    if (updates.banner !== undefined && mongoose.connection.db && finalStore) {
+    if (updates.banner !== undefined && mongoose.connection.db && updatedStore) {
       const collection = mongoose.connection.db.collection('stores');
-      const storeObjectId = typeof store._id === 'string' 
-        ? new mongoose.Types.ObjectId(store._id) 
+      const storeObjectId = typeof store._id === 'string'
+        ? new mongoose.Types.ObjectId(store._id)
         : store._id as mongoose.Types.ObjectId;
       const rawStore = await collection.findOne({ _id: storeObjectId }, { projection: { banner: 1 } });
-      
+
       if (rawStore) {
-        // Set the banner on the final store object
-        finalStore.set('banner', rawStore.banner);
-        finalStore.markModified('banner');
-        Object.assign(store, finalStore.toObject());
-      } else {
-        if (finalStore) {
-          Object.assign(store, finalStore.toObject());
-        }
+        updatedStore.set('banner', rawStore.banner);
+        updatedStore.markModified('banner');
       }
-    } else if (finalStore) {
-      Object.assign(store, finalStore.toObject());
     }
+
+    // Use the reloaded store for response (falls back to original if reload failed)
+    const responseStore = updatedStore || store;
 
     // Audit log
     await AuditService.log({
@@ -692,8 +687,8 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
       resourceId: (store._id as mongoose.Types.ObjectId).toString(),
       details: {
         before: oldValues,
-        after: store.toObject(),
-        metadata: { name: store.name }
+        after: responseStore.toObject(),
+        metadata: { name: responseStore.name }
       },
       ipAddress: req.ip || 'unknown',
       userAgent: req.headers['user-agent'] || 'unknown',
@@ -703,15 +698,15 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
     // Send real-time notification
     if (global.io) {
       global.io.to(`merchant-${merchantId}`).emit('store_updated', {
-        storeId: store._id,
-        storeName: store.name
+        storeId: responseStore._id,
+        storeName: responseStore.name
       });
     }
 
     return res.json({
       success: true,
       message: 'Store updated successfully',
-      data: store
+      data: responseStore
     });
   } catch (error: any) {
     console.error('Update store error:', error);

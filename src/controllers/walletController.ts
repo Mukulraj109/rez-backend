@@ -39,22 +39,40 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
     const { CoinTransaction } = require('../models/CoinTransaction');
     const coinTransactionBalance = await CoinTransaction.getUserBalance(userId);
 
-    const currentBalance = wallet.balance.available || 0;
-    if (Math.abs(coinTransactionBalance - currentBalance) > 0.01) {
-      console.log(`🔄 [WALLET] Auto-syncing balance: ${currentBalance} → ${coinTransactionBalance}`);
+    // Subtract any branded coin awards that were previously recorded as 'earned'
+    // type, which incorrectly inflated the CoinTransaction running balance.
+    // New awards use type 'branded_award' and don't affect the balance.
+    const brandedInflation = await CoinTransaction.aggregate([
+      {
+        $match: {
+          user: new mongoose.Types.ObjectId(userId),
+          source: 'merchant_award',
+          type: 'earned'
+        }
+      },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
+    const brandedAmount = brandedInflation[0]?.total || 0;
+    const actualRezBalance = coinTransactionBalance - brandedAmount;
 
-      // Update wallet balance
-      wallet.balance.available = coinTransactionBalance;
-      wallet.balance.total = coinTransactionBalance + (wallet.balance.pending || 0) + (wallet.balance.cashback || 0);
+    const currentBalance = wallet.balance.available || 0;
+    if (Math.abs(actualRezBalance - currentBalance) > 0.01) {
+      console.log(`🔄 [WALLET] Auto-syncing balance: ${currentBalance} → ${actualRezBalance} (CoinTx: ${coinTransactionBalance}, branded correction: -${brandedAmount})`);
+
+      // Update wallet balance (ReZ coins only, branded tracked separately)
+      wallet.balance.available = actualRezBalance;
+      wallet.balance.total = actualRezBalance + (wallet.balance.pending || 0) + (wallet.balance.cashback || 0);
 
       // Update ReZ coin amount
       const rezCoinToUpdate = wallet.coins.find((c: any) => c.type === 'rez');
       if (rezCoinToUpdate) {
-        rezCoinToUpdate.amount = coinTransactionBalance;
+        rezCoinToUpdate.amount = actualRezBalance;
         rezCoinToUpdate.lastUsed = new Date();
       }
 
       await wallet.save();
+      // Also sync to User model so profile page shows correct balance
+      await wallet.syncWithUser();
     }
   } catch (syncError) {
     console.error('⚠️ [WALLET] Auto-sync failed:', syncError);
@@ -100,6 +118,7 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
       merchantColor: bc.merchantColor || '#6366F1',
       amount: bc.amount
     })),
+    brandedCoinsTotal: (wallet.brandedCoins || []).reduce((sum: number, bc: any) => sum + (bc.amount || 0), 0),
     // Promo Coins (limited-time)
     promoCoins: {
       amount: promoCoin?.amount || 0,
@@ -1122,7 +1141,22 @@ export const syncWalletBalance = asyncHandler(async (req: Request, res: Response
     // Get accurate balance from CoinTransaction
     const coinTransactionBalance = await CoinTransaction.getUserBalance(userId);
 
-    console.log('📊 [WALLET SYNC] CoinTransaction balance:', coinTransactionBalance);
+    // Subtract any branded coin awards that were previously recorded as 'earned'
+    // type, which incorrectly inflated the CoinTransaction running balance.
+    const brandedInflation = await CoinTransaction.aggregate([
+      {
+        $match: {
+          user: new mongoose.Types.ObjectId(userId),
+          source: 'merchant_award',
+          type: 'earned'
+        }
+      },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
+    const brandedAmount = brandedInflation[0]?.total || 0;
+    const actualRezBalance = coinTransactionBalance - brandedAmount;
+
+    console.log('📊 [WALLET SYNC] CoinTransaction balance:', coinTransactionBalance, 'branded correction:', -brandedAmount, 'actual ReZ:', actualRezBalance);
 
     // Get or create wallet
     let wallet = await Wallet.findOne({ user: userId });
@@ -1137,20 +1171,20 @@ export const syncWalletBalance = asyncHandler(async (req: Request, res: Response
 
     const oldBalance = wallet.balance.available;
 
-    // Update ReZ coins in the coins array
+    // Update ReZ coins in the coins array (branded coins tracked separately)
     const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
     if (rezCoin) {
-      rezCoin.amount = coinTransactionBalance;
+      rezCoin.amount = actualRezBalance;
       rezCoin.lastUsed = new Date();
     }
 
-    // Update wallet balance to match CoinTransaction
-    wallet.balance.available = coinTransactionBalance;
-    wallet.balance.total = coinTransactionBalance + (wallet.balance.pending || 0) + (wallet.balance.cashback || 0);
+    // Update wallet balance to match (ReZ only, branded tracked separately)
+    wallet.balance.available = actualRezBalance;
+    wallet.balance.total = actualRezBalance + (wallet.balance.pending || 0) + (wallet.balance.cashback || 0);
 
     await wallet.save();
 
-    console.log(`✅ [WALLET SYNC] Balance synced: ${oldBalance} → ${coinTransactionBalance}`);
+    console.log(`✅ [WALLET SYNC] Balance synced: ${oldBalance} → ${actualRezBalance}`);
 
     sendSuccess(res, {
       previousBalance: oldBalance,

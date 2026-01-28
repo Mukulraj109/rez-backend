@@ -57,7 +57,7 @@ class MerchantWalletService {
     if (storeId) {
       storeObjectId = typeof storeId === 'string' ? new Types.ObjectId(storeId) : storeId;
     } else {
-      const store = await Store.findOne({ owner: merchantObjectId });
+      const store = await Store.findOne({ merchantId: merchantObjectId });
       if (!store) {
         throw new Error('No store found for this merchant');
       }
@@ -272,6 +272,53 @@ class MerchantWalletService {
     await wallet.save();
 
     console.log(`✅ [MERCHANT WALLET SERVICE] Bank details verified for merchant ${merchantId}`);
+  }
+
+  /**
+   * Debit merchant wallet when awarding branded coins to a customer
+   */
+  async debitForCoinAward(
+    merchantId: string | Types.ObjectId,
+    storeId: string | Types.ObjectId,
+    amount: number,
+    userId: string,
+    reason: string
+  ): Promise<{ newBalance: { total: number; available: number } }> {
+    const wallet = await this.getOrCreateWallet(merchantId, storeId);
+
+    if (wallet.balance.available < amount) {
+      throw new Error(
+        `Insufficient wallet balance. Available: ${wallet.balance.available}, Requested: ${amount}`
+      );
+    }
+
+    // Create debit transaction
+    const transaction: IMerchantWalletTransaction = {
+      type: 'debit',
+      amount,
+      netAmount: amount,
+      description: reason,
+      status: 'completed',
+      createdAt: new Date()
+    };
+
+    // Deduct from balance
+    wallet.balance.available -= amount;
+    wallet.balance.total -= amount;
+
+    // Add transaction
+    wallet.transactions.push(transaction);
+
+    await wallet.save();
+
+    console.log(`💸 [MERCHANT WALLET SERVICE] Debited ${amount} coins from merchant ${merchantId} for coin award to user ${userId}`);
+
+    return {
+      newBalance: {
+        total: wallet.balance.total,
+        available: wallet.balance.available
+      }
+    };
   }
 
   /**

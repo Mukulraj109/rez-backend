@@ -45,7 +45,7 @@ class CashbackService {
     storeId?: Types.ObjectId
   ): Promise<{ amount: number; rate: number; description: string; multiplier: number }> {
     // Base cashback rate
-    let cashbackRate = 2; // 2% base rate
+    let cashbackRate = 5; // 5% base rate (ReZ coin reward)
 
     // Category-specific bonuses
     const electronicCategories = ['electronics', 'mobile', 'laptop', 'camera'];
@@ -189,6 +189,53 @@ class CashbackService {
           storeId,
         },
       });
+
+      // Credit cashback to wallet as ReZ coins immediately
+      if (amount > 0) {
+        try {
+          const { Wallet } = await import('../models/Wallet');
+          const wallet = await Wallet.findOne({ user: order.user });
+
+          if (wallet) {
+            // Add to wallet balance
+            await wallet.addFunds(amount, 'cashback');
+
+            // Also update coins array (addFunds only updates balance)
+            const rezCoin = wallet.coins?.find((c: any) => c.type === 'rez');
+            if (rezCoin) {
+              rezCoin.amount += amount;
+              rezCoin.lastEarned = new Date();
+            }
+            await wallet.save();
+
+            // Create CoinTransaction record for auto-sync consistency
+            try {
+              const { CoinTransaction } = await import('../models/CoinTransaction');
+              await CoinTransaction.createTransaction(
+                order.user.toString(),
+                'earned',
+                amount,
+                'cashback',
+                `${rate}% cashback on order #${order.orderNumber}`,
+                { orderId: order._id, orderAmount: order.totals.total }
+              );
+            } catch (coinTxError) {
+              console.error('⚠️ [CASHBACK SERVICE] CoinTransaction creation failed (non-blocking):', coinTxError);
+            }
+
+            // Update cashback status to credited
+            cashback.status = 'credited';
+            await cashback.save();
+
+            console.log(`✅ [CASHBACK SERVICE] Credited ₹${amount} ReZ coins to wallet for user ${order.user}`);
+          } else {
+            console.warn(`⚠️ [CASHBACK SERVICE] Wallet not found for user ${order.user}, cashback record created but not credited`);
+          }
+        } catch (walletError) {
+          console.error('❌ [CASHBACK SERVICE] Error crediting cashback to wallet (non-blocking):', walletError);
+          // Cashback record still exists, can be manually credited later
+        }
+      }
 
       return cashback;
     } catch (error) {

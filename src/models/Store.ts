@@ -914,7 +914,23 @@ StoreSchema.index({ 'offers.isPartner': 1, 'ratings.average': -1 });
 
 // Virtual for current operational status
 StoreSchema.virtual('isCurrentlyOpen').get(function () {
-  return this.isOpen();
+  if (typeof this.isOpen === 'function') {
+    return this.isOpen();
+  }
+  // Fallback: inline check when isOpen method is not available (e.g., plain object context)
+  try {
+    const now = new Date();
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayName = dayNames[now.getDay()];
+    const currentTime = now.toTimeString().slice(0, 5);
+    const hours = this.operationalInfo?.hours as Record<string, any> | undefined;
+    if (!hours) return false;
+    const todayHours = hours[dayName] || hours[dayName.charAt(0).toUpperCase() + dayName.slice(1)];
+    if (!todayHours || todayHours.closed) return false;
+    return currentTime >= todayHours.open && currentTime <= todayHours.close;
+  } catch (_e) {
+    return false;
+  }
 });
 
 // Pre-save hook to generate slug
@@ -931,16 +947,25 @@ StoreSchema.pre('save', function (next) {
 
 // Method to check if store is currently open
 StoreSchema.methods.isOpen = function (): boolean {
-  const now = new Date();
-  const dayName = now.toLocaleDateString('en-US', { weekday: 'long' as 'long' }) as keyof typeof this.operationalInfo.hours;
-  const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
+  try {
+    const now = new Date();
+    const hours = this.operationalInfo?.hours;
+    if (!hours) return false;
 
-  const todayHours = this.operationalInfo.hours[dayName];
-  if (!todayHours || todayHours.closed) {
+    // Support both lowercase ("monday") and capitalized ("Monday") day name keys
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayName = dayNames[now.getDay()];
+    const currentTime = now.toTimeString().slice(0, 5); // HH:MM format
+
+    const todayHours = hours[dayName] || hours[dayName.charAt(0).toUpperCase() + dayName.slice(1)];
+    if (!todayHours || todayHours.closed) {
+      return false;
+    }
+
+    return currentTime >= todayHours.open && currentTime <= todayHours.close;
+  } catch (_e) {
     return false;
   }
-
-  return currentTime >= todayHours.open && currentTime <= todayHours.close;
 };
 
 // Method to calculate distance from user coordinates

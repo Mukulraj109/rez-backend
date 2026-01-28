@@ -599,42 +599,10 @@ class PaymentService {
       // POST-PAYMENT REWARDS & MERCHANT CREDIT
       // ========================================
 
-      // 1. Award 5% purchase reward coins to customer (NO LIMITS)
-      try {
-        const purchaseRewardRate = 0.05; // 5% of order total
-        const coinsToAward = Math.floor(order.totals.total * purchaseRewardRate);
+      // NOTE: 5% purchase reward coins are now awarded on delivery (see orderController.ts)
+      // This ensures users only get coins after actually receiving their order.
 
-        if (coinsToAward > 0) {
-          console.log('🪙 [PAYMENT SERVICE] Awarding 5% purchase reward:', coinsToAward, 'coins');
-
-          const coinResult = await coinService.awardCoins(
-            order.user.toString(),
-            coinsToAward,
-            'purchase_reward',
-            `5% purchase reward for order ${order.orderNumber}`,
-            { orderId: order._id }
-          );
-
-          console.log('✅ [PAYMENT SERVICE] Purchase reward coins awarded:', coinsToAward);
-
-          // Emit real-time notification to user
-          orderSocketService.emitCoinsAwarded({
-            userId: order.user.toString(),
-            amount: coinsToAward,
-            source: 'purchase_reward',
-            description: `5% purchase reward for order ${order.orderNumber}`,
-            newBalance: coinResult.newBalance,
-            orderId: (order._id as Types.ObjectId).toString(),
-            orderNumber: order.orderNumber,
-            timestamp: new Date()
-          });
-        }
-      } catch (coinError) {
-        console.error('❌ [PAYMENT SERVICE] Failed to award purchase reward coins:', coinError);
-        // Don't fail payment if coin award fails
-      }
-
-      // 2. Credit merchant wallet (immediate settlement)
+      // 1. Credit merchant wallet (immediate settlement)
       try {
         // Get merchant from the first order item's store
         const firstItem = order.items[0];
@@ -691,6 +659,24 @@ class PaymentService {
       } catch (walletError) {
         console.error('❌ [PAYMENT SERVICE] Failed to credit merchant wallet:', walletError);
         // Don't fail payment if wallet credit fails
+      }
+
+      // 2. Credit 5% admin commission to platform wallet (5% of subtotal)
+      try {
+        const adminWalletService = require('./adminWalletService').default;
+        const subtotal = order.totals.subtotal || 0;
+        const adminCommission = Math.floor(subtotal * 0.05);
+        if (adminCommission > 0) {
+          await adminWalletService.creditOrderCommission(
+            order._id as Types.ObjectId,
+            order.orderNumber,
+            subtotal
+          );
+          console.log('✅ [PAYMENT SERVICE] Admin wallet credited:', adminCommission);
+        }
+      } catch (adminError) {
+        console.error('❌ [PAYMENT SERVICE] Failed to credit admin wallet:', adminError);
+        // Don't fail payment if admin wallet credit fails
       }
 
       return order;

@@ -122,6 +122,7 @@ export interface IWallet extends Document {
   resetDailyLimit(): Promise<void>;
   getFormattedBalance(): string;
   getCoinUsageOrder(): { type: string; amount: number }[]; // Promo > Branded > ReZ
+  syncWithUser(): Promise<void>;
 }
 
 const WalletSchema = new Schema<IWallet>({
@@ -383,9 +384,10 @@ WalletSchema.virtual('formattedBalance').get(function() {
 
 // Pre-save hook to validate balances
 WalletSchema.pre('save', function(next) {
-  // Ensure total = available + pending + cashback + brandedCoins total
-  const brandedTotal = (this.brandedCoins || []).reduce((sum, coin) => sum + (coin.amount || 0), 0);
-  const calculatedTotal = this.balance.available + this.balance.pending + this.balance.cashback + brandedTotal;
+  // balance.total = available (ReZ) + pending + cashback
+  // Branded coins are tracked separately in brandedCoins[] and NOT included here.
+  // The frontend adds brandedCoinsTotal on top for the "Total Wallet Balance" display.
+  const calculatedTotal = this.balance.available + this.balance.pending + this.balance.cashback;
 
   // Allow small rounding differences
   if (Math.abs(this.balance.total - calculatedTotal) > 0.01) {
@@ -524,11 +526,6 @@ WalletSchema.methods.addBrandedCoins = async function(
     throw new Error('Wallet is frozen');
   }
 
-  // Check max balance limit
-  if (this.balance.total + amount > this.limits.maxBalance) {
-    throw new Error(`Maximum wallet balance (${this.limits.maxBalance}) would be exceeded`);
-  }
-
   // Check if merchant already has coins
   const existingCoin = this.brandedCoins.find(
     (coin: any) => coin.merchantId.toString() === merchantId.toString()
@@ -548,11 +545,8 @@ WalletSchema.methods.addBrandedCoins = async function(
     });
   }
 
-  // Update total balance
-  this.balance.total += amount;
-
-  // Update statistics
-  this.statistics.totalEarned += amount;
+  // Branded coins are tracked separately - do NOT add to balance.total or statistics.totalEarned
+  // balance.total only tracks ReZ coins, cashback, and promo coins
 
   this.lastTransactionAt = new Date();
   await this.save();
@@ -596,11 +590,7 @@ WalletSchema.methods.useBrandedCoins = async function(
     );
   }
 
-  // Update total balance
-  this.balance.total -= amount;
-
-  // Update statistics
-  this.statistics.totalSpent += amount;
+  // Branded coins are tracked separately - do NOT deduct from balance.total
 
   this.lastTransactionAt = new Date();
   await this.save();
@@ -677,8 +667,11 @@ WalletSchema.methods.getFormattedBalance = function(): string {
 // Method to sync with User model
 WalletSchema.methods.syncWithUser = async function(): Promise<void> {
   const User = mongoose.model('User');
+  // balance.total = ReZ + pending + cashback (no branded).
+  // For the User model display, include branded coins so the profile shows the full total.
+  const brandedTotal = (this.brandedCoins || []).reduce((sum: number, coin: any) => sum + (coin.amount || 0), 0);
   await User.findByIdAndUpdate(this.user, {
-    'wallet.balance': this.balance.total,
+    'wallet.balance': this.balance.total + brandedTotal,
     'wallet.totalEarned': this.statistics.totalEarned,
     'wallet.totalSpent': this.statistics.totalSpent,
     'wallet.pendingAmount': this.balance.pending
