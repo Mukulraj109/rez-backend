@@ -14,11 +14,11 @@ import achievementService from '../services/achievementService';
 
 // Rate limit configuration
 const RATE_LIMITS = {
-  COOLDOWN_HOURS: 1, // 1 hour between submissions (aligned with frontend)
-  DAILY_LIMIT: 3,
-  WEEKLY_LIMIT: 10,
-  MONTHLY_LIMIT: 30,
-  REJECTION_COOLDOWN_HOURS: 24 // 24 hours after rejection
+  COOLDOWN_HOURS: 0, // No cooldown between submissions
+  DAILY_LIMIT: 50,
+  WEEKLY_LIMIT: 200,
+  MONTHLY_LIMIT: 500,
+  REJECTION_COOLDOWN_HOURS: 0 // No cooldown after rejection
 };
 
 // Submit a new social media post
@@ -94,32 +94,7 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
       }
     }
 
-    // FRAUD PREVENTION CHECK 3: Check cooldown period (1 hour - aligned with frontend)
-    const cooldownTime = new Date(Date.now() - RATE_LIMITS.COOLDOWN_HOURS * 60 * 60 * 1000);
-    const recentSubmission = await SocialMediaPost.findOne({
-      user: userId,
-      submittedAt: { $gte: cooldownTime }
-    });
-    if (recentSubmission) {
-      const minutesRemaining = Math.ceil((recentSubmission.submittedAt.getTime() + RATE_LIMITS.COOLDOWN_HOURS * 60 * 60 * 1000 - Date.now()) / (60 * 1000));
-      console.warn('⚠️ [FRAUD] User in cooldown period:', { userId, minutesRemaining });
-      return sendError(res, `Please wait ${minutesRemaining} minutes before submitting another post`, 429);
-    }
-
-    // FRAUD PREVENTION CHECK 4: Check rejection cooldown (24 hours after rejection)
-    const rejectionCooldownTime = new Date(Date.now() - RATE_LIMITS.REJECTION_COOLDOWN_HOURS * 60 * 60 * 1000);
-    const recentRejection = await SocialMediaPost.findOne({
-      user: userId,
-      status: 'rejected',
-      reviewedAt: { $gte: rejectionCooldownTime }
-    });
-    if (recentRejection) {
-      const hoursRemaining = Math.ceil((recentRejection.reviewedAt!.getTime() + RATE_LIMITS.REJECTION_COOLDOWN_HOURS * 60 * 60 * 1000 - Date.now()) / (60 * 60 * 1000));
-      console.warn('⚠️ [FRAUD] User in rejection cooldown:', { userId, hoursRemaining });
-      return sendError(res, `Your last post was rejected. Please wait ${hoursRemaining} hours before submitting again.`, 429);
-    }
-
-    // FRAUD PREVENTION CHECK 5: Check daily limit (3 posts per day)
+    // FRAUD PREVENTION CHECK 3: Check daily limit
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const todaySubmissions = await SocialMediaPost.countDocuments({
       user: userId,
@@ -337,30 +312,7 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
       }
     }
 
-    // FRAUD PREVENTION CHECK 3: Check cooldown period (1 hour)
-    const cooldownTime = new Date(Date.now() - RATE_LIMITS.COOLDOWN_HOURS * 60 * 60 * 1000);
-    const recentSubmission = await SocialMediaPost.findOne({
-      user: userId,
-      submittedAt: { $gte: cooldownTime }
-    });
-    if (recentSubmission) {
-      const minutesRemaining = Math.ceil((recentSubmission.submittedAt.getTime() + RATE_LIMITS.COOLDOWN_HOURS * 60 * 60 * 1000 - Date.now()) / (60 * 1000));
-      return sendError(res, `Please wait ${minutesRemaining} minutes before submitting another post`, 429);
-    }
-
-    // FRAUD PREVENTION CHECK 4: Check rejection cooldown (24 hours)
-    const rejectionCooldownTime = new Date(Date.now() - RATE_LIMITS.REJECTION_COOLDOWN_HOURS * 60 * 60 * 1000);
-    const recentRejection = await SocialMediaPost.findOne({
-      user: userId,
-      status: 'rejected',
-      reviewedAt: { $gte: rejectionCooldownTime }
-    });
-    if (recentRejection) {
-      const hoursRemaining = Math.ceil((recentRejection.reviewedAt!.getTime() + RATE_LIMITS.REJECTION_COOLDOWN_HOURS * 60 * 60 * 1000 - Date.now()) / (60 * 60 * 1000));
-      return sendError(res, `Your last post was rejected. Please wait ${hoursRemaining} hours before submitting again.`, 429);
-    }
-
-    // FRAUD PREVENTION CHECK 5: Daily limit
+    // FRAUD PREVENTION CHECK 3: Daily limit
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const todaySubmissions = await SocialMediaPost.countDocuments({
       user: userId,
