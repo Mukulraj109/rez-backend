@@ -43,16 +43,13 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
       warningsCount: fraudMetadata.warnings?.length || 0
     });
 
-    // Block submissions with critical risk level
+    // Log high risk submissions as warnings (don't block)
     if (fraudMetadata.riskLevel === 'critical') {
-      console.warn('🚫 [FRAUD] Blocked critical risk submission:', { userId, riskScore: fraudMetadata.riskScore });
-      return sendError(res, 'Submission blocked due to security concerns. Please contact support.', 403);
+      console.warn('⚠️ [FRAUD] High risk submission (allowed):', { userId, riskScore: fraudMetadata.riskScore });
     }
 
-    // Block if trust score is too low
     if (fraudMetadata.trustScore !== undefined && fraudMetadata.trustScore < 20) {
-      console.warn('🚫 [FRAUD] Blocked low trust score submission:', { userId, trustScore: fraudMetadata.trustScore });
-      return sendError(res, 'Device verification failed. Please try again or contact support.', 403);
+      console.warn('⚠️ [FRAUD] Low trust score submission (allowed):', { userId, trustScore: fraudMetadata.trustScore });
     }
   }
 
@@ -284,14 +281,14 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
   console.log('========================================');
   console.log('📱 [SOCIAL MEDIA] Request:', JSON.stringify({ userId, platform, orderId, fileCount: files?.length }, null, 2));
 
-  // Log fraud metadata if provided
+  // Log fraud metadata if provided (non-blocking)
   if (fraudMetadata) {
     const parsed = typeof fraudMetadata === 'string' ? JSON.parse(fraudMetadata) : fraudMetadata;
     if (parsed.riskLevel === 'critical') {
-      return sendError(res, 'Submission blocked due to security concerns. Please contact support.', 403);
+      console.warn('⚠️ [FRAUD] High risk media submission (allowed):', { userId, riskScore: parsed.riskScore });
     }
     if (parsed.trustScore !== undefined && parsed.trustScore < 20) {
-      return sendError(res, 'Device verification failed. Please try again or contact support.', 403);
+      console.warn('⚠️ [FRAUD] Low trust score media submission (allowed):', { userId, trustScore: parsed.trustScore });
     }
   }
 
@@ -622,51 +619,57 @@ export const updatePostStatus = asyncHandler(async (req: Request, res: Response)
         userAgent: (req.headers['user-agent'] || 'unknown') as string
       });
     } else if (status === 'credited') {
-      // Credit cashback to user's wallet
-      const wallet = await Wallet.findOne({ user: post.user }).session(session);
-
-      if (!wallet) {
-        await session.abortTransaction();
-        throw new AppError('User wallet not found', 404);
-      }
-
-      // Add funds to wallet using the built-in method
-      await wallet.addFunds(post.cashbackAmount, 'cashback');
-      await wallet.save({ session });
+      // Mark post as credited (wallet update happens after transaction via coinService)
       await post.creditCashback();
 
-      console.log(`✅ [SOCIAL MEDIA] Credited ₹${post.cashbackAmount} to wallet`);
+      console.log(`✅ [SOCIAL MEDIA] Post marked as credited, will award ${post.cashbackAmount} coins after commit`);
 
       // Audit Log: Track cashback crediting
       await AuditLog.log({
         merchantId: new Types.ObjectId('000000000000000000000000'), // System/user activity
         merchantUserId: new Types.ObjectId(reviewerId),
-        action: 'social_media_cashback_credited',
+        action: 'social_share_reward_credited',
         resourceType: 'SocialMediaPost',
         resourceId: post._id as Types.ObjectId,
         details: {
           changes: {
             postUser: post.user,
             cashbackAmount: post.cashbackAmount,
-            walletId: wallet._id,
-            newWalletBalance: wallet.balance.total
           }
         },
         ipAddress: (req.ip || req.socket.remoteAddress || '0.0.0.0') as string,
         userAgent: (req.headers['user-agent'] || 'unknown') as string
       });
+    }
 
-      // Trigger achievement update for social media post crediting
+    await session.commitTransaction();
+
+    console.log('✅ [SOCIAL MEDIA] Post status updated:', post.status);
+
+    // After transaction commits: credit coins via coinService (creates CoinTransaction record)
+    // CoinTransaction is the source of truth — wallet auto-syncs from it on /wallet/balance
+    if (status === 'credited') {
+      try {
+        const coinService = require('../services/coinService');
+        await coinService.awardCoins(
+          post.user.toString(),
+          post.cashbackAmount,
+          'social_share_reward',
+          `Social media cashback (${post.platform}) for order ${post.order}`,
+          { postId: post._id, platform: post.platform, orderId: post.order }
+        );
+        console.log(`✅ [SOCIAL MEDIA] Credited ${post.cashbackAmount} REZ coins via CoinTransaction`);
+      } catch (coinError) {
+        console.error('❌ [SOCIAL MEDIA] Failed to credit coins via coinService:', coinError);
+      }
+
+      // Trigger achievement update
       try {
         await achievementService.triggerAchievementUpdate(post.user, 'social_media_post_credited');
       } catch (error) {
         console.error('❌ [SOCIAL MEDIA] Error triggering achievement update for crediting:', error);
       }
     }
-
-    await session.commitTransaction();
-
-    console.log('✅ [SOCIAL MEDIA] Post status updated:', post.status);
 
     sendSuccess(res, {
       post: {

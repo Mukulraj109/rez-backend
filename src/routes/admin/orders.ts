@@ -12,6 +12,9 @@ import cashbackService from '../../services/cashbackService';
 import userProductService from '../../services/userProductService';
 import achievementService from '../../services/achievementService';
 import { calculatePromoCoinsEarned, calculatePromoCoinsWithTierBonus } from '../../config/promoCoins.config';
+import merchantWalletService from '../../services/merchantWalletService';
+import orderSocketService from '../../services/orderSocketService';
+import { Store } from '../../models/Store';
 
 const router = Router();
 
@@ -664,6 +667,70 @@ router.put('/:id/status', async (req: Request, res: Response) => {
           );
         } catch (err) {
           console.error('[ADMIN ORDERS] Partner progress failed:', err);
+        }
+
+        // 9. Credit merchant wallet (subtotal minus 15% platform fee)
+        try {
+          const firstItem = populatedOrder.items[0];
+          if (firstItem && firstItem.store) {
+            const storeId = typeof firstItem.store === 'object'
+              ? (firstItem.store as any)._id
+              : firstItem.store;
+
+            const store = await Store.findById(storeId);
+            if (store && store.merchantId) {
+              const grossAmount = populatedOrder.totals.subtotal || 0;
+              const platformFee = populatedOrder.totals.platformFee || 0;
+
+              const walletResult = await merchantWalletService.creditOrderPayment(
+                store.merchantId.toString(),
+                populatedOrder._id as Types.ObjectId,
+                populatedOrder.orderNumber,
+                grossAmount,
+                platformFee,
+                storeId
+              );
+
+              console.log(`[ADMIN ORDERS] Merchant wallet credited: gross=${grossAmount}, fee=${platformFee}, net=${grossAmount - platformFee}`);
+
+              if (walletResult) {
+                orderSocketService.emitMerchantWalletUpdated({
+                  merchantId: store.merchantId.toString(),
+                  storeId: storeId.toString(),
+                  storeName: store.name,
+                  transactionType: 'credit',
+                  amount: grossAmount - platformFee,
+                  orderId: (populatedOrder._id as Types.ObjectId).toString(),
+                  orderNumber: populatedOrder.orderNumber,
+                  newBalance: {
+                    total: walletResult.balance?.total || 0,
+                    available: walletResult.balance?.available || 0,
+                    pending: walletResult.balance?.pending || 0
+                  },
+                  timestamp: new Date()
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[ADMIN ORDERS] Merchant wallet credit failed:', err);
+        }
+
+        // 10. Credit 5% admin commission (5% of subtotal)
+        try {
+          const adminWalletService = require('../../services/adminWalletService').default;
+          const subtotal = populatedOrder.totals.subtotal || 0;
+          const adminCommission = Math.floor(subtotal * 0.05);
+          if (adminCommission > 0) {
+            await adminWalletService.creditOrderCommission(
+              populatedOrder._id as Types.ObjectId,
+              populatedOrder.orderNumber,
+              subtotal
+            );
+            console.log(`[ADMIN ORDERS] Admin wallet credited: ${adminCommission}`);
+          }
+        } catch (err) {
+          console.error('[ADMIN ORDERS] Admin commission credit failed:', err);
         }
 
         console.log(`✅ [ADMIN ORDERS] All delivery rewards processed for order ${order.orderNumber}`);

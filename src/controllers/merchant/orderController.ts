@@ -13,6 +13,8 @@ import stripeService from '../../services/stripeService';
 import { Wallet } from '../../models/Wallet';
 import { Refund } from '../../models/Refund';
 import { Store } from '../../models/Store';
+import merchantWalletService from '../../services/merchantWalletService';
+import orderSocketService from '../../services/orderSocketService';
 
 /**
  * Helper function to send order status notifications to customers
@@ -1190,5 +1192,228 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
 
     console.error('❌ [REFUND] Error:', error);
     throw new AppError(`Refund processing failed: ${error.message}`, 500);
+  }
+});
+
+/**
+ * PUT /api/merchant/orders/:id/status
+ * Update single order status with transition validation, inventory management, and notifications
+ */
+export const updateMerchantOrderStatus = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { status, notes, notifyCustomer = true } = req.body;
+  const merchantId = (req as any).merchantId;
+
+  console.log('🔄 [ORDER STATUS] updateMerchantOrderStatus called:', { id, status, merchantId });
+
+  // Valid status transitions
+  const validTransitions: Record<string, string[]> = {
+    placed: ['confirmed', 'cancelled'],
+    pending: ['confirmed', 'cancelled'],
+    confirmed: ['preparing', 'cancelled'],
+    preparing: ['ready', 'cancelled'],
+    ready: ['out_for_delivery', 'dispatched', 'delivered'],
+    out_for_delivery: ['delivered'],
+    dispatched: ['delivered'],
+    delivered: [],
+    cancelled: [],
+    returned: [],
+    refunded: [],
+  };
+
+  const validStatuses = [
+    'placed', 'pending', 'confirmed', 'preparing', 'ready',
+    'out_for_delivery', 'dispatched', 'delivered', 'cancelled', 'refunded', 'returned'
+  ];
+
+  if (!status || !validStatuses.includes(status)) {
+    return sendBadRequest(res, `Invalid order status: ${status}`);
+  }
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // Verify merchant owns this order's store
+    const merchantStores = await Store.find({ merchantId: new Types.ObjectId(merchantId) }).select('_id').lean();
+    const merchantStoreIds = merchantStores.map(s => s._id.toString());
+
+    const order = await Order.findOne({
+      _id: new Types.ObjectId(id),
+      'items.store': { $in: merchantStores.map(s => s._id) }
+    }).session(session);
+
+    if (!order) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendNotFound(res, 'Order not found or does not belong to your stores');
+    }
+
+    // Validate status transition
+    const currentStatus = order.status;
+    const allowedNextStatuses = validTransitions[currentStatus] || [];
+
+    if (!allowedNextStatuses.includes(status)) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendBadRequest(res, `Cannot change status from "${currentStatus}" to "${status}". Allowed: ${allowedNextStatuses.join(', ') || 'none'}`);
+    }
+
+    // Inventory deduction on confirm
+    if (status === 'confirmed' && currentStatus !== 'confirmed') {
+      console.log(`📦 [ORDER STATUS] Processing inventory deduction for order ${order.orderNumber}`);
+
+      for (const item of order.items) {
+        const product = await Product.findById(item.product).session(session);
+        if (!product) {
+          console.warn(`⚠️ [ORDER STATUS] Product ${item.product} not found, skipping inventory`);
+          continue;
+        }
+
+        if (!product.inventory.unlimited && product.inventory.stock < item.quantity) {
+          await session.abortTransaction();
+          session.endSession();
+          return sendBadRequest(res, `Insufficient stock for "${item.name}". Available: ${product.inventory.stock}, Required: ${item.quantity}`);
+        }
+
+        if (!product.inventory.unlimited) {
+          product.inventory.stock -= item.quantity;
+          if (product.inventory.stock === 0) {
+            product.inventory.isAvailable = false;
+          }
+          await product.save({ session });
+          console.log(`📦 [ORDER STATUS] Deducted ${item.quantity} from "${item.name}". New stock: ${product.inventory.stock}`);
+        }
+      }
+    }
+
+    // Update status using Order model method
+    await order.updateStatus(status, notes || `Status updated to ${status} by merchant`);
+    await order.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    console.log(`✅ [ORDER STATUS] Order ${order.orderNumber} updated: ${currentStatus} → ${status}`);
+
+    // Send notifications (outside transaction)
+    if (notifyCustomer) {
+      try {
+        await sendOrderStatusNotification(order, status);
+      } catch (notifError) {
+        console.error('❌ [ORDER STATUS] Notification error (non-fatal):', notifError);
+      }
+    }
+
+    // Process delivery rewards when order is marked as delivered
+    if (status === 'delivered') {
+      const populatedOrder = await Order.findById(order._id)
+        .populate('items.product', 'name images')
+        .populate('items.store', 'name logo')
+        .populate('user', 'profile.firstName profile.lastName');
+
+      if (populatedOrder) {
+        const userIdObj = typeof populatedOrder.user === 'object'
+          ? (populatedOrder.user as any)._id
+          : populatedOrder.user;
+
+        // 1. Award 5% purchase reward coins (5% of subtotal)
+        try {
+          const coinService = require('../../services/coinService');
+          const coinsToAward = Math.floor((populatedOrder.totals.subtotal || 0) * 0.05);
+          if (coinsToAward > 0) {
+            await coinService.awardCoins(
+              userIdObj.toString(),
+              coinsToAward,
+              'purchase_reward',
+              `5% purchase reward for order ${populatedOrder.orderNumber}`,
+              { orderId: populatedOrder._id }
+            );
+            console.log(`✅ [ORDER STATUS] Purchase reward: ${coinsToAward} coins`);
+          }
+        } catch (err) {
+          console.error('❌ [ORDER STATUS] Failed to award purchase reward:', err);
+        }
+
+        // 2. Credit merchant wallet (subtotal minus 15% platform fee)
+        try {
+          const firstItem = populatedOrder.items[0];
+          if (firstItem && firstItem.store) {
+            const storeId = typeof firstItem.store === 'object'
+              ? (firstItem.store as any)._id
+              : firstItem.store;
+
+            const store = await Store.findById(storeId);
+            if (store && store.merchantId) {
+              const grossAmount = populatedOrder.totals.subtotal || 0;
+              const platformFee = populatedOrder.totals.platformFee || 0;
+
+              const walletResult = await merchantWalletService.creditOrderPayment(
+                store.merchantId.toString(),
+                populatedOrder._id as Types.ObjectId,
+                populatedOrder.orderNumber,
+                grossAmount,
+                platformFee,
+                storeId
+              );
+
+              console.log('✅ [ORDER STATUS] Merchant wallet credited:', {
+                gross: grossAmount, fee: platformFee, net: grossAmount - platformFee
+              });
+
+              if (walletResult) {
+                orderSocketService.emitMerchantWalletUpdated({
+                  merchantId: store.merchantId.toString(),
+                  storeId: storeId.toString(),
+                  storeName: store.name,
+                  transactionType: 'credit',
+                  amount: grossAmount - platformFee,
+                  orderId: (populatedOrder._id as Types.ObjectId).toString(),
+                  orderNumber: populatedOrder.orderNumber,
+                  newBalance: {
+                    total: walletResult.balance?.total || 0,
+                    available: walletResult.balance?.available || 0,
+                    pending: walletResult.balance?.pending || 0
+                  },
+                  timestamp: new Date()
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.error('❌ [ORDER STATUS] Failed to credit merchant wallet:', err);
+        }
+
+        // 3. Credit 5% admin commission (5% of subtotal)
+        try {
+          const adminWalletService = require('../../services/adminWalletService').default;
+          const subtotal = populatedOrder.totals.subtotal || 0;
+          const adminCommission = Math.floor(subtotal * 0.05);
+          if (adminCommission > 0) {
+            await adminWalletService.creditOrderCommission(
+              populatedOrder._id as Types.ObjectId,
+              populatedOrder.orderNumber,
+              subtotal
+            );
+            console.log('✅ [ORDER STATUS] Admin wallet credited:', adminCommission);
+          }
+        } catch (err) {
+          console.error('❌ [ORDER STATUS] Failed to credit admin wallet:', err);
+        }
+      }
+    }
+
+    sendSuccess(res, {
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      previousStatus: currentStatus,
+      status: order.status,
+    }, `Order status updated to ${status}`);
+
+  } catch (error: any) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error('❌ [ORDER STATUS] Error:', error);
+    throw new AppError(`Failed to update order status: ${error.message}`, 500);
   }
 });

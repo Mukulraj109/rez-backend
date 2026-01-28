@@ -151,4 +151,91 @@ router.post('/instagram/extract-post-data',
   extractInstagramPostData
 );
 
+// ============================================================================
+// ADMIN FIX: Re-credit social media posts that were marked 'credited' but
+// have no CoinTransaction record (one-time fix)
+// ============================================================================
+router.post('/admin/fix-missing-credits',
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { SocialMediaPost } = require('../models/SocialMediaPost');
+      const { CoinTransaction } = require('../models/CoinTransaction');
+      const coinService = require('../services/coinService');
+
+      // Find all credited posts
+      const creditedPosts = await SocialMediaPost.find({ status: 'credited' }).lean();
+      console.log(`[FIX] Found ${creditedPosts.length} credited social media posts`);
+
+      let fixed = 0;
+      let skipped = 0;
+      let failed = 0;
+      const results: any[] = [];
+
+      for (const post of creditedPosts) {
+        // Check if CoinTransaction already exists for this post
+        const existingTx = await CoinTransaction.findOne({
+          'metadata.postId': post._id,
+          source: 'social_share_reward'
+        });
+
+        if (existingTx) {
+          skipped++;
+          continue;
+        }
+
+        // Also check by description pattern
+        const existingByDesc = await CoinTransaction.findOne({
+          user: post.user,
+          source: 'social_share_reward',
+          description: { $regex: post.order?.toString() || 'nomatch' }
+        });
+
+        if (existingByDesc) {
+          skipped++;
+          continue;
+        }
+
+        // No CoinTransaction exists — create one
+        try {
+          await coinService.awardCoins(
+            post.user.toString(),
+            post.cashbackAmount,
+            'social_share_reward',
+            `Social media cashback (${post.platform}) for order ${post.order} [fix]`,
+            { postId: post._id, platform: post.platform, orderId: post.order }
+          );
+          fixed++;
+          results.push({
+            postId: post._id,
+            user: post.user,
+            amount: post.cashbackAmount,
+            status: 'fixed'
+          });
+          console.log(`[FIX] Credited ${post.cashbackAmount} coins to user ${post.user} for post ${post._id}`);
+        } catch (err: any) {
+          failed++;
+          results.push({
+            postId: post._id,
+            user: post.user,
+            amount: post.cashbackAmount,
+            status: 'failed',
+            error: err.message
+          });
+          console.error(`[FIX] Failed for post ${post._id}:`, err.message);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Fix complete: ${fixed} fixed, ${skipped} already had records, ${failed} failed`,
+        data: { total: creditedPosts.length, fixed, skipped, failed, results }
+      });
+    } catch (error: any) {
+      console.error('[FIX] Error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+);
+
 export default router;

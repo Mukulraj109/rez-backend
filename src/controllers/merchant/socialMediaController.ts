@@ -265,9 +265,17 @@ export const approveSocialMediaPost = asyncHandler(async (req: Request, res: Res
 
   console.log('📱 [MERCHANT SOCIAL] Approving post:', postId);
 
-  // Start transaction for atomic wallet update
+  // Step 1: Update post status atomically in a transaction
   const session = await mongoose.startSession();
   session.startTransaction();
+
+  let postUserId: string;
+  let cashbackAmount: number;
+  let postOrderId: any;
+  let postPlatform: string;
+  let savedPostId: any;
+  let reviewedAt: Date;
+  let creditedAt: Date;
 
   try {
     // Get merchant's stores
@@ -290,40 +298,21 @@ export const approveSocialMediaPost = asyncHandler(async (req: Request, res: Res
       return sendBadRequest(res, `Cannot approve post with status '${post.status}'. Only pending posts can be approved.`);
     }
 
-    // Get or create user's wallet
-    let wallet = await Wallet.findOne({ user: post.user }).session(session);
+    // Save post data for coin crediting after transaction
+    postUserId = post.user.toString();
+    cashbackAmount = post.cashbackAmount;
+    postOrderId = post.order;
+    postPlatform = post.platform;
+    savedPostId = post._id;
 
-    if (!wallet) {
-      // Create wallet if it doesn't exist
-      wallet = new Wallet({
-        user: post.user,
-        balance: {
-          available: 0,
-          pending: 0,
-          total: 0
-        },
-        currency: 'INR'
-      });
-    }
-
-    // Credit REZ coins to wallet
-    const cashbackAmount = post.cashbackAmount;
-    wallet.balance.available += cashbackAmount;
-    wallet.balance.total += cashbackAmount;
-
-    // Add transaction record if the wallet supports it
-    if (typeof wallet.addFunds === 'function') {
-      await wallet.addFunds(cashbackAmount, 'social_media_cashback');
-    }
-
-    await wallet.save({ session });
-
-    // Update post status to credited (since we're crediting immediately)
+    // Update post status to credited
     post.status = 'credited';
     post.reviewedAt = new Date();
     post.creditedAt = new Date();
     post.reviewedBy = merchantUserId ? new Types.ObjectId(merchantUserId) : undefined;
     (post as any).approvalNotes = notes;
+    reviewedAt = post.reviewedAt;
+    creditedAt = post.creditedAt;
 
     await post.save({ session });
 
@@ -351,23 +340,6 @@ export const approveSocialMediaPost = asyncHandler(async (req: Request, res: Res
     }
 
     await session.commitTransaction();
-
-    console.log(`✅ [MERCHANT SOCIAL] Post approved and ₹${cashbackAmount} REZ coins credited to user`);
-
-    return sendSuccess(res, {
-      post: {
-        id: post._id,
-        status: post.status,
-        cashbackAmount,
-        reviewedAt: post.reviewedAt,
-        creditedAt: post.creditedAt
-      },
-      walletUpdate: {
-        amountCredited: cashbackAmount,
-        newBalance: wallet.balance.total
-      }
-    }, `Post approved! ₹${cashbackAmount} REZ coins have been credited to the user's wallet.`);
-
   } catch (error: any) {
     await session.abortTransaction();
     console.error('❌ [MERCHANT SOCIAL] Error approving post:', error);
@@ -375,6 +347,39 @@ export const approveSocialMediaPost = asyncHandler(async (req: Request, res: Res
   } finally {
     session.endSession();
   }
+
+  // Step 2: Credit coins via coinService (outside transaction - creates CoinTransaction record)
+  // CoinTransaction is the source of truth for wallet balance (auto-synced on /wallet/balance)
+  let newBalance = 0;
+  try {
+    const coinService = require('../../services/coinService');
+    const result = await coinService.awardCoins(
+      postUserId,
+      cashbackAmount,
+      'social_share_reward',
+      `Social media cashback (${postPlatform}) for order ${postOrderId}`,
+      { postId: savedPostId, platform: postPlatform, orderId: postOrderId }
+    );
+    newBalance = result.newBalance || 0;
+    console.log(`✅ [MERCHANT SOCIAL] Post approved and ${cashbackAmount} REZ coins credited to user via CoinTransaction`);
+  } catch (coinError) {
+    console.error('❌ [MERCHANT SOCIAL] Failed to credit coins via coinService:', coinError);
+    // Post is already approved - log error but don't fail the response
+  }
+
+  return sendSuccess(res, {
+    post: {
+      id: savedPostId,
+      status: 'credited',
+      cashbackAmount,
+      reviewedAt,
+      creditedAt
+    },
+    walletUpdate: {
+      amountCredited: cashbackAmount,
+      newBalance
+    }
+  }, `Post approved! ${cashbackAmount} REZ coins have been credited to the user's wallet.`);
 });
 
 /**

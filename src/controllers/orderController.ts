@@ -30,6 +30,7 @@ import EmailService from '../services/EmailService';
 import { Store } from '../models/Store';
 import { Refund } from '../models/Refund';
 import merchantWalletService from '../services/merchantWalletService';
+import orderSocketService from '../services/orderSocketService';
 
 // Create new order from cart
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
@@ -686,38 +687,8 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     console.log('💳 [CREATE ORDER] Order created with status "pending_payment"');
     console.log('📌 [CREATE ORDER] Stock will be deducted after payment confirmation');
 
-    // Credit merchant wallet for COD orders (online payments are handled by PaymentService webhook)
-    if (paymentMethod === 'cod') {
-      try {
-        const firstItem = orderItems[0];
-        if (firstItem && firstItem.store) {
-          const storeId = firstItem.store;
-          const store = await Store.findById(storeId).select('merchantId');
-
-          if (store && store.merchantId) {
-            console.log('[MERCHANT WALLET] Crediting merchant wallet for COD order...');
-            await merchantWalletService.creditOrderPayment(
-              store.merchantId.toString(),
-              order._id as Types.ObjectId,
-              order.orderNumber,
-              subtotal,
-              platformFee,
-              storeId
-            );
-            console.log('[MERCHANT WALLET] Merchant wallet credited for COD order:', {
-              gross: subtotal,
-              fee: platformFee,
-              net: subtotal - platformFee
-            });
-          } else {
-            console.warn('[MERCHANT WALLET] Store or merchantId not found for COD wallet credit, storeId:', storeId);
-          }
-        }
-      } catch (walletError) {
-        console.error('[MERCHANT WALLET] Failed to credit merchant wallet for COD order:', walletError);
-        // Don't fail order creation if wallet crediting fails
-      }
-    }
+    // NOTE: Merchant wallet credit moved to delivery (see updateOrderStatus).
+    // Both COD and online payment orders only credit merchant wallet when status = 'delivered'.
 
     // Populate order for response
     const populatedOrder = await Order.findById(order._id)
@@ -1278,6 +1249,78 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         }
       } catch (coinError) {
         console.error('[ORDER] Failed to award purchase reward coins:', coinError);
+      }
+
+      // Credit merchant wallet on delivery (merchant gets subtotal minus 15% platform fee)
+      try {
+        const firstItem = populatedOrder.items[0];
+        if (firstItem && firstItem.store) {
+          const storeId = typeof firstItem.store === 'object'
+            ? (firstItem.store as any)._id
+            : firstItem.store;
+
+          const store = await Store.findById(storeId);
+
+          if (store && store.merchantId) {
+            console.log('💰 [ORDER] Crediting merchant wallet on delivery...');
+
+            const grossAmount = populatedOrder.totals.subtotal || 0;
+            const platformFee = populatedOrder.totals.platformFee || 0;
+
+            const walletResult = await merchantWalletService.creditOrderPayment(
+              store.merchantId.toString(),
+              populatedOrder._id as Types.ObjectId,
+              populatedOrder.orderNumber,
+              grossAmount,
+              platformFee,
+              storeId
+            );
+
+            console.log('✅ [ORDER] Merchant wallet credited:', {
+              gross: grossAmount,
+              fee: platformFee,
+              net: grossAmount - platformFee
+            });
+
+            // Emit real-time notification to merchant
+            if (walletResult) {
+              orderSocketService.emitMerchantWalletUpdated({
+                merchantId: store.merchantId.toString(),
+                storeId: storeId.toString(),
+                storeName: store.name,
+                transactionType: 'credit',
+                amount: grossAmount - platformFee,
+                orderId: (populatedOrder._id as Types.ObjectId).toString(),
+                orderNumber: populatedOrder.orderNumber,
+                newBalance: {
+                  total: walletResult.balance?.total || 0,
+                  available: walletResult.balance?.available || 0,
+                  pending: walletResult.balance?.pending || 0
+                },
+                timestamp: new Date()
+              });
+            }
+          }
+        }
+      } catch (walletError) {
+        console.error('❌ [ORDER] Failed to credit merchant wallet:', walletError);
+      }
+
+      // Credit 5% admin commission to platform wallet on delivery (5% of subtotal)
+      try {
+        const adminWalletService = require('../services/adminWalletService').default;
+        const subtotal = populatedOrder.totals.subtotal || 0;
+        const adminCommission = Math.floor(subtotal * 0.05);
+        if (adminCommission > 0) {
+          await adminWalletService.creditOrderCommission(
+            populatedOrder._id as Types.ObjectId,
+            populatedOrder.orderNumber,
+            subtotal
+          );
+          console.log('✅ [ORDER] Admin wallet credited:', adminCommission);
+        }
+      } catch (adminError) {
+        console.error('❌ [ORDER] Failed to credit admin wallet:', adminError);
       }
 
       // Create cashback for delivered order

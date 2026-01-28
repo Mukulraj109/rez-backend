@@ -596,88 +596,11 @@ class PaymentService {
       }
 
       // ========================================
-      // POST-PAYMENT REWARDS & MERCHANT CREDIT
+      // POST-PAYMENT NOTE
       // ========================================
-
-      // NOTE: 5% purchase reward coins are now awarded on delivery (see orderController.ts)
-      // This ensures users only get coins after actually receiving their order.
-
-      // 1. Credit merchant wallet (immediate settlement)
-      try {
-        // Get merchant from the first order item's store
-        const firstItem = order.items[0];
-        if (firstItem && firstItem.store) {
-          const storeId = typeof firstItem.store === 'object'
-            ? (firstItem.store as any)._id
-            : firstItem.store;
-
-          // Get store to find merchant owner
-          const { Store } = require('../models/Store');
-          const store = await Store.findById(storeId);
-
-          if (store && store.owner) {
-            console.log('💰 [PAYMENT SERVICE] Crediting merchant wallet...');
-
-            const grossAmount = order.totals.subtotal || 0;
-            const platformFee = order.totals.platformFee || 0;
-
-            const walletResult = await merchantWalletService.creditOrderPayment(
-              store.owner.toString(),
-              order._id as Types.ObjectId,
-              order.orderNumber,
-              grossAmount,
-              platformFee,
-              storeId
-            );
-
-            console.log('✅ [PAYMENT SERVICE] Merchant wallet credited:', {
-              gross: grossAmount,
-              fee: platformFee,
-              net: grossAmount - platformFee
-            });
-
-            // Emit real-time notification to merchant
-            if (walletResult) {
-              orderSocketService.emitMerchantWalletUpdated({
-                merchantId: store.owner.toString(),
-                storeId: storeId.toString(),
-                storeName: store.name,
-                transactionType: 'credit',
-                amount: grossAmount - platformFee,
-                orderId: (order._id as Types.ObjectId).toString(),
-                orderNumber: order.orderNumber,
-                newBalance: {
-                  total: walletResult.balance?.total || 0,
-                  available: walletResult.balance?.available || 0,
-                  pending: walletResult.balance?.pending || 0
-                },
-                timestamp: new Date()
-              });
-            }
-          }
-        }
-      } catch (walletError) {
-        console.error('❌ [PAYMENT SERVICE] Failed to credit merchant wallet:', walletError);
-        // Don't fail payment if wallet credit fails
-      }
-
-      // 2. Credit 5% admin commission to platform wallet (5% of subtotal)
-      try {
-        const adminWalletService = require('./adminWalletService').default;
-        const subtotal = order.totals.subtotal || 0;
-        const adminCommission = Math.floor(subtotal * 0.05);
-        if (adminCommission > 0) {
-          await adminWalletService.creditOrderCommission(
-            order._id as Types.ObjectId,
-            order.orderNumber,
-            subtotal
-          );
-          console.log('✅ [PAYMENT SERVICE] Admin wallet credited:', adminCommission);
-        }
-      } catch (adminError) {
-        console.error('❌ [PAYMENT SERVICE] Failed to credit admin wallet:', adminError);
-        // Don't fail payment if admin wallet credit fails
-      }
+      // Merchant wallet credit, admin commission, and purchase reward coins
+      // are all awarded on DELIVERY (see orderController.ts updateOrderStatus).
+      // This ensures money only moves after the customer receives their order.
 
       return order;
     } catch (error: any) {

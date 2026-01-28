@@ -4,7 +4,8 @@ import {
   getMerchantOrderById,
   getMerchantOrderAnalytics,
   bulkOrderAction,
-  refundOrder
+  refundOrder,
+  updateMerchantOrderStatus
 } from '../../controllers/merchant/orderController';
 import { authMiddleware as authenticateMerchant } from '../../middleware/merchantauth';
 import { validate, validateParams, validateQuery, commonSchemas } from '../../middleware/validation';
@@ -59,6 +60,22 @@ router.get('/:id',
     id: commonSchemas.objectId().required()
   })),
   getMerchantOrderById
+);
+
+// PUT /api/merchant/orders/:id/status - Update single order status
+router.put('/:id/status',
+  validateParams(Joi.object({
+    id: commonSchemas.objectId().required()
+  })),
+  validate(Joi.object({
+    status: Joi.string().valid(
+      'placed', 'pending', 'confirmed', 'preparing', 'ready',
+      'out_for_delivery', 'dispatched', 'delivered', 'cancelled'
+    ).required(),
+    notes: Joi.string().trim().max(500).optional(),
+    notifyCustomer: Joi.boolean().default(true)
+  })),
+  updateMerchantOrderStatus
 );
 
 // POST /api/merchant/orders/bulk-action - Bulk order operations
