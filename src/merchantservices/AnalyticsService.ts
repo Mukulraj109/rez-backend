@@ -277,7 +277,7 @@ export class AnalyticsService {
   }
 
   /**
-   * Get top selling products
+   * Get top selling products with full product details
    */
   static async getTopSellingProducts(
     storeId: string,
@@ -322,6 +322,36 @@ export class AnalyticsService {
           avgPrice: { $avg: '$items.price' }
         }
       },
+      // Lookup product details from Product collection
+      {
+        $lookup: {
+          from: 'products',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'productDetails'
+        }
+      },
+      {
+        $unwind: {
+          path: '$productDetails',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      // Lookup category name from Category collection
+      {
+        $lookup: {
+          from: 'categories',
+          localField: 'productDetails.category',
+          foreignField: '_id',
+          as: 'categoryDetails'
+        }
+      },
+      {
+        $unwind: {
+          path: '$categoryDetails',
+          preserveNullAndEmptyArrays: true
+        }
+      },
       {
         $project: {
           _id: 0,
@@ -330,7 +360,17 @@ export class AnalyticsService {
           totalQuantity: 1,
           totalRevenue: { $round: ['$totalRevenue', 2] },
           orderCount: 1,
-          averagePrice: { $round: ['$avgPrice', 2] }
+          averagePrice: { $round: ['$avgPrice', 2] },
+          // Additional product details
+          sku: { $ifNull: ['$productDetails.sku', 'N/A'] },
+          category: { $ifNull: ['$categoryDetails.name', 'General'] },
+          categoryId: { $toString: { $ifNull: ['$productDetails.category', null] } },
+          currentStock: { $ifNull: ['$productDetails.inventory.stock', null] },
+          isAvailable: { $ifNull: ['$productDetails.inventory.isAvailable', true] },
+          avgRating: { $ifNull: ['$productDetails.ratings.average', 0] },
+          reviewCount: { $ifNull: ['$productDetails.ratings.totalReviews', 0] },
+          // Product image for display
+          imageUrl: { $arrayElemAt: [{ $ifNull: ['$productDetails.images', []] }, 0] }
         }
       },
       {
@@ -340,6 +380,9 @@ export class AnalyticsService {
         $limit: limit
       }
     ]);
+
+    // Log for debugging
+    console.log('[AnalyticsService] getTopSellingProducts result:', JSON.stringify(topProducts.slice(0, 2), null, 2));
 
     return topProducts;
   }

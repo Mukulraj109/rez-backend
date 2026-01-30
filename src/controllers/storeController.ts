@@ -421,17 +421,27 @@ export const getNearbyStores = asyncHandler(async (req: Request, res: Response) 
       .limit(Number(limit))
       .lean();
 
-    // Calculate distances for each store
+    // Calculate distances for each store and add frontend-friendly fields
     const storesWithDistance = stores.map((store: any) => {
+      let distance = null;
       if (store.location?.coordinates && Array.isArray(store.location.coordinates) && store.location.coordinates.length === 2) {
         try {
-          const distance = calculateDistance([userLng, userLat], store.location.coordinates);
-          return { ...store, distance: Math.round(distance * 100) / 100 };
+          distance = Math.round(calculateDistance([userLng, userLat], store.location.coordinates) * 100) / 100;
         } catch (e) {
-          return { ...store, distance: null };
+          distance = null;
         }
       }
-      return { ...store, distance: null };
+
+      // Add frontend-friendly fields at top level for easier consumption
+      return {
+        ...store,
+        distance,
+        // Frontend-friendly fields
+        rating: store.ratings?.average || 0,
+        cashback: store.offers?.cashback || 0,
+        deliveryTime: store.operationalInfo?.deliveryTime || null,
+        image: store.logo || store.banner
+      };
     });
 
     // Sort by distance
@@ -496,7 +506,16 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
       stores = [...stores, ...additionalStores];
     }
 
-    sendSuccess(res, { stores }, 'Featured stores retrieved successfully');
+    // Transform stores to include frontend-friendly fields
+    const transformedStores = stores.map((store: any) => ({
+      ...store,
+      rating: store.ratings?.average || 0,
+      cashback: store.offers?.cashback || 0,
+      deliveryTime: store.operationalInfo?.deliveryTime || null,
+      image: store.logo || store.banner
+    }));
+
+    sendSuccess(res, { stores: transformedStores }, 'Featured stores retrieved successfully');
 
   } catch (error) {
     throw new AppError('Failed to fetch featured stores', 500);
@@ -1434,7 +1453,9 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
           createdAt: 1,
           description: 1,
           offers: 1,
-          rewardRules: 1
+          rewardRules: 1,
+          operationalInfo: 1,
+          tags: 1
         }
       },
       {
@@ -1471,7 +1492,7 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
       }
     ]);
 
-    // Calculate trending score for each store
+    // Calculate trending score for each store and add frontend-friendly fields
     const storesWithScore = stores
       .map(store => {
         const storeId = store._id.toString();
@@ -1485,8 +1506,15 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
           (orderData.totalRevenue * 0.01) +
           (((store.ratings as any)?.average || 0) * 5);
 
+        // Add frontend-friendly fields at top level for easier consumption
         return {
           ...store,
+          // Frontend-friendly fields
+          rating: (store.ratings as any)?.average || 0,
+          cashback: (store.offers as any)?.cashback || 0,
+          deliveryTime: (store.operationalInfo as any)?.deliveryTime || null,
+          image: store.logo || store.banner,
+          // Trending data
           trendingScore,
           recentOrders: orderData.orderCount,
           recentRevenue: orderData.totalRevenue

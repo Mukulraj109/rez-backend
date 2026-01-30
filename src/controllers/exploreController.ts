@@ -3,6 +3,7 @@ import { Activity } from '../models/Activity';
 import { Store } from '../models/Store';
 import { Review } from '../models/Review';
 import { StoreComparison } from '../models/StoreComparison';
+import Follow from '../models/Follow';
 import {
   sendSuccess,
   sendNotFound
@@ -58,12 +59,13 @@ export const getExploreStats = asyncHandler(async (req: Request, res: Response) 
       amount: { $gt: 0 }
     });
 
+    // Return real values without hardcoded fallbacks
     sendSuccess(res, {
-      activeUsers: Math.max(activeUsersCount, 10), // Minimum 10 for display
+      activeUsers: activeUsersCount,
       earnedToday: todayEarnings[0]?.total || 0,
-      dealsLive: activeDealsCount || 50,
-      peopleNearby: nearbyPeopleCount.length || 15,
-      peopleEarnedToday: peopleEarnedToday.length || 0
+      dealsLive: activeDealsCount,
+      peopleNearby: nearbyPeopleCount.length,
+      peopleEarnedToday: peopleEarnedToday.length
     }, 'Explore stats retrieved successfully');
   } catch (error) {
     console.error('Get explore stats error:', error);
@@ -92,26 +94,31 @@ export const getVerifiedReviews = asyncHandler(async (req: Request, res: Respons
       moderationStatus: 'approved'
     })
       .populate('user', 'profile.name profile.avatar')
-      .populate('store', 'name logo')
+      .populate('store', 'name logo offers.cashback offers.maxCashback')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
       .lean();
 
-    // Transform for frontend
-    const transformedReviews = reviews.map((review: any) => ({
-      id: review._id,
-      user: review.user?.profile?.name || 'Anonymous',
-      avatar: review.user?.profile?.avatar,
-      rating: review.rating,
-      review: review.comment,
-      store: review.store?.name || 'Unknown Store',
-      storeId: review.store?._id,
-      storeLogo: review.store?.logo,
-      cashback: 0, // Will be calculated from transactions if needed
-      verified: review.verified,
-      time: getTimeAgo(review.createdAt)
-    }));
+    // Transform for frontend with real cashback data from store
+    const transformedReviews = reviews.map((review: any) => {
+      // Get cashback rate from store's offers
+      const storeCashbackRate = review.store?.offers?.cashback || 0;
+
+      return {
+        id: review._id,
+        user: review.user?.profile?.name || 'Anonymous',
+        avatar: review.user?.profile?.avatar,
+        rating: review.rating,
+        review: review.comment,
+        store: review.store?.name || 'Unknown Store',
+        storeId: review.store?._id,
+        storeLogo: review.store?.logo,
+        cashback: storeCashbackRate,
+        verified: review.verified,
+        time: getTimeAgo(review.createdAt)
+      };
+    });
 
     const hasMore = skip + reviews.length < total;
 
@@ -135,18 +142,40 @@ export const getVerifiedReviews = asyncHandler(async (req: Request, res: Respons
 // Get featured comparison for explore page
 export const getFeaturedComparison = asyncHandler(async (req: Request, res: Response) => {
   try {
-    // Get a recent comparison that has multiple stores
-    const comparison = await StoreComparison.findOne({})
-      .populate('stores', 'name logo description location ratings cashbackRate operationalInfo')
+    // Get a comparison that is actually marked as featured
+    let comparison = await StoreComparison.findOne({
+      isFeaturedOnExplore: true
+    })
+      .populate('stores', 'name logo description location ratings offers.cashback operationalInfo')
       .sort({ updatedAt: -1 })
       .lean();
+
+    // If no featured comparison, try to get any recent comparison with 2+ stores
+    if (!comparison) {
+      comparison = await StoreComparison.findOne({
+        'stores.1': { $exists: true } // At least 2 stores
+      })
+        .populate('stores', 'name logo description location ratings offers.cashback operationalInfo')
+        .sort({ updatedAt: -1 })
+        .lean();
+    }
 
     if (!comparison) {
       return sendSuccess(res, { comparison: null }, 'No featured comparison available');
     }
 
+    // Transform to include cashbackRate at top level for frontend compatibility
+    const transformedComparison = {
+      ...comparison,
+      stores: (comparison.stores as any[]).map((store: any) => ({
+        ...store,
+        id: store._id,
+        cashbackRate: store.offers?.cashback || 0, // Add cashbackRate for frontend
+      }))
+    };
+
     sendSuccess(res, {
-      comparison
+      comparison: transformedComparison
     }, 'Featured comparison retrieved successfully');
   } catch (error) {
     console.error('Get featured comparison error:', error);
@@ -154,33 +183,57 @@ export const getFeaturedComparison = asyncHandler(async (req: Request, res: Resp
   }
 });
 
-// Get friends activity for explore page
+// Get friends activity for explore page (or community activity if not logged in)
 export const getFriendsActivity = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.id;
   const { limit = 10 } = req.query;
 
   try {
-    // Get recent activities
-    const activities = await Activity.find({})
+    let friendIds: string[] = [];
+    let activityQuery: any = {};
+
+    // If user is logged in, get their friends' activities
+    if (userId) {
+      // Get list of users this person follows
+      const follows = await Follow.find({ follower: userId })
+        .select('following')
+        .lean();
+
+      friendIds = follows.map((f: any) => f.following.toString());
+
+      // If user has friends, filter by friends' activities
+      if (friendIds.length > 0) {
+        activityQuery.user = { $in: friendIds };
+      }
+    }
+
+    // Get activities (from friends if logged in with friends, otherwise community)
+    const activities = await Activity.find(activityQuery)
       .populate('user', 'profile.name profile.avatar')
       .sort({ createdAt: -1 })
       .limit(Number(limit))
       .lean();
 
-    // Transform activities for frontend
-    const transformedActivities = activities.map((activity: any) => ({
-      id: activity._id,
-      type: activity.type?.toLowerCase() || 'order',
-      user: activity.user ? {
-        name: activity.user.profile?.name || 'User',
-        avatar: activity.user.profile?.avatar
-      } : null,
-      message: activity.description || activity.title,
-      store: activity.metadata?.storeName,
-      amount: activity.amount,
-      time: getTimeAgo(activity.createdAt),
-      isFriend: false // Would need Follow model to determine
-    }));
+    // Transform activities for frontend with accurate isFriend flag
+    const transformedActivities = activities.map((activity: any) => {
+      const activityUserId = activity.user?._id?.toString();
+      const isFriend = userId ? friendIds.includes(activityUserId) : false;
+
+      return {
+        id: activity._id,
+        type: activity.type?.toLowerCase() || 'order',
+        user: activity.user ? {
+          name: activity.user.profile?.name || 'User',
+          avatar: activity.user.profile?.avatar
+        } : null,
+        message: activity.description || activity.title,
+        store: activity.metadata?.storeName,
+        storeId: activity.metadata?.storeId, // Include storeId for navigation
+        amount: activity.amount,
+        time: getTimeAgo(activity.createdAt),
+        isFriend: isFriend
+      };
+    });
 
     sendSuccess(res, {
       activities: transformedActivities
@@ -194,22 +247,34 @@ export const getFriendsActivity = asyncHandler(async (req: Request, res: Respons
 // Get explore page stats summary (partner stores, cashback, etc)
 export const getExploreStatsSummary = asyncHandler(async (req: Request, res: Response) => {
   try {
-    // Get partner stores count
-    const partnerStoresCount = await Store.countDocuments({ isActive: true });
+    // Get partner stores count (stores with isPartner flag or just active stores)
+    const partnerStoresCount = await Store.countDocuments({
+      isActive: true,
+      'offers.isPartner': true
+    });
 
-    // Get max cashback rate
-    const maxCashbackStore = await Store.findOne({ isActive: true })
+    // If no partner stores, count all active stores
+    const totalStoresCount = partnerStoresCount > 0
+      ? partnerStoresCount
+      : await Store.countDocuments({ isActive: true });
+
+    // Get max cashback rate from stores with cashback offers
+    const maxCashbackStore = await Store.findOne({
+      isActive: true,
+      'offers.cashback': { $exists: true, $gt: 0 }
+    })
       .sort({ 'offers.cashback': -1 })
       .select('offers.cashback')
       .lean();
 
-    // Get total users (from activities)
+    // Get total unique users (from activities)
     const totalUsers = await Activity.distinct('user');
 
+    // Return real values without hardcoded fallbacks
     sendSuccess(res, {
-      partnerStores: partnerStoresCount || 1000,
-      maxCashback: maxCashbackStore?.offers?.cashback || 25,
-      totalUsers: totalUsers.length || 50000
+      partnerStores: totalStoresCount,
+      maxCashback: maxCashbackStore?.offers?.cashback || 0,
+      totalUsers: totalUsers.length
     }, 'Explore stats summary retrieved successfully');
   } catch (error) {
     console.error('Get explore stats summary error:', error);

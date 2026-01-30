@@ -1,0 +1,710 @@
+/**
+ * Merchant Notification Service
+ * Handles all notifications sent to merchants for their business operations
+ *
+ * This service creates notifications for merchants when important events occur:
+ * - New orders received
+ * - Order status changes
+ * - Cashback requests
+ * - Low stock alerts
+ * - Payment/withdrawal updates
+ * - Team member changes
+ * - Reviews received
+ */
+
+import { Types } from 'mongoose';
+import { Notification } from '../models/Notification';
+import { Merchant } from '../models/Merchant';
+import { Store } from '../models/Store';
+import { getIO } from '../config/socket';
+import SMSService from './SMSService';
+import { EmailService } from './EmailService';
+
+// Notification categories matching the Notification model
+type NotificationCategory = 'order' | 'earning' | 'general' | 'promotional' | 'social' | 'security' | 'system' | 'reminder';
+type NotificationType = 'info' | 'success' | 'warning' | 'error' | 'promotional';
+type NotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+interface CreateNotificationParams {
+  merchantId: string | Types.ObjectId;
+  title: string;
+  message: string;
+  type: NotificationType;
+  category: NotificationCategory;
+  priority: NotificationPriority;
+  data?: {
+    orderId?: string;
+    productId?: string;
+    transactionId?: string;
+    storeId?: string;
+    amount?: number;
+    deepLink?: string;
+    actionButton?: {
+      text: string;
+      action: 'navigate' | 'api_call' | 'external_link';
+      target: string;
+    };
+    metadata?: Record<string, any>;
+  };
+}
+
+class MerchantNotificationService {
+  /**
+   * Send SMS/Email for critical notifications
+   */
+  private async sendCriticalChannels(
+    merchantId: string,
+    title: string,
+    message: string,
+    priority: NotificationPriority
+  ): Promise<void> {
+    // Only send SMS/Email for high and urgent priority notifications
+    if (priority !== 'high' && priority !== 'urgent') {
+      return;
+    }
+
+    try {
+      // Get merchant contact info
+      const merchant = await Merchant.findById(merchantId).select('phone email businessName').lean();
+
+      if (!merchant) {
+        console.warn(`⚠️ [MERCHANT NOTIFICATION] Merchant not found for SMS/Email: ${merchantId}`);
+        return;
+      }
+
+      // Send SMS for urgent notifications
+      if (merchant.phone && priority === 'urgent') {
+        try {
+          const formattedPhone = SMSService.formatPhoneNumber(merchant.phone);
+          await SMSService.send({
+            to: formattedPhone,
+            message: `[${merchant.businessName || 'Rez'}] ${title}: ${message.substring(0, 140)}`,
+          });
+          console.log(`📱 [MERCHANT NOTIFICATION] SMS sent to ${formattedPhone}`);
+        } catch (smsError) {
+          console.warn('⚠️ [MERCHANT NOTIFICATION] Failed to send SMS:', smsError);
+        }
+      }
+
+      // Send Email for high and urgent priority
+      if (merchant.email) {
+        try {
+          await EmailService.send({
+            to: merchant.email,
+            subject: `[${priority === 'urgent' ? '🚨 URGENT' : '⚠️ Important'}] ${title}`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: ${priority === 'urgent' ? '#dc3545' : '#ffc107'}; color: ${priority === 'urgent' ? 'white' : 'black'}; padding: 20px; text-align: center;">
+                  <h1 style="margin: 0;">${title}</h1>
+                </div>
+                <div style="padding: 20px; background: #f8f9fa;">
+                  <p style="font-size: 16px; line-height: 1.6;">${message}</p>
+                  <p style="margin-top: 20px;">
+                    <a href="${process.env.MERCHANT_APP_URL || 'https://merchant.rezapp.in'}"
+                       style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">
+                      Open Dashboard
+                    </a>
+                  </p>
+                </div>
+                <div style="padding: 15px; text-align: center; font-size: 12px; color: #666;">
+                  <p>This is an automated notification from ${merchant.businessName || 'Rez'}.</p>
+                </div>
+              </div>
+            `,
+          });
+          console.log(`📧 [MERCHANT NOTIFICATION] Email sent to ${merchant.email}`);
+        } catch (emailError) {
+          console.warn('⚠️ [MERCHANT NOTIFICATION] Failed to send email:', emailError);
+        }
+      }
+    } catch (error) {
+      console.error('❌ [MERCHANT NOTIFICATION] Error sending critical channels:', error);
+    }
+  }
+
+  /**
+   * Create a notification for a merchant
+   */
+  async createNotification(params: CreateNotificationParams): Promise<any> {
+    try {
+      const deliveryChannels = ['in_app'];
+
+      // Add email/sms channels for high priority notifications
+      if (params.priority === 'high' || params.priority === 'urgent') {
+        deliveryChannels.push('email');
+        if (params.priority === 'urgent') {
+          deliveryChannels.push('sms');
+        }
+      }
+
+      const notification = await Notification.create({
+        user: new Types.ObjectId(params.merchantId.toString()),
+        title: params.title,
+        message: params.message,
+        type: params.type,
+        category: params.category,
+        priority: params.priority,
+        data: params.data,
+        deliveryChannels,
+        deliveryStatus: {
+          inApp: {
+            delivered: true,
+            deliveredAt: new Date(),
+            read: false,
+          },
+        },
+        source: 'system',
+        isRead: false,
+        isArchived: false,
+      });
+
+      // Emit real-time notification via Socket.IO
+      this.emitNotification(params.merchantId.toString(), notification);
+
+      // Send SMS/Email for critical notifications (non-blocking)
+      this.sendCriticalChannels(
+        params.merchantId.toString(),
+        params.title,
+        params.message,
+        params.priority
+      ).catch(err => console.error('Error sending critical channels:', err));
+
+      console.log(`📬 [MERCHANT NOTIFICATION] Created: ${params.title} for merchant ${params.merchantId}`);
+      return notification;
+    } catch (error) {
+      console.error('❌ [MERCHANT NOTIFICATION] Error creating notification:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Emit notification via Socket.IO for real-time updates
+   */
+  private emitNotification(merchantId: string, notification: any): void {
+    try {
+      const io = getIO();
+      if (io) {
+        // Emit to merchant-specific room
+        io.to(`merchant:${merchantId}`).emit('notification:new', {
+          id: notification._id,
+          title: notification.title,
+          message: notification.message,
+          type: notification.type,
+          category: notification.category,
+          priority: notification.priority,
+          createdAt: notification.createdAt,
+        });
+
+        // Also emit unread count update
+        this.emitUnreadCount(merchantId);
+      }
+    } catch (error) {
+      console.error('❌ [MERCHANT NOTIFICATION] Socket emit error:', error);
+    }
+  }
+
+  /**
+   * Emit updated unread count to merchant
+   */
+  private async emitUnreadCount(merchantId: string): Promise<void> {
+    try {
+      const io = getIO();
+      if (!io) return;
+
+      const unreadCount = await Notification.countDocuments({
+        user: new Types.ObjectId(merchantId),
+        isRead: false,
+        isArchived: false,
+        deletedAt: { $exists: false },
+      });
+
+      // Get count by category
+      const byType = await Notification.aggregate([
+        {
+          $match: {
+            user: new Types.ObjectId(merchantId),
+            isRead: false,
+            isArchived: false,
+            deletedAt: { $exists: false },
+          },
+        },
+        {
+          $group: {
+            _id: '$category',
+            count: { $sum: 1 },
+          },
+        },
+      ]);
+
+      const byTypeMap: Record<string, number> = {};
+      byType.forEach((item: any) => {
+        byTypeMap[item._id] = item.count;
+      });
+
+      io.to(`merchant:${merchantId}`).emit('notification:unread-count', {
+        count: unreadCount,
+        byType: byTypeMap,
+      });
+    } catch (error) {
+      console.error('❌ [MERCHANT NOTIFICATION] Error emitting unread count:', error);
+    }
+  }
+
+  // ============================================
+  // ORDER NOTIFICATIONS
+  // ============================================
+
+  /**
+   * Notify merchant when a new order is received
+   */
+  async notifyNewOrder(params: {
+    merchantId: string;
+    orderId: string;
+    orderNumber: string;
+    customerName: string;
+    totalAmount: number;
+    itemCount: number;
+    paymentMethod: string;
+  }): Promise<void> {
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: 'New Order Received! 🎉',
+      message: `Order #${params.orderNumber} from ${params.customerName} for ₹${params.totalAmount.toLocaleString()} (${params.itemCount} items)`,
+      type: 'success',
+      category: 'order',
+      priority: 'high',
+      data: {
+        orderId: params.orderId,
+        amount: params.totalAmount,
+        deepLink: `/orders/${params.orderId}`,
+        actionButton: {
+          text: 'View Order',
+          action: 'navigate',
+          target: `/orders/${params.orderId}`,
+        },
+        metadata: {
+          orderNumber: params.orderNumber,
+          customerName: params.customerName,
+          itemCount: params.itemCount,
+          paymentMethod: params.paymentMethod,
+        },
+      },
+    });
+  }
+
+  /**
+   * Notify merchant when payment is confirmed for an order
+   */
+  async notifyPaymentReceived(params: {
+    merchantId: string;
+    orderId: string;
+    orderNumber: string;
+    amount: number;
+    paymentMethod: string;
+  }): Promise<void> {
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: 'Payment Received 💰',
+      message: `Payment of ₹${params.amount.toLocaleString()} received for Order #${params.orderNumber} via ${params.paymentMethod}`,
+      type: 'success',
+      category: 'earning',
+      priority: 'medium',
+      data: {
+        orderId: params.orderId,
+        amount: params.amount,
+        deepLink: `/orders/${params.orderId}`,
+        metadata: {
+          orderNumber: params.orderNumber,
+          paymentMethod: params.paymentMethod,
+        },
+      },
+    });
+  }
+
+  /**
+   * Notify merchant when customer requests cancellation
+   */
+  async notifyOrderCancellationRequest(params: {
+    merchantId: string;
+    orderId: string;
+    orderNumber: string;
+    customerName: string;
+    reason?: string;
+  }): Promise<void> {
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: 'Cancellation Requested ⚠️',
+      message: `${params.customerName} requested to cancel Order #${params.orderNumber}${params.reason ? `: "${params.reason}"` : ''}`,
+      type: 'warning',
+      category: 'order',
+      priority: 'urgent',
+      data: {
+        orderId: params.orderId,
+        deepLink: `/orders/${params.orderId}`,
+        actionButton: {
+          text: 'Review Request',
+          action: 'navigate',
+          target: `/orders/${params.orderId}`,
+        },
+        metadata: {
+          orderNumber: params.orderNumber,
+          customerName: params.customerName,
+          reason: params.reason,
+        },
+      },
+    });
+  }
+
+  /**
+   * Notify merchant when order is cancelled
+   */
+  async notifyOrderCancelled(params: {
+    merchantId: string;
+    orderId: string;
+    orderNumber: string;
+    reason?: string;
+    cancelledBy: 'customer' | 'merchant' | 'system';
+  }): Promise<void> {
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: 'Order Cancelled',
+      message: `Order #${params.orderNumber} has been cancelled${params.cancelledBy !== 'merchant' ? ` by ${params.cancelledBy}` : ''}${params.reason ? `. Reason: ${params.reason}` : ''}`,
+      type: 'warning',
+      category: 'order',
+      priority: 'medium',
+      data: {
+        orderId: params.orderId,
+        deepLink: `/orders/${params.orderId}`,
+        metadata: {
+          orderNumber: params.orderNumber,
+          reason: params.reason,
+          cancelledBy: params.cancelledBy,
+        },
+      },
+    });
+  }
+
+  /**
+   * Notify merchant when refund is requested
+   */
+  async notifyRefundRequested(params: {
+    merchantId: string;
+    orderId: string;
+    orderNumber: string;
+    refundAmount: number;
+    reason?: string;
+  }): Promise<void> {
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: 'Refund Requested',
+      message: `Refund of ₹${params.refundAmount.toLocaleString()} requested for Order #${params.orderNumber}`,
+      type: 'warning',
+      category: 'order',
+      priority: 'high',
+      data: {
+        orderId: params.orderId,
+        amount: params.refundAmount,
+        deepLink: `/orders/${params.orderId}`,
+        actionButton: {
+          text: 'Process Refund',
+          action: 'navigate',
+          target: `/orders/${params.orderId}`,
+        },
+        metadata: {
+          orderNumber: params.orderNumber,
+          reason: params.reason,
+        },
+      },
+    });
+  }
+
+  // ============================================
+  // CASHBACK NOTIFICATIONS
+  // ============================================
+
+  /**
+   * Notify merchant of new cashback request pending review
+   */
+  async notifyCashbackRequest(params: {
+    merchantId: string;
+    requestId: string;
+    customerName: string;
+    amount: number;
+    riskScore?: number;
+  }): Promise<void> {
+    const isHighRisk = params.riskScore && params.riskScore > 70;
+
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: isHighRisk ? 'High-Risk Cashback Request ⚠️' : 'New Cashback Request',
+      message: `${params.customerName} requested ₹${params.amount.toLocaleString()} cashback${isHighRisk ? ' (flagged for review)' : ''}`,
+      type: isHighRisk ? 'warning' : 'info',
+      category: 'earning',
+      priority: isHighRisk ? 'urgent' : 'medium',
+      data: {
+        transactionId: params.requestId,
+        amount: params.amount,
+        deepLink: `/cashback/${params.requestId}`,
+        actionButton: {
+          text: 'Review Request',
+          action: 'navigate',
+          target: `/cashback/${params.requestId}`,
+        },
+        metadata: {
+          customerName: params.customerName,
+          riskScore: params.riskScore,
+        },
+      },
+    });
+  }
+
+  // ============================================
+  // INVENTORY NOTIFICATIONS
+  // ============================================
+
+  /**
+   * Notify merchant when product stock is low
+   */
+  async notifyLowStock(params: {
+    merchantId: string;
+    productId: string;
+    productName: string;
+    currentStock: number;
+    threshold: number;
+    storeId?: string;
+  }): Promise<void> {
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: 'Low Stock Alert ⚠️',
+      message: `${params.productName} is running low - only ${params.currentStock} units left (threshold: ${params.threshold})`,
+      type: 'warning',
+      category: 'general',
+      priority: 'high',
+      data: {
+        productId: params.productId,
+        storeId: params.storeId,
+        deepLink: `/products/${params.productId}/edit`,
+        actionButton: {
+          text: 'Update Stock',
+          action: 'navigate',
+          target: `/products/${params.productId}/edit`,
+        },
+        metadata: {
+          productName: params.productName,
+          currentStock: params.currentStock,
+          threshold: params.threshold,
+        },
+      },
+    });
+  }
+
+  /**
+   * Notify merchant when product is out of stock
+   */
+  async notifyOutOfStock(params: {
+    merchantId: string;
+    productId: string;
+    productName: string;
+    storeId?: string;
+  }): Promise<void> {
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: 'Out of Stock! 🚨',
+      message: `${params.productName} is now out of stock and has been automatically deactivated`,
+      type: 'error',
+      category: 'general',
+      priority: 'urgent',
+      data: {
+        productId: params.productId,
+        storeId: params.storeId,
+        deepLink: `/products/${params.productId}/edit`,
+        actionButton: {
+          text: 'Restock Now',
+          action: 'navigate',
+          target: `/products/${params.productId}/edit`,
+        },
+        metadata: {
+          productName: params.productName,
+        },
+      },
+    });
+  }
+
+  // ============================================
+  // WALLET/PAYMENT NOTIFICATIONS
+  // ============================================
+
+  /**
+   * Notify merchant when withdrawal is processed
+   */
+  async notifyWithdrawalStatus(params: {
+    merchantId: string;
+    withdrawalId: string;
+    amount: number;
+    status: 'approved' | 'completed' | 'rejected';
+    reason?: string;
+  }): Promise<void> {
+    const titles: Record<string, string> = {
+      approved: 'Withdrawal Approved',
+      completed: 'Withdrawal Completed ✅',
+      rejected: 'Withdrawal Rejected',
+    };
+
+    const messages: Record<string, string> = {
+      approved: `Your withdrawal request for ₹${params.amount.toLocaleString()} has been approved and is being processed`,
+      completed: `₹${params.amount.toLocaleString()} has been transferred to your bank account`,
+      rejected: `Your withdrawal request for ₹${params.amount.toLocaleString()} was rejected${params.reason ? `: ${params.reason}` : ''}`,
+    };
+
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: titles[params.status],
+      message: messages[params.status],
+      type: params.status === 'rejected' ? 'error' : 'success',
+      category: 'earning',
+      priority: params.status === 'rejected' ? 'high' : 'medium',
+      data: {
+        transactionId: params.withdrawalId,
+        amount: params.amount,
+        deepLink: '/wallet',
+        metadata: {
+          status: params.status,
+          reason: params.reason,
+        },
+      },
+    });
+  }
+
+  /**
+   * Notify merchant of daily/weekly earnings summary
+   */
+  async notifyEarningsSummary(params: {
+    merchantId: string;
+    period: 'daily' | 'weekly';
+    totalEarnings: number;
+    orderCount: number;
+    comparedToLastPeriod?: number; // percentage change
+  }): Promise<void> {
+    const periodLabel = params.period === 'daily' ? 'Today' : 'This Week';
+    const trend = params.comparedToLastPeriod
+      ? params.comparedToLastPeriod > 0
+        ? `↑ ${params.comparedToLastPeriod}%`
+        : `↓ ${Math.abs(params.comparedToLastPeriod)}%`
+      : '';
+
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: `${periodLabel}'s Earnings Summary 📊`,
+      message: `You earned ₹${params.totalEarnings.toLocaleString()} from ${params.orderCount} orders ${trend}`,
+      type: 'info',
+      category: 'earning',
+      priority: 'low',
+      data: {
+        amount: params.totalEarnings,
+        deepLink: '/analytics',
+        metadata: {
+          period: params.period,
+          orderCount: params.orderCount,
+          percentageChange: params.comparedToLastPeriod,
+        },
+      },
+    });
+  }
+
+  // ============================================
+  // TEAM NOTIFICATIONS
+  // ============================================
+
+  /**
+   * Notify merchant when team member joins
+   */
+  async notifyTeamMemberJoined(params: {
+    merchantId: string;
+    memberName: string;
+    memberEmail: string;
+    role: string;
+  }): Promise<void> {
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: 'New Team Member Joined',
+      message: `${params.memberName} (${params.memberEmail}) has joined as ${params.role}`,
+      type: 'info',
+      category: 'social',
+      priority: 'low',
+      data: {
+        deepLink: '/team',
+        metadata: {
+          memberName: params.memberName,
+          memberEmail: params.memberEmail,
+          role: params.role,
+        },
+      },
+    });
+  }
+
+  // ============================================
+  // REVIEW NOTIFICATIONS
+  // ============================================
+
+  /**
+   * Notify merchant of new review
+   */
+  async notifyNewReview(params: {
+    merchantId: string;
+    productId?: string;
+    storeId?: string;
+    reviewerName: string;
+    rating: number;
+    comment?: string;
+  }): Promise<void> {
+    const isNegative = params.rating < 3;
+
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: isNegative ? 'New Review Needs Attention ⚠️' : 'New Review Received ⭐',
+      message: `${params.reviewerName} left a ${params.rating}-star review${params.comment ? `: "${params.comment.substring(0, 50)}${params.comment.length > 50 ? '...' : ''}"` : ''}`,
+      type: isNegative ? 'warning' : 'info',
+      category: 'social',
+      priority: isNegative ? 'high' : 'medium',
+      data: {
+        productId: params.productId,
+        storeId: params.storeId,
+        deepLink: params.productId ? `/products/${params.productId}` : '/reviews',
+        metadata: {
+          reviewerName: params.reviewerName,
+          rating: params.rating,
+          comment: params.comment,
+        },
+      },
+    });
+  }
+
+  // ============================================
+  // SYSTEM NOTIFICATIONS
+  // ============================================
+
+  /**
+   * Notify merchant of system updates or maintenance
+   */
+  async notifySystemUpdate(params: {
+    merchantId: string;
+    title: string;
+    message: string;
+    priority?: NotificationPriority;
+  }): Promise<void> {
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: params.title,
+      message: params.message,
+      type: 'info',
+      category: 'system',
+      priority: params.priority || 'low',
+      data: {},
+    });
+  }
+}
+
+// Export singleton instance
+const merchantNotificationService = new MerchantNotificationService();
+export default merchantNotificationService;
+export { MerchantNotificationService };

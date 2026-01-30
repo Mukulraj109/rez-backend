@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { Category } from '../models/Category';
 import { Order } from '../models/Order';
+import { Store } from '../models/Store';
+import { Product } from '../models/Product';
 import {
   sendSuccess,
   sendNotFound
@@ -74,7 +76,26 @@ export const getCategoryBySlug = asyncHandler(async (req: Request, res: Response
       return sendNotFound(res, 'Category not found');
     }
 
-    sendSuccess(res, category, 'Category retrieved successfully');
+    // Compute store count and max cashback for this category
+    const storeStats = await Store.aggregate([
+      { $match: { category: (category as any)._id, isActive: true } },
+      {
+        $group: {
+          _id: null,
+          count: { $sum: 1 },
+          maxCashback: { $max: '$offers.cashback' }
+        }
+      }
+    ]);
+
+    const stats = storeStats[0] || { count: 0, maxCashback: 0 };
+    const categoryWithStats = {
+      ...category,
+      storeCount: stats.count || (category as any).storeCount || 0,
+      maxCashback: stats.maxCashback || (category as any).maxCashback || 0
+    };
+
+    sendSuccess(res, categoryWithStats, 'Category retrieved successfully');
 
   } catch (error) {
     throw new AppError('Failed to fetch category', 500);
@@ -93,9 +114,42 @@ export const getCategoriesWithCounts = asyncHandler(async (req: Request, res: Re
       .sort({ sortOrder: 1, name: 1 })
       .lean();
 
-    sendSuccess(res, categories, 'Categories with counts retrieved successfully');
+    // Compute real counts and max cashback for each category
+    const categoriesWithCounts = await Promise.all(
+      categories.map(async (category: any) => {
+        // Get store count and max cashback for this category
+        const storeStats = await Store.aggregate([
+          { $match: { category: category._id, isActive: true } },
+          {
+            $group: {
+              _id: null,
+              count: { $sum: 1 },
+              maxCashback: { $max: '$offers.cashback' }
+            }
+          }
+        ]);
+
+        // Get product count for this category
+        const productCount = await Product.countDocuments({
+          category: category._id,
+          isActive: true
+        });
+
+        const stats = storeStats[0] || { count: 0, maxCashback: 0 };
+
+        return {
+          ...category,
+          storeCount: stats.count || category.storeCount || 0,
+          productCount: productCount || category.productCount || 0,
+          maxCashback: stats.maxCashback || category.maxCashback || 0
+        };
+      })
+    );
+
+    sendSuccess(res, categoriesWithCounts, 'Categories with counts retrieved successfully');
 
   } catch (error) {
+    console.error('Error fetching categories with counts:', error);
     throw new AppError('Failed to fetch categories with counts', 500);
   }
 });
@@ -148,7 +202,8 @@ export const getBestDiscountCategories = asyncHandler(async (req: Request, res: 
   const { limit = 10 } = req.query;
 
   try {
-    const categories = await Category.find({
+    // First try to get categories marked as best discount
+    let categories = await Category.find({
       isActive: true,
       isBestDiscount: true
     })
@@ -156,9 +211,72 @@ export const getBestDiscountCategories = asyncHandler(async (req: Request, res: 
       .limit(Number(limit))
       .lean();
 
+    // If no categories marked as best discount, get categories with highest cashback from stores
+    if (categories.length === 0) {
+      // Aggregate to find categories with highest cashback
+      const categoryStats = await Store.aggregate([
+        { $match: { isActive: true, 'offers.cashback': { $gt: 0 } } },
+        {
+          $group: {
+            _id: '$category',
+            maxCashback: { $max: '$offers.cashback' },
+            storeCount: { $sum: 1 }
+          }
+        },
+        { $sort: { maxCashback: -1 } },
+        { $limit: Number(limit) }
+      ]);
+
+      if (categoryStats.length > 0) {
+        const categoryIds = categoryStats.map(s => s._id).filter(Boolean);
+        const categoryMap = new Map(categoryStats.map(s => [s._id?.toString(), s]));
+
+        categories = await Category.find({
+          _id: { $in: categoryIds },
+          isActive: true
+        }).lean();
+
+        // Add computed stats
+        categories = categories.map((cat: any) => {
+          const stats = categoryMap.get(cat._id.toString());
+          return {
+            ...cat,
+            maxCashback: stats?.maxCashback || cat.maxCashback || 0,
+            storeCount: stats?.storeCount || cat.storeCount || 0
+          };
+        });
+
+        // Sort by maxCashback
+        categories.sort((a: any, b: any) => (b.maxCashback || 0) - (a.maxCashback || 0));
+      }
+    } else {
+      // Add computed stats even for marked categories
+      categories = await Promise.all(
+        categories.map(async (category: any) => {
+          const storeStats = await Store.aggregate([
+            { $match: { category: category._id, isActive: true } },
+            {
+              $group: {
+                _id: null,
+                maxCashback: { $max: '$offers.cashback' },
+                storeCount: { $sum: 1 }
+              }
+            }
+          ]);
+          const stats = storeStats[0] || {};
+          return {
+            ...category,
+            maxCashback: stats.maxCashback || category.maxCashback || 0,
+            storeCount: stats.storeCount || category.storeCount || 0
+          };
+        })
+      );
+    }
+
     sendSuccess(res, categories, 'Best discount categories retrieved successfully');
 
   } catch (error) {
+    console.error('Error fetching best discount categories:', error);
     throw new AppError('Failed to fetch best discount categories', 500);
   }
 });
@@ -168,7 +286,8 @@ export const getBestSellerCategories = asyncHandler(async (req: Request, res: Re
   const { limit = 10 } = req.query;
 
   try {
-    const categories = await Category.find({
+    // First try to get categories marked as best seller
+    let categories = await Category.find({
       isActive: true,
       isBestSeller: true
     })
@@ -176,9 +295,65 @@ export const getBestSellerCategories = asyncHandler(async (req: Request, res: Re
       .limit(Number(limit))
       .lean();
 
+    // If no categories marked as best seller, get categories with most products/stores
+    if (categories.length === 0) {
+      // Aggregate to find categories with most products
+      const categoryStats = await Product.aggregate([
+        { $match: { isActive: true } },
+        {
+          $group: {
+            _id: '$category',
+            productCount: { $sum: 1 }
+          }
+        },
+        { $sort: { productCount: -1 } },
+        { $limit: Number(limit) }
+      ]);
+
+      if (categoryStats.length > 0) {
+        const categoryIds = categoryStats.map(s => s._id).filter(Boolean);
+        const categoryMap = new Map(categoryStats.map(s => [s._id?.toString(), s]));
+
+        categories = await Category.find({
+          _id: { $in: categoryIds },
+          isActive: true
+        }).lean();
+
+        // Add computed stats
+        categories = await Promise.all(
+          categories.map(async (cat: any) => {
+            const productStats = categoryMap.get(cat._id.toString());
+            const storeCount = await Store.countDocuments({ category: cat._id, isActive: true });
+            return {
+              ...cat,
+              productCount: productStats?.productCount || cat.productCount || 0,
+              storeCount: storeCount || cat.storeCount || 0
+            };
+          })
+        );
+
+        // Sort by productCount
+        categories.sort((a: any, b: any) => (b.productCount || 0) - (a.productCount || 0));
+      }
+    } else {
+      // Add computed stats even for marked categories
+      categories = await Promise.all(
+        categories.map(async (category: any) => {
+          const productCount = await Product.countDocuments({ category: category._id, isActive: true });
+          const storeCount = await Store.countDocuments({ category: category._id, isActive: true });
+          return {
+            ...category,
+            productCount: productCount || category.productCount || 0,
+            storeCount: storeCount || category.storeCount || 0
+          };
+        })
+      );
+    }
+
     sendSuccess(res, categories, 'Best seller categories retrieved successfully');
 
   } catch (error) {
+    console.error('Error fetching best seller categories:', error);
     throw new AppError('Failed to fetch best seller categories', 500);
   }
 });

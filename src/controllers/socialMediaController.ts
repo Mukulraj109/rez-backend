@@ -11,6 +11,8 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { sendSuccess, sendError, sendNotFound } from '../utils/response';
 import achievementService from '../services/achievementService';
+import merchantNotificationService from '../services/merchantNotificationService';
+import { User } from '../models/User';
 
 // Rate limit configuration
 const RATE_LIMITS = {
@@ -252,6 +254,26 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
       console.error('❌ [SOCIAL MEDIA] Error triggering achievement update:', error);
     }
 
+    // Notify merchant about new cashback request
+    if (merchantId) {
+      try {
+        const customer = await User.findById(userId).select('profile phoneNumber').lean();
+        const customerName = customer?.profile?.firstName
+          ? `${customer.profile.firstName} ${customer.profile.lastName || ''}`.trim()
+          : customer?.phoneNumber || 'Customer';
+
+        await merchantNotificationService.notifyCashbackRequest({
+          merchantId: merchantId.toString(),
+          requestId: (post._id as any).toString(),
+          customerName,
+          amount: cashbackAmount,
+        });
+        console.log('📬 [SOCIAL MEDIA] Merchant notified of new cashback request');
+      } catch (notifyError) {
+        console.error('❌ [SOCIAL MEDIA] Error notifying merchant:', notifyError);
+      }
+    }
+
     sendSuccess(res, {
       post: {
         id: post._id,
@@ -435,6 +457,26 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
       await achievementService.triggerAchievementUpdate(userId, 'social_media_post_submitted');
     } catch (error) {
       console.error('❌ [SOCIAL MEDIA] Error triggering achievement update:', error);
+    }
+
+    // Notify merchant about new cashback request
+    if (merchantId) {
+      try {
+        const customer = await User.findById(userId).select('profile phoneNumber').lean();
+        const customerName = customer?.profile?.firstName
+          ? `${customer.profile.firstName} ${customer.profile.lastName || ''}`.trim()
+          : customer?.phoneNumber || 'Customer';
+
+        await merchantNotificationService.notifyCashbackRequest({
+          merchantId: merchantId.toString(),
+          requestId: (post._id as any).toString(),
+          customerName,
+          amount: cashbackAmount,
+        });
+        console.log('📬 [SOCIAL MEDIA] Merchant notified of new cashback request (media)');
+      } catch (notifyError) {
+        console.error('❌ [SOCIAL MEDIA] Error notifying merchant:', notifyError);
+      }
     }
 
     sendSuccess(res, {

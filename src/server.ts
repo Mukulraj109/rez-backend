@@ -32,6 +32,7 @@ import { initializeTrialExpiryJob } from './jobs/trialExpiryNotification';
 import { initializeSessionCleanupJob } from './jobs/cleanupExpiredSessions';
 import { initializeCoinExpiryJob } from './jobs/expireCoins';
 import { initializeCashbackJobs } from './jobs/cashbackJobs';
+import { initializeInventoryAlertJob } from './jobs/inventoryAlerts';
 
 // Import export worker (initializes automatically when imported)
 import './workers/exportWorker';
@@ -1051,6 +1052,11 @@ async function startServer() {
     console.log('🔄 Initializing cashback jobs...');
     initializeCashbackJobs();
     console.log('✅ Cashback jobs started (credit: hourly, expire: daily at 2:00 AM)');
+
+    // Initialize inventory alert job (sends low stock / out of stock notifications)
+    console.log('🔄 Initializing inventory alert job...');
+    initializeInventoryAlertJob();
+    console.log('✅ Inventory alert job started (runs daily at 8:00 AM)');
 
     // Initialize audit retention service
     console.log('🔄 Initializing audit retention service...');

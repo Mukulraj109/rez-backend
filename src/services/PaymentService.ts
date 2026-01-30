@@ -363,6 +363,7 @@ class PaymentService {
 
       // Clear user's cart after successful payment
       // Deduct coins if they were used in this order
+      console.log('💰 [PAYMENT SERVICE] Checking coinsUsed on order:', JSON.stringify(order.payment.coinsUsed));
       if (order.payment.coinsUsed) {
         // Support both rezCoins (new) and wasilCoins (legacy) field names
         const rezCoins = (order.payment.coinsUsed as any).rezCoins || (order.payment.coinsUsed as any).wasilCoins || 0;
@@ -439,6 +440,9 @@ class PaymentService {
             const storeId = typeof firstItem.store === 'object'
               ? (firstItem.store as any)._id
               : firstItem.store;
+
+            console.log('💰 [PAYMENT SERVICE] Store ID for branded coins:', storeId);
+            console.log('💰 [PAYMENT SERVICE] First item store:', firstItem.store);
 
             if (storeId) {
               console.log('💰 [PAYMENT SERVICE] Deducting branded coins:', storePromoCoins);

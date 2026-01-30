@@ -38,8 +38,9 @@ router.get('/', async (req, res) => {
       BusinessMetricsService.getTimeSeriesData(merchantId, 30, storeId)
     ]);
 
-    // Calculate growth percentages for metrics
+    // Return all metrics from BusinessMetricsService plus wrapped summary
     const metricsWithGrowth = {
+      // Wrapped summary metrics for cards
       totalRevenue: {
         value: metrics.totalRevenue,
         change: metrics.revenueGrowth,
@@ -63,7 +64,24 @@ router.get('/', async (req, res) => {
         change: metrics.customerGrowth,
         trend: metrics.customerGrowth >= 0 ? 'up' : 'down',
         period: 'vs last month'
-      }
+      },
+      // All raw metrics for dashboard components
+      monthlyRevenue: metrics.monthlyRevenue,
+      monthlyOrders: metrics.monthlyOrders,
+      revenueGrowth: metrics.revenueGrowth,
+      ordersGrowth: metrics.ordersGrowth,
+      customerGrowth: metrics.customerGrowth,
+      averageOrderValue: metrics.averageOrderValue,
+      pendingOrders: metrics.pendingOrders,
+      completedOrders: metrics.completedOrders,
+      cancelledOrders: metrics.cancelledOrders,
+      activeProducts: metrics.activeProducts,
+      lowStockProducts: metrics.lowStockProducts,
+      monthlyCustomers: metrics.monthlyCustomers,
+      returningCustomers: metrics.returningCustomers,
+      totalCashbackPaid: metrics.totalCashbackPaid || 0,
+      pendingCashback: metrics.pendingCashback || 0,
+      profitMargin: metrics.profitMargin || 0,
     };
 
     return res.json({

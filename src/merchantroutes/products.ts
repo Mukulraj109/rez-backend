@@ -13,6 +13,7 @@ import SMSService from '../services/SMSService';
 import { Merchant } from '../models/Merchant';
 import AuditService from '../services/AuditService';
 import CloudinaryService from '../services/CloudinaryService';
+import merchantNotificationService from '../services/merchantNotificationService';
 // Import rate limiters and sanitization
 import {
   productGetLimiter,
@@ -992,20 +993,55 @@ router.put('/:id',
         // Continue - merchant product update should succeed even if sync fails
       }
 
-      // Check for low stock and send alert
-      if (product.inventory && product.inventory.stock <= product.inventory.lowStockThreshold) {
-        try {
-          const merchant = await Merchant.findById(req.merchantId);
-          if (merchant && merchant.phone) {
-            const formattedPhone = SMSService.formatPhoneNumber(merchant.phone);
-            await SMSService.sendLowStockAlert(
-              formattedPhone,
-              product.name,
-              product.inventory.stock
-            );
+      // Check for low stock / out of stock and send alerts
+      if (product.inventory) {
+        const stock = product.inventory.stock;
+        const threshold = product.inventory.lowStockThreshold || 5;
+
+        // Out of stock notification (highest priority)
+        if (stock === 0) {
+          try {
+            await merchantNotificationService.notifyOutOfStock({
+              merchantId: req.merchantId!,
+              productId: (product._id as any).toString(),
+              productName: product.name,
+              storeId: product.store?.toString(),
+            });
+            console.log('📬 [PRODUCT] Sent out of stock notification for:', product.name);
+          } catch (notifyError) {
+            console.warn('Failed to send out of stock notification:', notifyError);
           }
-        } catch (smsError) {
-          console.warn('Failed to send low stock SMS:', smsError);
+        }
+        // Low stock notification and SMS
+        else if (stock <= threshold) {
+          try {
+            await merchantNotificationService.notifyLowStock({
+              merchantId: req.merchantId!,
+              productId: (product._id as any).toString(),
+              productName: product.name,
+              currentStock: stock,
+              threshold: threshold,
+              storeId: product.store?.toString(),
+            });
+            console.log('📬 [PRODUCT] Sent low stock notification for:', product.name);
+          } catch (notifyError) {
+            console.warn('Failed to send low stock notification:', notifyError);
+          }
+
+          // Also send SMS alert
+          try {
+            const merchant = await Merchant.findById(req.merchantId);
+            if (merchant && merchant.phone) {
+              const formattedPhone = SMSService.formatPhoneNumber(merchant.phone);
+              await SMSService.sendLowStockAlert(
+                formattedPhone,
+                product.name,
+                stock
+              );
+            }
+          } catch (smsError) {
+            console.warn('Failed to send low stock SMS:', smsError);
+          }
         }
       }
 

@@ -9,6 +9,88 @@ import { getIO } from '../config/socket';
 import { SocketRoom } from '../types/socket';
 
 /**
+ * Transform notification from backend format to frontend expected format
+ * Maps: _id → id, isRead/isArchived → status, category → type
+ */
+const transformNotificationForFrontend = (notification: any) => {
+  // Determine status based on isRead and isArchived
+  let status = 'unread';
+  if (notification.isArchived) {
+    status = 'archived';
+  } else if (notification.isRead) {
+    status = 'read';
+  }
+
+  // Map backend category to frontend type
+  // Backend categories: order, earning, general, promotional, social, security, system, reminder
+  // Frontend types: order, product, cashback, team, system, payment, marketing, review, inventory, analytics
+  const categoryToTypeMap: Record<string, string> = {
+    'order': 'order',
+    'earning': 'cashback',
+    'general': 'system',
+    'promotional': 'marketing',
+    'social': 'team',
+    'security': 'system',
+    'system': 'system',
+    'reminder': 'system'
+  };
+
+  const mappedType = categoryToTypeMap[notification.category] || notification.category || 'system';
+
+  return {
+    // Include the id field (from _id)
+    id: notification._id?.toString() || notification.id,
+    _id: notification._id,
+
+    // Core fields
+    merchantId: notification.user?.toString(),
+    title: notification.title,
+    message: notification.message,
+
+    // Map category to type for frontend compatibility
+    type: mappedType,
+    category: notification.category,
+
+    // Map isRead/isArchived to status enum
+    status: status,
+    isRead: notification.isRead,
+    isArchived: notification.isArchived,
+
+    // Priority
+    priority: notification.priority || 'medium',
+
+    // Channels
+    channels: notification.deliveryChannels || ['in_app'],
+
+    // Related entity data
+    relatedEntityType: notification.data?.orderId ? 'order' :
+                       notification.data?.productId ? 'product' :
+                       notification.data?.transactionId ? 'cashback' : undefined,
+    relatedEntityId: notification.data?.orderId || notification.data?.productId || notification.data?.transactionId,
+    relatedEntityData: notification.data,
+
+    // Action URLs
+    actionUrl: notification.data?.deepLink || notification.data?.externalLink,
+    actionLabel: notification.data?.actionButton?.text,
+    imageUrl: notification.data?.imageUrl,
+
+    // Timestamps
+    createdAt: notification.createdAt,
+    updatedAt: notification.updatedAt,
+    readAt: notification.readAt,
+    archivedAt: notification.archivedAt,
+
+    // Delivery status
+    deliveryStatus: notification.deliveryStatus,
+    sentAt: notification.sentAt,
+
+    // Original backend fields for compatibility
+    source: notification.source,
+    template: notification.template
+  };
+};
+
+/**
  * Get all notifications for merchant with filters and pagination
  * Enhanced with type, status, sorting filters
  */
@@ -37,8 +119,30 @@ export const getMerchantNotifications = asyncHandler(async (req: Request, res: R
     };
 
     // Apply filters
+    // Frontend sends 'type' which maps to backend 'category'
+    // Map frontend type values to backend category values
+    const typeToCategory: Record<string, string> = {
+      'order': 'order',
+      'product': 'general',
+      'cashback': 'earning',
+      'team': 'social',
+      'system': 'system',
+      'payment': 'earning',
+      'marketing': 'promotional',
+      'review': 'social',
+      'inventory': 'general',
+      'analytics': 'system'
+    };
+
     if (type) {
-      query.type = type;
+      // Check if it's a frontend type that needs mapping
+      const mappedCategory = typeToCategory[type as string];
+      if (mappedCategory) {
+        query.category = mappedCategory;
+      } else {
+        // Fallback: check both type and category fields
+        query.$or = [{ type: type }, { category: type }];
+      }
     }
 
     if (category) {
@@ -83,9 +187,12 @@ export const getMerchantNotifications = asyncHandler(async (req: Request, res: R
     const limitNum = Number(limit);
     const totalPages = Math.ceil((total || 0) / limitNum);
 
+    // Transform notifications to frontend format
+    const transformedNotifications = (notifications || []).map(transformNotificationForFrontend);
+
     return sendSuccess(res, {
-      items: notifications || [],
-      notifications: notifications || [],
+      items: transformedNotifications,
+      notifications: transformedNotifications,
       unreadCount: unreadCount || 0,
       pagination: {
         page: pageNum,
@@ -104,7 +211,7 @@ export const getMerchantNotifications = asyncHandler(async (req: Request, res: R
 
 /**
  * Get unread notifications only
- * Returns most recent 50 unread notifications
+ * Returns most recent 50 unread notifications with count by type
  */
 export const getUnreadNotifications = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.merchantId!;
@@ -120,14 +227,28 @@ export const getUnreadNotifications = asyncHandler(async (req: Request, res: Res
       .limit(50)
       .lean();
 
+    // Transform notifications for frontend
+    const transformedNotifications = notifications.map(transformNotificationForFrontend);
+
+    // Calculate unread count by type (using transformed type values)
+    const byType: Record<string, number> = {};
+    transformedNotifications.forEach((n: any) => {
+      const type = n.type || 'system';
+      byType[type] = (byType[type] || 0) + 1;
+    });
+
     const unreadCount = notifications.length;
 
     // Set custom header with unread count
     res.setHeader('X-Unread-Count', unreadCount.toString());
 
+    // Return in format frontend expects
     sendSuccess(res, {
-      notifications,
-      count: unreadCount
+      notifications: transformedNotifications,
+      items: transformedNotifications,
+      unreadCount: unreadCount,
+      byType: byType,
+      count: unreadCount  // Keep for backward compatibility
     }, 'Unread notifications retrieved successfully');
   } catch (error) {
     throw new AppError('Failed to fetch unread notifications', 500);
@@ -366,8 +487,12 @@ export const getArchivedNotifications = asyncHandler(async (req: Request, res: R
       isArchived: true
     });
 
+    // Transform notifications for frontend
+    const transformedNotifications = notifications.map(transformNotificationForFrontend);
+
     sendSuccess(res, {
-      notifications,
+      notifications: transformedNotifications,
+      items: transformedNotifications,
       pagination: {
         page: Number(page),
         limit: Number(limit),
@@ -516,7 +641,10 @@ export const getNotificationById = asyncHandler(async (req: Request, res: Respon
       return sendNotFound(res, 'Notification not found');
     }
 
-    sendSuccess(res, { notification }, 'Notification retrieved successfully');
+    // Transform notification for frontend
+    const transformedNotification = transformNotificationForFrontend(notification);
+
+    sendSuccess(res, { notification: transformedNotification }, 'Notification retrieved successfully');
   } catch (error) {
     throw new AppError('Failed to fetch notification', 500);
   }
@@ -572,8 +700,11 @@ export const markNotificationAsRead = asyncHandler(async (req: Request, res: Res
       console.error('Socket emit error:', socketError);
     }
 
+    // Transform notification for frontend
+    const transformedNotification = transformNotificationForFrontend(notification.toObject ? notification.toObject() : notification);
+
     sendSuccess(res, {
-      notification,
+      notification: transformedNotification,
       unreadCount
     }, 'Notification marked as read');
   } catch (error) {

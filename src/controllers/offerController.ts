@@ -511,9 +511,9 @@ export const redeemOffer = async (req: Request, res: Response) => {
 
     await redemption.save();
 
-    // Update offer engagement
+    // Update offer redemption count
     await Offer.findByIdAndUpdate(id, {
-      $inc: { 'engagement.viewsCount': 1 }
+      $inc: { 'redemptionCount': 1 }
     });
 
     // Record analytics for exclusive offer redemption

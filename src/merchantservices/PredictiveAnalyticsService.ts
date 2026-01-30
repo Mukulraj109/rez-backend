@@ -28,6 +28,7 @@ export interface SalesForecast {
   averageDailyRevenue: number;
   trend: 'increasing' | 'decreasing' | 'stable';
   accuracy: number; // percentage
+  isSampleData?: boolean; // Flag for demo data when no historical orders
 }
 
 export interface StockoutPrediction {
@@ -118,6 +119,35 @@ export class PredictiveAnalyticsService {
 
     // Fill missing days with zero
     const filledData = this.fillMissingDays(historicalData, startDate, endDate);
+
+    // Check if we have actual sales data
+    const hasRealData = filledData.some(d => d.revenue > 0);
+
+    // If no real data, return empty forecast (no dummy data)
+    if (!hasRealData) {
+      const emptyForecasts: SalesForecast['forecast'] = [];
+      for (let i = 1; i <= days; i++) {
+        const forecastDate = new Date(endDate);
+        forecastDate.setDate(forecastDate.getDate() + i);
+        emptyForecasts.push({
+          date: forecastDate.toISOString().split('T')[0],
+          predictedRevenue: 0,
+          predictedOrders: 0,
+          confidenceLower: 0,
+          confidenceUpper: 0
+        });
+      }
+      return {
+        forecastDays: days,
+        historical: filledData,
+        forecast: emptyForecasts,
+        totalPredictedRevenue: 0,
+        averageDailyRevenue: 0,
+        trend: 'stable',
+        accuracy: 0,
+        isSampleData: false
+      };
+    }
 
     // Extract revenue and orders arrays for forecasting
     const revenues = filledData.map(d => d.revenue);

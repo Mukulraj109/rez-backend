@@ -31,6 +31,7 @@ import { Store } from '../models/Store';
 import { Refund } from '../models/Refund';
 import merchantWalletService from '../services/merchantWalletService';
 import orderSocketService from '../services/orderSocketService';
+import merchantNotificationService from '../services/merchantNotificationService';
 
 // Create new order from cart
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
@@ -43,6 +44,8 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
   try {
     console.log('📦 [CREATE ORDER] Starting order creation for user:', userId);
+    console.log('💰 [CREATE ORDER] coinsUsed received from frontend:', JSON.stringify(coinsUsed));
+    console.log('💳 [CREATE ORDER] Payment method:', paymentMethod);
 
     // Get user's cart
     const cart = await Cart.findOne({ user: userId })
@@ -595,7 +598,15 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         wallet.balance.total = Math.max(0, wallet.balance.total - coinsUsed.rezCoins);
         wallet.statistics.totalSpent += coinsUsed.rezCoins;
         wallet.lastTransactionAt = new Date();
-
+                  const { CoinTransaction } = require('../models/CoinTransaction');
+            await CoinTransaction.createTransaction(
+               userId.toString(),
+               'spent',
+               coinsUsed.rezCoins,
+               'purchase',
+               `COD Order: ${orderNumber}`,
+               { orderId: order._id, orderNumber, paymentMethod: 'cod' }
+            );
         console.log('✅ [CREATE ORDER] REZ coins deducted from wallet for COD:', coinsUsed.rezCoins);
       }
 
@@ -776,8 +787,9 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       // Send new order alert to merchant
       if (storeData?._id) {
         console.log('📱 [ORDER] Sending new order alert to merchant...');
-        const store = await Store.findById(storeData._id).select('contact');
+        const store = await Store.findById(storeData._id).select('contact merchant');
         const merchantPhone = store?.contact?.phone;
+        const merchantId = (store as any)?.merchant?.toString();
 
         if (merchantPhone) {
           await SMSService.sendNewOrderAlertToMerchant(
@@ -792,6 +804,20 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
             console.log('💰 [ORDER] Sending high-value order alert to merchant...');
             await SMSService.sendHighValueOrderAlert(merchantPhone, orderNumber, total);
           }
+        }
+
+        // Send in-app notification to merchant
+        if (merchantId) {
+          console.log('📬 [ORDER] Sending in-app notification to merchant...');
+          await merchantNotificationService.notifyNewOrder({
+            merchantId,
+            orderId: (order._id as any).toString(),
+            orderNumber,
+            customerName: userName,
+            totalAmount: total,
+            itemCount: populatedOrder?.items?.length || 0,
+            paymentMethod,
+          });
         }
       }
 
@@ -1298,6 +1324,15 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
                   pending: walletResult.balance?.pending || 0
                 },
                 timestamp: new Date()
+              });
+
+              // Send in-app notification for payment received
+              await merchantNotificationService.notifyPaymentReceived({
+                merchantId: store.merchantId.toString(),
+                orderId: (populatedOrder._id as Types.ObjectId).toString(),
+                orderNumber: populatedOrder.orderNumber,
+                amount: grossAmount - platformFee,
+                paymentMethod: populatedOrder.payment?.method || 'online',
               });
             }
           }

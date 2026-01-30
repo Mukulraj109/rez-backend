@@ -10,6 +10,7 @@ import { EmailService } from '../../services/EmailService';
 import { CashbackRequest } from '../../types/shared';
 import { createRazorpayPayout } from '../../services/razorpayService';
 import { UserCashback } from '../../models/UserCashback';
+import merchantNotificationService from '../../services/merchantNotificationService';
 
 /**
  * Calculate total cashback earned by a user

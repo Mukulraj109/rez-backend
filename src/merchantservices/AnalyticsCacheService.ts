@@ -15,6 +15,7 @@ export interface CacheOptions {
 export class AnalyticsCacheService {
   private static readonly DEFAULT_TTL = 900; // 15 minutes
   private static readonly DEFAULT_PREFIX = 'analytics';
+  private static readonly CACHE_VERSION = 'v2'; // Bump this to invalidate all cache
 
   /**
    * Get cached value or compute it if not in cache
@@ -175,7 +176,7 @@ export class AnalyticsCacheService {
    * Generate cache key for top products
    */
   static getTopProductsKey(storeId: string, limit: number, sortBy: string): string {
-    return `top:products:${storeId}:${limit}:${sortBy}`;
+    return `${this.CACHE_VERSION}:top:products:${storeId}:${limit}:${sortBy}`;
   }
 
   /**

@@ -571,11 +571,17 @@ WalletSchema.methods.useBrandedCoins = async function(
   }
 
   // Find merchant coins
+  console.log('💰 [WALLET] Looking for branded coins with merchantId:', merchantId.toString());
+  console.log('💰 [WALLET] Available branded coins:', JSON.stringify(this.brandedCoins.map((c: any) => ({ merchantId: c.merchantId?.toString(), amount: c.amount, name: c.merchantName }))));
+
   const merchantCoin = this.brandedCoins.find(
     (coin: any) => coin.merchantId.toString() === merchantId.toString()
   );
 
+  console.log('💰 [WALLET] Found merchant coin:', merchantCoin ? JSON.stringify({ merchantId: merchantCoin.merchantId, amount: merchantCoin.amount }) : 'NOT FOUND');
+
   if (!merchantCoin || merchantCoin.amount < amount) {
+    console.error('❌ [WALLET] Insufficient branded coins. Required:', amount, 'Available:', merchantCoin?.amount || 0);
     throw new Error('Insufficient Branded Coins for this merchant');
   }
 

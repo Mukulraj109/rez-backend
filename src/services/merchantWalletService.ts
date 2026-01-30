@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 import { MerchantWallet, IMerchantWallet, IMerchantWalletTransaction } from '../models/MerchantWallet';
 import { Store } from '../models/Store';
+import merchantNotificationService from './merchantNotificationService';
 
 interface WalletSummary {
   balance: {
@@ -226,6 +227,71 @@ class MerchantWalletService {
     await wallet.save();
 
     console.log(`✅ [MERCHANT WALLET SERVICE] Processed withdrawal: ₹${transaction.amount}`);
+
+    // Send notification to merchant about successful withdrawal
+    try {
+      await merchantNotificationService.notifyWithdrawalStatus({
+        merchantId: merchantObjectId.toString(),
+        withdrawalId: transactionId,
+        amount: transaction.amount,
+        status: 'completed',
+      });
+      console.log('📬 [MERCHANT WALLET SERVICE] Sent withdrawal completion notification');
+    } catch (notifyError) {
+      console.warn('Failed to send withdrawal notification:', notifyError);
+    }
+  }
+
+  /**
+   * Reject withdrawal (admin action)
+   */
+  async rejectWithdrawal(
+    merchantId: string | Types.ObjectId,
+    transactionId: string,
+    reason: string
+  ): Promise<void> {
+    const merchantObjectId = typeof merchantId === 'string' ? new Types.ObjectId(merchantId) : merchantId;
+
+    const wallet = await MerchantWallet.findOne({ merchant: merchantObjectId });
+
+    if (!wallet) {
+      throw new Error('Wallet not found');
+    }
+
+    // Find the pending withdrawal transaction
+    const transaction = wallet.transactions.find(
+      t => t._id?.toString() === transactionId && t.type === 'withdrawal' && t.status === 'pending'
+    );
+
+    if (!transaction) {
+      throw new Error('Withdrawal transaction not found or already processed');
+    }
+
+    // Update transaction status
+    transaction.status = 'failed';
+    transaction.description = `${transaction.description} - Rejected: ${reason}`;
+
+    // Return the pending amount to available balance
+    wallet.balance.pending -= transaction.amount;
+    wallet.balance.available += transaction.amount;
+
+    await wallet.save();
+
+    console.log(`❌ [MERCHANT WALLET SERVICE] Rejected withdrawal: ₹${transaction.amount} - ${reason}`);
+
+    // Send notification to merchant about rejected withdrawal
+    try {
+      await merchantNotificationService.notifyWithdrawalStatus({
+        merchantId: merchantObjectId.toString(),
+        withdrawalId: transactionId,
+        amount: transaction.amount,
+        status: 'rejected',
+        reason,
+      });
+      console.log('📬 [MERCHANT WALLET SERVICE] Sent withdrawal rejection notification');
+    } catch (notifyError) {
+      console.warn('Failed to send withdrawal rejection notification:', notifyError);
+    }
   }
 
   /**
