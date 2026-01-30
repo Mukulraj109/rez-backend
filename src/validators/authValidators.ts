@@ -33,8 +33,8 @@ export const registrationSchema = Joi.object({
       'any.required': 'Phone number is required'
     }),
   countryCode: Joi.string()
-    .pattern(/^\+\d{1,3}$/)
-    .default('+91')
+    .pattern(/^\+\d{1,4}$/)
+    .default('+971')
     .messages({
       'string.pattern.base': 'Invalid country code format'
     }),
@@ -58,8 +58,8 @@ export const loginSchema = Joi.object({
       'any.required': 'Phone number is required'
     }),
   countryCode: Joi.string()
-    .pattern(/^\+\d{1,3}$/)
-    .default('+91')
+    .pattern(/^\+\d{1,4}$/)
+    .default('+971')
 });
 
 // OTP verification validation
