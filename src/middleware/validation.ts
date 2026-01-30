@@ -92,11 +92,11 @@ export const commonSchemas = {
     search: Joi.string().trim().max(100)
   }),
   
-  // Phone number (Indian format) - accepts various formats: +91XXXXXXXXXX, 91XXXXXXXXXX, XXXXXXXXXX
-  // More permissive regex to handle edge cases
+  // Phone number (international format) - accepts E.164 format: +XXXXXXXXXXX
+  // Supports various country codes including UAE (+971), India (+91), etc.
   phoneNumber: Joi.string()
-    .pattern(/^(\+?91)?[\s\-]?[6-9]\d{9}$/)
-    .message('Invalid phone number format. Please enter a valid 10-digit Indian mobile number.'),
+    .pattern(/^\+?[1-9]\d{6,14}$/)
+    .message('Invalid phone number format. Please enter a valid phone number.'),
   
   // Email
   email: Joi.string().email().lowercase(),

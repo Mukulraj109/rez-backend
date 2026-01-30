@@ -100,19 +100,25 @@ const smsService = {
 };
 
 
-// Phone normalization helper
+// Phone normalization helper - supports international numbers
 const normalizePhoneNumber = (phone: string): string => {
   // Remove all spaces and special characters except +
   let normalized = phone.replace(/[\s\-()]/g, '');
 
-  // Remove leading +91 or 91
-  if (normalized.startsWith('+91')) {
-    normalized = normalized.substring(3);
-  } else if (normalized.startsWith('91') && normalized.length === 12) {
-    normalized = normalized.substring(2);
+  // If already has international format (starts with +), return as-is
+  if (normalized.startsWith('+')) {
+    return normalized;
   }
 
-  // Add +91 prefix
+  // For backward compatibility: if starts with country code without +, add +
+  if (normalized.startsWith('91') && normalized.length >= 12) {
+    return `+${normalized}`;
+  }
+  if (normalized.startsWith('971') && normalized.length >= 12) {
+    return `+${normalized}`;
+  }
+
+  // Default: assume Indian number if no country code, add +91
   return `+91${normalized}`;
 };
 
@@ -139,15 +145,12 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
 
     // Create user if doesn't exist, or reactivate if inactive
     if (!user) {
-      // For new users, email is required
-      if (!email) {
-        return sendBadRequest(res, 'User not found. Please sign up first or check your phone number.');
-      }
-      
-      // Check if email already exists
-      const emailExists = await User.findOne({ email });
-      if (emailExists) {
-        return sendConflict(res, 'Email is already registered');
+      // Check if email already exists (only if email is provided)
+      if (email) {
+        const emailExists = await User.findOne({ email });
+        if (emailExists) {
+          return sendConflict(res, 'Email is already registered');
+        }
       }
 
       // Check if referral code is valid (if provided)
