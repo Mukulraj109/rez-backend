@@ -516,10 +516,15 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
     console.log('📦 [CREATE ORDER] Generated order number:', orderNumber);
 
+    // Get primary store - use storeId from request (for multi-store orders) or extract from first item
+    const primaryStoreId = storeId || orderItems[0]?.store;
+    console.log('🏪 [CREATE ORDER] Primary store for order:', primaryStoreId);
+
     // Create order
     const order = new Order({
       orderNumber,
       user: userId,
+      store: primaryStoreId, // Set primary store for easy access/population
       items: orderItems,
       totals: {
         subtotal,
@@ -904,6 +909,7 @@ export const getUserOrders = asyncHandler(async (req: Request, res: Response) =>
     const orders = await Order.find(query)
       .populate('items.product', 'name images basePrice')
       .populate('items.store', 'name logo')
+      .populate('store', 'name logo location') // Populate top-level store
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit))
@@ -934,6 +940,8 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
   const { orderId } = req.params;
   const userId = req.userId!;
 
+  console.log('📦 [GET ORDER BY ID] Request:', { orderId, userId });
+
   try {
     const order = await Order.findOne({
       _id: orderId,
@@ -941,17 +949,29 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
     })
     .populate('items.product', 'name images basePrice description')
     .populate('items.store', 'name logo location')
-    .populate('store', 'name logo location')
+    .populate('store', 'name logo location') // Top-level store field
     .populate('user', 'profile.firstName profile.lastName profile.phoneNumber profile.email')
     .lean();
 
     if (!order) {
+      // Debug: Check if order exists but belongs to different user
+      const orderExists = await Order.findById(orderId).select('_id user orderNumber').lean();
+      console.log('⚠️ [GET ORDER BY ID] Order not found for user:', {
+        orderId,
+        userId,
+        orderExists: !!orderExists,
+        orderOwner: orderExists?.user?.toString(),
+        orderNumber: orderExists?.orderNumber,
+        userMismatch: orderExists ? orderExists.user?.toString() !== userId : 'N/A'
+      });
       return sendNotFound(res, 'Order not found');
     }
 
+    console.log('✅ [GET ORDER BY ID] Order found:', { orderId, orderNumber: order.orderNumber });
     sendSuccess(res, order, 'Order retrieved successfully');
 
-  } catch (error) {
+  } catch (error: any) {
+    console.error('❌ [GET ORDER BY ID] Error:', error.message);
     throw new AppError('Failed to fetch order', 500);
   }
 });

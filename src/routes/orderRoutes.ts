@@ -67,6 +67,25 @@ router.post('/',
   createOrder
 );
 
+// IMPORTANT: Static routes must come BEFORE parameterized routes
+// Get user's refund history (moved here from below to prevent /:orderId from catching '/refunds')
+router.get('/refunds',
+  validateQuery(Joi.object({
+    status: Joi.string().valid('pending', 'processing', 'completed', 'failed', 'cancelled'),
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(50).default(20)
+  })),
+  getUserRefunds
+);
+
+// Get refund details (moved here from below)
+router.get('/refunds/:refundId',
+  validateParams(Joi.object({
+    refundId: commonSchemas.objectId().required()
+  })),
+  getRefundDetails
+);
+
 // Get single order by ID
 router.get('/:orderId',
   // generalLimiter,, // Disabled for development
@@ -162,23 +181,7 @@ router.post('/:orderId/refund-request',
   requestRefund
 );
 
-// Get user's refund history
-router.get('/refunds',
-  validateQuery(Joi.object({
-    status: Joi.string().valid('pending', 'processing', 'completed', 'failed', 'cancelled'),
-    page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(50).default(20)
-  })),
-  getUserRefunds
-);
-
-// Get refund details
-router.get('/refunds/:refundId',
-  validateParams(Joi.object({
-    refundId: commonSchemas.objectId().required()
-  })),
-  getRefundDetails
-);
+// Note: /refunds and /refunds/:refundId routes are defined above /:orderId to prevent route conflicts
 
 // Admin/Store Owner Routes
 // Update order status

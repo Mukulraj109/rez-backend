@@ -145,6 +145,7 @@ export interface IOrderAnalytics {
 export interface IOrder extends Document {
   orderNumber: string;
   user: Types.ObjectId;
+  store?: Types.ObjectId; // Primary store for the order (for single-store orders or main store)
   items: IOrderItem[];
   totals: IOrderTotals;
   payment: IOrderPayment;
@@ -228,6 +229,12 @@ const OrderSchema = new Schema<IOrder>({
     type: Schema.Types.ObjectId,
     ref: 'User',
     required: true,
+    index: true
+  },
+  // Primary store for the order (populated from first item's store during order creation)
+  store: {
+    type: Schema.Types.ObjectId,
+    ref: 'Store',
     index: true
   },
   items: [{
