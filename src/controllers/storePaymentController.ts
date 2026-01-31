@@ -16,6 +16,7 @@ import { StorePayment, IPaymentRewards } from '../models/StorePayment';
 import stripeService from '../services/stripeService';
 import { Wallet } from '../models/Wallet';
 import { Transaction } from '../models/Transaction';
+import { CoinTransaction } from '../models/CoinTransaction';
 import Discount from '../models/Discount';
 // Note: StorePromoCoin model removed - using wallet.brandedCoins instead
 
@@ -953,12 +954,32 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
             throw new Error(`Insufficient coin balance. Available: ${wallet.balance.available}, Required: ${universalCoinsToDeduct}`);
           }
 
-          // Deduct ReZ + Promo coins from available balance
+          // Deduct ReZ coins from wallet.coins array
+          if (rezCoinsToDeduct > 0) {
+            const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+            if (rezCoin) {
+              rezCoin.amount = Math.max(0, rezCoin.amount - rezCoinsToDeduct);
+              rezCoin.lastUsed = new Date();
+              console.log('✅ Deducted ReZ coins from wallet.coins:', rezCoinsToDeduct);
+            }
+          }
+
+          // Deduct Promo coins from wallet.coins array
+          if (promoCoinsToDeduct > 0) {
+            const promoCoin = wallet.coins.find((c: any) => c.type === 'promo');
+            if (promoCoin) {
+              promoCoin.amount = Math.max(0, promoCoin.amount - promoCoinsToDeduct);
+              promoCoin.lastUsed = new Date();
+              console.log('✅ Deducted Promo coins from wallet.coins:', promoCoinsToDeduct);
+            }
+          }
+
+          // Deduct from overall balance
           wallet.balance.available -= universalCoinsToDeduct;
           wallet.balance.total -= universalCoinsToDeduct;
           wallet.statistics.totalSpent += universalCoinsToDeduct;
           wallet.limits.dailySpent += universalCoinsToDeduct;
-          console.log('✅ Deducted universal coins (ReZ + Promo):', universalCoinsToDeduct);
+          console.log('✅ Deducted universal coins (ReZ + Promo) from balance:', universalCoinsToDeduct);
         }
 
         // Deduct Branded Coins (merchant-specific) - CRITICAL FIX
@@ -1033,6 +1054,48 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
           retryCount: 0,
           maxRetries: 0,
         }], { session });
+
+        // Create CoinTransaction record for sync (CRITICAL for balance sync)
+        // This ensures wallet.syncBalance() uses the correct balance from CoinTransaction
+        if (universalCoinsToDeduct > 0) {
+          await CoinTransaction.createTransaction(
+            storePayment.userId.toString(),
+            'spent',
+            universalCoinsToDeduct,
+            'store_payment',
+            `Store payment at ${storePayment.storeName}`,
+            {
+              storePaymentId: storePayment._id,
+              paymentId: storePayment.paymentId,
+              storeId: storePayment.storeId,
+              storeName: storePayment.storeName,
+              rezCoins: rezCoinsToDeduct,
+              promoCoins: promoCoinsToDeduct,
+            }
+          );
+          console.log('✅ [STORE PAYMENT] CoinTransaction record created for universal coins:', universalCoinsToDeduct);
+        }
+
+        // Create separate CoinTransaction for branded coins (for audit trail)
+        if (brandedCoinsToDeduct > 0) {
+          // Note: Branded coins are tracked separately in wallet.brandedCoins
+          // This CoinTransaction is for audit purposes only, not for balance sync
+          await CoinTransaction.create({
+            user: storePayment.userId,
+            type: 'spent',
+            amount: brandedCoinsToDeduct,
+            balance: 0, // Branded coins have separate balance tracking
+            source: 'branded_coin_store_payment',
+            description: `Branded coins used at ${storePayment.storeName}`,
+            metadata: {
+              storePaymentId: storePayment._id,
+              paymentId: storePayment.paymentId,
+              storeId: storePayment.storeId,
+              storeName: storePayment.storeName,
+            }
+          });
+          console.log('✅ [STORE PAYMENT] CoinTransaction record created for branded coins:', brandedCoinsToDeduct);
+        }
       }
 
       // Calculate rewards
