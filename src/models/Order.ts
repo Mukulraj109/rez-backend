@@ -19,6 +19,7 @@ export interface IOrderServiceBookingDetails {
 export interface IOrderItem {
   product: Types.ObjectId;
   store: Types.ObjectId;
+  storeName?: string; // Store name at time of order (for display without populate)
   name: string; // Store product name at time of order
   image: string; // Store product image at time of order
   itemType: 'product' | 'service' | 'event'; // Type of item
@@ -239,6 +240,10 @@ const OrderSchema = new Schema<IOrder>({
       type: Schema.Types.ObjectId,
       ref: 'Store',
       required: true
+    },
+    storeName: {
+      type: String,
+      trim: true
     },
     name: {
       type: String,

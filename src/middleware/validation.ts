@@ -272,7 +272,16 @@ export const orderSchemas = {
       promoCoins: Joi.number().min(0).default(0),
       storePromoCoins: Joi.number().min(0).default(0),
       totalCoinsValue: Joi.number().min(0).default(0)
-    })
+    }),
+    // Multi-store order support - filter cart items to specific store
+    storeId: Joi.string().trim().optional(),
+    // Direct items for multi-store checkout (frontend sends items per store)
+    items: Joi.array().items(Joi.object({
+      product: Joi.string().trim().required(),
+      quantity: Joi.number().integer().min(1).required(),
+      price: Joi.number().min(0).required(),
+      name: Joi.string().trim().optional()
+    })).optional()
   })
 };
 

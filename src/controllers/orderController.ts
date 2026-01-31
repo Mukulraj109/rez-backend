@@ -36,7 +36,7 @@ import merchantNotificationService from '../services/merchantNotificationService
 // Create new order from cart
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
-  const { deliveryAddress, paymentMethod, specialInstructions, couponCode, voucherCode, coinsUsed } = req.body;
+  const { deliveryAddress, paymentMethod, specialInstructions, couponCode, voucherCode, coinsUsed, storeId, items: requestItems } = req.body;
 
   // Start a MongoDB session for transaction
   const session = await mongoose.startSession();
@@ -44,8 +44,13 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
   try {
     console.log('📦 [CREATE ORDER] Starting order creation for user:', userId);
+    console.log('📦 [CREATE ORDER] RAW req.body keys:', Object.keys(req.body));
+    console.log('📦 [CREATE ORDER] RAW req.body.storeId:', req.body.storeId);
+    console.log('📦 [CREATE ORDER] RAW req.body.items:', req.body.items?.length);
     console.log('💰 [CREATE ORDER] coinsUsed received from frontend:', JSON.stringify(coinsUsed));
     console.log('💳 [CREATE ORDER] Payment method:', paymentMethod);
+    console.log('🏪 [CREATE ORDER] StoreId filter:', storeId || 'none (all items)');
+    console.log('📦 [CREATE ORDER] Request items:', requestItems?.length || 'not provided');
 
     // Get user's cart
     const cart = await Cart.findOne({ user: userId })
@@ -67,6 +72,42 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       session.endSession();
       return sendBadRequest(res, 'Cart is empty');
     }
+
+    // Filter cart items by storeId if provided (for multi-store order splitting)
+    let itemsToProcess = cart.items;
+    if (storeId) {
+      console.log('🏪 [CREATE ORDER] Filtering items for store:', storeId);
+      itemsToProcess = cart.items.filter((item: any) => {
+        const itemStoreId = typeof item.store === 'object' ? item.store._id?.toString() : item.store?.toString();
+        return itemStoreId === storeId;
+      });
+      console.log('🏪 [CREATE ORDER] Items after store filter:', itemsToProcess.length);
+
+      if (itemsToProcess.length === 0) {
+        await session.abortTransaction();
+        session.endSession();
+        return sendBadRequest(res, 'No items found for the specified store');
+      }
+    }
+
+    // Also support filtering by specific product IDs (for more granular control)
+    if (requestItems && Array.isArray(requestItems) && requestItems.length > 0) {
+      const productIds = requestItems.map((item: any) => item.product?.toString() || item.id?.toString()).filter(Boolean);
+      if (productIds.length > 0) {
+        console.log('📦 [CREATE ORDER] Filtering by product IDs:', productIds);
+        itemsToProcess = itemsToProcess.filter((item: any) => {
+          const itemProductId = typeof item.product === 'object' ? item.product._id?.toString() : item.product?.toString();
+          return productIds.includes(itemProductId);
+        });
+        console.log('📦 [CREATE ORDER] Items after product filter:', itemsToProcess.length);
+      }
+    }
+
+    // Create a virtual cart object with filtered items for order processing
+    const orderCart = {
+      ...cart.toObject(),
+      items: itemsToProcess
+    };
 
     // Validate payment method
     const validPaymentMethods = ['cod', 'wallet', 'razorpay', 'upi', 'card', 'netbanking', 'stripe'];
@@ -108,8 +149,8 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       return sendBadRequest(res, 'Invalid pincode format (must be 6 digits)');
     }
 
-    // Validate all items belong to the same store
-    const storeIds = new Set(cart.items.map((item: any) => {
+    // Validate all items belong to the same store (using filtered orderCart)
+    const storeIds = new Set(orderCart.items.map((item: any) => {
       const store = item.store;
       return typeof store === 'object' ? store._id?.toString() : store?.toString();
     }).filter(Boolean));
@@ -161,17 +202,17 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
       // Validate store promo coins
       if (coinsUsed.storePromoCoins > 0) {
-        // Get the store from the first cart item - now using branded coins
-        const firstItem = cart.items[0];
-        const storeId = typeof firstItem.store === 'object'
+        // Get the store from the first order item - now using branded coins
+        const firstItem = orderCart.items[0];
+        const orderStoreId = typeof firstItem.store === 'object'
           ? (firstItem.store as any)._id
           : firstItem.store;
 
-        if (storeId) {
+        if (orderStoreId) {
           // Get branded coins balance from wallet
           const wallet = await Wallet.findOne({ user: userId });
           const brandedCoin = wallet?.brandedCoins?.find(
-            (bc: any) => bc.merchantId?.toString() === storeId.toString()
+            (bc: any) => bc.merchantId?.toString() === orderStoreId.toString()
           );
           const brandedBalance = brandedCoin?.amount || 0;
           
@@ -193,7 +234,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     const orderItems = [];
     const stockUpdates = []; // Track stock updates for atomic operation
 
-    for (const cartItem of cart.items) {
+    for (const cartItem of orderCart.items) {
       const product = cartItem.product as any;
       const store = cartItem.store as any;
 
@@ -348,6 +389,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       orderItems.push({
         product: product._id,
         store: store._id,
+        storeName: store.name, // Store name for display without populate
         name: product.name,
         image: productImage,
         quantity: cartItem.quantity,
@@ -629,14 +671,14 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
       // Deduct branded coins (store-specific coins)
       if (coinsUsed.storePromoCoins && coinsUsed.storePromoCoins > 0) {
-        const firstItem = cart.items[0];
-        const storeId = typeof firstItem.store === 'object'
+        const firstItem = orderCart.items[0];
+        const deductStoreId = typeof firstItem.store === 'object'
           ? (firstItem.store as any)._id
           : firstItem.store;
 
-        if (storeId) {
+        if (deductStoreId) {
           const brandedCoin = wallet.brandedCoins?.find(
-            (bc: any) => bc.merchantId?.toString() === storeId.toString()
+            (bc: any) => bc.merchantId?.toString() === deductStoreId.toString()
           );
 
           if (!brandedCoin || brandedCoin.amount < coinsUsed.storePromoCoins) {
@@ -893,11 +935,13 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
   const userId = req.userId!;
 
   try {
-    const order = await Order.findOne({ 
-      _id: orderId, 
-      user: userId 
+    const order = await Order.findOne({
+      _id: orderId,
+      user: userId
     })
     .populate('items.product', 'name images basePrice description')
+    .populate('items.store', 'name logo location')
+    .populate('store', 'name logo location')
     .populate('user', 'profile.firstName profile.lastName profile.phoneNumber profile.email')
     .lean();
 
