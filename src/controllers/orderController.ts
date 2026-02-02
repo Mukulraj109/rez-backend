@@ -407,10 +407,32 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     // This prevents stock being locked for failed payments
     // Stock deduction will happen in paymentService.handlePaymentSuccess()
 
-    // Get base totals from cart
-    const subtotal = cart.totals.subtotal || 0;
-    const tax = cart.totals.tax || 0;
-    const baseDiscount = cart.totals.discount || 0;
+    // BUGFIX: Calculate totals from filtered items, NOT full cart
+    // For multi-store orders, each order should only include its store's items
+    const filteredSubtotal = itemsToProcess.reduce((sum: number, item: any) => {
+      return sum + ((item.price || 0) * (item.quantity || 1));
+    }, 0);
+
+    // Use filtered subtotal for this order (not full cart subtotal)
+    const subtotal = filteredSubtotal;
+
+    // Calculate tax (5%) on filtered subtotal
+    const taxRate = 0.05;
+    const tax = Math.round(subtotal * taxRate * 100) / 100;
+
+    // Calculate discount proportionally based on filtered items ratio
+    const fullCartSubtotal = cart.totals.subtotal || 0;
+    const discountRatio = fullCartSubtotal > 0 ? subtotal / fullCartSubtotal : 1;
+    const baseDiscount = Math.round((cart.totals.discount || 0) * discountRatio * 100) / 100;
+
+    console.log('💰 [CREATE ORDER] Calculated filtered totals:', {
+      filteredSubtotal: subtotal,
+      fullCartSubtotal,
+      discountRatio,
+      tax,
+      baseDiscount,
+      itemCount: itemsToProcess.length
+    });
 
     // Calculate 15% platform fee on SUBTOTAL ONLY (excludes tax and delivery)
     const platformFeeRate = CHECKOUT_CONFIG.merchantFee?.percentage || 0.15;
@@ -431,9 +453,16 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     // Apply partner benefits to order
     console.log('👥 [PARTNER BENEFITS] Applying partner benefits to order...');
     const partnerBenefitsService = require('../services/partnerBenefitsService').default;
+
+    // BUGFIX: Calculate base delivery fee for THIS order's subtotal, not full cart
+    // Standard: ₹50 delivery fee, free if subtotal >= ₹500
+    const FREE_DELIVERY_THRESHOLD = 500;
+    const STANDARD_DELIVERY_FEE = 50;
+    const baseDeliveryFee = subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : STANDARD_DELIVERY_FEE;
+
     const partnerBenefits = await partnerBenefitsService.applyPartnerBenefits({
       subtotal,
-      deliveryFee: cart.totals.delivery || 0,
+      deliveryFee: baseDeliveryFee, // Use calculated delivery fee for this order
       userId: userId.toString()
     });
     

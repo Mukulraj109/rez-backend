@@ -590,12 +590,14 @@ CartSchema.methods.addItem = async function(
 
     const extractedPrice = product.price?.current || product.pricing?.selling || 0;
     const extractedOriginalPrice = product.price?.original || product.pricing?.original || 0;
-    const extractedDiscount = product.price?.discount || product.pricing?.discount || 0;
+    // Note: product.price?.discount is the SALE discount, not lock fee
+    // The discount field on cart items is ONLY for lock fees (paid at lock)
+    // Sale discounts are shown via originalPrice vs price comparison
 
     console.log('🛒 [CART MODEL] Extracted prices:', {
       price: extractedPrice,
       originalPrice: extractedOriginalPrice,
-      discount: extractedDiscount
+      saleDiscount: extractedOriginalPrice - extractedPrice // For logging only
     });
 
     const cartItem: ICartItem = {
@@ -605,7 +607,8 @@ CartSchema.methods.addItem = async function(
       variant,
       price: extractedPrice,
       originalPrice: extractedOriginalPrice,
-      discount: extractedDiscount,
+      discount: 0, // Only set for lock fees (via moveLockedToCart)
+      lockedQuantity: 0, // No locked items for regular cart add
       itemType: 'product',
       addedAt: new Date()
     };

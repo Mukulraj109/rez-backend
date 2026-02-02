@@ -1162,8 +1162,14 @@ export const moveLockedToCart = asyncHandler(async (req: Request, res: Response)
 
     await cart.moveLockedToCart(productId, variant);
 
+    // Invalidate cart cache so fresh data with lockedQuantity is returned
+    await CacheInvalidator.invalidateCart(req.userId);
+
+    // Re-fetch cart with populated data to ensure lockedQuantity is included
+    const updatedCart = await Cart.getActiveCart(req.userId);
+
     console.log('✅ [MOVE TO CART] Item moved successfully');
-    sendSuccess(res, cart, 'Item moved to cart successfully');
+    sendSuccess(res, updatedCart || cart, 'Item moved to cart successfully');
 
   } catch (error) {
     console.error('❌ [MOVE TO CART] Error:', error);
