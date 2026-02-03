@@ -43,6 +43,7 @@ export interface IOrderTotals {
   tax: number;
   delivery: number;
   discount: number;
+  lockFeeDiscount?: number;  // Amount already paid when locking item
   cashback: number;
   total: number;
   paidAmount: number;
@@ -154,6 +155,11 @@ export interface IOrder extends Document {
   analytics?: IOrderAnalytics;
   status: 'placed' | 'confirmed' | 'preparing' | 'ready' | 'dispatched' | 'delivered' | 'cancelled' | 'returned' | 'refunded';
   couponCode?: string;
+  redemption?: {
+    code: string;
+    discount: number;
+    dealTitle?: string;
+  };
   notes?: string;
   specialInstructions?: string;
   cancelReason?: string;
@@ -343,6 +349,11 @@ const OrderSchema = new Schema<IOrder>({
       default: 0,
       min: 0
     },
+    lockFeeDiscount: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
     cashback: {
       type: Number,
       default: 0,
@@ -512,6 +523,11 @@ const OrderSchema = new Schema<IOrder>({
     type: String,
     uppercase: true,
     trim: true
+  },
+  redemption: {
+    code: { type: String, uppercase: true, trim: true },
+    discount: { type: Number, default: 0 },
+    dealTitle: { type: String },
   },
   notes: {
     type: String,

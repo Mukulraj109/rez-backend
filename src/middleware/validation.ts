@@ -281,7 +281,11 @@ export const orderSchemas = {
       quantity: Joi.number().integer().min(1).required(),
       price: Joi.number().min(0).required(),
       name: Joi.string().trim().optional()
-    })).optional()
+    })).optional(),
+    // Deal redemption code
+    redemptionCode: Joi.string().trim().uppercase().optional(),
+    // Lock fee discount (amount already paid when locking item)
+    lockFeeDiscount: Joi.number().min(0).optional()
   })
 };
 

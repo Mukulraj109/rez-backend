@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import StoreExperience from '../models/StoreExperience';
 import { Store } from '../models/Store';
 import { Category } from '../models/Category';
@@ -16,13 +17,28 @@ export const getExperiences = asyncHandler(async (req: Request, res: Response) =
   const { featured, limit = 10 } = req.query;
 
   try {
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
     const query: any = { isActive: true };
 
     if (featured === 'true') {
       query.isFeatured = true;
     }
 
-    console.log('🔍 [EXPERIENCES] Fetching store experiences...');
+    // Filter by region - show experiences that have no regions set (global) or include user's region
+    if (region) {
+      query.$or = [
+        { regions: { $exists: false } },
+        { regions: { $size: 0 } },
+        { regions: region }
+      ];
+    }
+
+    console.log('🔍 [EXPERIENCES] Fetching store experiences...', { region });
 
     const experiences = await StoreExperience.find(query)
       .sort({ sortOrder: 1 })
@@ -105,23 +121,67 @@ export const getStoresByExperience = asyncHandler(async (req: Request, res: Resp
     }
 
     if (filterCriteria) {
+      // Tags filter
       if (filterCriteria.tags && filterCriteria.tags.length > 0) {
         storeQuery.tags = { $in: filterCriteria.tags };
       }
+
+      // Min rating filter
       if (filterCriteria.minRating) {
         storeQuery['ratings.average'] = { $gte: filterCriteria.minRating };
       }
-      if (filterCriteria.isPremium !== undefined) {
-        storeQuery['offers.partnerLevel'] = { $in: ['gold', 'platinum'] };
-      }
-      if (filterCriteria.categories && filterCriteria.categories.length > 0) {
-        // Fix: Look up Category IDs from names to prevent CastError
-        const categories = await Category.find({
-          name: { $in: filterCriteria.categories }
-        }).select('_id');
 
-        if (categories.length > 0) {
-          storeQuery.category = { $in: categories.map(c => c._id) };
+      // Delivery category filters - use Store's deliveryCategories booleans
+      if ((filterCriteria as any).isPremium === true) {
+        storeQuery['deliveryCategories.premium'] = true;
+      }
+      if ((filterCriteria as any).isOrganic === true) {
+        storeQuery['deliveryCategories.organic'] = true;
+      }
+      if ((filterCriteria as any).isMall === true) {
+        storeQuery['deliveryCategories.mall'] = true;
+      }
+      if ((filterCriteria as any).isFastDelivery === true) {
+        storeQuery['deliveryCategories.fastDelivery'] = true;
+      }
+      if ((filterCriteria as any).isBudgetFriendly === true) {
+        storeQuery['deliveryCategories.budgetFriendly'] = true;
+      }
+
+      // Partner filter
+      if ((filterCriteria as any).isPartner === true) {
+        storeQuery['offers.isPartner'] = true;
+      }
+
+      // Verified filter
+      if ((filterCriteria as any).isVerified === true) {
+        storeQuery.isVerified = true;
+      }
+
+      // Categories filter
+      if (filterCriteria.categories && filterCriteria.categories.length > 0) {
+        // Support both ObjectIds and category names
+        const categoryIds = filterCriteria.categories.filter(
+          (c: any) => mongoose.Types.ObjectId.isValid(c)
+        );
+        const categoryNames = filterCriteria.categories.filter(
+          (c: any) => !mongoose.Types.ObjectId.isValid(c)
+        );
+
+        let allCategoryIds: any[] = [...categoryIds];
+
+        if (categoryNames.length > 0) {
+          const categories = await Category.find({
+            $or: [
+              { name: { $in: categoryNames } },
+              { slug: { $in: categoryNames } },
+            ]
+          }).select('_id').lean();
+          allCategoryIds = [...allCategoryIds, ...categories.map((c: any) => c._id)];
+        }
+
+        if (allCategoryIds.length > 0) {
+          storeQuery.category = { $in: allCategoryIds };
         } else {
           // If filter specifies categories but none found, return no stores
           storeQuery.category = { $in: [] };
@@ -222,10 +282,27 @@ export const getHomepageExperiences = asyncHandler(async (req: Request, res: Res
   const { limit = 4 } = req.query;
 
   try {
-    const experiences = await StoreExperience.find({
+    // Get region from X-Rez-Region header
+    const regionHeader = req.headers['x-rez-region'] as string;
+    const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+      ? regionHeader as RegionId
+      : undefined;
+
+    const query: any = {
       isActive: true,
       isFeatured: true,
-    })
+    };
+
+    // Filter by region - show experiences that have no regions set (global) or include user's region
+    if (region) {
+      query.$or = [
+        { regions: { $exists: false } },
+        { regions: { $size: 0 } },
+        { regions: region }
+      ];
+    }
+
+    const experiences = await StoreExperience.find(query)
       .sort({ sortOrder: 1 })
       .limit(Number(limit))
       .lean();
@@ -237,6 +314,7 @@ export const getHomepageExperiences = asyncHandler(async (req: Request, res: Res
       type: exp.type,
       badge: exp.badge,
       subtitle: exp.subtitle,
+      slug: exp.slug,
     }));
 
     sendSuccess(res, {
@@ -323,11 +401,28 @@ export const getUniqueFinds = asyncHandler(async (req: Request, res: Response) =
       .limit(Number(limit))
       .lean();
 
+    // Get currency symbol based on region
+    const getCurrencySymbol = (reg: RegionId | undefined, productCurrency?: string): string => {
+      // If product has explicit currency, use that
+      if (productCurrency === 'USD') return '$';
+      if (productCurrency === 'AED') return 'د.إ';
+      if (productCurrency === 'CNY') return '¥';
+      if (productCurrency === 'INR') return '₹';
+
+      // Otherwise, use region's default currency
+      switch (reg) {
+        case 'dubai': return 'د.إ';
+        case 'china': return '¥';
+        case 'bangalore':
+        default: return '₹';
+      }
+    };
+
     const formattedProducts = products.map((p: any) => ({
       id: p._id,
       title: p.name,
       category: (p.category as any)?.name || 'General',
-      price: p.pricing.selling === 0 ? 'Free' : `${p.pricing.currency === 'USD' ? '$' : '₹'}${p.pricing.selling}`,
+      price: p.pricing.selling === 0 ? 'Free' : `${getCurrencySymbol(region, p.pricing.currency)}${p.pricing.selling}`,
       image: p.images?.[0] || 'https://images.unsplash.com/photo-1517336714731-489689fd1ca4?w=300',
       rating: p.ratings?.average || 4.5
     }));

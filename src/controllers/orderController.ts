@@ -36,7 +36,7 @@ import merchantNotificationService from '../services/merchantNotificationService
 // Create new order from cart
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
-  const { deliveryAddress, paymentMethod, specialInstructions, couponCode, voucherCode, coinsUsed, storeId, items: requestItems } = req.body;
+  const { deliveryAddress, paymentMethod, specialInstructions, couponCode, voucherCode, coinsUsed, storeId, items: requestItems, redemptionCode, lockFeeDiscount: clientLockFeeDiscount } = req.body;
 
   // Start a MongoDB session for transaction
   const session = await mongoose.startSession();
@@ -51,6 +51,9 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     console.log('💳 [CREATE ORDER] Payment method:', paymentMethod);
     console.log('🏪 [CREATE ORDER] StoreId filter:', storeId || 'none (all items)');
     console.log('📦 [CREATE ORDER] Request items:', requestItems?.length || 'not provided');
+    console.log('🎁 [CREATE ORDER] Redemption code received:', redemptionCode || 'none');
+    console.log('🔒 [CREATE ORDER] Lock fee discount received:', clientLockFeeDiscount || 0);
+    console.log('🔍 [CREATE ORDER DEBUG] Full req.body:', JSON.stringify(req.body, null, 2));
 
     // Get user's cart
     const cart = await Cart.findOne({ user: userId })
@@ -504,13 +507,87 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       }
     }
 
+    // Apply deal redemption code if provided
+    let redemptionDiscount = 0;
+    let appliedRedemption: any = null;
+    if (redemptionCode) {
+      console.log('🎁 [REDEMPTION] Attempting to apply deal redemption code:', redemptionCode);
+      const DealRedemption = require('../models/DealRedemption').default;
+
+      const redemption = await DealRedemption.findOne({
+        redemptionCode: redemptionCode.toUpperCase(),
+        user: new mongoose.Types.ObjectId(userId),
+      }).session(session);
+
+      if (redemption) {
+        // Check if redemption is active - return error if not
+        if (redemption.status !== 'active') {
+          console.warn(`⚠️ [REDEMPTION] Code already ${redemption.status}:`, redemptionCode);
+          await session.abortTransaction();
+          session.endSession();
+          const statusMessages: Record<string, string> = {
+            'pending': 'This deal code is pending payment confirmation',
+            'used': 'This deal code has already been used',
+            'expired': 'This deal code has expired',
+            'cancelled': 'This deal code was cancelled'
+          };
+          return sendBadRequest(res, statusMessages[redemption.status] || `Deal code is ${redemption.status}`);
+        } else if (new Date(redemption.expiresAt) < new Date()) {
+          console.warn('⚠️ [REDEMPTION] Code has expired:', redemptionCode);
+          await session.abortTransaction();
+          session.endSession();
+          return sendBadRequest(res, 'This deal code has expired');
+        } else {
+          // Calculate the benefit
+          const deal = redemption.dealSnapshot;
+          if (deal?.cashback) {
+            const match = deal.cashback.match(/(\d+)/);
+            if (match) {
+              const value = parseInt(match[1]);
+              redemptionDiscount = deal.cashback.includes('%')
+                ? Math.round(subtotal * (value / 100))
+                : value;
+            }
+          } else if (deal?.discount) {
+            const match = deal.discount.match(/(\d+)/);
+            if (match) {
+              const value = parseInt(match[1]);
+              redemptionDiscount = deal.discount.includes('%')
+                ? Math.round(subtotal * (value / 100))
+                : value;
+            }
+          }
+
+          // Apply max benefit cap from campaign
+          if (redemption.campaignSnapshot?.maxBenefit && redemptionDiscount > redemption.campaignSnapshot.maxBenefit) {
+            redemptionDiscount = redemption.campaignSnapshot.maxBenefit;
+          }
+
+          appliedRedemption = redemption;
+          discount += redemptionDiscount;
+          console.log(`✅ [REDEMPTION] Applied deal code ${redemptionCode}: ${redemptionDiscount} discount`);
+        }
+      } else {
+        console.warn('⚠️ [REDEMPTION] Code not found or does not belong to user:', redemptionCode);
+        await session.abortTransaction();
+        session.endSession();
+        return sendBadRequest(res, 'Invalid deal code. Please check the code and try again.');
+      }
+    }
+
     // Calculate coin discount from coinsUsed
     const coinDiscount = coinsUsed
       ? (coinsUsed.rezCoins || 0) + (coinsUsed.promoCoins || 0) + (coinsUsed.storePromoCoins || 0)
       : 0;
 
+    // Lock fee discount (amount already paid by customer when locking item)
+    const lockFeeDiscount = Number(clientLockFeeDiscount) || 0;
+    if (lockFeeDiscount > 0) {
+      console.log('🔒 [LOCK FEE] Lock fee discount applied:', lockFeeDiscount);
+    }
+
     // Validate coin discount doesn't exceed order total (prevent negative payment)
-    const maxAllowedCoinDiscount = subtotal + tax + deliveryFee - discount;
+    const maxAllowedCoinDiscount = subtotal + tax + deliveryFee - discount - lockFeeDiscount;
     if (coinDiscount > maxAllowedCoinDiscount) {
       await session.abortTransaction();
       session.endSession();
@@ -521,8 +598,8 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       return sendBadRequest(res, `Coin discount (₹${coinDiscount}) exceeds order total (₹${maxAllowedCoinDiscount})`);
     }
 
-    // Calculate total with partner benefits, voucher, and coin discount
-    let total = subtotal + tax + deliveryFee - discount - coinDiscount;
+    // Calculate total with partner benefits, voucher, lock fee, and coin discount
+    let total = subtotal + tax + deliveryFee - discount - lockFeeDiscount - coinDiscount;
     if (total < 0) total = 0;
 
     console.log('📦 [CREATE ORDER] Order totals (with partner benefits, voucher & coins):', {
@@ -531,11 +608,14 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       deliveryFee,
       discount,
       voucherDiscount,
+      redemptionDiscount,
+      lockFeeDiscount,
       coinDiscount,
       cashback,
       total,
       partnerBenefitsApplied: partnerBenefits.appliedBenefits,
       voucherApplied,
+      redemptionCodeApplied: appliedRedemption?.redemptionCode,
       coinsUsed
     });
 
@@ -560,6 +640,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         tax,
         delivery: deliveryFee,
         discount,
+        lockFeeDiscount,
         cashback,
         total,
         paidAmount: paymentMethod === 'cod' ? 0 : total,
@@ -589,12 +670,29 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       }],
       status: 'placed',
       couponCode: cart.coupon?.code,
-      specialInstructions
+      specialInstructions,
+      // Add redemption info if a deal code was applied
+      redemption: appliedRedemption ? {
+        code: appliedRedemption.redemptionCode,
+        discount: redemptionDiscount,
+        dealTitle: appliedRedemption.campaignSnapshot?.title,
+      } : undefined
     });
 
     await order.save({ session });
 
     console.log('📦 [CREATE ORDER] Order saved successfully:', order.orderNumber);
+
+    // Mark deal redemption as used if applied
+    if (appliedRedemption) {
+      console.log('🎁 [REDEMPTION] Marking redemption as used:', appliedRedemption.redemptionCode);
+      appliedRedemption.status = 'used';
+      appliedRedemption.usedAt = new Date();
+      appliedRedemption.orderId = order._id;
+      appliedRedemption.benefitApplied = redemptionDiscount;
+      await appliedRedemption.save({ session });
+      console.log('✅ [REDEMPTION] Redemption marked as used');
+    }
 
     // For COD orders, deduct stock immediately since payment confirmation never happens
     if (paymentMethod === 'cod') {

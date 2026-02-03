@@ -22,7 +22,7 @@ class StripeService {
 
     try {
       this.stripe = new Stripe(secretKey, {
-        apiVersion: '2025-09-30.clover',
+        apiVersion: '2024-12-18.acacia' as any, // Latest stable Stripe API version
       });
       this.isConfigured = true;
       console.log('✅ [STRIPE SERVICE] Stripe initialized successfully');
@@ -494,6 +494,154 @@ class StripeService {
     } catch (error: any) {
       console.error('❌ [STRIPE SERVICE] Error cancelling refund:', error.message);
       throw new Error(`Failed to cancel refund: ${error.message}`);
+    }
+  }
+
+  /**
+   * Create a checkout session for deal purchase (paid deals in campaigns)
+   */
+  public async createDealPurchaseSession(params: {
+    campaignId: string;
+    campaignSlug: string;
+    dealIndex: number;
+    dealStore: string;
+    dealImage?: string;
+    userId: string;
+    amount: number;
+    currency?: string;
+    successUrl: string;
+    cancelUrl: string;
+    customerEmail?: string;
+    redemptionId?: string;
+  }): Promise<Stripe.Checkout.Session> {
+    if (!this.stripe) {
+      throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY in environment variables.');
+    }
+
+    // Validate currency - only allow supported currencies
+    const supportedCurrencies = ['inr', 'aed', 'usd'];
+    const currency = (params.currency || 'INR').toLowerCase();
+
+    if (!supportedCurrencies.includes(currency)) {
+      throw new Error(`Unsupported currency: ${params.currency}. Supported currencies: INR, AED, USD`);
+    }
+
+    // Validate amount
+    if (!params.amount || params.amount <= 0) {
+      throw new Error('Invalid payment amount. Amount must be greater than 0.');
+    }
+
+    console.log('💳 [STRIPE SERVICE] Creating deal purchase checkout session:', {
+      campaignSlug: params.campaignSlug,
+      dealIndex: params.dealIndex,
+      amount: params.amount,
+      currency: currency.toUpperCase(),
+      userId: params.userId,
+    });
+
+    try {
+      // Convert amount to smallest currency unit
+      const amountInSmallestUnit = Math.round(params.amount * 100);
+
+      // Create checkout session for deal purchase
+      const session = await this.stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: currency,
+              product_data: {
+                name: `Deal from ${params.dealStore || 'Campaign'}`,
+                description: `Campaign: ${params.campaignSlug} | Deal #${params.dealIndex + 1}`,
+                images: params.dealImage ? [params.dealImage] : [],
+              },
+              unit_amount: amountInSmallestUnit,
+            },
+            quantity: 1,
+          },
+        ],
+        mode: 'payment',
+        success_url: params.successUrl,
+        cancel_url: params.cancelUrl,
+        customer_email: params.customerEmail,
+        metadata: {
+          type: 'deal_purchase',
+          campaignId: params.campaignId,
+          campaignSlug: params.campaignSlug,
+          dealIndex: params.dealIndex.toString(),
+          userId: params.userId,
+          redemptionId: params.redemptionId || '',
+        },
+        payment_intent_data: {
+          metadata: {
+            type: 'deal_purchase',
+            campaignId: params.campaignId,
+            campaignSlug: params.campaignSlug,
+            dealIndex: params.dealIndex.toString(),
+            userId: params.userId,
+            redemptionId: params.redemptionId || '',
+          },
+        },
+        expires_at: Math.floor(Date.now() / 1000) + (60 * 60), // 60 minutes expiry for mobile users
+      });
+
+      console.log('✅ [STRIPE SERVICE] Deal purchase checkout session created:', session.id);
+
+      return session;
+    } catch (error: any) {
+      console.error('❌ [STRIPE SERVICE] Error creating deal purchase checkout session:', error.message);
+      throw new Error(`Failed to create deal purchase checkout session: ${error.message}`);
+    }
+  }
+
+  /**
+   * Verify deal purchase checkout session
+   */
+  public async verifyDealPurchaseSession(sessionId: string): Promise<{
+    verified: boolean;
+    paymentStatus: string;
+    amount: number;
+    currency: string;
+    campaignId: string;
+    campaignSlug: string;
+    dealIndex: number;
+    userId: string;
+    redemptionId?: string;
+    paymentIntentId?: string;
+  }> {
+    if (!this.stripe) {
+      throw new Error('Stripe is not configured');
+    }
+
+    try {
+      console.log('🔐 [STRIPE SERVICE] Verifying deal purchase session:', sessionId);
+
+      const session = await this.stripe.checkout.sessions.retrieve(sessionId);
+
+      const verified = session.payment_status === 'paid';
+      const metadata = session.metadata || {};
+
+      console.log(
+        verified
+          ? '✅ [STRIPE SERVICE] Deal purchase session verified successfully'
+          : `⚠️ [STRIPE SERVICE] Deal payment status: ${session.payment_status}`
+      );
+
+      return {
+        verified,
+        paymentStatus: session.payment_status,
+        amount: (session.amount_total || 0) / 100,
+        currency: (session.currency || 'inr').toUpperCase(),
+        campaignId: metadata.campaignId || '',
+        campaignSlug: metadata.campaignSlug || '',
+        dealIndex: parseInt(metadata.dealIndex || '0', 10),
+        userId: metadata.userId || '',
+        redemptionId: metadata.redemptionId || undefined,
+        paymentIntentId: session.payment_intent as string,
+      };
+    } catch (error: any) {
+      console.error('❌ [STRIPE SERVICE] Error verifying deal purchase session:', error.message);
+      throw new Error(`Failed to verify deal purchase session: ${error.message}`);
     }
   }
 

@@ -1,7 +1,10 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { asyncHandler } from '../utils/asyncHandler';
 import { Order } from '../models/Order';
 import { WebhookLog } from '../models/WebhookLog';
+import DealRedemption from '../models/DealRedemption';
+import Campaign from '../models/Campaign';
 import paymentService from '../services/PaymentService';
 import stripeService from '../services/stripeService';
 import { razorpayService } from '../services/razorpayService';
@@ -568,9 +571,18 @@ function extractStripeMetadata(event: Stripe.Event): any {
 
     case 'checkout.session.completed':
       const session = event.data.object as Stripe.Checkout.Session;
-      metadata.orderId = session.metadata?.subscriptionId;
+      metadata.orderId = session.metadata?.subscriptionId || session.metadata?.orderId;
       metadata.amount = session.amount_total;
       metadata.currency = session.currency;
+      // Deal purchase metadata
+      if (session.metadata?.type === 'deal_purchase') {
+        metadata.type = 'deal_purchase';
+        metadata.campaignId = session.metadata?.campaignId;
+        metadata.campaignSlug = session.metadata?.campaignSlug;
+        metadata.dealIndex = session.metadata?.dealIndex;
+        metadata.userId = session.metadata?.userId;
+        metadata.redemptionId = session.metadata?.redemptionId;
+      }
       break;
   }
 
@@ -610,9 +622,67 @@ async function processStripeEvent(event: Stripe.Event, webhookLog: any): Promise
       await handleStripePaymentIntentCanceled(event);
       break;
 
+    case 'checkout.session.expired':
+      await handleStripeCheckoutSessionExpired(event);
+      break;
+
+    case 'checkout.session.async_payment_failed':
+      await handleStripeCheckoutSessionAsyncPaymentFailed(event);
+      break;
+
     default:
       console.log(`ℹ️ [STRIPE WEBHOOK] Unhandled event type: ${eventType}`);
       // Don't throw error for unhandled events
+  }
+}
+
+/**
+ * Handle checkout.session.expired event
+ * Cleans up pending redemptions when checkout session expires
+ */
+async function handleStripeCheckoutSessionExpired(event: Stripe.Event): Promise<void> {
+  const session = event.data.object as Stripe.Checkout.Session;
+  const metadata = session.metadata || {};
+
+  console.log('⏰ [STRIPE WEBHOOK] Checkout session expired:', session.id);
+
+  // Handle deal purchase expiry
+  if (metadata.type === 'deal_purchase') {
+    const redemption = await DealRedemption.findOne({
+      stripeSessionId: session.id,
+      status: 'pending',
+    });
+
+    if (redemption) {
+      redemption.status = 'cancelled';
+      await redemption.save();
+      console.log(`✅ [STRIPE WEBHOOK] Pending redemption cancelled due to session expiry: ${redemption._id}`);
+    }
+  }
+}
+
+/**
+ * Handle checkout.session.async_payment_failed event
+ * Handles async payment failures (bank transfers, etc.)
+ */
+async function handleStripeCheckoutSessionAsyncPaymentFailed(event: Stripe.Event): Promise<void> {
+  const session = event.data.object as Stripe.Checkout.Session;
+  const metadata = session.metadata || {};
+
+  console.log('❌ [STRIPE WEBHOOK] Async payment failed:', session.id);
+
+  // Handle deal purchase async payment failure
+  if (metadata.type === 'deal_purchase') {
+    const redemption = await DealRedemption.findOne({
+      stripeSessionId: session.id,
+      status: 'pending',
+    });
+
+    if (redemption) {
+      redemption.status = 'cancelled';
+      await redemption.save();
+      console.log(`✅ [STRIPE WEBHOOK] Pending redemption cancelled due to payment failure: ${redemption._id}`);
+    }
   }
 }
 
@@ -734,18 +804,140 @@ async function handleStripeChargeRefunded(event: Stripe.Event): Promise<void> {
  */
 async function handleStripeCheckoutSessionCompleted(event: Stripe.Event): Promise<void> {
   const session = event.data.object as Stripe.Checkout.Session;
-  const subscriptionId = session.metadata?.subscriptionId;
+  const metadata = session.metadata || {};
 
   console.log('✅ [STRIPE WEBHOOK] Checkout session completed:', session.id);
 
-  if (!subscriptionId) {
-    console.log('ℹ️ [STRIPE WEBHOOK] No subscription ID in metadata');
+  // Check if this is a deal purchase
+  if (metadata.type === 'deal_purchase') {
+    await handleDealPurchaseCompleted(session);
     return;
   }
 
   // Handle subscription payment completion
-  // This would typically update subscription status in your database
-  console.log('✅ [STRIPE WEBHOOK] Subscription payment completed:', subscriptionId);
+  const subscriptionId = metadata.subscriptionId;
+  if (subscriptionId) {
+    console.log('✅ [STRIPE WEBHOOK] Subscription payment completed:', subscriptionId);
+    return;
+  }
+
+  // Handle order payment completion
+  const orderId = metadata.orderId;
+  if (orderId) {
+    console.log('✅ [STRIPE WEBHOOK] Order payment completed:', orderId);
+    const order = await Order.findById(orderId);
+    if (order && order.payment.status !== 'paid') {
+      order.payment.status = 'paid';
+      order.payment.transactionId = session.payment_intent as string;
+      order.payment.paidAt = new Date();
+      order.totals.paidAmount = (session.amount_total || 0) / 100;
+      order.timeline.push({
+        status: 'payment_success',
+        message: 'Payment completed via Stripe checkout',
+        timestamp: new Date()
+      });
+      await order.save();
+    }
+    return;
+  }
+
+  console.log('ℹ️ [STRIPE WEBHOOK] No recognized metadata in checkout session');
+}
+
+/**
+ * Handle deal purchase checkout session completion
+ * Uses MongoDB transaction for atomic updates
+ */
+async function handleDealPurchaseCompleted(session: Stripe.Checkout.Session): Promise<void> {
+  const metadata = session.metadata || {};
+  const { campaignId, campaignSlug, dealIndex, userId, redemptionId } = metadata;
+
+  console.log('💳 [STRIPE WEBHOOK] Processing deal purchase:', {
+    sessionId: session.id,
+    campaignSlug,
+    dealIndex,
+    userId,
+    redemptionId
+  });
+
+  // Validate required metadata
+  if (!campaignId || !userId || dealIndex === undefined) {
+    console.error('❌ [STRIPE WEBHOOK] Missing required metadata:', { campaignId, userId, dealIndex });
+    return;
+  }
+
+  // Verify payment was successful
+  if (session.payment_status !== 'paid') {
+    console.error('❌ [STRIPE WEBHOOK] Deal purchase not paid:', session.payment_status);
+    return;
+  }
+
+  const dealIdx = parseInt(dealIndex || '0', 10);
+
+  // Validate deal index bounds
+  if (isNaN(dealIdx) || dealIdx < 0) {
+    console.error('❌ [STRIPE WEBHOOK] Invalid deal index:', dealIndex);
+    return;
+  }
+
+  // Start a MongoDB session for transaction
+  const mongoSession = await mongoose.startSession();
+
+  try {
+    await mongoSession.withTransaction(async () => {
+      // Find the redemption within transaction
+      const redemption = await DealRedemption.findOne({
+        stripeSessionId: session.id,
+        user: new mongoose.Types.ObjectId(userId),
+      }).session(mongoSession);
+
+      if (!redemption) {
+        throw new Error(`Redemption not found for session: ${session.id}`);
+      }
+
+      // Check if already processed (idempotency)
+      if (redemption.status === 'active' || redemption.status === 'used') {
+        console.log('⚠️ [STRIPE WEBHOOK] Redemption already processed:', redemption._id);
+        return; // Not an error, just already done
+      }
+
+      // Verify campaign and deal exist
+      const campaign = await Campaign.findById(campaignId).session(mongoSession);
+      if (!campaign) {
+        throw new Error(`Campaign not found: ${campaignId}`);
+      }
+
+      if (dealIdx >= campaign.deals.length) {
+        throw new Error(`Deal index ${dealIdx} out of bounds for campaign ${campaignId}`);
+      }
+
+      // Update redemption status atomically
+      redemption.status = 'active';
+      redemption.purchasedAt = new Date();
+      redemption.stripePaymentIntentId = session.payment_intent as string;
+      redemption.purchasePaymentMethod = 'stripe';
+      await redemption.save({ session: mongoSession });
+
+      // Update deal purchase count atomically
+      await Campaign.updateOne(
+        { _id: new mongoose.Types.ObjectId(campaignId) },
+        { $inc: { [`deals.${dealIdx}.purchaseCount`]: 1 } },
+        { session: mongoSession }
+      );
+
+      console.log('✅ [STRIPE WEBHOOK] Deal purchase completed:', {
+        redemptionId: redemption._id,
+        redemptionCode: redemption.redemptionCode,
+        amount: (session.amount_total || 0) / 100,
+        currency: session.currency
+      });
+    });
+  } catch (error: any) {
+    console.error('❌ [STRIPE WEBHOOK] Transaction failed for deal purchase:', error.message);
+    throw error; // Re-throw to mark webhook as failed for retry
+  } finally {
+    await mongoSession.endSession();
+  }
 }
 
 /**

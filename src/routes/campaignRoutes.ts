@@ -6,11 +6,21 @@ import {
   getAllCampaigns,
   getExcitingDeals,
   trackDealInteraction,
+  redeemDeal,
+  verifyDealPayment,
+  getUserRedemptions,
+  getRedemptionByCode,
+  useRedemption,
+  cancelRedemption,
 } from '../controllers/campaignController';
-import { optionalAuth } from '../middleware/auth';
-import { validateQuery, validateParams, Joi } from '../middleware/validation';
+import { optionalAuth, requireAuth } from '../middleware/auth';
+import { validateQuery, validateParams, validateBody, Joi } from '../middleware/validation';
 
 const router = Router();
+
+// ============================================================================
+// STATIC ROUTES (Must come BEFORE dynamic /:campaignId routes)
+// ============================================================================
 
 /**
  * @route   GET /api/campaigns
@@ -71,16 +81,18 @@ router.get('/type/:type',
 );
 
 /**
- * @route   GET /api/campaigns/:campaignId
- * @desc    Get single campaign by ID or slug
- * @access  Public
+ * @route   GET /api/campaigns/my-redemptions
+ * @desc    Get user's redeemed deals
+ * @access  Private
  */
-router.get('/:campaignId',
-  optionalAuth,
-  validateParams(Joi.object({
-    campaignId: Joi.string().required(),
+router.get('/my-redemptions',
+  requireAuth,
+  validateQuery(Joi.object({
+    status: Joi.string().valid('active', 'used', 'expired', 'cancelled', 'pending'),
+    limit: Joi.number().integer().min(1).max(50).default(20),
+    page: Joi.number().integer().min(1).default(1),
   })),
-  getCampaignById
+  getUserRedemptions
 );
 
 /**
@@ -91,6 +103,99 @@ router.get('/:campaignId',
 router.post('/deals/track',
   optionalAuth,
   trackDealInteraction
+);
+
+/**
+ * @route   POST /api/campaigns/deals/verify-payment
+ * @desc    Verify Stripe payment for paid deal purchase
+ * @access  Private
+ */
+router.post('/deals/verify-payment',
+  requireAuth,
+  validateBody(Joi.object({
+    sessionId: Joi.string().required(),
+    redemptionId: Joi.string(),
+  })),
+  verifyDealPayment
+);
+
+/**
+ * @route   GET /api/campaigns/redemptions/:code
+ * @desc    Get redemption by code
+ * @access  Private
+ */
+router.get('/redemptions/:code',
+  requireAuth,
+  validateParams(Joi.object({
+    code: Joi.string().required(),
+  })),
+  getRedemptionByCode
+);
+
+/**
+ * @route   POST /api/campaigns/redemptions/:code/use
+ * @desc    Mark redemption as used (after order completion)
+ * @access  Private
+ */
+router.post('/redemptions/:code/use',
+  requireAuth,
+  validateParams(Joi.object({
+    code: Joi.string().required(),
+  })),
+  validateBody(Joi.object({
+    orderId: Joi.string(),
+    benefitApplied: Joi.number(),
+  })),
+  useRedemption
+);
+
+/**
+ * @route   DELETE /api/campaigns/redemptions/:id
+ * @desc    Cancel a pending/free redemption
+ * @access  Private
+ */
+router.delete('/redemptions/:id',
+  requireAuth,
+  validateParams(Joi.object({
+    id: Joi.string().required(),
+  })),
+  cancelRedemption
+);
+
+// ============================================================================
+// DYNAMIC ROUTES (Must come AFTER static routes)
+// ============================================================================
+
+/**
+ * @route   POST /api/campaigns/:campaignId/deals/:dealIndex/redeem
+ * @desc    Redeem a deal (free) or initiate payment (paid)
+ * @access  Private
+ */
+router.post('/:campaignId/deals/:dealIndex/redeem',
+  requireAuth,
+  validateParams(Joi.object({
+    campaignId: Joi.string().required(),
+    dealIndex: Joi.string().pattern(/^\d+$/).required(), // Express params are always strings
+  })),
+  validateBody(Joi.object({
+    successUrl: Joi.string().uri(),
+    cancelUrl: Joi.string().uri(),
+  })),
+  redeemDeal
+);
+
+/**
+ * @route   GET /api/campaigns/:campaignId
+ * @desc    Get single campaign by ID or slug
+ * @access  Public
+ * NOTE: This MUST be the LAST route as it catches all /:campaignId patterns
+ */
+router.get('/:campaignId',
+  optionalAuth,
+  validateParams(Joi.object({
+    campaignId: Joi.string().required(),
+  })),
+  getCampaignById
 );
 
 export default router;

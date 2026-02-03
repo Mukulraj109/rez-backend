@@ -33,6 +33,7 @@ import { initializeSessionCleanupJob } from './jobs/cleanupExpiredSessions';
 import { initializeCoinExpiryJob } from './jobs/expireCoins';
 import { initializeCashbackJobs } from './jobs/cashbackJobs';
 import { initializeInventoryAlertJob } from './jobs/inventoryAlerts';
+import { initializeDealExpiryJob } from './jobs/expireDealRedemptions';
 
 // Import export worker (initializes automatically when imported)
 import './workers/exportWorker';
@@ -158,7 +159,8 @@ import {
   adminMerchantsRoutes,
   adminWalletRoutes,
   adminCampaignsRoutes,
-  adminUploadsRoutes
+  adminUploadsRoutes,
+  adminExperiencesRoutes
 } from './routes/admin';
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
 import experienceRoutes from './routes/experienceRoutes';  // Store experience routes
@@ -199,6 +201,7 @@ import bulkImportRoutes from './merchantroutes/bulkImport';  // Bulk product imp
 import merchantSocialMediaRoutes from './merchantroutes/socialMedia';  // Merchant social media verification routes
 import merchantEventsRoutes from './merchantroutes/events';  // Merchant events management routes
 import merchantServicesRoutes from './merchantroutes/services';  // Merchant services management routes
+import merchantDealRedemptionRoutes from './merchantroutes/dealRedemptions';  // Merchant deal redemption routes
 import { RealTimeService } from './merchantservices/RealTimeService';  // Temporarily disabled
 import { ReportService } from './merchantservices/ReportService';  // Temporarily disabled
 import stockSocketService from './services/stockSocketService';
@@ -824,6 +827,8 @@ app.use(`${API_PREFIX}/admin/campaigns`, adminCampaignsRoutes);
 console.log('✅ Admin campaigns routes registered at /api/admin/campaigns');
 app.use(`${API_PREFIX}/admin/uploads`, adminUploadsRoutes);
 console.log('✅ Admin uploads routes registered at /api/admin/uploads');
+app.use(`${API_PREFIX}/admin/experiences`, adminExperiencesRoutes);
+console.log('✅ Admin experiences routes registered at /api/admin/experiences');
 
 // Campaign Routes - Homepage exciting deals
 app.use(`${API_PREFIX}/campaigns`, campaignRoutes);
@@ -940,6 +945,10 @@ console.log('✅ Merchant events routes registered at /api/merchant/events');
 // Merchant Services Management Routes - Create, manage services and bookings
 app.use('/api/merchant/services', merchantServicesRoutes);
 console.log('✅ Merchant services routes registered at /api/merchant/services');
+
+// Merchant Deal Redemption Routes - Verify and redeem deal codes
+app.use('/api/merchant/deal-redemptions', merchantDealRedemptionRoutes);
+console.log('✅ Merchant deal redemption routes registered at /api/merchant/deal-redemptions');
 
 // Root endpoint (MUST be before 404 handler)
 app.get('/', (req, res) => {
@@ -1063,6 +1072,11 @@ async function startServer() {
     console.log('🔄 Initializing inventory alert job...');
     initializeInventoryAlertJob();
     console.log('✅ Inventory alert job started (runs daily at 8:00 AM)');
+
+    // Initialize deal redemption expiry job
+    console.log('🔄 Initializing deal expiry job...');
+    initializeDealExpiryJob();
+    console.log('✅ Deal expiry job started (runs every hour)');
 
     // Initialize audit retention service
     console.log('🔄 Initializing audit retention service...');

@@ -9,3 +9,4 @@ export { default as adminMerchantsRoutes } from './merchants';
 export { default as adminWalletRoutes } from './adminWallet';
 export { default as adminCampaignsRoutes } from './campaigns';
 export { default as adminUploadsRoutes } from './uploads';
+export { default as adminExperiencesRoutes } from './experiences';

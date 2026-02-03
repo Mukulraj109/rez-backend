@@ -32,8 +32,14 @@ export interface IStoreExperience extends Document {
     isOrganic?: boolean;
     isPartner?: boolean;
     isMall?: boolean;
+    isFastDelivery?: boolean;
+    isBudgetFriendly?: boolean;
+    isVerified?: boolean;
     categories?: Types.ObjectId[];
   };
+
+  // Region settings
+  regions?: string[]; // Available regions (empty = all regions)
 
   // Display settings
   storeCount?: number; // Cached count
@@ -125,8 +131,16 @@ const StoreExperienceSchema = new Schema<IStoreExperience>({
     isOrganic: { type: Boolean },
     isPartner: { type: Boolean },
     isMall: { type: Boolean },
+    isFastDelivery: { type: Boolean },
+    isBudgetFriendly: { type: Boolean },
+    isVerified: { type: Boolean },
     categories: [{ type: Schema.Types.ObjectId, ref: 'Category' }],
   },
+  regions: [{
+    type: String,
+    enum: ['bangalore', 'dubai', 'china'],
+    index: true,
+  }],
   storeCount: {
     type: Number,
     default: 0,

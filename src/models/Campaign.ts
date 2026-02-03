@@ -13,6 +13,13 @@ export interface ICampaignDeal {
   drop?: string;
   discount?: string;
   endsIn?: string;
+  // Price for paid deals (0 or undefined = free deal)
+  price?: number;
+  currency?: 'INR' | 'AED' | 'USD';
+  // Optional: limit how many times this deal can be purchased (0 = unlimited)
+  purchaseLimit?: number;
+  // Track how many times this deal has been purchased
+  purchaseCount?: number;
 }
 
 /**
@@ -61,6 +68,13 @@ const CampaignDealSchema = new Schema<ICampaignDeal>({
   drop: { type: String },
   discount: { type: String },
   endsIn: { type: String },
+  // Price for paid deals (0 or undefined = free deal)
+  price: { type: Number, default: 0, min: 0 },
+  currency: { type: String, enum: ['INR', 'AED', 'USD'], default: 'INR' },
+  // Limit how many times this deal can be purchased (0 = unlimited)
+  purchaseLimit: { type: Number, default: 0, min: 0 },
+  // Track how many times this deal has been purchased
+  purchaseCount: { type: Number, default: 0, min: 0 },
 }, { _id: false });
 
 /**

@@ -367,6 +367,11 @@ router.post('/', async (req: Request, res: Response) => {
           drop: deal.drop,
           discount: deal.discount,
           endsIn: deal.endsIn,
+          // Paid deal fields
+          price: deal.price || 0,
+          currency: deal.currency || 'INR',
+          purchaseLimit: deal.purchaseLimit || 0,
+          purchaseCount: deal.purchaseCount || 0,
         });
       }
     }
@@ -522,6 +527,11 @@ router.put('/:id', async (req: Request, res: Response) => {
           drop: deal.drop,
           discount: deal.discount,
           endsIn: deal.endsIn,
+          // Paid deal fields
+          price: deal.price || 0,
+          currency: deal.currency || 'INR',
+          purchaseLimit: deal.purchaseLimit || 0,
+          purchaseCount: deal.purchaseCount || 0,
         });
       }
       campaign.deals = validatedDeals;
@@ -547,20 +557,21 @@ router.put('/:id', async (req: Request, res: Response) => {
 
 /**
  * @route   DELETE /api/admin/campaigns/:id
- * @desc    Delete a campaign
+ * @desc    Delete a campaign (blocked if active redemptions exist)
  * @access  Admin
  */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const { force } = req.query; // ?force=true to override protection
 
-    // Find and delete campaign
+    // Find campaign first
     let campaign;
     if (Types.ObjectId.isValid(id)) {
-      campaign = await Campaign.findByIdAndDelete(id);
+      campaign = await Campaign.findById(id);
     }
     if (!campaign) {
-      campaign = await Campaign.findOneAndDelete({ campaignId: id });
+      campaign = await Campaign.findOne({ campaignId: id });
     }
 
     if (!campaign) {
@@ -570,12 +581,42 @@ router.delete('/:id', async (req: Request, res: Response) => {
       });
     }
 
+    // Check for active/pending redemptions (import DealRedemption at top of file if not already)
+    const DealRedemption = require('../../models/DealRedemption').default;
+    const activeRedemptionsCount = await DealRedemption.countDocuments({
+      campaign: campaign._id,
+      status: { $in: ['active', 'pending'] }
+    });
+
+    if (activeRedemptionsCount > 0 && force !== 'true') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete campaign with ${activeRedemptionsCount} active/pending redemptions. Use ?force=true to override (not recommended).`,
+        data: { activeRedemptionsCount }
+      });
+    }
+
+    // If force delete, mark redemptions as cancelled first
+    if (activeRedemptionsCount > 0 && force === 'true') {
+      await DealRedemption.updateMany(
+        { campaign: campaign._id, status: { $in: ['active', 'pending'] } },
+        { $set: { status: 'cancelled' } }
+      );
+      console.log(`⚠️ [ADMIN CAMPAIGNS] Force delete: cancelled ${activeRedemptionsCount} redemptions`);
+    }
+
+    // Now delete the campaign
+    await Campaign.findByIdAndDelete(campaign._id);
+
     console.log(`✅ [ADMIN CAMPAIGNS] Campaign deleted: ${campaign.campaignId} by admin ${req.userId}`);
 
     res.json({
       success: true,
       message: 'Campaign deleted successfully',
-      data: { campaignId: campaign.campaignId }
+      data: {
+        campaignId: campaign.campaignId,
+        cancelledRedemptions: force === 'true' ? activeRedemptionsCount : 0
+      }
     });
   } catch (error: any) {
     console.error('❌ [ADMIN CAMPAIGNS] Error deleting campaign:', error);
@@ -632,13 +673,27 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
 
 /**
  * @route   POST /api/admin/campaigns/:id/deals
- * @desc    Add a deal to a campaign
+ * @desc    Add a deal to a campaign (supports both free and paid deals)
  * @access  Admin
  */
 router.post('/:id/deals', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { store, storeId, image, cashback, coins, bonus, drop, discount, endsIn } = req.body;
+    const {
+      store,
+      storeId,
+      image,
+      cashback,
+      coins,
+      bonus,
+      drop,
+      discount,
+      endsIn,
+      // Paid deal fields
+      price = 0,
+      currency = 'INR',
+      purchaseLimit = 0,
+    } = req.body;
 
     if (!image) {
       return res.status(400).json({
@@ -663,6 +718,8 @@ router.post('/:id/deals', async (req: Request, res: Response) => {
       });
     }
 
+    const isPaidDeal = (price || 0) > 0;
+
     const newDeal: ICampaignDeal = {
       store,
       storeId: storeId ? new Types.ObjectId(storeId) : undefined,
@@ -673,16 +730,23 @@ router.post('/:id/deals', async (req: Request, res: Response) => {
       drop,
       discount,
       endsIn,
+      price: price || 0,
+      currency: currency || 'INR',
+      purchaseLimit: purchaseLimit || 0,
+      purchaseCount: 0,
     };
 
     campaign.deals.push(newDeal);
     await campaign.save();
 
-    console.log(`✅ [ADMIN CAMPAIGNS] Deal added to campaign: ${campaign.campaignId} by admin ${req.userId}`);
+    console.log(`✅ [ADMIN CAMPAIGNS] ${isPaidDeal ? 'Paid' : 'Free'} deal added to campaign: ${campaign.campaignId} by admin ${req.userId}`, {
+      price: isPaidDeal ? `${price} ${currency}` : 'FREE',
+      purchaseLimit: purchaseLimit || 'unlimited',
+    });
 
     res.json({
       success: true,
-      message: 'Deal added successfully',
+      message: `${isPaidDeal ? 'Paid' : 'Free'} deal added successfully`,
       data: campaign
     });
   } catch (error: any) {
@@ -690,6 +754,102 @@ router.post('/:id/deals', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to add deal'
+    });
+  }
+});
+
+/**
+ * @route   PUT /api/admin/campaigns/:id/deals/:dealIndex
+ * @desc    Update a specific deal in a campaign
+ * @access  Admin
+ */
+router.put('/:id/deals/:dealIndex', async (req: Request, res: Response) => {
+  try {
+    const { id, dealIndex } = req.params;
+    const index = parseInt(dealIndex);
+
+    if (isNaN(index) || index < 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid deal index'
+      });
+    }
+
+    // Find campaign
+    let campaign;
+    if (Types.ObjectId.isValid(id)) {
+      campaign = await Campaign.findById(id);
+    }
+    if (!campaign) {
+      campaign = await Campaign.findOne({ campaignId: id });
+    }
+
+    if (!campaign) {
+      return res.status(404).json({
+        success: false,
+        message: 'Campaign not found'
+      });
+    }
+
+    if (index >= campaign.deals.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'Deal index out of range'
+      });
+    }
+
+    const {
+      store,
+      storeId,
+      image,
+      cashback,
+      coins,
+      bonus,
+      drop,
+      discount,
+      endsIn,
+      price,
+      currency,
+      purchaseLimit,
+    } = req.body;
+
+    // Update deal fields
+    const deal = campaign.deals[index];
+    if (store !== undefined) deal.store = store;
+    if (storeId !== undefined) deal.storeId = storeId ? new Types.ObjectId(storeId) : undefined;
+    if (image !== undefined) deal.image = image;
+    if (cashback !== undefined) deal.cashback = cashback;
+    if (coins !== undefined) deal.coins = coins;
+    if (bonus !== undefined) deal.bonus = bonus;
+    if (drop !== undefined) deal.drop = drop;
+    if (discount !== undefined) deal.discount = discount;
+    if (endsIn !== undefined) deal.endsIn = endsIn;
+    if (price !== undefined) deal.price = price;
+    if (currency !== undefined) deal.currency = currency;
+    if (purchaseLimit !== undefined) deal.purchaseLimit = purchaseLimit;
+
+    await campaign.save();
+
+    const isPaidDeal = (deal.price || 0) > 0;
+
+    console.log(`✅ [ADMIN CAMPAIGNS] Deal ${index} updated in campaign: ${campaign.campaignId} by admin ${req.userId}`, {
+      isPaid: isPaidDeal,
+      price: isPaidDeal ? `${deal.price} ${deal.currency}` : 'FREE',
+    });
+
+    res.json({
+      success: true,
+      message: 'Deal updated successfully',
+      data: {
+        campaign,
+        updatedDeal: deal,
+      }
+    });
+  } catch (error: any) {
+    console.error('❌ [ADMIN CAMPAIGNS] Error updating deal:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update deal'
     });
   }
 });
