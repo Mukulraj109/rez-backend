@@ -22,7 +22,7 @@ export interface IStoreExperience extends Document {
   bannerImage?: string;
   benefits?: string[];
 
-  // Store filtering criteria
+  // Store filtering criteria (auto-matching)
   filterCriteria: {
     tags?: string[];
     maxDeliveryTime?: number; // in minutes
@@ -37,6 +37,9 @@ export interface IStoreExperience extends Document {
     isVerified?: boolean;
     categories?: Types.ObjectId[];
   };
+
+  // Manually assigned stores (admin can add specific stores)
+  assignedStores?: Types.ObjectId[];
 
   // Region settings
   regions?: string[]; // Available regions (empty = all regions)
@@ -136,6 +139,11 @@ const StoreExperienceSchema = new Schema<IStoreExperience>({
     isVerified: { type: Boolean },
     categories: [{ type: Schema.Types.ObjectId, ref: 'Category' }],
   },
+  assignedStores: [{
+    type: Schema.Types.ObjectId,
+    ref: 'Store',
+    index: true,
+  }],
   regions: [{
     type: String,
     enum: ['bangalore', 'dubai', 'china'],

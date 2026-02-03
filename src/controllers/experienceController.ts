@@ -110,13 +110,45 @@ export const getStoresByExperience = asyncHandler(async (req: Request, res: Resp
       ? regionHeader as RegionId
       : undefined;
 
-    // Build store query based on filter criteria
+    // Check if there are manually assigned stores
+    const assignedStoreIds = (experience as any).assignedStores || [];
+    const hasAssignedStores = assignedStoreIds.length > 0;
+    const hasFilterCriteria = experience.filterCriteria && (
+      (experience.filterCriteria.tags && experience.filterCriteria.tags.length > 0) ||
+      experience.filterCriteria.minRating ||
+      (experience.filterCriteria as any).isPremium ||
+      (experience.filterCriteria as any).isOrganic ||
+      (experience.filterCriteria as any).isMall ||
+      (experience.filterCriteria as any).isFastDelivery ||
+      (experience.filterCriteria as any).isBudgetFriendly ||
+      (experience.filterCriteria as any).isPartner ||
+      (experience.filterCriteria as any).isVerified ||
+      (experience.filterCriteria.categories && experience.filterCriteria.categories.length > 0)
+    );
+
+    // Build store query based on filter criteria OR assigned stores
     const storeQuery: any = { isActive: true };
     const filterCriteria = experience.filterCriteria;
 
-    // Add region filter
+    // NOTE: Region filter will be applied ONLY to filter-based query, not to assigned stores
+    // This allows assigned stores from any region to appear
+    let regionFilter: any = null;
     if (region) {
-      const regionFilter = regionService.getStoreFilter(region);
+      regionFilter = regionService.getStoreFilter(region);
+    }
+
+    // If we have assigned stores but no filter criteria, only show assigned stores (NO region filter)
+    if (hasAssignedStores && !hasFilterCriteria) {
+      storeQuery._id = { $in: assignedStoreIds };
+      // Don't apply region filter - assigned stores should show regardless of region
+    }
+    // If we have both, show assigned stores OR filter-matched stores
+    else if (hasAssignedStores && hasFilterCriteria) {
+      // We'll handle this with $or after building filter criteria
+      // Region filter will be applied only to filter-based query in that branch
+    }
+    // If only filter criteria (no assigned stores), apply region filter
+    else if (regionFilter) {
       Object.assign(storeQuery, regionFilter);
     }
 
@@ -219,20 +251,43 @@ export const getStoresByExperience = asyncHandler(async (req: Request, res: Resp
       ];
     }
 
+    // If we have both assigned stores AND filter criteria, include both with $or
+    let finalQuery = storeQuery;
+    if (hasAssignedStores && hasFilterCriteria && !storeQuery._id) {
+      // Clone storeQuery for filter-based matching
+      const filterBasedQuery = { ...storeQuery };
+
+      // Apply region filter ONLY to filter-based query (not to assigned stores)
+      if (regionFilter) {
+        Object.assign(filterBasedQuery, regionFilter);
+      }
+
+      // Create query that matches either:
+      // 1. Manually assigned stores (only need to be active, no other filters)
+      // 2. OR filter-matched stores (with all filter criteria including region)
+      finalQuery = {
+        $or: [
+          { _id: { $in: assignedStoreIds }, isActive: true },
+          filterBasedQuery
+        ]
+      };
+    }
+    // If only assigned stores (no filter criteria), storeQuery already has _id filter set
+
     const [storesRaw, total] = await Promise.all([
-      Store.find(storeQuery)
+      Store.find(finalQuery)
         .populate({ path: 'category', select: 'name slug' })
         .sort({ 'ratings.average': -1 })
         .skip(skip)
         .limit(Number(limit))
         .lean(),
-      Store.countDocuments(storeQuery),
+      Store.countDocuments(finalQuery),
     ]);
 
-    // Enhance store data for frontend
+    // Enhance store data for frontend - REAL DATA ONLY
     const stores = storesRaw.map((store: any) => {
-      // Calculate or mock distance
-      let distance = '2.5 km'; // Default mock
+      // Calculate real distance only if user location provided
+      let distance: string | null = null;
       if (userLng && userLat && store.location?.coordinates) {
         const [storeLng, storeLat] = store.location.coordinates;
         const dist = Math.sqrt(
@@ -243,13 +298,25 @@ export const getStoresByExperience = asyncHandler(async (req: Request, res: Resp
         distance = store.location.distance;
       }
 
+      // Build real offer text from actual data
+      let offer: string | null = null;
+      if (store.offers?.offer) {
+        offer = store.offers.offer;
+      } else if (store.offers?.cashback && store.offers.cashback > 0) {
+        offer = `${store.offers.cashback}% Cashback`;
+      } else if (store.offers?.discount && store.offers.discount > 0) {
+        offer = `${store.offers.discount}% Off`;
+      }
+
       return {
         ...store,
-        id: store._id, // Ensure ID is available as 'id'
-        image: store.logo || store.image || 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=300', // Fallback image
+        id: store._id,
+        image: store.logo || store.image || store.banner || null,
         distance: distance,
-        rating: store.ratings?.average || 4.5, // verified default
-        offer: store.offers?.offer || (store.offers?.cashback ? `${store.offers.cashback}% Cashback` : 'Special Deal'),
+        rating: store.ratings?.average || null, // Real rating only
+        reviewCount: store.ratings?.count || 0,
+        offer: offer,
+        cashback: store.offers?.cashback || null, // Raw cashback percentage for stats calculation
       };
     });
 

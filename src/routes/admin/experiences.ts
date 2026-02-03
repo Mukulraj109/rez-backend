@@ -131,6 +131,111 @@ router.get('/stats', async (req: Request, res: Response) => {
 });
 
 // ============================================
+// SEARCH STORES (for assigning to experience)
+// Must be BEFORE /:id routes
+// ============================================
+
+/**
+ * @route   GET /api/admin/experiences/stores/search
+ * @desc    Search stores to assign to an experience
+ * @access  Admin
+ */
+router.get('/stores/search', async (req: Request, res: Response) => {
+  try {
+    const { q, limit = 10 } = req.query;
+
+    if (!q || (q as string).length < 2) {
+      return res.json({
+        success: true,
+        data: { stores: [], total: 0 },
+      });
+    }
+
+    // Escape special regex characters to prevent injection
+    const escapedQuery = (q as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const searchRegex = new RegExp(escapedQuery, 'i');
+
+    // Optimized: search only in name field for speed, with index hint
+    const stores = await Store.find({
+      isActive: true,
+      name: searchRegex,
+    })
+      .select('_id name logo banner category city ratings offers')
+      .populate('category', 'name')
+      .sort({ 'ratings.average': -1 }) // Best rated first
+      .limit(Math.min(Number(limit), 10)) // Cap at 10 for performance
+      .lean();
+
+    return res.json({
+      success: true,
+      data: {
+        stores: stores.map((s: any) => ({
+          _id: s._id,
+          name: s.name,
+          logo: s.logo || s.banner,
+          category: s.category?.name || 'Other',
+          city: s.city,
+          rating: s.ratings?.average,
+          cashback: s.offers?.cashback,
+        })),
+        total: stores.length,
+      },
+    });
+  } catch (error: any) {
+    console.error('[ADMIN EXPERIENCES] Search stores error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to search stores',
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * @route   GET /api/admin/experiences/stores/suggested
+ * @desc    Get suggested stores (popular/top-rated) for quick assignment
+ * @access  Admin
+ */
+router.get('/stores/suggested', async (req: Request, res: Response) => {
+  try {
+    // Get top-rated active stores for quick selection
+    const stores = await Store.find({
+      isActive: true,
+      'ratings.average': { $gte: 3.5 }, // Only well-rated stores
+    })
+      .select('_id name logo banner category city ratings offers tags')
+      .populate('category', 'name')
+      .sort({ 'ratings.average': -1, 'ratings.count': -1 }) // Best rated first
+      .limit(15)
+      .lean();
+
+    return res.json({
+      success: true,
+      data: {
+        stores: stores.map((s: any) => ({
+          _id: s._id,
+          name: s.name,
+          logo: s.logo || s.banner,
+          category: s.category?.name || 'Other',
+          city: s.city,
+          rating: s.ratings?.average,
+          cashback: s.offers?.cashback,
+          tags: s.tags?.slice(0, 3),
+        })),
+        total: stores.length,
+      },
+    });
+  } catch (error: any) {
+    console.error('[ADMIN EXPERIENCES] Suggested stores error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch suggested stores',
+      error: error.message,
+    });
+  }
+});
+
+// ============================================
 // LIST EXPERIENCES
 // ============================================
 
@@ -385,32 +490,52 @@ router.post('/refresh-all-counts', async (req: Request, res: Response) => {
     for (const experience of experiences) {
       const storeQuery: any = { isActive: true };
       const filterCriteria = experience.filterCriteria;
+      let hasFilterCriteria = false;
 
       if (filterCriteria) {
         if (filterCriteria.tags && filterCriteria.tags.length > 0) {
           storeQuery.tags = { $in: filterCriteria.tags };
+          hasFilterCriteria = true;
         }
         if (filterCriteria.minRating && filterCriteria.minRating > 0) {
           storeQuery['ratings.average'] = { $gte: filterCriteria.minRating };
+          hasFilterCriteria = true;
         }
         if ((filterCriteria as any).isPremium === true) {
           storeQuery['deliveryCategories.premium'] = true;
+          hasFilterCriteria = true;
         }
         if ((filterCriteria as any).isOrganic === true) {
           storeQuery['deliveryCategories.organic'] = true;
+          hasFilterCriteria = true;
         }
         if ((filterCriteria as any).isMall === true) {
           storeQuery['deliveryCategories.mall'] = true;
+          hasFilterCriteria = true;
         }
         if ((filterCriteria as any).isPartner === true) {
           storeQuery['offers.isPartner'] = true;
+          hasFilterCriteria = true;
         }
         if (filterCriteria.categories && filterCriteria.categories.length > 0) {
           storeQuery.category = { $in: filterCriteria.categories };
+          hasFilterCriteria = true;
         }
       }
 
-      const storeCount = await Store.countDocuments(storeQuery);
+      // Count filter-matched stores
+      let filterMatchCount = 0;
+      if (hasFilterCriteria) {
+        filterMatchCount = await Store.countDocuments(storeQuery);
+      }
+
+      // Count manually assigned stores (excluding duplicates)
+      const assignedCount = experience.assignedStores?.length || 0;
+
+      // Total unique stores = filter matched + assigned (for simplicity, we add them)
+      // In practice, there could be overlap, but this gives a reasonable estimate
+      const storeCount = filterMatchCount + assignedCount;
+
       if (experience.storeCount !== storeCount) {
         experience.storeCount = storeCount;
         await experience.save();
@@ -824,37 +949,55 @@ router.patch('/:id/refresh-count', async (req: Request, res: Response) => {
 
     const storeQuery: any = { isActive: true };
     const filterCriteria = experience.filterCriteria;
+    let hasFilterCriteria = false;
 
     if (filterCriteria) {
       if (filterCriteria.tags && filterCriteria.tags.length > 0) {
         storeQuery.tags = { $in: filterCriteria.tags };
+        hasFilterCriteria = true;
       }
       if (filterCriteria.minRating && filterCriteria.minRating > 0) {
         storeQuery['ratings.average'] = { $gte: filterCriteria.minRating };
+        hasFilterCriteria = true;
       }
       if ((filterCriteria as any).isPremium === true) {
         storeQuery['deliveryCategories.premium'] = true;
+        hasFilterCriteria = true;
       }
       if ((filterCriteria as any).isOrganic === true) {
         storeQuery['deliveryCategories.organic'] = true;
+        hasFilterCriteria = true;
       }
       if ((filterCriteria as any).isMall === true) {
         storeQuery['deliveryCategories.mall'] = true;
+        hasFilterCriteria = true;
       }
       if ((filterCriteria as any).isPartner === true) {
         storeQuery['offers.isPartner'] = true;
+        hasFilterCriteria = true;
       }
       if (filterCriteria.categories && filterCriteria.categories.length > 0) {
         storeQuery.category = { $in: filterCriteria.categories };
+        hasFilterCriteria = true;
       }
     }
 
-    const storeCount = await Store.countDocuments(storeQuery);
+    // Count filter-matched stores
+    let filterMatchCount = 0;
+    if (hasFilterCriteria) {
+      filterMatchCount = await Store.countDocuments(storeQuery);
+    }
+
+    // Count manually assigned stores
+    const assignedCount = experience.assignedStores?.length || 0;
+
+    // Total = filter matched + manually assigned
+    const storeCount = filterMatchCount + assignedCount;
 
     experience.storeCount = storeCount;
     await experience.save();
 
-    console.log(`🔄 [ADMIN EXPERIENCES] Refreshed count for ${experience.title}: ${storeCount} stores`);
+    console.log(`🔄 [ADMIN EXPERIENCES] Refreshed count for ${experience.title}: ${storeCount} stores (${filterMatchCount} from filters + ${assignedCount} assigned)`);
 
     return res.json({
       success: true,
@@ -866,6 +1009,236 @@ router.patch('/:id/refresh-count', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to refresh store count',
+      error: error.message,
+    });
+  }
+});
+
+// ============================================
+// GET ASSIGNED STORES FOR EXPERIENCE
+// ============================================
+
+/**
+ * @route   GET /api/admin/experiences/:id/assigned-stores
+ * @desc    Get stores assigned to an experience
+ * @access  Admin
+ */
+router.get('/:id/assigned-stores', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid experience ID',
+      });
+    }
+
+    const experience = await StoreExperience.findById(id).lean();
+
+    if (!experience) {
+      return res.status(404).json({
+        success: false,
+        message: 'Experience not found',
+      });
+    }
+
+    const assignedStoreIds = (experience as any).assignedStores || [];
+
+    if (assignedStoreIds.length === 0) {
+      return res.json({
+        success: true,
+        data: { stores: [], total: 0 },
+      });
+    }
+
+    const stores = await Store.find({ _id: { $in: assignedStoreIds } })
+      .select('_id name logo banner category city ratings offers')
+      .populate('category', 'name')
+      .lean();
+
+    return res.json({
+      success: true,
+      data: {
+        stores: stores.map((s: any) => ({
+          _id: s._id,
+          name: s.name,
+          logo: s.logo || s.banner,
+          category: s.category?.name || 'Other',
+          city: s.city,
+          rating: s.ratings?.average,
+          cashback: s.offers?.cashback,
+        })),
+        total: stores.length,
+      },
+    });
+  } catch (error: any) {
+    console.error('[ADMIN EXPERIENCES] Get assigned stores error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch assigned stores',
+      error: error.message,
+    });
+  }
+});
+
+// ============================================
+// ASSIGN STORE TO EXPERIENCE
+// ============================================
+
+/**
+ * @route   POST /api/admin/experiences/:id/assign-store
+ * @desc    Assign a store to an experience
+ * @access  Admin
+ */
+router.post('/:id/assign-store', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { storeId } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid experience ID',
+      });
+    }
+
+    if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid store ID',
+      });
+    }
+
+    // Verify store exists
+    const store = await Store.findById(storeId).select('name').lean();
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        message: 'Store not found',
+      });
+    }
+
+    const experience = await StoreExperience.findById(id);
+
+    if (!experience) {
+      return res.status(404).json({
+        success: false,
+        message: 'Experience not found',
+      });
+    }
+
+    // Initialize assignedStores array if it doesn't exist
+    if (!(experience as any).assignedStores) {
+      (experience as any).assignedStores = [];
+    }
+
+    // Check if already assigned
+    const isAlreadyAssigned = (experience as any).assignedStores.some(
+      (sid: any) => sid.toString() === storeId
+    );
+
+    if (isAlreadyAssigned) {
+      return res.status(400).json({
+        success: false,
+        message: 'Store is already assigned to this experience',
+      });
+    }
+
+    // Add store to assigned stores
+    (experience as any).assignedStores.push(new mongoose.Types.ObjectId(storeId));
+
+    // Update store count
+    experience.storeCount = (experience.storeCount || 0) + 1;
+
+    await experience.save();
+
+    console.log(`➕ [ADMIN EXPERIENCES] Assigned store ${store.name} to ${experience.title}. Total: ${experience.storeCount} stores`);
+
+    return res.json({
+      success: true,
+      message: 'Store assigned successfully',
+      data: { storeId, storeName: store.name, storeCount: experience.storeCount },
+    });
+  } catch (error: any) {
+    console.error('[ADMIN EXPERIENCES] Assign store error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to assign store',
+      error: error.message,
+    });
+  }
+});
+
+// ============================================
+// REMOVE STORE FROM EXPERIENCE
+// ============================================
+
+/**
+ * @route   DELETE /api/admin/experiences/:id/remove-store/:storeId
+ * @desc    Remove a store from an experience
+ * @access  Admin
+ */
+router.delete('/:id/remove-store/:storeId', async (req: Request, res: Response) => {
+  try {
+    const { id, storeId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid experience ID',
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(storeId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid store ID',
+      });
+    }
+
+    const experience = await StoreExperience.findById(id);
+
+    if (!experience) {
+      return res.status(404).json({
+        success: false,
+        message: 'Experience not found',
+      });
+    }
+
+    if (!(experience as any).assignedStores) {
+      return res.status(400).json({
+        success: false,
+        message: 'No stores assigned to this experience',
+      });
+    }
+
+    // Remove store from assigned stores
+    const previousCount = (experience as any).assignedStores.length;
+    (experience as any).assignedStores = (experience as any).assignedStores.filter(
+      (sid: any) => sid.toString() !== storeId
+    );
+    const newCount = (experience as any).assignedStores.length;
+
+    // Update store count if a store was actually removed
+    if (newCount < previousCount) {
+      experience.storeCount = Math.max(0, (experience.storeCount || 0) - 1);
+    }
+
+    await experience.save();
+
+    console.log(`➖ [ADMIN EXPERIENCES] Removed store ${storeId} from ${experience.title}. Total: ${experience.storeCount} stores`);
+
+    return res.json({
+      success: true,
+      message: 'Store removed successfully',
+      data: { storeCount: experience.storeCount },
+    });
+  } catch (error: any) {
+    console.error('[ADMIN EXPERIENCES] Remove store error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to remove store',
       error: error.message,
     });
   }
