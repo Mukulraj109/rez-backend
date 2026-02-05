@@ -3,6 +3,7 @@
 
 import { Request, Response } from 'express';
 import { User } from '../models/User';
+import UserZoneVerification from '../models/UserZoneVerification';
 import { sendSuccess, sendError, sendBadRequest } from '../utils/response';
 import { asyncHandler } from '../middleware/asyncHandler';
 
@@ -122,7 +123,30 @@ export const getZoneVerificationStatus = asyncHandler(async (req: Request, res: 
 
   const zoneVerification = user.verifications?.[zone as keyof typeof user.verifications] || { verified: false };
 
-  sendSuccess(res, zoneVerification, `${zone} verification status retrieved`);
+  // Also check UserZoneVerification for pending/rejected status
+  const pendingVerification = await UserZoneVerification.findOne({
+    userId: user._id,
+    verificationType: zone,
+  }).sort({ createdAt: -1 }); // Get most recent
+
+  // Build response with status
+  const response: any = {
+    ...zoneVerification,
+    verified: zoneVerification?.verified || false,
+  };
+
+  // Add status from UserZoneVerification if exists
+  if (pendingVerification) {
+    response.status = pendingVerification.status;
+    response.submittedAt = pendingVerification.createdAt;
+    if (pendingVerification.status === 'rejected') {
+      response.rejectionReason = pendingVerification.rejectionReason;
+    }
+  } else if (zoneVerification?.verified) {
+    response.status = 'approved';
+  }
+
+  sendSuccess(res, response, `${zone} verification status retrieved`);
 });
 
 /**
@@ -249,13 +273,14 @@ export const submitVerification = asyncHandler(async (req: Request, res: Respons
   }
 
   // Store document info if provided
-  if (documentImage) {
-    // If file was uploaded via multer, use the path
-    if ((req as any).file) {
-      (verificationData as any).documentImage = (req as any).file.path;
-    } else {
-      (verificationData as any).documentImage = documentImage;
-    }
+  let documentUrl = null;
+  if ((req as any).file) {
+    // File was uploaded via multer to Cloudinary
+    documentUrl = (req as any).file.path;
+    (verificationData as any).documentImage = documentUrl;
+  } else if (documentImage) {
+    documentUrl = documentImage;
+    (verificationData as any).documentImage = documentImage;
   }
 
   // Auto-approve if eligible
@@ -264,10 +289,43 @@ export const submitVerification = asyncHandler(async (req: Request, res: Respons
     verificationData.verifiedAt = new Date();
   }
 
-  // Update user verification
+  // Update user verification (quick access)
   (user.verifications as any)[zone] = verificationData;
   user.markModified('verifications');
   await user.save();
+
+  // Create UserZoneVerification record for admin review (if not auto-approved)
+  if (!isAutoApproved) {
+    // Check if there's already a pending request
+    const existingRequest = await UserZoneVerification.findOne({
+      userId: user._id,
+      zoneSlug: zone,
+      status: 'pending',
+    });
+
+    if (!existingRequest) {
+      await UserZoneVerification.create({
+        userId: user._id,
+        zoneSlug: zone,
+        verificationType: zone,
+        status: 'pending',
+        submittedData: {
+          documentType: method,
+          documentUrl: documentUrl,
+          email: email,
+          instituteName: additionalInfo?.instituteName,
+          companyName: additionalInfo?.companyName,
+          serviceNumber: additionalInfo?.serviceNumber,
+          profession: additionalInfo?.profession,
+          department: additionalInfo?.department,
+          disabilityType: additionalInfo?.disabilityType,
+        },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+      console.log(`📝 [VERIFICATION] Created UserZoneVerification record for admin review`);
+    }
+  }
 
   console.log(`✅ [VERIFICATION] ${zone} verification ${isAutoApproved ? 'auto-approved' : 'submitted'} for user ${userId}`);
 

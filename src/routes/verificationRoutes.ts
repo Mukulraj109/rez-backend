@@ -2,8 +2,8 @@
 // Handles routes for zone-specific user verification
 
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth';
-import { uploadProfileImage } from '../middleware/upload';
+import { authenticate, requireAdmin } from '../middleware/auth';
+import { uploadVerificationDocument } from '../middleware/upload';
 import {
   getVerificationStatus,
   getZoneVerificationStatus,
@@ -45,7 +45,7 @@ router.get('/:zone', getZoneVerificationStatus);
  * @body    { method, email?, documentNumber?, documentImage?, additionalInfo? }
  */
 router.post('/:zone',
-  uploadProfileImage.single('document'),
+  uploadVerificationDocument.single('document'),
   submitVerification
 );
 
@@ -55,6 +55,6 @@ router.post('/:zone',
  * @access  Private (Admin only)
  * @body    { userId, action: 'approve' | 'reject', reason? }
  */
-router.post('/:zone/review', reviewVerification);
+router.post('/:zone/review', requireAdmin, reviewVerification);
 
 export default router;

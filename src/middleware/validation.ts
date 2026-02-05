@@ -282,8 +282,10 @@ export const orderSchemas = {
       price: Joi.number().min(0).required(),
       name: Joi.string().trim().optional()
     })).optional(),
-    // Deal redemption code
+    // Deal redemption code (spin wheel deals)
     redemptionCode: Joi.string().trim().uppercase().optional(),
+    // Offer redemption code (cashback vouchers from My Vouchers - RED-xxx format)
+    offerRedemptionCode: Joi.string().trim().uppercase().optional(),
     // Lock fee discount (amount already paid when locking item)
     lockFeeDiscount: Joi.number().min(0).optional()
   })

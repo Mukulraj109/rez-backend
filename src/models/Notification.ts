@@ -19,6 +19,11 @@ export interface INotificationData {
     target: string;
   };
   metadata?: { [key: string]: any };
+  // Verification-related data
+  type?: string; // e.g., 'verification_approved', 'verification_rejected'
+  verificationType?: string; // e.g., 'student', 'corporate'
+  zoneSlug?: string;
+  reason?: string; // For rejection reason
 }
 
 // Push notification settings interface

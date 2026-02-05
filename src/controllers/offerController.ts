@@ -1193,3 +1193,318 @@ export const getHeroBanners = async (req: Request, res: Response) => {
     sendError(res, 'Failed to fetch hero banners', 500);
   }
 };
+
+/**
+ * POST /api/offers/redemptions/validate
+ * Validate a redemption code before use
+ */
+export const validateRedemptionCode = async (req: Request, res: Response) => {
+  try {
+    const { code } = req.body;
+    const userId = req.user?.id;
+
+    // Require authentication
+    if (!userId) {
+      return sendError(res, 'Authentication required', 401);
+    }
+
+    if (!code) {
+      return sendError(res, 'Redemption code is required', 400);
+    }
+
+    // Find redemption by code
+    const redemption = await OfferRedemption.findOne({
+      redemptionCode: code.toUpperCase()
+    }).populate('offer', 'title image cashbackPercentage category type restrictions store');
+
+    if (!redemption) {
+      return sendError(res, 'Invalid redemption code', 404);
+    }
+
+    // Check ownership - user can only validate their own vouchers
+    if (redemption.user.toString() !== userId) {
+      return sendError(res, 'This voucher belongs to another user', 403);
+    }
+
+    // Check if valid
+    if (!redemption.isValid()) {
+      if (redemption.status === 'used') {
+        return sendError(res, 'This voucher has already been used', 400);
+      }
+      if (redemption.status === 'expired') {
+        return sendError(res, 'This voucher has expired', 400);
+      }
+      if (redemption.status === 'cancelled') {
+        return sendError(res, 'This voucher has been cancelled', 400);
+      }
+      return sendError(res, 'This voucher is no longer valid', 400);
+    }
+
+    // Get offer details for discount calculation
+    const offer = redemption.offer as any;
+
+    sendSuccess(res, {
+      valid: true,
+      redemption: {
+        _id: redemption._id,
+        redemptionCode: redemption.redemptionCode,
+        status: redemption.status,
+        expiryDate: redemption.expiryDate,
+        redemptionType: redemption.redemptionType,
+        verificationCode: redemption.verificationCode,
+      },
+      offer: {
+        _id: offer._id,
+        title: offer.title,
+        image: offer.image,
+        cashbackPercentage: offer.cashbackPercentage,
+        type: offer.type,
+        restrictions: {
+          minOrderValue: offer.restrictions?.minOrderValue || 0,
+          maxDiscountAmount: offer.restrictions?.maxDiscountAmount || null,
+        }
+      }
+    }, 'Voucher is valid');
+  } catch (error) {
+    console.error('Error validating redemption code:', error);
+    sendError(res, 'Failed to validate redemption code', 500);
+  }
+};
+
+/**
+ * POST /api/offers/redemptions/:id/use
+ * Mark a redemption as used and credit cashback to wallet
+ * Uses MongoDB transaction for atomicity
+ */
+export const markRedemptionAsUsed = async (req: Request, res: Response) => {
+  // Start MongoDB session for transaction
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id } = req.params;
+    const userId = req.user!.id;
+    const { orderAmount, orderId, storeId } = req.body;
+
+    if (!orderAmount || orderAmount <= 0) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendError(res, 'Valid order amount is required', 400);
+    }
+
+    // Atomic find and update - prevents race conditions
+    // Only update if status is 'active' to prevent double-spending
+    const redemption = await OfferRedemption.findOneAndUpdate(
+      {
+        _id: id,
+        user: userId,
+        status: 'active', // Only match active redemptions
+        expiryDate: { $gt: new Date() } // Not expired
+      },
+      {
+        $set: {
+          status: 'used',
+          usedDate: new Date(),
+          ...(orderId && { order: orderId }),
+          ...(storeId && { usedAtStore: storeId })
+        }
+      },
+      {
+        new: false, // Return the document BEFORE update to get offer details
+        session
+      }
+    ).populate('offer', 'title cashbackPercentage type restrictions');
+
+    if (!redemption) {
+      await session.abortTransaction();
+      session.endSession();
+      // Could be: not found, already used, expired, or belongs to another user
+      return sendError(res, 'Voucher not found, already used, or expired', 400);
+    }
+
+    const offer = redemption.offer as any;
+
+    if (!offer) {
+      await session.abortTransaction();
+      session.endSession();
+      return sendError(res, 'Associated offer not found', 404);
+    }
+
+    // Check minimum order value
+    if (offer.restrictions?.minOrderValue && orderAmount < offer.restrictions.minOrderValue) {
+      // Rollback - set status back to active
+      await OfferRedemption.findByIdAndUpdate(id, { status: 'active', usedDate: null }, { session });
+      await session.abortTransaction();
+      session.endSession();
+      return sendError(res, `Minimum order value of ₹${offer.restrictions.minOrderValue} required`, 400);
+    }
+
+    // Calculate cashback
+    let cashbackAmount = (orderAmount * offer.cashbackPercentage) / 100;
+
+    // Apply max discount cap if set
+    if (offer.restrictions?.maxDiscountAmount && cashbackAmount > offer.restrictions.maxDiscountAmount) {
+      cashbackAmount = offer.restrictions.maxDiscountAmount;
+    }
+
+    // Round to 2 decimal places
+    cashbackAmount = Math.round(cashbackAmount * 100) / 100;
+
+    // Update redemption with amount
+    await OfferRedemption.findByIdAndUpdate(id, { usedAmount: cashbackAmount }, { session });
+
+    // Credit cashback to user's wallet - create wallet if it doesn't exist
+    let wallet = await Wallet.findOne({ user: userId }).session(session);
+    let walletBalance = { total: 0, available: 0 };
+
+    // Create wallet if it doesn't exist
+    if (!wallet) {
+      console.log('🎟️ [OFFER REDEMPTION] Creating wallet for user:', userId);
+      wallet = new Wallet({
+        user: userId,
+        balance: { total: 0, available: 0, pending: 0 },
+        coins: [],
+        currency: 'INR',
+        isActive: true
+      });
+      await wallet.save({ session });
+    }
+
+    if (wallet) {
+      const balanceBefore = wallet.balance.total;
+
+      // Update wallet balance
+      wallet.balance.total += cashbackAmount;
+      wallet.balance.available += cashbackAmount;
+
+      // Add to rez coins
+      const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+      if (rezCoin) {
+        rezCoin.amount += cashbackAmount;
+        rezCoin.lastEarned = new Date();
+      } else {
+        wallet.coins.push({
+          type: 'rez',
+          amount: cashbackAmount,
+          isActive: true,
+          color: '#FFD700',
+          lastEarned: new Date()
+        } as any);
+      }
+
+      await wallet.save({ session });
+      walletBalance = { total: wallet.balance.total, available: wallet.balance.available };
+
+      // Create transaction record
+      const Transaction = mongoose.model('Transaction');
+      const transaction = new Transaction({
+        user: userId,
+        type: 'credit',
+        amount: cashbackAmount,
+        currency: wallet.currency || 'INR',
+        category: 'cashback',
+        description: `Cashback from ${offer.title}`,
+        status: {
+          current: 'completed',
+          history: [{
+            status: 'completed',
+            timestamp: new Date(),
+            reason: 'Cashback credited for voucher redemption',
+          }],
+        },
+        source: {
+          type: 'cashback',
+          reference: redemption._id,
+          description: `Cashback - ${offer.title}`,
+          metadata: {
+            offerId: offer._id,
+            offerTitle: offer.title,
+            orderAmount,
+            cashbackPercentage: offer.cashbackPercentage,
+            redemptionCode: redemption.redemptionCode,
+          },
+        },
+        balanceBefore,
+        balanceAfter: wallet.balance.total,
+      });
+
+      await transaction.save({ session });
+    }
+
+    // Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    // Send push notification (async, don't wait - after transaction committed)
+    try {
+      const NotificationService = require('../services/notificationService').default;
+      NotificationService.sendToUser(userId, {
+        title: 'Cashback Credited! 🎉',
+        body: `₹${cashbackAmount} cashback from ${offer.title} has been added to your wallet!`,
+        data: {
+          type: 'cashback_credited',
+          amount: cashbackAmount,
+          redemptionId: (redemption as any)._id?.toString() || id,
+        }
+      }).catch((err: any) => console.error('Failed to send cashback notification:', err));
+    } catch (notifError) {
+      console.error('Failed to send cashback notification:', notifError);
+    }
+
+    sendSuccess(res, {
+      success: true,
+      redemption: {
+        _id: (redemption as any)._id || id,
+        status: 'used',
+        usedDate: new Date(),
+        usedAmount: cashbackAmount,
+      },
+      cashback: {
+        amount: cashbackAmount,
+        percentage: offer.cashbackPercentage,
+        orderAmount,
+      },
+      wallet: walletBalance.total > 0 ? walletBalance : null,
+    }, `₹${cashbackAmount} cashback credited to your wallet!`);
+  } catch (error) {
+    // Rollback transaction on error
+    await session.abortTransaction();
+    session.endSession();
+    console.error('Error marking redemption as used:', error);
+    sendError(res, 'Failed to process voucher', 500);
+  }
+};
+
+/**
+ * GET /api/offers/redemptions/:id
+ * Get single redemption details with QR code
+ */
+export const getRedemptionById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.id;
+
+    const redemption = await OfferRedemption.findOne({
+      _id: id,
+      user: userId
+    }).populate('offer', 'title image cashbackPercentage category type restrictions store');
+
+    if (!redemption) {
+      return sendError(res, 'Redemption not found', 404);
+    }
+
+    const offer = redemption.offer as any;
+
+    sendSuccess(res, {
+      ...redemption.toObject(),
+      cashbackPercentage: offer?.cashbackPercentage || 0,
+      restrictions: {
+        minOrderValue: offer?.restrictions?.minOrderValue || 0,
+        maxDiscountAmount: offer?.restrictions?.maxDiscountAmount || null,
+      }
+    }, 'Redemption fetched successfully');
+  } catch (error) {
+    console.error('Error fetching redemption:', error);
+    sendError(res, 'Failed to fetch redemption', 500);
+  }
+};

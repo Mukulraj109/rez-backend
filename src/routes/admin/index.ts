@@ -10,3 +10,6 @@ export { default as adminWalletRoutes } from './adminWallet';
 export { default as adminCampaignsRoutes } from './campaigns';
 export { default as adminUploadsRoutes } from './uploads';
 export { default as adminExperiencesRoutes } from './experiences';
+export { default as adminHomepageDealsRoutes } from './homepageDeals';
+export { default as adminZoneVerificationsRoutes } from './zoneVerifications';
+export { default as adminOffersRoutes } from './offers';

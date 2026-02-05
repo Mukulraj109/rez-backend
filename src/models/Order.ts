@@ -160,6 +160,11 @@ export interface IOrder extends Document {
     discount: number;
     dealTitle?: string;
   };
+  offerRedemption?: {
+    code: string;
+    cashback: number;
+    offerTitle?: string;
+  };
   notes?: string;
   specialInstructions?: string;
   cancelReason?: string;
@@ -528,6 +533,11 @@ const OrderSchema = new Schema<IOrder>({
     code: { type: String, uppercase: true, trim: true },
     discount: { type: Number, default: 0 },
     dealTitle: { type: String },
+  },
+  offerRedemption: {
+    code: { type: String, uppercase: true, trim: true },
+    cashback: { type: Number, default: 0 },
+    offerTitle: { type: String },
   },
   notes: {
     type: String,

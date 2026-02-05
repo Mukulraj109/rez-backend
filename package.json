@@ -65,6 +65,7 @@
     "seed:discovery": "npm run seed:payment-methods && npm run seed:bnpl-stores && npm run seed:search-history && npm run seed:nearby-activity",
     "seed:offers-page": "ts-node src/scripts/seedOffersPage.ts",
     "seed:homepage": "ts-node src/seeds/homepageSeeds.ts",
+    "seed:homepage-deals": "ts-node src/seeds/homepageDealsSeeds.ts",
     "seed:master": "ts-node src/seeds/masterSeeds.ts",
     "seed:offers-page:clear": "ts-node src/scripts/seedOffersPage.ts --clear",
     "seed:category-page": "ts-node src/scripts/seedCategoryPageData.ts",

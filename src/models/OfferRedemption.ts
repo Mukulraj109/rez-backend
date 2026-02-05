@@ -234,12 +234,23 @@ OfferRedemptionSchema.methods.isValid = function (): boolean {
   );
 };
 
-// Method to mark as used
+// Method to mark as used with idempotency check
 OfferRedemptionSchema.methods.markAsUsed = async function (
   orderId?: string,
   amount?: number,
   storeId?: string
 ) {
+  // Idempotency check - if already used, return without error
+  if (this.status === 'used') {
+    console.log(`⚠️ [OFFER REDEMPTION] Redemption ${this.redemptionCode} already marked as used, skipping`);
+    return this;
+  }
+
+  // Only allow marking 'active' redemptions as used
+  if (this.status !== 'active') {
+    throw new Error(`Cannot mark redemption as used: current status is ${this.status}`);
+  }
+
   this.status = 'used';
   this.usedDate = new Date();
 

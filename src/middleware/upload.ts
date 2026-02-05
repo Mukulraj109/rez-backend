@@ -156,3 +156,33 @@ export const uploadReviewImage = multer({
     cb(null, true);
   },
 });
+
+// Create storage engine for verification documents
+const verificationStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: async (req, file) => {
+    const zone = req.params?.zone || 'general';
+    console.log(`📤 [CLOUDINARY] Uploading verification document for user: ${(req as any).user?._id} (zone: ${zone})`);
+    return {
+      folder: `rez-app/verifications/${zone}`,
+      resource_type: 'image',
+      public_id: `verification_${(req as any).user?._id}_${Date.now()}`,
+      timeout: 120000,
+    };
+  },
+});
+
+// Create multer upload instance for verification documents
+export const uploadVerificationDocument = multer({
+  storage: verificationStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit for verification documents
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept images and PDFs
+    if (!file.mimetype.startsWith('image/') && file.mimetype !== 'application/pdf') {
+      return cb(new Error('Only image and PDF files are allowed for verification!') as any, false);
+    }
+    cb(null, true);
+  },
+});

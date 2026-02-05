@@ -36,7 +36,7 @@ import merchantNotificationService from '../services/merchantNotificationService
 // Create new order from cart
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
-  const { deliveryAddress, paymentMethod, specialInstructions, couponCode, voucherCode, coinsUsed, storeId, items: requestItems, redemptionCode, lockFeeDiscount: clientLockFeeDiscount } = req.body;
+  const { deliveryAddress, paymentMethod, specialInstructions, couponCode, voucherCode, coinsUsed, storeId, items: requestItems, redemptionCode, offerRedemptionCode, lockFeeDiscount: clientLockFeeDiscount } = req.body;
 
   // Start a MongoDB session for transaction
   const session = await mongoose.startSession();
@@ -575,6 +575,77 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       }
     }
 
+    // Apply offer redemption code if provided (RED-xxx format cashback vouchers)
+    let offerRedemptionCashback = 0;
+    let appliedOfferRedemption: any = null;
+    if (offerRedemptionCode) {
+      console.log('🎟️ [OFFER REDEMPTION] Attempting to apply offer code:', offerRedemptionCode);
+      const OfferRedemption = require('../models/OfferRedemption').default;
+      const Offer = require('../models/Offer').default;
+
+      const offerRedemption = await OfferRedemption.findOne({
+        $or: [
+          { redemptionCode: offerRedemptionCode.toUpperCase() },
+          { verificationCode: offerRedemptionCode }
+        ],
+        user: new mongoose.Types.ObjectId(userId),
+      }).populate('offer', 'title cashbackPercentage restrictions').session(session);
+
+      if (offerRedemption) {
+        // Check if redemption is active
+        if (offerRedemption.status !== 'active') {
+          console.warn(`⚠️ [OFFER REDEMPTION] Code already ${offerRedemption.status}:`, offerRedemptionCode);
+          await session.abortTransaction();
+          session.endSession();
+          const statusMessages: Record<string, string> = {
+            'pending': 'This voucher is pending activation',
+            'used': 'This voucher has already been used',
+            'expired': 'This voucher has expired',
+            'cancelled': 'This voucher was cancelled'
+          };
+          return sendBadRequest(res, statusMessages[offerRedemption.status] || `Voucher is ${offerRedemption.status}`);
+        }
+
+        // Check expiry
+        if (new Date(offerRedemption.expiryDate) < new Date()) {
+          console.warn('⚠️ [OFFER REDEMPTION] Code has expired:', offerRedemptionCode);
+          await session.abortTransaction();
+          session.endSession();
+          return sendBadRequest(res, 'This voucher has expired');
+        }
+
+        const offer = offerRedemption.offer as any;
+
+        // Check minimum order value
+        if (offer?.restrictions?.minOrderValue && subtotal < offer.restrictions.minOrderValue) {
+          console.warn('⚠️ [OFFER REDEMPTION] Min order value not met:', {
+            required: offer.restrictions.minOrderValue,
+            current: subtotal
+          });
+          await session.abortTransaction();
+          session.endSession();
+          return sendBadRequest(res, `Minimum order value of ₹${offer.restrictions.minOrderValue} required for this voucher`);
+        }
+
+        // Calculate cashback
+        const cashbackPercentage = offer?.cashbackPercentage || 0;
+        offerRedemptionCashback = Math.round(subtotal * (cashbackPercentage / 100));
+
+        // Apply max discount cap
+        if (offer?.restrictions?.maxDiscountAmount && offerRedemptionCashback > offer.restrictions.maxDiscountAmount) {
+          offerRedemptionCashback = offer.restrictions.maxDiscountAmount;
+        }
+
+        appliedOfferRedemption = offerRedemption;
+        console.log(`✅ [OFFER REDEMPTION] Applied offer code ${offerRedemptionCode}: ₹${offerRedemptionCashback} cashback (${cashbackPercentage}%)`);
+      } else {
+        console.warn('⚠️ [OFFER REDEMPTION] Code not found or does not belong to user:', offerRedemptionCode);
+        await session.abortTransaction();
+        session.endSession();
+        return sendBadRequest(res, 'Invalid voucher code. Please check the code and try again.');
+      }
+    }
+
     // Calculate coin discount from coinsUsed
     const coinDiscount = coinsUsed
       ? (coinsUsed.rezCoins || 0) + (coinsUsed.promoCoins || 0) + (coinsUsed.storePromoCoins || 0)
@@ -609,6 +680,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       discount,
       voucherDiscount,
       redemptionDiscount,
+      offerRedemptionCashback,
       lockFeeDiscount,
       coinDiscount,
       cashback,
@@ -616,6 +688,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       partnerBenefitsApplied: partnerBenefits.appliedBenefits,
       voucherApplied,
       redemptionCodeApplied: appliedRedemption?.redemptionCode,
+      offerRedemptionCodeApplied: appliedOfferRedemption?.redemptionCode,
       coinsUsed
     });
 
@@ -676,6 +749,12 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         code: appliedRedemption.redemptionCode,
         discount: redemptionDiscount,
         dealTitle: appliedRedemption.campaignSnapshot?.title,
+      } : undefined,
+      // Add offer redemption info if an offer voucher was applied
+      offerRedemption: appliedOfferRedemption ? {
+        code: appliedOfferRedemption.redemptionCode,
+        cashback: offerRedemptionCashback,
+        offerTitle: (appliedOfferRedemption.offer as any)?.title || 'Offer Cashback',
       } : undefined
     });
 
@@ -692,6 +771,105 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       appliedRedemption.benefitApplied = redemptionDiscount;
       await appliedRedemption.save({ session });
       console.log('✅ [REDEMPTION] Redemption marked as used');
+    }
+
+    // Mark offer redemption as used and credit cashback if applied
+    if (appliedOfferRedemption && offerRedemptionCashback > 0) {
+      console.log('🎟️ [OFFER REDEMPTION] Marking offer redemption as used:', appliedOfferRedemption.redemptionCode);
+
+      // Mark as used
+      appliedOfferRedemption.status = 'used';
+      appliedOfferRedemption.usedDate = new Date();
+      appliedOfferRedemption.order = order._id;
+      appliedOfferRedemption.usedAmount = offerRedemptionCashback;
+      await appliedOfferRedemption.save({ session });
+
+      // Credit cashback to user's wallet (create wallet if doesn't exist)
+      let userWallet = await Wallet.findOne({ user: userId }).session(session);
+      if (!userWallet) {
+        console.log('🏦 [OFFER REDEMPTION] Creating wallet for user:', userId);
+        userWallet = new Wallet({
+          user: userId,
+          balance: { total: 0, available: 0, pending: 0 },
+          coins: [],
+          currency: 'INR',
+          isActive: true
+        });
+        await userWallet.save({ session });
+      }
+
+      const balanceBefore = userWallet.balance.total;
+      userWallet.balance.total += offerRedemptionCashback;
+      userWallet.balance.available += offerRedemptionCashback;
+
+      // Add to rez coins
+      const rezCoin = userWallet.coins.find((c: any) => c.type === 'rez');
+      if (rezCoin) {
+        rezCoin.amount += offerRedemptionCashback;
+        rezCoin.lastEarned = new Date();
+      } else {
+        userWallet.coins.push({
+          type: 'rez',
+          amount: offerRedemptionCashback,
+          lastEarned: new Date()
+        } as any);
+      }
+
+      await userWallet.save({ session });
+
+      // Create transaction record for cashback
+      const { Transaction } = require('../models/Transaction');
+      const cashbackTransaction = new Transaction({
+        user: userId,
+        type: 'credit',
+        amount: offerRedemptionCashback,
+        currency: userWallet.currency || 'INR',
+        category: 'cashback',
+        description: `Cashback from order #${order.orderNumber}`,
+        status: {
+          current: 'completed',
+          history: [{
+            status: 'completed',
+            timestamp: new Date(),
+            reason: 'Offer cashback credited on order placement',
+          }],
+        },
+        source: {
+          type: 'cashback',
+          reference: appliedOfferRedemption._id,
+          description: `Order cashback - ${(appliedOfferRedemption.offer as any)?.title || 'Offer'}`,
+          metadata: {
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            offerId: appliedOfferRedemption.offer?._id || appliedOfferRedemption.offer,
+            redemptionCode: appliedOfferRedemption.redemptionCode,
+          },
+        },
+        balanceBefore,
+        balanceAfter: userWallet.balance.total,
+      });
+
+      await cashbackTransaction.save({ session });
+      console.log(`✅ [OFFER REDEMPTION] Cashback of ₹${offerRedemptionCashback} credited to wallet`);
+
+      // Send push notification (async, don't wait)
+      try {
+        const NotificationService = require('../services/notificationService').default;
+        NotificationService.sendToUser(userId.toString(), {
+          title: 'Cashback Credited! 🎉',
+          body: `₹${offerRedemptionCashback} cashback has been added to your wallet for order #${order.orderNumber}`,
+          data: {
+            type: 'cashback_credited',
+            amount: offerRedemptionCashback,
+            orderId: (order as any)._id?.toString() || '',
+            orderNumber: order.orderNumber,
+          }
+        }).catch((err: any) => console.error('Failed to send cashback notification:', err));
+      } catch (notifError) {
+        console.error('Failed to send cashback notification:', notifError);
+      }
+
+      console.log('✅ [OFFER REDEMPTION] Offer redemption processed successfully');
     }
 
     // For COD orders, deduct stock immediately since payment confirmation never happens
@@ -1311,6 +1489,115 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
         } catch (coinError) {
           console.error('❌ [CANCEL ORDER] Failed to refund store promo coins:', coinError);
         }
+      }
+    }
+
+    // Reverse offer redemption cashback if applied
+    if ((order as any).offerRedemption?.code) {
+      console.log('🎟️ [CANCEL ORDER] Reversing offer redemption cashback...');
+      const OfferRedemption = require('../models/OfferRedemption').default;
+      const { Transaction } = require('../models/Transaction');
+
+      const cashbackAmount = (order as any).offerRedemption?.cashback || 0;
+      const redemptionCode = (order as any).offerRedemption?.code;
+
+      try {
+        // Find and restore the offer redemption to active status
+        const offerRedemption = await OfferRedemption.findOneAndUpdate(
+          {
+            redemptionCode: redemptionCode,
+            user: userId,
+            status: 'used'
+          },
+          {
+            $set: {
+              status: 'active',
+              usedDate: null,
+              order: null,
+              usedAmount: null
+            }
+          },
+          { session, new: true }
+        );
+
+        if (offerRedemption) {
+          console.log('✅ [CANCEL ORDER] Offer redemption restored to active:', redemptionCode);
+
+          // Deduct cashback from user's wallet if it was credited
+          if (cashbackAmount > 0) {
+            const wallet = await Wallet.findOne({ user: userId }).session(session);
+            if (wallet) {
+              const balanceBefore = wallet.balance.total;
+
+              // Deduct from wallet balance
+              wallet.balance.total = Math.max(0, wallet.balance.total - cashbackAmount);
+              wallet.balance.available = Math.max(0, wallet.balance.available - cashbackAmount);
+
+              // Deduct from rez coins
+              const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+              if (rezCoin) {
+                rezCoin.amount = Math.max(0, rezCoin.amount - cashbackAmount);
+              }
+
+              await wallet.save({ session });
+
+              // Create reversal transaction record
+              const reversalTransaction = new Transaction({
+                user: userId,
+                type: 'debit',
+                amount: cashbackAmount,
+                currency: wallet.currency || 'INR',
+                category: 'cashback_reversal',
+                description: `Cashback reversed for cancelled order #${order.orderNumber}`,
+                status: {
+                  current: 'completed',
+                  history: [{
+                    status: 'completed',
+                    timestamp: new Date(),
+                    reason: 'Order cancelled - cashback reversed',
+                  }],
+                },
+                source: {
+                  type: 'cashback_reversal',
+                  reference: offerRedemption._id,
+                  description: `Reversal - ${(order as any).offerRedemption?.offerTitle || 'Offer Cashback'}`,
+                  metadata: {
+                    orderId: order._id,
+                    orderNumber: order.orderNumber,
+                    redemptionCode: redemptionCode,
+                  },
+                },
+                balanceBefore,
+                balanceAfter: wallet.balance.total,
+              });
+
+              await reversalTransaction.save({ session });
+              console.log(`✅ [CANCEL ORDER] Cashback of ₹${cashbackAmount} reversed from wallet`);
+
+              // Send notification about reversal
+              try {
+                const NotificationService = require('../services/notificationService').default;
+                NotificationService.sendToUser(userId.toString(), {
+                  title: 'Cashback Reversed',
+                  body: `₹${cashbackAmount} cashback has been reversed due to order #${order.orderNumber} cancellation. Your voucher is now available again.`,
+                  data: {
+                    type: 'cashback_reversed',
+                    amount: cashbackAmount,
+                    orderId: (order as any)._id?.toString() || '',
+                    orderNumber: order.orderNumber,
+                  }
+                }).catch((err: any) => console.error('Failed to send reversal notification:', err));
+              } catch (notifError) {
+                console.error('Failed to send reversal notification:', notifError);
+              }
+            }
+          }
+        } else {
+          console.warn('⚠️ [CANCEL ORDER] Offer redemption not found or already reverted:', redemptionCode);
+        }
+      } catch (redemptionError) {
+        console.error('❌ [CANCEL ORDER] Failed to reverse offer redemption:', redemptionError);
+        // Continue with cancellation even if redemption reversal fails
       }
     }
 

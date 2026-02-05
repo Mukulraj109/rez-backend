@@ -631,11 +631,16 @@ class PaymentService {
    * @param reason Failure reason
    */
   async handlePaymentFailure(orderId: string, reason: string): Promise<IOrder> {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
       console.log('❌ [PAYMENT SERVICE] Processing payment failure for order:', orderId);
 
-      const order = await Order.findById(orderId);
+      const order = await Order.findById(orderId).session(session);
       if (!order) {
+        await session.abortTransaction();
+        session.endSession();
         throw new Error('Order not found');
       }
 
@@ -650,17 +655,133 @@ class PaymentService {
         timestamp: new Date()
       });
 
+      // Reverse offer redemption cashback if applied
+      if ((order as any).offerRedemption?.code) {
+        console.log('🎟️ [PAYMENT SERVICE] Reversing offer redemption cashback for failed payment...');
+        const OfferRedemption = require('../models/OfferRedemption').default;
+        const { Transaction } = require('../models/Transaction');
+
+        const cashbackAmount = (order as any).offerRedemption?.cashback || 0;
+        const redemptionCode = (order as any).offerRedemption?.code;
+        const userId = order.user;
+
+        try {
+          // Find and restore the offer redemption to active status
+          const offerRedemption = await OfferRedemption.findOneAndUpdate(
+            {
+              redemptionCode: redemptionCode,
+              user: userId,
+              status: 'used'
+            },
+            {
+              $set: {
+                status: 'active',
+                usedDate: null,
+                order: null,
+                usedAmount: null
+              }
+            },
+            { session, new: true }
+          );
+
+          if (offerRedemption) {
+            console.log('✅ [PAYMENT SERVICE] Offer redemption restored to active:', redemptionCode);
+
+            // Deduct cashback from user's wallet if it was credited
+            if (cashbackAmount > 0) {
+              const wallet = await Wallet.findOne({ user: userId }).session(session);
+              if (wallet) {
+                const balanceBefore = wallet.balance.total;
+
+                // Deduct from wallet balance
+                wallet.balance.total = Math.max(0, wallet.balance.total - cashbackAmount);
+                wallet.balance.available = Math.max(0, wallet.balance.available - cashbackAmount);
+
+                // Deduct from rez coins
+                const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+                if (rezCoin) {
+                  rezCoin.amount = Math.max(0, rezCoin.amount - cashbackAmount);
+                }
+
+                await wallet.save({ session });
+
+                // Create reversal transaction record
+                const reversalTransaction = new Transaction({
+                  user: userId,
+                  type: 'debit',
+                  amount: cashbackAmount,
+                  currency: wallet.currency || 'INR',
+                  category: 'cashback_reversal',
+                  description: `Cashback reversed - payment failed for order #${order.orderNumber}`,
+                  status: {
+                    current: 'completed',
+                    history: [{
+                      status: 'completed',
+                      timestamp: new Date(),
+                      reason: 'Payment failed - cashback reversed',
+                    }],
+                  },
+                  source: {
+                    type: 'cashback_reversal',
+                    reference: offerRedemption._id,
+                    description: `Payment failure reversal - ${(order as any).offerRedemption?.offerTitle || 'Offer Cashback'}`,
+                    metadata: {
+                      orderId: order._id,
+                      orderNumber: order.orderNumber,
+                      redemptionCode: redemptionCode,
+                      failureReason: reason,
+                    },
+                  },
+                  balanceBefore,
+                  balanceAfter: wallet.balance.total,
+                });
+
+                await reversalTransaction.save({ session });
+                console.log(`✅ [PAYMENT SERVICE] Cashback of ₹${cashbackAmount} reversed from wallet`);
+
+                // Send notification about reversal
+                try {
+                  const NotificationService = require('./notificationService').default;
+                  NotificationService.sendToUser(userId.toString(), {
+                    title: 'Cashback Reversed',
+                    body: `Payment failed for order #${order.orderNumber}. ₹${cashbackAmount} cashback has been reversed. Your voucher is available again.`,
+                    data: {
+                      type: 'cashback_reversed',
+                      amount: cashbackAmount,
+                      orderId: (order as any)._id?.toString() || '',
+                      orderNumber: order.orderNumber,
+                    }
+                  }).catch((err: any) => console.error('Failed to send reversal notification:', err));
+                } catch (notifError) {
+                  console.error('Failed to send reversal notification:', notifError);
+                }
+              }
+            }
+          } else {
+            console.warn('⚠️ [PAYMENT SERVICE] Offer redemption not found or already reverted:', redemptionCode);
+          }
+        } catch (redemptionError) {
+          console.error('❌ [PAYMENT SERVICE] Failed to reverse offer redemption:', redemptionError);
+          // Continue with payment failure processing even if redemption reversal fails
+        }
+      }
+
       // Update order status to cancelled if payment failed
       order.status = 'cancelled';
       order.cancelReason = `Payment failed: ${reason}`;
       order.cancelledAt = new Date();
 
-      await order.save();
+      await order.save({ session });
+
+      await session.commitTransaction();
+      session.endSession();
 
       console.log('✅ [PAYMENT SERVICE] Payment failure processed');
 
       return order;
     } catch (error: any) {
+      await session.abortTransaction();
+      session.endSession();
       console.error('❌ [PAYMENT SERVICE] Error processing payment failure:', error);
       throw error;
     }

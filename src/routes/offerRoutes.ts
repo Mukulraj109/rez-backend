@@ -1,4 +1,6 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
+import HomepageDealsSection from '../models/HomepageDealsSection';
+import HomepageDealsItem from '../models/HomepageDealsItem';
 import {
   getOffers,
   getFeaturedOffers,
@@ -23,7 +25,10 @@ import {
   toggleOfferLike,
   shareOffer,
   getOfferCategories,
-  getHeroBanners
+  getHeroBanners,
+  validateRedemptionCode,
+  markRedemptionAsUsed,
+  getRedemptionById
 } from '../controllers/offerController';
 import {
   getHotspots,
@@ -174,6 +179,38 @@ router.get('/user/redemptions',
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),
   getUserRedemptions
+);
+
+// Validate a redemption/voucher code
+router.post('/redemptions/validate',
+  authenticate,
+  validate(Joi.object({
+    code: Joi.string().required().trim().uppercase()
+  })),
+  validateRedemptionCode
+);
+
+// Get single redemption details
+router.get('/redemptions/:id',
+  authenticate,
+  validateParams(Joi.object({
+    id: commonSchemas.objectId().required()
+  })),
+  getRedemptionById
+);
+
+// Mark redemption as used (credit cashback)
+router.post('/redemptions/:id/use',
+  authenticate,
+  validateParams(Joi.object({
+    id: commonSchemas.objectId().required()
+  })),
+  validate(Joi.object({
+    orderAmount: Joi.number().positive().required(),
+    orderId: commonSchemas.objectId(),
+    storeId: commonSchemas.objectId()
+  })),
+  markRedemptionAsUsed
 );
 
 // Get user's favorite offers
@@ -393,6 +430,219 @@ router.get('/bank-offers',
   })),
   getBankOffers
 );
+
+// ============================================
+// HOMEPAGE DEALS SECTION (Public API)
+// ============================================
+
+/**
+ * @route   GET /api/offers/homepage-deals-section
+ * @desc    Get the "Deals that save you money" section config and items for frontend
+ * @access  Public
+ */
+router.get('/homepage-deals-section', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const region = (req.headers['x-rez-region'] as string) || 'all';
+
+    // Get section config
+    let sectionConfig = await HomepageDealsSection.findOne({
+      sectionId: 'deals-that-save-money',
+      isActive: true,
+    });
+
+    // Return empty if section doesn't exist or is inactive
+    if (!sectionConfig) {
+      return res.json({
+        success: true,
+        data: null,
+        message: 'Section not configured',
+      });
+    }
+
+    // Check region
+    if (sectionConfig.regions.length > 0 && !sectionConfig.regions.includes('all' as any)) {
+      if (!sectionConfig.regions.includes(region as any)) {
+        return res.json({
+          success: true,
+          data: null,
+          message: 'Section not available in this region',
+        });
+      }
+    }
+
+    // Build region filter for items
+    const regionFilter = {
+      $or: [
+        { regions: { $in: [region, 'all'] } },
+        { regions: { $size: 0 } },
+      ],
+    };
+
+    // Fetch items for each tab in parallel
+    const [offersItems, cashbackItems, exclusiveItems] = await Promise.all([
+      sectionConfig.tabs.offers.isEnabled
+        ? HomepageDealsItem.find({
+            tabType: 'offers',
+            isActive: true,
+            ...regionFilter,
+          })
+            .sort({ sortOrder: 1 })
+            .limit(sectionConfig.tabs.offers.maxItems)
+            .lean()
+        : Promise.resolve([]),
+
+      sectionConfig.tabs.cashback.isEnabled
+        ? HomepageDealsItem.find({
+            tabType: 'cashback',
+            isActive: true,
+            ...regionFilter,
+          })
+            .sort({ sortOrder: 1 })
+            .limit(sectionConfig.tabs.cashback.maxItems)
+            .lean()
+        : Promise.resolve([]),
+
+      sectionConfig.tabs.exclusive.isEnabled
+        ? HomepageDealsItem.find({
+            tabType: 'exclusive',
+            isActive: true,
+            ...regionFilter,
+          })
+            .sort({ sortOrder: 1 })
+            .limit(sectionConfig.tabs.exclusive.maxItems)
+            .lean()
+        : Promise.resolve([]),
+    ]);
+
+    // Build enabled tabs array sorted by sortOrder
+    const enabledTabs = Object.entries(sectionConfig.tabs)
+      .filter(([_, tab]) => tab.isEnabled)
+      .sort((a, b) => a[1].sortOrder - b[1].sortOrder)
+      .map(([key, tab]) => ({
+        key,
+        displayName: tab.displayName,
+        sortOrder: tab.sortOrder,
+      }));
+
+    return res.json({
+      success: true,
+      data: {
+        section: {
+          title: sectionConfig.title,
+          subtitle: sectionConfig.subtitle,
+          icon: sectionConfig.icon,
+        },
+        enabledTabs,
+        tabs: {
+          offers: {
+            isEnabled: sectionConfig.tabs.offers.isEnabled,
+            displayName: sectionConfig.tabs.offers.displayName,
+            items: offersItems,
+          },
+          cashback: {
+            isEnabled: sectionConfig.tabs.cashback.isEnabled,
+            displayName: sectionConfig.tabs.cashback.displayName,
+            items: cashbackItems,
+          },
+          exclusive: {
+            isEnabled: sectionConfig.tabs.exclusive.isEnabled,
+            displayName: sectionConfig.tabs.exclusive.displayName,
+            items: exclusiveItems,
+          },
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error('[OFFERS] Homepage deals section error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch homepage deals section',
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * @route   POST /api/offers/homepage-deals-section/track-impression
+ * @desc    Track item impressions (batch)
+ * @access  Public
+ */
+router.post('/homepage-deals-section/track-impression', async (req: Request, res: Response) => {
+  try {
+    const { itemIds, tabType } = req.body;
+
+    if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'itemIds array is required',
+      });
+    }
+
+    // Batch update impressions
+    await HomepageDealsItem.updateMany(
+      { _id: { $in: itemIds } },
+      { $inc: { impressions: 1 } }
+    );
+
+    // Also update section total
+    await HomepageDealsSection.updateOne(
+      { sectionId: 'deals-that-save-money' },
+      { $inc: { totalImpressions: itemIds.length } }
+    );
+
+    return res.json({
+      success: true,
+      message: 'Impressions tracked',
+    });
+  } catch (error: any) {
+    console.error('[OFFERS] Track impression error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to track impression',
+    });
+  }
+});
+
+/**
+ * @route   POST /api/offers/homepage-deals-section/track-click
+ * @desc    Track item click
+ * @access  Public
+ */
+router.post('/homepage-deals-section/track-click', async (req: Request, res: Response) => {
+  try {
+    const { itemId, tabType } = req.body;
+
+    if (!itemId) {
+      return res.status(400).json({
+        success: false,
+        message: 'itemId is required',
+      });
+    }
+
+    // Update item click count
+    await HomepageDealsItem.updateOne(
+      { _id: itemId },
+      { $inc: { clicks: 1 } }
+    );
+
+    // Also update section total
+    await HomepageDealsSection.updateOne(
+      { sectionId: 'deals-that-save-money' },
+      { $inc: { totalClicks: 1 } }
+    );
+
+    return res.json({
+      success: true,
+      message: 'Click tracked',
+    });
+  } catch (error: any) {
+    console.error('[OFFERS] Track click error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to track click',
+    });
+  }
+});
 
 // Get exclusive zones
 router.get('/exclusive-zones',

@@ -34,6 +34,7 @@ import { initializeCoinExpiryJob } from './jobs/expireCoins';
 import { initializeCashbackJobs } from './jobs/cashbackJobs';
 import { initializeInventoryAlertJob } from './jobs/inventoryAlerts';
 import { initializeDealExpiryJob } from './jobs/expireDealRedemptions';
+import { initializeVoucherExpiryJob } from './jobs/expireVoucherRedemptions';
 
 // Import export worker (initializes automatically when imported)
 import './workers/exportWorker';
@@ -143,6 +144,7 @@ import webhookRoutes from './routes/webhookRoutes';
 import storeGalleryRoutes from './routes/storeGallery';  // Public store gallery routes
 import productGalleryRoutes from './routes/productGallery';  // Public product gallery routes
 import offersRoutes from './routes/offersRoutes';  // Bank and exclusive offers routes
+import zoneVerificationRoutes from './routes/zoneVerificationRoutes';  // Zone verification routes
 import loyaltyRoutes from './routes/loyaltyRoutes';  // User loyalty routes
 import statsRoutes from './routes/statsRoutes';  // Social proof stats routes
 import exploreRoutes from './routes/exploreRoutes';  // Explore page routes
@@ -160,7 +162,10 @@ import {
   adminWalletRoutes,
   adminCampaignsRoutes,
   adminUploadsRoutes,
-  adminExperiencesRoutes
+  adminExperiencesRoutes,
+  adminHomepageDealsRoutes,
+  adminZoneVerificationsRoutes,
+  adminOffersRoutes
 } from './routes/admin';
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
 import experienceRoutes from './routes/experienceRoutes';  // Store experience routes
@@ -202,6 +207,7 @@ import merchantSocialMediaRoutes from './merchantroutes/socialMedia';  // Mercha
 import merchantEventsRoutes from './merchantroutes/events';  // Merchant events management routes
 import merchantServicesRoutes from './merchantroutes/services';  // Merchant services management routes
 import merchantDealRedemptionRoutes from './merchantroutes/dealRedemptions';  // Merchant deal redemption routes
+import merchantVoucherRedemptionRoutes from './merchantroutes/voucherRedemptions';  // Merchant voucher/offer redemption routes
 import { RealTimeService } from './merchantservices/RealTimeService';  // Temporarily disabled
 import { ReportService } from './merchantservices/ReportService';  // Temporarily disabled
 import stockSocketService from './services/stockSocketService';
@@ -639,6 +645,8 @@ app.use(`${API_PREFIX}/sync`, syncRoutes);
 app.use(`${API_PREFIX}/location`, locationRoutes);
 app.use(`${API_PREFIX}/wallet`, walletRoutes);
 app.use(`${API_PREFIX}/offers`, offerRoutes);
+app.use(`${API_PREFIX}/zones`, zoneVerificationRoutes);
+console.log('✅ Zone verification routes registered at /api/zones');
 app.use(`${API_PREFIX}/offer-categories`, offerCategoryRoutes);
 app.use(`${API_PREFIX}/hero-banners`, heroBannerRoutes);
 app.use(`${API_PREFIX}/whats-new`, whatsNewRoutes);
@@ -829,6 +837,12 @@ app.use(`${API_PREFIX}/admin/uploads`, adminUploadsRoutes);
 console.log('✅ Admin uploads routes registered at /api/admin/uploads');
 app.use(`${API_PREFIX}/admin/experiences`, adminExperiencesRoutes);
 console.log('✅ Admin experiences routes registered at /api/admin/experiences');
+app.use(`${API_PREFIX}/admin/homepage-deals`, adminHomepageDealsRoutes);
+console.log('✅ Admin homepage deals routes registered at /api/admin/homepage-deals');
+app.use(`${API_PREFIX}/admin/zone-verifications`, adminZoneVerificationsRoutes);
+console.log('✅ Admin zone verifications routes registered at /api/admin/zone-verifications');
+app.use(`${API_PREFIX}/admin/offers`, adminOffersRoutes);
+console.log('✅ Admin offers routes registered at /api/admin/offers');
 
 // Campaign Routes - Homepage exciting deals
 app.use(`${API_PREFIX}/campaigns`, campaignRoutes);
@@ -949,6 +963,10 @@ console.log('✅ Merchant services routes registered at /api/merchant/services')
 // Merchant Deal Redemption Routes - Verify and redeem deal codes
 app.use('/api/merchant/deal-redemptions', merchantDealRedemptionRoutes);
 console.log('✅ Merchant deal redemption routes registered at /api/merchant/deal-redemptions');
+
+// Merchant Voucher Redemption Routes - Verify and redeem offer voucher codes
+app.use('/api/merchant/voucher-redemptions', merchantVoucherRedemptionRoutes);
+console.log('✅ Merchant voucher redemption routes registered at /api/merchant/voucher-redemptions');
 
 // Root endpoint (MUST be before 404 handler)
 app.get('/', (req, res) => {
@@ -1077,6 +1095,11 @@ async function startServer() {
     console.log('🔄 Initializing deal expiry job...');
     initializeDealExpiryJob();
     console.log('✅ Deal expiry job started (runs every hour)');
+
+    // Initialize voucher redemption expiry job
+    console.log('🔄 Initializing voucher expiry job...');
+    initializeVoucherExpiryJob();
+    console.log('✅ Voucher expiry job started (runs every hour at :30)');
 
     // Initialize audit retention service
     console.log('🔄 Initializing audit retention service...');
