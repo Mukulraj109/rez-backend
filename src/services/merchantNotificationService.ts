@@ -419,6 +419,92 @@ class MerchantNotificationService {
   }
 
   // ============================================
+  // STORE VISIT NOTIFICATIONS
+  // ============================================
+
+  /**
+   * Notify merchant when a new visit is scheduled or a walk-in joins the queue
+   */
+  async notifyNewVisit(params: {
+    merchantId: string;
+    visitId: string;
+    visitNumber: string;
+    customerName: string;
+    visitDate: string;
+    visitTime: string;
+    visitType: 'scheduled' | 'queue' | 'rescheduled';
+    queueNumber?: number;
+    storeName: string;
+  }): Promise<void> {
+    const isQueue = params.visitType === 'queue';
+    const isRescheduled = params.visitType === 'rescheduled';
+
+    const title = isQueue
+      ? 'New Walk-in Customer'
+      : isRescheduled
+        ? 'Visit Rescheduled'
+        : 'New Visit Scheduled';
+
+    const message = isQueue
+      ? `${params.customerName} joined the queue (Queue #${params.queueNumber}) at ${params.storeName}`
+      : isRescheduled
+        ? `${params.customerName} rescheduled their visit at ${params.storeName} to ${params.visitDate} at ${params.visitTime}`
+        : `${params.customerName} scheduled a visit at ${params.storeName} on ${params.visitDate} at ${params.visitTime}`;
+
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title,
+      message,
+      type: 'info',
+      category: 'order',
+      priority: isQueue ? 'high' : 'medium',
+      data: {
+        deepLink: `/store-visits/${params.visitId}`,
+        actionButton: {
+          text: 'View Visit',
+          action: 'navigate',
+          target: `/store-visits/${params.visitId}`,
+        },
+        metadata: {
+          visitNumber: params.visitNumber,
+          customerName: params.customerName,
+          visitDate: params.visitDate,
+          visitTime: params.visitTime,
+          visitType: params.visitType,
+          queueNumber: params.queueNumber,
+        },
+      },
+    });
+  }
+
+  /**
+   * Notify merchant when a visit is cancelled
+   */
+  async notifyVisitCancelled(params: {
+    merchantId: string;
+    visitId: string;
+    visitNumber: string;
+    customerName: string;
+    storeName: string;
+  }): Promise<void> {
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: 'Visit Cancelled',
+      message: `${params.customerName} cancelled visit #${params.visitNumber} at ${params.storeName}`,
+      type: 'warning',
+      category: 'order',
+      priority: 'medium',
+      data: {
+        deepLink: `/store-visits/${params.visitId}`,
+        metadata: {
+          visitNumber: params.visitNumber,
+          customerName: params.customerName,
+        },
+      },
+    });
+  }
+
+  // ============================================
   // CASHBACK NOTIFICATIONS
   // ============================================
 

@@ -7,7 +7,9 @@ import {
   getStoreVisits,
   cancelStoreVisit,
   getCurrentQueueStatus,
-  checkStoreAvailability
+  checkStoreAvailability,
+  getAvailableSlotsHandler,
+  rescheduleStoreVisit
 } from '../controllers/storeVisitController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 
@@ -17,11 +19,13 @@ const router = Router();
 router.post('/schedule', authenticate, scheduleStoreVisit);
 router.post('/queue', optionalAuth, getQueueNumber); // Optional auth for walk-ins
 router.get('/user', authenticate, getUserStoreVisits);
-router.get('/:visitId', authenticate, getStoreVisit);
-router.get('/store/:storeId', authenticate, getStoreVisits);
+router.put('/:visitId/reschedule', authenticate, rescheduleStoreVisit);
 router.put('/:visitId/cancel', authenticate, cancelStoreVisit);
+router.get('/store/:storeId', authenticate, getStoreVisits);
+router.get('/:visitId', authenticate, getStoreVisit);
 
 // Public routes - no authentication required
+router.get('/available-slots/:storeId', getAvailableSlotsHandler);
 router.get('/queue-status/:storeId', getCurrentQueueStatus);
 router.get('/availability/:storeId', checkStoreAvailability);
 

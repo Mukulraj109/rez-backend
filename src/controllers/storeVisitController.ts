@@ -5,6 +5,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess, sendError, sendNotFound, sendBadRequest } from '../utils/response';
 import { AppError } from '../middleware/errorHandler';
 import pushNotificationService from '../services/pushNotificationService';
+import merchantNotificationService from '../services/merchantNotificationService';
 
 // Schedule a store visit
 export const scheduleStoreVisit = asyncHandler(async (req: Request, res: Response) => {
@@ -21,7 +22,8 @@ export const scheduleStoreVisit = asyncHandler(async (req: Request, res: Respons
     customerName,
     customerPhone,
     customerEmail,
-    estimatedDuration
+    estimatedDuration,
+    paymentMethod
   } = req.body;
 
   // Validate required fields
@@ -36,29 +38,62 @@ export const scheduleStoreVisit = asyncHandler(async (req: Request, res: Respons
     userId
   });
 
+  // Validate visit date is not in the past
+  const parsedVisitDate = new Date(visitDate);
+  if (isNaN(parsedVisitDate.getTime())) {
+    return sendBadRequest(res, 'Invalid date format. Please provide a valid date.');
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (parsedVisitDate < today) {
+    return sendBadRequest(res, 'Cannot schedule a visit in the past. Please select a future date.');
+  }
+
+  // Validate visitTime format
+  const timeRegex = /^(\d{1,2}):(\d{2})(\s*(AM|PM))?$/i;
+  if (!timeRegex.test(visitTime.trim())) {
+    return sendBadRequest(res, 'Invalid time format. Use "HH:MM AM/PM" or "HH:MM" (24-hour).');
+  }
+
   // Check if store exists
   const store = await Store.findById(storeId);
   if (!store) {
     return sendNotFound(res, 'Store not found');
   }
 
-  // Validate store type (optional - if you have store type field)
-  // if (store.type !== 'RETAIL') {
-  //   return sendBadRequest(res, 'This feature is only available for retail stores');
-  // }
+  // Prevent duplicate bookings by same user for same store/date/time
+  const existingBooking = await StoreVisit.findOne({
+    userId,
+    storeId,
+    visitDate: parsedVisitDate,
+    visitTime,
+    status: { $in: [VisitStatus.PENDING, VisitStatus.CHECKED_IN] }
+  });
+  if (existingBooking) {
+    return sendBadRequest(res, 'You already have a visit scheduled at this store for this date and time.');
+  }
+
+  // Check time slot availability (prevent overlaps)
+  const duration = estimatedDuration || 30;
+  const isAvailable = await StoreVisit.checkSlotAvailability(storeId, parsedVisitDate, visitTime, duration);
+  if (!isAvailable) {
+    return sendBadRequest(res, 'This time slot is already booked. Please select a different time.');
+  }
 
   // Create scheduled visit
   const visit = await StoreVisit.create({
     storeId,
     userId,
     visitType: VisitType.SCHEDULED,
-    visitDate: new Date(visitDate),
+    visitDate: parsedVisitDate,
     visitTime,
     customerName,
     customerPhone,
     customerEmail,
     status: VisitStatus.PENDING,
-    estimatedDuration: estimatedDuration || 30
+    estimatedDuration: duration,
+    paymentMethod: paymentMethod || 'none',
+    paymentStatus: paymentMethod === 'pay_at_store' ? 'pending' : 'not_required'
   });
 
   const populatedVisit = await StoreVisit.findById(visit._id)
@@ -87,7 +122,20 @@ export const scheduleStoreVisit = asyncHandler(async (req: Request, res: Respons
     console.log('📱 [SMS] Visit scheduled notification sent');
   } catch (smsError) {
     console.error('❌ [SMS] Failed to send visit notification:', smsError);
-    // Don't fail the request if SMS fails
+  }
+
+  // Notify merchant
+  if ((store as any).merchantId) {
+    merchantNotificationService.notifyNewVisit({
+      merchantId: (store as any).merchantId.toString(),
+      visitId: (visit._id as any).toString(),
+      visitNumber: visit.visitNumber,
+      customerName,
+      visitDate: parsedVisitDate.toLocaleDateString('en-IN'),
+      visitTime,
+      visitType: 'scheduled',
+      storeName: store.name,
+    }).catch(err => console.error('❌ [MERCHANT] Visit notification failed:', err));
   }
 
   sendSuccess(res, populatedVisit, 'Visit scheduled successfully', 201);
@@ -175,6 +223,21 @@ export const getQueueNumber = asyncHandler(async (req: Request, res: Response) =
     // Don't fail the request if SMS fails
   }
 
+  // Notify merchant
+  if ((store as any).merchantId) {
+    merchantNotificationService.notifyNewVisit({
+      merchantId: (store as any).merchantId.toString(),
+      visitId: (visit._id as any).toString(),
+      visitNumber: visit.visitNumber,
+      customerName,
+      visitDate: new Date().toLocaleDateString('en-IN'),
+      visitTime: '',
+      visitType: 'queue',
+      queueNumber,
+      storeName: store.name,
+    }).catch(err => console.error('❌ [MERCHANT] Queue notification failed:', err));
+  }
+
   sendSuccess(res, populatedVisit, 'Queue number generated successfully', 201);
 });
 
@@ -251,10 +314,13 @@ export const getStoreVisits = asyncHandler(async (req: Request, res: Response) =
     return sendNotFound(res, 'Store not found');
   }
 
-  // Optional: Add authorization check if store has owner field
-  // if (store.owner && store.owner.toString() !== userId) {
-  //   return sendError(res, 'Unauthorized access', 403);
-  // }
+  // Authorization check: verify user owns this store or is a merchant
+  if ((store as any).merchantId && (store as any).merchantId.toString() !== userId) {
+    // Also check if this is the store owner
+    if ((store as any).owner && (store as any).owner.toString() !== userId) {
+      return sendError(res, 'Unauthorized: You do not have access to this store\'s visits', 403);
+    }
+  }
 
   const visitDate = date ? new Date(date as string) : undefined;
   const visits = await StoreVisit.findStoreVisits(storeId, visitDate);
@@ -302,6 +368,29 @@ export const cancelStoreVisit = asyncHandler(async (req: Request, res: Response)
   console.log('✅ [STORE VISIT] Visit cancelled:', {
     visitNumber: visit.visitNumber
   });
+
+  // Notify merchant of cancellation
+  const cancelStore = await Store.findById(visit.storeId);
+  if (cancelStore && (cancelStore as any).merchantId) {
+    merchantNotificationService.notifyVisitCancelled({
+      merchantId: (cancelStore as any).merchantId.toString(),
+      visitId: (visit._id as any).toString(),
+      visitNumber: visit.visitNumber,
+      customerName: visit.customerName,
+      storeName: cancelStore.name,
+    }).catch(err => console.error('❌ [MERCHANT] Cancel notification failed:', err));
+  }
+
+  // Send cancellation SMS to customer
+  try {
+    await pushNotificationService.sendVisitCancelled(
+      cancelStore?.name || '',
+      visit.visitNumber,
+      visit.customerPhone
+    );
+  } catch (smsError) {
+    console.error('❌ [SMS] Failed to send cancellation notification:', smsError);
+  }
 
   sendSuccess(res, visit, 'Visit cancelled successfully');
 });
@@ -423,4 +512,314 @@ export const checkStoreAvailability = asyncHandler(async (req: Request, res: Res
   });
 
   sendSuccess(res, availability, 'Store availability retrieved successfully');
+});
+
+// Get available time slots for a date (public endpoint)
+export const getAvailableSlotsHandler = asyncHandler(async (req: Request, res: Response) => {
+  const { storeId } = req.params;
+  const { date, duration } = req.query;
+
+  if (!date) {
+    return sendBadRequest(res, 'Date query parameter is required (YYYY-MM-DD)');
+  }
+
+  const store = await Store.findById(storeId);
+  if (!store) {
+    return sendNotFound(res, 'Store not found');
+  }
+
+  const visitDate = new Date(date as string);
+  const visitDuration = duration ? parseInt(duration as string, 10) : 30;
+
+  // Try to get store hours for the day
+  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const dayName = dayNames[visitDate.getDay()];
+  const storeOperationalHours = (store as any).operationalInfo?.hours;
+  const dayHours = storeOperationalHours?.[dayName];
+
+  let storeHours = { open: '09:00', close: '21:00' }; // Default
+  if (dayHours && !dayHours.closed) {
+    storeHours = { open: dayHours.open || '09:00', close: dayHours.close || '21:00' };
+  } else if (dayHours?.closed) {
+    return sendSuccess(res, { availableSlots: [], date, storeId, closed: true }, 'Store is closed on this day');
+  }
+
+  const availableSlots = await StoreVisit.getAvailableSlots(storeId, visitDate, visitDuration, storeHours);
+
+  sendSuccess(res, { availableSlots, date, storeId }, 'Available slots retrieved successfully');
+});
+
+// Reschedule a store visit
+export const rescheduleStoreVisit = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+
+  if (!userId) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const { visitId } = req.params;
+  const { visitDate, visitTime } = req.body;
+
+  if (!visitDate || !visitTime) {
+    return sendBadRequest(res, 'New visit date and time are required');
+  }
+
+  // Validate date is not in the past
+  const parsedNewDate = new Date(visitDate);
+  if (isNaN(parsedNewDate.getTime())) {
+    return sendBadRequest(res, 'Invalid date format.');
+  }
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  if (parsedNewDate < todayStart) {
+    return sendBadRequest(res, 'Cannot reschedule to a past date.');
+  }
+
+  // Validate time format
+  const timeRegex = /^(\d{1,2}):(\d{2})(\s*(AM|PM))?$/i;
+  if (!timeRegex.test(visitTime.trim())) {
+    return sendBadRequest(res, 'Invalid time format. Use "HH:MM AM/PM" or "HH:MM" (24-hour).');
+  }
+
+  const visit = await StoreVisit.findById(visitId);
+  if (!visit) {
+    return sendNotFound(res, 'Visit not found');
+  }
+
+  // Check ownership
+  if (visit.userId && visit.userId.toString() !== userId) {
+    return sendError(res, 'Unauthorized access', 403);
+  }
+
+  // Only pending visits can be rescheduled
+  if (visit.status !== VisitStatus.PENDING) {
+    return sendBadRequest(res, 'Only pending visits can be rescheduled');
+  }
+
+  // Check slot availability (exclude current visit from conflict check)
+  const isAvailable = await StoreVisit.checkSlotAvailability(
+    visit.storeId,
+    parsedNewDate,
+    visitTime,
+    visit.estimatedDuration || 30,
+    visit._id as any
+  );
+
+  if (!isAvailable) {
+    return sendBadRequest(res, 'The new time slot is already booked. Please select a different time.');
+  }
+
+  // Update visit
+  visit.visitDate = parsedNewDate;
+  visit.visitTime = visitTime;
+  await visit.save();
+
+  const populatedVisit = await StoreVisit.findById(visit._id)
+    .populate('storeId', 'name location contact images')
+    .populate('userId', 'name phoneNumber email');
+
+  console.log('✅ [STORE VISIT] Visit rescheduled:', { visitNumber: visit.visitNumber });
+
+  // Notify merchant of reschedule
+  const store = await Store.findById(visit.storeId);
+  if (store && (store as any).merchantId) {
+    merchantNotificationService.notifyNewVisit({
+      merchantId: (store as any).merchantId.toString(),
+      visitId: (visit._id as any).toString(),
+      visitNumber: visit.visitNumber,
+      customerName: visit.customerName,
+      visitDate: parsedNewDate.toLocaleDateString('en-IN'),
+      visitTime,
+      visitType: 'rescheduled',
+      storeName: store.name,
+    }).catch(err => console.error('❌ [MERCHANT] Reschedule notification failed:', err));
+  }
+
+  // Send SMS confirmation to customer
+  try {
+    await pushNotificationService.sendVisitScheduled(
+      store?.name || '',
+      visit.visitNumber,
+      parsedNewDate,
+      visitTime,
+      visit.customerPhone,
+      store?.location?.address
+    );
+  } catch (smsError) {
+    console.error('❌ [SMS] Failed to send reschedule notification:', smsError);
+  }
+
+  sendSuccess(res, populatedVisit, 'Visit rescheduled successfully');
+});
+
+// ============================================
+// MERCHANT-FACING ENDPOINTS
+// ============================================
+
+// Get visits for merchant's store (with filters)
+export const getStoreVisitsForMerchant = asyncHandler(async (req: Request, res: Response) => {
+  const merchantId = (req as any).merchantId;
+  const { storeId, date, status, page = '1', limit = '20' } = req.query;
+
+  if (!storeId) {
+    return sendBadRequest(res, 'Store ID is required');
+  }
+
+  // Verify store belongs to merchant
+  const store = await Store.findById(storeId);
+  if (!store || (store as any).merchantId?.toString() !== merchantId) {
+    return sendNotFound(res, 'Store not found');
+  }
+
+  const query: any = { storeId };
+
+  if (date) {
+    const visitDate = new Date(date as string);
+    const startOfDay = new Date(visitDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(visitDate);
+    endOfDay.setHours(23, 59, 59, 999);
+    query.visitDate = { $gte: startOfDay, $lte: endOfDay };
+  }
+
+  if (status && status !== 'all') {
+    query.status = status;
+  }
+
+  const pageNum = parseInt(page as string, 10);
+  const limitNum = parseInt(limit as string, 10);
+  const skip = (pageNum - 1) * limitNum;
+
+  const [visits, totalCount] = await Promise.all([
+    StoreVisit.find(query)
+      .populate('userId', 'name phoneNumber email')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum),
+    StoreVisit.countDocuments(query)
+  ]);
+
+  sendSuccess(res, {
+    visits,
+    totalCount,
+    page: pageNum,
+    limit: limitNum,
+    totalPages: Math.ceil(totalCount / limitNum)
+  }, 'Merchant visits retrieved successfully');
+});
+
+// Get visit stats for merchant's store
+export const getVisitStats = asyncHandler(async (req: Request, res: Response) => {
+  const merchantId = (req as any).merchantId;
+  const { storeId } = req.query;
+
+  if (!storeId) {
+    return sendBadRequest(res, 'Store ID is required');
+  }
+
+  const store = await Store.findById(storeId);
+  if (!store || (store as any).merchantId?.toString() !== merchantId) {
+    return sendNotFound(res, 'Store not found');
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  // Week start (Monday) — handle Sunday (getDay()=0) correctly
+  const weekStart = new Date(today);
+  const dayOfWeek = weekStart.getDay();
+  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  weekStart.setDate(weekStart.getDate() - daysFromMonday);
+
+  const [todayVisits, weekVisits] = await Promise.all([
+    StoreVisit.find({
+      storeId,
+      visitDate: { $gte: today, $lt: tomorrow }
+    }),
+    StoreVisit.countDocuments({
+      storeId,
+      visitDate: { $gte: weekStart, $lt: tomorrow }
+    })
+  ]);
+
+  const stats = {
+    totalToday: todayVisits.length,
+    upcoming: todayVisits.filter(v => v.status === VisitStatus.PENDING).length,
+    checkedIn: todayVisits.filter(v => v.status === VisitStatus.CHECKED_IN).length,
+    completed: todayVisits.filter(v => v.status === VisitStatus.COMPLETED).length,
+    cancelled: todayVisits.filter(v => v.status === VisitStatus.CANCELLED).length,
+    totalThisWeek: weekVisits
+  };
+
+  sendSuccess(res, stats, 'Visit stats retrieved successfully');
+});
+
+// Update visit status (merchant action: check-in, complete, cancel)
+export const updateVisitStatusByMerchant = asyncHandler(async (req: Request, res: Response) => {
+  const merchantId = (req as any).merchantId;
+  const { visitId } = req.params;
+  const { status, notes } = req.body;
+
+  if (!status) {
+    return sendBadRequest(res, 'Status is required');
+  }
+
+  const validTransitions: Record<string, string[]> = {
+    [VisitStatus.PENDING]: [VisitStatus.CHECKED_IN, VisitStatus.CANCELLED],
+    [VisitStatus.CHECKED_IN]: [VisitStatus.COMPLETED, VisitStatus.CANCELLED],
+  };
+
+  const visit = await StoreVisit.findById(visitId);
+  if (!visit) {
+    return sendNotFound(res, 'Visit not found');
+  }
+
+  // Verify store belongs to merchant
+  const store = await Store.findById(visit.storeId);
+  if (!store || (store as any).merchantId?.toString() !== merchantId) {
+    return sendError(res, 'Unauthorized access', 403);
+  }
+
+  const allowed = validTransitions[visit.status];
+  if (!allowed || !allowed.includes(status)) {
+    return sendBadRequest(res, `Cannot transition from '${visit.status}' to '${status}'`);
+  }
+
+  const previousStatus = visit.status;
+  await visit.updateStatus(status as VisitStatus);
+
+  console.log('✅ [MERCHANT] Visit status updated:', {
+    visitNumber: visit.visitNumber,
+    from: previousStatus,
+    to: status
+  });
+
+  // Notify customer of status change via SMS
+  try {
+    if (status === VisitStatus.CHECKED_IN) {
+      await pushNotificationService.sendVisitCheckedIn(
+        store.name,
+        visit.visitNumber,
+        visit.customerPhone
+      );
+    } else if (status === VisitStatus.COMPLETED) {
+      await pushNotificationService.sendVisitCompleted(
+        store.name,
+        visit.visitNumber,
+        visit.customerPhone
+      );
+    } else if (status === VisitStatus.CANCELLED) {
+      await pushNotificationService.sendVisitCancelled(
+        store.name,
+        visit.visitNumber,
+        visit.customerPhone
+      );
+    }
+  } catch (smsError) {
+    console.error('❌ [SMS] Failed to send status change notification:', smsError);
+  }
+
+  sendSuccess(res, visit, 'Visit status updated successfully');
 });

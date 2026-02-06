@@ -302,6 +302,30 @@ class PushNotificationService {
 
     console.log(`❌ [Notification] Visit cancellation sent for ${visitNumber}`);
   }
+
+  public async sendVisitCheckedIn(
+    storeName: string,
+    visitNumber: string,
+    phone: string
+  ): Promise<void> {
+    const message = `✅ You're Checked In!\n\nStore: ${storeName}\nVisit #: ${visitNumber}\n\nYou have been checked in. The store team is ready for you!`;
+
+    await this.sendSMS(phone, message);
+
+    console.log(`✅ [Notification] Visit check-in sent for ${visitNumber}`);
+  }
+
+  public async sendVisitCompleted(
+    storeName: string,
+    visitNumber: string,
+    phone: string
+  ): Promise<void> {
+    const message = `🎉 Visit Complete!\n\nStore: ${storeName}\nVisit #: ${visitNumber}\n\nThank you for visiting! We hope you had a great experience.`;
+
+    await this.sendSMS(phone, message);
+
+    console.log(`🎉 [Notification] Visit completion sent for ${visitNumber}`);
+  }
 }
 
 // Export singleton instance
@@ -321,4 +345,6 @@ export const {
   sendQueueNumberAssigned,
   sendVisitScheduled,
   sendVisitCancelled,
+  sendVisitCheckedIn,
+  sendVisitCompleted,
 } = pushNotificationService;

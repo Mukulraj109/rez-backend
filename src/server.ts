@@ -206,6 +206,7 @@ import bulkImportRoutes from './merchantroutes/bulkImport';  // Bulk product imp
 import merchantSocialMediaRoutes from './merchantroutes/socialMedia';  // Merchant social media verification routes
 import merchantEventsRoutes from './merchantroutes/events';  // Merchant events management routes
 import merchantServicesRoutes from './merchantroutes/services';  // Merchant services management routes
+import merchantStoreVisitRoutes from './merchantroutes/storeVisits';  // Merchant store visit management routes
 import merchantDealRedemptionRoutes from './merchantroutes/dealRedemptions';  // Merchant deal redemption routes
 import merchantVoucherRedemptionRoutes from './merchantroutes/voucherRedemptions';  // Merchant voucher/offer redemption routes
 import { RealTimeService } from './merchantservices/RealTimeService';  // Temporarily disabled
@@ -921,6 +922,9 @@ app.use('/api/merchant/outlets', merchantOutletRoutes);  // Merchant outlet mana
 console.log('✅ Merchant outlet management routes registered at /api/merchant/outlets');
 app.use('/api/merchant/videos', merchantVideoRoutes);  // Merchant promotional video routes
 console.log('✅ Merchant promotional video routes registered at /api/merchant/videos');
+
+app.use('/api/merchant/store-visits', merchantStoreVisitRoutes);
+console.log('✅ Merchant store visit management routes registered at /api/merchant/store-visits');
 
 // // Merchant Sync Routes - Syncs merchant data to customer app
 app.use('/api/merchant/sync', merchantSyncRoutes);

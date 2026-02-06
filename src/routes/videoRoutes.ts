@@ -13,7 +13,9 @@ import {
   addVideoComment,
   getVideoComments,
   searchVideos,
-  reportVideo
+  reportVideo,
+  shareVideo,
+  toggleCommentLike
 } from '../controllers/videoController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validate, validateParams, validateQuery, videoSchemas, commonSchemas } from '../middleware/validation';
@@ -183,6 +185,25 @@ router.get('/:videoId/comments',
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),
   getVideoComments
+);
+
+// Share video (optional authentication - track share event)
+router.post('/:videoId/share',
+  optionalAuth,
+  validateParams(Joi.object({
+    videoId: commonSchemas.objectId().required()
+  })),
+  shareVideo
+);
+
+// Like/Unlike a comment (requires authentication)
+router.post('/:videoId/comments/:commentId/like',
+  authenticate,
+  validateParams(Joi.object({
+    videoId: commonSchemas.objectId().required(),
+    commentId: commonSchemas.objectId().required()
+  })),
+  toggleCommentLike
 );
 
 // Report video (requires authentication)

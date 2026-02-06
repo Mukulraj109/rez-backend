@@ -427,30 +427,41 @@ export const getTrendingVideos = asyncHandler(async (req: Request, res: Response
   try {
     // Calculate date for timeframe
     const days = timeframe === '1d' ? 1 : timeframe === '7d' ? 7 : 30;
-    const sinceDate = new Date();
-    sinceDate.setDate(sinceDate.getDate() - days);
 
-    const videos = await Video.find({
-      isPublished: true,
-      createdAt: { $gte: sinceDate }
-    })
-    .populate('creator', 'profile.firstName profile.lastName profile.avatar username')
-    .populate({
-      path: 'products',
-      select: 'name images description pricing inventory rating category store',
-      populate: {
-        path: 'store',
-        select: 'name slug logo _id'
+    // Progressive timeframe fallback: try requested -> 30d -> all-time
+    const timeframes = [days, 30, null]; // null = no date filter
+    let videos: any[] = [];
+
+    for (const tf of timeframes) {
+      const query: any = { isPublished: true };
+      if (tf !== null) {
+        const sinceDate = new Date();
+        sinceDate.setDate(sinceDate.getDate() - tf);
+        query.createdAt = { $gte: sinceDate };
       }
-    })
-    .populate('stores', 'name slug logo _id')
-    .sort({
-      'analytics.engagement': -1,
-      'analytics.views': -1,
-      createdAt: -1
-    })
-    .limit(Number(limit))
-    .lean();
+
+      videos = await Video.find(query)
+        .populate('creator', 'profile.firstName profile.lastName profile.avatar username')
+        .populate({
+          path: 'products',
+          select: 'name images description pricing inventory rating category store',
+          populate: {
+            path: 'store',
+            select: 'name slug logo _id'
+          }
+        })
+        .populate('stores', 'name slug logo _id')
+        .sort({
+          isTrending: -1,
+          'analytics.engagement': -1,
+          'analytics.views': -1,
+          createdAt: -1
+        })
+        .limit(Number(limit))
+        .lean();
+
+      if (videos.length > 0) break;
+    }
 
     // Transform videos to include isLiked status and flatten data
     const transformedVideos = videos.map((video: any) => {
@@ -579,35 +590,28 @@ export const toggleVideoLike = asyncHandler(async (req: Request, res: Response) 
     if (!video.engagement) {
       video.engagement = { views: 0, likes: [], shares: 0, comments: 0, saves: 0, reports: 0 };
     }
-    if (!video.engagement.likes) {
-      video.engagement.likes = [];
-    }
 
-    // Check if user already liked the video (check both arrays)
-    const likedInLikedBy = video.likedBy.some(id => id && id.equals(userObjectId));
-    const likedInEngagement = video.engagement.likes.some((id: any) => id && id.equals(userObjectId));
-    const wasLiked = likedInLikedBy || likedInEngagement;
+    // Use likedBy as single source of truth (avoids dual-array divergence)
+    const wasLiked = video.likedBy.some(id => id && id.equals(userObjectId));
 
     let isLiked = false;
 
     if (wasLiked) {
-      // Unlike: remove user from BOTH arrays
       video.likedBy = video.likedBy.filter(id => !id || !id.equals(userObjectId));
-      video.engagement.likes = video.engagement.likes.filter((id: any) => !id || !id.equals(userObjectId));
     } else {
-      // Like: add user to BOTH arrays
       video.likedBy.push(userObjectId);
-      video.engagement.likes.push(userObjectId);
       isLiked = true;
     }
 
-    // Update analytics.likes count for consistency
+    // Sync engagement.likes from likedBy for backward compatibility
+    video.engagement.likes = [...video.likedBy];
+
+    // Update analytics.likes count
     if (!video.analytics) {
       video.analytics = {} as any;
     }
     video.analytics.likes = video.likedBy.length;
 
-    // Get total likes from likedBy array length
     const totalLikes = video.likedBy.length;
 
     await video.save();
@@ -971,5 +975,97 @@ export const trackVideoView = asyncHandler(async (req: Request, res: Response) =
   } catch (error) {
     console.error('❌ [VIDEO] Track view error:', error);
     throw new AppError('Failed to track view', 500);
+  }
+});
+
+// Share video - increment share count
+export const shareVideo = asyncHandler(async (req: Request, res: Response) => {
+  const { videoId } = req.params;
+
+  try {
+    const video = await Video.findById(videoId);
+
+    if (!video) {
+      return sendNotFound(res, 'Video not found');
+    }
+
+    // Use the share method from the model if it exists, otherwise manual increment
+    if (typeof video.share === 'function') {
+      await video.share();
+    } else {
+      if (!video.engagement) {
+        video.engagement = { views: 0, likes: [], shares: 0, comments: 0, saves: 0, reports: 0 } as any;
+      }
+      video.engagement.shares = (video.engagement.shares || 0) + 1;
+      if (!video.analytics) {
+        video.analytics = {} as any;
+      }
+      video.analytics.shares = (video.analytics.shares || 0) + 1;
+      await video.save();
+    }
+
+    console.log(`✅ [VIDEO] Video ${videoId} shared. Total shares: ${video.engagement.shares}`);
+
+    sendSuccess(res, {
+      videoId: video._id,
+      shares: video.engagement.shares
+    }, 'Video shared successfully');
+
+  } catch (error) {
+    console.error('❌ [VIDEO] Share video error:', error);
+    throw new AppError('Failed to share video', 500);
+  }
+});
+
+// Toggle like on a comment
+export const toggleCommentLike = asyncHandler(async (req: Request, res: Response) => {
+  const { videoId, commentId } = req.params;
+  const userId = req.userId!;
+
+  try {
+    const video = await Video.findById(videoId);
+
+    if (!video) {
+      return sendNotFound(res, 'Video not found');
+    }
+
+    const comment = (video.comments as any[])?.find(
+      (c: any) => c._id.toString() === commentId
+    );
+
+    if (!comment) {
+      return sendNotFound(res, 'Comment not found');
+    }
+
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    // Initialize likes array if it doesn't exist
+    if (!comment.likes) {
+      comment.likes = [];
+    }
+
+    const wasLiked = comment.likes.some((id: any) => id && id.equals(userObjectId));
+    let isLiked = false;
+
+    if (wasLiked) {
+      comment.likes = comment.likes.filter((id: any) => !id || !id.equals(userObjectId));
+    } else {
+      comment.likes.push(userObjectId);
+      isLiked = true;
+    }
+
+    await video.save();
+
+    console.log(`✅ [VIDEO] Comment ${commentId} ${isLiked ? 'liked' : 'unliked'} by user ${userId}`);
+
+    sendSuccess(res, {
+      commentId,
+      isLiked,
+      likesCount: comment.likes.length
+    }, isLiked ? 'Comment liked' : 'Comment unliked');
+
+  } catch (error) {
+    console.error('❌ [VIDEO] Toggle comment like error:', error);
+    throw new AppError('Failed to toggle comment like', 500);
   }
 });

@@ -645,42 +645,54 @@ export const getStoresByCategory = asyncHandler(async (req: Request, res: Respon
       .limit(Number(limit))
       .lean();
 
-    // Fetch products for each store
-    const storesWithProducts = await Promise.all(
-      stores.map(async (store: any) => {
-        const products = await Product.find({
-          store: store._id,
-          isActive: true,
-          isDeleted: { $ne: true }
-        })
-          .select('name images pricing ratings inventory tags brand shortDescription subCategory category')
-          .limit(10)
-          .lean();
+    // Fetch products for all stores in a single bulk query (avoids N+1)
+    const storeIds = stores.map((s: any) => s._id);
+    const allProducts = await Product.find({
+      store: { $in: storeIds },
+      isActive: true,
+      isDeleted: { $ne: true }
+    })
+      .select('name images pricing ratings inventory tags brand shortDescription subCategory category store')
+      .lean();
 
-        // Transform products to match frontend expected format
-        const transformedProducts = products.map((product: any) => ({
-          _id: product._id,
-          name: product.name,
-          image: product.images?.[0] || '',
-          imageUrl: product.images?.[0] || '',
-          price: product.pricing?.selling || 0,
-          originalPrice: product.pricing?.original || 0,
-          rating: product.ratings?.average || 0,
-          reviewCount: product.ratings?.count || 0,
-          inStock: product.inventory?.isAvailable !== false,
-          tags: product.tags || [],
-          brand: product.brand || '',
-          description: product.shortDescription || '',
-          subCategory: product.subCategory?.toString() || null,
-          category: product.category?.toString() || null
-        }));
+    // Group products by store ID (limit 10 per store)
+    const productsByStore = new Map<string, any[]>();
+    for (const product of allProducts) {
+      const sid = product.store.toString();
+      if (!productsByStore.has(sid)) {
+        productsByStore.set(sid, []);
+      }
+      const arr = productsByStore.get(sid)!;
+      if (arr.length < 10) {
+        arr.push(product);
+      }
+    }
 
-        return {
-          ...store,
-          products: transformedProducts
-        };
-      })
-    );
+    // Attach transformed products to each store
+    const storesWithProducts = stores.map((store: any) => {
+      const products = productsByStore.get(store._id.toString()) || [];
+      const transformedProducts = products.map((product: any) => ({
+        _id: product._id,
+        name: product.name,
+        image: product.images?.[0] || '',
+        imageUrl: product.images?.[0] || '',
+        price: product.pricing?.selling || 0,
+        originalPrice: product.pricing?.original || 0,
+        rating: product.ratings?.average || 0,
+        reviewCount: product.ratings?.count || 0,
+        inStock: product.inventory?.isAvailable !== false,
+        tags: product.tags || [],
+        brand: product.brand || '',
+        description: product.shortDescription || '',
+        subCategory: product.subCategory?.toString() || null,
+        category: product.category?.toString() || null
+      }));
+
+      return {
+        ...store,
+        products: transformedProducts
+      };
+    });
 
     const total = await Store.countDocuments(query);
     const totalPages = Math.ceil(total / Number(limit));
@@ -1909,41 +1921,54 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
 
     console.log(`📦 [GET STORES BY SLUG] Found ${stores.length} stores for category ${slug}`);
 
-    // Fetch products for each store (first 4 products)
-    const storesWithProducts = await Promise.all(
-      stores.map(async (store: any) => {
-        const products = await Product.find({
-          store: store._id,
-          isActive: true
-        })
-          .select('name pricing images slug ratings inventory subSubCategory')
-          .limit(4)
-          .lean();
+    // Fetch products for all stores in a single bulk query (avoids N+1)
+    const storeIds = stores.map((s: any) => s._id);
+    const allProducts = await Product.find({
+      store: { $in: storeIds },
+      isActive: true
+    })
+      .select('name pricing images slug ratings inventory subSubCategory store')
+      .lean();
 
-        // Transform products to expected format
-        // Handle both old (price/rating) and new (pricing/ratings) field structures
-        const transformedProducts = products.map((product: any) => ({
-          _id: product._id,
-          productId: product._id,
-          name: product.name,
-          // Support both pricing.selling (new) and pricing.current/price.current (old)
-          price: product.pricing?.selling || product.pricing?.current || product.price?.current || 0,
-          originalPrice: product.pricing?.original || product.price?.original || null,
-          discountPercentage: product.pricing?.discount || product.price?.discount || null,
-          imageUrl: product.images?.[0] || 'https://via.placeholder.com/150',
-          // Support both ratings.average (new) and rating.value (old)
-          rating: product.ratings?.average || product.rating?.value || 0,
-          reviewCount: product.ratings?.count || product.rating?.count || 0,
-          inStock: product.inventory?.isAvailable !== false,
-          subSubCategory: product.subSubCategory || null
-        }));
+    // Group products by store ID (limit 4 per store)
+    const productsByStore = new Map<string, any[]>();
+    for (const product of allProducts) {
+      const sid = product.store.toString();
+      if (!productsByStore.has(sid)) {
+        productsByStore.set(sid, []);
+      }
+      const arr = productsByStore.get(sid)!;
+      if (arr.length < 4) {
+        arr.push(product);
+      }
+    }
 
-        return {
-          ...store,
-          products: transformedProducts
-        };
-      })
-    );
+    // Attach transformed products to each store
+    const storesWithProducts = stores.map((store: any) => {
+      const products = productsByStore.get(store._id.toString()) || [];
+      // Transform products to expected format
+      // Handle both old (price/rating) and new (pricing/ratings) field structures
+      const transformedProducts = products.map((product: any) => ({
+        _id: product._id,
+        productId: product._id,
+        name: product.name,
+        // Support both pricing.selling (new) and pricing.current/price.current (old)
+        price: product.pricing?.selling || product.pricing?.current || product.price?.current || 0,
+        originalPrice: product.pricing?.original || product.price?.original || null,
+        discountPercentage: product.pricing?.discount || product.price?.discount || null,
+        imageUrl: product.images?.[0] || 'https://via.placeholder.com/150',
+        // Support both ratings.average (new) and rating.value (old)
+        rating: product.ratings?.average || product.rating?.value || 0,
+        reviewCount: product.ratings?.count || product.rating?.count || 0,
+        inStock: product.inventory?.isAvailable !== false,
+        subSubCategory: product.subSubCategory || null
+      }));
+
+      return {
+        ...store,
+        products: transformedProducts
+      };
+    });
 
     const totalPages = Math.ceil(total / Number(limit));
 
@@ -2637,26 +2662,33 @@ export const getCuisineCounts = asyncHandler(async (req: Request, res: Response)
       { id: 'thali', name: 'Thali', icon: '🍱' },
     ];
 
-    // Count stores for each cuisine
-    const cuisineCounts = await Promise.all(
-      cuisines.map(async (cuisine) => {
-        const count = await Store.countDocuments({
-          isActive: true,
-          $or: [
-            { tags: { $elemMatch: { $regex: new RegExp(cuisine.id, 'i') } } },
-            { name: { $regex: new RegExp(cuisine.id, 'i') } }
-          ]
-        });
+    // Count stores for all cuisines in a single aggregation (avoids 12 individual queries)
+    const facetStages: Record<string, any[]> = {};
+    for (const cuisine of cuisines) {
+      const regex = new RegExp(cuisine.id, 'i');
+      facetStages[cuisine.id] = [
+        { $match: { $or: [{ tags: { $elemMatch: { $regex: regex } } }, { name: { $regex: regex } }] } },
+        { $count: 'count' }
+      ];
+    }
 
-        return {
-          id: cuisine.id,
-          name: cuisine.name,
-          icon: cuisine.icon,
-          count: count,
-          displayCount: count > 0 ? `${count}+ places` : '0 places'
-        };
-      })
-    );
+    const [facetResult] = await Store.aggregate([
+      { $match: { isActive: true } },
+      { $facet: facetStages }
+    ]);
+
+    // Map aggregation results back to cuisine objects
+    const cuisineCounts = cuisines.map((cuisine) => {
+      const result = facetResult?.[cuisine.id];
+      const count = result && result.length > 0 ? result[0].count : 0;
+      return {
+        id: cuisine.id,
+        name: cuisine.name,
+        icon: cuisine.icon,
+        count,
+        displayCount: count > 0 ? `${count}+ places` : '0 places'
+      };
+    });
 
     // Sort by count (most popular first) and filter out zeros
     const sortedCounts = cuisineCounts
