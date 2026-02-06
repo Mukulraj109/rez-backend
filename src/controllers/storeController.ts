@@ -225,15 +225,14 @@ export const getStoreById = asyncHandler(async (req: Request, res: Response) => 
       return sendNotFound(res, 'Store not found');
     }
 
-    // Validate region access
+    // Region check - log mismatch but allow direct store access by ID
+    // Users who navigate directly to a store page should still be able to view it
     const regionHeader = req.headers['x-rez-region'] as string;
     if (regionHeader && isValidRegion(regionHeader)) {
       const storeCity = store.location?.city;
       if (!regionService.validateStoreAccess(storeCity, regionHeader as RegionId)) {
         const suggestedRegion = regionService.getSuggestedRegion(storeCity);
-        const suggestedConfig = getRegionConfig(suggestedRegion);
-        console.log('🚫 [GET STORE] Region mismatch - store region:', suggestedRegion, 'user region:', regionHeader);
-        return sendBadRequest(res, `This store is not available in your region. It's located in ${suggestedConfig.displayName}.`);
+        console.log('⚠️ [GET STORE] Region mismatch (allowed) - store region:', suggestedRegion, 'user region:', regionHeader);
       }
     }
 
@@ -1749,8 +1748,89 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
     }).lean();
 
     if (!category) {
-      console.log(`❌ [GET STORES BY SLUG] Category not found: ${slug}`);
-      return sendNotFound(res, `Category '${slug}' not found`);
+      // Category slug not in DB — fallback to keyword-based search instead of 404
+      console.log(`⚠️ [GET STORES BY SLUG] Category not found in DB, falling back to keyword search: ${slug}`);
+
+      const searchKeywords = slug.replace(/-/g, ' ');
+      const fallbackQuery: any = {
+        isActive: true,
+        $or: [
+          { name: { $regex: searchKeywords, $options: 'i' } },
+          { description: { $regex: searchKeywords, $options: 'i' } },
+          { tags: { $regex: searchKeywords, $options: 'i' } }
+        ]
+      };
+
+      const regionHeader = req.headers['x-rez-region'] as string;
+      if (regionHeader && isValidRegion(regionHeader)) {
+        const regionFilter = regionService.getStoreFilter(regionHeader as RegionId);
+        Object.assign(fallbackQuery, regionFilter);
+      }
+
+      const fallbackSort: any = {};
+      switch (sortBy) {
+        case 'rating': fallbackSort['ratings.average'] = -1; break;
+        case 'name': fallbackSort.name = 1; break;
+        case 'newest': fallbackSort.createdAt = -1; break;
+        default: fallbackSort['ratings.average'] = -1;
+      }
+
+      const fallbackSkip = (Number(page) - 1) * Number(limit);
+
+      const [fallbackStores, fallbackTotal] = await Promise.all([
+        Store.find(fallbackQuery)
+          .populate('category', 'name slug icon')
+          .sort(fallbackSort)
+          .skip(fallbackSkip)
+          .limit(Number(limit))
+          .lean(),
+        Store.countDocuments(fallbackQuery)
+      ]);
+
+      const fallbackStoresWithProducts = await Promise.all(
+        fallbackStores.map(async (store: any) => {
+          const products = await Product.find({ store: store._id, isActive: true })
+            .select('name pricing images slug ratings inventory subSubCategory')
+            .limit(4)
+            .lean();
+
+          const transformedProducts = products.map((product: any) => ({
+            _id: product._id,
+            productId: product._id,
+            name: product.name,
+            price: product.pricing?.selling || product.pricing?.current || product.price?.current || 0,
+            originalPrice: product.pricing?.original || product.price?.original || null,
+            discountPercentage: product.pricing?.discount || product.price?.discount || null,
+            imageUrl: product.images?.[0] || 'https://via.placeholder.com/150',
+            rating: product.ratings?.average || product.rating?.value || 0,
+            reviewCount: product.ratings?.count || product.rating?.count || 0,
+            inStock: product.inventory?.isAvailable !== false,
+            subSubCategory: product.subSubCategory || null
+          }));
+
+          return { ...store, products: transformedProducts };
+        })
+      );
+
+      const fallbackTotalPages = Math.ceil(fallbackTotal / Number(limit));
+
+      return sendSuccess(res, {
+        stores: fallbackStoresWithProducts,
+        category: {
+          _id: null,
+          name: searchKeywords,
+          slug: slug,
+          icon: null
+        },
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total: fallbackTotal,
+          totalPages: fallbackTotalPages,
+          hasNext: Number(page) < fallbackTotalPages,
+          hasPrev: Number(page) > 1
+        }
+      }, `Found ${fallbackTotal} stores matching: ${searchKeywords}`);
     }
 
     console.log(`✅ [GET STORES BY SLUG] Found category: ${category.name} (${category._id})`);

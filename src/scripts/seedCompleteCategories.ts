@@ -84,7 +84,6 @@ const CATEGORY_HIERARCHY: Record<string, {
     subcategories: [
       { slug: 'footwear', name: 'Footwear', icon: 'footsteps-outline' },
       { slug: 'bags-accessories', name: 'Bags & Accessories', icon: 'bag-outline' },
-      { slug: 'electronics', name: 'Electronics', icon: 'phone-portrait-outline' },
       { slug: 'mobile-accessories', name: 'Mobile Accessories', icon: 'headset-outline' },
       { slug: 'watches', name: 'Watches', icon: 'watch-outline' },
       { slug: 'jewelry', name: 'Jewelry', icon: 'diamond-outline' },
@@ -175,6 +174,21 @@ const CATEGORY_HIERARCHY: Record<string, {
       { slug: 'donations', name: 'Donations', icon: 'heart-outline' },
     ],
   },
+  'electronics': {
+    name: 'Electronics',
+    icon: 'phone-portrait-outline',
+    primaryColor: '#3B82F6',
+    subcategories: [
+      { slug: 'mobile-phones', name: 'Mobile Phones', icon: 'phone-portrait-outline' },
+      { slug: 'laptops', name: 'Laptops', icon: 'laptop-outline' },
+      { slug: 'televisions', name: 'Televisions', icon: 'tv-outline' },
+      { slug: 'cameras', name: 'Cameras', icon: 'camera-outline' },
+      { slug: 'audio-headphones', name: 'Audio & Headphones', icon: 'headset-outline' },
+      { slug: 'gaming', name: 'Gaming', icon: 'game-controller-outline' },
+      { slug: 'accessories', name: 'Accessories', icon: 'hardware-chip-outline' },
+      { slug: 'smartwatches', name: 'Smartwatches', icon: 'watch-outline' },
+    ],
+  },
 };
 
 async function seedCompleteCategories() {
@@ -192,17 +206,17 @@ async function seedCompleteCategories() {
     const categoryMapping: Record<string, mongoose.Types.ObjectId> = {};
 
     // Step 1: Create main categories
-    console.log('📦 Creating 11 Main Categories...\n');
+    console.log('📦 Creating 12 Main Categories...\n');
     let mainCategoryCount = 0;
 
     for (const [slug, config] of Object.entries(CATEGORY_HIERARCHY)) {
-      // Check if main category already exists
+      // Check if main category already exists (as a top-level category)
       const existingMain = await categoriesCollection.findOne({ slug, parentCategory: null });
 
       let mainCategoryId: mongoose.Types.ObjectId;
 
       if (existingMain) {
-        // Update existing
+        // Update existing main category
         await categoriesCollection.updateOne(
           { _id: existingMain._id },
           {
@@ -219,24 +233,48 @@ async function seedCompleteCategories() {
         mainCategoryId = existingMain._id as mongoose.Types.ObjectId;
         console.log(`   ✏️ Updated: ${config.name} (${slug})`);
       } else {
-        // Insert new
-        const result = await categoriesCollection.insertOne({
-          name: config.name,
-          slug: slug,
-          icon: config.icon,
-          type: 'going_out',
-          parentCategory: null,
-          childCategories: [],
-          metadata: { color: config.primaryColor },
-          isActive: true,
-          sortOrder: mainCategoryCount,
-          productCount: 0,
-          storeCount: 0,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-        mainCategoryId = result.insertedId as mongoose.Types.ObjectId;
-        console.log(`   ✅ Created: ${config.name} (${slug})`);
+        // Check if slug exists as a subcategory (e.g., 'electronics' under 'fashion')
+        const existingAsSub = await categoriesCollection.findOne({ slug });
+
+        if (existingAsSub) {
+          // Promote existing subcategory to main category
+          await categoriesCollection.updateOne(
+            { _id: existingAsSub._id },
+            {
+              $set: {
+                name: config.name,
+                icon: config.icon,
+                type: 'going_out',
+                parentCategory: null,
+                metadata: { color: config.primaryColor },
+                isActive: true,
+                sortOrder: mainCategoryCount,
+                updatedAt: new Date(),
+              },
+            }
+          );
+          mainCategoryId = existingAsSub._id as mongoose.Types.ObjectId;
+          console.log(`   🔄 Promoted to main: ${config.name} (${slug}) — was a subcategory`);
+        } else {
+          // Insert new
+          const result = await categoriesCollection.insertOne({
+            name: config.name,
+            slug: slug,
+            icon: config.icon,
+            type: 'going_out',
+            parentCategory: null,
+            childCategories: [],
+            metadata: { color: config.primaryColor },
+            isActive: true,
+            sortOrder: mainCategoryCount,
+            productCount: 0,
+            storeCount: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+          mainCategoryId = result.insertedId as mongoose.Types.ObjectId;
+          console.log(`   ✅ Created: ${config.name} (${slug})`);
+        }
       }
 
       categoryMapping[slug] = mainCategoryId;
