@@ -584,6 +584,18 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
       };
     }
 
+    // Update booking config
+    if (updates.bookingConfig !== undefined) {
+      (store as any).bookingConfig = {
+        ...(store as any).bookingConfig,
+        ...updates.bookingConfig,
+        workingHours: {
+          ...(store as any).bookingConfig?.workingHours,
+          ...updates.bookingConfig?.workingHours,
+        },
+      };
+    }
+
     // If banner was updated using raw MongoDB, we need to update other fields using raw MongoDB too
     // to prevent Mongoose from overwriting the banner with undefined
     if (updates.banner !== undefined && mongoose.connection.db) {
@@ -609,6 +621,7 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
       if (updates.isActive !== undefined) fieldsToUpdate.isActive = store.isActive;
       if (updates.isFeatured !== undefined) fieldsToUpdate.isFeatured = store.isFeatured;
       if (updates.actionButtons !== undefined) fieldsToUpdate.actionButtons = (store as any).actionButtons;
+      if (updates.bookingConfig !== undefined) fieldsToUpdate.bookingConfig = (store as any).bookingConfig;
       if (store.category) {
         // Ensure category is an ObjectId
         fieldsToUpdate.category = store.category instanceof mongoose.Types.ObjectId
@@ -643,6 +656,7 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
         if (updates.isActive !== undefined) fieldsToUpdate.isActive = store.isActive;
         if (updates.isFeatured !== undefined) fieldsToUpdate.isFeatured = store.isFeatured;
         if (updates.actionButtons !== undefined) fieldsToUpdate.actionButtons = (store as any).actionButtons;
+      if (updates.bookingConfig !== undefined) fieldsToUpdate.bookingConfig = (store as any).bookingConfig;
         if (store.category) {
           fieldsToUpdate.category = store.category instanceof mongoose.Types.ObjectId
             ? store.category

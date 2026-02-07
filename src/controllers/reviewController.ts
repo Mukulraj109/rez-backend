@@ -548,3 +548,69 @@ export const canUserReviewStore = asyncHandler(async (req: Request, res: Respons
     throw new AppError('Failed to check review eligibility', 500);
   }
 });
+
+// Get featured reviews (public endpoint for UGC sections)
+export const getFeaturedReviews = asyncHandler(async (req: Request, res: Response) => {
+  const { page = 1, limit = 20, category } = req.query;
+
+  try {
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const query: any = { isActive: true, status: 'approved' };
+
+    // Prefer featured reviews, fall back to approved with images
+    const featuredCount = await Review.countDocuments({ ...query, isFeaturedOnExplore: true });
+    if (featuredCount > 0) {
+      query.isFeaturedOnExplore = true;
+    } else {
+      query.images = { $exists: true, $ne: [] };
+    }
+
+    // Filter by category if provided (through store's category)
+    let storeFilter = {};
+    if (category) {
+      const { Category } = require('../models/Category');
+      const cat = await Category.findOne({ slug: category, isActive: true }).lean();
+      if (cat) {
+        storeFilter = { category: cat._id };
+      }
+    }
+
+    let reviewQuery = Review.find(query)
+      .populate('user', 'profile.firstName profile.lastName profile.avatar isVerified')
+      .populate('store', 'name logo slug category')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit));
+
+    const [reviews, total] = await Promise.all([
+      reviewQuery.lean(),
+      Review.countDocuments(query)
+    ]);
+
+    // Filter by category on populated data if needed
+    let filteredReviews = reviews;
+    if (category && storeFilter) {
+      const { Category } = require('../models/Category');
+      const cat = await Category.findOne({ slug: category, isActive: true }).lean();
+      if (cat) {
+        filteredReviews = reviews.filter((r: any) =>
+          r.store?.category?.toString() === cat._id.toString()
+        );
+      }
+    }
+
+    sendSuccess(res, {
+      reviews: filteredReviews,
+      pagination: {
+        current: Number(page),
+        pages: Math.ceil(total / Number(limit)),
+        total,
+        limit: Number(limit)
+      }
+    }, 'Featured reviews retrieved successfully');
+  } catch (error) {
+    console.error('Get featured reviews error:', error);
+    throw new AppError('Failed to fetch featured reviews', 500);
+  }
+});

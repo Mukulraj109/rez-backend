@@ -7,7 +7,8 @@ import {
   markReviewHelpful,
   getUserReviews,
   canUserReviewStore,
-  moderateReview
+  moderateReview,
+  getFeaturedReviews
 } from '../controllers/reviewController';
 import { uploadReviewImage as uploadReviewImageController } from '../controllers/uploadController';
 import { uploadReviewImage as uploadReviewImageMiddleware } from '../middleware/upload';
@@ -17,6 +18,16 @@ import { validateQuery, validateParams, validateBody, commonSchemas } from '../m
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+
+// Get featured reviews (public, for UGC sections and food-stories)
+router.get('/featured',
+  validateQuery(Joi.object({
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(50).default(20),
+    category: Joi.string().trim()
+  })),
+  getFeaturedReviews
+);
 
 // Get reviews for a store
 router.get('/store/:storeId',

@@ -62,6 +62,33 @@ export const createTableBooking = async (req: Request, res: Response) => {
       return sendBadRequest(res, 'Party size must be between 1 and 50');
     }
 
+    // Check availability before creating booking (prevent overbooking)
+    const maxCapacity = (store as any).bookingConfig?.maxTableCapacity || 50;
+
+    const startOfBookingDay = new Date(bookingDateTime);
+    startOfBookingDay.setHours(0, 0, 0, 0);
+    const endOfBookingDay = new Date(bookingDateTime);
+    endOfBookingDay.setHours(23, 59, 59, 999);
+
+    const existingBookings = await TableBooking.find({
+      storeId: new Types.ObjectId(storeId),
+      bookingDate: { $gte: startOfBookingDay, $lte: endOfBookingDay },
+      bookingTime,
+      status: { $in: ['pending', 'confirmed'] }
+    }).select('partySize').lean();
+
+    const totalBooked = existingBookings.reduce((sum, b) => sum + b.partySize, 0);
+    if (totalBooked + partySize > maxCapacity) {
+      const remaining = maxCapacity - totalBooked;
+      console.error('❌ [TABLE BOOKING] Slot full. Booked:', totalBooked, 'Requested:', partySize, 'Max:', maxCapacity);
+      return sendBadRequest(
+        res,
+        remaining > 0
+          ? `Only ${remaining} seats available at ${bookingTime}. Please choose a different time or reduce party size.`
+          : `This time slot (${bookingTime}) is fully booked. Please choose a different time.`
+      );
+    }
+
     // Create booking
     const booking = new TableBooking({
       storeId: new Types.ObjectId(storeId),
@@ -249,6 +276,134 @@ export const getStoreTableBookings = async (req: Request, res: Response) => {
   }
 };
 
+// Get all table bookings across all stores owned by the merchant
+export const getMerchantTableBookings = async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { date, status, page = 1, limit = 50 } = req.query;
+
+    console.log('📅 [TABLE BOOKING] Getting merchant bookings for user:', userId);
+
+    // Find all stores owned by this merchant
+    const merchantStores = await Store.find({ merchantId: new Types.ObjectId(userId) }).select('_id name').lean();
+
+    if (!merchantStores.length) {
+      return sendSuccess(res, {
+        bookings: [],
+        stores: [],
+        pagination: { page: 1, limit: Number(limit), total: 0, totalPages: 0, hasNext: false, hasPrev: false }
+      }, 'No stores found');
+    }
+
+    const storeIds = merchantStores.map(s => s._id);
+    const query: any = { storeId: { $in: storeIds } };
+
+    if (date) {
+      const bookingDate = new Date(date as string);
+      const startOfDay = new Date(bookingDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(bookingDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      query.bookingDate = { $gte: startOfDay, $lte: endOfDay };
+    }
+
+    if (status) {
+      query.status = status;
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const bookings = await TableBooking.find(query)
+      .populate('storeId', 'name logo')
+      .populate('userId', 'profile.firstName profile.lastName phoneNumber email')
+      .sort({ bookingDate: -1, bookingTime: -1 })
+      .skip(skip)
+      .limit(Number(limit))
+      .lean();
+
+    const total = await TableBooking.countDocuments(query);
+    const totalPages = Math.ceil(total / Number(limit));
+
+    console.log('✅ [TABLE BOOKING] Found merchant bookings:', bookings.length, 'across', merchantStores.length, 'stores');
+
+    return sendSuccess(res, {
+      bookings,
+      stores: merchantStores,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        totalPages,
+        hasNext: Number(page) < totalPages,
+        hasPrev: Number(page) > 1
+      }
+    }, 'Merchant bookings retrieved successfully');
+
+  } catch (error: any) {
+    console.error('❌ [TABLE BOOKING] Error getting merchant bookings:', error);
+    return sendError(res, `Failed to retrieve merchant bookings: ${error.message}`, 500);
+  }
+};
+
+// Update table booking status (for store owners/merchants)
+export const updateTableBookingStatus = async (req: Request, res: Response) => {
+  try {
+    const { bookingId } = req.params;
+    const userId = req.userId!;
+    const { status } = req.body;
+
+    console.log('📅 [TABLE BOOKING] Updating booking status:', { bookingId, status });
+
+    // Validate status
+    const validStatuses = ['confirmed', 'completed', 'cancelled'];
+    if (!status || !validStatuses.includes(status)) {
+      return sendBadRequest(res, `Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+    }
+
+    // Find the booking
+    const booking = await TableBooking.findById(bookingId);
+    if (!booking) {
+      return sendNotFound(res, 'Booking not found');
+    }
+
+    // Verify the merchant owns the store
+    const store = await Store.findOne({
+      _id: booking.storeId,
+      merchantId: new Types.ObjectId(userId)
+    });
+
+    if (!store) {
+      return sendBadRequest(res, 'You do not have permission to update this booking');
+    }
+
+    // Validate status transitions
+    if (booking.status === 'cancelled') {
+      return sendBadRequest(res, 'Cannot update a cancelled booking');
+    }
+    if (booking.status === 'completed') {
+      return sendBadRequest(res, 'Cannot update a completed booking');
+    }
+    if (status === 'completed' && booking.status !== 'confirmed') {
+      return sendBadRequest(res, 'Booking must be confirmed before marking as completed');
+    }
+
+    booking.status = status;
+    await booking.save();
+
+    console.log('✅ [TABLE BOOKING] Booking status updated:', booking.bookingNumber, '->', status);
+
+    const populatedBooking = await TableBooking.findById(booking._id)
+      .populate('storeId', 'name logo location contact')
+      .populate('userId', 'profile.firstName profile.lastName phoneNumber email');
+
+    return sendSuccess(res, populatedBooking, `Booking ${status} successfully`);
+
+  } catch (error: any) {
+    console.error('❌ [TABLE BOOKING] Error updating booking status:', error);
+    return sendError(res, `Failed to update booking status: ${error.message}`, 500);
+  }
+};
+
 // Cancel table booking
 export const cancelTableBooking = async (req: Request, res: Response) => {
   try {
@@ -339,26 +494,36 @@ export const checkAvailability = async (req: Request, res: Response) => {
 
     console.log('✅ [TABLE BOOKING] Found bookings for date:', bookings.length);
 
-    // Generate time slots (example: 9 AM to 10 PM, every hour)
+    // Use store's configured capacity or default
+    const maxCapacity = (store as any).bookingConfig?.maxTableCapacity || 50;
+    const slotDuration = (store as any).bookingConfig?.slotDuration || 30; // minutes
+    const workingStart = (store as any).bookingConfig?.workingHours?.start || '09:00';
+    const workingEnd = (store as any).bookingConfig?.workingHours?.end || '22:00';
+
+    const startHour = parseInt(workingStart.split(':')[0]);
+    const endHour = parseInt(workingEnd.split(':')[0]);
+
+    // Generate time slots based on store config (half-hour or configured duration)
     const timeSlots = [];
-    for (let hour = 9; hour <= 22; hour++) {
-      const time = `${hour.toString().padStart(2, '0')}:00`;
+    for (let hour = startHour; hour <= endHour; hour++) {
+      for (let min = 0; min < 60; min += slotDuration) {
+        if (hour === endHour && min > 0) break; // Don't go past closing
+        const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
 
-      // Count bookings for this time slot
-      const bookingsAtTime = bookings.filter(b => b.bookingTime === time);
-      const totalPartySize = bookingsAtTime.reduce((sum, b) => sum + b.partySize, 0);
+        // Count bookings for this time slot
+        const bookingsAtTime = bookings.filter(b => b.bookingTime === time);
+        const totalPartySize = bookingsAtTime.reduce((sum, b) => sum + b.partySize, 0);
 
-      // Assume max capacity of 100 people per time slot (adjust based on actual store capacity)
-      const maxCapacity = 100;
-      const available = totalPartySize < maxCapacity;
-      const remainingCapacity = maxCapacity - totalPartySize;
+        const remainingCapacity = Math.max(0, maxCapacity - totalPartySize);
+        const available = remainingCapacity > 0;
 
-      timeSlots.push({
-        time,
-        available,
-        remainingCapacity,
-        bookingsCount: bookingsAtTime.length
-      });
+        timeSlots.push({
+          time,
+          available,
+          remainingCapacity,
+          bookingsCount: bookingsAtTime.length
+        });
+      }
     }
 
     return sendSuccess(res, {

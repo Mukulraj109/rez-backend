@@ -4,6 +4,7 @@ import {
   checkIn,
   completeMission,
   getCoinBalance,
+  syncBrandLoyalty,
   getHomepageLoyaltySummary
 } from '../controllers/loyaltyController';
 import { authenticate, optionalAuth } from '../middleware/auth';
@@ -56,5 +57,8 @@ router.post('/missions/:missionId/complete',
 
 // Get coin balance
 router.get('/coins', getCoinBalance);
+
+// Sync brand loyalty from order history
+router.post('/sync-brands', syncBrandLoyalty);
 
 export default router;

@@ -114,6 +114,11 @@ router.get('/trending',
 router.get('/popular',
   // generalLimiter,, // Disabled for development
   optionalAuth,
+  validateQuery(Joi.object({
+    category: Joi.string().trim().max(100),
+    limit: Joi.number().integer().min(1).max(50).default(20),
+    page: Joi.number().integer().min(1).default(1)
+  })),
   getPopularProducts
 );
 
@@ -121,6 +126,14 @@ router.get('/popular',
 router.get('/nearby',
   // generalLimiter,, // Disabled for development
   optionalAuth,
+  validateQuery(Joi.object({
+    lat: Joi.number().min(-90).max(90),
+    lng: Joi.number().min(-180).max(180),
+    radius: Joi.number().min(1).max(100).default(10),
+    category: Joi.string().trim().max(100),
+    limit: Joi.number().integer().min(1).max(50).default(20),
+    page: Joi.number().integer().min(1).default(1)
+  })),
   getNearbyProducts
 );
 
@@ -128,6 +141,11 @@ router.get('/nearby',
 router.get('/hot-deals',
   // generalLimiter,, // Disabled for development
   optionalAuth,
+  validateQuery(Joi.object({
+    category: Joi.string().trim().max(100),
+    limit: Joi.number().integer().min(1).max(50).default(20),
+    page: Joi.number().integer().min(1).default(1)
+  })),
   getHotDeals
 );
 
@@ -204,7 +222,7 @@ router.get('/subcategory/:subcategorySlug',
     subcategorySlug: Joi.string().required()
   })),
   validateQuery(Joi.object({
-    limit: Joi.number().integer().min(1).max(20).default(10)
+    limit: Joi.number().integer().min(1).max(100).default(20)
   })),
   getProductsBySubcategory
 );
@@ -218,11 +236,11 @@ router.get('/store/:storeId',
     storeId: Joi.string().trim().min(1).required()
   })),
   validateQuery(Joi.object({
-    category: commonSchemas.objectId,
+    category: commonSchemas.objectId(),
     minPrice: Joi.number().min(0),
     maxPrice: Joi.number().min(0),
     sortBy: Joi.string().valid('price_low', 'price_high', 'rating', 'newest'),
-    ...commonSchemas.pagination
+    ...commonSchemas.pagination()
   })),
   getProductsByStore
 );

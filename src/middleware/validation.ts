@@ -180,7 +180,7 @@ export const authSchemas = {
 export const productSchemas = {
   getProducts: Joi.object({
     category: Joi.string().trim().max(100), // Allow category slug (string) or ObjectId
-    store: commonSchemas.objectId,
+    store: commonSchemas.objectId(),
     minPrice: Joi.number().min(0),
     maxPrice: Joi.number().min(0),
     rating: Joi.number().min(1).max(5),
@@ -313,7 +313,7 @@ export const reviewSchemas = {
 // Notification validation schemas
 export const notificationSchemas = {
   markAsRead: Joi.object({
-    notificationIds: Joi.array().items(commonSchemas.objectId)
+    notificationIds: Joi.array().items(commonSchemas.objectId())
   })
 };
 
@@ -342,9 +342,10 @@ export const wishlistSchemas = {
 // Video validation schemas
 export const videoSchemas = {
   getVideos: Joi.object({
-    category: Joi.string().valid('trending_me', 'trending_her', 'waist', 'article', 'featured', 'challenge', 'tutorial', 'review'),
+    category: Joi.string().trim().max(100),
     contentType: Joi.string().valid('merchant', 'ugc', 'article_video'),
-    creator: commonSchemas.objectId,
+    status: Joi.string().valid('approved', 'pending', 'rejected'),
+    creator: commonSchemas.objectId(),
     hasProducts: Joi.alternatives().try(
       Joi.boolean(),
       Joi.string().valid('true', 'false').custom((value) => value === 'true')

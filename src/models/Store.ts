@@ -218,6 +218,7 @@ export interface IStore extends Document {
     allowWalkIn: boolean; // true for retail "store visit"
     slotDuration: number; // minutes
     advanceBookingDays: number; // how many days in advance
+    maxTableCapacity: number; // max guests per time slot (restaurant seating capacity)
     workingHours?: {
       start: string; // e.g., "09:00"
       end: string; // e.g., "21:00"
@@ -637,6 +638,7 @@ const StoreSchema = new Schema<IStore>({
     allowWalkIn: { type: Boolean, default: true },
     slotDuration: { type: Number, default: 30 }, // minutes
     advanceBookingDays: { type: Number, default: 7 }, // days
+    maxTableCapacity: { type: Number, default: 50 }, // max guests per time slot
     workingHours: {
       start: { type: String, default: '09:00' },
       end: { type: String, default: '21:00' }

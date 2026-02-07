@@ -52,11 +52,11 @@ export const createVideo = asyncHandler(async (req: Request, res: Response) => {
       products: products || [],
       stores: [], // Empty stores array for now
       isPublished: isPublic,
-      isApproved: true, // Auto-approve for now
+      isApproved: contentType === 'promotional' || contentType === 'merchant',
       isFeatured: false,
       isTrending: false,
       isSponsored: false,
-      moderationStatus: 'approved',
+      moderationStatus: (contentType === 'promotional' || contentType === 'merchant') ? 'approved' : 'pending',
       analytics: {
         views: 0,
         likes: 0,
@@ -361,9 +361,10 @@ export const getVideosByCategory = asyncHandler(async (req: Request, res: Respon
   const { page = 1, limit = 20, sortBy = 'newest' } = req.query;
 
   try {
-    const query = { 
-      category, 
-      isPublished: true 
+    const query = {
+      category,
+      isPublished: true,
+      isApproved: true
     };
 
     const sortOptions: any = {};
@@ -433,7 +434,7 @@ export const getTrendingVideos = asyncHandler(async (req: Request, res: Response
     let videos: any[] = [];
 
     for (const tf of timeframes) {
-      const query: any = { isPublished: true };
+      const query: any = { isPublished: true, isApproved: true };
       if (tf !== null) {
         const sinceDate = new Date();
         sinceDate.setDate(sinceDate.getDate() - tf);
@@ -652,7 +653,9 @@ export const addVideoComment = asyncHandler(async (req: Request, res: Response) 
 
     // Update analytics
     video.analytics.comments += 1;
-    video.analytics.engagement = video.analytics.likes + video.analytics.comments + (video.analytics.shares || 0);
+    const likesCount = (video.likedBy || []).length;
+    video.analytics.likes = likesCount;
+    video.analytics.engagement = likesCount + video.analytics.comments + (video.analytics.shares || 0);
 
     await video.save();
 
@@ -678,6 +681,7 @@ export const addVideoComment = asyncHandler(async (req: Request, res: Response) 
 export const getVideoComments = asyncHandler(async (req: Request, res: Response) => {
   const { videoId } = req.params;
   const { page = 1, limit = 20 } = req.query;
+  const userId = req.userId;
 
   try {
     const video = await Video.findById(videoId)
@@ -694,9 +698,19 @@ export const getVideoComments = asyncHandler(async (req: Request, res: Response)
 
     // Pagination for comments
     const skip = (Number(page) - 1) * Number(limit);
-    const comments = allComments
+    const paginatedComments = allComments
       .sort((a: any, b: any) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime())
       .slice(skip, skip + Number(limit));
+
+    // Transform comments: convert likes array to count + isLiked boolean
+    const comments = paginatedComments.map((c: any) => {
+      const likesArray = Array.isArray(c.likes) ? c.likes : [];
+      return {
+        ...c,
+        likes: likesArray.length,
+        isLiked: userId ? likesArray.some((id: any) => id && id.toString() === userId) : false,
+      };
+    });
 
     const total = allComments.length;
     const totalPages = Math.ceil(total / Number(limit)) || 1;
@@ -729,6 +743,7 @@ export const searchVideos = asyncHandler(async (req: Request, res: Response) => 
   try {
     const query: any = {
       isPublished: true,
+      isApproved: true,
       $or: [
         { title: { $regex: searchText, $options: 'i' } },
         { description: { $regex: searchText, $options: 'i' } },

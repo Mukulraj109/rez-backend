@@ -59,8 +59,8 @@ const router = Router();
 router.get('/',
   optionalAuth,
   validateQuery(Joi.object({
-    category: commonSchemas.objectId,
-    store: commonSchemas.objectId,
+    category: commonSchemas.objectId(),
+    store: commonSchemas.objectId(),
     type: Joi.string().valid('cashback', 'discount', 'voucher', 'combo', 'special', 'walk_in'),
     tags: Joi.string(),
     featured: Joi.boolean(),
@@ -101,8 +101,8 @@ router.get('/search',
   optionalAuth,
   validateQuery(Joi.object({
     q: Joi.string().required().trim().min(1).max(100),
-    category: commonSchemas.objectId,
-    store: commonSchemas.objectId,
+    category: commonSchemas.objectId(),
+    store: commonSchemas.objectId(),
     minCashback: Joi.number().min(0).max(100),
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20)
@@ -134,7 +134,7 @@ router.get('/store/:storeId',
     storeId: commonSchemas.objectId().required()
   })),
   validateQuery(Joi.object({
-    category: commonSchemas.objectId,
+    category: commonSchemas.objectId(),
     active: Joi.boolean().default(true),
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20)

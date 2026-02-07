@@ -123,8 +123,8 @@ TableBookingSchema.virtual('formattedDateTime').get(function() {
   return `${dateStr} at ${this.bookingTime}`;
 });
 
-// Pre-save hook to generate booking number
-TableBookingSchema.pre('save', async function(next) {
+// Pre-validate hook to generate booking number (runs before validation so 'required' passes)
+TableBookingSchema.pre('validate', async function(next) {
   if (this.isNew && !this.bookingNumber) {
     // Generate booking number: TB-TIMESTAMP-RANDOM
     const timestamp = Date.now();
