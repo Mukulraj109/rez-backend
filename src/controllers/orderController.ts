@@ -28,6 +28,42 @@ import { Subscription } from '../models/Subscription';
 import { SMSService } from '../services/SMSService';
 import EmailService from '../services/EmailService';
 import { Store } from '../models/Store';
+import { Category } from '../models/Category';
+import { MainCategorySlug } from '../models/CoinTransaction';
+
+const VALID_CATEGORY_SLUGS: MainCategorySlug[] = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
+
+/**
+ * Get the root MainCategory slug for a store.
+ * Traverses the category hierarchy up to the root (parentCategory === null).
+ */
+async function getStoreCategorySlug(storeId: string): Promise<MainCategorySlug | null> {
+  try {
+    const store = await Store.findById(storeId).select('category').lean();
+    if (!store?.category) return null;
+
+    let categoryId = store.category.toString();
+    let maxDepth = 5; // Safety limit
+
+    while (maxDepth-- > 0) {
+      const cat = await Category.findById(categoryId).select('slug parentCategory').lean();
+      if (!cat) return null;
+
+      if (!cat.parentCategory) {
+        // This is the root category
+        const slug = cat.slug as MainCategorySlug;
+        return VALID_CATEGORY_SLUGS.includes(slug) ? slug : null;
+      }
+
+      categoryId = cat.parentCategory.toString();
+    }
+
+    return null;
+  } catch (err) {
+    console.error('[ORDER] Error getting store category slug:', err);
+    return null;
+  }
+}
 import { Refund } from '../models/Refund';
 import merchantWalletService from '../services/merchantWalletService';
 import orderSocketService from '../services/orderSocketService';
@@ -932,22 +968,44 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         return sendBadRequest(res, 'Wallet not found. Cannot process coin payment.');
       }
 
+      // Determine the store's root category for category-specific coin deduction
+      const firstCartItem = orderCart.items[0];
+      const codStoreId = firstCartItem?.store
+        ? (typeof firstCartItem.store === 'object' ? (firstCartItem.store as any)._id : firstCartItem.store)
+        : null;
+      const codCategory = codStoreId ? await getStoreCategorySlug(codStoreId.toString()) : null;
+
       // Deduct REZ coins from Wallet model
       if (coinsUsed.rezCoins && coinsUsed.rezCoins > 0) {
-        const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-        if (!rezCoin || rezCoin.amount < coinsUsed.rezCoins) {
-          await session.abortTransaction();
-          session.endSession();
-          console.error('❌ [CREATE ORDER] Insufficient rez coins in wallet at time of deduction');
-          return sendBadRequest(res, 'Insufficient REZ coins. Balance may have changed.');
+        // Try category balance first, fall back to global
+        let deductedFromCategory = false;
+        if (codCategory) {
+          const catBal = wallet.getCategoryBalance(codCategory);
+          if (catBal >= coinsUsed.rezCoins) {
+            wallet.deductCategoryCoins(codCategory, coinsUsed.rezCoins);
+            deductedFromCategory = true;
+            console.log(`✅ [CREATE ORDER] REZ coins deducted from ${codCategory} category balance:`, coinsUsed.rezCoins);
+          }
         }
 
-        rezCoin.amount -= coinsUsed.rezCoins;
-        rezCoin.lastUsed = new Date();
+        if (!deductedFromCategory) {
+          // Fall back to global ReZ coins
+          const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+          if (!rezCoin || rezCoin.amount < coinsUsed.rezCoins) {
+            await session.abortTransaction();
+            session.endSession();
+            console.error('❌ [CREATE ORDER] Insufficient rez coins in wallet at time of deduction');
+            return sendBadRequest(res, 'Insufficient REZ coins. Balance may have changed.');
+          }
 
-        // Update wallet balances
-        wallet.balance.available = Math.max(0, wallet.balance.available - coinsUsed.rezCoins);
-        wallet.balance.total = Math.max(0, wallet.balance.total - coinsUsed.rezCoins);
+          rezCoin.amount -= coinsUsed.rezCoins;
+          rezCoin.lastUsed = new Date();
+          wallet.markModified('coins');
+          wallet.balance.available = Math.max(0, wallet.balance.available - coinsUsed.rezCoins);
+        }
+
+        // balance.total is recalculated by the pre-save hook (available + pending + cashback + categoryTotal)
+        // so we do NOT manually decrement it here — it would cause double-deduction
         wallet.statistics.totalSpent += coinsUsed.rezCoins;
         wallet.lastTransactionAt = new Date();
                   const { CoinTransaction } = require('../models/CoinTransaction');
@@ -957,9 +1015,29 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
                coinsUsed.rezCoins,
                'purchase',
                `COD Order: ${orderNumber}`,
-               { orderId: order._id, orderNumber, paymentMethod: 'cod' }
+               { orderId: order._id, orderNumber, paymentMethod: 'cod' },
+               deductedFromCategory ? codCategory : null
             );
-        console.log('✅ [CREATE ORDER] REZ coins deducted from wallet for COD:', coinsUsed.rezCoins);
+        console.log('✅ [CREATE ORDER] REZ coins deducted from wallet for COD:', coinsUsed.rezCoins, deductedFromCategory ? `(${codCategory})` : '(global)');
+
+        // Also update UserLoyalty.categoryCoins if deducted from category
+        if (deductedFromCategory && codCategory) {
+          try {
+            const UserLoyalty = require('../models/UserLoyalty').default || require('../models/UserLoyalty').UserLoyalty;
+            const loyalty = await UserLoyalty.findOne({ userId: userId.toString() });
+            if (loyalty && loyalty.categoryCoins) {
+              const catCoins = loyalty.categoryCoins.get(codCategory);
+              if (catCoins) {
+                catCoins.available = Math.max(0, catCoins.available - coinsUsed.rezCoins);
+                loyalty.categoryCoins.set(codCategory, catCoins);
+                loyalty.markModified('categoryCoins');
+                await loyalty.save();
+              }
+            }
+          } catch (loyaltyErr) {
+            console.error('[CREATE ORDER] Failed to update UserLoyalty categoryCoins:', loyaltyErr);
+          }
+        }
       }
 
       // Deduct promo coins
@@ -1736,20 +1814,29 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
       }
 
       // Award 5% purchase reward coins on delivery (5% of subtotal, NOT total)
+      // Coins go to the store's MainCategory balance
       try {
         const coinService = require('../services/coinService');
         const purchaseRewardRate = 0.05;
         const coinsToAward = Math.floor(populatedOrder.totals.subtotal * purchaseRewardRate);
         if (coinsToAward > 0) {
-          console.log('🪙 [ORDER] Awarding 5% purchase reward on delivery:', coinsToAward, 'coins');
+          // Determine the store's root category for category-specific coins
+          const firstItem = populatedOrder.items[0];
+          const rewardStoreId = firstItem?.store
+            ? (typeof firstItem.store === 'object' ? (firstItem.store as any)._id : firstItem.store)
+            : null;
+          const rewardCategory = rewardStoreId ? await getStoreCategorySlug(rewardStoreId.toString()) : null;
+
+          console.log('🪙 [ORDER] Awarding 5% purchase reward on delivery:', coinsToAward, 'coins', rewardCategory ? `(${rewardCategory})` : '(global)');
           await coinService.awardCoins(
             userIdObj.toString(),
             coinsToAward,
             'purchase_reward',
             `5% purchase reward for order ${populatedOrder.orderNumber}`,
-            { orderId: populatedOrder._id }
+            { orderId: populatedOrder._id },
+            rewardCategory
           );
-          console.log('✅ [ORDER] Purchase reward coins awarded:', coinsToAward);
+          console.log('✅ [ORDER] Purchase reward coins awarded:', coinsToAward, rewardCategory ? `to ${rewardCategory}` : 'globally');
         }
       } catch (coinError) {
         console.error('[ORDER] Failed to award purchase reward coins:', coinError);

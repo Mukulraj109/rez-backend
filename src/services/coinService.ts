@@ -1,12 +1,44 @@
-import { CoinTransaction } from '../models/CoinTransaction';
+import { CoinTransaction, MainCategorySlug } from '../models/CoinTransaction';
 import { Wallet } from '../models/Wallet';
+import { UserLoyalty } from '../models/UserLoyalty';
 import mongoose from 'mongoose';
 
 /**
- * Get user's current coin balance
+ * Get user's current coin balance (global or category-specific)
  */
-export async function getCoinBalance(userId: string): Promise<number> {
+export async function getCoinBalance(userId: string, category?: MainCategorySlug): Promise<number> {
+  if (category) {
+    return getCategoryBalance(userId, category);
+  }
   return await CoinTransaction.getUserBalance(userId);
+}
+
+/**
+ * Get user's category-specific coin balance
+ */
+export async function getCategoryBalance(userId: string, category: MainCategorySlug): Promise<number> {
+  const wallet = await Wallet.findOne({ user: userId });
+  return wallet?.getCategoryBalance(category) || 0;
+}
+
+/**
+ * Get all category balances for a user
+ */
+export async function getAllCategoryBalances(userId: string): Promise<Record<string, { available: number; earned: number; spent: number }>> {
+  const wallet = await Wallet.findOne({ user: userId });
+  const result: Record<string, { available: number; earned: number; spent: number }> = {};
+  const categories: MainCategorySlug[] = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
+
+  for (const cat of categories) {
+    const catBal = wallet?.categoryBalances?.get(cat);
+    result[cat] = {
+      available: catBal?.available || 0,
+      earned: catBal?.earned || 0,
+      spent: catBal?.spent || 0
+    };
+  }
+
+  return result;
 }
 
 /**
@@ -17,13 +49,18 @@ export async function getCoinTransactions(
   options: {
     type?: string;
     source?: string;
+    category?: MainCategorySlug | null;
     limit?: number;
     offset?: number;
   } = {}
 ): Promise<{ transactions: any[]; total: number; balance: number }> {
-  const { type, source, limit = 20, offset = 0 } = options;
+  const { type, source, category, limit = 20, offset = 0 } = options;
 
   const query: any = { user: userId };
+
+  if (category) {
+    query.category = category;
+  }
 
   if (type) {
     query.type = type;
@@ -61,14 +98,15 @@ export async function getCoinTransactions(
 }
 
 /**
- * Award coins to user
+ * Award coins to user (optionally to a specific MainCategory balance)
  */
 export async function awardCoins(
   userId: string,
   amount: number,
   source: string,
   description: string,
-  metadata?: any
+  metadata?: any,
+  category?: MainCategorySlug | null
 ): Promise<any> {
   if (amount <= 0) {
     throw new Error('Amount must be positive');
@@ -80,7 +118,8 @@ export async function awardCoins(
     amount,
     source,
     description,
-    metadata
+    metadata,
+    category || null
   );
 
   // Also update the Wallet model to keep balances in sync
@@ -93,28 +132,49 @@ export async function awardCoins(
     }
 
     if (wallet) {
-      // Update ReZ coins in the coins array
-      const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-      if (rezCoin) {
-        rezCoin.amount += amount;
-        rezCoin.lastUsed = new Date();
+      if (category) {
+        // Category-specific: add to categoryBalances
+        wallet.addCategoryCoins(category, amount);
+      } else {
+        // Legacy/global: add to ReZ coins
+        const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+        if (rezCoin) {
+          rezCoin.amount += amount;
+          rezCoin.lastUsed = new Date();
+          wallet.markModified('coins');
+        }
+        wallet.balance.available += amount;
       }
 
-      // Update balance
-      wallet.balance.available += amount;
-      wallet.balance.total += amount;
-
-      // Update statistics
+      // Update statistics (always global)
       wallet.statistics.totalEarned += amount;
 
       wallet.lastTransactionAt = new Date();
       await wallet.save();
 
-      console.log(`✅ [COIN SERVICE] Wallet updated: +${amount} coins, new balance: ${wallet.balance.total}`);
+      console.log(`✅ [COIN SERVICE] Wallet updated: +${amount} coins${category ? ` (${category})` : ''}, new balance: ${wallet.balance.total}`);
     }
   } catch (walletError) {
     console.error('❌ [COIN SERVICE] Failed to update wallet:', walletError);
-    // Don't throw - transaction was created successfully, wallet sync is secondary
+  }
+
+  // Also update UserLoyalty categoryCoins if category is provided
+  if (category) {
+    try {
+      let loyalty = await UserLoyalty.findOne({ userId });
+      if (loyalty) {
+        const catCoins = loyalty.categoryCoins?.get(category) || { available: 0, expiring: 0 };
+        catCoins.available += amount;
+        if (!loyalty.categoryCoins) {
+          loyalty.categoryCoins = new Map();
+        }
+        loyalty.categoryCoins.set(category, catCoins);
+        loyalty.markModified('categoryCoins');
+        await loyalty.save();
+      }
+    } catch (loyaltyError) {
+      console.error('❌ [COIN SERVICE] Failed to update UserLoyalty categoryCoins:', loyaltyError);
+    }
   }
 
   return {
@@ -122,28 +182,44 @@ export async function awardCoins(
     amount: transaction.amount,
     newBalance: transaction.balance,
     source: transaction.source,
-    description: transaction.description
+    description: transaction.description,
+    category: category || null
   };
 }
 
 /**
- * Deduct coins from user
+ * Deduct coins from user (optionally from a specific MainCategory balance)
+ * If category is provided, deducts from category balance first, then falls back to global.
  */
 export async function deductCoins(
   userId: string,
   amount: number,
   source: string,
   description: string,
-  metadata?: any
+  metadata?: any,
+  category?: MainCategorySlug | null
 ): Promise<any> {
   if (amount <= 0) {
     throw new Error('Amount must be positive');
   }
 
-  const currentBalance = await getCoinBalance(userId);
-
-  if (currentBalance < amount) {
-    throw new Error(`Insufficient coin balance. Required: ${amount}, Available: ${currentBalance}`);
+  if (category) {
+    // Check category-specific balance first
+    const catBalance = await getCategoryBalance(userId, category);
+    if (catBalance < amount) {
+      // Fall back to global balance check
+      const globalBalance = await getCoinBalance(userId);
+      if (globalBalance < amount) {
+        throw new Error(`Insufficient coin balance. Required: ${amount}, Category (${category}): ${catBalance}, Global: ${globalBalance}`);
+      }
+      // Use global balance instead
+      category = null;
+    }
+  } else {
+    const currentBalance = await getCoinBalance(userId);
+    if (currentBalance < amount) {
+      throw new Error(`Insufficient coin balance. Required: ${amount}, Available: ${currentBalance}`);
+    }
   }
 
   const transaction = await CoinTransaction.createTransaction(
@@ -152,7 +228,8 @@ export async function deductCoins(
     amount,
     source,
     description,
-    metadata
+    metadata,
+    category || null
   );
 
   // Also update the Wallet model to keep balances in sync
@@ -160,28 +237,48 @@ export async function deductCoins(
     const wallet = await Wallet.findOne({ user: userId });
 
     if (wallet) {
-      // Update ReZ coins in the coins array
-      const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-      if (rezCoin) {
-        rezCoin.amount = Math.max(0, rezCoin.amount - amount);
-        rezCoin.lastUsed = new Date();
+      if (category) {
+        // Deduct from category balance
+        wallet.deductCategoryCoins(category, amount);
+      } else {
+        // Deduct from global ReZ coins
+        const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+        if (rezCoin) {
+          rezCoin.amount = Math.max(0, rezCoin.amount - amount);
+          rezCoin.lastUsed = new Date();
+          wallet.markModified('coins');
+        }
+        wallet.balance.available = Math.max(0, wallet.balance.available - amount);
       }
 
-      // Update balance
-      wallet.balance.available = Math.max(0, wallet.balance.available - amount);
-      wallet.balance.total = Math.max(0, wallet.balance.total - amount);
-
-      // Update statistics
+      // Update statistics (always global)
       wallet.statistics.totalSpent += amount;
 
       wallet.lastTransactionAt = new Date();
       await wallet.save();
 
-      console.log(`✅ [COIN SERVICE] Wallet updated: -${amount} coins, new balance: ${wallet.balance.total}`);
+      console.log(`✅ [COIN SERVICE] Wallet updated: -${amount} coins${category ? ` (${category})` : ''}, new balance: ${wallet.balance.total}`);
     }
   } catch (walletError) {
     console.error('❌ [COIN SERVICE] Failed to update wallet:', walletError);
-    // Don't throw - transaction was created successfully, wallet sync is secondary
+  }
+
+  // Also update UserLoyalty categoryCoins if category is provided
+  if (category) {
+    try {
+      const loyalty = await UserLoyalty.findOne({ userId });
+      if (loyalty) {
+        const catCoins = loyalty.categoryCoins?.get(category);
+        if (catCoins) {
+          catCoins.available = Math.max(0, catCoins.available - amount);
+          loyalty.categoryCoins.set(category, catCoins);
+          loyalty.markModified('categoryCoins');
+          await loyalty.save();
+        }
+      }
+    } catch (loyaltyError) {
+      console.error('❌ [COIN SERVICE] Failed to update UserLoyalty categoryCoins:', loyaltyError);
+    }
   }
 
   return {
@@ -189,7 +286,8 @@ export async function deductCoins(
     amount: transaction.amount,
     newBalance: transaction.balance,
     source: transaction.source,
-    description: transaction.description
+    description: transaction.description,
+    category: category || null
   };
 }
 
@@ -450,6 +548,8 @@ export async function getUserCoinRank(userId: string, period: 'daily' | 'weekly'
 
 export default {
   getCoinBalance,
+  getCategoryBalance,
+  getAllCategoryBalances,
   getCoinTransactions,
   awardCoins,
   deductCoins,

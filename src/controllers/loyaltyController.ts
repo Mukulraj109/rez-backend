@@ -5,6 +5,8 @@ import { Product } from '../models/Product';
 import { Order } from '../models/Order';
 import { Wallet } from '../models/Wallet';
 import { Review } from '../models/Review';
+import coinService from '../services/coinService';
+import { MainCategorySlug } from '../models/CoinTransaction';
 import {
   sendSuccess,
   sendNotFound
@@ -12,6 +14,8 @@ import {
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
+
+const VALID_CATEGORIES: MainCategorySlug[] = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
 
 // Default food-dining missions to seed for new users
 const FOOD_DINING_MISSIONS = [
@@ -57,6 +61,143 @@ const FOOD_DINING_MISSIONS = [
   },
 ];
 
+// Fitness & Sports missions
+const FITNESS_SPORTS_MISSIONS = [
+  { missionId: 'fitness-visit-3-gyms', title: 'Visit 3 Gyms/Studios', description: 'Try 3 different fitness venues', target: 3, reward: 50, icon: '🏋️' },
+  { missionId: 'fitness-book-5-classes', title: 'Book 5 Fitness Classes', description: 'Book group classes or personal training', target: 5, reward: 75, icon: '📅' },
+  { missionId: 'fitness-7-day-streak', title: '7-Day Check-in Streak', description: 'Check in every day for 7 consecutive days', target: 7, reward: 50, icon: '🔥' },
+  { missionId: 'fitness-leave-2-reviews', title: 'Rate 2 Venues', description: 'Leave reviews at fitness venues', target: 2, reward: 30, icon: '⭐' },
+  { missionId: 'fitness-try-3-workouts', title: 'Try 3 Workout Types', description: 'Try different workout categories', target: 3, reward: 60, icon: '💪' },
+];
+
+// Beauty & Wellness missions
+const BEAUTY_WELLNESS_MISSIONS = [
+  { missionId: 'beauty-visit-3-salons', title: 'Visit 3 Salons/Spas', description: 'Try 3 different beauty venues', target: 3, reward: 50, icon: '💇' },
+  { missionId: 'beauty-book-5-services', title: 'Book 5 Services', description: 'Book beauty or wellness services', target: 5, reward: 75, icon: '📅' },
+  { missionId: 'beauty-7-day-streak', title: '7-Day Self-Care Streak', description: 'Check in every day for 7 consecutive days', target: 7, reward: 50, icon: '🔥' },
+  { missionId: 'beauty-leave-2-reviews', title: 'Rate 2 Venues', description: 'Leave reviews at beauty venues', target: 2, reward: 30, icon: '⭐' },
+  { missionId: 'beauty-try-3-services', title: 'Try 3 Service Types', description: 'Try different beauty categories', target: 3, reward: 60, icon: '✨' },
+];
+
+// Grocery missions
+const GROCERY_ESSENTIALS_MISSIONS = [
+  { missionId: 'grocery-shop-3-stores', title: 'Shop at 3 Stores', description: 'Try 3 different grocery stores', target: 3, reward: 50, icon: '🛒' },
+  { missionId: 'grocery-place-10-orders', title: 'Place 10 Orders', description: 'Complete 10 grocery orders', target: 10, reward: 100, icon: '📦' },
+  { missionId: 'grocery-7-day-streak', title: '7-Day Shopping Streak', description: 'Check in every day for 7 consecutive days', target: 7, reward: 50, icon: '🔥' },
+  { missionId: 'grocery-leave-2-reviews', title: 'Rate 2 Stores', description: 'Leave reviews at grocery stores', target: 2, reward: 30, icon: '⭐' },
+  { missionId: 'grocery-try-5-categories', title: 'Try 5 Categories', description: 'Shop from 5 different product categories', target: 5, reward: 75, icon: '🧺' },
+];
+
+// Healthcare missions
+const HEALTHCARE_MISSIONS = [
+  { missionId: 'health-visit-3-clinics', title: 'Visit 3 Clinics', description: 'Try 3 different healthcare providers', target: 3, reward: 50, icon: '🏥' },
+  { missionId: 'health-book-5-appointments', title: 'Book 5 Appointments', description: 'Book doctor or lab appointments', target: 5, reward: 75, icon: '📅' },
+  { missionId: 'health-checkup-streak', title: 'Health Checkup Streak', description: 'Complete routine checkups for 3 months', target: 3, reward: 60, icon: '🔥' },
+  { missionId: 'health-rate-2-doctors', title: 'Rate 2 Doctors', description: 'Leave reviews for healthcare providers', target: 2, reward: 30, icon: '⭐' },
+  { missionId: 'health-try-3-specialties', title: 'Try 3 Specialties', description: 'Visit different medical specialties', target: 3, reward: 60, icon: '💊' },
+];
+
+// Fashion missions
+const FASHION_MISSIONS = [
+  { missionId: 'fashion-visit-3-stores', title: 'Visit 3 Stores', description: 'Shop at 3 different fashion stores', target: 3, reward: 50, icon: '👗' },
+  { missionId: 'fashion-buy-5-brands', title: 'Buy from 5 Brands', description: 'Purchase from 5 different brands', target: 5, reward: 75, icon: '🛍️' },
+  { missionId: 'fashion-7-day-streak', title: '7-Day Style Streak', description: 'Check in every day for 7 consecutive days', target: 7, reward: 50, icon: '🔥' },
+  { missionId: 'fashion-rate-2-boutiques', title: 'Rate 2 Boutiques', description: 'Leave reviews at fashion stores', target: 2, reward: 30, icon: '⭐' },
+  { missionId: 'fashion-try-3-categories', title: 'Try 3 Categories', description: 'Shop from 3 different fashion categories', target: 3, reward: 60, icon: '👠' },
+];
+
+// Education missions
+const EDUCATION_MISSIONS = [
+  { missionId: 'edu-enroll-3-courses', title: 'Enroll in 3 Courses', description: 'Join 3 different courses or classes', target: 3, reward: 50, icon: '📚' },
+  { missionId: 'edu-complete-5-classes', title: 'Complete 5 Classes', description: 'Attend and complete 5 class sessions', target: 5, reward: 75, icon: '✅' },
+  { missionId: 'edu-7-day-streak', title: '7-Day Learning Streak', description: 'Check in every day for 7 consecutive days', target: 7, reward: 50, icon: '🔥' },
+  { missionId: 'edu-rate-2-institutes', title: 'Rate 2 Institutes', description: 'Leave reviews for educational institutes', target: 2, reward: 30, icon: '⭐' },
+  { missionId: 'edu-try-3-subjects', title: 'Try 3 Subjects', description: 'Explore 3 different subject areas', target: 3, reward: 60, icon: '🎓' },
+];
+
+// Home Services missions
+const HOME_SERVICES_MISSIONS = [
+  { missionId: 'home-book-3-services', title: 'Book 3 Services', description: 'Book 3 different home services', target: 3, reward: 50, icon: '🏠' },
+  { missionId: 'home-complete-5-jobs', title: 'Complete 5 Jobs', description: 'Get 5 home service jobs completed', target: 5, reward: 75, icon: '🔧' },
+  { missionId: 'home-monthly-maintenance', title: 'Monthly Maintenance', description: 'Schedule maintenance services for 3 months', target: 3, reward: 60, icon: '🔥' },
+  { missionId: 'home-rate-2-providers', title: 'Rate 2 Providers', description: 'Leave reviews for service providers', target: 2, reward: 30, icon: '⭐' },
+  { missionId: 'home-try-3-services', title: 'Try 3 Service Types', description: 'Use 3 different types of home services', target: 3, reward: 60, icon: '🛠️' },
+];
+
+// Travel missions
+const TRAVEL_MISSIONS = [
+  { missionId: 'travel-book-3-trips', title: 'Book 3 Trips', description: 'Book 3 different travel experiences', target: 3, reward: 50, icon: '✈️' },
+  { missionId: 'travel-visit-5-destinations', title: 'Visit 5 Destinations', description: 'Travel to 5 different destinations', target: 5, reward: 75, icon: '🗺️' },
+  { missionId: 'travel-weekend-streak', title: 'Weekend Getaway Streak', description: 'Plan weekend trips for 3 months', target: 3, reward: 60, icon: '🔥' },
+  { missionId: 'travel-rate-2-hotels', title: 'Rate 2 Hotels', description: 'Leave reviews for hotels or venues', target: 2, reward: 30, icon: '⭐' },
+  { missionId: 'travel-try-3-modes', title: 'Try 3 Travel Modes', description: 'Use 3 different travel modes', target: 3, reward: 60, icon: '🚂' },
+];
+
+// Entertainment missions
+const ENTERTAINMENT_MISSIONS = [
+  { missionId: 'ent-attend-3-events', title: 'Attend 3 Events', description: 'Attend 3 different entertainment events', target: 3, reward: 50, icon: '🎬' },
+  { missionId: 'ent-book-5-tickets', title: 'Book 5 Tickets', description: 'Book tickets for 5 shows or events', target: 5, reward: 75, icon: '🎟️' },
+  { missionId: 'ent-weekend-streak', title: 'Weekend Fun Streak', description: 'Attend events for 4 consecutive weekends', target: 4, reward: 50, icon: '🔥' },
+  { missionId: 'ent-rate-2-venues', title: 'Rate 2 Venues', description: 'Leave reviews for entertainment venues', target: 2, reward: 30, icon: '⭐' },
+  { missionId: 'ent-try-3-types', title: 'Try 3 Entertainment Types', description: 'Experience 3 different entertainment types', target: 3, reward: 60, icon: '🎭' },
+];
+
+// Financial missions
+const FINANCIAL_MISSIONS = [
+  { missionId: 'fin-pay-3-bills', title: 'Pay 3 Bills', description: 'Pay 3 different utility or service bills', target: 3, reward: 50, icon: '💳' },
+  { missionId: 'fin-use-5-services', title: 'Use 5 Services', description: 'Use 5 different financial services', target: 5, reward: 75, icon: '🏦' },
+  { missionId: 'fin-savings-streak', title: 'Monthly Savings Streak', description: 'Save consistently for 3 months', target: 3, reward: 60, icon: '🔥' },
+  { missionId: 'fin-rate-2-providers', title: 'Rate 2 Providers', description: 'Leave reviews for financial service providers', target: 2, reward: 30, icon: '⭐' },
+  { missionId: 'fin-try-3-products', title: 'Try 3 Financial Products', description: 'Use 3 different financial product types', target: 3, reward: 60, icon: '📊' },
+];
+
+// Electronics missions
+const ELECTRONICS_MISSIONS = [
+  { missionId: 'elec-buy-3-stores', title: 'Buy from 3 Stores', description: 'Purchase from 3 different electronics stores', target: 3, reward: 50, icon: '📱' },
+  { missionId: 'elec-purchase-5-items', title: 'Purchase 5 Items', description: 'Buy 5 different electronics products', target: 5, reward: 75, icon: '💻' },
+  { missionId: 'elec-review-streak', title: 'Tech Review Streak', description: 'Write tech reviews for 3 consecutive weeks', target: 3, reward: 50, icon: '🔥' },
+  { missionId: 'elec-rate-2-brands', title: 'Rate 2 Brands', description: 'Leave reviews for electronics brands', target: 2, reward: 30, icon: '⭐' },
+  { missionId: 'elec-try-3-categories', title: 'Try 3 Categories', description: 'Shop from 3 different electronics categories', target: 3, reward: 60, icon: '🎮' },
+];
+
+// Category-aware mission selector
+const CATEGORY_MISSIONS: Record<string, typeof FOOD_DINING_MISSIONS> = {
+  'food-dining': FOOD_DINING_MISSIONS,
+  'fitness-sports': FITNESS_SPORTS_MISSIONS,
+  'beauty-wellness': BEAUTY_WELLNESS_MISSIONS,
+  'grocery-essentials': GROCERY_ESSENTIALS_MISSIONS,
+  'healthcare': HEALTHCARE_MISSIONS,
+  'fashion': FASHION_MISSIONS,
+  'education-learning': EDUCATION_MISSIONS,
+  'home-services': HOME_SERVICES_MISSIONS,
+  'travel-experiences': TRAVEL_MISSIONS,
+  'entertainment': ENTERTAINMENT_MISSIONS,
+  'financial-lifestyle': FINANCIAL_MISSIONS,
+  'electronics': ELECTRONICS_MISSIONS,
+};
+
+function getMissionsForCategory(category?: string) {
+  return CATEGORY_MISSIONS[category || 'food-dining'] || FOOD_DINING_MISSIONS;
+}
+
+// Category-aware brand name fallback
+function getBrandFallbackName(category?: string): string {
+  switch (category) {
+    case 'fitness-sports': return 'Gym';
+    case 'beauty-wellness': return 'Salon';
+    case 'grocery-essentials': return 'Store';
+    case 'healthcare': return 'Clinic';
+    case 'fashion': return 'Brand';
+    case 'education-learning': return 'Institute';
+    case 'home-services': return 'Service';
+    case 'travel-experiences': return 'Venue';
+    case 'entertainment': return 'Venue';
+    case 'financial-lifestyle': return 'Provider';
+    case 'electronics': return 'Store';
+    default: return 'Restaurant';
+  }
+}
+
 // Tier thresholds for brand loyalty
 function getTierFromPurchaseCount(count: number): { tier: 'Bronze' | 'Silver' | 'Gold' | 'Platinum'; progress: number; nextTierAt: number } {
   if (count >= 20) return { tier: 'Platinum', progress: 100, nextTierAt: 0 };
@@ -85,7 +226,7 @@ async function populateBrandLoyaltyFromOrders(userId: string): Promise<any[]> {
           existing.count += 1;
         } else {
           // Try to get store name from items
-          const storeName = order.items?.[0]?.storeName || 'Restaurant';
+          const storeName = order.items?.[0]?.storeName || 'Venue';
           storeMap.set(storeId, { name: storeName, count: 1 });
         }
         continue;
@@ -99,7 +240,7 @@ async function populateBrandLoyaltyFromOrders(userId: string): Promise<any[]> {
         if (existing) {
           existing.count += 1;
         } else {
-          storeMap.set(storeId, { name: item.storeName || 'Restaurant', count: 1 });
+          storeMap.set(storeId, { name: item.storeName || 'Venue', count: 1 });
         }
       }
     }
@@ -170,12 +311,86 @@ async function computeMissionProgress(userId: string, streakCurrent: number): Pr
       }
     }
 
-    // Set progress for each mission type
-    progressMap.set('food-try-3-restaurants', uniqueStoreIds.size);
-    progressMap.set('food-leave-2-reviews', reviewCount);
-    progressMap.set('food-place-10-orders', deliveredOrders.length);
-    progressMap.set('food-7-day-streak', streakCurrent);
-    progressMap.set('food-try-5-cuisines', uniqueCuisineCount);
+    // Set progress for ALL category missions (generalized)
+    // Each category has 5 mission types following the same pattern
+    const MISSION_PROGRESS_MAP: Record<string, number> = {
+      // food-dining
+      'food-try-3-restaurants': uniqueStoreIds.size,
+      'food-leave-2-reviews': reviewCount,
+      'food-place-10-orders': deliveredOrders.length,
+      'food-7-day-streak': streakCurrent,
+      'food-try-5-cuisines': uniqueCuisineCount,
+      // fitness-sports
+      'fitness-visit-3-gyms': uniqueStoreIds.size,
+      'fitness-book-5-classes': deliveredOrders.length,
+      'fitness-7-day-streak': streakCurrent,
+      'fitness-leave-2-reviews': reviewCount,
+      'fitness-try-3-workouts': uniqueCuisineCount,
+      // beauty-wellness
+      'beauty-visit-3-salons': uniqueStoreIds.size,
+      'beauty-book-5-services': deliveredOrders.length,
+      'beauty-7-day-streak': streakCurrent,
+      'beauty-leave-2-reviews': reviewCount,
+      'beauty-try-3-services': uniqueCuisineCount,
+      // grocery-essentials
+      'grocery-shop-3-stores': uniqueStoreIds.size,
+      'grocery-place-10-orders': deliveredOrders.length,
+      'grocery-7-day-streak': streakCurrent,
+      'grocery-leave-2-reviews': reviewCount,
+      'grocery-try-5-categories': uniqueCuisineCount,
+      // healthcare
+      'health-visit-3-clinics': uniqueStoreIds.size,
+      'health-book-5-appointments': deliveredOrders.length,
+      'health-checkup-streak': streakCurrent,
+      'health-rate-2-doctors': reviewCount,
+      'health-try-3-specialties': uniqueCuisineCount,
+      // fashion
+      'fashion-visit-3-stores': uniqueStoreIds.size,
+      'fashion-buy-5-brands': deliveredOrders.length,
+      'fashion-7-day-streak': streakCurrent,
+      'fashion-rate-2-boutiques': reviewCount,
+      'fashion-try-3-categories': uniqueCuisineCount,
+      // education-learning
+      'edu-enroll-3-courses': uniqueStoreIds.size,
+      'edu-complete-5-classes': deliveredOrders.length,
+      'edu-7-day-streak': streakCurrent,
+      'edu-rate-2-institutes': reviewCount,
+      'edu-try-3-subjects': uniqueCuisineCount,
+      // home-services
+      'home-book-3-services': uniqueStoreIds.size,
+      'home-complete-5-jobs': deliveredOrders.length,
+      'home-monthly-maintenance': streakCurrent,
+      'home-rate-2-providers': reviewCount,
+      'home-try-3-services': uniqueCuisineCount,
+      // travel-experiences
+      'travel-book-3-trips': uniqueStoreIds.size,
+      'travel-visit-5-destinations': deliveredOrders.length,
+      'travel-weekend-streak': streakCurrent,
+      'travel-rate-2-hotels': reviewCount,
+      'travel-try-3-modes': uniqueCuisineCount,
+      // entertainment
+      'ent-attend-3-events': uniqueStoreIds.size,
+      'ent-book-5-tickets': deliveredOrders.length,
+      'ent-weekend-streak': streakCurrent,
+      'ent-rate-2-venues': reviewCount,
+      'ent-try-3-types': uniqueCuisineCount,
+      // financial-lifestyle
+      'fin-pay-3-bills': uniqueStoreIds.size,
+      'fin-use-5-services': deliveredOrders.length,
+      'fin-savings-streak': streakCurrent,
+      'fin-rate-2-providers': reviewCount,
+      'fin-try-3-products': uniqueCuisineCount,
+      // electronics
+      'elec-buy-3-stores': uniqueStoreIds.size,
+      'elec-purchase-5-items': deliveredOrders.length,
+      'elec-review-streak': streakCurrent,
+      'elec-rate-2-brands': reviewCount,
+      'elec-try-3-categories': uniqueCuisineCount,
+    };
+
+    for (const [missionId, progress] of Object.entries(MISSION_PROGRESS_MAP)) {
+      progressMap.set(missionId, progress);
+    }
   } catch (error) {
     console.error('[Loyalty] Error computing mission progress:', error);
   }
@@ -224,7 +439,7 @@ export const getUserLoyalty = asyncHandler(async (req: Request, res: Response) =
 
     if (!loyalty) {
       // Create default loyalty record with seeded missions
-      const missions = FOOD_DINING_MISSIONS.map(m => ({ ...m, progress: 0 }));
+      const missions = getMissionsForCategory(category).map(m => ({ ...m, progress: 0 }));
       loyalty = await UserLoyalty.create({
         userId,
         streak: {
@@ -244,7 +459,7 @@ export const getUserLoyalty = asyncHandler(async (req: Request, res: Response) =
 
     // Auto-seed missions if empty
     if (!loyalty.missions || loyalty.missions.length === 0) {
-      loyalty.missions = FOOD_DINING_MISSIONS.map(m => ({ ...m, progress: 0 })) as any;
+      loyalty.missions = getMissionsForCategory(category).map(m => ({ ...m, progress: 0 })) as any;
       needsSave = true;
     }
 
@@ -282,19 +497,48 @@ export const getUserLoyalty = asyncHandler(async (req: Request, res: Response) =
 
     // Fetch wallet balance to merge with loyalty coins
     let walletBalance = 0;
+    let categoryBalance = 0;
+    let categoryCoinsData: { available: number; expiring: number; expiryDate?: Date } | null = null;
     try {
-      const wallet = await Wallet.findOne({ user: userId }).select('balance coins').lean();
+      const wallet = await Wallet.findOne({ user: userId }).select('balance coins categoryBalances').lean();
       if (wallet) {
         walletBalance = wallet.balance?.available || 0;
+
+        // If category requested, get category-specific balance
+        if (category && VALID_CATEGORIES.includes(category as MainCategorySlug)) {
+          // .lean() returns plain object (not Map), so use bracket notation
+          const catBal = (wallet as any).categoryBalances?.[category];
+          categoryBalance = catBal?.available || 0;
+        }
       }
     } catch (walletErr) {
       console.error('[Loyalty] Error fetching wallet balance:', walletErr);
+    }
+
+    // Get category-specific coins from UserLoyalty
+    if (category && VALID_CATEGORIES.includes(category as MainCategorySlug)) {
+      const catCoins = loyaltyObj.categoryCoins instanceof Map
+        ? loyaltyObj.categoryCoins.get(category)
+        : (loyaltyObj.categoryCoins as any)?.[category];
+      if (catCoins) {
+        categoryCoinsData = {
+          available: catCoins.available || 0,
+          expiring: catCoins.expiring || 0,
+          expiryDate: catCoins.expiryDate,
+        };
+      }
     }
 
     sendSuccess(res, {
       loyalty: loyaltyObj,
       walletBalance,
       totalCoins: (loyaltyObj.coins?.available || 0) + walletBalance,
+      // Category-specific data (only included when category query param is provided)
+      ...(category && VALID_CATEGORIES.includes(category as MainCategorySlug) ? {
+        categoryCoins: categoryCoinsData || { available: 0, expiring: 0 },
+        categoryBalance,
+        categoryTotalCoins: (categoryCoinsData?.available || 0) + categoryBalance,
+      } : {}),
     }, 'Loyalty data retrieved successfully');
   } catch (error) {
     throw new AppError('Failed to fetch loyalty data', 500);
@@ -365,11 +609,13 @@ export const checkIn = asyncHandler(async (req: Request, res: Response) => {
     if (loyalty.streak.current >= 7) coinsEarned = 20; // Bonus for 7+ day streak
     else if (loyalty.streak.current >= 3) coinsEarned = 15; // Bonus for 3+ day streak
 
-    const category = req.query.category as string || req.body?.category;
-    const description = category
-      ? `Daily ${category.replace(/-/g, ' ')} check-in reward`
+    const category = (req.query.category as string || req.body?.category) as MainCategorySlug | undefined;
+    const validCategory = category && VALID_CATEGORIES.includes(category) ? category : null;
+    const description = validCategory
+      ? `Daily ${validCategory.replace(/-/g, ' ')} check-in reward`
       : 'Daily check-in reward';
 
+    // Update global coins (legacy)
     loyalty.coins.available += coinsEarned;
     loyalty.coins.history.push({
       amount: coinsEarned,
@@ -379,12 +625,29 @@ export const checkIn = asyncHandler(async (req: Request, res: Response) => {
     });
 
     // Update 7-day streak mission progress
-    const streakMission = loyalty.missions.find(m => m.missionId === 'food-7-day-streak' && !m.completedAt);
+    const streakMission = loyalty.missions.find(m =>
+      (m.missionId.includes('streak') || m.missionId.includes('maintenance')) && !m.completedAt
+    );
     if (streakMission) {
       streakMission.progress = Math.min(loyalty.streak.current, streakMission.target);
     }
 
     await loyalty.save();
+
+    // Sync wallet + category balance via coinService AFTER saving loyalty
+    // This avoids race conditions (coinService does its own fresh DB read)
+    try {
+      await coinService.awardCoins(
+        userId,
+        coinsEarned,
+        'daily_login',
+        description,
+        { streakDay: loyalty.streak.current },
+        validCategory || null
+      );
+    } catch (coinErr) {
+      console.error('[Loyalty] Failed to sync coins via coinService:', coinErr);
+    }
 
     sendSuccess(res, {
       loyalty,
@@ -449,7 +712,26 @@ export const completeMission = asyncHandler(async (req: Request, res: Response) 
       date: new Date()
     });
 
+    // Determine category for coin allocation
+    const missionCategory = (req.query.category as string || req.body?.category) as MainCategorySlug | undefined;
+    const validMissionCategory = missionCategory && VALID_CATEGORIES.includes(missionCategory) ? missionCategory : null;
+
+    // Save loyalty first (global coins), then sync wallet + category via coinService
     await loyalty.save();
+
+    // coinService handles: CoinTransaction, Wallet sync, and UserLoyalty.categoryCoins (if category)
+    try {
+      await coinService.awardCoins(
+        userId,
+        mission.reward,
+        'achievement',
+        `Mission completed: ${mission.title}`,
+        { missionId: mission.missionId },
+        validMissionCategory || null
+      );
+    } catch (coinErr) {
+      console.error('[Loyalty] Failed to sync mission coins via coinService:', coinErr);
+    }
 
     sendSuccess(res, { 
       loyalty,
@@ -463,9 +745,10 @@ export const completeMission = asyncHandler(async (req: Request, res: Response) 
   }
 });
 
-// Get coin balance (combined loyalty + wallet)
+// Get coin balance (combined loyalty + wallet, with per-category breakdown)
 export const getCoinBalance = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).user?.id;
+  const category = req.query.category as string | undefined;
 
   if (!userId) {
     throw new AppError('User not authenticated', 401);
@@ -473,17 +756,63 @@ export const getCoinBalance = asyncHandler(async (req: Request, res: Response) =
 
   try {
     const [loyalty, wallet] = await Promise.all([
-      UserLoyalty.findOne({ userId }).select('coins').lean(),
-      Wallet.findOne({ user: userId }).select('balance coins').lean(),
+      UserLoyalty.findOne({ userId }).select('coins categoryCoins').lean(),
+      Wallet.findOne({ user: userId }).select('balance coins categoryBalances').lean(),
     ]);
 
     const loyaltyCoins = loyalty?.coins || { available: 0, expiring: 0, expiryDate: null, history: [] };
     const walletBalance = wallet?.balance?.available || 0;
 
+    // Build per-category breakdown (wallet is the source of truth for category balances)
+    const categoryBreakdown: Record<string, { available: number; earned: number; spent: number }> = {};
+    for (const cat of VALID_CATEGORIES) {
+      // .lean() returns plain objects (not Maps), so use bracket notation
+      const walletCatBal = (wallet as any)?.categoryBalances?.[cat];
+      categoryBreakdown[cat] = {
+        available: walletCatBal?.available || 0,
+        earned: walletCatBal?.earned || 0,
+        spent: walletCatBal?.spent || 0,
+      };
+    }
+
+    // If a specific category is requested, also filter transaction history
+    let filteredHistory = loyaltyCoins.history;
+    if (category && VALID_CATEGORIES.includes(category as MainCategorySlug)) {
+      // Get category-specific transactions
+      try {
+        const catTransactions = await coinService.getCoinTransactions(userId, {
+          category: category as MainCategorySlug,
+          limit: 50,
+        });
+        filteredHistory = catTransactions.transactions.map(t => ({
+          amount: t.amount,
+          type: t.type as 'earned' | 'spent' | 'expired',
+          description: t.description,
+          date: t.createdAt,
+        }));
+      } catch {
+        // Fall back to unfiltered history
+      }
+    }
+
+    // When a specific category is requested, override coins.available with category balance
+    // so it's consistent with the already-filtered transaction history
+    const isValidCategory = category && VALID_CATEGORIES.includes(category as MainCategorySlug);
+    const categoryAvailable = isValidCategory ? (categoryBreakdown[category]?.available || 0) : 0;
+
     sendSuccess(res, {
-      coins: loyaltyCoins,
+      coins: {
+        ...loyaltyCoins,
+        ...(isValidCategory ? { available: categoryAvailable } : {}),
+        history: filteredHistory,
+      },
       walletBalance,
       totalCoins: (loyaltyCoins.available || 0) + walletBalance,
+      categoryBreakdown,
+      // Category-specific data if requested
+      ...(isValidCategory ? {
+        categoryBalance: categoryBreakdown[category],
+      } : {}),
     }, 'Coin balance retrieved successfully');
   } catch (error) {
     throw new AppError('Failed to fetch coin balance', 500);

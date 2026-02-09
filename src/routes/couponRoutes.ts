@@ -52,7 +52,9 @@ router.get('/',
 router.get('/my-coupons',
   authenticate,
   validateQuery(Joi.object({
-    status: Joi.string().valid('available', 'used', 'expired')
+    status: Joi.string().valid('available', 'used', 'expired'),
+    category: Joi.string().max(100),
+    limit: Joi.number().integer().min(1).max(50),
   })),
   getMyCoupons
 );

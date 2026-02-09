@@ -66,6 +66,13 @@ export interface ISavingsInsights {
 }
 
 // Wallet interface - complements User.wallet with additional details
+// Category-specific coin balance
+export interface ICategoryBalance {
+  available: number;
+  earned: number;
+  spent: number;
+}
+
 export interface IWallet extends Document {
   user: Types.ObjectId;
   balance: {
@@ -76,6 +83,7 @@ export interface IWallet extends Document {
   };
   coins: ICoinBalance[];    // ReZ Coins and Promo Coins
   brandedCoins: IBrandedCoin[]; // Merchant-specific coins (separate array)
+  categoryBalances: Map<string, ICategoryBalance>; // Per-MainCategory coin balances
   currency: string;         // 'REZ_COIN' or 'RC'
   statistics: {
     totalEarned: number;    // Lifetime earnings
@@ -123,6 +131,9 @@ export interface IWallet extends Document {
   getFormattedBalance(): string;
   getCoinUsageOrder(): { type: string; amount: number }[]; // Promo > Branded > ReZ
   syncWithUser(): Promise<void>;
+  getCategoryBalance(category: string): number;
+  addCategoryCoins(category: string, amount: number): void;
+  deductCategoryCoins(category: string, amount: number): void;
 }
 
 const WalletSchema = new Schema<IWallet>({
@@ -224,6 +235,16 @@ const WalletSchema = new Schema<IWallet>({
     lastUsed: Date
     // No expiry for branded coins
   }],
+  // Per-MainCategory coin balances (food-dining, beauty-wellness, grocery-essentials)
+  categoryBalances: {
+    type: Map,
+    of: new Schema({
+      available: { type: Number, default: 0, min: 0 },
+      earned: { type: Number, default: 0, min: 0 },
+      spent: { type: Number, default: 0, min: 0 }
+    }, { _id: false }),
+    default: () => new Map()
+  },
   currency: {
     type: String,
     required: true,
@@ -384,10 +405,16 @@ WalletSchema.virtual('formattedBalance').get(function() {
 
 // Pre-save hook to validate balances
 WalletSchema.pre('save', function(next) {
-  // balance.total = available (ReZ) + pending + cashback
+  // balance.total = available (ReZ) + pending + cashback + sum of all category balances
   // Branded coins are tracked separately in brandedCoins[] and NOT included here.
   // The frontend adds brandedCoinsTotal on top for the "Total Wallet Balance" display.
-  const calculatedTotal = this.balance.available + this.balance.pending + this.balance.cashback;
+  let categoryTotal = 0;
+  if (this.categoryBalances) {
+    this.categoryBalances.forEach((catBal: any) => {
+      categoryTotal += catBal?.available || 0;
+    });
+  }
+  const calculatedTotal = this.balance.available + this.balance.pending + this.balance.cashback + categoryTotal;
 
   // Allow small rounding differences
   if (Math.abs(this.balance.total - calculatedTotal) > 0.01) {
@@ -548,6 +575,7 @@ WalletSchema.methods.addBrandedCoins = async function(
   // Branded coins are tracked separately - do NOT add to balance.total or statistics.totalEarned
   // balance.total only tracks ReZ coins, cashback, and promo coins
 
+  this.markModified('brandedCoins');
   this.lastTransactionAt = new Date();
   await this.save();
 
@@ -598,6 +626,7 @@ WalletSchema.methods.useBrandedCoins = async function(
 
   // Branded coins are tracked separately - do NOT deduct from balance.total
 
+  this.markModified('brandedCoins');
   this.lastTransactionAt = new Date();
   await this.save();
 
@@ -640,6 +669,39 @@ WalletSchema.methods.getCoinUsageOrder = function(): { type: string; amount: num
   }
 
   return order;
+};
+
+// Method to get category-specific coin balance
+WalletSchema.methods.getCategoryBalance = function(category: string): number {
+  const catBalance = this.categoryBalances?.get(category);
+  return catBalance?.available || 0;
+};
+
+// Method to add coins to a specific category balance
+WalletSchema.methods.addCategoryCoins = function(category: string, amount: number): void {
+  if (!this.categoryBalances) {
+    this.categoryBalances = new Map();
+  }
+  const existing = this.categoryBalances.get(category) || { available: 0, earned: 0, spent: 0 };
+  existing.available += amount;
+  existing.earned += amount;
+  this.categoryBalances.set(category, existing);
+  this.markModified('categoryBalances');
+};
+
+// Method to deduct coins from a specific category balance
+WalletSchema.methods.deductCategoryCoins = function(category: string, amount: number): void {
+  if (!this.categoryBalances) {
+    throw new Error(`Insufficient ${category} category coin balance`);
+  }
+  const existing = this.categoryBalances.get(category);
+  if (!existing || existing.available < amount) {
+    throw new Error(`Insufficient ${category} category coin balance`);
+  }
+  existing.available -= amount;
+  existing.spent += amount;
+  this.categoryBalances.set(category, existing);
+  this.markModified('categoryBalances');
 };
 
 // Method to freeze wallet

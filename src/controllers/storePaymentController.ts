@@ -18,7 +18,11 @@ import { Wallet } from '../models/Wallet';
 import { Transaction } from '../models/Transaction';
 import { CoinTransaction } from '../models/CoinTransaction';
 import Discount from '../models/Discount';
+import { Category } from '../models/Category';
+import { MainCategorySlug } from '../models/CoinTransaction';
 // Note: StorePromoCoin model removed - using wallet.brandedCoins instead
+
+const VALID_MAIN_CATEGORY_SLUGS: MainCategorySlug[] = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
 
 // ==================== QR CODE HANDLERS ====================
 
@@ -932,6 +936,26 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
       storePayment.status = 'processing';
       await storePayment.save({ session });
 
+      // Resolve store's root MainCategory slug for category-specific coins
+      let paymentCategorySlug: MainCategorySlug | null = null;
+      try {
+        let catId = (await Store.findById(storePayment.storeId).select('category').session(session).lean())?.category?.toString();
+        let depth = 5;
+        while (catId && depth-- > 0) {
+          const cat = await Category.findById(catId).select('slug parentCategory').session(session).lean();
+          if (!cat) break;
+          if (!cat.parentCategory) {
+            if (VALID_MAIN_CATEGORY_SLUGS.includes(cat.slug as MainCategorySlug)) {
+              paymentCategorySlug = cat.slug as MainCategorySlug;
+            }
+            break;
+          }
+          catId = cat.parentCategory.toString();
+        }
+      } catch (e) {
+        // Non-critical — fall back to global
+      }
+
       // Deduct coins from user's wallet (ATOMIC)
       if (storePayment.coinRedemption.totalAmount > 0) {
         console.log('💰 [STORE PAYMENT] Deducting coins:', storePayment.coinRedemption);
@@ -954,17 +978,45 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
             throw new Error(`Insufficient coin balance. Available: ${wallet.balance.available}, Required: ${universalCoinsToDeduct}`);
           }
 
-          // Deduct ReZ coins from wallet.coins array
+          // Deduct ReZ coins — try category balance first, then global
+          let deductedFromCategory = false;
           if (rezCoinsToDeduct > 0) {
-            const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-            if (rezCoin) {
-              rezCoin.amount = Math.max(0, rezCoin.amount - rezCoinsToDeduct);
-              rezCoin.lastUsed = new Date();
-              console.log('✅ Deducted ReZ coins from wallet.coins:', rezCoinsToDeduct);
+            if (paymentCategorySlug) {
+              const catBal = wallet.getCategoryBalance(paymentCategorySlug);
+              if (catBal >= rezCoinsToDeduct) {
+                wallet.deductCategoryCoins(paymentCategorySlug, rezCoinsToDeduct);
+                deductedFromCategory = true;
+                console.log(`✅ Deducted ReZ coins from ${paymentCategorySlug} category balance:`, rezCoinsToDeduct);
+
+                // Also update UserLoyalty.categoryCoins to keep in sync
+                try {
+                  const UserLoyalty = require('../models/UserLoyalty').default || require('../models/UserLoyalty').UserLoyalty;
+                  const loyalty = await UserLoyalty.findOne({ userId: userId.toString() });
+                  if (loyalty && loyalty.categoryCoins) {
+                    const catCoins = loyalty.categoryCoins.get(paymentCategorySlug);
+                    if (catCoins) {
+                      catCoins.available = Math.max(0, catCoins.available - rezCoinsToDeduct);
+                      loyalty.categoryCoins.set(paymentCategorySlug, catCoins);
+                      loyalty.markModified('categoryCoins');
+                      await loyalty.save();
+                    }
+                  }
+                } catch (loyaltyErr) {
+                  console.error('[STORE PAYMENT] Failed to update UserLoyalty categoryCoins:', loyaltyErr);
+                }
+              }
+            }
+            if (!deductedFromCategory) {
+              const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
+              if (rezCoin) {
+                rezCoin.amount = Math.max(0, rezCoin.amount - rezCoinsToDeduct);
+                rezCoin.lastUsed = new Date();
+                console.log('✅ Deducted ReZ coins from global wallet.coins:', rezCoinsToDeduct);
+              }
             }
           }
 
-          // Deduct Promo coins from wallet.coins array
+          // Deduct Promo coins from wallet.coins array (promo is always global)
           if (promoCoinsToDeduct > 0) {
             const promoCoin = wallet.coins.find((c: any) => c.type === 'promo');
             if (promoCoin) {
@@ -974,12 +1026,21 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
             }
           }
 
+          // Mark coins array as modified for Mongoose
+          wallet.markModified('coins');
+
           // Deduct from overall balance
-          wallet.balance.available -= universalCoinsToDeduct;
-          wallet.balance.total -= universalCoinsToDeduct;
+          // If ReZ coins came from categoryBalances, only deduct promo from balance.available
+          // (category coins are NOT in balance.available — they're in categoryBalances)
+          const globalDeduction = deductedFromCategory ? promoCoinsToDeduct : universalCoinsToDeduct;
+          if (globalDeduction > 0) {
+            wallet.balance.available -= globalDeduction;
+          }
+          // balance.total is recalculated by the pre-save hook (available + pending + cashback + categoryTotal)
+          // so we do NOT manually decrement it — it would cause double-deduction
           wallet.statistics.totalSpent += universalCoinsToDeduct;
           wallet.limits.dailySpent += universalCoinsToDeduct;
-          console.log('✅ Deducted universal coins (ReZ + Promo) from balance:', universalCoinsToDeduct);
+          console.log('✅ Deducted universal coins from balance:', { globalDeduction, universalCoinsToDeduct, deductedFromCategory });
         }
 
         // Deduct Branded Coins (merchant-specific) - CRITICAL FIX
@@ -1013,10 +1074,11 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
             wallet.brandedCoins.splice(merchantCoinIndex, 1);
           }
 
-          // Update total balance
-          wallet.balance.total -= brandedCoinsToDeduct;
+          // Branded coins are tracked separately — do NOT deduct from balance.total
+          // (pre-save hook calculates total from available + pending + cashback + categoryTotal, excluding branded)
           wallet.statistics.totalSpent += brandedCoinsToDeduct;
 
+          wallet.markModified('brandedCoins');
           console.log('✅ Deducted branded coins:', brandedCoinsToDeduct);
         }
 
@@ -1071,9 +1133,10 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
               storeName: storePayment.storeName,
               rezCoins: rezCoinsToDeduct,
               promoCoins: promoCoinsToDeduct,
-            }
+            },
+            paymentCategorySlug
           );
-          console.log('✅ [STORE PAYMENT] CoinTransaction record created for universal coins:', universalCoinsToDeduct);
+          console.log('✅ [STORE PAYMENT] CoinTransaction record created for universal coins:', universalCoinsToDeduct, 'category:', paymentCategorySlug);
         }
 
         // Create separate CoinTransaction for branded coins (for audit trail)
@@ -1173,9 +1236,16 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
       if (totalRewardCoins > 0) {
         const wallet = await Wallet.findOne({ user: storePayment.userId }).session(session);
         if (wallet) {
-          // Add to available balance
-          wallet.balance.available += totalRewardCoins;
-          wallet.balance.total += totalRewardCoins;
+          if (paymentCategorySlug) {
+            // Add to category-specific balance (pre-save hook includes in total)
+            wallet.addCategoryCoins(paymentCategorySlug, totalRewardCoins);
+            console.log(`✅ [STORE PAYMENT] Credited reward coins to ${paymentCategorySlug} category:`, totalRewardCoins);
+          } else {
+            // No category — add to global balance
+            wallet.balance.available += totalRewardCoins;
+          }
+
+          // Statistics always track globally
           wallet.statistics.totalEarned += totalRewardCoins;
           wallet.statistics.totalCashback += totalRewardCoins;
           wallet.lastTransactionAt = new Date();
@@ -1454,8 +1524,8 @@ export const getCoinsForStore = async (req: Request, res: Response) => {
     }
 
     // Get store info first
-    const store = await Store.findById(storeId).select('name merchantId paymentSettings').lean();
-    
+    const store = await Store.findById(storeId).select('name merchantId paymentSettings category').lean();
+
     if (!store) {
       return res.status(404).json({
         success: false,
@@ -1463,9 +1533,29 @@ export const getCoinsForStore = async (req: Request, res: Response) => {
       });
     }
 
+    // Resolve root MainCategory slug for category-specific coins
+    let storeCategorySlug: MainCategorySlug | null = null;
+    try {
+      let catId = store.category?.toString();
+      let depth = 5;
+      while (catId && depth-- > 0) {
+        const cat = await Category.findById(catId).select('slug parentCategory').lean();
+        if (!cat) break;
+        if (!cat.parentCategory) {
+          if (VALID_MAIN_CATEGORY_SLUGS.includes(cat.slug as MainCategorySlug)) {
+            storeCategorySlug = cat.slug as MainCategorySlug;
+          }
+          break;
+        }
+        catId = cat.parentCategory.toString();
+      }
+    } catch (e) {
+      // Non-critical
+    }
+
     // Get user's wallet
     const wallet = await Wallet.findOne({ user: userId });
-    
+
     if (!wallet) {
       return res.status(200).json({
         success: true,
@@ -1496,10 +1586,12 @@ export const getCoinsForStore = async (req: Request, res: Response) => {
       });
     }
 
-    // ==================== 1. REZ COINS (Universal) ====================
-    // Green coin, usable everywhere, 30-day expiry, no redemption cap
+    // ==================== 1. REZ COINS (Category-specific or Universal) ====================
+    // Use category-specific balance if available, otherwise fall back to global
     const rezCoin = wallet.coins?.find((c: any) => c.type === 'rez' && c.isActive);
-    const rezCoinsAvailable = rezCoin?.amount || wallet.balance?.available || 0;
+    const globalRezBalance = rezCoin?.amount || wallet.balance?.available || 0;
+    const categoryBalance = storeCategorySlug ? wallet.getCategoryBalance(storeCategorySlug) : 0;
+    const rezCoinsAvailable = categoryBalance > 0 ? categoryBalance : globalRezBalance;
     
     // Calculate expiry days for ReZ coins
     let rezExpiryDays = null;

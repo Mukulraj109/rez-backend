@@ -129,6 +129,8 @@ router.get('/nearby',
   validateQuery(Joi.object({
     lat: Joi.number().min(-90).max(90),
     lng: Joi.number().min(-180).max(180),
+    latitude: Joi.number().min(-90).max(90),
+    longitude: Joi.number().min(-180).max(180),
     radius: Joi.number().min(1).max(100).default(10),
     category: Joi.string().trim().max(100),
     limit: Joi.number().integer().min(1).max(50).default(20),

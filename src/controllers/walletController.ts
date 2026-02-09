@@ -119,6 +119,20 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
       amount: bc.amount
     })),
     brandedCoinsTotal: (wallet.brandedCoins || []).reduce((sum: number, bc: any) => sum + (bc.amount || 0), 0),
+    // Per-MainCategory coin balances
+    categoryBalances: (() => {
+      const result: Record<string, { available: number; earned: number; spent: number }> = {};
+      if (wallet.categoryBalances) {
+        wallet.categoryBalances.forEach((val: any, key: string) => {
+          result[key] = {
+            available: val?.available || 0,
+            earned: val?.earned || 0,
+            spent: val?.spent || 0,
+          };
+        });
+      }
+      return result;
+    })(),
     // Promo Coins (limited-time)
     promoCoins: {
       amount: promoCoin?.amount || 0,

@@ -165,7 +165,8 @@ import {
   adminExperiencesRoutes,
   adminHomepageDealsRoutes,
   adminZoneVerificationsRoutes,
-  adminOffersRoutes
+  adminOffersRoutes,
+  adminLoyaltyRoutes
 } from './routes/admin';
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
 import experienceRoutes from './routes/experienceRoutes';  // Store experience routes
@@ -844,6 +845,8 @@ app.use(`${API_PREFIX}/admin/zone-verifications`, adminZoneVerificationsRoutes);
 console.log('✅ Admin zone verifications routes registered at /api/admin/zone-verifications');
 app.use(`${API_PREFIX}/admin/offers`, adminOffersRoutes);
 console.log('✅ Admin offers routes registered at /api/admin/offers');
+app.use(`${API_PREFIX}/admin/loyalty`, adminLoyaltyRoutes);
+console.log('✅ Admin loyalty routes registered at /api/admin/loyalty');
 
 // Campaign Routes - Homepage exciting deals
 app.use(`${API_PREFIX}/campaigns`, campaignRoutes);

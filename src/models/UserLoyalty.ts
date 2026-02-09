@@ -1,5 +1,13 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
 
+export type MainCategorySlug = 'food-dining' | 'beauty-wellness' | 'grocery-essentials' | 'fitness-sports' | 'healthcare' | 'fashion' | 'education-learning' | 'home-services' | 'travel-experiences' | 'entertainment' | 'financial-lifestyle' | 'electronics';
+
+export interface ICategoryCoins {
+  available: number;
+  expiring: number;
+  expiryDate?: Date;
+}
+
 export interface IUserLoyalty extends Document {
   userId: Types.ObjectId;
   streak: {
@@ -37,6 +45,7 @@ export interface IUserLoyalty extends Document {
       date: Date;
     }>;
   };
+  categoryCoins: Map<string, ICategoryCoins>; // Per-MainCategory coin balances
   createdAt: Date;
   updatedAt: Date;
 }
@@ -175,6 +184,16 @@ const UserLoyaltySchema = new Schema<IUserLoyalty>({
         default: Date.now
       }
     }]
+  },
+  // Per-MainCategory coin balances (food-dining, beauty-wellness, grocery-essentials)
+  categoryCoins: {
+    type: Map,
+    of: new Schema({
+      available: { type: Number, default: 0, min: 0 },
+      expiring: { type: Number, default: 0, min: 0 },
+      expiryDate: { type: Date }
+    }, { _id: false }),
+    default: () => new Map()
   }
 }, {
   timestamps: true

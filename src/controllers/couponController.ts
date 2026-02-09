@@ -80,7 +80,7 @@ export const getFeaturedCoupons = async (req: Request, res: Response): Promise<v
 export const getMyCoupons = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).userId;
-    const { status } = req.query;
+    const { status, category, limit } = req.query;
 
     if (!userId) {
       res.status(401).json({
@@ -96,15 +96,34 @@ export const getMyCoupons = async (req: Request, res: Response): Promise<void> =
       filters.status = status;
     }
 
-    const userCoupons = await UserCoupon.find(filters)
+    let query = UserCoupon.find(filters)
       .populate('coupon')
-      .sort({ status: 1, expiryDate: 1 })
-      .lean();
+      .sort({ status: 1, expiryDate: 1 });
+
+    if (limit) {
+      query = query.limit(Number(limit));
+    }
+
+    let userCoupons = await query.lean();
+
+    // Filter by category slug if provided (match against populated coupon's applicableTo.categories)
+    if (category && typeof category === 'string') {
+      const { Category } = require('../models/Category');
+      const cat = await Category.findOne({ slug: category }).lean();
+      if (cat) {
+        const catId = (cat as any)._id.toString();
+        userCoupons = userCoupons.filter((uc: any) => {
+          const coupon = uc.coupon;
+          if (!coupon?.applicableTo?.categories?.length) return true; // No category restriction = applies to all
+          return coupon.applicableTo.categories.some((c: any) => c.toString() === catId);
+        });
+      }
+    }
 
     // Categorize coupons
-    const available = userCoupons.filter(uc => uc.status === 'available');
-    const used = userCoupons.filter(uc => uc.status === 'used');
-    const expired = userCoupons.filter(uc => uc.status === 'expired');
+    const available = userCoupons.filter((uc: any) => uc.status === 'available');
+    const used = userCoupons.filter((uc: any) => uc.status === 'used');
+    const expired = userCoupons.filter((uc: any) => uc.status === 'expired');
 
     res.status(200).json({
       success: true,

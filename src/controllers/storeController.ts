@@ -263,8 +263,30 @@ export const getStoreById = asyncHandler(async (req: Request, res: Response) => 
     // Increment view count (simplified)
     await Store.updateOne({ _id: store._id }, { $inc: { 'analytics.views': 1 } });
 
+    // Resolve root MainCategory slug for category-specific coins
+    let mainCategorySlug: string | null = null;
+    try {
+      const VALID_MAIN_SLUGS = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
+      const storeCat = (store as any).category;
+      let catId = storeCat && typeof storeCat === 'object' && '_id' in storeCat
+        ? storeCat._id?.toString()
+        : storeCat?.toString();
+      let depth = 5;
+      while (catId && depth-- > 0) {
+        const cat = await Category.findById(catId).select('slug parentCategory').lean();
+        if (!cat) break;
+        if (!cat.parentCategory) {
+          if (VALID_MAIN_SLUGS.includes(cat.slug)) mainCategorySlug = cat.slug;
+          break;
+        }
+        catId = cat.parentCategory.toString();
+      }
+    } catch (e) {
+      // Non-critical — continue without mainCategorySlug
+    }
+
     sendSuccess(res, {
-      store,
+      store: { ...store, mainCategorySlug },
       products,
       productsCount: await Product.countDocuments({ store: store._id, isActive: true })
     }, 'Store retrieved successfully');
