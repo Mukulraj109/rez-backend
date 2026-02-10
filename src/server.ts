@@ -35,6 +35,7 @@ import { initializeCashbackJobs } from './jobs/cashbackJobs';
 import { initializeInventoryAlertJob } from './jobs/inventoryAlerts';
 import { initializeDealExpiryJob } from './jobs/expireDealRedemptions';
 import { initializeVoucherExpiryJob } from './jobs/expireVoucherRedemptions';
+import { initializeTableBookingExpiryJob } from './jobs/expireTableBookings';
 
 // Import export worker (initializes automatically when imported)
 import './workers/exportWorker';
@@ -1107,6 +1108,11 @@ async function startServer() {
     console.log('🔄 Initializing voucher expiry job...');
     initializeVoucherExpiryJob();
     console.log('✅ Voucher expiry job started (runs every hour at :30)');
+
+    // Initialize table booking expiry job
+    console.log('🔄 Initializing table booking expiry job...');
+    initializeTableBookingExpiryJob();
+    console.log('✅ Table booking expiry job started (runs every 30 min)');
 
     // Initialize audit retention service
     console.log('🔄 Initializing audit retention service...');

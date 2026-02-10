@@ -27,11 +27,13 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
     search,
     tags,
     isFeatured,
-    sortBy = 'rating',
+    sort,
+    sortBy: sortByParam,
     page = 1,
     limit = 20,
     region // Region filter parameter
   } = req.query;
+  const sortBy = sort || sortByParam || 'rating';
 
   try {
     const query: any = { isActive: true };
@@ -46,8 +48,24 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
       console.log('🌍 [GET STORES] Region filter applied:', effectiveRegion);
     }
 
-    // Apply filters
-    if (category) query.category = category;
+    // Apply category filter (supports both ObjectId and slug)
+    if (category) {
+      const categoryStr = category as string;
+      if (mongoose.Types.ObjectId.isValid(categoryStr)) {
+        query.category = categoryStr;
+      } else {
+        // Look up category by slug
+        const categoryDoc = await Category.findOne({ slug: categoryStr }).select('_id');
+        if (categoryDoc) {
+          // Also find subcategories under this parent
+          const subCategories = await Category.find({ parentCategory: categoryDoc._id }).select('_id');
+          const categoryIds = [categoryDoc._id, ...subCategories.map(sc => sc._id)];
+          query.category = { $in: categoryIds };
+        } else {
+          query.category = categoryStr; // Fallback: let it match nothing
+        }
+      }
+    }
     if (rating) query['ratings.average'] = { $gte: Number(rating) };
 
     // Filter by tags
@@ -106,6 +124,10 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
         break;
       case 'name':
         sortOptions.name = 1;
+        break;
+      case 'popularity':
+        sortOptions['ratings.count'] = -1;
+        sortOptions['ratings.average'] = -1;
         break;
       case 'newest':
         sortOptions.createdAt = -1;

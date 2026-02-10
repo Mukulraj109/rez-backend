@@ -47,7 +47,7 @@ router.get('/',
   // generalLimiter, // Disabled for development
   optionalAuth,
   validateQuery(Joi.object({
-    category: commonSchemas.objectId(),
+    category: Joi.string().trim(), // Accepts ObjectId or category slug
     location: Joi.string(), // "lng,lat" format
     radius: Joi.number().min(0.1).max(50).default(10),
     rating: Joi.number().min(1).max(5),
@@ -61,7 +61,8 @@ router.get('/',
       Joi.boolean(),
       Joi.string().valid('true', 'false')
     ),
-    sortBy: Joi.string().valid('rating', 'distance', 'name', 'newest').default('rating'),
+    sort: Joi.string().valid('rating', 'distance', 'name', 'popularity', 'newest'),
+    sortBy: Joi.string().valid('rating', 'distance', 'name', 'popularity', 'newest').default('rating'),
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),

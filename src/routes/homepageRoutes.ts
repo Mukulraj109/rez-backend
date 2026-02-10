@@ -26,7 +26,9 @@ router.get('/',
   validateQuery(Joi.object({
     sections: Joi.string().optional(),
     limit: Joi.number().integer().min(1).max(50).optional(),
-    location: Joi.string().pattern(/^-?\d+\.?\d*,-?\d+\.?\d*$/).optional()
+    location: Joi.string().pattern(/^-?\d+\.?\d*,-?\d+\.?\d*$/).optional(),
+    region: Joi.string().optional(),
+    userId: Joi.string().optional(),
   })),
   getHomepage
 );

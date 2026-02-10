@@ -12,12 +12,13 @@ export interface ITableBooking extends Document {
   customerPhone: string;
   customerEmail?: string;
   specialRequests?: string;
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
+  cancellationReason?: string;
   createdAt: Date;
   updatedAt: Date;
 
   // Methods
-  updateStatus(newStatus: 'pending' | 'confirmed' | 'completed' | 'cancelled'): Promise<void>;
+  updateStatus(newStatus: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'): Promise<void>;
 }
 
 // TableBooking Schema
@@ -88,9 +89,14 @@ const TableBookingSchema = new Schema<ITableBooking>({
   },
   status: {
     type: String,
-    enum: ['pending', 'confirmed', 'completed', 'cancelled'],
+    enum: ['pending', 'confirmed', 'completed', 'cancelled', 'no_show'],
     default: 'pending',
     index: true
+  },
+  cancellationReason: {
+    type: String,
+    trim: true,
+    maxlength: 500
   }
 }, {
   timestamps: true,
@@ -136,7 +142,7 @@ TableBookingSchema.pre('validate', async function(next) {
 
 // Instance method to update status
 TableBookingSchema.methods.updateStatus = async function(
-  newStatus: 'pending' | 'confirmed' | 'completed' | 'cancelled'
+  newStatus: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
 ): Promise<void> {
   this.status = newStatus;
   await this.save();
@@ -182,11 +188,61 @@ TableBookingSchema.statics.findUserBookings = function(userId: Types.ObjectId | 
     .sort({ bookingDate: -1, createdAt: -1 });
 };
 
+// Static method to mark no-shows (past bookings that were never completed)
+TableBookingSchema.statics.markNoShows = async function(
+  filter: Record<string, any> = {},
+  graceHours: number = 1
+): Promise<number> {
+  const now = new Date();
+
+  // Find pending/confirmed bookings where bookingDate is in the past
+  const query: any = {
+    ...filter,
+    status: { $in: ['pending', 'confirmed'] },
+    bookingDate: { $lte: now }
+  };
+
+  // Get candidates
+  const candidates = await this.find(query)
+    .select('_id bookingDate bookingTime')
+    .lean();
+
+  if (candidates.length === 0) return 0;
+
+  // Filter by bookingDate + bookingTime + graceHours < now
+  const expiredIds: Types.ObjectId[] = [];
+  for (const booking of candidates) {
+    const [hours, minutes] = (booking.bookingTime || '00:00').split(':').map(Number);
+    const bookingDateTime = new Date(booking.bookingDate);
+    bookingDateTime.setHours(hours, minutes, 0, 0);
+    // Add grace period
+    bookingDateTime.setHours(bookingDateTime.getHours() + graceHours);
+
+    if (bookingDateTime < now) {
+      expiredIds.push(booking._id);
+    }
+  }
+
+  if (expiredIds.length === 0) return 0;
+
+  const result = await this.updateMany(
+    { _id: { $in: expiredIds } },
+    { $set: { status: 'no_show' } }
+  );
+
+  if (result.modifiedCount > 0) {
+    console.log(`📅 [TABLE BOOKING] Marked ${result.modifiedCount} bookings as no_show`);
+  }
+
+  return result.modifiedCount;
+};
+
 // Add static method types to the model
 interface ITableBookingModel extends mongoose.Model<ITableBooking> {
   findByBookingNumber(bookingNumber: string): Promise<ITableBooking | null>;
   findStoreBookings(storeId: Types.ObjectId | string, date?: Date): Promise<ITableBooking[]>;
   findUserBookings(userId: Types.ObjectId | string): Promise<ITableBooking[]>;
+  markNoShows(filter?: Record<string, any>, graceHours?: number): Promise<number>;
 }
 
 export const TableBooking = mongoose.model<ITableBooking, ITableBookingModel>(

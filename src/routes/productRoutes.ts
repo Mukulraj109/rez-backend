@@ -210,8 +210,12 @@ router.get('/category/:categorySlug',
     minPrice: Joi.number().min(0),
     maxPrice: Joi.number().min(0),
     rating: Joi.number().min(1).max(5),
-    sortBy: Joi.string().valid('price_low', 'price_high', 'rating', 'newest'),
-    ...commonSchemas.pagination()
+    sort: Joi.string().valid('price_low', 'price_high', 'rating', 'newest', 'popularity', 'oldest',
+      'createdAt', '-createdAt', 'updatedAt', '-updatedAt', 'name', '-name'),
+    sortBy: Joi.string().valid('price_low', 'price_high', 'rating', 'newest', 'popularity'),
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(100).default(20),
+    search: Joi.string().trim().max(100),
   })),
   getProductsByCategory
 );

@@ -820,65 +820,43 @@ export const getPlayAndEarnData = asyncHandler(async (req: Request, res: Respons
   // Import MiniGame for spin count
   const { MiniGame } = await import('../models/MiniGame');
 
-  // Fetch all data in parallel with individual error handling
-  let spinEligibility: { eligible: boolean; nextAvailableAt?: Date | null; reason?: string } = { eligible: false, nextAvailableAt: null };
-  let spinsToday = 0;
-  let lastSpin = null;
-  let activeChallenges: any[] = [];
-  let userStreaks: any[] = [];
-  let availableDrops: any[] = [];
-  let coinBalance = 0;
-
-  try {
-    spinEligibility = await spinWheelService.checkEligibility(userId);
-  } catch (err) {
-    // Spin eligibility check failed, use defaults
-  }
-
-  try {
-    spinsToday = await MiniGame.countDocuments({
+  // Fetch all data in parallel for performance
+  const [
+    spinEligibilityResult,
+    spinsTodayResult,
+    lastSpinResult,
+    activeChallengesResult,
+    userStreaksResult,
+    availableDropsResult,
+    coinBalanceResult,
+  ] = await Promise.allSettled([
+    spinWheelService.checkEligibility(userId),
+    MiniGame.countDocuments({
       user: userId,
       gameType: 'spin_wheel',
       status: 'completed',
       completedAt: { $gte: today }
-    });
-  } catch (err) {
-    // Count spins failed, use default
-  }
-
-  try {
-    lastSpin = await MiniGame.findOne({
+    }),
+    MiniGame.findOne({
       user: userId,
       gameType: 'spin_wheel',
       status: 'completed'
-    }).sort({ completedAt: -1 }).select('completedAt');
-  } catch (err) {
-    // Get last spin failed
-  }
+    }).sort({ completedAt: -1 }).select('completedAt'),
+    challengeService.getUserProgress(userId, false),
+    streakService.getUserStreaks(userId),
+    (SurpriseCoinDrop as any).getAvailableDrops(userId),
+    coinService.getCoinBalance(userId),
+  ]);
 
-  try {
-    activeChallenges = await challengeService.getUserProgress(userId, false);
-  } catch (err) {
-    // Get challenges failed
-  }
-
-  try {
-    userStreaks = await streakService.getUserStreaks(userId);
-  } catch (err) {
-    // Get streaks failed
-  }
-
-  try {
-    availableDrops = await (SurpriseCoinDrop as any).getAvailableDrops(userId);
-  } catch (err) {
-    // Get drops failed
-  }
-
-  try {
-    coinBalance = await coinService.getCoinBalance(userId);
-  } catch (err) {
-    // Get coin balance failed
-  }
+  const spinEligibility = spinEligibilityResult.status === 'fulfilled'
+    ? spinEligibilityResult.value
+    : { eligible: false, nextAvailableAt: null as Date | null };
+  const spinsToday = spinsTodayResult.status === 'fulfilled' ? spinsTodayResult.value : 0;
+  const lastSpin = lastSpinResult.status === 'fulfilled' ? lastSpinResult.value : null;
+  const activeChallenges = activeChallengesResult.status === 'fulfilled' ? activeChallengesResult.value : [];
+  const userStreaks = userStreaksResult.status === 'fulfilled' ? userStreaksResult.value : [];
+  const availableDrops = availableDropsResult.status === 'fulfilled' ? availableDropsResult.value : [];
+  const coinBalance = coinBalanceResult.status === 'fulfilled' ? coinBalanceResult.value : 0;
 
   const spinsRemaining = Math.max(0, MAX_DAILY_SPINS - spinsToday);
 

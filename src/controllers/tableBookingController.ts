@@ -9,6 +9,8 @@ import {
   sendBadRequest,
   sendError
 } from '../utils/response';
+import { NotificationService } from '../services/notificationService';
+import merchantNotificationService from '../services/merchantNotificationService';
 
 // Create new table booking
 export const createTableBooking = async (req: Request, res: Response) => {
@@ -46,6 +48,13 @@ export const createTableBooking = async (req: Request, res: Response) => {
       return sendNotFound(res, 'Store not found');
     }
 
+    const bookingConfig = (store as any).bookingConfig;
+
+    // Check if bookings are enabled for this store
+    if (bookingConfig && bookingConfig.enabled === false) {
+      return sendBadRequest(res, 'Table bookings are not available for this restaurant');
+    }
+
     // Validate booking date is not in the past
     const bookingDateTime = new Date(bookingDate);
     const now = new Date();
@@ -56,19 +65,52 @@ export const createTableBooking = async (req: Request, res: Response) => {
       return sendBadRequest(res, 'Booking date cannot be in the past');
     }
 
-    // Validate party size
-    if (partySize < 1 || partySize > 50) {
-      console.error('❌ [TABLE BOOKING] Invalid party size:', partySize);
-      return sendBadRequest(res, 'Party size must be between 1 and 50');
+    // Validate advance booking window
+    if (bookingConfig?.advanceBookingDays) {
+      const maxDate = new Date();
+      maxDate.setDate(maxDate.getDate() + bookingConfig.advanceBookingDays);
+      maxDate.setHours(23, 59, 59, 999);
+      if (bookingDateTime > maxDate) {
+        return sendBadRequest(res, `Bookings can only be made up to ${bookingConfig.advanceBookingDays} days in advance`);
+      }
     }
 
-    // Check availability before creating booking (prevent overbooking)
-    const maxCapacity = (store as any).bookingConfig?.maxTableCapacity || 50;
+    // Validate booking time is within store working hours
+    if (bookingConfig?.workingHours?.start && bookingConfig?.workingHours?.end) {
+      const workStart = bookingConfig.workingHours.start;
+      const workEnd = bookingConfig.workingHours.end;
+      if (bookingTime < workStart || bookingTime > workEnd) {
+        return sendBadRequest(res, `Bookings are only available between ${workStart} and ${workEnd}`);
+      }
+    }
 
+    // Validate party size
+    const minParty = bookingConfig?.minPartySize || 1;
+    const maxParty = bookingConfig?.maxPartySize || 50;
+    if (partySize < minParty || partySize > maxParty) {
+      return sendBadRequest(res, `Party size must be between ${minParty} and ${maxParty}`);
+    }
+
+    // Check for duplicate booking (same user, store, date, time)
     const startOfBookingDay = new Date(bookingDateTime);
     startOfBookingDay.setHours(0, 0, 0, 0);
     const endOfBookingDay = new Date(bookingDateTime);
     endOfBookingDay.setHours(23, 59, 59, 999);
+
+    const duplicateBooking = await TableBooking.findOne({
+      userId: new Types.ObjectId(userId),
+      storeId: new Types.ObjectId(storeId),
+      bookingDate: { $gte: startOfBookingDay, $lte: endOfBookingDay },
+      bookingTime,
+      status: { $in: ['pending', 'confirmed'] }
+    }).lean();
+
+    if (duplicateBooking) {
+      return sendBadRequest(res, 'You already have a booking at this restaurant for this time slot');
+    }
+
+    // Check availability before creating booking (prevent overbooking)
+    const maxCapacity = bookingConfig?.maxTableCapacity || 50;
 
     const existingBookings = await TableBooking.find({
       storeId: new Types.ObjectId(storeId),
@@ -112,6 +154,42 @@ export const createTableBooking = async (req: Request, res: Response) => {
       .populate('storeId', 'name logo location contact')
       .populate('userId', 'profile.firstName profile.lastName phoneNumber email');
 
+    // Send notifications (fire-and-forget)
+    const formattedDate = bookingDateTime.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+    NotificationService.createNotification({
+      userId,
+      title: 'Table Booking Received',
+      message: `Your table for ${partySize} at ${store.name} on ${formattedDate} at ${bookingTime} has been received. The restaurant will confirm shortly.`,
+      type: 'success',
+      category: 'order',
+      priority: 'medium',
+      data: {
+        orderId: booking._id?.toString(),
+        deepLink: '/BookingsPage',
+        actionButton: {
+          text: 'View Booking',
+          action: 'navigate',
+          target: '/BookingsPage'
+        }
+      },
+      deliveryChannels: ['push', 'in_app'],
+      source: 'automated'
+    }).catch((err: any) => console.error('❌ [TABLE BOOKING] Failed to send user notification:', err.message));
+
+    if ((store as any).merchantId) {
+      merchantNotificationService.notifyNewVisit({
+        merchantId: (store as any).merchantId.toString(),
+        visitId: booking._id?.toString() || '',
+        visitNumber: booking.bookingNumber,
+        customerName,
+        visitDate: formattedDate,
+        visitTime: bookingTime,
+        visitType: 'scheduled',
+        storeName: store.name
+      }).catch((err: any) => console.error('❌ [TABLE BOOKING] Failed to send merchant notification:', err.message));
+    }
+
     return sendCreated(res, populatedBooking, 'Table booking created successfully');
 
   } catch (error: any) {
@@ -125,6 +203,13 @@ export const getUserTableBookings = async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
     const { status, page = 1, limit = 20 } = req.query;
+
+    // Auto-expire past bookings for this user (non-blocking)
+    try {
+      await TableBooking.markNoShows({ userId: new Types.ObjectId(userId) });
+    } catch (err: any) {
+      console.error('❌ [TABLE BOOKING] Auto-expiry error:', err.message);
+    }
 
     console.log('📅 [TABLE BOOKING] Getting user bookings:', {
       userId,
@@ -140,14 +225,16 @@ export const getUserTableBookings = async (req: Request, res: Response) => {
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const bookings = await TableBooking.find(query)
-      .populate('storeId', 'name logo location contact')
-      .sort({ bookingDate: -1, createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
+    const [bookings, total] = await Promise.all([
+      TableBooking.find(query)
+        .populate('storeId', 'name logo location contact')
+        .sort({ bookingDate: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      TableBooking.countDocuments(query)
+    ]);
 
-    const total = await TableBooking.countDocuments(query);
     const totalPages = Math.ceil(total / Number(limit));
 
     console.log('✅ [TABLE BOOKING] Found bookings:', bookings.length);
@@ -207,6 +294,13 @@ export const getStoreTableBookings = async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { date, status, page = 1, limit = 50 } = req.query;
 
+    // Auto-expire past bookings for this store (non-blocking)
+    try {
+      await TableBooking.markNoShows({ storeId: new Types.ObjectId(storeId) });
+    } catch (err: any) {
+      console.error('❌ [TABLE BOOKING] Auto-expiry error:', err.message);
+    }
+
     console.log('📅 [TABLE BOOKING] Getting store bookings:', {
       storeId,
       date,
@@ -246,14 +340,16 @@ export const getStoreTableBookings = async (req: Request, res: Response) => {
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const bookings = await TableBooking.find(query)
-      .populate('userId', 'profile.firstName profile.lastName phoneNumber email')
-      .sort({ bookingDate: 1, bookingTime: 1 })
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
+    const [bookings, total] = await Promise.all([
+      TableBooking.find(query)
+        .populate('userId', 'profile.firstName profile.lastName phoneNumber email')
+        .sort({ bookingDate: 1, bookingTime: 1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      TableBooking.countDocuments(query)
+    ]);
 
-    const total = await TableBooking.countDocuments(query);
     const totalPages = Math.ceil(total / Number(limit));
 
     console.log('✅ [TABLE BOOKING] Found store bookings:', bookings.length);
@@ -296,6 +392,14 @@ export const getMerchantTableBookings = async (req: Request, res: Response) => {
     }
 
     const storeIds = merchantStores.map(s => s._id);
+
+    // Auto-expire past bookings for merchant's stores (non-blocking)
+    try {
+      await TableBooking.markNoShows({ storeId: { $in: storeIds } });
+    } catch (err: any) {
+      console.error('❌ [TABLE BOOKING] Auto-expiry error:', err.message);
+    }
+
     const query: any = { storeId: { $in: storeIds } };
 
     if (date) {
@@ -313,15 +417,17 @@ export const getMerchantTableBookings = async (req: Request, res: Response) => {
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const bookings = await TableBooking.find(query)
-      .populate('storeId', 'name logo')
-      .populate('userId', 'profile.firstName profile.lastName phoneNumber email')
-      .sort({ bookingDate: -1, bookingTime: -1 })
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
+    const [bookings, total] = await Promise.all([
+      TableBooking.find(query)
+        .populate('storeId', 'name logo')
+        .populate('userId', 'profile.firstName profile.lastName phoneNumber email')
+        .sort({ bookingDate: -1, bookingTime: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      TableBooking.countDocuments(query)
+    ]);
 
-    const total = await TableBooking.countDocuments(query);
     const totalPages = Math.ceil(total / Number(limit));
 
     console.log('✅ [TABLE BOOKING] Found merchant bookings:', bookings.length, 'across', merchantStores.length, 'stores');
@@ -355,7 +461,7 @@ export const updateTableBookingStatus = async (req: Request, res: Response) => {
     console.log('📅 [TABLE BOOKING] Updating booking status:', { bookingId, status });
 
     // Validate status
-    const validStatuses = ['confirmed', 'completed', 'cancelled'];
+    const validStatuses = ['confirmed', 'completed', 'cancelled', 'no_show'];
     if (!status || !validStatuses.includes(status)) {
       return sendBadRequest(res, `Invalid status. Must be one of: ${validStatuses.join(', ')}`);
     }
@@ -376,25 +482,76 @@ export const updateTableBookingStatus = async (req: Request, res: Response) => {
       return sendBadRequest(res, 'You do not have permission to update this booking');
     }
 
-    // Validate status transitions
+    // Validate status transitions — terminal states cannot be changed
     if (booking.status === 'cancelled') {
       return sendBadRequest(res, 'Cannot update a cancelled booking');
     }
     if (booking.status === 'completed') {
       return sendBadRequest(res, 'Cannot update a completed booking');
     }
+    if (booking.status === 'no_show') {
+      return sendBadRequest(res, 'Cannot update a no-show booking');
+    }
     if (status === 'completed' && booking.status !== 'confirmed') {
       return sendBadRequest(res, 'Booking must be confirmed before marking as completed');
     }
 
+    const previousStatus = booking.status;
     booking.status = status;
     await booking.save();
 
-    console.log('✅ [TABLE BOOKING] Booking status updated:', booking.bookingNumber, '->', status);
+    console.log('✅ [TABLE BOOKING] Booking status updated:', booking.bookingNumber, previousStatus, '->', status);
 
     const populatedBooking = await TableBooking.findById(booking._id)
       .populate('storeId', 'name logo location contact')
       .populate('userId', 'profile.firstName profile.lastName phoneNumber email');
+
+    // Notify the customer about status change (fire-and-forget)
+    const statusMessages: Record<string, { title: string; message: string; type: 'success' | 'warning' | 'info' }> = {
+      confirmed: {
+        title: 'Booking Confirmed',
+        message: `Your table booking at ${store.name} has been confirmed! See you on ${booking.bookingDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at ${booking.bookingTime}.`,
+        type: 'success'
+      },
+      completed: {
+        title: 'Booking Completed',
+        message: `Thank you for dining at ${store.name}! We hope you enjoyed your visit.`,
+        type: 'success'
+      },
+      cancelled: {
+        title: 'Booking Cancelled by Restaurant',
+        message: `Unfortunately, ${store.name} has cancelled your booking for ${booking.bookingDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} at ${booking.bookingTime}. Please try rebooking or contact the restaurant.`,
+        type: 'warning'
+      },
+      no_show: {
+        title: 'Booking Marked as No Show',
+        message: `Your booking at ${store.name} was marked as a no-show. If this was a mistake, please contact the restaurant.`,
+        type: 'warning'
+      }
+    };
+
+    const notifConfig = statusMessages[status];
+    if (notifConfig) {
+      NotificationService.createNotification({
+        userId: booking.userId.toString(),
+        title: notifConfig.title,
+        message: notifConfig.message,
+        type: notifConfig.type,
+        category: 'order',
+        priority: 'medium',
+        data: {
+          orderId: booking._id?.toString(),
+          deepLink: '/BookingsPage',
+          actionButton: {
+            text: 'View Booking',
+            action: 'navigate',
+            target: '/BookingsPage'
+          }
+        },
+        deliveryChannels: ['push', 'in_app'],
+        source: 'automated'
+      }).catch((err: any) => console.error('❌ [TABLE BOOKING] Failed to send status notification:', err.message));
+    }
 
     return sendSuccess(res, populatedBooking, `Booking ${status} successfully`);
 
@@ -434,8 +591,15 @@ export const cancelTableBooking = async (req: Request, res: Response) => {
       return sendBadRequest(res, 'Cannot cancel a completed booking');
     }
 
-    // Update booking status
+    if (booking.status === 'no_show') {
+      return sendBadRequest(res, 'Cannot cancel a no-show booking');
+    }
+
+    // Update booking status and save cancellation reason
     booking.status = 'cancelled';
+    if (reason) {
+      (booking as any).cancellationReason = reason;
+    }
     await booking.save();
 
     console.log('✅ [TABLE BOOKING] Booking cancelled:', booking.bookingNumber);
@@ -444,6 +608,18 @@ export const cancelTableBooking = async (req: Request, res: Response) => {
     const populatedBooking = await TableBooking.findById(booking._id)
       .populate('storeId', 'name logo location contact')
       .populate('userId', 'profile.firstName profile.lastName phoneNumber email');
+
+    // Notify merchant about cancellation (fire-and-forget)
+    const store = await Store.findById(booking.storeId).select('merchantId name').lean();
+    if (store && (store as any).merchantId) {
+      merchantNotificationService.notifyVisitCancelled({
+        merchantId: (store as any).merchantId.toString(),
+        visitId: booking._id?.toString() || '',
+        visitNumber: booking.bookingNumber,
+        customerName: booking.customerName,
+        storeName: store.name
+      }).catch((err: any) => console.error('❌ [TABLE BOOKING] Failed to send cancel notification to merchant:', err.message));
+    }
 
     return sendSuccess(res, populatedBooking, 'Booking cancelled successfully');
 

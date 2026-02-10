@@ -447,10 +447,12 @@ export const getProductsByCategory = asyncHandler(async (req: Request, res: Resp
     minPrice,
     maxPrice,
     rating,
-    sortBy = 'createdAt',
+    sort,
+    sortBy: sortByParam,
     page = 1,
     limit = 20
   } = req.query;
+  const sortBy = sort || sortByParam || 'createdAt';
 
   try {
     // Try to get from cache first
@@ -505,6 +507,9 @@ export const getProductsByCategory = asyncHandler(async (req: Request, res: Resp
         break;
       case 'rating':
         sortOptions = { 'ratings.average': -1 };
+        break;
+      case 'popularity':
+        sortOptions = { 'ratings.count': -1, 'ratings.average': -1 };
         break;
       case 'newest':
         sortOptions = { createdAt: -1 };

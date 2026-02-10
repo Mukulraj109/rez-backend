@@ -249,13 +249,37 @@ export const getUserStoreVisits = asyncHandler(async (req: Request, res: Respons
     throw new AppError('Authentication required', 401);
   }
 
-  console.log('📋 [STORE VISIT] Fetching user visits:', { userId });
+  const { page = 1, limit = 20, status } = req.query;
+  const pageNum = Math.max(1, Number(page));
+  const limitNum = Math.min(100, Math.max(1, Number(limit)));
+  const skip = (pageNum - 1) * limitNum;
 
-  const visits = await StoreVisit.findUserVisits(userId);
+  console.log('📋 [STORE VISIT] Fetching user visits:', { userId, page: pageNum, limit: limitNum });
 
-  console.log('✅ [STORE VISIT] Found visits:', { count: visits.length });
+  const query: any = { userId };
+  if (status) query.status = status;
 
-  sendSuccess(res, visits, 'Visits retrieved successfully');
+  const [visits, total] = await Promise.all([
+    StoreVisit.find(query)
+      .populate('storeId', 'name location contact images logo')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean(),
+    StoreVisit.countDocuments(query),
+  ]);
+
+  console.log('✅ [STORE VISIT] Found visits:', { count: visits.length, total });
+
+  sendSuccess(res, {
+    visits,
+    pagination: {
+      total,
+      page: pageNum,
+      pages: Math.ceil(total / limitNum),
+      limit: limitNum,
+    },
+  }, 'Visits retrieved successfully');
 });
 
 // Get visit by ID
