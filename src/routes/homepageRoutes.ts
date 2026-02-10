@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { getHomepage, getAvailableSections } from '../controllers/homepageController';
-import { optionalAuth } from '../middleware/auth';
+import { getHomepage, getAvailableSections, getUserContext } from '../controllers/homepageController';
+import { optionalAuth, authenticate } from '../middleware/auth';
 import { Joi } from '../middleware/validation';
 import { validateQuery } from '../middleware/validation';
 
@@ -43,6 +43,17 @@ router.get('/',
  */
 router.get('/sections',
   getAvailableSections
+);
+
+/**
+ * @route   GET /api/homepage/user-context
+ * @desc    Get all user-specific homepage data in a single request
+ *          (wallet balance, voucher count, offers count, cart count, subscription)
+ * @access  Private (requires auth)
+ */
+router.get('/user-context',
+  authenticate,
+  getUserContext
 );
 
 export default router;

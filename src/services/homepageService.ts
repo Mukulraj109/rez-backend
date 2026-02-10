@@ -8,12 +8,32 @@ import { Article } from '../models/Article';
 import { MallBrand } from '../models/MallBrand';
 import { ModeId } from './modeService';
 import { regionService, RegionId, isValidRegion, DEFAULT_REGION } from './regionService';
+import { withCache, CacheKeys } from '../utils/cacheHelper';
+import { CacheTTL } from '../config/redis';
 
 /**
  * Homepage Service
  * Aggregates data from multiple sources for the homepage
  * Uses parallel execution for optimal performance
+ * Uses Redis caching to avoid repeated DB queries
  */
+
+// In-memory cache for region-to-storeIds mapping (avoids repeated pre-queries)
+const regionStoreCache = new Map<string, { ids: string[], timestamp: number }>();
+const REGION_STORE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getStoreIdsForRegion(region: RegionId): Promise<string[]> {
+  const cacheKey = String(region);
+  const cached = regionStoreCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < REGION_STORE_CACHE_TTL) {
+    return cached.ids;
+  }
+  const regionFilter = regionService.getStoreFilter(region);
+  const stores = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
+  const ids = stores.map((s: any) => s._id);
+  regionStoreCache.set(cacheKey, { ids, timestamp: Date.now() });
+  return ids;
+}
 
 // Default limits for each section
 const DEFAULT_LIMITS = {
@@ -67,360 +87,379 @@ interface HomepageResponse {
 }
 
 /**
- * Fetch featured products
+ * Fetch featured products (cached)
  */
 async function fetchFeaturedProducts(limit: number, region?: RegionId): Promise<any[]> {
-  const startTime = Date.now();
-  try {
-    // Build base query
-    const query: Record<string, any> = {
-      isActive: true,
-      isFeatured: true,
-      'inventory.isAvailable': true
-    };
+  const cacheKey = region
+    ? CacheKeys.productFeaturedByRegion(String(region), limit)
+    : CacheKeys.productFeatured(limit);
 
-    // Add region filter by finding stores in region first
-    if (region) {
-      const regionFilter = regionService.getStoreFilter(region);
-      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
-      const storeIds = storesInRegion.map((s: any) => s._id);
-      query.store = { $in: storeIds };
+  return withCache(cacheKey, CacheTTL.PRODUCT_FEATURED, async () => {
+    const startTime = Date.now();
+    try {
+      const query: Record<string, any> = {
+        isActive: true,
+        isFeatured: true,
+        'inventory.isAvailable': true
+      };
+
+      if (region) {
+        const storeIds = await getStoreIdsForRegion(region);
+        query.store = { $in: storeIds };
+      }
+
+      const products: any = await (Product as any).find(query)
+        .populate('category', 'name slug')
+        .populate('store', 'name slug logo location')
+        .select('name slug images pricing ratings analytics')
+        .sort({ 'analytics.views': -1, 'ratings.average': -1 })
+        .limit(limit)
+        .lean();
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ [Homepage Service] Fetched ${products.length} featured products (region: ${region || 'all'}) in ${duration}ms`);
+      return products;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(`❌ [Homepage Service] Failed to fetch featured products in ${duration}ms:`, error);
+      throw error;
     }
-
-    const products: any = await (Product as any).find(query)
-      .populate('category', 'name slug')
-      .populate('store', 'name slug logo location')
-      .select('name slug images pricing inventory ratings badges tags analytics')
-      .sort({ 'analytics.views': -1, 'ratings.average': -1 })
-      .limit(limit)
-      .lean();
-
-    const duration = Date.now() - startTime;
-    console.log(`✅ [Homepage Service] Fetched ${products.length} featured products (region: ${region || 'all'}) in ${duration}ms`);
-    return products;
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`❌ [Homepage Service] Failed to fetch featured products in ${duration}ms:`, error);
-    throw error;
-  }
+  });
 }
 
 /**
- * Fetch new arrival products
+ * Fetch new arrival products (cached)
  */
 async function fetchNewArrivals(limit: number, region?: RegionId): Promise<any[]> {
-  const startTime = Date.now();
-  try {
-    // Products created in the last 30 days
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const cacheKey = region
+    ? CacheKeys.productNewArrivalsByRegion(String(region), limit)
+    : CacheKeys.productNewArrivals(limit);
 
-    // Build base query
-    const query: Record<string, any> = {
-      isActive: true,
-      'inventory.isAvailable': true,
-      createdAt: { $gte: thirtyDaysAgo }
-    };
+  return withCache(cacheKey, CacheTTL.PRODUCT_NEW_ARRIVALS, async () => {
+    const startTime = Date.now();
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    // Add region filter by finding stores in region first
-    if (region) {
-      const regionFilter = regionService.getStoreFilter(region);
-      const storesInRegion = await Store.find({ isActive: true, ...regionFilter }).select('_id').lean();
-      const storeIds = storesInRegion.map((s: any) => s._id);
-      query.store = { $in: storeIds };
+      const query: Record<string, any> = {
+        isActive: true,
+        'inventory.isAvailable': true,
+        createdAt: { $gte: thirtyDaysAgo }
+      };
+
+      if (region) {
+        const storeIds = await getStoreIdsForRegion(region);
+        query.store = { $in: storeIds };
+      }
+
+      const products: any = await (Product as any).find(query)
+        .populate('category', 'name slug')
+        .populate('store', 'name slug logo location cashback')
+        .select('name title slug images pricing ratings createdAt cashback')
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
+
+      const transformedProducts = products.map((product: any) => ({
+        _id: product._id,
+        id: product._id,
+        name: product.name,
+        title: product.title || product.name,
+        image: product.images?.[0] || '',
+        images: product.images || [],
+        pricing: product.pricing || {
+          selling: product.price?.current || 0,
+          original: product.price?.original || 0,
+          currency: product.price?.currency || 'INR',
+          discount: product.price?.discount || 0
+        },
+        category: product.category,
+        ratings: product.ratings || {
+          average: 0,
+          count: 0
+        },
+        isNewArrival: true,
+        createdAt: product.createdAt,
+        store: product.store,
+        cashback: product.cashback?.percentage || (product.store as any)?.cashback?.percentage
+          ? {
+              percentage: product.cashback?.percentage || (product.store as any)?.cashback?.percentage || 5,
+              maxAmount: product.cashback?.maxAmount || (product.store as any)?.cashback?.maxAmount || 500
+            }
+          : {
+              percentage: 5,
+              maxAmount: 500
+            }
+      }));
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ [Homepage Service] Fetched ${transformedProducts.length} new arrivals (region: ${region || 'all'}) in ${duration}ms`);
+      return transformedProducts;
+    } catch (error) {
+      throw error;
     }
-
-    const products: any = await (Product as any).find(query)
-      .populate('category', 'name slug')
-      .populate('store', 'name slug logo location cashback')
-      .select('name title slug images pricing inventory ratings badges tags createdAt cashback')
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean();
-
-    // Transform products to match frontend format with cashback
-    const transformedProducts = products.map((product: any) => ({
-      _id: product._id,
-      id: product._id,
-      name: product.name,
-      title: product.title || product.name,
-      brand: product.brand || 'Generic',
-      image: product.image || product.images?.[0] || '',
-      images: product.images || [],
-      description: product.description || '',
-      pricing: product.pricing || {
-        selling: product.price?.current || 0,
-        original: product.price?.original || 0,
-        currency: product.price?.currency || 'INR',
-        discount: product.price?.discount || 0
-      },
-      price: product.price || {
-        current: product.pricing?.selling || 0,
-        original: product.pricing?.original || 0,
-        currency: product.pricing?.currency || 'INR',
-        discount: product.pricing?.discount || 0
-      },
-      category: product.category,
-      ratings: product.ratings || {
-        average: product.rating?.value || 0,
-        count: product.rating?.count || 0
-      },
-      rating: product.rating || {
-        value: product.ratings?.average || 0,
-        count: product.ratings?.count || 0
-      },
-      inventory: product.inventory,
-      availabilityStatus: product.availabilityStatus || (product.inventory?.stock > 0 ? 'in_stock' : 'out_of_stock'),
-      tags: product.tags || [],
-      isNewArrival: true,
-      arrivalDate: product.arrivalDate || product.createdAt?.toISOString().split('T')[0],
-      createdAt: product.createdAt,
-      store: product.store,
-      // Include cashback information
-      cashback: product.cashback?.percentage || (product.store as any)?.cashback?.percentage 
-        ? {
-            percentage: product.cashback?.percentage || (product.store as any)?.cashback?.percentage || 5,
-            maxAmount: product.cashback?.maxAmount || (product.store as any)?.cashback?.maxAmount || 500
-          }
-        : {
-            percentage: 5, // Default cashback for new arrivals
-            maxAmount: 500
-          }
-    }));
-
-    return transformedProducts;
-  } catch (error) {
-    throw error;
-  }
+  });
 }
 
 /**
- * Fetch featured stores
+ * Fetch featured stores (cached)
  */
 async function fetchFeaturedStores(limit: number, region?: RegionId): Promise<any[]> {
-  const startTime = Date.now();
-  try {
-    // Build query with region filter
-    const query: Record<string, any> = {
-      isActive: true,
-      isFeatured: true
-    };
+  const cacheKey = region
+    ? CacheKeys.homepageByRegion(String(region), `featuredStores:${limit}`)
+    : `homepage:featuredStores:${limit}`;
 
-    // Add region filter if specified
-    if (region) {
-      const regionFilter = regionService.getStoreFilter(region);
-      Object.assign(query, regionFilter);
+  return withCache(cacheKey, CacheTTL.STORE_LIST, async () => {
+    const startTime = Date.now();
+    try {
+      const query: Record<string, any> = {
+        isActive: true,
+        isFeatured: true
+      };
+
+      if (region) {
+        const regionFilter = regionService.getStoreFilter(region);
+        Object.assign(query, regionFilter);
+      }
+
+      const stores = await Store.find(query)
+        .populate('category', 'name slug')
+        .select('name slug logo ratings location tags')
+        .sort({ 'ratings.average': -1 })
+        .limit(limit)
+        .lean();
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ [Homepage Service] Fetched ${stores.length} featured stores (region: ${region || 'all'}) in ${duration}ms`);
+      return stores;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(`❌ [Homepage Service] Failed to fetch featured stores in ${duration}ms:`, error);
+      throw error;
     }
-
-    const stores = await Store.find(query)
-      .populate('category', 'name slug')
-      .select('name slug logo images ratings location deliveryCategories tags operationalInfo offers')
-      .sort({ 'ratings.average': -1 })
-      .limit(limit)
-      .lean();
-
-    const duration = Date.now() - startTime;
-    console.log(`✅ [Homepage Service] Fetched ${stores.length} featured stores (region: ${region || 'all'}) in ${duration}ms`);
-    return stores;
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`❌ [Homepage Service] Failed to fetch featured stores in ${duration}ms:`, error);
-    throw error;
-  }
+  });
 }
 
 /**
- * Fetch trending stores
+ * Fetch trending stores (cached)
  */
 async function fetchTrendingStores(limit: number, region?: RegionId): Promise<any[]> {
-  const startTime = Date.now();
-  try {
-    // Build query with region filter
-    const query: Record<string, any> = {
-      isActive: true
-    };
+  const cacheKey = region
+    ? CacheKeys.homepageByRegion(String(region), `trendingStores:${limit}`)
+    : `homepage:trendingStores:${limit}`;
 
-    // Add region filter if specified
-    if (region) {
-      const regionFilter = regionService.getStoreFilter(region);
-      Object.assign(query, regionFilter);
+  return withCache(cacheKey, CacheTTL.STORE_LIST, async () => {
+    const startTime = Date.now();
+    try {
+      const query: Record<string, any> = {
+        isActive: true
+      };
+
+      if (region) {
+        const regionFilter = regionService.getStoreFilter(region);
+        Object.assign(query, regionFilter);
+      }
+
+      const stores = await Store.find(query)
+        .populate('category', 'name slug')
+        .select('name slug logo ratings location tags analytics')
+        .sort({ 'analytics.totalOrders': -1, 'ratings.average': -1 })
+        .limit(limit)
+        .lean();
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ [Homepage Service] Fetched ${stores.length} trending stores (region: ${region || 'all'}) in ${duration}ms`);
+      return stores;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(`❌ [Homepage Service] Failed to fetch trending stores in ${duration}ms:`, error);
+      throw error;
     }
-
-    const stores = await Store.find(query)
-      .populate('category', 'name slug')
-      .select('name slug logo images ratings location tags operationalInfo offers analytics')
-      .sort({ 'analytics.totalOrders': -1, 'ratings.average': -1 })
-      .limit(limit)
-      .lean();
-
-    const duration = Date.now() - startTime;
-    console.log(`✅ [Homepage Service] Fetched ${stores.length} trending stores (region: ${region || 'all'}) in ${duration}ms`);
-    return stores;
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`❌ [Homepage Service] Failed to fetch trending stores in ${duration}ms:`, error);
-    throw error;
-  }
+  });
 }
 
 /**
- * Fetch upcoming events
+ * Fetch upcoming events (cached)
  */
 async function fetchUpcomingEvents(limit: number): Promise<any[]> {
-  const startTime = Date.now();
-  try {
-    const now = new Date();
+  const cacheKey = `homepage:upcomingEvents:${limit}`;
 
-    const events = await Event.find({
-      isActive: true,
-      'dateTime.start': { $gte: now },
-      status: 'upcoming'
-    })
-      .select('title slug category images price location dateTime organizer tags analytics')
-      .sort({ 'dateTime.start': 1 })
-      .limit(limit)
-      .lean();
+  return withCache(cacheKey, CacheTTL.PRODUCT_SEARCH, async () => {
+    const startTime = Date.now();
+    try {
+      const now = new Date();
 
-    const duration = Date.now() - startTime;
-    console.log(`✅ [Homepage Service] Fetched ${events.length} upcoming events in ${duration}ms`);
-    return events;
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`❌ [Homepage Service] Failed to fetch upcoming events in ${duration}ms:`, error);
-    throw error;
-  }
+      const events = await Event.find({
+        isActive: true,
+        'dateTime.start': { $gte: now },
+        status: 'upcoming'
+      })
+        .select('title slug category images price location dateTime organizer tags')
+        .sort({ 'dateTime.start': 1 })
+        .limit(limit)
+        .lean();
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ [Homepage Service] Fetched ${events.length} upcoming events in ${duration}ms`);
+      return events;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(`❌ [Homepage Service] Failed to fetch upcoming events in ${duration}ms:`, error);
+      throw error;
+    }
+  });
 }
 
 /**
- * Fetch mega offers
+ * Fetch mega offers (cached)
  */
 async function fetchMegaOffers(limit: number): Promise<any[]> {
-  const startTime = Date.now();
-  try {
-    const now = new Date();
+  const cacheKey = `homepage:megaOffers:${limit}`;
 
-    const offers = await Offer.find({
-      category: 'mega',
-      'validity.isActive': true,
-      'validity.startDate': { $lte: now },
-      'validity.endDate': { $gte: now }
-    })
-      .select('title subtitle image category type cashbackPercentage originalPrice discountedPrice store validity engagement')
-      .sort({ 'engagement.viewsCount': -1 })
-      .limit(limit)
-      .lean();
+  return withCache(cacheKey, CacheTTL.PRODUCT_SEARCH, async () => {
+    const startTime = Date.now();
+    try {
+      const now = new Date();
 
-    const duration = Date.now() - startTime;
-    console.log(`✅ [Homepage Service] Fetched ${offers.length} mega offers in ${duration}ms`);
-    return offers;
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`❌ [Homepage Service] Failed to fetch mega offers in ${duration}ms:`, error);
-    throw error;
-  }
+      const offers = await Offer.find({
+        category: 'mega',
+        'validity.isActive': true,
+        'validity.startDate': { $lte: now },
+        'validity.endDate': { $gte: now }
+      })
+        .select('title subtitle image category type cashbackPercentage originalPrice discountedPrice store validity')
+        .sort({ 'engagement.viewsCount': -1 })
+        .limit(limit)
+        .lean();
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ [Homepage Service] Fetched ${offers.length} mega offers in ${duration}ms`);
+      return offers;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(`❌ [Homepage Service] Failed to fetch mega offers in ${duration}ms:`, error);
+      throw error;
+    }
+  });
 }
 
 /**
- * Fetch student offers
+ * Fetch student offers (cached)
  */
 async function fetchStudentOffers(limit: number): Promise<any[]> {
-  const startTime = Date.now();
-  try {
-    const now = new Date();
+  const cacheKey = `homepage:studentOffers:${limit}`;
 
-    const offers = await Offer.find({
-      category: 'student',
-      'validity.isActive': true,
-      'validity.startDate': { $lte: now },
-      'validity.endDate': { $gte: now }
-    })
-      .select('title subtitle image category type cashbackPercentage originalPrice discountedPrice store validity engagement')
-      .sort({ 'engagement.viewsCount': -1 })
-      .limit(limit)
-      .lean();
+  return withCache(cacheKey, CacheTTL.PRODUCT_SEARCH, async () => {
+    const startTime = Date.now();
+    try {
+      const now = new Date();
 
-    const duration = Date.now() - startTime;
-    console.log(`✅ [Homepage Service] Fetched ${offers.length} student offers in ${duration}ms`);
-    return offers;
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`❌ [Homepage Service] Failed to fetch student offers in ${duration}ms:`, error);
-    throw error;
-  }
+      const offers = await Offer.find({
+        category: 'student',
+        'validity.isActive': true,
+        'validity.startDate': { $lte: now },
+        'validity.endDate': { $gte: now }
+      })
+        .select('title subtitle image category type cashbackPercentage originalPrice discountedPrice store validity')
+        .sort({ 'engagement.viewsCount': -1 })
+        .limit(limit)
+        .lean();
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ [Homepage Service] Fetched ${offers.length} student offers in ${duration}ms`);
+      return offers;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(`❌ [Homepage Service] Failed to fetch student offers in ${duration}ms:`, error);
+      throw error;
+    }
+  });
 }
 
 /**
- * Fetch all categories
+ * Fetch all categories (cached - long TTL since categories rarely change)
  */
 async function fetchCategories(limit: number): Promise<any[]> {
-  const startTime = Date.now();
-  try {
-    const categories = await Category.find({ isActive: true })
-      .select('name slug icon image description productCount')
-      .sort({ productCount: -1, name: 1 })
-      .limit(limit)
-      .lean();
+  const cacheKey = `homepage:categories:${limit}`;
 
-    const duration = Date.now() - startTime;
-    console.log(`✅ [Homepage Service] Fetched ${categories.length} categories in ${duration}ms`);
-    return categories;
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`❌ [Homepage Service] Failed to fetch categories in ${duration}ms:`, error);
-    throw error;
-  }
+  return withCache(cacheKey, CacheTTL.CATEGORY_LIST, async () => {
+    const startTime = Date.now();
+    try {
+      const categories = await Category.find({ isActive: true })
+        .select('name slug icon image description productCount')
+        .sort({ productCount: -1, name: 1 })
+        .limit(limit)
+        .lean();
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ [Homepage Service] Fetched ${categories.length} categories in ${duration}ms`);
+      return categories;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(`❌ [Homepage Service] Failed to fetch categories in ${duration}ms:`, error);
+      throw error;
+    }
+  });
 }
 
 /**
- * Fetch trending videos
+ * Fetch trending videos (cached)
  */
 async function fetchTrendingVideos(limit: number): Promise<any[]> {
-  const startTime = Date.now();
-  try {
-    const videos = await Video.find({
-      isActive: true,
-      type: { $in: ['merchant', 'ugc'] }
-    })
-      .populate('creator', 'name avatar')
-      .select('title thumbnail url duration views likes category tags createdAt')
-      .sort({ views: -1, likes: -1 })
-      .limit(limit)
-      .lean();
+  const cacheKey = `homepage:trendingVideos:${limit}`;
 
-    const duration = Date.now() - startTime;
-    console.log(`✅ [Homepage Service] Fetched ${videos.length} trending videos in ${duration}ms`);
-    return videos;
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`❌ [Homepage Service] Failed to fetch trending videos in ${duration}ms:`, error);
-    throw error;
-  }
+  return withCache(cacheKey, CacheTTL.PRODUCT_LIST, async () => {
+    const startTime = Date.now();
+    try {
+      const videos = await Video.find({
+        isActive: true,
+        type: { $in: ['merchant', 'ugc'] }
+      })
+        .populate('creator', 'name avatar')
+        .select('title thumbnail url duration views likes category tags createdAt')
+        .sort({ views: -1, likes: -1 })
+        .limit(limit)
+        .lean();
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ [Homepage Service] Fetched ${videos.length} trending videos in ${duration}ms`);
+      return videos;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(`❌ [Homepage Service] Failed to fetch trending videos in ${duration}ms:`, error);
+      throw error;
+    }
+  });
 }
 
 /**
- * Fetch latest articles
+ * Fetch latest articles (cached)
  */
 async function fetchLatestArticles(limit: number): Promise<any[]> {
-  const startTime = Date.now();
-  try {
-    const articles = await Article.find({
-      isActive: true,
-      status: 'published'
-    })
-      .populate('author', 'name avatar')
-      .select('title slug thumbnail excerpt category tags readTime views publishedAt')
-      .sort({ publishedAt: -1 })
-      .limit(limit)
-      .lean();
+  const cacheKey = `homepage:latestArticles:${limit}`;
 
-    const duration = Date.now() - startTime;
-    console.log(`✅ [Homepage Service] Fetched ${articles.length} latest articles in ${duration}ms`);
-    return articles;
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`❌ [Homepage Service] Failed to fetch latest articles in ${duration}ms:`, error);
-    throw error;
-  }
+  return withCache(cacheKey, CacheTTL.PRODUCT_LIST, async () => {
+    const startTime = Date.now();
+    try {
+      const articles = await Article.find({
+        isActive: true,
+        status: 'published'
+      })
+        .populate('author', 'name avatar')
+        .select('title slug thumbnail excerpt category tags readTime publishedAt')
+        .sort({ publishedAt: -1 })
+        .limit(limit)
+        .lean();
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ [Homepage Service] Fetched ${articles.length} latest articles in ${duration}ms`);
+      return articles;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(`❌ [Homepage Service] Failed to fetch latest articles in ${duration}ms:`, error);
+      throw error;
+    }
+  });
 }
 
 /**
@@ -439,45 +478,47 @@ function formatDeal(cashback: any): string {
 }
 
 /**
- * Fetch brand partnerships for homepage
+ * Fetch brand partnerships for homepage (cached)
  */
 async function fetchBrandPartnerships(limit: number): Promise<any[]> {
-  const startTime = Date.now();
-  try {
-    const brands = await MallBrand.find({
-      isFeatured: true,
-      isActive: true,
-      'cashback.percentage': { $gt: 0 }
-    })
-      .populate('mallCategory', 'name slug color')
-      .select('name slug logo tier cashback badges ratings analytics')
-      .sort({ 'ratings.average': -1, 'analytics.clicks': -1 })
-      .limit(limit)
-      .lean();
+  const cacheKey = `homepage:brandPartnerships:${limit}`;
 
-    // Transform to frontend-friendly format
-    const transformedBrands = brands.map((brand: any) => ({
-      id: brand._id,
-      name: brand.name,
-      slug: brand.slug,
-      logo: brand.logo,
-      tier: brand.tier,
-      deal: formatDeal(brand.cashback),
-      cashback: brand.cashback,
-      badges: brand.badges || [],
-      rating: brand.ratings?.average || 4.0,
-      category: brand.mallCategory?.name,
-      gradientColors: TIER_GRADIENTS[brand.tier] || TIER_GRADIENTS.standard
-    }));
+  return withCache(cacheKey, CacheTTL.PRODUCT_FEATURED, async () => {
+    const startTime = Date.now();
+    try {
+      const brands = await MallBrand.find({
+        isFeatured: true,
+        isActive: true,
+        'cashback.percentage': { $gt: 0 }
+      })
+        .populate('mallCategory', 'name slug color')
+        .select('name slug logo tier cashback ratings')
+        .sort({ 'ratings.average': -1, 'analytics.clicks': -1 })
+        .limit(limit)
+        .lean();
 
-    const duration = Date.now() - startTime;
-    console.log(`✅ [Homepage Service] Fetched ${transformedBrands.length} brand partnerships in ${duration}ms`);
-    return transformedBrands;
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`❌ [Homepage Service] Failed to fetch brand partnerships in ${duration}ms:`, error);
-    throw error;
-  }
+      const transformedBrands = brands.map((brand: any) => ({
+        id: brand._id,
+        name: brand.name,
+        slug: brand.slug,
+        logo: brand.logo,
+        tier: brand.tier,
+        deal: formatDeal(brand.cashback),
+        cashback: brand.cashback,
+        rating: brand.ratings?.average || 4.0,
+        category: brand.mallCategory?.name,
+        gradientColors: TIER_GRADIENTS[brand.tier] || TIER_GRADIENTS.standard
+      }));
+
+      const duration = Date.now() - startTime;
+      console.log(`✅ [Homepage Service] Fetched ${transformedBrands.length} brand partnerships in ${duration}ms`);
+      return transformedBrands;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error(`❌ [Homepage Service] Failed to fetch brand partnerships in ${duration}ms:`, error);
+      throw error;
+    }
+  });
 }
 
 /**

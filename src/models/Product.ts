@@ -776,6 +776,10 @@ ProductSchema.index({ store: 1, 'analytics.purchases': -1, isDeleted: 1 }); // T
 ProductSchema.index({ store: 1, category: 1, createdAt: -1, isDeleted: 1 }); // Category performance
 ProductSchema.index({ store: 1, 'inventory.stock': 1, 'inventory.lowStockThreshold': 1, isDeleted: 1 }); // Low stock alerts
 
+// Homepage query indexes
+ProductSchema.index({ isActive: 1, isFeatured: 1, 'inventory.isAvailable': 1, 'analytics.views': -1 }); // featured products
+ProductSchema.index({ isActive: 1, 'inventory.isAvailable': 1, createdAt: -1 }); // new arrivals
+
 // Soft delete indexes
 ProductSchema.index({ isDeleted: 1, deletedAt: 1 }); // For cleanup queries
 ProductSchema.index({ store: 1, isDeleted: 1 }); // For merchant queries with deleted filter

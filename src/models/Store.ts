@@ -914,6 +914,10 @@ StoreSchema.index({ 'deliveryCategories.cashStore': 1, isActive: 1 });
 StoreSchema.index({ category: 1, 'location.city': 1, isActive: 1 });
 StoreSchema.index({ 'offers.isPartner': 1, 'ratings.average': -1 });
 
+// Homepage query indexes
+StoreSchema.index({ isActive: 1, 'analytics.totalOrders': -1, 'ratings.average': -1 }); // trending stores
+StoreSchema.index({ isActive: 1, isFeatured: 1, 'ratings.average': -1 }); // featured stores sorted by rating
+
 // Virtual for current operational status
 StoreSchema.virtual('isCurrentlyOpen').get(function () {
   if (typeof this.isOpen === 'function') {

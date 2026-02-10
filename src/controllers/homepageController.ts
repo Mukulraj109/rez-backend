@@ -1,9 +1,15 @@
 import { Request, Response } from 'express';
 import { getHomepageData } from '../services/homepageService';
 import { asyncHandler } from '../utils/asyncHandler';
-import { sendSuccess, sendInternalError } from '../utils/response';
+import { sendSuccess, sendInternalError, sendUnauthorized } from '../utils/response';
 import { modeService, ModeId } from '../services/modeService';
 import { isValidRegion, RegionId, DEFAULT_REGION } from '../services/regionService';
+import { Wallet } from '../models/Wallet';
+import { UserVoucher } from '../models/Voucher';
+import OfferRedemption from '../models/OfferRedemption';
+import Offer from '../models/Offer';
+import { Cart } from '../models/Cart';
+import subscriptionBenefitsService from '../services/subscriptionBenefitsService';
 
 /**
  * Homepage Controller
@@ -182,4 +188,70 @@ export const getAvailableSections = asyncHandler(async (req: Request, res: Respo
   ];
 
   sendSuccess(res, { sections }, 'Available homepage sections');
+});
+
+/**
+ * @route   GET /api/homepage/user-context
+ * @desc    Get all user-specific homepage data in a single request
+ *          Combines: wallet balance, voucher count, offer count, cart count, subscription tier
+ * @access  Private (requireAuth)
+ */
+export const getUserContext = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId || (req as any).user?._id || (req as any).user?.id;
+
+  if (!userId) {
+    return sendUnauthorized(res, 'Authentication required');
+  }
+
+  try {
+    const [wallet, activeVoucherCount, activeRedemptionCount, totalOffersCount, cart, subscription] = await Promise.all([
+      // Wallet balance
+      Wallet.findOne({ user: userId }).select('balance coins brandedCoins statistics').lean().catch(() => null),
+
+      // Active vouchers count
+      UserVoucher.countDocuments({ user: userId, status: 'active' }).catch(() => 0),
+
+      // Active offer redemptions count
+      OfferRedemption.countDocuments({ user: userId, status: 'active' }).catch(() => 0),
+
+      // Total available offers count
+      Offer.countDocuments({
+        isActive: true,
+        startDate: { $lte: new Date() },
+        endDate: { $gte: new Date() },
+      }).catch(() => 0),
+
+      // Cart item count
+      Cart.getActiveCart(String(userId)).then(c => c).catch(() => null),
+
+      // Subscription tier
+      subscriptionBenefitsService.getUserSubscription(userId).catch(() => null),
+    ]);
+
+    // Extract wallet data
+    const rezCoin = wallet?.coins?.find((c: any) => c.type === 'rez');
+    const walletBalance = rezCoin?.amount || 0;
+    const totalSaved = wallet?.statistics
+      ? (wallet.statistics.totalCashback || 0) + (wallet.statistics.totalRefunds || 0)
+      : 0;
+
+    // Cart item count
+    const cartItemCount = cart?.items?.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0) || 0;
+
+    sendSuccess(res, {
+      walletBalance,
+      totalSaved,
+      voucherCount: activeVoucherCount + activeRedemptionCount,
+      offersCount: totalOffersCount,
+      cartItemCount,
+      subscription: subscription ? {
+        tier: subscription.tier,
+        status: subscription.status,
+      } : { tier: 'free', status: 'active' },
+    }, 'User context retrieved');
+
+  } catch (error) {
+    console.error('❌ [Homepage] Error fetching user context:', error);
+    sendInternalError(res, 'Failed to fetch user context');
+  }
 });
