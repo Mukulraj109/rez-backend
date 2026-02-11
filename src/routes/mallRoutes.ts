@@ -38,6 +38,12 @@ import {
   getMallStoreCategories,
   getMallStoresByCategory,
   getMallStoresByCategorySlug,
+  // New store-based endpoints
+  getAllianceMallStores,
+  getTrendingMallStores,
+  getRewardBoosterStores,
+  getDealsOfDay,
+  getAdminStats,
   // Admin endpoints
   createMallBrand,
   updateMallBrand,
@@ -172,6 +178,27 @@ router.get('/stores/top-rated', optionalAuth, getTopRatedMallStores);
 router.get('/stores/premium', optionalAuth, getPremiumMallStores);
 
 /**
+ * @route   GET /api/mall/stores/alliance
+ * @desc    Get alliance mall stores (partner stores)
+ * @access  Public
+ */
+router.get('/stores/alliance', optionalAuth, getAllianceMallStores);
+
+/**
+ * @route   GET /api/mall/stores/trending
+ * @desc    Get trending mall stores (by views/activity)
+ * @access  Public
+ */
+router.get('/stores/trending', optionalAuth, getTrendingMallStores);
+
+/**
+ * @route   GET /api/mall/stores/reward-boosters
+ * @desc    Get stores with highest coin reward percentages
+ * @access  Public
+ */
+router.get('/stores/reward-boosters', optionalAuth, getRewardBoosterStores);
+
+/**
  * @route   GET /api/mall/stores/search
  * @desc    Search mall stores
  * @access  Public
@@ -255,6 +282,13 @@ router.get('/collections/:slug/brands', optionalAuth, getBrandsByCollection);
 router.get('/offers', optionalAuth, getMallOffers);
 
 /**
+ * @route   GET /api/mall/offers/today
+ * @desc    Get deals of the day (flash sales)
+ * @access  Public
+ */
+router.get('/offers/today', optionalAuth, getDealsOfDay);
+
+/**
  * @route   GET /api/mall/offers/exclusive
  * @desc    Get exclusive mall offers
  * @access  Public
@@ -279,6 +313,9 @@ router.get('/banners/hero', optionalAuth, getMallHeroBanners);
 
 // ==================== ADMIN ROUTES ====================
 // Note: In production, add admin role verification middleware
+
+// Admin Stats
+router.get('/admin/stats', authenticate, getAdminStats);
 
 // Brand Admin Routes
 router.post('/admin/brands', authenticate, createMallBrand);

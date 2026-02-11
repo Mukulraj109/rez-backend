@@ -42,6 +42,11 @@ const CACHE_KEYS = {
   NEW_STORES: 'mall:stores:new',
   TOP_RATED_STORES: 'mall:stores:top-rated',
   PREMIUM_STORES: 'mall:stores:premium',
+  ALLIANCE_STORES: 'mall:stores:alliance',
+  TRENDING_STORES: 'mall:stores:trending',
+  REWARD_BOOSTERS: 'mall:stores:reward-boosters',
+  DEALS_TODAY: 'mall:offers:today',
+  ADMIN_STATS: 'mall:admin:stats',
 };
 
 // Types
@@ -601,6 +606,11 @@ class MallService {
       `${CACHE_KEYS.NEW_STORES}:*`,
       `${CACHE_KEYS.TOP_RATED_STORES}:*`,
       `${CACHE_KEYS.PREMIUM_STORES}:*`,
+      `${CACHE_KEYS.ALLIANCE_STORES}:*`,
+      `${CACHE_KEYS.TRENDING_STORES}:*`,
+      `${CACHE_KEYS.REWARD_BOOSTERS}:*`,
+      `${CACHE_KEYS.DEALS_TODAY}:*`,
+      CACHE_KEYS.ADMIN_STATS,
     ];
 
     for (const key of keys) {
@@ -953,6 +963,140 @@ class MallService {
     ]);
 
     return { stores, total, category };
+  }
+
+  /**
+   * Get alliance mall stores (stores with deliveryCategories.alliance=true)
+   */
+  async getAllianceMallStores(limit: number = 20): Promise<IStore[]> {
+    const cacheKey = `${CACHE_KEYS.ALLIANCE_STORES}:${limit}`;
+    const cached = await redisService.get<IStore[]>(cacheKey);
+    if (cached) return cached;
+
+    const stores = await Store.find({
+      isActive: true,
+      'deliveryCategories.alliance': true,
+    })
+      .populate('category', 'name slug')
+      .sort({ 'ratings.average': -1 })
+      .limit(limit)
+      .lean();
+
+    await redisService.set(cacheKey, stores, CACHE_TTL.BRANDS);
+    return stores;
+  }
+
+  /**
+   * Get trending mall stores (sorted by analytics views/clicks, recent activity)
+   */
+  async getTrendingMallStores(limit: number = 10): Promise<IStore[]> {
+    const cacheKey = `${CACHE_KEYS.TRENDING_STORES}:${limit}`;
+    const cached = await redisService.get<IStore[]>(cacheKey);
+    if (cached) return cached;
+
+    const stores = await Store.find({
+      isActive: true,
+      'deliveryCategories.mall': true,
+    })
+      .populate('category', 'name slug')
+      .sort({ 'analytics.views': -1, 'analytics.orders': -1, 'ratings.average': -1 })
+      .limit(limit)
+      .lean();
+
+    await redisService.set(cacheKey, stores, CACHE_TTL.BRANDS);
+    return stores;
+  }
+
+  /**
+   * Get reward booster mall stores (highest coin reward percentage)
+   */
+  async getRewardBoosterStores(limit: number = 10): Promise<IStore[]> {
+    const cacheKey = `${CACHE_KEYS.REWARD_BOOSTERS}:${limit}`;
+    const cached = await redisService.get<IStore[]>(cacheKey);
+    if (cached) return cached;
+
+    const stores = await Store.find({
+      isActive: true,
+      'deliveryCategories.mall': true,
+      'offers.cashback': { $gt: 0 },
+    })
+      .populate('category', 'name slug')
+      .sort({ 'offers.cashback': -1, 'ratings.average': -1 })
+      .limit(limit)
+      .lean();
+
+    await redisService.set(cacheKey, stores, CACHE_TTL.BRANDS);
+    return stores;
+  }
+
+  /**
+   * Get deals of the day (flash sale offers valid today)
+   */
+  async getDealsOfDay(limit: number = 10): Promise<IMallOffer[]> {
+    const cacheKey = `${CACHE_KEYS.DEALS_TODAY}:${limit}`;
+    const cached = await redisService.get<IMallOffer[]>(cacheKey);
+    if (cached) return cached;
+
+    const now = new Date();
+    const offers = await MallOffer.find({
+      isActive: true,
+      validFrom: { $lte: now },
+      validUntil: { $gte: now },
+      $or: [
+        { badge: 'flash-sale' },
+        { badge: 'limited-time' },
+      ],
+    })
+      .populate('brand', 'name logo slug')
+      .sort({ priority: -1, validUntil: 1 })
+      .limit(limit)
+      .lean();
+
+    await redisService.set(cacheKey, offers, CACHE_TTL.OFFERS);
+    return offers;
+  }
+
+  /**
+   * Get admin dashboard stats
+   */
+  async getAdminStats(): Promise<any> {
+    const cacheKey = CACHE_KEYS.ADMIN_STATS;
+    const cached = await redisService.get<any>(cacheKey);
+    if (cached) return cached;
+
+    const [
+      totalBrands,
+      activeBrands,
+      totalCategories,
+      activeCategories,
+      activeOffers,
+      totalOffers,
+      activeBanners,
+      totalMallStores,
+    ] = await Promise.all([
+      MallBrand.countDocuments(),
+      MallBrand.countDocuments({ isActive: true }),
+      MallCategory.countDocuments(),
+      MallCategory.countDocuments({ isActive: true }),
+      MallOffer.countDocuments({ isActive: true, validUntil: { $gte: new Date() } }),
+      MallOffer.countDocuments(),
+      MallBanner.countDocuments({ isActive: true, validUntil: { $gte: new Date() } }),
+      Store.countDocuments({ isActive: true, 'deliveryCategories.mall': true }),
+    ]);
+
+    const stats = {
+      totalBrands,
+      activeBrands,
+      totalCategories,
+      activeCategories,
+      activeOffers,
+      totalOffers,
+      activeBanners,
+      totalMallStores,
+    };
+
+    await redisService.set(cacheKey, stats, CACHE_TTL.HOMEPAGE);
+    return stats;
   }
 }
 

@@ -861,3 +861,52 @@ export const getMallStoresByCategorySlug = asyncHandler(async (req: Request, res
     },
   }, 'Mall stores by category retrieved successfully');
 });
+
+/**
+ * Get Alliance Mall Stores
+ * GET /api/mall/stores/alliance
+ */
+export const getAllianceMallStores = asyncHandler(async (req: Request, res: Response) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+  const stores = await mallService.getAllianceMallStores(limit);
+  return sendSuccess(res, stores, 'Alliance mall stores retrieved successfully');
+});
+
+/**
+ * Get Trending Mall Stores
+ * GET /api/mall/stores/trending
+ */
+export const getTrendingMallStores = asyncHandler(async (req: Request, res: Response) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 10, 20);
+  const stores = await mallService.getTrendingMallStores(limit);
+  return sendSuccess(res, stores, 'Trending mall stores retrieved successfully');
+});
+
+/**
+ * Get Reward Booster Stores
+ * GET /api/mall/stores/reward-boosters
+ */
+export const getRewardBoosterStores = asyncHandler(async (req: Request, res: Response) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 10, 20);
+  const stores = await mallService.getRewardBoosterStores(limit);
+  return sendSuccess(res, stores, 'Reward booster stores retrieved successfully');
+});
+
+/**
+ * Get Deals of the Day
+ * GET /api/mall/offers/today
+ */
+export const getDealsOfDay = asyncHandler(async (req: Request, res: Response) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 10, 20);
+  const offers = await mallService.getDealsOfDay(limit);
+  return sendSuccess(res, offers, 'Deals of the day retrieved successfully');
+});
+
+/**
+ * Get Admin Dashboard Stats
+ * GET /api/mall/admin/stats
+ */
+export const getAdminStats = asyncHandler(async (req: Request, res: Response) => {
+  const stats = await mallService.getAdminStats();
+  return sendSuccess(res, stats, 'Admin stats retrieved successfully');
+});
