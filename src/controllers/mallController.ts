@@ -688,6 +688,16 @@ export const getMallStoresHomepage = asyncHandler(async (req: Request, res: Resp
 });
 
 /**
+ * Get Mall Homepage Batch — ALL homepage data in one call
+ * GET /api/mall/homepage-batch
+ * Returns stores, banners, trending, reward boosters, deals in a single response
+ */
+export const getMallHomepageBatch = asyncHandler(async (req: Request, res: Response) => {
+  const data = await mallService.getMallHomepageBatch();
+  return sendSuccess(res, data, 'Mall homepage batch data retrieved successfully');
+});
+
+/**
  * Get All Mall Stores
  * GET /api/mall/stores
  *

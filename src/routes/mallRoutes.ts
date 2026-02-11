@@ -6,6 +6,7 @@
 
 import { Router } from 'express';
 import { authenticate, optionalAuth } from '../middleware/auth';
+import { cacheMiddleware } from '../middleware/cacheMiddleware';
 import {
   // Public endpoints
   getMallHomepageData,
@@ -43,6 +44,7 @@ import {
   getTrendingMallStores,
   getRewardBoosterStores,
   getDealsOfDay,
+  getMallHomepageBatch,
   getAdminStats,
   // Admin endpoints
   createMallBrand,
@@ -71,7 +73,7 @@ const router = Router();
  * @desc    Get aggregated mall homepage data
  * @access  Public (optionalAuth for personalization)
  */
-router.get('/homepage', optionalAuth, getMallHomepageData);
+router.get('/homepage', optionalAuth, cacheMiddleware({ ttl: 300, keyPrefix: 'mall:hp', condition: () => true }), getMallHomepageData);
 
 // ==================== BRAND ROUTES ====================
 
@@ -143,11 +145,18 @@ router.post('/brands/:brandId/purchase', authenticate, trackBrandPurchase);
 // For the in-app delivery marketplace (users earn ReZ Coins)
 
 /**
+ * @route   GET /api/mall/homepage-batch
+ * @desc    Get ALL mall homepage data in one call (stores + banners + trending + reward boosters + deals)
+ * @access  Public
+ */
+router.get('/homepage-batch', optionalAuth, cacheMiddleware({ ttl: 300, keyPrefix: 'mall:hp-batch', condition: () => true }), getMallHomepageBatch);
+
+/**
  * @route   GET /api/mall/stores/homepage
  * @desc    Get mall stores homepage data (featured, new, top-rated, premium stores)
  * @access  Public
  */
-router.get('/stores/homepage', optionalAuth, getMallStoresHomepage);
+router.get('/stores/homepage', optionalAuth, cacheMiddleware({ ttl: 300, keyPrefix: 'mall:stores:hp', condition: () => true }), getMallStoresHomepage);
 
 /**
  * @route   GET /api/mall/stores/featured
@@ -189,14 +198,14 @@ router.get('/stores/alliance', optionalAuth, getAllianceMallStores);
  * @desc    Get trending mall stores (by views/activity)
  * @access  Public
  */
-router.get('/stores/trending', optionalAuth, getTrendingMallStores);
+router.get('/stores/trending', optionalAuth, cacheMiddleware({ ttl: 600, keyPrefix: 'mall:stores:trend', condition: () => true }), getTrendingMallStores);
 
 /**
  * @route   GET /api/mall/stores/reward-boosters
  * @desc    Get stores with highest coin reward percentages
  * @access  Public
  */
-router.get('/stores/reward-boosters', optionalAuth, getRewardBoosterStores);
+router.get('/stores/reward-boosters', optionalAuth, cacheMiddleware({ ttl: 600, keyPrefix: 'mall:stores:rb', condition: () => true }), getRewardBoosterStores);
 
 /**
  * @route   GET /api/mall/stores/search
@@ -286,7 +295,7 @@ router.get('/offers', optionalAuth, getMallOffers);
  * @desc    Get deals of the day (flash sales)
  * @access  Public
  */
-router.get('/offers/today', optionalAuth, getDealsOfDay);
+router.get('/offers/today', optionalAuth, cacheMiddleware({ ttl: 300, keyPrefix: 'mall:deals', condition: () => true }), getDealsOfDay);
 
 /**
  * @route   GET /api/mall/offers/exclusive
@@ -309,7 +318,7 @@ router.get('/banners', optionalAuth, getMallBanners);
  * @desc    Get hero banners
  * @access  Public
  */
-router.get('/banners/hero', optionalAuth, getMallHeroBanners);
+router.get('/banners/hero', optionalAuth, cacheMiddleware({ ttl: 600, keyPrefix: 'mall:banners:hero', condition: () => true }), getMallHeroBanners);
 
 // ==================== ADMIN ROUTES ====================
 // Note: In production, add admin role verification middleware

@@ -57,6 +57,7 @@ export interface MallBrandFilters {
   minCashback?: number;
   badges?: string[];
   search?: string;
+  sort?: Record<string, 1 | -1>;
 }
 
 export interface MallHomepageData {
@@ -243,6 +244,29 @@ class MallService {
     page: number = 1,
     limit: number = 20
   ): Promise<{ brands: IMallBrand[]; total: number; pages: number }> {
+    // Build cache key from filter params (skip caching for text search queries)
+    if (!filters.search) {
+      const sortKey = filters.sort ? JSON.stringify(filters.sort) : 'default';
+      const cacheKey = `mall:brands:q:${filters.category || 'all'}:${filters.tier || 'all'}:${filters.minCashback || 0}:${sortKey}:p${page}:l${limit}`;
+      const cached = await redisService.get<{ brands: IMallBrand[]; total: number; pages: number }>(cacheKey);
+      if (cached) return cached;
+
+      const result = await this._fetchBrands(filters, page, limit);
+      await redisService.set(cacheKey, result, CACHE_TTL.BRANDS);
+      return result;
+    }
+
+    return this._fetchBrands(filters, page, limit);
+  }
+
+  /**
+   * Internal brand fetch (used by getBrands with/without cache)
+   */
+  private async _fetchBrands(
+    filters: MallBrandFilters,
+    page: number,
+    limit: number
+  ): Promise<{ brands: IMallBrand[]; total: number; pages: number }> {
     const query: any = { isActive: true };
 
     if (filters.category) {
@@ -274,10 +298,12 @@ class MallService {
 
     const skip = (page - 1) * limit;
 
+    const sortOptions = filters.sort || { 'ratings.average': -1 };
+
     const [brands, total] = await Promise.all([
       MallBrand.find(query)
         .populate('mallCategory', 'name slug color icon')
-        .sort({ 'ratings.average': -1 })
+        .sort(sortOptions)
         .skip(skip)
         .limit(limit)
         .lean(),
@@ -1054,6 +1080,46 @@ class MallService {
 
     await redisService.set(cacheKey, offers, CACHE_TTL.OFFERS);
     return offers;
+  }
+
+  /**
+   * Get Mall Homepage Batch — ALL homepage data in one Redis-cached call
+   * Combines: stores homepage + hero banners + trending + reward boosters + deals of day
+   */
+  async getMallHomepageBatch(): Promise<{
+    featuredStores: IStore[];
+    newStores: IStore[];
+    topRatedStores: IStore[];
+    premiumStores: IStore[];
+    categories: any[];
+    heroBanners: IMallBanner[];
+    trendingStores: IStore[];
+    rewardBoosters: IStore[];
+    dealsOfDay: IMallOffer[];
+  }> {
+    const cacheKey = `${CACHE_KEYS.MALL_STORES}:homepage-batch`;
+    const cached = await redisService.get<any>(cacheKey);
+    if (cached) return cached;
+
+    // Fetch everything in parallel — each sub-method has its own Redis cache too
+    const [homepageData, heroBanners, trendingStores, rewardBoosters, dealsOfDay] = await Promise.all([
+      this.getMallStoresHomepage(),
+      this.getHeroBanners(5),
+      this.getTrendingMallStores(10),
+      this.getRewardBoosterStores(10),
+      this.getDealsOfDay(10),
+    ]);
+
+    const batch = {
+      ...homepageData,
+      heroBanners,
+      trendingStores,
+      rewardBoosters,
+      dealsOfDay,
+    };
+
+    await redisService.set(cacheKey, batch, CACHE_TTL.HOMEPAGE); // 5 min
+    return batch;
   }
 
   /**

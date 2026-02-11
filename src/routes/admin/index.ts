@@ -14,3 +14,7 @@ export { default as adminHomepageDealsRoutes } from './homepageDeals';
 export { default as adminZoneVerificationsRoutes } from './zoneVerifications';
 export { default as adminOffersRoutes } from './offers';
 export { default as adminLoyaltyRoutes } from './loyalty';
+export { default as adminDoubleCampaignsRoutes } from './doubleCampaigns';
+export { default as adminCoinDropsRoutes } from './coinDrops';
+export { default as adminVouchersRoutes } from './vouchers';
+export { default as adminCouponsRoutes } from './coupons';

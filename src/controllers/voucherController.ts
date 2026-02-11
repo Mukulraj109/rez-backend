@@ -3,6 +3,8 @@ import { VoucherBrand, UserVoucher } from '../models/Voucher';
 import { Wallet } from '../models/Wallet';
 import { Transaction } from '../models/Transaction';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
+import stripeService from '../services/stripeService';
+import coinService from '../services/coinService';
 
 /**
  * GET /api/vouchers/brands
@@ -186,24 +188,57 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
       return sendError(res, 'Invalid denomination for this brand', 400);
     }
 
-    // For now, only support wallet payment
-    if (paymentMethod !== 'wallet') {
-      return sendError(res, 'Only wallet payment is supported currently', 400);
-    }
-
-    // Get user's wallet
-    const wallet = await Wallet.findOne({ user: userId });
-
-    if (!wallet) {
-      return sendError(res, 'Wallet not found', 404);
-    }
-
-    // Calculate price (currently 1:1, but can add discounts later)
     const purchasePrice = Number(denomination);
 
-    // Check sufficient balance
-    if (wallet.balance.available < purchasePrice) {
-      return sendError(res, 'Insufficient wallet balance', 400);
+    // ─── CARD PAYMENT: Create Stripe PaymentIntent ───
+    if (paymentMethod === 'card') {
+      if (!stripeService.isStripeConfigured()) {
+        return sendError(res, 'Card payments are not available at this time', 503);
+      }
+
+      const paymentIntent = await stripeService.createPaymentIntent({
+        amount: purchasePrice,
+        currency: 'inr',
+        metadata: {
+          type: 'voucher_purchase',
+          userId,
+          brandId: String(brandId),
+          brandName: brand.name,
+          denomination: String(denomination),
+        },
+      });
+
+      return sendSuccess(res, {
+        requiresPayment: true,
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+        amount: purchasePrice,
+        brand: {
+          name: brand.name,
+          cashbackRate: brand.cashbackRate,
+        },
+      }, 'Payment intent created. Complete card payment to receive your voucher.');
+    }
+
+    // ─── WALLET PAYMENT ───
+    if (paymentMethod !== 'wallet') {
+      return sendError(res, 'Supported payment methods: wallet, card', 400);
+    }
+
+    // Use coinService.deductCoins (creates CoinTransaction — the source of truth)
+    let deductResult;
+    try {
+      deductResult = await coinService.deductCoins(
+        userId,
+        purchasePrice,
+        'purchase',
+        `Purchased ${brand.name} voucher - ₹${denomination}`,
+        { brandId: String(brandId), brandName: brand.name, denomination },
+        null // global coins, not category-specific
+      );
+    } catch (deductError: any) {
+      // deductCoins throws on insufficient balance
+      return sendError(res, deductError.message || 'Insufficient coin balance', 400);
     }
 
     // Generate voucher code
@@ -235,25 +270,13 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
 
     await userVoucher.save();
 
-    // Deduct from wallet
-    wallet.balance.total -= purchasePrice;
-    wallet.balance.available -= purchasePrice;
-
-    // Update coins
-    const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-    if (rezCoin && rezCoin.amount >= purchasePrice) {
-      rezCoin.amount -= purchasePrice;
-      rezCoin.lastUsed = new Date();
-    }
-
-    await wallet.save();
-
-    // Create transaction record
+    // Create transaction record for order history
+    const wallet = await Wallet.findOne({ user: userId });
     const transaction = new Transaction({
       user: userId,
       type: 'debit',
       amount: purchasePrice,
-      currency: wallet.currency,
+      currency: wallet?.currency || 'INR',
       category: 'spending',
       description: `Purchased ${brand.name} voucher - ₹${denomination}`,
       status: {
@@ -270,14 +293,15 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
         description: `Voucher purchase - ${brand.name}`,
         metadata: {
           orderNumber: `VOUCHR-${String(userVoucher._id).substring(0, 8)}`,
+          coinTransactionId: deductResult.transactionId,
           storeInfo: brand.store ? {
             name: brand.name,
             id: brand.store as any,
           } : undefined,
         },
       },
-      balanceBefore: wallet.balance.total + purchasePrice,
-      balanceAfter: wallet.balance.total,
+      balanceBefore: deductResult.newBalance + purchasePrice,
+      balanceAfter: deductResult.newBalance,
     });
 
     await transaction.save();
@@ -295,8 +319,8 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
         voucher: userVoucher,
         transaction,
         wallet: {
-          balance: wallet.balance.total,
-          available: wallet.balance.available,
+          balance: deductResult.newBalance,
+          available: deductResult.newBalance,
         },
       },
       'Voucher purchased successfully',
@@ -305,6 +329,128 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error purchasing voucher:', error);
     sendError(res, 'Failed to purchase voucher', 500);
+  }
+};
+
+/**
+ * POST /api/vouchers/confirm-card-purchase
+ * Confirm voucher purchase after successful Stripe card payment
+ */
+export const confirmCardPurchase = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { paymentIntentId } = req.body;
+
+    if (!paymentIntentId) {
+      return sendError(res, 'Payment intent ID is required', 400);
+    }
+
+    // Verify with Stripe
+    const paymentIntent = await stripeService.getPaymentIntent(paymentIntentId);
+
+    if (paymentIntent.status !== 'succeeded') {
+      return sendError(res, `Payment not completed. Status: ${paymentIntent.status}`, 400);
+    }
+
+    // Extract purchase details from metadata
+    const { brandId, denomination, type: paymentType } = paymentIntent.metadata;
+
+    if (paymentType !== 'voucher_purchase') {
+      return sendError(res, 'Invalid payment intent for voucher purchase', 400);
+    }
+
+    if (paymentIntent.metadata.userId !== userId) {
+      return sendError(res, 'Payment does not belong to this user', 403);
+    }
+
+    // Idempotency: check if voucher already created for this payment
+    const existingVoucher = await UserVoucher.findOne({ transactionId: paymentIntentId });
+    if (existingVoucher) {
+      await existingVoucher.populate('brand', 'name logo backgroundColor cashbackRate');
+      return sendSuccess(res, {
+        voucher: existingVoucher,
+        alreadyProcessed: true,
+      }, 'Voucher already issued for this payment');
+    }
+
+    const brand = await VoucherBrand.findById(brandId);
+    if (!brand) {
+      return sendError(res, 'Voucher brand not found', 404);
+    }
+
+    const purchasePrice = Number(denomination);
+
+    // Generate voucher code
+    const brandPrefix = brandId.toString().substring(0, 6).toUpperCase();
+    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const voucherCode = `${brandPrefix}-${denomination}-${random}`;
+
+    const purchaseDate = new Date();
+    const expiryDate = new Date(purchaseDate);
+    expiryDate.setDate(expiryDate.getDate() + 365);
+
+    // Create voucher
+    const userVoucher = new UserVoucher({
+      user: userId,
+      brand: brandId,
+      voucherCode,
+      denomination: purchasePrice,
+      purchasePrice,
+      purchaseDate,
+      expiryDate,
+      validityDays: 365,
+      status: 'active',
+      deliveryMethod: 'app',
+      deliveryStatus: 'delivered',
+      deliveredAt: new Date(),
+      paymentMethod: 'card',
+      transactionId: paymentIntentId,
+    });
+
+    await userVoucher.save();
+
+    // Create transaction record
+    const transaction = new Transaction({
+      user: userId,
+      type: 'debit',
+      amount: purchasePrice,
+      currency: 'INR',
+      category: 'spending',
+      description: `Purchased ${brand.name} voucher - ₹${denomination} (Card)`,
+      status: {
+        current: 'completed',
+        history: [{
+          status: 'completed',
+          timestamp: new Date(),
+          reason: 'Voucher purchased via card payment',
+        }],
+      },
+      source: {
+        type: 'order',
+        reference: userVoucher._id as any,
+        description: `Voucher purchase - ${brand.name}`,
+        metadata: {
+          orderNumber: `VOUCHR-${String(userVoucher._id).substring(0, 8)}`,
+          paymentIntentId,
+          paymentMethod: 'card',
+        },
+      },
+    });
+
+    await transaction.save();
+
+    brand.purchaseCount += 1;
+    await brand.save();
+
+    await userVoucher.populate('brand', 'name logo backgroundColor cashbackRate');
+
+    sendSuccess(res, {
+      voucher: userVoucher,
+      transaction,
+    }, 'Voucher purchased successfully via card', 201);
+  } catch (error: any) {
+    console.error('Error confirming card voucher purchase:', error);
+    sendError(res, error.message || 'Failed to confirm voucher purchase', 500);
   }
 };
 

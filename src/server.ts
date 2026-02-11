@@ -168,7 +168,11 @@ import {
   adminHomepageDealsRoutes,
   adminZoneVerificationsRoutes,
   adminOffersRoutes,
-  adminLoyaltyRoutes
+  adminLoyaltyRoutes,
+  adminDoubleCampaignsRoutes,
+  adminCoinDropsRoutes,
+  adminVouchersRoutes,
+  adminCouponsRoutes
 } from './routes/admin';
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
 import experienceRoutes from './routes/experienceRoutes';  // Store experience routes
@@ -849,6 +853,14 @@ app.use(`${API_PREFIX}/admin/offers`, adminOffersRoutes);
 console.log('✅ Admin offers routes registered at /api/admin/offers');
 app.use(`${API_PREFIX}/admin/loyalty`, adminLoyaltyRoutes);
 console.log('✅ Admin loyalty routes registered at /api/admin/loyalty');
+app.use(`${API_PREFIX}/admin/double-campaigns`, adminDoubleCampaignsRoutes);
+console.log('✅ Admin double campaigns routes registered at /api/admin/double-campaigns');
+app.use(`${API_PREFIX}/admin/coin-drops`, adminCoinDropsRoutes);
+console.log('✅ Admin coin drops routes registered at /api/admin/coin-drops');
+app.use(`${API_PREFIX}/admin/vouchers`, adminVouchersRoutes);
+console.log('✅ Admin vouchers routes registered at /api/admin/vouchers');
+app.use(`${API_PREFIX}/admin/coupons`, adminCouponsRoutes);
+console.log('✅ Admin coupons routes registered at /api/admin/coupons');
 
 // Campaign Routes - Homepage exciting deals
 app.use(`${API_PREFIX}/campaigns`, campaignRoutes);

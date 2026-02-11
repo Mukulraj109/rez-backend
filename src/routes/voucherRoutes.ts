@@ -6,6 +6,7 @@ import {
   getNewlyAddedBrands,
   getVoucherCategories,
   purchaseVoucher,
+  confirmCardPurchase,
   getUserVouchers,
   getUserVoucherById,
   useVoucher,
@@ -98,6 +99,15 @@ router.post('/purchase',
     paymentMethod: Joi.string().valid('wallet', 'card', 'upi', 'netbanking').default('wallet')
   })),
   purchaseVoucher
+);
+
+// Confirm card payment for voucher purchase
+router.post('/confirm-card-purchase',
+  authenticate,
+  validate(Joi.object({
+    paymentIntentId: Joi.string().required(),
+  })),
+  confirmCardPurchase
 );
 
 // Get user's purchased vouchers
