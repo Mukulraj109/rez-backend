@@ -34,6 +34,35 @@ export interface ITimeSlot {
   end: string;   // "10:00"
 }
 
+// Cashback status type for travel bookings
+export type CashbackStatus = 'pending' | 'held' | 'credited' | 'clawed_back';
+
+// Travel details interface
+export interface ITravelDetails {
+  route?: {
+    from: string;
+    to: string;
+    fromCode?: string;
+    toCode?: string;
+  };
+  class?: string;
+  passengers?: {
+    adults: number;
+    children: number;
+    infants?: number;
+  };
+  tripType?: 'one-way' | 'round-trip';
+  returnDate?: Date;
+}
+
+// Refund policy interface
+export interface IRefundPolicy {
+  tiers: Array<{
+    hoursBeforeDeparture: number;
+    refundPercentage: number;
+  }>;
+}
+
 // Service Booking interface
 export interface IServiceBooking extends Document {
   _id: Types.ObjectId;
@@ -107,6 +136,17 @@ export interface IServiceBooking extends Document {
   originalTimeSlot?: ITimeSlot;
   rescheduleCount: number;
   maxReschedules: number;
+
+  // Travel-specific fields
+  pnr?: string;
+  externalReference?: string;
+  eTicketUrl?: string;
+  cashbackStatus: CashbackStatus;
+  cashbackCreditedAt?: Date;
+  cashbackHeldAt?: Date;
+  verificationDays: number;
+  travelDetails?: ITravelDetails;
+  refundPolicy?: IRefundPolicy;
 
   createdAt: Date;
   updatedAt: Date;
@@ -396,6 +436,60 @@ const ServiceBookingSchema = new Schema<IServiceBooking>(
     maxReschedules: {
       type: Number,
       default: 2
+    },
+
+    // Travel-specific fields
+    pnr: {
+      type: String,
+      trim: true,
+      index: true
+    },
+    externalReference: {
+      type: String,
+      trim: true
+    },
+    eTicketUrl: {
+      type: String,
+      trim: true
+    },
+    cashbackStatus: {
+      type: String,
+      enum: ['pending', 'held', 'credited', 'clawed_back'],
+      default: 'pending',
+      index: true
+    },
+    cashbackCreditedAt: { type: Date },
+    cashbackHeldAt: { type: Date },
+    verificationDays: {
+      type: Number,
+      default: 7,
+      min: 0,
+      max: 30
+    },
+    travelDetails: {
+      route: {
+        from: { type: String, trim: true },
+        to: { type: String, trim: true },
+        fromCode: { type: String, trim: true },
+        toCode: { type: String, trim: true }
+      },
+      class: { type: String, trim: true },
+      passengers: {
+        adults: { type: Number, min: 0 },
+        children: { type: Number, min: 0 },
+        infants: { type: Number, min: 0 }
+      },
+      tripType: {
+        type: String,
+        enum: ['one-way', 'round-trip']
+      },
+      returnDate: { type: Date }
+    },
+    refundPolicy: {
+      tiers: [{
+        hoursBeforeDeparture: { type: Number, required: true },
+        refundPercentage: { type: Number, required: true, min: 0, max: 100 }
+      }]
     }
   },
   {
@@ -415,6 +509,11 @@ ServiceBookingSchema.index({ store: 1, status: 1, bookingDate: 1 });
 ServiceBookingSchema.index({ bookingDate: 1, status: 1 });
 ServiceBookingSchema.index({ serviceCategory: 1, status: 1 });
 ServiceBookingSchema.index({ service: 1, bookingDate: 1 });
+// Travel cashback indexes
+ServiceBookingSchema.index({ user: 1, status: 1, cashbackStatus: 1, createdAt: -1 });
+ServiceBookingSchema.index({ cashbackStatus: 1, completedAt: 1 });
+ServiceBookingSchema.index({ service: 1, bookingDate: 1, status: 1 });
+ServiceBookingSchema.index({ paymentStatus: 1, requiresPaymentUpfront: 1, createdAt: 1 });
 
 // Virtual: Formatted date and time
 ServiceBookingSchema.virtual('formattedDateTime').get(function () {

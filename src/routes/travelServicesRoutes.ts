@@ -7,6 +7,7 @@ import {
   getPopularTravelServices
 } from '../controllers/travelServicesController';
 import { optionalAuth } from '../middleware/auth';
+import { cacheMiddleware, createKeyGenerator } from '../middleware/cacheMiddleware';
 
 const router = Router();
 
@@ -20,7 +21,12 @@ const router = Router();
  *       200:
  *         description: List of travel service categories
  */
-router.get('/categories', optionalAuth, getTravelServicesCategories);
+router.get(
+  '/categories',
+  optionalAuth,
+  cacheMiddleware({ ttl: 300, keyPrefix: 'travel', condition: () => true }),
+  getTravelServicesCategories
+);
 
 /**
  * @swagger
@@ -38,7 +44,12 @@ router.get('/categories', optionalAuth, getTravelServicesCategories);
  *       200:
  *         description: List of featured travel services
  */
-router.get('/featured', optionalAuth, getFeaturedTravelServices);
+router.get(
+  '/featured',
+  optionalAuth,
+  cacheMiddleware({ ttl: 180, keyPrefix: 'travel', condition: () => true }),
+  getFeaturedTravelServices
+);
 
 /**
  * @swagger
@@ -56,7 +67,12 @@ router.get('/featured', optionalAuth, getFeaturedTravelServices);
  *       200:
  *         description: List of popular travel services
  */
-router.get('/popular', optionalAuth, getPopularTravelServices);
+router.get(
+  '/popular',
+  optionalAuth,
+  cacheMiddleware({ ttl: 180, keyPrefix: 'travel', condition: () => true }),
+  getPopularTravelServices
+);
 
 /**
  * @swagger
@@ -68,7 +84,12 @@ router.get('/popular', optionalAuth, getPopularTravelServices);
  *       200:
  *         description: Travel services statistics
  */
-router.get('/stats', optionalAuth, getTravelServicesStats);
+router.get(
+  '/stats',
+  optionalAuth,
+  cacheMiddleware({ ttl: 300, keyPrefix: 'travel', condition: () => true }),
+  getTravelServicesStats
+);
 
 /**
  * @swagger
@@ -100,6 +121,16 @@ router.get('/stats', optionalAuth, getTravelServicesStats);
  *       200:
  *         description: List of travel services in category
  */
-router.get('/category/:slug', optionalAuth, getTravelServicesByCategory);
+router.get(
+  '/category/:slug',
+  optionalAuth,
+  cacheMiddleware({
+    ttl: 120,
+    keyPrefix: 'travel',
+    keyGenerator: createKeyGenerator('slug', 'page', 'sortBy', 'limit'),
+    condition: () => true,
+  }),
+  getTravelServicesByCategory
+);
 
 export default router;

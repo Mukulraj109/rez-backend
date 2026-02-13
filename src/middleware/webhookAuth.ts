@@ -8,12 +8,12 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { MallBrand } from '../models/MallBrand';
+import redisService from '../services/redisService';
 
 // Environment variable for master webhook key
-// SECURITY: In production, this MUST be set via environment variable
-// The hardcoded fallback only works in development/test environments
-const MASTER_WEBHOOK_KEY = process.env.MALL_WEBHOOK_MASTER_KEY ||
-  (process.env.NODE_ENV !== 'production' ? 'rez_webhook_demo_key_2024' : undefined);
+// SECURITY: Master key MUST always come from environment variable.
+// No hardcoded fallback — use demoWebhookAuth middleware for dev/test endpoints.
+const MASTER_WEBHOOK_KEY = process.env.MALL_WEBHOOK_MASTER_KEY;
 
 /**
  * Webhook Authentication Middleware
@@ -86,7 +86,25 @@ export const webhookAuth = async (
         return;
       }
 
-      // Validate signature if secret key is configured
+      // Validate HMAC signature — mandatory in production
+      if (process.env.NODE_ENV === 'production') {
+        if (!webhookConfig.secretKey) {
+          console.error(`⚠️ [WEBHOOK] Brand ${brand.name} has no secret key configured`);
+          res.status(401).json({
+            success: false,
+            message: 'Brand webhook signature not configured',
+          });
+          return;
+        }
+        if (!signature) {
+          res.status(401).json({
+            success: false,
+            message: 'Webhook signature required (x-webhook-signature header)',
+          });
+          return;
+        }
+      }
+
       if (webhookConfig.secretKey && signature) {
         const isValidSignature = verifySignature(
           req.body,
@@ -101,6 +119,8 @@ export const webhookAuth = async (
           });
           return;
         }
+      } else if (process.env.NODE_ENV !== 'production') {
+        console.warn(`⚠️ [WEBHOOK] Skipping signature check in ${process.env.NODE_ENV} for brand ${brand.name}`);
       }
 
       console.log(`🔑 [WEBHOOK] Authenticated for brand: ${brand.name}`);
@@ -122,7 +142,25 @@ export const webhookAuth = async (
     if (brand) {
       const webhookConfig = (brand as any).webhookConfig;
 
-      // Validate signature if secret key is configured
+      // Validate HMAC signature — mandatory in production
+      if (process.env.NODE_ENV === 'production') {
+        if (!webhookConfig.secretKey) {
+          console.error(`⚠️ [WEBHOOK] Brand ${brand.name} has no secret key configured`);
+          res.status(401).json({
+            success: false,
+            message: 'Brand webhook signature not configured',
+          });
+          return;
+        }
+        if (!signature) {
+          res.status(401).json({
+            success: false,
+            message: 'Webhook signature required (x-webhook-signature header)',
+          });
+          return;
+        }
+      }
+
       if (webhookConfig.secretKey && signature) {
         const isValidSignature = verifySignature(
           req.body,
@@ -137,6 +175,8 @@ export const webhookAuth = async (
           });
           return;
         }
+      } else if (process.env.NODE_ENV !== 'production') {
+        console.warn(`⚠️ [WEBHOOK] Skipping signature check in ${process.env.NODE_ENV} for brand ${brand.name}`);
       }
 
       console.log(`🔑 [WEBHOOK] Authenticated for brand: ${brand.name}`);
@@ -193,35 +233,39 @@ function verifySignature(
 }
 
 /**
- * Rate limiting for webhooks (optional)
- * Tracks webhook calls per IP/brand to prevent abuse
+ * Rate limiting for webhooks (Redis-backed for multi-instance support)
+ * Tracks webhook calls per IP/brand to prevent abuse.
+ * Falls back to allowing requests if Redis is unavailable.
  */
-const webhookRateLimits = new Map<string, { count: number; resetAt: number }>();
-
 export const webhookRateLimit = (
   maxRequests: number = 100,
-  windowMs: number = 60000 // 1 minute
+  windowSeconds: number = 60
 ) => {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    const key = `${req.ip}_${(req as any).webhookAuth?.brandId || 'unknown'}`;
-    const now = Date.now();
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const brandId = (req as any).webhookAuth?.brandId || 'unknown';
+    const key = `webhook_rate:${req.ip}:${brandId}`;
 
-    let record = webhookRateLimits.get(key);
+    try {
+      // Atomic INCR + EXPIRE via Lua script (no race condition)
+      const count = await redisService.atomicIncr(key, windowSeconds);
 
-    if (!record || now > record.resetAt) {
-      record = { count: 0, resetAt: now + windowMs };
-      webhookRateLimits.set(key, record);
-    }
+      // Redis unavailable (returns null) — allow request through
+      if (count === null) {
+        next();
+        return;
+      }
 
-    record.count++;
-
-    if (record.count > maxRequests) {
-      res.status(429).json({
-        success: false,
-        message: 'Too many webhook requests',
-        retryAfter: Math.ceil((record.resetAt - now) / 1000),
-      });
-      return;
+      if (count > maxRequests) {
+        res.status(429).json({
+          success: false,
+          message: 'Too many webhook requests',
+          retryAfter: windowSeconds,
+        });
+        return;
+      }
+    } catch (error) {
+      // Redis error — allow request through (fail open for webhooks)
+      console.warn('⚠️ [WEBHOOK] Rate limit check failed, allowing request:', error);
     }
 
     next();

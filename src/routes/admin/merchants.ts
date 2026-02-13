@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth, requireAdmin } from '../../middleware/auth';
+import { requireAuth, requireAdmin, requireSeniorAdmin } from '../../middleware/auth';
 import { Merchant } from '../../models/Merchant';
 import { Store } from '../../models/Store';
 
@@ -261,7 +261,7 @@ router.get('/:id', async (req: Request, res: Response) => {
  * @desc    Approve a merchant
  * @access  Admin
  */
-router.post('/:id/approve', async (req: Request, res: Response) => {
+router.post('/:id/approve', requireSeniorAdmin, async (req: Request, res: Response) => {
   try {
     const merchant = await Merchant.findById(req.params.id);
 
@@ -315,7 +315,7 @@ router.post('/:id/approve', async (req: Request, res: Response) => {
  * @desc    Reject a merchant (with reason)
  * @access  Admin
  */
-router.post('/:id/reject', async (req: Request, res: Response) => {
+router.post('/:id/reject', requireSeniorAdmin, async (req: Request, res: Response) => {
   try {
     const { reason } = req.body;
 
@@ -376,7 +376,7 @@ router.post('/:id/reject', async (req: Request, res: Response) => {
  * @desc    Suspend a merchant (with reason)
  * @access  Admin
  */
-router.post('/:id/suspend', async (req: Request, res: Response) => {
+router.post('/:id/suspend', requireSeniorAdmin, async (req: Request, res: Response) => {
   try {
     const { reason } = req.body;
 
@@ -433,7 +433,7 @@ router.post('/:id/suspend', async (req: Request, res: Response) => {
  * @desc    Reactivate a suspended merchant
  * @access  Admin
  */
-router.post('/:id/reactivate', async (req: Request, res: Response) => {
+router.post('/:id/reactivate', requireSeniorAdmin, async (req: Request, res: Response) => {
   try {
     const merchant = await Merchant.findById(req.params.id);
 

@@ -10,26 +10,47 @@ import couponService from '../services/couponService';
 /**
  * Get all available coupons (public)
  * GET /api/user/coupons
+ * - Populates applicableTo.categories and applicableTo.stores with name
+ * - If authenticated, filters out coupons the user has already claimed
  */
 export const getAvailableCoupons = async (req: Request, res: Response): Promise<void> => {
   try {
     const { category, tag, featured } = req.query;
+    const userId = (req as any).userId; // from optionalAuth
 
-    const filters: any = {};
+    const now = new Date();
+    const filter: any = {
+      status: 'active',
+      validFrom: { $lte: now },
+      validTo: { $gte: now },
+    };
 
     if (category) {
-      filters['applicableTo.categories'] = category;
+      filter['applicableTo.categories'] = category;
     }
-
     if (tag) {
-      filters.tags = tag;
+      filter.tags = tag;
     }
-
     if (featured === 'true') {
-      filters.isFeatured = true;
+      filter.isFeatured = true;
     }
 
-    const coupons = await (Coupon as any).getActiveCoupons(filters);
+    let coupons = await Coupon.find(filter)
+      .populate('applicableTo.categories', 'name slug')
+      .populate('applicableTo.stores', 'name logo')
+      .sort({ isFeatured: -1, autoApplyPriority: -1, createdAt: -1 })
+      .lean();
+
+    // If user is authenticated, filter out already-claimed coupons
+    if (userId) {
+      const claimedCouponIds = await UserCoupon.find({
+        user: userId,
+        coupon: { $in: coupons.map((c: any) => c._id) },
+      }).distinct('coupon');
+
+      const claimedSet = new Set(claimedCouponIds.map((id: any) => id.toString()));
+      coupons = coupons.filter((c: any) => !claimedSet.has(c._id.toString()));
+    }
 
     res.status(200).json({
       success: true,
@@ -54,7 +75,28 @@ export const getAvailableCoupons = async (req: Request, res: Response): Promise<
  */
 export const getFeaturedCoupons = async (req: Request, res: Response): Promise<void> => {
   try {
-    const coupons = await (Coupon as any).getActiveCoupons({ isFeatured: true });
+    const userId = (req as any).userId;
+    const now = new Date();
+
+    let coupons = await Coupon.find({
+      status: 'active',
+      validFrom: { $lte: now },
+      validTo: { $gte: now },
+      isFeatured: true,
+    })
+      .populate('applicableTo.categories', 'name slug')
+      .populate('applicableTo.stores', 'name logo')
+      .sort({ autoApplyPriority: -1, createdAt: -1 })
+      .lean();
+
+    if (userId) {
+      const claimedCouponIds = await UserCoupon.find({
+        user: userId,
+        coupon: { $in: coupons.map((c: any) => c._id) },
+      }).distinct('coupon');
+      const claimedSet = new Set(claimedCouponIds.map((id: any) => id.toString()));
+      coupons = coupons.filter((c: any) => !claimedSet.has(c._id.toString()));
+    }
 
     res.status(200).json({
       success: true,
@@ -97,7 +139,13 @@ export const getMyCoupons = async (req: Request, res: Response): Promise<void> =
     }
 
     let query = UserCoupon.find(filters)
-      .populate('coupon')
+      .populate({
+        path: 'coupon',
+        populate: [
+          { path: 'applicableTo.categories', select: 'name slug' },
+          { path: 'applicableTo.stores', select: 'name logo' },
+        ],
+      })
       .sort({ status: 1, expiryDate: 1 });
 
     if (limit) {

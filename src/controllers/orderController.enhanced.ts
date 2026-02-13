@@ -154,7 +154,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
       });
 
       // If location provided, emit location update
-      if (location && (status === 'dispatched' || status === 'out_for_delivery')) {
+      if (location && status === 'dispatched') {
         orderSocketService.emitOrderLocationUpdate({
           orderId: order._id.toString(),
           orderNumber: order.orderNumber,

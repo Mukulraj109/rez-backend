@@ -188,6 +188,24 @@ class PaymentService {
     orderId: string,
     paymentDetails: IRazorpayPaymentVerification
   ): Promise<IOrder> {
+    // ATOMIC IDEMPOTENCY GUARD — Only one concurrent caller can claim this order.
+    // Uses findOneAndUpdate with status condition BEFORE starting the transaction.
+    const claimedOrder = await Order.findOneAndUpdate(
+      { _id: orderId, 'payment.status': { $ne: 'paid' } },
+      { $set: { 'payment.status': 'processing' } },
+      { new: true }
+    );
+
+    if (!claimedOrder) {
+      // Either not found or already paid/processing by another webhook
+      const existing = await Order.findById(orderId);
+      if (existing && (existing.payment.status === 'paid' || existing.payment.status === 'processing')) {
+        console.log('⚠️ [PAYMENT SERVICE] Payment already processed/processing for order:', orderId);
+        return existing;
+      }
+      throw new Error('Order not found');
+    }
+
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -202,21 +220,13 @@ class PaymentService {
         paymentDetails.razorpay_order_id
       );
 
-      // Fetch order
+      // Re-fetch order inside session for transactional consistency
       const order = await Order.findById(orderId).session(session);
       if (!order) {
-        throw new Error('Order not found');
+        throw new Error('Order not found in session');
       }
 
-      // Check if payment already processed
-      if (order.payment.status === 'paid') {
-        console.log('⚠️ [PAYMENT SERVICE] Payment already processed for order:', orderId);
-        await session.abortTransaction();
-        session.endSession();
-        return order;
-      }
-
-      // Update payment status
+      // Update payment status to paid
       order.payment.status = 'paid';
       order.payment.transactionId = paymentDetails.razorpay_payment_id;
       order.payment.paidAt = new Date();
@@ -376,24 +386,32 @@ class PaymentService {
           try {
             console.log('💰 [PAYMENT SERVICE] Deducting REZ coins:', rezCoins);
 
-            // Update Wallet model (coins array)
-            const { Wallet } = require('../models/Wallet');
-            const wallet = await Wallet.findOne({ user: userId });
+            // Atomic update: decrement coins array + balance in one operation
+            const updatedWallet = await Wallet.findOneAndUpdate(
+              {
+                user: userId,
+                coins: { $elemMatch: { type: 'rez', amount: { $gte: rezCoins } } }
+              },
+              {
+                $inc: {
+                  'coins.$.amount': -rezCoins,
+                  'balance.available': -rezCoins,
+                  'balance.total': -rezCoins,
+                  'statistics.totalSpent': rezCoins,
+                  'limits.dailySpent': rezCoins,
+                },
+                $set: {
+                  'coins.$.lastUsed': new Date(),
+                  lastTransactionAt: new Date(),
+                }
+              },
+              { new: true }
+            );
 
-            if (wallet) {
-              const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-              if (rezCoin && rezCoin.amount >= rezCoins) {
-                rezCoin.amount -= rezCoins;
-                rezCoin.lastUsed = new Date();
-
-                wallet.balance.available = Math.max(0, wallet.balance.available - rezCoins);
-                wallet.balance.total = Math.max(0, wallet.balance.total - rezCoins);
-                wallet.statistics.totalSpent += rezCoins;
-                wallet.lastTransactionAt = new Date();
-
-                await wallet.save();
-                console.log('✅ [PAYMENT SERVICE] Wallet rez coins updated:', rezCoins);
-              }
+            if (updatedWallet) {
+              console.log('✅ [PAYMENT SERVICE] Wallet rez coins updated:', rezCoins);
+            } else {
+              console.warn('⚠️ [PAYMENT SERVICE] REZ coin deduction skipped — insufficient balance');
             }
 
             // Also create transaction record
@@ -414,18 +432,27 @@ class PaymentService {
         if (promoCoins && promoCoins > 0) {
           try {
             console.log('💰 [PAYMENT SERVICE] Deducting promo coins:', promoCoins);
-            const { Wallet } = require('../models/Wallet');
-            const wallet = await Wallet.findOne({ user: userId });
 
-            if (wallet) {
-              const promoCoin = wallet.coins.find((c: any) => c.type === 'promo');
-              if (promoCoin && promoCoin.amount >= promoCoins) {
-                promoCoin.amount -= promoCoins;
-                promoCoin.lastUsed = new Date();
-                wallet.lastTransactionAt = new Date();
-                await wallet.save();
-                console.log('✅ [PAYMENT SERVICE] Promo coins deducted:', promoCoins);
-              }
+            // Atomic update: decrement promo coins in one operation
+            const updatedWallet = await Wallet.findOneAndUpdate(
+              {
+                user: userId,
+                coins: { $elemMatch: { type: 'promo', amount: { $gte: promoCoins } } }
+              },
+              {
+                $inc: { 'coins.$.amount': -promoCoins },
+                $set: {
+                  'coins.$.lastUsed': new Date(),
+                  lastTransactionAt: new Date(),
+                }
+              },
+              { new: true }
+            );
+
+            if (updatedWallet) {
+              console.log('✅ [PAYMENT SERVICE] Promo coins deducted:', promoCoins);
+            } else {
+              console.warn('⚠️ [PAYMENT SERVICE] Promo coin deduction skipped — insufficient balance');
             }
           } catch (coinError) {
             console.error('❌ [PAYMENT SERVICE] Failed to deduct promo coins:', coinError);
@@ -440,9 +467,6 @@ class PaymentService {
             const storeId = typeof firstItem.store === 'object'
               ? (firstItem.store as any)._id
               : firstItem.store;
-
-            console.log('💰 [PAYMENT SERVICE] Store ID for branded coins:', storeId);
-            console.log('💰 [PAYMENT SERVICE] First item store:', firstItem.store);
 
             if (storeId) {
               console.log('💰 [PAYMENT SERVICE] Deducting branded coins:', storePromoCoins);
@@ -611,6 +635,15 @@ class PaymentService {
       await session.abortTransaction();
       session.endSession();
       console.error('❌ [PAYMENT SERVICE] Error processing payment success:', error);
+
+      // Reset payment status from 'processing' back to 'pending_payment' so it can be retried
+      try {
+        await Order.findByIdAndUpdate(orderId, {
+          $set: { 'payment.status': 'pending_payment' }
+        });
+      } catch (resetError) {
+        console.error('❌ [PAYMENT SERVICE] Failed to reset payment status:', resetError);
+      }
 
       // Log payment failure
       PaymentLogger.logPaymentFailure(
@@ -1019,22 +1052,11 @@ class PaymentService {
     try {
       // Check if Razorpay is configured
       if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-        console.log('\n💰 PAYOUT (Razorpay not configured - simulating):');
-        console.log('═══════════════════════════════════════════════════════');
-        console.log(`Amount: ₹${options.amount / 100}`);
-        console.log(`Beneficiary: ${options.beneficiaryName}`);
-        console.log(`Account: ${options.accountNumber}`);
-        console.log(`IFSC: ${options.ifscCode}`);
-        console.log(`Purpose: ${options.purpose}`);
-        console.log(`Reference: ${options.reference}`);
-        console.log(`Status: SIMULATED SUCCESS`);
-        console.log('═══════════════════════════════════════════════════════\n');
-
+        console.error('❌ [PAYMENT SERVICE] Payout failed — Razorpay not configured');
         return {
-          success: true,
-          payoutId: `simulated_${Date.now()}`,
-          status: 'processed',
-          amount: options.amount,
+          success: false,
+          error: 'Payment gateway not configured. Cannot process payout.',
+          status: 'failed',
         };
       }
 
@@ -1121,9 +1143,8 @@ class PaymentService {
     try {
       if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
         return {
-          success: true,
-          status: 'processed',
-          message: 'Razorpay not configured - simulated status',
+          success: false,
+          error: 'Payment gateway not configured. Cannot fetch payout status.',
         };
       }
 
@@ -1150,10 +1171,9 @@ class PaymentService {
   async cancelPayout(payoutId: string): Promise<any> {
     try {
       if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-        console.log(`📝 [PAYMENT SERVICE] Payout ${payoutId} cancelled (simulated)`);
         return {
-          success: true,
-          message: 'Payout cancelled (simulated)',
+          success: false,
+          error: 'Payment gateway not configured. Cannot cancel payout.',
         };
       }
 

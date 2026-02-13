@@ -449,7 +449,7 @@ WalletSchema.methods.canSpend = function(amount: number): boolean {
   return true;
 };
 
-// Method to add funds
+// Method to add funds (atomic $inc to prevent race conditions)
 WalletSchema.methods.addFunds = async function(
   amount: number,
   type: string
@@ -467,34 +467,51 @@ WalletSchema.methods.addFunds = async function(
     throw new Error(`Maximum wallet balance (${this.limits.maxBalance}) would be exceeded`);
   }
 
-  // Update balances
-  this.balance.available += amount;
-  this.balance.total += amount;
+  // Build atomic $inc update based on fund type
+  const incUpdate: Record<string, number> = {
+    'balance.available': amount,
+    'balance.total': amount,
+  };
 
-  // Update statistics based on type
   switch (type) {
     case 'cashback':
-      this.statistics.totalCashback += amount;
-      this.statistics.totalEarned += amount;
+      incUpdate['statistics.totalCashback'] = amount;
+      incUpdate['statistics.totalEarned'] = amount;
       break;
     case 'refund':
-      this.statistics.totalRefunds += amount;
+      incUpdate['statistics.totalRefunds'] = amount;
       break;
     case 'topup':
-      this.statistics.totalTopups += amount;
+      incUpdate['statistics.totalTopups'] = amount;
       break;
     default:
-      this.statistics.totalEarned += amount;
+      incUpdate['statistics.totalEarned'] = amount;
   }
 
-  this.lastTransactionAt = new Date();
-  await this.save();
+  // Atomic update — safe under concurrent requests
+  const updated = await (this.constructor as any).findByIdAndUpdate(
+    this._id,
+    {
+      $inc: incUpdate,
+      $set: { lastTransactionAt: new Date() }
+    },
+    { new: true }
+  );
+
+  if (!updated) {
+    throw new Error('Wallet not found during addFunds');
+  }
+
+  // Refresh local document fields from DB result
+  this.balance = updated.balance;
+  this.statistics = updated.statistics;
+  this.lastTransactionAt = updated.lastTransactionAt;
 
   // Sync with User model
   await this.syncWithUser();
 };
 
-// Method to deduct funds
+// Method to deduct funds (atomic $inc to prevent race conditions)
 WalletSchema.methods.deductFunds = async function(amount: number): Promise<void> {
   if (!this.isActive) {
     throw new Error('Wallet is not active');
@@ -508,16 +525,33 @@ WalletSchema.methods.deductFunds = async function(amount: number): Promise<void>
     throw new Error('Insufficient balance or daily limit exceeded');
   }
 
-  // Update balances
-  this.balance.available -= amount;
-  this.balance.total -= amount;
+  // Atomic deduction with balance guard — prevents going negative
+  const updated = await (this.constructor as any).findOneAndUpdate(
+    {
+      _id: this._id,
+      'balance.available': { $gte: amount } // Guard: only deduct if sufficient
+    },
+    {
+      $inc: {
+        'balance.available': -amount,
+        'balance.total': -amount,
+        'statistics.totalSpent': amount,
+        'limits.dailySpent': amount,
+      },
+      $set: { lastTransactionAt: new Date() }
+    },
+    { new: true }
+  );
 
-  // Update statistics
-  this.statistics.totalSpent += amount;
-  this.limits.dailySpent += amount;
+  if (!updated) {
+    throw new Error('Insufficient balance (concurrent deduction detected)');
+  }
 
-  this.lastTransactionAt = new Date();
-  await this.save();
+  // Refresh local document fields from DB result
+  this.balance = updated.balance;
+  this.statistics = updated.statistics;
+  this.limits = updated.limits;
+  this.lastTransactionAt = updated.lastTransactionAt;
 
   // Sync with User model
   await this.syncWithUser();
@@ -525,7 +559,6 @@ WalletSchema.methods.deductFunds = async function(amount: number): Promise<void>
   // Check low balance alert
   if (this.settings.lowBalanceAlert &&
       this.balance.available <= this.settings.lowBalanceThreshold) {
-    // Trigger low balance notification (implement notification service)
     console.log(`Low balance alert for user ${this.user}: ${this.balance.available} RC`);
   }
 
@@ -533,7 +566,6 @@ WalletSchema.methods.deductFunds = async function(amount: number): Promise<void>
   if (this.settings.autoTopup &&
       this.balance.available <= this.settings.autoTopupThreshold) {
     console.log(`Auto-topup triggered for user ${this.user}`);
-    // Implement auto-topup logic here
   }
 };
 
@@ -598,37 +630,45 @@ WalletSchema.methods.useBrandedCoins = async function(
     throw new Error('Wallet is frozen');
   }
 
-  // Find merchant coins
-  console.log('💰 [WALLET] Looking for branded coins with merchantId:', merchantId.toString());
-  console.log('💰 [WALLET] Available branded coins:', JSON.stringify(this.brandedCoins.map((c: any) => ({ merchantId: c.merchantId?.toString(), amount: c.amount, name: c.merchantName }))));
-
-  const merchantCoin = this.brandedCoins.find(
-    (coin: any) => coin.merchantId.toString() === merchantId.toString()
+  // Atomic update: decrement branded coin with balance guard
+  const updated = await (this.constructor as any).findOneAndUpdate(
+    {
+      _id: this._id,
+      brandedCoins: {
+        $elemMatch: {
+          merchantId: merchantId,
+          amount: { $gte: amount }
+        }
+      }
+    },
+    {
+      $inc: { 'brandedCoins.$.amount': -amount },
+      $set: {
+        'brandedCoins.$.lastUsed': new Date(),
+        lastTransactionAt: new Date(),
+      }
+    },
+    { new: true }
   );
 
-  console.log('💰 [WALLET] Found merchant coin:', merchantCoin ? JSON.stringify({ merchantId: merchantCoin.merchantId, amount: merchantCoin.amount }) : 'NOT FOUND');
-
-  if (!merchantCoin || merchantCoin.amount < amount) {
-    console.error('❌ [WALLET] Insufficient branded coins. Required:', amount, 'Available:', merchantCoin?.amount || 0);
+  if (!updated) {
     throw new Error('Insufficient Branded Coins for this merchant');
   }
 
-  // Deduct from branded coins
-  merchantCoin.amount -= amount;
-  merchantCoin.lastUsed = new Date();
-
-  // Remove if zero
-  if (merchantCoin.amount <= 0) {
-    this.brandedCoins = this.brandedCoins.filter(
-      (coin: any) => coin.merchantId.toString() !== merchantId.toString()
-    );
+  // Clean up zero-balance branded coins
+  const zeroCoin = updated.brandedCoins.find(
+    (coin: any) => coin.merchantId.toString() === merchantId.toString() && coin.amount <= 0
+  );
+  if (zeroCoin) {
+    await (this.constructor as any).findByIdAndUpdate(this._id, {
+      $pull: { brandedCoins: { merchantId: merchantId, amount: { $lte: 0 } } }
+    });
   }
 
-  // Branded coins are tracked separately - do NOT deduct from balance.total
-
-  this.markModified('brandedCoins');
-  this.lastTransactionAt = new Date();
-  await this.save();
+  // Refresh local document
+  const refreshed = await (this.constructor as any).findById(this._id);
+  this.brandedCoins = refreshed.brandedCoins;
+  this.lastTransactionAt = refreshed.lastTransactionAt;
 
   // Sync with User model
   await this.syncWithUser();

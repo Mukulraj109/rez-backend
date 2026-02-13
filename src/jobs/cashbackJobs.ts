@@ -1,5 +1,6 @@
 import * as cron from 'node-cron';
 import mallAffiliateService from '../services/mallAffiliateService';
+import redisService from '../services/redisService';
 
 /**
  * Cashback Background Jobs
@@ -14,23 +15,26 @@ import mallAffiliateService from '../services/mallAffiliateService';
  * 2. Mark Expired Clicks (runs daily at 2:00 AM):
  *    - Finds clicks older than 30 days that weren't converted
  *    - Marks them as 'expired' to clean up attribution window
+ *
+ * Uses Redis distributed locks with owner tokens for multi-instance safety.
  */
 
 // Job instances
 let creditCashbackJob: ReturnType<typeof cron.schedule> | null = null;
 let expireClicksJob: ReturnType<typeof cron.schedule> | null = null;
 
-// Execution flags to prevent concurrent runs
-let isCreditJobRunning = false;
-let isExpireJobRunning = false;
-
 // Configuration
 const CREDIT_CASHBACK_SCHEDULE = '0 * * * *'; // Every hour at minute 0
 const EXPIRE_CLICKS_SCHEDULE = '0 2 * * *'; // Daily at 2:00 AM
 
+// Lock TTLs (seconds) — should be longer than max expected job duration
+const CREDIT_JOB_LOCK_TTL = 3600; // 1 hour
+const EXPIRE_JOB_LOCK_TTL = 1800; // 30 minutes
+
 interface CreditStats {
   credited: number;
   total: number;
+  failed: number;
   errors: string[];
   duration: number;
 }
@@ -48,6 +52,7 @@ async function runCreditPendingCashback(): Promise<CreditStats> {
   const stats: CreditStats = {
     credited: 0,
     total: 0,
+    failed: 0,
     errors: [],
     duration: 0,
   };
@@ -58,12 +63,14 @@ async function runCreditPendingCashback(): Promise<CreditStats> {
     const result = await mallAffiliateService.creditPendingCashback();
     stats.credited = result.credited;
     stats.total = result.total;
+    stats.failed = result.failed;
 
     stats.duration = Date.now() - startTime;
 
     console.log(`✅ [CASHBACK JOB] Credit job completed:`, {
       credited: stats.credited,
       total: stats.total,
+      failed: stats.failed,
       duration: `${stats.duration}ms`,
       timestamp: new Date().toISOString(),
     });
@@ -132,19 +139,19 @@ export function startCreditCashbackJob(): void {
   console.log(`💰 [CASHBACK JOB] Starting credit cashback job (runs every hour)`);
 
   creditCashbackJob = cron.schedule(CREDIT_CASHBACK_SCHEDULE, async () => {
-    if (isCreditJobRunning) {
-      console.log('⏭️ [CASHBACK JOB] Previous credit job still running, skipping');
+    // Acquire distributed lock with owner token — only one instance runs the job
+    const lockToken = await redisService.acquireLock('cashback_credit_job', CREDIT_JOB_LOCK_TTL);
+    if (!lockToken) {
+      console.log('⏭️ [CASHBACK JOB] Another instance is running the credit job, skipping');
       return;
     }
-
-    isCreditJobRunning = true;
 
     try {
       await runCreditPendingCashback();
     } catch (error) {
       // Error already logged in runCreditPendingCashback
     } finally {
-      isCreditJobRunning = false;
+      await redisService.releaseLock('cashback_credit_job', lockToken);
     }
   });
 
@@ -163,19 +170,19 @@ export function startExpireClicksJob(): void {
   console.log(`⏰ [CASHBACK JOB] Starting expire clicks job (runs daily at 2:00 AM)`);
 
   expireClicksJob = cron.schedule(EXPIRE_CLICKS_SCHEDULE, async () => {
-    if (isExpireJobRunning) {
-      console.log('⏭️ [CASHBACK JOB] Previous expire job still running, skipping');
+    // Acquire distributed lock with owner token — only one instance runs the job
+    const lockToken = await redisService.acquireLock('expire_clicks_job', EXPIRE_JOB_LOCK_TTL);
+    if (!lockToken) {
+      console.log('⏭️ [CASHBACK JOB] Another instance is running the expire job, skipping');
       return;
     }
-
-    isExpireJobRunning = true;
 
     try {
       await runExpireClicks();
     } catch (error) {
       // Error already logged in runExpireClicks
     } finally {
-      isExpireJobRunning = false;
+      await redisService.releaseLock('expire_clicks_job', lockToken);
     }
   });
 
@@ -203,18 +210,16 @@ export function stopCashbackJobs(): void {
  * Get cashback jobs status
  */
 export function getCashbackJobsStatus(): {
-  creditJob: { running: boolean; executing: boolean; schedule: string };
-  expireJob: { running: boolean; executing: boolean; schedule: string };
+  creditJob: { running: boolean; schedule: string };
+  expireJob: { running: boolean; schedule: string };
 } {
   return {
     creditJob: {
       running: creditCashbackJob !== null,
-      executing: isCreditJobRunning,
       schedule: CREDIT_CASHBACK_SCHEDULE,
     },
     expireJob: {
       running: expireClicksJob !== null,
-      executing: isExpireJobRunning,
       schedule: EXPIRE_CLICKS_SCHEDULE,
     },
   };
@@ -224,18 +229,17 @@ export function getCashbackJobsStatus(): {
  * Manually trigger credit pending cashback (for testing/maintenance)
  */
 export async function triggerManualCreditCashback(): Promise<CreditStats> {
-  if (isCreditJobRunning) {
-    throw new Error('Credit job already in progress');
+  const lockToken = await redisService.acquireLock('cashback_credit_job', CREDIT_JOB_LOCK_TTL);
+  if (!lockToken) {
+    throw new Error('Credit job already in progress (locked by another instance)');
   }
 
   console.log('💰 [CASHBACK JOB] Manual credit cashback triggered');
 
-  isCreditJobRunning = true;
-
   try {
     return await runCreditPendingCashback();
   } finally {
-    isCreditJobRunning = false;
+    await redisService.releaseLock('cashback_credit_job', lockToken);
   }
 }
 
@@ -243,18 +247,17 @@ export async function triggerManualCreditCashback(): Promise<CreditStats> {
  * Manually trigger expire clicks (for testing/maintenance)
  */
 export async function triggerManualExpireClicks(): Promise<ExpireStats> {
-  if (isExpireJobRunning) {
-    throw new Error('Expire job already in progress');
+  const lockToken = await redisService.acquireLock('expire_clicks_job', EXPIRE_JOB_LOCK_TTL);
+  if (!lockToken) {
+    throw new Error('Expire job already in progress (locked by another instance)');
   }
 
   console.log('⏰ [CASHBACK JOB] Manual expire clicks triggered');
 
-  isExpireJobRunning = true;
-
   try {
     return await runExpireClicks();
   } finally {
-    isExpireJobRunning = false;
+    await redisService.releaseLock('expire_clicks_job', lockToken);
   }
 }
 

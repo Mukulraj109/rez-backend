@@ -54,6 +54,7 @@ export interface IMallPurchase extends Document {
   // Webhook data
   webhookPayload?: Record<string, any>;  // Raw webhook data for debugging
   webhookReceivedAt?: Date;
+  fraudFlags?: string[];                 // Fraud velocity check flags
 
   // Timestamps
   purchasedAt: Date;            // When purchase was made on brand site
@@ -61,7 +62,7 @@ export interface IMallPurchase extends Document {
   updatedAt: Date;
 
   // Instance methods
-  updateStatus(newStatus: PurchaseStatus, reason?: string, updatedBy?: string): Promise<void>;
+  updateStatus(newStatus: PurchaseStatus, reason?: string, updatedBy?: string, session?: any): Promise<void>;
   getDaysUntilCredit(): number;
 }
 
@@ -180,6 +181,7 @@ const MallPurchaseSchema = new Schema<IMallPurchase>({
     type: Schema.Types.Mixed,
   },
   webhookReceivedAt: Date,
+  fraudFlags: [{ type: String }],
 
   // Purchase timestamp
   purchasedAt: {
@@ -194,7 +196,7 @@ const MallPurchaseSchema = new Schema<IMallPurchase>({
 // Compound indexes
 MallPurchaseSchema.index({ user: 1, status: 1, purchasedAt: -1 });
 MallPurchaseSchema.index({ brand: 1, status: 1 });
-MallPurchaseSchema.index({ status: 1, purchasedAt: 1 }); // For credit job
+MallPurchaseSchema.index({ status: 1, creditedAt: 1, purchasedAt: 1 }); // For credit job (getReadyForCredit)
 MallPurchaseSchema.index({ externalOrderId: 1, brand: 1 }, { unique: true }); // Prevent duplicates
 
 // Pre-save hook to generate purchaseId
@@ -224,22 +226,23 @@ MallPurchaseSchema.statics.generatePurchaseId = function(): string {
   return `PUR_${timestamp}_${random}`;
 };
 
-// Static method to find purchases ready for credit
-MallPurchaseSchema.statics.getReadyForCredit = async function(): Promise<IMallPurchase[]> {
+// Static method to find purchases ready for credit (DB-level filtering with batch limit)
+MallPurchaseSchema.statics.getReadyForCredit = async function(
+  batchSize: number = 200
+): Promise<IMallPurchase[]> {
   const now = new Date();
 
+  // Use $expr for DB-level date math: purchasedAt + (verificationDays * ms/day) <= now
   return this.find({
     status: 'confirmed',
     creditedAt: { $exists: false },
-  }).then((purchases: IMallPurchase[]) => {
-    return purchases.filter(p => {
-      const purchaseDate = new Date(p.purchasedAt);
-      const daysSincePurchase = Math.floor(
-        (now.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24)
-      );
-      return daysSincePurchase >= p.verificationDays;
-    });
-  });
+    $expr: {
+      $lte: [
+        { $add: ['$purchasedAt', { $multiply: ['$verificationDays', 86400000] }] },
+        now,
+      ],
+    },
+  }).limit(batchSize);
 };
 
 // Static method to get user's purchase history
@@ -372,7 +375,8 @@ MallPurchaseSchema.statics.getBrandPurchaseAnalytics = async function(
 MallPurchaseSchema.methods.updateStatus = async function(
   newStatus: PurchaseStatus,
   reason?: string,
-  updatedBy: string = 'system'
+  updatedBy: string = 'system',
+  session?: any
 ): Promise<void> {
   this.status = newStatus;
   this.statusHistory.push({
@@ -388,7 +392,7 @@ MallPurchaseSchema.methods.updateStatus = async function(
     this.creditedAt = new Date();
   }
 
-  await this.save();
+  await this.save(session ? { session } : undefined);
   console.log(`📦 [PURCHASE] ${this.purchaseId} status updated to ${newStatus}`);
 };
 

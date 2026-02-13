@@ -411,7 +411,7 @@ export class OrderModel {
     const orders = await OrderMongoModel.find(query);
 
     const totalOrders = orders.length;
-    const pendingOrders = orders.filter(order => order.status === 'pending').length;
+    const pendingOrders = orders.filter(order => order.status === 'placed').length;
     const completedOrders = orders.filter(order => order.status === 'delivered').length;
     const averageOrderValue = orders.length > 0 
       ? orders.reduce((sum, order) => sum + (order.pricing?.totalAmount || order.total), 0) / orders.length 
@@ -507,7 +507,7 @@ export class OrderModel {
       { id: 'item_3', productId: 'product_3', productName: 'Organic Honey', productImage: 'https://images.unsplash.com/photo-1524594081293-190a2fe0baae', sku: 'HONEY-001', quantity: 1, price: 15.99, total: 15.99, totalPrice: 15.99 }
     ];
 
-    const statuses: OrderStatus[] = ['pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled'];
+    const statuses: OrderStatus[] = ['placed', 'confirmed', 'preparing', 'ready', 'dispatched', 'delivered', 'cancelled'];
     const priorities = ['normal', 'high', 'urgent'] as const;
     const sources = ['app', 'web', 'pos'] as const;
 

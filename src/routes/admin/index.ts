@@ -18,3 +18,4 @@ export { default as adminDoubleCampaignsRoutes } from './doubleCampaigns';
 export { default as adminCoinDropsRoutes } from './coinDrops';
 export { default as adminVouchersRoutes } from './vouchers';
 export { default as adminCouponsRoutes } from './coupons';
+export { default as adminTravelRoutes } from './travel';

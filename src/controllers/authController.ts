@@ -30,12 +30,7 @@ import dotenv from 'dotenv';
 // Ensure dotenv is loaded
 dotenv.config();
 
-// Debug: Check if Twilio credentials are loaded
-console.log('🔍 Twilio Debug:', {
-  accountSid: process.env.TWILIO_ACCOUNT_SID ? `${process.env.TWILIO_ACCOUNT_SID.substring(0, 8)}...` : 'NOT_FOUND',
-  authToken: process.env.TWILIO_AUTH_TOKEN ? `${process.env.TWILIO_AUTH_TOKEN.substring(0, 8)}...` : 'NOT_FOUND',
-  phoneNumber: process.env.TWILIO_PHONE_NUMBER
-});
+// Twilio credentials loaded from environment
 
 // Use environment variables for Twilio configuration
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
@@ -44,12 +39,7 @@ const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER?.startsWith('+')
   ? process.env.TWILIO_PHONE_NUMBER 
   : `+91${process.env.TWILIO_PHONE_NUMBER || '8210224305'}`;
 
-console.log('🔍 Twilio configuration:', {
-  hasAccountSid: !!TWILIO_ACCOUNT_SID,
-  hasAuthToken: !!TWILIO_AUTH_TOKEN,
-  phoneNumber: TWILIO_PHONE_NUMBER,
-  isDevelopment: process.env.NODE_ENV === 'development'
-});
+// Twilio configuration loaded
 
 // Only initialize Twilio client if we have valid credentials
 let client = null;
@@ -65,36 +55,37 @@ if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_ACCOUNT_SID.startsWith('AC
   console.log('🔧 Development mode: Twilio client not initialized (using console OTP)');
 }
 
+const isDev = process.env.NODE_ENV === 'development';
+
 const smsService = {
   sendOTP: async (phoneNumber: string, otp: string): Promise<boolean> => {
-    // Always log OTP to console for development
-    console.log(`📱 [OTP_SERVICE] Processing OTP for ${phoneNumber}: ${otp}`);
-    
-    // Check if we have a valid Twilio client
+    // In development without Twilio, log OTP to console for testing
     if (!client) {
-      console.log(`🔧 [DEV_MODE] No Twilio client available, using console OTP`);
-      console.log(`📱 [CONSOLE_OTP] ==== OTP FOR ${phoneNumber}: ${otp} ====`);
-      console.log(`⏰ [EXPIRY] Valid for 10 minutes`);
-      console.log(`💡 [TIP] Use this OTP code to login to your app`);
+      if (isDev) {
+        console.log(`📱 [DEV_MODE] OTP for ${phoneNumber}: ${otp}`);
+      } else {
+        console.error(`❌ [OTP_SERVICE] No SMS provider configured in production!`);
+        return false;
+      }
       return true;
     }
-    
-    // Try to send SMS via Twilio
+
+    // Send SMS via Twilio
     try {
       await client.messages.create({
         body: `Your REZ App OTP is ${otp}. Valid for 10 minutes.`,
         from: TWILIO_PHONE_NUMBER,
         to: phoneNumber
       });
-      console.log(`✅ SMS successfully sent to ${phoneNumber}`);
-      console.log(`📱 [SUCCESS] OTP for ${phoneNumber}: ${otp} (sent via SMS)`);
+      console.log(`✅ [OTP_SERVICE] SMS sent to ${phoneNumber}`);
       return true;
     } catch (error) {
-      console.error("❌ Error sending OTP:", error);
-      console.log(`📱 [FALLBACK] OTP for ${phoneNumber}: ${otp} (SMS failed, use console OTP)`);
-      console.log(`ℹ️  SMS failed, but OTP is still valid for login`);
-      // Return true for fallback mode - this allows development to continue
-      return true;
+      console.error("❌ [OTP_SERVICE] SMS send failed:", error instanceof Error ? error.message : String(error));
+      if (isDev) {
+        console.log(`📱 [DEV_FALLBACK] OTP for ${phoneNumber}: ${otp}`);
+        return true;
+      }
+      return false;
     }
   }
 };
@@ -130,14 +121,9 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
   const originalPhone = phoneNumber;
   phoneNumber = normalizePhoneNumber(phoneNumber);
 
-  console.log('\n' + '='.repeat(60));
-  console.log('🚀 [SEND_OTP] NEW OTP REQUEST RECEIVED');
-  console.log('📱 Phone (original):', originalPhone);
-  console.log('📱 Phone (normalized):', phoneNumber);
-  console.log('📧 Email:', email);
-  console.log('🎫 Referral:', referralCode || 'None');
-  console.log('⏰ Time:', new Date().toISOString());
-  console.log('='.repeat(60));
+  if (isDev) {
+    console.log(`[SEND_OTP] Phone: ${phoneNumber}, Email: ${email || 'none'}`);
+  }
 
   try {
     // Check if user exists
@@ -226,53 +212,34 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
     }
 
     // Generate and save OTP
-    console.log(`🔐 [OTP_GENERATE] Generating OTP for ${phoneNumber}`);
     const otp = user.generateOTP();
     await user.save();
-    console.log(`✅ [OTP_GENERATE] OTP generated and saved for ${phoneNumber}`);
 
-    // Send OTP via SMS (Twilio implementation)
-    console.log(`📤 [OTP_SEND] Attempting to send OTP to ${phoneNumber}`);
+    // Send OTP via SMS
     const otpSent = await smsService.sendOTP(phoneNumber, otp);
-    console.log(`📱 [OTP_TERMINAL] ==== OTP FOR ${phoneNumber}: ${otp} ====`);
-
 
     if (!otpSent) {
-      console.log(`❌ [OTP_FAIL] Failed to send OTP to ${phoneNumber}`);
       throw new AppError('Failed to send OTP. Please try again.', 500);
     }
-    
-    console.log(`✅ [OTP_SUCCESS] OTP successfully sent to ${phoneNumber}`);
-    console.log(`🎯 [OTP_READY] Ready to verify - Phone: ${phoneNumber}, OTP: ${otp}`);
-    
-    console.log('\n' + '🎉'.repeat(20));
-    console.log('   🔥 OTP GENERATED SUCCESSFULLY! 🔥');
-    console.log(`   📱 Phone: ${phoneNumber}`);
-    console.log(`   🔑 OTP CODE: ${otp}`);
-    console.log(`   ⏳ Expires in: 10 minutes`);
-    console.log('   Use this OTP in your app to login!');
-    console.log('🎉'.repeat(20) + '\n');
 
-    // Build response with devOtp in development mode
     const responseData: any = {
       message: 'OTP sent successfully',
       expiresIn: 10 * 60 // 10 minutes in seconds
     };
 
-    // Include OTP in response for development/testing (REMOVE IN PRODUCTION)
-    if (process.env.NODE_ENV === 'development') {
+    // Only include OTP in response in development mode (for testing convenience)
+    if (isDev) {
       responseData.devOtp = otp;
-      console.log(`🔧 [DEV_MODE] OTP included in response: ${otp}`);
     }
 
     sendSuccess(res, responseData, 'OTP sent to your phone number');
 
   } catch (error) {
-    console.error('❌ [SEND_OTP] Error details:', error);
     if (error instanceof AppError) {
       throw error;
     }
-    throw new AppError(`Failed to send OTP: ${error instanceof Error ? error.message : String(error)}`, 500);
+    console.error('[SEND_OTP] Error:', error instanceof Error ? error.message : String(error));
+    throw new AppError('Failed to send OTP. Please try again.', 500);
   }
 });
 
@@ -284,24 +251,19 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
   const originalPhone = phoneNumber;
   phoneNumber = normalizePhoneNumber(phoneNumber);
 
-  console.log(`🔍 [VERIFY] Starting OTP verification`);
-  console.log(`📱 Phone (original): ${originalPhone}`);
-  console.log(`📱 Phone (normalized): ${phoneNumber}`);
-  console.log(`🔑 OTP: ${otp}`);
+  if (isDev) {
+    console.log(`[VERIFY_OTP] Phone: ${phoneNumber}`);
+  }
 
   // Find user with OTP fields
   const user = await User.findOne({ phoneNumber }).select('+auth.otpCode +auth.otpExpiry');
 
   if (!user) {
-    console.log(`❌ [VERIFY] User not found for phone: ${phoneNumber}`);
     return sendNotFound(res, 'User not found');
   }
 
-  console.log(`✅ [VERIFY] User found for phone: ${phoneNumber}`);
-
   // Check if account is inactive
   if (!user.isActive) {
-    console.log(`❌ [VERIFY] Account is deactivated for phone: ${phoneNumber}`);
     return sendUnauthorized(res, 'Account is deactivated. Please contact support.');
   }
 
@@ -310,31 +272,19 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
     return sendTooManyRequests(res, 'Account is temporarily locked');
   }
 
-  // Debug OTP verification
-  console.log(`🔍 [OTP DEBUG] Verifying OTP for ${phoneNumber}:`);
-  console.log(`   - Provided OTP: ${otp}`);
-  console.log(`   - Stored OTP: ${user.auth.otpCode}`);
-  console.log(`   - OTP Expiry: ${user.auth.otpExpiry}`);
-  console.log(`   - Current Time: ${new Date()}`);
-  console.log(`   - Is Expired: ${user.auth.otpExpiry ? user.auth.otpExpiry < new Date() : 'No expiry set'}`);
-
   // Development bypass: Accept OTP starting with "123" for testing
-  const isDevelopmentBypass = process.env.NODE_ENV === 'development' && otp.startsWith('123');
+  const isDevelopmentBypass = isDev && otp.startsWith('123');
 
   if (isDevelopmentBypass) {
-    console.log(`🔧 [DEV_BYPASS] Development OTP detected (starts with 123) - bypassing verification`);
+    console.log(`[DEV_BYPASS] Development OTP bypass for ${phoneNumber}`);
   } else {
-    // PRODUCTION MODE: Verify OTP properly
+    // Verify OTP properly
     const isValidOTP = user.verifyOTP(otp);
 
     if (!isValidOTP) {
-      console.log(`❌ [OTP DEBUG] OTP verification failed`);
-      // Increment failed attempts
       await user.incrementLoginAttempts();
       return sendUnauthorized(res, 'Invalid or expired OTP');
     }
-
-    console.log(`✅ [OTP DEBUG] OTP verification successful`);
   }
 
   // Reset login attempts on successful verification
@@ -374,12 +324,8 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
             },
           });
         } else {
-          // Use addFunds method if available, or update manually
-          refereeWallet.balance.total += 30;
-          refereeWallet.balance.available += 30;
-          refereeWallet.statistics.totalEarned += 30;
-          refereeWallet.statistics.totalTopups += 30;
-          await refereeWallet.save();
+          // Use atomic addFunds method
+          await refereeWallet.addFunds(30, 'topup');
         }
 
         // Update user referral stats

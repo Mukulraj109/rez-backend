@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { Coupon } from '../../models/Coupon';
+import { Store } from '../../models/Store';
 import { sendSuccess, sendError } from '../../utils/response';
 
 const router = Router();
@@ -86,6 +87,29 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/admin/coupons/stores
+ * Search stores for coupon targeting (applicableTo.stores)
+ */
+router.get('/stores', async (req: Request, res: Response) => {
+  try {
+    const search = req.query.q as string;
+    const filter: any = { isActive: true };
+    if (search) {
+      filter.name = { $regex: search, $options: 'i' };
+    }
+    const stores = await Store.find(filter)
+      .select('_id name logo category')
+      .sort({ name: 1 })
+      .limit(50)
+      .lean();
+    return sendSuccess(res, stores, 'Stores fetched');
+  } catch (error) {
+    console.error('[Admin] Error fetching stores for coupons:', error);
+    return sendError(res, 'Failed to fetch stores', 500);
+  }
+});
+
+/**
  * GET /api/admin/coupons/:id
  * Get single coupon by ID
  */
@@ -139,11 +163,24 @@ router.post('/', async (req: Request, res: Response) => {
       isFeatured,
       isNewlyAdded,
       metadata,
+      status,
+      isActive, // legacy field — map to status
     } = req.body;
 
     if (!couponCode || !title || !description || !discountType || !discountValue || !validFrom || !validTo) {
       return sendError(res, 'couponCode, title, description, discountType, discountValue, validFrom, and validTo are required', 400);
     }
+
+    // Normalize usageLimit — accept number or object
+    let normalizedUsageLimit = usageLimit;
+    if (typeof usageLimit === 'number') {
+      normalizedUsageLimit = { totalUsage: usageLimit, perUser: 1, usedCount: 0 };
+    } else if (!usageLimit || typeof usageLimit !== 'object') {
+      normalizedUsageLimit = { totalUsage: 0, perUser: 1, usedCount: 0 };
+    }
+
+    // Determine status — accept `status` field, fallback to `isActive` boolean
+    const resolvedStatus = status || (isActive === false ? 'inactive' : 'active');
 
     const coupon = await Coupon.create({
       couponCode,
@@ -155,11 +192,11 @@ router.post('/', async (req: Request, res: Response) => {
       maxDiscountCap: maxDiscountCap || 0,
       validFrom: new Date(validFrom),
       validTo: new Date(validTo),
-      usageLimit: usageLimit || { totalUsage: 0, perUser: 1, usedCount: 0 },
+      usageLimit: normalizedUsageLimit,
       applicableTo: applicableTo || { categories: [], products: [], stores: [], userTiers: [] },
       autoApply: autoApply || false,
       autoApplyPriority: autoApplyPriority || 0,
-      status: 'active',
+      status: resolvedStatus,
       termsAndConditions: termsAndConditions || [],
       createdBy: (req as any).user?._id,
       tags: tags || [],
@@ -167,6 +204,10 @@ router.post('/', async (req: Request, res: Response) => {
       isFeatured: isFeatured || false,
       isNewlyAdded: isNewlyAdded !== undefined ? isNewlyAdded : true,
       metadata: metadata || null,
+      // Always start analytics at 0 for new coupons — real data only
+      viewCount: 0,
+      claimCount: 0,
+      usageCount: 0,
     });
 
     return sendSuccess(res, coupon, 'Coupon created');
@@ -186,9 +227,30 @@ router.put('/:id', async (req: Request, res: Response) => {
       return sendError(res, 'Invalid coupon ID', 400);
     }
 
+    // Normalize fields before update
+    const updateData = { ...req.body };
+    // Never allow admin edits to override real analytics counters
+    delete updateData.viewCount;
+    delete updateData.claimCount;
+    delete updateData.usageCount;
+    // Map isActive boolean → status enum if status not provided
+    if (updateData.isActive !== undefined && !updateData.status) {
+      updateData.status = updateData.isActive ? 'active' : 'inactive';
+      delete updateData.isActive;
+    }
+    // Normalize usageLimit number → object
+    if (typeof updateData.usageLimit === 'number') {
+      updateData.usageLimit = { totalUsage: updateData.usageLimit, perUser: 1, usedCount: 0 };
+    }
+    // Map isAutoApply → autoApply
+    if (updateData.isAutoApply !== undefined && updateData.autoApply === undefined) {
+      updateData.autoApply = updateData.isAutoApply;
+      delete updateData.isAutoApply;
+    }
+
     const coupon = await Coupon.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body },
+      { $set: updateData },
       { new: true, runValidators: true }
     );
 

@@ -11,6 +11,7 @@ import crypto from 'crypto';
 import mallAffiliateService from '../services/mallAffiliateService';
 import { MallBrand } from '../models/MallBrand';
 import { AffiliateWebhookLog, AffiliateWebhookType } from '../models/AffiliateWebhookLog';
+import redisService from '../services/redisService';
 import {
   sendSuccess,
   sendPaginated,
@@ -19,6 +20,33 @@ import {
   sendError,
   sendUnauthorized,
 } from '../utils/response';
+
+// Webhook idempotency: 24-hour TTL for deduplication keys
+const IDEMPOTENCY_TTL = 24 * 60 * 60;
+
+/**
+ * Check webhook idempotency. Returns cached response if this is a duplicate.
+ * Key format: webhook_idem:{type}:{purchaseId|orderId}
+ */
+const checkIdempotency = async (
+  idempotencyKey: string
+): Promise<{ isDuplicate: boolean; cachedResponse?: any }> => {
+  const cached = await redisService.get<any>(`webhook_idem:${idempotencyKey}`);
+  if (cached) {
+    return { isDuplicate: true, cachedResponse: cached };
+  }
+  return { isDuplicate: false };
+};
+
+/**
+ * Store webhook response for idempotency deduplication.
+ */
+const storeIdempotency = async (
+  idempotencyKey: string,
+  response: any
+): Promise<void> => {
+  await redisService.set(`webhook_idem:${idempotencyKey}`, response, IDEMPOTENCY_TTL);
+};
 
 // Helper function to log webhook request
 const logWebhookRequest = async (
@@ -209,43 +237,61 @@ export const processConversionWebhook = asyncHandler(async (req: Request, res: R
     orderAmount,
     currency,
     status,
+    purchased_at,
+    purchasedAt: purchasedAtBody,
   } = req.body;
 
   // Support both snake_case and camelCase
   const resolvedClickId = click_id || clickId;
   const resolvedOrderId = order_id || orderId;
-  const resolvedOrderAmount = order_amount || orderAmount;
+  const resolvedOrderAmount = parseFloat(order_amount || orderAmount);
+  const resolvedPurchasedAt = purchased_at || purchasedAtBody;
+  const authenticatedBrandId = (req as any).webhookAuth?.brandId?.toString() || undefined;
 
-  if (!resolvedClickId) {
+  if (!resolvedClickId || typeof resolvedClickId !== 'string' || resolvedClickId.trim() === '') {
     await updateWebhookLog(logId, {
       status: 'invalid',
       responseStatus: 400,
       processingTime: Date.now() - startTime,
-      errorMessage: 'Click ID is required',
+      errorMessage: 'click_id or clickId is required and must be a non-empty string',
     });
-    return sendBadRequest(res, 'Click ID is required');
+    return sendBadRequest(res, 'click_id or clickId is required and must be a non-empty string');
   }
 
-  if (!resolvedOrderId) {
+  if (!resolvedOrderId || typeof resolvedOrderId !== 'string' || resolvedOrderId.trim() === '') {
     await updateWebhookLog(logId, {
       status: 'invalid',
       responseStatus: 400,
       processingTime: Date.now() - startTime,
-      errorMessage: 'Order ID is required',
+      errorMessage: 'order_id or orderId is required and must be a non-empty string',
       clickId: resolvedClickId,
     });
-    return sendBadRequest(res, 'Order ID is required');
+    return sendBadRequest(res, 'order_id or orderId is required and must be a non-empty string');
   }
 
-  if (!resolvedOrderAmount || resolvedOrderAmount <= 0) {
+  if (isNaN(resolvedOrderAmount) || resolvedOrderAmount <= 0) {
     await updateWebhookLog(logId, {
       status: 'invalid',
       responseStatus: 400,
       processingTime: Date.now() - startTime,
-      errorMessage: 'Valid order amount is required',
+      errorMessage: 'order_amount or orderAmount is required and must be a positive number',
       clickId: resolvedClickId,
     });
-    return sendBadRequest(res, 'Valid order amount is required');
+    return sendBadRequest(res, 'order_amount or orderAmount is required and must be a positive number');
+  }
+
+  // Idempotency check: same order ID + brand = same conversion
+  const conversionIdempKey = `conversion:${resolvedOrderId}:${authenticatedBrandId || 'unknown'}`;
+  const { isDuplicate: isConvDuplicate, cachedResponse: cachedConvResponse } = await checkIdempotency(conversionIdempKey);
+  if (isConvDuplicate && cachedConvResponse) {
+    await updateWebhookLog(logId, {
+      status: 'duplicate',
+      responseStatus: 200,
+      responseBody: cachedConvResponse,
+      processingTime: Date.now() - startTime,
+      clickId: resolvedClickId,
+    });
+    return sendSuccess(res, cachedConvResponse, 'Conversion already processed (idempotent)');
   }
 
   // Validate click before processing
@@ -269,6 +315,8 @@ export const processConversionWebhook = asyncHandler(async (req: Request, res: R
       currency: currency || 'INR',
       status: status || 'pending',
       webhookPayload: req.body,
+      purchasedAt: resolvedPurchasedAt ? new Date(resolvedPurchasedAt) : undefined,
+      authenticatedBrandId,
     });
 
     const responseData = {
@@ -276,6 +324,9 @@ export const processConversionWebhook = asyncHandler(async (req: Request, res: R
       status: purchase.status,
       cashbackAmount: purchase.actualCashback,
     };
+
+    // Store idempotency response
+    await storeIdempotency(conversionIdempKey, responseData);
 
     await updateWebhookLog(logId, {
       status: 'success',
@@ -322,6 +373,14 @@ export const confirmPurchaseWebhook = asyncHandler(async (req: Request, res: Res
     return sendBadRequest(res, 'Purchase ID is required');
   }
 
+  // Idempotency check
+  const confirmIdempKey = `confirm:${resolvedPurchaseId}`;
+  const { isDuplicate: isConfirmDup, cachedResponse: cachedConfirmResp } = await checkIdempotency(confirmIdempKey);
+  if (isConfirmDup && cachedConfirmResp) {
+    await updateWebhookLog(logId, { status: 'duplicate', responseStatus: 200, responseBody: cachedConfirmResp, processingTime: Date.now() - startTime, purchaseId: resolvedPurchaseId });
+    return sendSuccess(res, cachedConfirmResp, 'Purchase already confirmed (idempotent)');
+  }
+
   try {
     const purchase = await mallAffiliateService.confirmPurchase(resolvedPurchaseId, reason);
 
@@ -329,6 +388,8 @@ export const confirmPurchaseWebhook = asyncHandler(async (req: Request, res: Res
       purchaseId: purchase.purchaseId,
       status: purchase.status,
     };
+
+    await storeIdempotency(confirmIdempKey, responseData);
 
     await updateWebhookLog(logId, {
       status: 'success',
@@ -361,8 +422,10 @@ export const refundWebhook = asyncHandler(async (req: Request, res: Response) =>
   const startTime = Date.now();
   const logId = await logWebhookRequest(req, 'refund');
 
-  const { purchase_id, purchaseId, reason } = req.body;
+  const { purchase_id, purchaseId, reason, refund_amount, refundAmount } = req.body;
   const resolvedPurchaseId = purchase_id || purchaseId;
+  const resolvedRefundAmount = refund_amount || refundAmount;
+  const parsedRefundAmount = resolvedRefundAmount ? parseFloat(resolvedRefundAmount) : undefined;
 
   if (!resolvedPurchaseId) {
     await updateWebhookLog(logId, {
@@ -385,13 +448,28 @@ export const refundWebhook = asyncHandler(async (req: Request, res: Response) =>
     return sendBadRequest(res, 'Refund reason is required');
   }
 
+  // Idempotency check
+  const refundIdempKey = `refund:${resolvedPurchaseId}`;
+  const { isDuplicate: isRefundDup, cachedResponse: cachedRefundResp } = await checkIdempotency(refundIdempKey);
+  if (isRefundDup && cachedRefundResp) {
+    await updateWebhookLog(logId, { status: 'duplicate', responseStatus: 200, responseBody: cachedRefundResp, processingTime: Date.now() - startTime, purchaseId: resolvedPurchaseId });
+    return sendSuccess(res, cachedRefundResp, 'Refund already processed (idempotent)');
+  }
+
   try {
-    const purchase = await mallAffiliateService.handleRefund(resolvedPurchaseId, reason);
+    const purchase = await mallAffiliateService.handleRefund(
+      resolvedPurchaseId,
+      reason,
+      parsedRefundAmount && parsedRefundAmount > 0 ? parsedRefundAmount : undefined
+    );
 
     const responseData = {
       purchaseId: purchase.purchaseId,
       status: purchase.status,
+      ...(parsedRefundAmount && { refundAmount: parsedRefundAmount }),
     };
+
+    await storeIdempotency(refundIdempKey, responseData);
 
     await updateWebhookLog(logId, {
       status: 'success',
@@ -448,6 +526,14 @@ export const rejectPurchaseWebhook = asyncHandler(async (req: Request, res: Resp
     return sendBadRequest(res, 'Rejection reason is required');
   }
 
+  // Idempotency check
+  const rejectIdempKey = `reject:${resolvedPurchaseId}`;
+  const { isDuplicate: isRejectDup, cachedResponse: cachedRejectResp } = await checkIdempotency(rejectIdempKey);
+  if (isRejectDup && cachedRejectResp) {
+    await updateWebhookLog(logId, { status: 'duplicate', responseStatus: 200, responseBody: cachedRejectResp, processingTime: Date.now() - startTime, purchaseId: resolvedPurchaseId });
+    return sendSuccess(res, cachedRejectResp, 'Purchase already rejected (idempotent)');
+  }
+
   try {
     const purchase = await mallAffiliateService.rejectPurchase(resolvedPurchaseId, reason);
 
@@ -455,6 +541,8 @@ export const rejectPurchaseWebhook = asyncHandler(async (req: Request, res: Resp
       purchaseId: purchase.purchaseId,
       status: purchase.status,
     };
+
+    await storeIdempotency(rejectIdempKey, responseData);
 
     await updateWebhookLog(logId, {
       status: 'success',

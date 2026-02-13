@@ -104,7 +104,7 @@ export class RealTimeService {
     ] = await Promise.all([
       ProductModel.countByMerchant(merchantId),
       OrderModel.countByMerchant(merchantId),
-      OrderModel.countByStatus(merchantId, 'pending'),
+      OrderModel.countByStatus(merchantId, 'placed'),
       CashbackModel.getMetrics(merchantId)
     ]);
 
@@ -123,7 +123,7 @@ export class RealTimeService {
       pendingCashback
     ] = await Promise.all([
       ProductModel.findLowStock(merchantId),
-      OrderModel.findByStatus(merchantId, 'pending'),
+      OrderModel.findByStatus(merchantId, 'placed'),
 (async () => {
         const result = await CashbackModel.search({ merchantId, status: 'pending', flaggedOnly: true });
         return result.requests || [];

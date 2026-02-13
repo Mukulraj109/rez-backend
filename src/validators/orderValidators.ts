@@ -48,7 +48,7 @@ export const createOrderSchema = Joi.object({
 // Update order status validation
 export const updateOrderStatusSchema = Joi.object({
   status: Joi.string()
-    .valid('pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded')
+    .valid('placed', 'confirmed', 'preparing', 'ready', 'dispatched', 'delivered', 'cancelled', 'returned', 'refunded')
     .required(),
   notes: Joi.string()
     .trim()
@@ -69,7 +69,7 @@ export const queryOrdersSchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(20),
   sort: Joi.string().valid('createdAt', '-createdAt', 'total', '-total', 'status').default('-createdAt'),
-  status: Joi.string().valid('pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded').optional(),
+  status: Joi.string().valid('placed', 'confirmed', 'preparing', 'ready', 'dispatched', 'delivered', 'cancelled', 'returned', 'refunded').optional(),
   paymentMethod: Joi.string().valid('cod', 'online', 'wallet', 'razorpay', 'stripe', 'paypal').optional(),
   startDate: Joi.date().iso().optional(),
   endDate: Joi.date().iso().min(Joi.ref('startDate')).optional(),

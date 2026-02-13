@@ -6,6 +6,7 @@
  */
 
 import { createClient, RedisClientType } from 'redis';
+import crypto from 'crypto';
 import { getRedisConfig, RedisConfig } from '../config/redis';
 
 /**
@@ -392,6 +393,94 @@ class RedisService {
     } catch (error) {
       console.error(`❌ Redis DECR error for key ${key}:`, error);
       return null;
+    }
+  }
+
+  /**
+   * Atomic increment with TTL using Lua script.
+   * Guarantees INCR + EXPIRE happen atomically (no race condition).
+   * Returns the new counter value, or null if Redis is unavailable.
+   */
+  public async atomicIncr(key: string, ttlSeconds: number): Promise<number | null> {
+    if (!this.isReady()) {
+      return null;
+    }
+
+    try {
+      const prefixedKey = this.getPrefixedKey(key);
+      // Lua script: INCR key, set EXPIRE only on first increment (count == 1)
+      const luaScript = `
+        local count = redis.call('INCR', KEYS[1])
+        if count == 1 then
+          redis.call('EXPIRE', KEYS[1], ARGV[1])
+        end
+        return count
+      `;
+      const result = await this.client!.eval(luaScript, {
+        keys: [prefixedKey],
+        arguments: [ttlSeconds.toString()],
+      });
+      return result as number;
+    } catch (error) {
+      console.error(`❌ Redis ATOMIC_INCR error for key ${key}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Acquire a distributed lock with owner verification (SET NX EX pattern).
+   * Returns the lock owner token if acquired, or null if already held.
+   * The token MUST be passed to releaseLock() to prevent releasing another instance's lock.
+   * Falls back to a dummy token if Redis is unavailable (single-instance fallback).
+   */
+  public async acquireLock(key: string, ttlSeconds: number): Promise<string | null> {
+    if (!this.isReady()) {
+      return 'fallback'; // Allow execution if Redis is down (single-instance fallback)
+    }
+
+    try {
+      const prefixedKey = this.getPrefixedKey(`lock:${key}`);
+      const ownerToken = crypto.randomBytes(16).toString('hex');
+      const result = await this.client!.set(prefixedKey, ownerToken, {
+        NX: true,
+        EX: ttlSeconds,
+      });
+      return result === 'OK' ? ownerToken : null;
+    } catch (error) {
+      console.error(`❌ Redis LOCK acquire error for ${key}:`, error);
+      return 'fallback'; // Fail open for single-instance
+    }
+  }
+
+  /**
+   * Release a distributed lock only if we own it (prevents releasing another instance's lock).
+   * Uses Lua script for atomic check-and-delete.
+   */
+  public async releaseLock(key: string, ownerToken?: string): Promise<void> {
+    if (!this.isReady()) return;
+
+    try {
+      const prefixedKey = this.getPrefixedKey(`lock:${key}`);
+
+      if (ownerToken && ownerToken !== 'fallback') {
+        // Safe release: only delete if we own the lock
+        const luaScript = `
+          if redis.call("get", KEYS[1]) == ARGV[1] then
+            return redis.call("del", KEYS[1])
+          else
+            return 0
+          end
+        `;
+        await this.client!.eval(luaScript, {
+          keys: [prefixedKey],
+          arguments: [ownerToken],
+        });
+      } else {
+        // Backward-compatible: unconditional delete (for callers that don't pass token)
+        await this.client!.del(prefixedKey);
+      }
+    } catch (error) {
+      console.error(`❌ Redis LOCK release error for ${key}:`, error);
     }
   }
 

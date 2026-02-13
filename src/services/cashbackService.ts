@@ -6,6 +6,7 @@ import { UserCashback, IUserCashback } from '../models/UserCashback';
 import { Order } from '../models/Order';
 import { User } from '../models/User';
 import subscriptionBenefitsService from './subscriptionBenefitsService';
+import DoubleCashbackCampaign from '../models/DoubleCashbackCampaign';
 
 interface CreateCashbackData {
   userId: Types.ObjectId;
@@ -457,43 +458,34 @@ class CashbackService {
   }
 
   /**
-   * Get cashback campaigns (placeholder for future campaigns)
+   * Get active cashback campaigns from DoubleCashbackCampaign model
    */
   async getActiveCampaigns(): Promise<any[]> {
-    // Placeholder for future cashback campaigns
-    return [
-      {
-        id: '1',
-        name: 'Electronics Bonanza',
-        description: 'Get 5% cashback on all electronics',
-        cashbackRate: 5,
-        validFrom: new Date('2025-01-01'),
-        validTo: new Date('2025-12-31'),
-        categories: ['electronics', 'mobile', 'laptop'],
+    try {
+      const now = new Date();
+      const campaigns = await DoubleCashbackCampaign.find({
         isActive: true,
-      },
-      {
-        id: '2',
-        name: 'Fashion Festival',
-        description: 'Get 3% cashback on fashion items',
-        cashbackRate: 3,
-        validFrom: new Date('2025-01-01'),
-        validTo: new Date('2025-12-31'),
-        categories: ['clothing', 'fashion', 'shoes'],
+        startTime: { $lte: now },
+        endTime: { $gte: now },
+      })
+        .sort({ priority: -1, createdAt: -1 })
+        .lean();
+
+      // Map to frontend expected shape
+      return campaigns.map((c) => ({
+        id: c._id.toString(),
+        name: c.title,
+        description: c.subtitle || c.description || '',
+        cashbackRate: c.multiplier,
+        validFrom: c.startTime,
+        validTo: c.endTime,
+        categories: c.eligibleCategories || [],
         isActive: true,
-      },
-      {
-        id: '3',
-        name: 'Weekend Special',
-        description: 'Extra 1% cashback on weekend orders',
-        cashbackRate: 1,
-        validFrom: new Date('2025-01-01'),
-        validTo: new Date('2025-12-31'),
-        categories: [],
-        isActive: true,
-        daysOfWeek: [0, 6], // Sunday and Saturday
-      },
-    ];
+      }));
+    } catch (error) {
+      console.error('❌ [CASHBACK SERVICE] Error fetching campaigns:', error);
+      return [];
+    }
   }
 
   /**

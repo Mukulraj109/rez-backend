@@ -25,6 +25,14 @@ import {
 } from '../controllers/mallAffiliateController';
 import { optionalAuth, requireAuth } from '../middleware/auth';
 import { webhookAuth, demoWebhookAuth, webhookRateLimit } from '../middleware/webhookAuth';
+import { createRateLimiter } from '../middleware/rateLimiter';
+
+// Rate limiter for click endpoint: max 10 requests per minute per IP
+const clickRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10,
+  message: 'Too many click requests. Please try again in a minute.',
+});
 
 const router = Router();
 
@@ -37,7 +45,7 @@ const router = Router();
  *
  * Records the user's click and returns a tracking URL for affiliate attribution.
  */
-router.post('/click', optionalAuth, trackBrandClick);
+router.post('/click', clickRateLimiter, optionalAuth, trackBrandClick);
 
 /**
  * Get User's Click History

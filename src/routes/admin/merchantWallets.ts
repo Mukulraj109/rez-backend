@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth, requireAdmin } from '../../middleware/auth';
+import { requireAuth, requireAdmin, requireSeniorAdmin, requireOperator } from '../../middleware/auth';
 import { MerchantWallet } from '../../models/MerchantWallet';
 import merchantWalletService from '../../services/merchantWalletService';
 
@@ -129,7 +129,7 @@ router.get('/:merchantId/transactions', async (req: Request, res: Response) => {
  * @desc    Process a pending withdrawal request
  * @access  Admin
  */
-router.post('/:merchantId/process-withdrawal', async (req: Request, res: Response) => {
+router.post('/:merchantId/process-withdrawal', requireSeniorAdmin, async (req: Request, res: Response) => {
   try {
     const { transactionId, transactionReference } = req.body;
 
@@ -164,7 +164,7 @@ router.post('/:merchantId/process-withdrawal', async (req: Request, res: Respons
  * @desc    Verify merchant bank details
  * @access  Admin
  */
-router.post('/:merchantId/verify-bank', async (req: Request, res: Response) => {
+router.post('/:merchantId/verify-bank', requireOperator, async (req: Request, res: Response) => {
   try {
     await merchantWalletService.verifyBankDetails(req.params.merchantId);
 

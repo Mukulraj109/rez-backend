@@ -213,7 +213,8 @@ export interface CashbackAnalytics {
 }
 
 // Order types
-export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'refunded';
+// Canonical order status — must match Order model schema enum
+export type OrderStatus = 'placed' | 'confirmed' | 'preparing' | 'ready' | 'dispatched' | 'delivered' | 'cancelled' | 'returned' | 'refunded';
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
 
 export interface Order {

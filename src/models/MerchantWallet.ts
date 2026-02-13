@@ -270,13 +270,22 @@ MerchantWalletSchema.statics.getWalletSummary = async function(
   };
 };
 
-// Instance method: Credit order payment to wallet
+// Instance method: Credit order payment to wallet (idempotent + atomic)
 MerchantWalletSchema.methods.creditOrder = async function(
   orderId: Types.ObjectId,
   orderNumber: string,
   grossAmount: number,
   platformFee: number
 ): Promise<void> {
+  // IDEMPOTENCY CHECK — prevent double-crediting the same order
+  const alreadyCredited = this.transactions.some(
+    (t: any) => t.orderId && t.orderId.toString() === orderId.toString() && t.type === 'credit'
+  );
+  if (alreadyCredited) {
+    console.log(`⚠️ [MERCHANT WALLET] Order ${orderNumber} already credited, skipping duplicate`);
+    return;
+  }
+
   const netAmount = grossAmount - platformFee;
 
   // Create transaction record
@@ -292,30 +301,49 @@ MerchantWalletSchema.methods.creditOrder = async function(
     createdAt: new Date()
   };
 
-  // Update balances - immediate settlement
-  this.balance.total += grossAmount;
-  this.balance.available += netAmount;  // Net amount available immediately
+  // ATOMIC UPDATE — use $inc for balances and $push for transaction
+  const updated = await (this.constructor as any).findOneAndUpdate(
+    {
+      _id: this._id,
+      // Extra guard: ensure this orderId isn't already in transactions
+      'transactions.orderId': { $ne: orderId }
+    },
+    {
+      $inc: {
+        'balance.total': grossAmount,
+        'balance.available': netAmount,
+        'statistics.totalSales': grossAmount,
+        'statistics.totalPlatformFees': platformFee,
+        'statistics.netSales': netAmount,
+        'statistics.totalOrders': 1,
+      },
+      $push: { transactions: transaction },
+      $set: { lastSettlementAt: new Date() }
+    },
+    { new: true }
+  );
 
-  // Update statistics
-  this.statistics.totalSales += grossAmount;
-  this.statistics.totalPlatformFees += platformFee;
-  this.statistics.netSales += netAmount;
-  this.statistics.totalOrders += 1;
-  this.statistics.averageOrderValue = this.statistics.totalSales / this.statistics.totalOrders;
+  if (!updated) {
+    console.log(`⚠️ [MERCHANT WALLET] Order ${orderNumber} credit skipped (concurrent duplicate)`);
+    return;
+  }
 
-  // Add transaction
-  this.transactions.push(transaction);
+  // Recalculate average order value
+  if (updated.statistics.totalOrders > 0) {
+    updated.statistics.averageOrderValue = updated.statistics.totalSales / updated.statistics.totalOrders;
+    await updated.save();
+  }
 
-  // Update last settlement time
-  this.lastSettlementAt = new Date();
-
-  await this.save();
+  // Refresh local document
+  this.balance = updated.balance;
+  this.statistics = updated.statistics;
+  this.lastSettlementAt = updated.lastSettlementAt;
 
   console.log(`💰 [MERCHANT WALLET] Credited order ${orderNumber}:`, {
     gross: grossAmount,
     platformFee: platformFee,
     net: netAmount,
-    newAvailable: this.balance.available
+    newAvailable: updated.balance.available
   });
 };
 
@@ -348,14 +376,28 @@ MerchantWalletSchema.methods.requestWithdrawal = async function(
     createdAt: new Date()
   };
 
-  // Update balances
-  this.balance.available -= amount;
-  this.balance.pending += amount;
+  // ATOMIC withdrawal — move funds from available to pending with balance guard
+  const updated = await (this.constructor as any).findOneAndUpdate(
+    {
+      _id: this._id,
+      'balance.available': { $gte: amount }
+    },
+    {
+      $inc: {
+        'balance.available': -amount,
+        'balance.pending': amount,
+      },
+      $push: { transactions: transaction }
+    },
+    { new: true }
+  );
 
-  // Add transaction
-  this.transactions.push(transaction);
+  if (!updated) {
+    throw new Error('Insufficient balance (concurrent withdrawal detected)');
+  }
 
-  await this.save();
+  // Refresh local document
+  this.balance = updated.balance;
 
   console.log(`💸 [MERCHANT WALLET] Withdrawal requested: ₹${amount}`);
 

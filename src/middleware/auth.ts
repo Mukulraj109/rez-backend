@@ -202,11 +202,51 @@ export const authorize = (...roles: string[]) => {
   };
 };
 
-// Check if user is admin
-export const requireAdmin = authorize('admin');
+// Admin role hierarchy: support(60) < operator(70) < admin(80) < super_admin(100)
+const ADMIN_ROLE_LEVELS: Record<string, number> = {
+  support: 60,
+  operator: 70,
+  admin: 80,
+  super_admin: 100,
+};
+
+// Check if user has at least the given admin role level
+export const requireAdminRole = (minRole: string) => {
+  const minLevel = ADMIN_ROLE_LEVELS[minRole] || 0;
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required'
+      });
+    }
+
+    const userLevel = ADMIN_ROLE_LEVELS[req.user.role] || 0;
+    if (userLevel < minLevel) {
+      return res.status(403).json({
+        success: false,
+        message: `Insufficient permissions. Requires ${minRole} role or higher.`
+      });
+    }
+
+    next();
+  };
+};
+
+// Check if user is any admin portal role (support or higher)
+export const requireAdmin = requireAdminRole('support');
+
+// Check if user is operator or higher (blocks support from write operations)
+export const requireOperator = requireAdminRole('operator');
+
+// Check if user is admin or super_admin (for sensitive ops like refunds, user bans, merchant approval)
+export const requireSeniorAdmin = requireAdminRole('admin');
+
+// Check if user is super_admin (for destructive ops like deletions, system config)
+export const requireSuperAdmin = requireAdminRole('super_admin');
 
 // Check if user is store owner or admin
-export const requireStoreOwnerOrAdmin = authorize('store_owner', 'admin');
+export const requireStoreOwnerOrAdmin = authorize('store_owner', 'admin', 'super_admin');
 
 // Alias for authenticate (commonly used name)
 export const requireAuth = authenticate;

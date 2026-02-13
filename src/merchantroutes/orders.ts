@@ -44,7 +44,7 @@ interface OrderSearchRequest {
 }
 
 const isValidOrderStatus = (status: unknown): status is OrderStatus => {
-  const validStatuses: OrderStatus[] = ['pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery', 'delivered', 'cancelled', 'refunded'];
+  const validStatuses: OrderStatus[] = ['placed', 'confirmed', 'preparing', 'ready', 'dispatched', 'delivered', 'cancelled', 'returned', 'refunded'];
   return typeof status === 'string' && validStatuses.includes(status as OrderStatus);
 };
 
@@ -379,7 +379,7 @@ router.use(authMiddleware);
 
 // Helper: Validate if value is OrderStatus
 const isOrderStatus = (value: any): value is OrderStatus => {
-  const statuses: OrderStatus[] = ['pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery', 'delivered', 'cancelled', 'refunded'];
+  const statuses: string[] = ['placed', 'confirmed', 'preparing', 'ready', 'dispatched', 'delivered', 'cancelled', 'returned', 'refunded'];
   return statuses.includes(value);
 };
 

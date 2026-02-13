@@ -1,14 +1,14 @@
+// Canonical order status — must match Order model schema enum
 export type OrderStatus =
-  | 'pending'
+  | 'placed'
   | 'confirmed'
   | 'preparing'
   | 'ready'
-  | 'out_for_delivery'
+  | 'dispatched'
   | 'delivered'
   | 'cancelled'
-  | 'refunded'
   | 'returned'
-  | 'failed';
+  | 'refunded';
 
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
 

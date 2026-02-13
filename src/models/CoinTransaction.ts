@@ -7,7 +7,7 @@ export interface ICoinTransaction extends Document {
   type: 'earned' | 'spent' | 'expired' | 'refunded' | 'bonus';
   amount: number;
   balance: number; // Balance after transaction
-  source: 'spin_wheel' | 'scratch_card' | 'quiz_game' | 'challenge' | 'achievement' | 'referral' | 'order' | 'review' | 'bill_upload' | 'daily_login' | 'admin' | 'purchase' | 'redemption' | 'expiry' | 'survey' | 'memory_match' | 'coin_hunt' | 'guess_price' | 'purchase_reward' | 'social_share_reward' | 'merchant_award';
+  source: 'spin_wheel' | 'scratch_card' | 'quiz_game' | 'challenge' | 'achievement' | 'referral' | 'order' | 'review' | 'bill_upload' | 'daily_login' | 'admin' | 'purchase' | 'redemption' | 'expiry' | 'survey' | 'memory_match' | 'coin_hunt' | 'guess_price' | 'purchase_reward' | 'social_share_reward' | 'merchant_award' | 'cashback';
   description: string;
   category?: MainCategorySlug | null; // MainCategory this transaction belongs to
   metadata?: {
@@ -88,7 +88,8 @@ const CoinTransactionSchema: Schema = new Schema(
         'guess_price',
         'purchase_reward',      // 5% auto coin after purchase
         'social_share_reward',  // 5% coin on social sharing
-        'merchant_award'        // merchant gives coins to customer
+        'merchant_award',       // merchant gives coins to customer
+        'cashback'              // cashback from orders or affiliate purchases
       ],
       required: true,
       index: true

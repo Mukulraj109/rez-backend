@@ -62,9 +62,13 @@ export interface IMallAffiliateClick extends Document {
 const MallAffiliateClickSchema = new Schema<IMallAffiliateClick>({
   clickId: {
     type: String,
-    required: true,
     unique: true,
     index: true,
+    default: function () {
+      const timestamp = Date.now().toString(36);
+      const random = crypto.randomBytes(6).toString('hex');
+      return `CLK_${timestamp}_${random}`;
+    },
   },
   user: {
     type: Schema.Types.ObjectId,
@@ -129,8 +133,12 @@ const MallAffiliateClickSchema = new Schema<IMallAffiliateClick>({
   },
   expiresAt: {
     type: Date,
-    required: true,
     index: true,
+    default: function () {
+      const expiry = new Date();
+      expiry.setDate(expiry.getDate() + 30);
+      return expiry;
+    },
   },
 
   // Conversion tracking
@@ -166,24 +174,11 @@ MallAffiliateClickSchema.index({ user: 1, brand: 1, clickedAt: -1 });
 MallAffiliateClickSchema.index({ status: 1, expiresAt: 1 });
 MallAffiliateClickSchema.index({ sessionId: 1, brand: 1 });
 
-// Pre-save hook to generate clickId if not provided
-MallAffiliateClickSchema.pre('save', function(next) {
-  if (!this.clickId && this.isNew) {
-    // Generate unique click ID: CLK_<timestamp>_<random>
-    const timestamp = Date.now().toString(36);
-    const random = crypto.randomBytes(6).toString('hex');
-    this.clickId = `CLK_${timestamp}_${random}`;
-  }
+// TTL index: auto-delete expired clicks after 90 days (30d attribution + 60d buffer)
+MallAffiliateClickSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 60 * 24 * 60 * 60 });
 
-  // Set expiry date if not provided (30 days from click)
-  if (!this.expiresAt && this.isNew) {
-    const expiry = new Date();
-    expiry.setDate(expiry.getDate() + 30);
-    this.expiresAt = expiry;
-  }
-
-  next();
-});
+// Note: clickId and expiresAt defaults are handled via schema default functions
+// (runs before validation, unlike pre-save hooks which run after validation)
 
 // Static method to generate a unique click ID
 MallAffiliateClickSchema.statics.generateClickId = function(): string {

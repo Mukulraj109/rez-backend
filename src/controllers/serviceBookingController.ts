@@ -5,6 +5,7 @@ import { Store } from '../models/Store';
 import { ServiceCategory } from '../models/ServiceCategory';
 import { logger } from '../config/logger';
 import mongoose from 'mongoose';
+import travelCashbackService, { TRAVEL_CATEGORY_SLUGS } from '../services/travelCashbackService';
 
 // Use Express Request with user property (extended globally)
 
@@ -217,6 +218,46 @@ export const createBooking = async (req: Request, res: Response) => {
       }
     }
 
+    // Determine if this is a travel booking
+    const isTravelBooking = travelCashbackService.isTravelCategory(categorySlug);
+
+    // For travel bookings: enforce upfront payment, set verification days and refund policy
+    const requiresPaymentUpfront = isTravelBooking
+      ? true
+      : (service.serviceDetails?.requiresPaymentUpfront || false);
+    const verificationDays = isTravelBooking
+      ? travelCashbackService.getVerificationDays(categorySlug)
+      : 7;
+    const refundPolicy = isTravelBooking
+      ? { tiers: travelCashbackService.getRefundTiers(categorySlug) }
+      : undefined;
+
+    // Extract travel details from customerNotes (structured data instead of raw JSON)
+    let travelDetails: any = undefined;
+    if (isTravelBooking && bookingDetails) {
+      travelDetails = {};
+      if (bookingDetails.route) {
+        travelDetails.route = {
+          from: bookingDetails.route.from || bookingDetails.from,
+          to: bookingDetails.route.to || bookingDetails.to,
+          fromCode: bookingDetails.route.fromCode,
+          toCode: bookingDetails.route.toCode,
+        };
+      }
+      if (bookingDetails.class) travelDetails.class = bookingDetails.class;
+      if (bookingDetails.passengers) travelDetails.passengers = bookingDetails.passengers;
+      if (bookingDetails.tripType) travelDetails.tripType = bookingDetails.tripType;
+      if (bookingDetails.returnDate) travelDetails.returnDate = new Date(bookingDetails.returnDate);
+    }
+
+    // Price sanity check for travel: reject if totalPrice > basePrice * 10
+    if (isTravelBooking && totalPrice > basePrice * 10) {
+      return res.status(400).json({
+        success: false,
+        message: 'Total price exceeds acceptable range for this service'
+      });
+    }
+
     // Create booking
     const booking = new ServiceBooking({
       bookingNumber,
@@ -235,16 +276,21 @@ export const createBooking = async (req: Request, res: Response) => {
       serviceAddress: svcType === 'home' ? serviceAddress : undefined,
       pricing: {
         basePrice,
-        total: totalPrice, // Use calculated total price
+        total: totalPrice,
         cashbackEarned,
         cashbackPercentage,
         currency: service.pricing.currency || 'INR'
       },
-      requiresPaymentUpfront: service.serviceDetails?.requiresPaymentUpfront || false,
+      requiresPaymentUpfront,
       paymentStatus: 'pending',
       paymentMethod,
       customerNotes,
-      status: 'pending'
+      status: 'pending',
+      // Travel-specific fields
+      verificationDays,
+      refundPolicy,
+      travelDetails,
+      cashbackStatus: 'pending',
     });
 
     await booking.save();
@@ -258,7 +304,8 @@ export const createBooking = async (req: Request, res: Response) => {
     res.status(201).json({
       success: true,
       message: 'Booking created successfully',
-      data: populatedBooking
+      data: populatedBooking,
+      requiresPayment: requiresPaymentUpfront,
     });
   } catch (error: any) {
     logger.error('Error creating booking:', error);
@@ -424,21 +471,54 @@ export const cancelBooking = async (req: Request, res: Response) => {
       });
     }
 
-    // Check cancellation time (at least 2 hours before)
-    const now = new Date();
-    const bookingDateTime = new Date(booking.bookingDate);
-    const [hours, minutes] = booking.timeSlot.start.split(':').map(Number);
-    bookingDateTime.setHours(hours, minutes, 0, 0);
-    const twoHoursBefore = new Date(bookingDateTime.getTime() - 2 * 60 * 60 * 1000);
+    // Determine category slug for travel-specific logic
+    const populatedCategory = await ServiceCategory.findById(booking.serviceCategory);
+    const catSlug = populatedCategory?.slug || '';
+    const isTravelCancel = travelCashbackService.isTravelCategory(catSlug);
 
-    if (now >= twoHoursBefore) {
-      return res.status(400).json({
-        success: false,
-        message: 'Bookings can only be cancelled at least 2 hours before the scheduled time'
-      });
+    if (isTravelCancel) {
+      // Travel bookings use category-specific refund tiers instead of fixed 2-hour window
+      const { refundPercentage } = travelCashbackService.calculateRefundAmount(booking, catSlug);
+
+      if (refundPercentage === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'This booking is past the cancellation window and cannot be cancelled for a refund'
+        });
+      }
+
+      // Cancel the booking
+      await booking.cancel(reason || 'Cancelled by user', 'user');
+
+      // Handle cashback clawback for travel bookings
+      if (booking.cashbackStatus === 'credited' || booking.cashbackStatus === 'held') {
+        try {
+          await travelCashbackService.handleRefund(
+            booking._id.toString(),
+            reason || 'Booking cancelled by user'
+          );
+        } catch (refundError: any) {
+          logger.error('Error processing travel cashback refund:', refundError);
+          // Booking is still cancelled even if cashback clawback fails — admin will review
+        }
+      }
+    } else {
+      // Non-travel: use existing 2-hour cancellation window
+      const now = new Date();
+      const bookingDateTime = new Date(booking.bookingDate);
+      const [hours, minutes] = booking.timeSlot.start.split(':').map(Number);
+      bookingDateTime.setHours(hours, minutes, 0, 0);
+      const twoHoursBefore = new Date(bookingDateTime.getTime() - 2 * 60 * 60 * 1000);
+
+      if (now >= twoHoursBefore) {
+        return res.status(400).json({
+          success: false,
+          message: 'Bookings can only be cancelled at least 2 hours before the scheduled time'
+        });
+      }
+
+      await booking.cancel(reason || 'Cancelled by user', 'user');
     }
-
-    await booking.cancel(reason || 'Cancelled by user', 'user');
 
     // Populate booking data for response
     const updatedBooking = await ServiceBooking.findById(booking._id)

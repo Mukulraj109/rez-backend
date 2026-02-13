@@ -227,12 +227,15 @@ export const getTravelServicesStats = asyncHandler(async (req: Request, res: Res
       isActive: true
     }).select('_id cashbackPercentage');
 
+    // Configurable coin multiplier — can be overridden via environment variable
+    const coinMultiplier = Number(process.env.TRAVEL_COIN_MULTIPLIER) || 2;
+
     if (travelCategories.length === 0) {
       return sendSuccess(res, {
         hotels: 0,
         maxCashback: 0,
         serviceCount: 0,
-        coinMultiplier: 2
+        coinMultiplier
       }, 'Travel services stats');
     }
 
@@ -267,7 +270,7 @@ export const getTravelServicesStats = asyncHandler(async (req: Request, res: Res
       hotels: hotelCount,
       maxCashback,
       serviceCount,
-      coinMultiplier: 2 // Default coin multiplier for travel bookings
+      coinMultiplier
     }, 'Travel services stats fetched successfully');
   } catch (error: any) {
     logger.error('Error fetching travel services stats:', error);

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
-import { requireAuth, requireAdmin } from '../../middleware/auth';
+import { requireAuth, requireAdmin, requireSeniorAdmin } from '../../middleware/auth';
 import { Order } from '../../models/Order';
 import { User } from '../../models/User';
 import { Product } from '../../models/Product';
@@ -52,12 +52,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Status filter
     if (req.query.status) {
-      // "pending" should also match "placed" orders (new orders start as 'placed')
-      if (req.query.status === 'pending') {
-        filter.status = { $in: ['pending', 'placed'] };
-      } else {
-        filter.status = req.query.status;
-      }
+      filter.status = req.query.status;
     }
 
     // Payment status filter
@@ -228,7 +223,7 @@ router.get('/:id', async (req: Request, res: Response) => {
  * @desc    Process refund for an order
  * @access  Admin
  */
-router.post('/:id/refund', async (req: Request, res: Response) => {
+router.post('/:id/refund', requireSeniorAdmin, async (req: Request, res: Response) => {
   try {
     const { reason } = req.body;
 
@@ -333,7 +328,7 @@ router.post('/:id/refund', async (req: Request, res: Response) => {
  * @desc    Cancel an order
  * @access  Admin
  */
-router.post('/:id/cancel', async (req: Request, res: Response) => {
+router.post('/:id/cancel', requireSeniorAdmin, async (req: Request, res: Response) => {
   try {
     const { reason } = req.body;
 
@@ -448,7 +443,7 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
  * @desc    Update order status
  * @access  Admin
  */
-router.put('/:id/status', async (req: Request, res: Response) => {
+router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response) => {
   try {
     const { status, notes } = req.body;
 

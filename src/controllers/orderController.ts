@@ -1365,36 +1365,40 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
   const { reason } = req.body;
 
+  // ATOMIC IDEMPOTENCY GUARD — claim the order for cancellation
+  // Only one concurrent caller can transition from cancellable status to 'cancelling'
+  const claimedOrder = await Order.findOneAndUpdate(
+    {
+      _id: orderId,
+      user: userId,
+      status: { $in: ['placed', 'confirmed', 'preparing'] }
+    },
+    { $set: { status: 'cancelling' } },
+    { new: true }
+  );
+
+  if (!claimedOrder) {
+    const existing = await Order.findOne({ _id: orderId, user: userId });
+    if (!existing) {
+      return sendNotFound(res, 'Order not found');
+    }
+    if (existing.status === 'cancelled' || (existing.status as string) === 'cancelling') {
+      return sendBadRequest(res, 'Order is already cancelled');
+    }
+    return sendBadRequest(res, 'Order cannot be cancelled at this stage');
+  }
+
   // Start a MongoDB session for transaction
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    console.log('🚫 [CANCEL ORDER] Starting cancellation for order:', orderId);
-
-    const order = await Order.findOne({
-      _id: orderId,
-      user: userId
-    }).session(session);
-
-    console.log('🚫 [CANCEL ORDER] Order found:', order ? 'Yes' : 'No');
-
+    const order = await Order.findById(orderId).session(session);
     if (!order) {
       await session.abortTransaction();
       session.endSession();
       return sendNotFound(res, 'Order not found');
     }
-
-    console.log('🚫 [CANCEL ORDER] Current status:', order.status);
-
-    // Check if order can be cancelled
-    if (!['placed', 'confirmed', 'preparing'].includes(order.status)) {
-      await session.abortTransaction();
-      session.endSession();
-      return sendBadRequest(res, 'Order cannot be cancelled at this stage');
-    }
-
-    console.log('🚫 [CANCEL ORDER] Updating order status to cancelled');
 
     // Restore stock for cancelled order items
     console.log('🚫 [CANCEL ORDER] Restoring stock for order items...');
@@ -1728,9 +1732,14 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
     await session.abortTransaction();
     session.endSession();
 
-    console.error('❌ [CANCEL ORDER] Error:', error);
-    console.error('❌ [CANCEL ORDER] Error message:', error.message);
-    console.error('❌ [CANCEL ORDER] Error stack:', error.stack);
+    // Reset status from 'cancelling' back to previous state so it can be retried
+    try {
+      await Order.findByIdAndUpdate(orderId, { $set: { status: 'placed' } });
+    } catch (resetError) {
+      console.error('❌ [CANCEL ORDER] Failed to reset status:', resetError);
+    }
+
+    console.error('❌ [CANCEL ORDER] Error:', error.message);
     throw new AppError(`Failed to cancel order: ${error.message}`, 500);
   }
 });

@@ -269,8 +269,7 @@ const MallBrandSchema = new Schema<IMallBrand>({
     conversionRate: {
       type: Number,
       default: 0,
-      min: 0,
-      max: 100
+      min: 0
     }
   },
   collections: [{
@@ -436,9 +435,12 @@ MallBrandSchema.methods.recordView = async function() {
 // Method to record click
 MallBrandSchema.methods.recordClick = async function() {
   this.analytics.clicks += 1;
-  // Update conversion rate
-  if (this.analytics.views > 0) {
-    this.analytics.conversionRate = (this.analytics.clicks / this.analytics.views) * 100;
+  // Update conversion rate (purchases / clicks)
+  if (this.analytics.clicks > 0) {
+    this.analytics.conversionRate = Math.min(
+      100,
+      (this.analytics.purchases / this.analytics.clicks) * 100
+    );
   }
   await this.save();
 };
@@ -447,6 +449,13 @@ MallBrandSchema.methods.recordClick = async function() {
 MallBrandSchema.methods.recordPurchase = async function(cashbackAmount: number = 0) {
   this.analytics.purchases += 1;
   this.analytics.totalCashbackGiven += cashbackAmount;
+  // Update conversion rate (purchases / clicks)
+  if (this.analytics.clicks > 0) {
+    this.analytics.conversionRate = Math.min(
+      100,
+      (this.analytics.purchases / this.analytics.clicks) * 100
+    );
+  }
   await this.save();
 };
 

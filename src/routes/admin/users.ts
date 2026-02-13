@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth, requireAdmin } from '../../middleware/auth';
+import { requireAuth, requireAdmin, requireSeniorAdmin } from '../../middleware/auth';
 import { User } from '../../models/User';
 import { Wallet } from '../../models/Wallet';
 
@@ -175,7 +175,7 @@ router.get('/:id/wallet', async (req: Request, res: Response) => {
  * @desc    Suspend a user account
  * @access  Admin
  */
-router.post('/:id/suspend', async (req: Request, res: Response) => {
+router.post('/:id/suspend', requireSeniorAdmin, async (req: Request, res: Response) => {
   try {
     const { reason } = req.body;
 
@@ -240,7 +240,7 @@ router.post('/:id/suspend', async (req: Request, res: Response) => {
  * @desc    Unsuspend a user account
  * @access  Admin
  */
-router.post('/:id/unsuspend', async (req: Request, res: Response) => {
+router.post('/:id/unsuspend', requireSeniorAdmin, async (req: Request, res: Response) => {
   try {
     const user = await User.findById(req.params.id);
 

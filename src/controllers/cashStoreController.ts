@@ -8,27 +8,15 @@
  * - Aggregated homepage data (single call)
  *
  * Delegates to mallService for all data access (MallBrand + MallCategory).
+ *
+ * NOTE: Caching is handled by cacheMiddleware on routes (cashStoreRoutes.ts).
+ * Do NOT add manual redisService.get/set here — it causes double caching.
  */
 
 import { Request, Response } from 'express';
 import mallService from '../services/mallService';
-import redisService from '../services/redisService';
 import { sendSuccess, sendError } from '../utils/response';
 import { MallOffer } from '../models/MallOffer';
-
-// Cache TTLs (seconds)
-const CACHE_TTL = {
-  HOMEPAGE: 300,     // 5 minutes
-  BRANDS: 600,       // 10 minutes
-  CATEGORIES: 1800,  // 30 minutes
-};
-
-// Cache key prefixes
-const CACHE_KEYS = {
-  HOMEPAGE: 'cashstore:homepage',
-  BRANDS: 'cashstore:brands',
-  CATEGORIES: 'cashstore:categories',
-};
 
 // Sort option mapping
 const SORT_OPTIONS: Record<string, Record<string, 1 | -1>> = {
@@ -91,13 +79,6 @@ const VIRTUAL_FILTERS = [
  */
 export const getCashStoreCategories = async (req: Request, res: Response) => {
   try {
-    // Check cache first
-    const cacheKey = CACHE_KEYS.CATEGORIES;
-    const cached = await redisService.get<any[]>(cacheKey);
-    if (cached) {
-      return sendSuccess(res, cached, 'Categories fetched');
-    }
-
     const dbCategories = await mallService.getCategories();
 
     // Map DB categories to include isSpecialFilter: false
@@ -118,9 +99,6 @@ export const getCashStoreCategories = async (req: Request, res: Response) => {
 
     const allCategories = [...VIRTUAL_FILTERS, ...mappedCategories];
 
-    // Cache the result
-    await redisService.set(cacheKey, allCategories, CACHE_TTL.CATEGORIES);
-
     return sendSuccess(res, allCategories, 'Categories fetched');
   } catch (error) {
     console.error('[CashStore] Error fetching categories:', error);
@@ -138,14 +116,6 @@ export const getCashStoreBrands = async (req: Request, res: Response) => {
     const limitNum = Math.min(parseInt(limit as string) || 12, 50);
     const pageNum = parseInt(page as string) || 1;
     const sortOption = SORT_OPTIONS[sort as string] || SORT_OPTIONS['rating'];
-    const sortKey = (sort as string) || 'rating';
-
-    // Build dynamic cache key from query params
-    const cacheKey = `${CACHE_KEYS.BRANDS}:${filter || 'all'}:${category || 'all'}:${sortKey}:p${pageNum}:l${limitNum}`;
-    const cached = await redisService.get<any>(cacheKey);
-    if (cached) {
-      return sendSuccess(res, cached, 'Brands fetched');
-    }
 
     let brands: any[] = [];
     let total = 0;
@@ -173,7 +143,7 @@ export const getCashStoreBrands = async (req: Request, res: Response) => {
       brands = result.brands;
       total = result.total;
     } else if (category && category !== 'all') {
-      // Filter by category slug — getBrandsByCategory doesn't support sort, use getBrands with category lookup
+      // Filter by category slug
       const result = await mallService.getBrandsByCategory(
         category as string,
         pageNum,
@@ -193,9 +163,6 @@ export const getCashStoreBrands = async (req: Request, res: Response) => {
     }
 
     const responseData = { brands, total, page: pageNum, limit: limitNum };
-
-    // Cache the result
-    await redisService.set(cacheKey, responseData, CACHE_TTL.BRANDS);
 
     return sendSuccess(res, responseData, 'Brands fetched');
   } catch (error) {
@@ -237,13 +204,6 @@ export const searchCashStoreBrands = async (req: Request, res: Response) => {
  */
 export const getCashStoreHomepage = async (req: Request, res: Response) => {
   try {
-    // Check cache first — this is the biggest performance win
-    const cacheKey = CACHE_KEYS.HOMEPAGE;
-    const cached = await redisService.get<any>(cacheKey);
-    if (cached) {
-      return sendSuccess(res, cached, 'Cash Store homepage data fetched');
-    }
-
     const [
       dbCategories,
       topBrandsResult,
@@ -281,9 +241,6 @@ export const getCashStoreHomepage = async (req: Request, res: Response) => {
       highCashbackBrands: highCashbackResult.brands,
     };
 
-    // Cache the aggregated result
-    await redisService.set(cacheKey, homepageData, CACHE_TTL.HOMEPAGE);
-
     return sendSuccess(res, homepageData, 'Cash Store homepage data fetched');
   } catch (error) {
     console.error('[CashStore] Error fetching homepage data:', error);
@@ -300,12 +257,6 @@ export const getCashStoreGiftCards = async (req: Request, res: Response) => {
     const { category, limit = '20', page = '1' } = req.query;
     const limitNum = Math.min(parseInt(limit as string) || 20, 50);
     const pageNum = parseInt(page as string) || 1;
-
-    const cacheKey = `cashstore:gc:${category || 'all'}:p${pageNum}:l${limitNum}`;
-    const cached = await redisService.get<any>(cacheKey);
-    if (cached) {
-      return sendSuccess(res, cached, 'Gift cards fetched');
-    }
 
     let result;
     if (category && category !== 'all') {
@@ -325,7 +276,6 @@ export const getCashStoreGiftCards = async (req: Request, res: Response) => {
       limit: limitNum,
     };
 
-    await redisService.set(cacheKey, responseData, CACHE_TTL.BRANDS);
     return sendSuccess(res, responseData, 'Gift cards fetched');
   } catch (error) {
     console.error('[CashStore] Error fetching gift cards:', error);
@@ -339,12 +289,6 @@ export const getCashStoreGiftCards = async (req: Request, res: Response) => {
  */
 export const getCashStoreTrending = async (req: Request, res: Response) => {
   try {
-    const cacheKey = 'cashstore:trending';
-    const cached = await redisService.get<any>(cacheKey);
-    if (cached) {
-      return sendSuccess(res, cached, 'Trending data fetched');
-    }
-
     const now = new Date();
 
     const [
@@ -382,7 +326,6 @@ export const getCashStoreTrending = async (req: Request, res: Response) => {
       activeOffers,
     };
 
-    await redisService.set(cacheKey, trendingData, CACHE_TTL.HOMEPAGE);
     return sendSuccess(res, trendingData, 'Trending data fetched');
   } catch (error) {
     console.error('[CashStore] Error fetching trending data:', error);

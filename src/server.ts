@@ -32,6 +32,7 @@ import { initializeTrialExpiryJob } from './jobs/trialExpiryNotification';
 import { initializeSessionCleanupJob } from './jobs/cleanupExpiredSessions';
 import { initializeCoinExpiryJob } from './jobs/expireCoins';
 import { initializeCashbackJobs } from './jobs/cashbackJobs';
+import { initializeTravelCashbackJobs } from './jobs/travelCashbackJobs';
 import { initializeInventoryAlertJob } from './jobs/inventoryAlerts';
 import { initializeDealExpiryJob } from './jobs/expireDealRedemptions';
 import { initializeVoucherExpiryJob } from './jobs/expireVoucherRedemptions';
@@ -131,6 +132,8 @@ import serviceRoutes from './routes/serviceRoutes';
 import serviceBookingRoutes from './routes/serviceBookingRoutes';
 import homeServicesRoutes from './routes/homeServicesRoutes';
 import travelServicesRoutes from './routes/travelServicesRoutes';
+import travelPaymentRoutes from './routes/travelPaymentRoutes';
+import travelWebhookRoutes from './routes/travelWebhookRoutes';
 import financialServicesRoutes from './routes/financialServicesRoutes';
 import healthRecordRoutes from './routes/healthRecordRoutes';
 import emergencyRoutes from './routes/emergencyRoutes';
@@ -172,7 +175,8 @@ import {
   adminDoubleCampaignsRoutes,
   adminCoinDropsRoutes,
   adminVouchersRoutes,
-  adminCouponsRoutes
+  adminCouponsRoutes,
+  adminTravelRoutes
 } from './routes/admin';
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
 import experienceRoutes from './routes/experienceRoutes';  // Store experience routes
@@ -772,6 +776,12 @@ console.log('✅ Home services routes registered at /api/home-services');
 app.use(`${API_PREFIX}/travel-services`, travelServicesRoutes);
 console.log('✅ Travel services routes registered at /api/travel-services');
 
+// Travel Payment Routes - Razorpay integration for travel bookings
+app.use(`${API_PREFIX}/travel-payment`, travelPaymentRoutes);
+console.log('✅ Travel payment routes registered at /api/travel-payment');
+app.use(`${API_PREFIX}/travel-webhooks`, travelWebhookRoutes);
+console.log('✅ Travel webhook routes registered at /api/travel-webhooks');
+
 // Financial Services Routes - Financial services endpoints (bills, OTT, recharge, gold, insurance)
 app.use(`${API_PREFIX}/financial-services`, financialServicesRoutes);
 console.log('✅ Financial services routes registered at /api/financial-services');
@@ -861,6 +871,8 @@ app.use(`${API_PREFIX}/admin/vouchers`, adminVouchersRoutes);
 console.log('✅ Admin vouchers routes registered at /api/admin/vouchers');
 app.use(`${API_PREFIX}/admin/coupons`, adminCouponsRoutes);
 console.log('✅ Admin coupons routes registered at /api/admin/coupons');
+app.use(`${API_PREFIX}/admin/travel`, adminTravelRoutes);
+console.log('✅ Admin travel routes registered at /api/admin/travel');
 
 // Campaign Routes - Homepage exciting deals
 app.use(`${API_PREFIX}/campaigns`, campaignRoutes);
@@ -1022,17 +1034,41 @@ app.use(globalErrorHandler);
 
 
 
+// Socket.IO JWT authentication middleware
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+
+  if (!token) {
+    return next(new Error('Authentication required'));
+  }
+
+  try {
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET) as { userId: string; role: string };
+    (socket as any).userId = decoded.userId;
+    (socket as any).userRole = decoded.role;
+    next();
+  } catch (err) {
+    return next(new Error('Invalid or expired token'));
+  }
+});
+
 io.on('connection', (socket) => {
-  console.log('🔌 Merchant client connected:', socket.id);
-  
-  // Join merchant room for real-time updates
+  const userId = (socket as any).userId;
+  const userRole = (socket as any).userRole;
+
+  // Auto-join user's personal room
+  socket.join(`user-${userId}`);
+
+  // Join merchant room (only if merchant/admin role)
   socket.on('join-merchant-room', (merchantId: string) => {
-    socket.join(`merchant-${merchantId}`);
-    console.log(`Merchant ${merchantId} joined room`);
+    if (userRole === 'merchant' || userRole === 'admin' || userRole === 'superadmin') {
+      socket.join(`merchant-${merchantId}`);
+    }
   });
-  
+
   socket.on('disconnect', () => {
-    console.log('🔌 Merchant client disconnected:', socket.id);
+    // cleanup handled by socket.io automatically
   });
 });
 
@@ -1110,6 +1146,11 @@ async function startServer() {
     console.log('🔄 Initializing cashback jobs...');
     initializeCashbackJobs();
     console.log('✅ Cashback jobs started (credit: hourly, expire: daily at 2:00 AM)');
+
+    // Initialize travel cashback jobs (credit, expire unpaid, mark completed)
+    console.log('🔄 Initializing travel cashback jobs...');
+    initializeTravelCashbackJobs();
+    console.log('✅ Travel cashback jobs started (credit: 2h, expire: 15m, complete: daily 3AM)');
 
     // Initialize inventory alert job (sends low stock / out of stock notifications)
     console.log('🔄 Initializing inventory alert job...');

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
-import { requireAuth, requireAdmin } from '../../middleware/auth';
+import { requireAuth, requireAdmin, requireSeniorAdmin, requireOperator } from '../../middleware/auth';
 import { PendingCoinReward } from '../../models/PendingCoinReward';
 import { CoinTransaction } from '../../models/CoinTransaction';
 
@@ -195,7 +195,7 @@ router.get('/:id', async (req: Request, res: Response) => {
  * @desc    Approve a pending coin reward and credit coins
  * @access  Admin
  */
-router.post('/:id/approve', async (req: Request, res: Response) => {
+router.post('/:id/approve', requireSeniorAdmin, async (req: Request, res: Response) => {
   try {
     const reward = await PendingCoinReward.findById(req.params.id);
 
@@ -241,7 +241,7 @@ router.post('/:id/approve', async (req: Request, res: Response) => {
  * @desc    Reject a pending coin reward
  * @access  Admin
  */
-router.post('/:id/reject', async (req: Request, res: Response) => {
+router.post('/:id/reject', requireOperator, async (req: Request, res: Response) => {
   try {
     const reward = await PendingCoinReward.findById(req.params.id);
 
@@ -290,7 +290,7 @@ router.post('/:id/reject', async (req: Request, res: Response) => {
  * @desc    Bulk approve multiple pending coin rewards
  * @access  Admin
  */
-router.post('/bulk-approve', async (req: Request, res: Response) => {
+router.post('/bulk-approve', requireSeniorAdmin, async (req: Request, res: Response) => {
   try {
     const { rewardIds, notes } = req.body;
 
@@ -344,7 +344,7 @@ router.post('/bulk-approve', async (req: Request, res: Response) => {
  * @desc    Bulk reject multiple pending coin rewards
  * @access  Admin
  */
-router.post('/bulk-reject', async (req: Request, res: Response) => {
+router.post('/bulk-reject', requireOperator, async (req: Request, res: Response) => {
   try {
     const { rewardIds, reason } = req.body;
 
