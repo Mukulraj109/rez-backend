@@ -166,7 +166,88 @@ UserAchievementSchema.index({ user: 1, type: 1 }, { unique: true });
 UserAchievementSchema.index({ user: 1, unlocked: 1 });
 UserAchievementSchema.index({ user: 1, progress: -1 });
 
-// Achievement Definitions (Master List)
+// Achievement Definition Schema (Admin-manageable collection)
+export interface IAchievementDoc extends Document {
+  type: string;
+  title: string;
+  description: string;
+  icon: string;
+  color: string;
+  category: string;
+  target: number;
+  coinReward: number;
+  badge?: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const AchievementSchema = new Schema<IAchievementDoc>({
+  type: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    index: true
+  },
+  title: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  description: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  icon: {
+    type: String,
+    required: true
+  },
+  color: {
+    type: String,
+    default: '#10B981'
+  },
+  category: {
+    type: String,
+    required: true,
+    index: true
+  },
+  target: {
+    type: Number,
+    required: true,
+    min: 1
+  },
+  coinReward: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  badge: {
+    type: String,
+    trim: true
+  },
+  isActive: {
+    type: Boolean,
+    default: true,
+    index: true
+  },
+  sortOrder: {
+    type: Number,
+    default: 0
+  }
+}, {
+  timestamps: true
+});
+
+AchievementSchema.index({ category: 1, sortOrder: 1 });
+AchievementSchema.index({ isActive: 1, sortOrder: 1 });
+
+// Achievement master model (admin-manageable)
+const Achievement = mongoose.model<IAchievementDoc>('Achievement', AchievementSchema);
+export default Achievement;
+
 export const ACHIEVEMENT_DEFINITIONS: IAchievementDefinition[] = [
   // Order Achievements
   {

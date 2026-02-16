@@ -118,6 +118,8 @@ const SpinWheelSpinSchema = new Schema<ISpinWheelSpin>({
 // Index for querying user's spin history
 SpinWheelSpinSchema.index({ userId: 1, spinTimestamp: -1 });
 SpinWheelSpinSchema.index({ status: 1, expiresAt: 1 }); // For cleanup jobs
+// Daily spin limit check: query spins per user per date
+SpinWheelSpinSchema.index({ userId: 1, spinTimestamp: 1 });
 
 export const SpinWheelSpin: Model<ISpinWheelSpin> = mongoose.model<ISpinWheelSpin>('SpinWheelSpin', SpinWheelSpinSchema);
 

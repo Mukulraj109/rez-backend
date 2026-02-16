@@ -77,7 +77,15 @@ import {
   updateMallBanner,
   deleteMallBanner,
   toggleStoreAlliance,
-  getAdminAllianceStores
+  getAdminAllianceStores,
+  getAdminMallStores,
+  toggleStoreMall,
+  updateStoreMallProperties,
+  getAdminBanners,
+  getAdminCollections,
+  getAdminBrands,
+  getAdminCategories,
+  getAdminOffers,
 } from '../controllers/mallController';
 
 const router = Router();
@@ -342,26 +350,31 @@ router.get('/banners/hero', optionalAuth, getMallHeroBanners);
 router.get('/admin/stats', authenticate, requireAdmin, getAdminStats);
 
 // Brand Admin Routes
+router.get('/admin/brands', authenticate, requireAdmin, getAdminBrands);
 router.post('/admin/brands', authenticate, requireAdmin, validate(createBrandSchema), createMallBrand);
 router.put('/admin/brands/:brandId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), validate(updateBrandSchema), updateMallBrand);
 router.delete('/admin/brands/:brandId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), deleteMallBrand);
 
 // Category Admin Routes
+router.get('/admin/categories', authenticate, requireAdmin, getAdminCategories);
 router.post('/admin/categories', authenticate, requireAdmin, validate(createCategorySchema), createMallCategory);
 router.put('/admin/categories/:categoryId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), validate(updateCategorySchema), updateMallCategory);
 router.delete('/admin/categories/:categoryId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), deleteMallCategory);
 
 // Collection Admin Routes
+router.get('/admin/collections', authenticate, requireAdmin, getAdminCollections);
 router.post('/admin/collections', authenticate, requireAdmin, validate(createCollectionSchema), createMallCollection);
 router.put('/admin/collections/:collectionId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), validate(updateCollectionSchema), updateMallCollection);
 router.delete('/admin/collections/:collectionId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), deleteMallCollection);
 
 // Offer Admin Routes
+router.get('/admin/offers', authenticate, requireAdmin, getAdminOffers);
 router.post('/admin/offers', authenticate, requireAdmin, validate(createOfferSchema), createMallOffer);
 router.put('/admin/offers/:offerId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), validate(updateOfferSchema), updateMallOffer);
 router.delete('/admin/offers/:offerId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), deleteMallOffer);
 
 // Banner Admin Routes
+router.get('/admin/banners', authenticate, requireAdmin, getAdminBanners);
 router.post('/admin/banners', authenticate, requireAdmin, validate(createBannerSchema), createMallBanner);
 router.put('/admin/banners/:bannerId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), validate(updateBannerSchema), updateMallBanner);
 router.delete('/admin/banners/:bannerId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), deleteMallBanner);
@@ -369,5 +382,10 @@ router.delete('/admin/banners/:bannerId', authenticate, requireAdmin, validatePa
 // Alliance Store Admin Routes
 router.get('/admin/stores/alliance', authenticate, requireAdmin, getAdminAllianceStores);
 router.put('/admin/stores/:storeId/alliance', authenticate, requireAdmin, validateParams(objectIdParamsSchema), validate(toggleAllianceSchema), toggleStoreAlliance);
+
+// Mall Store Management Admin Routes
+router.get('/admin/stores/manage', authenticate, requireAdmin, getAdminMallStores);
+router.put('/admin/stores/:storeId/mall-toggle', authenticate, requireAdmin, validateParams(objectIdParamsSchema), toggleStoreMall);
+router.put('/admin/stores/:storeId/mall-properties', authenticate, requireAdmin, validateParams(objectIdParamsSchema), updateStoreMallProperties);
 
 export default router;

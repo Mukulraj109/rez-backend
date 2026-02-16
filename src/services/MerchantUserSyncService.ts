@@ -4,6 +4,43 @@ import { Category } from '../models/Category';
 import { MProduct } from '../models/MerchantProduct';
 import { Product } from '../models/Product';
 
+// Map merchant businessType to category slug for auto-assignment
+const BUSINESS_TYPE_TO_CATEGORY_SLUG: Record<string, string> = {
+  'restaurant': 'food-dining',
+  'cafe': 'food-dining',
+  'food': 'food-dining',
+  'catering': 'food-dining',
+  'bakery': 'food-dining',
+  'grocery': 'grocery-essentials',
+  'supermarket': 'grocery-essentials',
+  'fashion': 'fashion',
+  'clothing': 'fashion',
+  'apparel': 'fashion',
+  'beauty': 'beauty-wellness',
+  'salon': 'beauty-wellness',
+  'spa': 'beauty-wellness',
+  'cosmetics': 'beauty-wellness',
+  'electronics': 'electronics',
+  'tech': 'electronics',
+  'healthcare': 'healthcare',
+  'pharmacy': 'healthcare',
+  'medical': 'healthcare',
+  'fitness': 'fitness-sports',
+  'gym': 'fitness-sports',
+  'sports': 'fitness-sports',
+  'education': 'education-learning',
+  'coaching': 'education-learning',
+  'travel': 'travel-experiences',
+  'hotel': 'travel-experiences',
+  'home-services': 'home-services',
+  'plumbing': 'home-services',
+  'cleaning': 'home-services',
+  'financial': 'financial-lifestyle',
+  'insurance': 'financial-lifestyle',
+  'entertainment': 'entertainment',
+  'events': 'entertainment',
+};
+
 export class MerchantUserSyncService {
   /**
    * Sync all existing merchants to create corresponding stores
@@ -68,15 +105,43 @@ export class MerchantUserSyncService {
    */
   static async createStoreForMerchant(merchant: any): Promise<void> {
     try {
-      // Find a default category or create one if it doesn't exist
-      let defaultCategory = await Category.findOne({ name: 'General' });
-      if (!defaultCategory) {
-        defaultCategory = await Category.create({
-          name: 'General',
-          slug: 'general',
-          type: 'store',
-          isActive: true
-        });
+      // Resolve category from merchant's businessType
+      let targetCategory = null;
+      const rawBusinessType =
+        merchant.onboarding?.stepData?.businessInfo?.businessType ||
+        merchant.businessType ||
+        '';
+      // Guard against non-string values (e.g. objects)
+      const businessType = (typeof rawBusinessType === 'string' ? rawBusinessType : String(rawBusinessType || '')).toLowerCase().trim();
+
+      if (businessType) {
+        // Direct mapping lookup
+        const categorySlug = BUSINESS_TYPE_TO_CATEGORY_SLUG[businessType];
+        if (categorySlug) {
+          targetCategory = await Category.findOne({ slug: categorySlug, isActive: true });
+        }
+        // Fallback: fuzzy match by category name (escape regex special chars to prevent crashes)
+        if (!targetCategory) {
+          const escapedType = businessType.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          targetCategory = await Category.findOne({
+            name: { $regex: new RegExp(escapedType, 'i') },
+            isActive: true,
+            parentCategory: null,
+          });
+        }
+      }
+
+      // Final fallback to General
+      if (!targetCategory) {
+        targetCategory = await Category.findOne({ name: 'General' });
+        if (!targetCategory) {
+          targetCategory = await Category.create({
+            name: 'General',
+            slug: 'general',
+            type: 'general',
+            isActive: true,
+          });
+        }
       }
 
       // Create store slug from business name
@@ -99,7 +164,7 @@ export class MerchantUserSyncService {
         name: merchant.businessName,
         slug: finalSlug,
         description: `${merchant.businessName} - Your trusted local business`,
-        category: defaultCategory._id,
+        category: targetCategory._id,
         merchantId: merchant._id, // Link to merchant
         location: {
           address: `${merchant.businessAddress.street}, ${merchant.businessAddress.city}`,

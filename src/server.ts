@@ -39,6 +39,8 @@ import { initializeVoucherExpiryJob } from './jobs/expireVoucherRedemptions';
 import { initializeTableBookingExpiryJob } from './jobs/expireTableBookings';
 import { startReconciliationJob } from './jobs/reconciliationJob';
 import { startReservationCleanup } from './jobs/reservationCleanup';
+import { initializeLeaderboardRefreshJob } from './jobs/leaderboardRefreshJob';
+import { initializeBillVerificationJob } from './jobs/billVerificationJob';
 
 // Import Bull-based scheduled job service (replaces node-cron with Bull repeatable jobs)
 import { ScheduledJobService } from './services/ScheduledJobService';
@@ -173,6 +175,8 @@ import {
   adminCampaignsRoutes,
   adminUploadsRoutes,
   adminExperiencesRoutes,
+  adminCategoriesRoutes,
+  adminStoresRoutes,
   adminHomepageDealsRoutes,
   adminZoneVerificationsRoutes,
   adminOffersRoutes,
@@ -182,7 +186,12 @@ import {
   adminVouchersRoutes,
   adminCouponsRoutes,
   adminTravelRoutes,
-  adminSystemRoutes
+  adminSystemRoutes,
+  adminChallengesRoutes,
+  adminGameConfigRoutes,
+  adminFeatureFlagsRoutes,
+  adminAchievementsRoutes,
+  adminGamificationStatsRoutes,
 } from './routes/admin';
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
 import experienceRoutes from './routes/experienceRoutes';  // Store experience routes
@@ -209,6 +218,12 @@ import merchantOrderRoutes from './routes/merchant/orders';
 import merchantCashbackRoutesNew from './routes/merchant/cashback';
 // Merchant notification routes (Agent 2)
 import merchantNotificationRoutes from './routes/merchant/notifications';
+// Merchant CoinDrop routes (Phase 4.1)
+import merchantCoinDropRoutes from './routes/merchant/coinDrops';
+// Merchant Branded Coin campaign routes (Phase 4.2)
+import merchantBrandedCoinRoutes from './routes/merchant/brandedCoins';
+// Merchant Earning Analytics routes (Phase 4.3)
+import merchantEarningAnalyticsRoutes from './routes/merchant/earningAnalytics';
 // Bulk product operations routes (Agent 4)
 import bulkRoutes from './merchantroutes/bulk';
 import storeRoutesM from './merchantroutes/stores';  // Merchant store management routes
@@ -887,6 +902,10 @@ app.use(`${API_PREFIX}/admin/uploads`, adminUploadsRoutes);
 console.log('✅ Admin uploads routes registered at /api/admin/uploads');
 app.use(`${API_PREFIX}/admin/experiences`, adminExperiencesRoutes);
 console.log('✅ Admin experiences routes registered at /api/admin/experiences');
+app.use(`${API_PREFIX}/admin/categories`, adminCategoriesRoutes);
+console.log('✅ Admin categories routes registered at /api/admin/categories');
+app.use(`${API_PREFIX}/admin/stores`, adminStoresRoutes);
+console.log('✅ Admin stores routes registered at /api/admin/stores');
 app.use(`${API_PREFIX}/admin/homepage-deals`, adminHomepageDealsRoutes);
 console.log('✅ Admin homepage deals routes registered at /api/admin/homepage-deals');
 app.use(`${API_PREFIX}/admin/zone-verifications`, adminZoneVerificationsRoutes);
@@ -907,6 +926,16 @@ app.use(`${API_PREFIX}/admin/travel`, adminTravelRoutes);
 console.log('✅ Admin travel routes registered at /api/admin/travel');
 app.use(`${API_PREFIX}/admin/system`, adminSystemRoutes);
 console.log('✅ Admin system routes registered at /api/admin/system');
+app.use(`${API_PREFIX}/admin/challenges`, adminChallengesRoutes);
+console.log('✅ Admin challenges routes registered at /api/admin/challenges');
+app.use(`${API_PREFIX}/admin/game-config`, adminGameConfigRoutes);
+console.log('✅ Admin game config routes registered at /api/admin/game-config');
+app.use(`${API_PREFIX}/admin/feature-flags`, adminFeatureFlagsRoutes);
+console.log('✅ Admin feature flags routes registered at /api/admin/feature-flags');
+app.use(`${API_PREFIX}/admin/achievements`, adminAchievementsRoutes);
+console.log('✅ Admin achievements routes registered at /api/admin/achievements');
+app.use(`${API_PREFIX}/admin/gamification-stats`, adminGamificationStatsRoutes);
+console.log('✅ Admin gamification stats routes registered at /api/admin/gamification-stats');
 
 // Campaign Routes - Homepage exciting deals
 app.use(`${API_PREFIX}/campaigns`, campaignRoutes);
@@ -1038,6 +1067,18 @@ console.log('✅ Merchant deal redemption routes registered at /api/merchant/dea
 // Merchant Voucher Redemption Routes - Verify and redeem offer voucher codes
 app.use('/api/merchant/voucher-redemptions', merchantVoucherRedemptionRoutes);
 console.log('✅ Merchant voucher redemption routes registered at /api/merchant/voucher-redemptions');
+
+// Merchant CoinDrop Routes (Phase 4.1) - CoinDrop configuration and management
+app.use('/api/merchant', merchantCoinDropRoutes);
+console.log('✅ Merchant CoinDrop routes registered at /api/merchant/stores/:storeId/coin-drops');
+
+// Merchant Branded Coin Campaign Routes (Phase 4.2) - Branded coin analytics and awards
+app.use('/api/merchant', merchantBrandedCoinRoutes);
+console.log('✅ Merchant branded coin routes registered at /api/merchant/stores/:storeId/branded-campaigns');
+
+// Merchant Earning Analytics Routes (Phase 4.3) - Earning analytics dashboard
+app.use('/api/merchant', merchantEarningAnalyticsRoutes);
+console.log('✅ Merchant earning analytics routes registered');
 
 // Root endpoint (MUST be before 404 handler)
 app.get('/', (req, res) => {
@@ -1215,6 +1256,16 @@ async function startServer() {
     console.log('🔄 Initializing reservation cleanup job...');
     startReservationCleanup();
     console.log('✅ Reservation cleanup job started (runs every 5 min)');
+
+    // Initialize leaderboard refresh job (gamification Phase 5.2)
+    console.log('🔄 Initializing leaderboard refresh job...');
+    initializeLeaderboardRefreshJob();
+    console.log('✅ Leaderboard refresh job started (runs every 5 min)');
+
+    // Initialize bill verification job (gamification Phase 5.2)
+    console.log('🔄 Initializing bill verification job...');
+    initializeBillVerificationJob();
+    console.log('✅ Bill verification job started (runs every 10 min)');
 
     // Initialize Bull-based scheduled job service (preferred over node-cron above)
     // The node-cron jobs above serve as fallback if Redis/Bull is unavailable

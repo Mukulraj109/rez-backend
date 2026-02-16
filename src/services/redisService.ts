@@ -219,13 +219,29 @@ class RedisService {
 
     try {
       const prefixedPattern = this.getPrefixedKey(pattern);
-      const keys = await this.client!.keys(prefixedPattern);
+
+      // Use SCAN instead of KEYS to avoid blocking Redis under high load
+      const keys: string[] = [];
+      let cursor = 0;
+      do {
+        const result = await this.client!.scan(cursor, {
+          MATCH: prefixedPattern,
+          COUNT: 100,
+        });
+        cursor = result.cursor;
+        keys.push(...result.keys);
+      } while (cursor !== 0);
 
       if (keys.length === 0) {
         return 0;
       }
 
-      await this.client!.del(keys);
+      // Delete in batches of 100 to avoid blocking
+      for (let i = 0; i < keys.length; i += 100) {
+        const batch = keys.slice(i, i + 100);
+        await this.client!.del(batch);
+      }
+
       console.log(`🗑️ Cache DEL pattern: ${pattern} (${keys.length} keys)`);
       return keys.length;
     } catch (error) {

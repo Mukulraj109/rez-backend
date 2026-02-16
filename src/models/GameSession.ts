@@ -91,6 +91,8 @@ const GameSessionSchema: Schema = new Schema(
 // Indexes
 GameSessionSchema.index({ user: 1, gameType: 1, status: 1 });
 GameSessionSchema.index({ user: 1, createdAt: -1 });
+GameSessionSchema.index({ user: 1, gameType: 1, createdAt: -1 });
+GameSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL cleanup
 
 // Method to complete game session
 GameSessionSchema.methods.complete = async function(result: any) {

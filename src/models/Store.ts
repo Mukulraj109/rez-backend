@@ -246,6 +246,34 @@ export interface IStore extends Document {
   // Reward Rules (Merchant Sets)
   rewardRules?: IStoreRewardRules;
 
+  // Service Capabilities - unified service type configuration
+  serviceCapabilities?: {
+    homeDelivery: {
+      enabled: boolean;
+      deliveryRadius?: number;     // km
+      minOrder?: number;
+      deliveryFee?: number;
+      freeDeliveryAbove?: number;
+      estimatedTime?: string;      // "30-45 min"
+    };
+    driveThru: {
+      enabled: boolean;
+      estimatedTime?: string;      // "5-10 min"
+      menuType?: 'full' | 'limited';
+    };
+    tableBooking: {
+      enabled: boolean;
+      // Detailed config lives in bookingConfig
+    };
+    dineIn: {
+      enabled: boolean;
+    };
+    storePickup: {
+      enabled: boolean;
+      estimatedTime?: string;      // "15-20 min"
+    };
+  };
+
   // Category page metadata
   is60MinDelivery?: boolean;
   hasStorePickup?: boolean;
@@ -830,6 +858,33 @@ const StoreSchema = new Schema<IStore>({
     }]
   },
 
+  // Service Capabilities - unified service type configuration
+  serviceCapabilities: {
+    homeDelivery: {
+      enabled: { type: Boolean, default: false },
+      deliveryRadius: { type: Number, min: 0 },
+      minOrder: { type: Number, min: 0 },
+      deliveryFee: { type: Number, min: 0 },
+      freeDeliveryAbove: { type: Number, min: 0 },
+      estimatedTime: { type: String, trim: true },
+    },
+    driveThru: {
+      enabled: { type: Boolean, default: false },
+      estimatedTime: { type: String, trim: true },
+      menuType: { type: String, enum: ['full', 'limited'], default: 'full' },
+    },
+    tableBooking: {
+      enabled: { type: Boolean, default: false },
+    },
+    dineIn: {
+      enabled: { type: Boolean, default: false },
+    },
+    storePickup: {
+      enabled: { type: Boolean, default: false },
+      estimatedTime: { type: String, trim: true },
+    },
+  },
+
   // Category page metadata
   is60MinDelivery: {
     type: Boolean,
@@ -900,6 +955,13 @@ StoreSchema.index({ hasMenu: 1, isActive: 1 }); // Menu index
 StoreSchema.index({ bookingType: 1, isActive: 1 }); // Booking type index
 StoreSchema.index({ 'paymentSettings.upiId': 1 }); // UPI ID lookup index
 
+// Service capability indexes
+StoreSchema.index({ 'serviceCapabilities.homeDelivery.enabled': 1, category: 1, isActive: 1, 'ratings.average': -1 });
+StoreSchema.index({ 'serviceCapabilities.driveThru.enabled': 1, category: 1, isActive: 1 });
+StoreSchema.index({ 'serviceCapabilities.tableBooking.enabled': 1, category: 1, isActive: 1 });
+StoreSchema.index({ 'serviceCapabilities.dineIn.enabled': 1, category: 1, isActive: 1 });
+StoreSchema.index({ 'serviceCapabilities.storePickup.enabled': 1, category: 1, isActive: 1 });
+
 // Delivery category indexes
 StoreSchema.index({ 'deliveryCategories.fastDelivery': 1, isActive: 1 });
 StoreSchema.index({ 'deliveryCategories.budgetFriendly': 1, isActive: 1 });
@@ -919,13 +981,13 @@ StoreSchema.index({ isActive: 1, 'analytics.totalOrders': -1, 'ratings.average':
 StoreSchema.index({ isActive: 1, isFeatured: 1, 'ratings.average': -1 }); // featured stores sorted by rating
 
 // Mall tab compound indexes (optimizes mallService.ts queries)
-StoreSchema.index({ 'deliveryCategories.mall': 1, isFeatured: 1, isActive: 1, 'ratings.average': -1 }); // featured mall stores
-StoreSchema.index({ 'deliveryCategories.mall': 1, isActive: 1, createdAt: -1 }); // new mall stores
-StoreSchema.index({ 'deliveryCategories.mall': 1, isActive: 1, 'ratings.count': 1, 'ratings.average': -1 }); // top rated mall stores
-StoreSchema.index({ 'deliveryCategories.mall': 1, 'deliveryCategories.premium': 1, isActive: 1 }); // premium mall stores
-StoreSchema.index({ 'deliveryCategories.mall': 1, isActive: 1, 'analytics.views': -1 }); // trending mall stores
+StoreSchema.index({ 'deliveryCategories.mall': 1, isActive: 1, adminApproved: 1, isFeatured: 1, 'ratings.average': -1 }); // featured mall stores
+StoreSchema.index({ 'deliveryCategories.mall': 1, isActive: 1, adminApproved: 1, createdAt: -1 }); // new mall stores
+StoreSchema.index({ 'deliveryCategories.mall': 1, isActive: 1, adminApproved: 1, 'ratings.count': 1, 'ratings.average': -1 }); // top rated mall stores
+StoreSchema.index({ 'deliveryCategories.mall': 1, 'deliveryCategories.premium': 1, isActive: 1, adminApproved: 1 }); // premium mall stores
+StoreSchema.index({ 'deliveryCategories.mall': 1, isActive: 1, adminApproved: 1, 'analytics.totalOrders': -1 }); // trending mall stores
 StoreSchema.index({ 'deliveryCategories.mall': 1, isActive: 1, 'offers.cashback': -1 }); // reward booster stores
-StoreSchema.index({ 'deliveryCategories.mall': 1, category: 1, isActive: 1 }); // mall stores by category
+StoreSchema.index({ 'deliveryCategories.mall': 1, category: 1, isActive: 1, adminApproved: 1, 'ratings.average': -1 }); // mall stores by category
 StoreSchema.index({ 'deliveryCategories.alliance': 1, isActive: 1, 'ratings.average': -1 }); // alliance stores
 
 // Text index for search (replaces slow $regex searches)
@@ -965,6 +1027,50 @@ StoreSchema.pre('save', function (next) {
       .trim();
   }
   next();
+});
+
+// Post-save hook to update parent Category's materialized store count
+// Uses pre-save tracking to only update when category or isActive actually changed
+StoreSchema.pre('save', function (this: any, next) {
+  // Track whether category or isActive was modified for post-save hook
+  this._categoryChanged = this.isNew || this.isModified('category') || this.isModified('isActive');
+  this._prevCategory = this.isModified('category') ? this._original?.category : null;
+  next();
+});
+
+StoreSchema.post('save', async function (doc: any) {
+  try {
+    if (!doc._categoryChanged) return;
+    if (doc.category) {
+      const StoreModel = mongoose.model('Store');
+      const CategoryModel = mongoose.model('Category');
+      const count = await StoreModel.countDocuments({ category: doc.category, isActive: true });
+      await CategoryModel.findByIdAndUpdate(doc.category, { storeCount: count });
+    }
+    // If category changed, also update old category's count
+    if (doc._prevCategory && doc._prevCategory.toString() !== doc.category?.toString()) {
+      const StoreModel = mongoose.model('Store');
+      const CategoryModel = mongoose.model('Category');
+      const oldCount = await StoreModel.countDocuments({ category: doc._prevCategory, isActive: true });
+      await CategoryModel.findByIdAndUpdate(doc._prevCategory, { storeCount: oldCount });
+    }
+  } catch (err) {
+    console.error('Error updating store count after save:', err);
+  }
+});
+
+// Post-findOneAndDelete hook to update parent Category's materialized store count
+StoreSchema.post('findOneAndDelete', async function (doc: any) {
+  try {
+    if (doc && doc.category) {
+      const StoreModel = mongoose.model('Store');
+      const Category = mongoose.model('Category');
+      const count = await StoreModel.countDocuments({ category: doc.category, isActive: true });
+      await Category.findByIdAndUpdate(doc.category, { storeCount: count });
+    }
+  } catch (err) {
+    console.error('Error updating store count after delete:', err);
+  }
 });
 
 // Method to check if store is currently open

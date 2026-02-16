@@ -147,6 +147,8 @@ const ChallengeSchema: Schema = new Schema(
 // Indexes for efficient querying
 ChallengeSchema.index({ type: 1, active: 1, startDate: 1, endDate: 1 });
 ChallengeSchema.index({ active: 1, featured: 1, endDate: -1 });
+// For bonus-opportunities query filtering by isActive + endDate range
+ChallengeSchema.index({ isActive: 1, endDate: 1 });
 
 // Virtual for completion rate
 ChallengeSchema.virtual('completionRate').get(function(this: IChallenge) {

@@ -133,26 +133,35 @@ export async function awardCoins(
 
     if (wallet) {
       if (category) {
-        // Category-specific: add to categoryBalances
-        wallet.addCategoryCoins(category, amount);
+        // Category-specific: atomic $inc on categoryBalances
+        await Wallet.findByIdAndUpdate(wallet._id, {
+          $inc: {
+            [`categoryBalances.${category}.available`]: amount,
+            [`categoryBalances.${category}.earned`]: amount,
+            'statistics.totalEarned': amount,
+            'balance.total': amount
+          },
+          $set: { lastTransactionAt: new Date() }
+        });
       } else {
-        // Legacy/global: add to ReZ coins
-        const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-        if (rezCoin) {
-          rezCoin.amount += amount;
-          rezCoin.lastUsed = new Date();
-          wallet.markModified('coins');
-        }
-        wallet.balance.available += amount;
+        // Global ReZ coins: atomic $inc on balance + coins array
+        await Wallet.findOneAndUpdate(
+          { _id: wallet._id, 'coins.type': 'rez' },
+          {
+            $inc: {
+              'balance.available': amount,
+              'balance.total': amount,
+              'statistics.totalEarned': amount,
+              'coins.$.amount': amount
+            },
+            $set: {
+              'coins.$.lastUsed': new Date(),
+              lastTransactionAt: new Date()
+            }
+          }
+        );
       }
-
-      // Update statistics (always global)
-      wallet.statistics.totalEarned += amount;
-
-      wallet.lastTransactionAt = new Date();
-      await wallet.save();
-
-      console.log(`✅ [COIN SERVICE] Wallet updated: +${amount} coins${category ? ` (${category})` : ''}, new balance: ${wallet.balance.total}`);
+      console.log(`✅ [COIN SERVICE] Wallet updated atomically: +${amount} coins${category ? ` (${category})` : ''}`);
     }
   } catch (walletError) {
     console.error('❌ [COIN SERVICE] Failed to update wallet:', walletError);
@@ -238,26 +247,48 @@ export async function deductCoins(
 
     if (wallet) {
       if (category) {
-        // Deduct from category balance
-        wallet.deductCategoryCoins(category, amount);
+        // Category-specific: atomic $inc (negative) with balance guard
+        await Wallet.findOneAndUpdate(
+          {
+            _id: wallet._id,
+            [`categoryBalances.${category}.available`]: { $gte: amount }
+          },
+          {
+            $inc: {
+              [`categoryBalances.${category}.available`]: -amount,
+              [`categoryBalances.${category}.spent`]: amount,
+              'statistics.totalSpent': amount,
+              'balance.total': -amount
+            },
+            $set: { lastTransactionAt: new Date() }
+          }
+        );
       } else {
-        // Deduct from global ReZ coins
-        const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-        if (rezCoin) {
-          rezCoin.amount = Math.max(0, rezCoin.amount - amount);
-          rezCoin.lastUsed = new Date();
-          wallet.markModified('coins');
+        // Global ReZ coins: atomic deduction with balance guard
+        const updated = await Wallet.findOneAndUpdate(
+          {
+            _id: wallet._id,
+            'balance.available': { $gte: amount },
+            'coins.type': 'rez'
+          },
+          {
+            $inc: {
+              'balance.available': -amount,
+              'balance.total': -amount,
+              'statistics.totalSpent': amount,
+              'coins.$.amount': -amount
+            },
+            $set: {
+              'coins.$.lastUsed': new Date(),
+              lastTransactionAt: new Date()
+            }
+          }
+        );
+        if (!updated) {
+          console.error(`❌ [COIN SERVICE] Atomic deduction failed - insufficient balance or concurrent update`);
         }
-        wallet.balance.available = Math.max(0, wallet.balance.available - amount);
       }
-
-      // Update statistics (always global)
-      wallet.statistics.totalSpent += amount;
-
-      wallet.lastTransactionAt = new Date();
-      await wallet.save();
-
-      console.log(`✅ [COIN SERVICE] Wallet updated: -${amount} coins${category ? ` (${category})` : ''}, new balance: ${wallet.balance.total}`);
+      console.log(`✅ [COIN SERVICE] Wallet updated atomically: -${amount} coins${category ? ` (${category})` : ''}`);
     }
   } catch (walletError) {
     console.error('❌ [COIN SERVICE] Failed to update wallet:', walletError);
@@ -293,6 +324,12 @@ export async function deductCoins(
 
 /**
  * Transfer coins between users (e.g., for gifting)
+ *
+ * TODO (Phase 0.6): This function has a race condition — it reads the sender's balance,
+ * checks sufficiency, then creates two separate transactions without atomicity.
+ * A concurrent deduction could cause the sender's balance to go negative.
+ * This needs to be wrapped in a MongoDB multi-document transaction (session) to ensure
+ * the balance check + deduct + credit are all-or-nothing.
  */
 export async function transferCoins(
   fromUserId: string,

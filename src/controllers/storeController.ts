@@ -31,7 +31,8 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
     sortBy: sortByParam,
     page = 1,
     limit = 20,
-    region // Region filter parameter
+    region, // Region filter parameter
+    serviceType // Service capability filter
   } = req.query;
   const sortBy = sort || sortByParam || 'rating';
 
@@ -82,6 +83,15 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
         ? isFeatured.toLowerCase() === 'true'
         : Boolean(isFeatured);
       query.isFeatured = isFeaturedValue;
+    }
+
+    // Filter by service capability type
+    if (serviceType) {
+      const validServiceTypes = ['homeDelivery', 'driveThru', 'tableBooking', 'dineIn', 'storePickup'];
+      const serviceTypeStr = serviceType as string;
+      if (validServiceTypes.includes(serviceTypeStr)) {
+        query[`serviceCapabilities.${serviceTypeStr}.enabled`] = true;
+      }
     }
 
     if (search) {
@@ -2778,5 +2788,85 @@ export const getCuisineCounts = asyncHandler(async (req: Request, res: Response)
   } catch (error) {
     console.error('❌ [GET CUISINE COUNTS] Error:', error);
     throw new AppError('Failed to get cuisine counts', 500);
+  }
+});
+
+// Get stores filtered by service capability type
+// GET /stores/by-service-type/:serviceType?category=food-dining&page=1&limit=20
+export const getStoresByServiceType = asyncHandler(async (req: Request, res: Response) => {
+  const { serviceType } = req.params;
+  const { category, page = 1, limit = 20, sort = 'rating' } = req.query;
+
+  const validServiceTypes = ['homeDelivery', 'driveThru', 'tableBooking', 'dineIn', 'storePickup'];
+  if (!validServiceTypes.includes(serviceType)) {
+    return sendBadRequest(res, `Invalid service type. Must be one of: ${validServiceTypes.join(', ')}`);
+  }
+
+  try {
+    const query: any = {
+      isActive: true,
+      [`serviceCapabilities.${serviceType}.enabled`]: true,
+    };
+
+    // Apply region filter
+    const regionHeader = req.headers['x-rez-region'] as string;
+    if (regionHeader && isValidRegion(regionHeader)) {
+      Object.assign(query, regionService.getStoreFilter(regionHeader as RegionId));
+    }
+
+    // Apply category filter (supports slug)
+    if (category) {
+      const categoryStr = category as string;
+      if (mongoose.Types.ObjectId.isValid(categoryStr)) {
+        query.category = categoryStr;
+      } else {
+        const categoryDoc = await Category.findOne({ slug: categoryStr }).select('_id');
+        if (categoryDoc) {
+          const subCategories = await Category.find({ parentCategory: categoryDoc._id }).select('_id');
+          query.category = { $in: [categoryDoc._id, ...subCategories.map(sc => sc._id)] };
+        }
+      }
+    }
+
+    // Sorting
+    const sortOptions: any = {};
+    switch (sort) {
+      case 'rating': sortOptions['ratings.average'] = -1; break;
+      case 'newest': sortOptions.createdAt = -1; break;
+      case 'popularity': sortOptions['analytics.totalOrders'] = -1; break;
+      case 'name': sortOptions.name = 1; break;
+      default: sortOptions['ratings.average'] = -1;
+    }
+
+    const pageNum = Math.max(1, Number(page));
+    const limitNum = Math.min(50, Math.max(1, Number(limit)));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [stores, total] = await Promise.all([
+      Store.find(query)
+        .select('name slug logo banner ratings tags offers operationalInfo location serviceCapabilities deliveryCategories rewardRules isFeatured priceForTwo bookingType bookingConfig')
+        .populate('category', 'name slug')
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Store.countDocuments(query),
+    ]);
+
+    sendSuccess(res, {
+      stores,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum),
+        hasMore: skip + stores.length < total,
+      },
+      serviceType,
+    }, `Found ${total} stores with ${serviceType} capability`);
+
+  } catch (error) {
+    console.error(`❌ [GET STORES BY SERVICE TYPE] Error for ${serviceType}:`, error);
+    throw new AppError('Failed to get stores by service type', 500);
   }
 });

@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { Category } from '../models/Category';
 import { Order } from '../models/Order';
 import { Store } from '../models/Store';
@@ -9,6 +10,17 @@ import {
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+
+/**
+ * Simple hex color lightener. Takes a hex color and returns a lighter version.
+ */
+function lightenHex(hex: string, percent: number = 30): string {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.min(255, ((num >> 16) & 0xFF) + Math.round(255 * percent / 100));
+  const g = Math.min(255, ((num >> 8) & 0xFF) + Math.round(255 * percent / 100));
+  const b = Math.min(255, (num & 0xFF) + Math.round(255 * percent / 100));
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
 
 // Get all categories with optional filtering
 export const getCategories = asyncHandler(async (req: Request, res: Response) => {
@@ -33,7 +45,7 @@ export const getCategories = asyncHandler(async (req: Request, res: Response) =>
       Category.find(query)
         .select('name slug image icon sortOrder type parentCategory childCategories metadata isActive')
         .populate('parentCategory', 'name slug')
-        .populate('childCategories', 'name slug image')
+        .populate('childCategories', 'name slug icon image sortOrder metadata isActive')
         .sort({ sortOrder: 1, name: 1 })
         .skip(skip)
         .limit(limitNum)
@@ -69,7 +81,7 @@ export const getCategoryTree = asyncHandler(async (req: Request, res: Response) 
 
     const rootCategories = await Category.find(query)
       .select('name slug image icon sortOrder type childCategories isActive')
-      .populate('childCategories', 'name slug image sortOrder')
+      .populate('childCategories', 'name slug icon image sortOrder metadata isActive')
       .sort({ sortOrder: 1, name: 1 })
       .lean();
 
@@ -90,7 +102,7 @@ export const getCategoryBySlug = asyncHandler(async (req: Request, res: Response
       isActive: true
     })
       .populate('parentCategory', 'name slug')
-      .populate('childCategories', 'name slug image sortOrder')
+      .populate('childCategories', 'name slug icon image sortOrder metadata isActive')
       .lean();
 
     if (!category) {
@@ -569,9 +581,10 @@ export const getCategoryLoyaltyStats = asyncHandler(async (req: Request, res: Re
       return sendSuccess(res, { ordersCount: 0, brandsCount: 0 }, 'Category loyalty stats retrieved successfully');
     }
 
-    // Aggregate user's orders for this category
+    // Aggregate user's orders for this category (convert string userId to ObjectId for aggregation)
+    const userObjectId = new mongoose.Types.ObjectId(userId);
     const stats = await Order.aggregate([
-      { $match: { user: userId } },
+      { $match: { user: userObjectId } },
       {
         $lookup: {
           from: 'products',
@@ -699,5 +712,114 @@ export const getRecentOrders = asyncHandler(async (req: Request, res: Response) 
   } catch (error) {
     console.error('Recent Orders Error:', error);
     throw new AppError('Failed to fetch recent orders', 500);
+  }
+});
+
+// Get full page configuration for a main category
+// GET /categories/:slug/page-config
+export const getCategoryPageConfig = asyncHandler(async (req: Request, res: Response) => {
+  const { slug } = req.params;
+
+  try {
+    const category = await Category.findOne({ slug, isActive: true })
+      .select('name slug icon image bannerImage type pageConfig metadata vibes occasions trendingHashtags aiSuggestions aiPlaceholders promotions maxCashback childCategories sortOrder')
+      .populate('childCategories', 'name slug icon image sortOrder metadata isActive maxCashback productCount storeCount')
+      .lean();
+
+    if (!category) {
+      return sendNotFound(res, 'Category not found');
+    }
+
+    // Compute store stats for this category
+    const subCategoryIds = (category.childCategories || []).map((c: any) => c._id);
+    const allCategoryIds = [category._id, ...subCategoryIds];
+
+    const storeStats = await Store.aggregate([
+      { $match: { category: { $in: allCategoryIds }, isActive: true } },
+      {
+        $group: {
+          _id: null,
+          totalStores: { $sum: 1 },
+          maxCashback: { $max: '$offers.cashback' },
+          avgRating: { $avg: '$ratings.average' },
+        },
+      },
+    ]);
+
+    const stats = storeStats[0] || { totalStores: 0, maxCashback: 0, avgRating: 0 };
+
+    // Build response - use pageConfig if available, otherwise return base category data
+    const pageConfig = category.pageConfig || {} as any;
+
+    // Default values for new pageConfig fields
+    const defaults = {
+      sortOptions: [
+        { id: 'popularity', label: 'Popularity', icon: 'trending-up-outline', enabled: true, sortOrder: 0 },
+        { id: 'rating', label: 'Rating', icon: 'star-outline', enabled: true, sortOrder: 1 },
+        { id: 'delivery_time', label: 'Delivery Time', icon: 'time-outline', enabled: true, sortOrder: 2 },
+        { id: 'newest', label: 'Newest', icon: 'sparkles-outline', enabled: true, sortOrder: 3 },
+      ],
+      filterOptions: { priceMax: 500, ratingThreshold: 4, showPriceFilter: true, showRatingFilter: true, showOpenNow: true },
+      storeDisplayConfig: { storesPerPage: 10, tagExclusions: ['halal', 'pure-veg', 'veg', 'non-veg', 'jain'], defaultCoinsMultiplier: 4.5, defaultReviewBonus: 20, defaultVisitMilestone: 5 },
+    };
+
+    // Merge defaults with existing pageConfig (configured values take priority)
+    const mergedConfig = {
+      ...pageConfig,
+      sortOptions: pageConfig.sortOptions?.length ? pageConfig.sortOptions : defaults.sortOptions,
+      filterOptions: { ...defaults.filterOptions, ...(pageConfig.filterOptions || {}) },
+      storeDisplayConfig: { ...defaults.storeDisplayConfig, ...(pageConfig.storeDisplayConfig || {}) },
+    };
+
+    // Transform serviceTypes for frontend compatibility (filterField → serviceFilter, add defaults)
+    if (mergedConfig?.serviceTypes) {
+      (mergedConfig as any).serviceTypes = (mergedConfig.serviceTypes as any[]).map((st: any) => ({
+        ...st,
+        serviceFilter: st.filterField,
+        color: st.color || '#3B82F6',
+        gradient: st.gradient?.length >= 2 ? st.gradient : [st.color || '#3B82F6', lightenHex(st.color || '#3B82F6')],
+      }));
+    }
+
+    // HTTP caching
+    res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    const etag = `"${category._id}-${(category as any).updatedAt?.getTime?.() || Date.now()}"`;
+    res.set('ETag', etag);
+    if (req.get('If-None-Match') === etag) {
+      return res.status(304).end();
+    }
+
+    // Sort child categories by sortOrder
+    const childCategories = (category.childCategories || [])
+      .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0));
+
+    sendSuccess(res, {
+      category: {
+        _id: category._id,
+        name: category.name,
+        slug: category.slug,
+        icon: category.icon,
+        image: category.image,
+        bannerImage: category.bannerImage,
+        type: category.type,
+        metadata: category.metadata,
+        maxCashback: category.maxCashback,
+      },
+      pageConfig: mergedConfig,
+      childCategories,
+      // Embedded page data
+      vibes: category.vibes || [],
+      occasions: category.occasions || [],
+      trendingHashtags: category.trendingHashtags || [],
+      aiSuggestions: category.aiSuggestions || [],
+      aiPlaceholders: category.aiPlaceholders || [],
+      promotions: category.promotions || [],
+      // Computed stats
+      stats,
+    }, 'Category page config retrieved successfully');
+
+  } catch (error) {
+    console.error('Category Page Config Error:', error);
+    throw new AppError('Failed to fetch category page config', 500);
   }
 });

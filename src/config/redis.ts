@@ -78,6 +78,13 @@ export const CacheTTL = {
 
   // Very short-lived cache
   SHORT_CACHE: 60, // 1 minute
+
+  // Gamification caching
+  LEADERBOARD: 5 * 60, // 5 minutes
+  GAME_CONFIG: 10 * 60, // 10 minutes
+  FEATURE_FLAGS: 5 * 60, // 5 minutes
+  AVAILABLE_GAMES: 10 * 60, // 10 minutes
+  CHALLENGES_ACTIVE: 5 * 60, // 5 minutes
 } as const;
 
 export default {

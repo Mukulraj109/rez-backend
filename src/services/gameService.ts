@@ -507,6 +507,30 @@ class GameService {
     const prizes = MEMORY_MATCH_PRIZES[difficulty as keyof typeof MEMORY_MATCH_PRIZES];
     const pairs = metadata?.pairs || 6;
 
+    // Input validation
+    if (score < 0) {
+      throw new Error('Invalid score: cannot be negative');
+    }
+    if (timeSpent < 0) {
+      throw new Error('Invalid time spent: cannot be negative');
+    }
+    if (moves < 0) {
+      throw new Error('Invalid moves: cannot be negative');
+    }
+    // Minimum time check — realistic minimum is ~10 seconds
+    if (timeSpent > 0 && timeSpent < 10000) {
+      console.warn(`⚠️ [MEMORY_MATCH] Suspicious fast completion: ${timeSpent}ms, ${moves} moves for session ${sessionId}`);
+    }
+    // Maximum score sanity check
+    const maxPossibleCoins = (metadata?.pairs || 6) * 100; // generous upper bound
+    if (score > maxPossibleCoins) {
+      throw new Error('Invalid score: exceeds maximum possible');
+    }
+    // Moves must be at least equal to number of pairs (minimum to complete)
+    if (moves < (metadata?.pairs || 6)) {
+      throw new Error('Invalid moves: fewer than minimum required');
+    }
+
     // Calculate coins
     let coins = prizes.baseCoins;
 
@@ -616,6 +640,22 @@ class GameService {
       throw new Error('Game already completed');
     }
 
+    // Input validation
+    if (coinsCollected < 0) {
+      throw new Error('Invalid coins collected: cannot be negative');
+    }
+    if (score < 0) {
+      throw new Error('Invalid score: cannot be negative');
+    }
+    // Sanity check: score can't exceed theoretical maximum
+    const maxValue = session.metadata?.maxValue || 200;
+    if (score > maxValue) {
+      throw new Error(`Invalid score: exceeds maximum possible (${maxValue})`);
+    }
+    if (coinsCollected > (session.metadata?.totalCoins || 20)) {
+      throw new Error('Invalid coins collected: exceeds total available');
+    }
+
     const userId = session.user.toString();
 
     const result = {
@@ -719,6 +759,14 @@ class GameService {
 
     if (session.status === 'completed') {
       throw new Error('Game already completed');
+    }
+
+    // Input validation
+    if (guessedPrice <= 0) {
+      throw new Error('Invalid guess: price must be positive');
+    }
+    if (guessedPrice > 1000000) {
+      throw new Error('Invalid guess: price unreasonably high');
     }
 
     const userId = session.user.toString();

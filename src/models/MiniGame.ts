@@ -116,6 +116,8 @@ const MiniGameSchema: Schema = new Schema(
 MiniGameSchema.index({ user: 1, gameType: 1, status: 1 });
 MiniGameSchema.index({ user: 1, createdAt: -1 });
 MiniGameSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// Daily limit check: count completed spins/games per user per day
+MiniGameSchema.index({ user: 1, gameType: 1, status: 1, completedAt: -1 });
 
 // Method to complete mini-game
 MiniGameSchema.methods.complete = async function(reward: any) {

@@ -21,6 +21,7 @@ import type { ISocialMediaPost } from '../models/SocialMediaPost';
 import Challenge from '../models/Challenge';
 import Campaign from '../models/Campaign';
 import CoinDrop from '../models/CoinDrop';
+import { withTransaction } from '../utils/withTransaction';
 
 // ========================================
 // CHALLENGES
@@ -54,6 +55,68 @@ export const claimChallengeReward = asyncHandler(async (req: Request, res: Respo
   const result = await challengeService.claimRewards((req.user._id as Types.ObjectId).toString(), id);
 
   sendSuccess(res, result, 'Challenge reward claimed successfully');
+});
+
+/**
+ * Join a challenge
+ * POST /api/gamification/challenges/:id/join
+ */
+export const joinChallenge = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const { id } = req.params;
+  const userId = (req.user._id as Types.ObjectId).toString();
+
+  // Validate challenge exists and is active
+  const challenge = await Challenge.findById(id);
+  if (!challenge) {
+    return sendNotFound(res, 'Challenge not found');
+  }
+
+  if (!challenge.isActive()) {
+    return sendBadRequest(res, 'Challenge is no longer active');
+  }
+
+  if (!challenge.canJoin()) {
+    return sendBadRequest(res, 'Challenge has reached maximum participants');
+  }
+
+  // Check if user already joined
+  const UserChallengeProgress = (await import('../models/UserChallengeProgress')).default;
+  const existing = await UserChallengeProgress.findOne({ user: userId, challenge: id });
+  if (existing) {
+    return sendSuccess(res, {
+      progress: existing,
+      alreadyJoined: true
+    }, 'Already joined this challenge');
+  }
+
+  // Create progress document
+  const progress = await UserChallengeProgress.create({
+    user: userId,
+    challenge: id,
+    progress: 0,
+    target: challenge.requirements.target,
+    startedAt: new Date()
+  });
+
+  // Increment participant count
+  await Challenge.findByIdAndUpdate(id, { $inc: { participantCount: 1 } });
+
+  sendSuccess(res, {
+    progress,
+    alreadyJoined: false,
+    challenge: {
+      id: challenge._id,
+      title: challenge.title,
+      description: challenge.description,
+      target: challenge.requirements.target,
+      rewards: challenge.rewards,
+      endDate: challenge.endDate
+    }
+  }, 'Successfully joined challenge', 201);
 });
 
 export const getChallengeLeaderboard = asyncHandler(async (req: Request, res: Response) => {
@@ -288,6 +351,24 @@ export const getUserRank = asyncHandler(async (req: Request, res: Response) => {
   sendSuccess(res, ranks, 'User rank retrieved successfully');
 });
 
+/**
+ * Get current user's rank across all leaderboard types
+ * GET /api/gamification/leaderboard/my-rank
+ */
+export const getMyRank = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const userId = (req.user._id as Types.ObjectId).toString();
+  const { period = 'weekly' } = req.query;
+
+  const backendPeriod = mapPeriodToBackend(period as string);
+  const ranks = await leaderboardService.getAllUserRanks(userId, backendPeriod);
+
+  sendSuccess(res, ranks, 'User rank retrieved successfully');
+});
+
 // ========================================
 // COINS (CURRENCY SYSTEM)
 // ========================================
@@ -439,6 +520,23 @@ export const spinWheel = asyncHandler(async (req: Request, res: Response) => {
 
   const spinResult = await spinWheelService.spin(session.sessionId);
   console.log('🎉 [SPIN_WHEEL] Spin result:', spinResult);
+
+  // SECURITY: Post-spin race condition check
+  // After the spin is completed, verify we haven't exceeded the limit
+  // (catches the case where concurrent requests both passed the initial count check)
+  const finalSpinCount = await MiniGame.countDocuments({
+    user: userId,
+    gameType: 'spin_wheel',
+    status: 'completed',
+    completedAt: { $gte: today }
+  });
+
+  if (finalSpinCount > MAX_DAILY_SPINS) {
+    // Race condition detected — mark this spin as expired to roll back
+    console.warn(`⚠️ [SPIN_WHEEL] Race condition detected for user ${userId}: ${finalSpinCount} spins today, rolling back`);
+    await MiniGame.findByIdAndUpdate(session.sessionId, { status: 'expired' });
+    return sendBadRequest(res, `Daily spin limit reached (${MAX_DAILY_SPINS} spins per day). This spin has been voided.`);
+  }
 
   // ✅ FIX: Get user's coin balance from WALLET (single source of truth)
   // This ensures consistency between homepage and spin wheel page
@@ -961,32 +1059,44 @@ export const claimSurpriseDrop = asyncHandler(async (req: Request, res: Response
     return sendBadRequest(res, 'Drop ID is required');
   }
 
-  // Claim the drop
-  const claimedDrop = await (SurpriseCoinDrop as any).claimDrop(dropId, userId);
+  const result = await withTransaction(async (session) => {
+    // Claim the drop (within transaction if available)
+    const claimedDrop = await (SurpriseCoinDrop as any).claimDrop(dropId, userId);
 
-  if (!claimedDrop) {
+    if (!claimedDrop) {
+      return null;
+    }
+
+    // Award coins to user
+    const coinResult = await coinService.awardCoins(
+      userId,
+      claimedDrop.coins,
+      'surprise_drop',
+      claimedDrop.message,
+      { dropId: claimedDrop._id, reason: claimedDrop.reason }
+    );
+
+    return { claimedDrop, coinResult };
+  });
+
+  if (!result) {
     return sendNotFound(res, 'Drop not found, already claimed, or expired');
   }
 
-  // Award coins to user
-  const result = await coinService.awardCoins(
-    userId,
-    claimedDrop.coins,
-    'surprise_drop',
-    claimedDrop.message,
-    { dropId: claimedDrop._id, reason: claimedDrop.reason }
-  );
-
   sendSuccess(res, {
-    coins: claimedDrop.coins,
-    newBalance: result.balance,
-    message: `You claimed ${claimedDrop.coins} surprise coins!`
+    coins: result.claimedDrop.coins,
+    newBalance: result.coinResult.newBalance,
+    message: `You claimed ${result.claimedDrop.coins} surprise coins!`
   }, 'Surprise drop claimed successfully');
 });
 
 /**
  * Check in for daily streak
  * POST /api/gamification/streak/checkin
+ *
+ * SECURITY: Uses atomic findOneAndUpdate to prevent race condition where
+ * two concurrent requests both see yesterday's date and both award coins.
+ * Only one request per day can succeed — the atomic guard ensures this.
  */
 export const streakCheckin = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
@@ -994,20 +1104,48 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
   }
 
   const userId = (req.user._id as Types.ObjectId).toString();
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
 
-  // Get or create app_open streak
-  let streak = await UserStreak.findOne({ user: userId, type: 'app_open' });
-
-  if (!streak) {
-    // Create new streak
-    streak = new UserStreak({
+  // Step 1: Atomically claim today's check-in slot.
+  // Only succeeds if lastActivityDate is before today (prevents double check-in).
+  // Returns the OLD document so we can compute the correct streak values.
+  const previousStreak = await UserStreak.findOneAndUpdate(
+    {
       user: userId,
       type: 'app_open',
-      currentStreak: 0,
-      longestStreak: 0,
-      lastActivityDate: new Date(0), // Set to past to trigger increment
+      lastActivityDate: { $lt: todayStart }
+    },
+    {
+      $set: { lastActivityDate: new Date() }
+    },
+    { new: false } // Return OLD document
+  );
+
+  if (!previousStreak) {
+    // Either already checked in today, or no streak document exists
+    const existingStreak = await UserStreak.findOne({ user: userId, type: 'app_open' });
+
+    if (existingStreak) {
+      // Already checked in today — return current state
+      return sendSuccess(res, {
+        streakUpdated: false,
+        currentStreak: existingStreak.currentStreak,
+        coinsEarned: 0,
+        milestoneReached: null,
+        message: 'Already checked in today'
+      }, 'Already checked in today');
+    }
+
+    // No streak exists — create one atomically (first-ever check-in)
+    const newStreak = await UserStreak.create({
+      user: userId,
+      type: 'app_open',
+      currentStreak: 1,
+      longestStreak: 1,
+      lastActivityDate: new Date(),
       streakStartDate: new Date(),
-      totalDays: 0,
+      totalDays: 1,
       milestones: [
         { day: 3, coinsReward: 50, rewardsClaimed: false },
         { day: 7, coinsReward: 200, rewardsClaimed: false },
@@ -1017,36 +1155,91 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
         { day: 100, coinsReward: 10000, badgeReward: 'loyalty_legend', rewardsClaimed: false }
       ]
     });
-  }
 
-  // Check if already checked in today
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const lastActivity = new Date(streak.lastActivityDate);
-  lastActivity.setHours(0, 0, 0, 0);
+    // Award base check-in coins
+    const result = await coinService.awardCoins(
+      userId, 10, 'daily_login', 'Day 1 streak bonus', { streakDay: 1 }
+    );
 
-  if (lastActivity.getTime() === today.getTime()) {
+    // Create DailyCheckIn record
+    const DailyCheckIn = (await import('../models/DailyCheckIn')).default;
+    try {
+      await DailyCheckIn.findOneAndUpdate(
+        { userId: new Types.ObjectId(userId), date: todayStart },
+        { userId: new Types.ObjectId(userId), date: todayStart, streak: 1, coinsEarned: 10, bonusEarned: 0, totalEarned: 10, coinType: 'rez' },
+        { upsert: true, new: true }
+      );
+    } catch (checkInError) {
+      console.error('[STREAK CHECKIN] Error creating DailyCheckIn record:', checkInError);
+    }
+
     return sendSuccess(res, {
-      streakUpdated: false,
-      currentStreak: streak.currentStreak,
-      coinsEarned: 0,
+      streakUpdated: true,
+      currentStreak: 1,
+      longestStreak: 1,
+      coinsEarned: 10,
+      totalEarned: 10,
       milestoneReached: null,
-      message: 'Already checked in today'
-    }, 'Already checked in today');
+      newBalance: result.newBalance,
+      message: 'Day 1 streak! +10 coins'
+    }, 'Streak check-in successful');
   }
 
-  // Update streak
-  await streak.updateStreak();
+  // Step 2: We have the OLD document. The atomic update already set lastActivityDate
+  // to now, so no other concurrent request can pass step 1. Safe to compute streak.
+  const lastActivity = new Date(previousStreak.lastActivityDate);
+  lastActivity.setUTCHours(0, 0, 0, 0);
+  const daysDiff = Math.floor((todayStart.getTime() - lastActivity.getTime()) / (1000 * 60 * 60 * 24));
 
-  // Check for milestone rewards
+  let newCurrentStreak: number;
+  let newStreakStart = previousStreak.streakStartDate;
+
+  if (daysDiff === 1) {
+    // Consecutive day — extend streak
+    newCurrentStreak = previousStreak.currentStreak + 1;
+  } else if (daysDiff > 1) {
+    // Streak potentially broken
+    if (previousStreak.frozen && previousStreak.freezeExpiresAt && previousStreak.freezeExpiresAt >= todayStart) {
+      // Freeze saved the streak
+      newCurrentStreak = previousStreak.currentStreak + 1;
+    } else {
+      // Streak is broken — restart
+      newCurrentStreak = 1;
+      newStreakStart = new Date();
+    }
+  } else {
+    // daysDiff === 0 shouldn't happen (filtered by $lt todayStart), defensive fallback
+    newCurrentStreak = previousStreak.currentStreak;
+  }
+
+  const newLongestStreak = Math.max(previousStreak.longestStreak, newCurrentStreak);
+
+  // Step 3: Update streak with computed values
+  const updatedStreak = await UserStreak.findByIdAndUpdate(
+    previousStreak._id,
+    {
+      $set: {
+        currentStreak: newCurrentStreak,
+        longestStreak: newLongestStreak,
+        totalDays: previousStreak.totalDays + 1,
+        streakStartDate: newStreakStart,
+        frozen: false,
+        freezeExpiresAt: undefined
+      }
+    },
+    { new: true }
+  );
+
+  if (!updatedStreak) {
+    throw new AppError('Failed to update streak', 500);
+  }
+
+  // Step 4: Check for milestone rewards
   let milestoneReached = null;
   let coinsEarned = 10; // Base daily check-in coins
 
-  for (const milestone of streak.milestones) {
-    if (
-      streak.currentStreak >= milestone.day &&
-      !milestone.rewardsClaimed
-    ) {
+  for (const milestone of updatedStreak.milestones) {
+    if (newCurrentStreak >= milestone.day && !milestone.rewardsClaimed) {
       milestoneReached = {
         day: milestone.day,
         coins: milestone.coinsReward,
@@ -1060,32 +1253,32 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
     }
   }
 
-  await streak.save();
+  // Save milestone claims if any were reached
+  if (milestoneReached) {
+    await updatedStreak.save();
+  }
 
-  // Award coins
+  // Step 5: Award coins
   const result = await coinService.awardCoins(
     userId,
     coinsEarned,
     'daily_login',
     milestoneReached
-      ? `Day ${streak.currentStreak} streak + Day ${milestoneReached.day} milestone!`
-      : `Day ${streak.currentStreak} streak bonus`,
-    { streakDay: streak.currentStreak, milestone: milestoneReached }
+      ? `Day ${newCurrentStreak} streak + Day ${milestoneReached.day} milestone!`
+      : `Day ${newCurrentStreak} streak bonus`,
+    { streakDay: newCurrentStreak, milestone: milestoneReached }
   );
 
-  // Create DailyCheckIn record to track earnings
+  // Create DailyCheckIn record
   const DailyCheckIn = (await import('../models/DailyCheckIn')).default;
-  const todayDate = new Date();
-  todayDate.setUTCHours(0, 0, 0, 0);
-
   try {
     await DailyCheckIn.findOneAndUpdate(
-      { userId: new Types.ObjectId(userId), date: todayDate },
+      { userId: new Types.ObjectId(userId), date: todayStart },
       {
         userId: new Types.ObjectId(userId),
-        date: todayDate,
-        streak: streak.currentStreak,
-        coinsEarned: 10, // Base coins
+        date: todayStart,
+        streak: newCurrentStreak,
+        coinsEarned: 10,
         bonusEarned: milestoneReached ? milestoneReached.coins : 0,
         totalEarned: coinsEarned,
         coinType: 'rez'
@@ -1098,16 +1291,137 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
 
   sendSuccess(res, {
     streakUpdated: true,
-    currentStreak: streak.currentStreak,
-    longestStreak: streak.longestStreak,
+    currentStreak: newCurrentStreak,
+    longestStreak: newLongestStreak,
     coinsEarned,
     totalEarned: coinsEarned,
     milestoneReached,
-    newBalance: result.balance,
+    newBalance: result.newBalance,
     message: milestoneReached
       ? `Congratulations! You reached Day ${milestoneReached.day} milestone!`
-      : `Day ${streak.currentStreak} streak! +${coinsEarned} coins`
+      : `Day ${newCurrentStreak} streak! +${coinsEarned} coins`
   }, 'Streak check-in successful');
+});
+
+/**
+ * Claim a streak milestone reward (path-param version)
+ * POST /api/gamification/streak/milestone/:day/claim
+ */
+export const claimStreakMilestone = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const userId = (req.user._id as Types.ObjectId).toString();
+  const day = parseInt(req.params.day);
+  const { type = 'login' } = req.body;
+
+  if (isNaN(day) || day <= 0) {
+    return sendBadRequest(res, 'Invalid milestone day');
+  }
+
+  const validTypes = ['login', 'order', 'review'];
+  if (!validTypes.includes(type)) {
+    return sendBadRequest(res, 'Invalid streak type. Must be: login, order, or review');
+  }
+
+  const result = await streakService.claimMilestone(userId, type, day);
+
+  // Award milestone coins
+  if (result.rewards.coins > 0) {
+    const coinResult = await coinService.awardCoins(
+      userId,
+      result.rewards.coins,
+      'daily_login',
+      `Streak milestone Day ${day} reward: ${result.rewards.name}`,
+      { streakDay: day, streakType: type, milestoneName: result.rewards.name }
+    );
+
+    sendSuccess(res, {
+      milestone: {
+        day,
+        name: result.rewards.name,
+        coins: result.rewards.coins,
+        badge: result.rewards.badge || null
+      },
+      newBalance: coinResult.newBalance,
+      currentStreak: result.streak.currentStreak
+    }, 'Milestone reward claimed successfully');
+  } else {
+    sendSuccess(res, {
+      milestone: { day, name: result.rewards.name, coins: 0 },
+      currentStreak: result.streak.currentStreak
+    }, 'Milestone claimed');
+  }
+});
+
+/**
+ * Get milestones for a specific streak type
+ * GET /api/gamification/streaks/:type/milestones
+ */
+export const getStreakMilestones = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const userId = (req.user._id as Types.ObjectId).toString();
+  const { type } = req.params;
+
+  const validTypes = ['login', 'order', 'review', 'app_open'];
+  if (!validTypes.includes(type)) {
+    return sendBadRequest(res, 'Invalid streak type');
+  }
+
+  // Get user's streak for this type
+  let streak = await UserStreak.findOne({ user: userId, type });
+
+  if (!streak) {
+    // Return default milestones with no progress
+    const defaultMilestones = type === 'app_open' || type === 'login'
+      ? [
+          { day: 3, coins: 50, name: '3-Day Streak', reached: false, claimed: false },
+          { day: 7, coins: 200, name: 'Week Warrior', reached: false, claimed: false },
+          { day: 14, coins: 500, name: 'Two-Week Champion', reached: false, claimed: false },
+          { day: 30, coins: 2000, name: 'Month Master', reached: false, claimed: false },
+          { day: 60, coins: 5000, name: 'Dedication Pro', reached: false, claimed: false },
+          { day: 100, coins: 10000, name: 'Loyalty Legend', reached: false, claimed: false },
+        ]
+      : type === 'order'
+      ? [
+          { day: 2, coins: 100, name: 'Double Order', reached: false, claimed: false },
+          { day: 4, coins: 300, name: 'Shopping Habit', reached: false, claimed: false },
+          { day: 7, coins: 800, name: 'Weekly Shopper', reached: false, claimed: false },
+          { day: 14, coins: 2000, name: 'Shopping Pro', reached: false, claimed: false },
+        ]
+      : [
+          { day: 3, coins: 75, name: 'Review Regular', reached: false, claimed: false },
+          { day: 7, coins: 250, name: 'Review Pro', reached: false, claimed: false },
+          { day: 14, coins: 600, name: 'Review Champion', reached: false, claimed: false },
+        ];
+
+    return sendSuccess(res, {
+      type,
+      currentStreak: 0,
+      milestones: defaultMilestones
+    }, 'Streak milestones retrieved');
+  }
+
+  // Format milestones with reach/claim status
+  const milestones = streak.milestones.map(m => ({
+    day: m.day,
+    coins: m.coinsReward,
+    badge: m.badgeReward || null,
+    reached: streak!.currentStreak >= m.day,
+    claimed: m.rewardsClaimed,
+    claimedAt: m.claimedAt || null
+  }));
+
+  sendSuccess(res, {
+    type,
+    currentStreak: streak.currentStreak,
+    longestStreak: streak.longestStreak,
+    milestones
+  }, 'Streak milestones retrieved');
 });
 
 // ========================================
@@ -1190,15 +1504,9 @@ export const getPromotionalPosters = asyncHandler(async (req: Request, res: Resp
     isActive: banner.isActive,
   }));
 
-  // If still no posters, return default promotional posters
+  // No posters found — return empty array (frontend handles empty state)
   if (formattedPosters.length === 0) {
-    const defaultPosters = [
-      { id: '1', title: 'Mega Sale', subtitle: 'Up to 70% off + Extra Cashback', image: 'https://images.unsplash.com/photo-1607083206968-13611e3d76db?w=500', colors: ['#F97316', '#EF4444'], shareBonus: 50, isActive: true },
-      { id: '2', title: 'Weekend Bonanza', subtitle: '3X Coins on All Purchases', image: 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=500', colors: ['#A855F7', '#EC4899'], shareBonus: 30, isActive: true },
-      { id: '3', title: 'New User Special', subtitle: 'Get Rs.500 Welcome Bonus', image: 'https://images.unsplash.com/photo-1607082349566-187342175e2f?w=500', colors: ['#3B82F6', '#06B6D4'], shareBonus: 100, isActive: true },
-      { id: '4', title: 'Flash Sale Today', subtitle: 'Limited Time Mega Deals', image: 'https://images.unsplash.com/photo-1607082350899-7e105aa886ae?w=500', colors: ['#22C55E', '#14B8A6'], shareBonus: 40, isActive: true },
-    ];
-    return sendSuccess(res, { posters: defaultPosters }, 'Default promotional posters retrieved');
+    return sendSuccess(res, { posters: [] }, 'No promotional posters available');
   }
 
   sendSuccess(res, { posters: formattedPosters }, 'Promotional posters retrieved successfully');
@@ -1534,31 +1842,8 @@ export const getBonusOpportunities = asyncHandler(async (req: Request, res: Resp
     // Sort by priority (higher first) and time remaining
     opportunities.sort((a, b) => b.priority - a.priority);
 
-    // If no opportunities found, return default suggestions
-    if (opportunities.length === 0) {
-      opportunities.push(
-        {
-          id: 'daily-spin',
-          title: 'Daily Spin',
-          description: 'Spin the wheel for free coins',
-          reward: 'Up to 200 Coins',
-          timeLeft: '24h',
-          icon: 'refresh-circle',
-          type: 'game',
-          priority: 1
-        },
-        {
-          id: 'daily-checkin',
-          title: 'Daily Check-in',
-          description: 'Check in daily for streak bonuses',
-          reward: '10-100 Coins',
-          timeLeft: '24h',
-          icon: 'calendar',
-          type: 'streak',
-          priority: 1
-        }
-      );
-    }
+    // No bonus opportunities currently active — return empty array
+    // Frontend handles the empty state display
 
     sendSuccess(res, {
       opportunities: opportunities.slice(0, 10),

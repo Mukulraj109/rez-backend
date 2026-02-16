@@ -203,9 +203,6 @@ export async function spin(sessionId: string): Promise<any> {
  */
 export async function awardSpinPrize(userId: string, prize: SpinResult): Promise<any | null> {
   if (prize.type === 'coins') {
-    // ✅ FIX: Award coins to BOTH CoinTransaction AND Wallet (for sync)
-    // This ensures both homepage (uses Wallet) and gamification (uses CoinTransaction) show correct balance
-
     // 1. Add to CoinTransaction (for gamification tracking)
     await CoinTransaction.createTransaction(
       userId,
@@ -215,41 +212,50 @@ export async function awardSpinPrize(userId: string, prize: SpinResult): Promise
       `Won ${prize.value} coins from Spin Wheel`
     );
 
-    // 2. Add to Wallet rez coins (for homepage display)
+    // 2. Atomic wallet update (prevents race conditions on concurrent spins)
     const { Wallet } = await import('../models/Wallet');
-    const wallet = await Wallet.findOne({ user: userId });
+    const updated = await Wallet.findOneAndUpdate(
+      { user: userId, 'coins.type': 'rez' },
+      {
+        $inc: {
+          'balance.available': prize.value,
+          'balance.total': prize.value,
+          'statistics.totalEarned': prize.value,
+          'coins.$.amount': prize.value
+        },
+        $set: {
+          'coins.$.lastUsed': new Date(),
+          lastTransactionAt: new Date()
+        }
+      },
+      { new: true }
+    );
 
-    if (wallet) {
-      // Find or create rez coin entry
-      let rezCoin = wallet.coins.find(c => c.type === 'rez');
-
-      if (!rezCoin) {
-        // Create new rez coin entry
-        wallet.coins.push({
-          type: 'rez',
-          amount: prize.value,
-          isActive: true,
-          earnedDate: new Date(),
-          color: '#00C06A'
-        });
-      } else {
-        // Update existing rez coin amount
-        rezCoin.amount += prize.value;
-      }
-
-      // Update balance and statistics
-      wallet.balance.available += prize.value;
-      wallet.balance.total += prize.value;
-      wallet.statistics.totalEarned += prize.value;
-      wallet.lastTransactionAt = new Date();
-
-      await wallet.save();
-      console.log(`💰 [SPIN_WHEEL] Added ${prize.value} coins to wallet. New balance: ${wallet.balance.total}`);
+    if (updated) {
+      console.log(`💰 [SPIN_WHEEL] Added ${prize.value} coins to wallet atomically. New balance: ${updated.balance.total}`);
     } else {
-      console.warn(`⚠️ [SPIN_WHEEL] Wallet not found for user ${userId}, skipping wallet update`);
+      // Wallet might not exist or no rez coin entry — try creating
+      const wallet = await Wallet.findOne({ user: userId });
+      if (!wallet) {
+        const newWallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
+        if (newWallet) {
+          await Wallet.findOneAndUpdate(
+            { _id: newWallet._id, 'coins.type': 'rez' },
+            {
+              $inc: {
+                'balance.available': prize.value,
+                'balance.total': prize.value,
+                'statistics.totalEarned': prize.value,
+                'coins.$.amount': prize.value
+              },
+              $set: { lastTransactionAt: new Date() }
+            }
+          );
+        }
+      }
+      console.warn(`⚠️ [SPIN_WHEEL] Wallet atomic update returned null for user ${userId}, created/retried`);
     }
 
-    // Coins don't have coupon metadata
     return null;
   } else if (prize.type === 'cashback') {
     // ✅ NEW: Award cashback with smart store assignment (always store-wide for better UX)

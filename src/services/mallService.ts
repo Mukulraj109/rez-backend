@@ -23,12 +23,12 @@ function escapeRegex(str: string): string {
 
 // Cache TTL constants (in seconds)
 const CACHE_TTL = {
-  HOMEPAGE: 300,      // 5 minutes
-  BRANDS: 600,        // 10 minutes
-  CATEGORIES: 1800,   // 30 minutes
-  COLLECTIONS: 900,   // 15 minutes
-  OFFERS: 300,        // 5 minutes
-  BANNERS: 600,       // 10 minutes
+  HOMEPAGE: 1800,     // 30 minutes (admin changes invalidate cache immediately)
+  BRANDS: 3600,       // 1 hour
+  CATEGORIES: 7200,   // 2 hours (rarely change)
+  COLLECTIONS: 1800,  // 30 minutes
+  OFFERS: 600,        // 10 minutes (time-sensitive but not per-second)
+  BANNERS: 1800,      // 30 minutes (admin changes invalidate cache immediately)
 };
 
 // Cache key prefixes
@@ -458,7 +458,7 @@ class MallService {
     if (cached) return cached;
 
     const now = new Date();
-    const offers = await MallOffer.find({
+    let offers = await MallOffer.find({
       isActive: true,
       isMallExclusive: true,
       validFrom: { $lte: now },
@@ -469,6 +469,20 @@ class MallService {
       .sort({ priority: -1, createdAt: -1 })
       .limit(limit)
       .lean();
+
+    // Fallback: if no exclusive offers, return any active offers
+    if (offers.length === 0) {
+      offers = await MallOffer.find({
+        isActive: true,
+        validFrom: { $lte: now },
+        validUntil: { $gte: now }
+      })
+        .populate('brand', 'name slug logo tier')
+        .populate('store', 'name logo tags')
+        .sort({ priority: -1, createdAt: -1 })
+        .limit(limit)
+        .lean();
+    }
 
     await redisService.set(cacheKey, offers, CACHE_TTL.OFFERS);
     return offers;
@@ -510,7 +524,7 @@ class MallService {
     if (cached) return cached;
 
     const now = new Date();
-    const banners = await MallBanner.find({
+    let banners = await MallBanner.find({
       isActive: true,
       position: 'hero',
       validFrom: { $lte: now },
@@ -522,6 +536,33 @@ class MallService {
       .sort({ priority: -1 })
       .limit(limit)
       .lean();
+
+    // Fallback: if no banners with valid date range, return any active hero banners
+    if (banners.length === 0) {
+      banners = await MallBanner.find({
+        isActive: true,
+        position: 'hero',
+      })
+        .populate('ctaBrand', 'name slug logo')
+        .populate('ctaCategory', 'name slug')
+        .populate('ctaCollection', 'name slug')
+        .sort({ priority: -1, createdAt: -1 })
+        .limit(limit)
+        .lean();
+    }
+
+    // Final fallback: any active banners regardless of position
+    if (banners.length === 0) {
+      banners = await MallBanner.find({
+        isActive: true,
+      })
+        .populate('ctaBrand', 'name slug logo')
+        .populate('ctaCategory', 'name slug')
+        .populate('ctaCollection', 'name slug')
+        .sort({ priority: -1, createdAt: -1 })
+        .limit(limit)
+        .lean();
+    }
 
     await redisService.set(cacheKey, banners, CACHE_TTL.BANNERS);
     return banners;
@@ -750,7 +791,7 @@ class MallService {
     const cached = await redisService.get<IStore[]>(cacheKey);
     if (cached) return cached;
 
-    const stores = await Store.find({
+    let stores = await Store.find({
       isActive: true,
       adminApproved: true,
       isFeatured: true,
@@ -760,6 +801,19 @@ class MallService {
       .sort({ 'ratings.average': -1 })
       .limit(limit)
       .lean();
+
+    // Fallback: if no featured stores, return highest-rated mall stores
+    if (stores.length === 0) {
+      stores = await Store.find({
+        isActive: true,
+        adminApproved: true,
+        'deliveryCategories.mall': true,
+      })
+        .populate('category', 'name slug')
+        .sort({ 'ratings.average': -1, createdAt: -1 })
+        .limit(limit)
+        .lean();
+    }
 
     await redisService.set(cacheKey, stores, CACHE_TTL.BRANDS);
     return stores;
@@ -776,7 +830,7 @@ class MallService {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const stores = await Store.find({
+    let stores = await Store.find({
       isActive: true,
       adminApproved: true,
       'deliveryCategories.mall': true,
@@ -786,6 +840,19 @@ class MallService {
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean();
+
+    // Fallback: if no stores within 30 days, return most recently created mall stores
+    if (stores.length === 0) {
+      stores = await Store.find({
+        isActive: true,
+        adminApproved: true,
+        'deliveryCategories.mall': true,
+      })
+        .populate('category', 'name slug')
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
+    }
 
     await redisService.set(cacheKey, stores, CACHE_TTL.BRANDS);
     return stores;
@@ -799,7 +866,7 @@ class MallService {
     const cached = await redisService.get<IStore[]>(cacheKey);
     if (cached) return cached;
 
-    const stores = await Store.find({
+    let stores = await Store.find({
       isActive: true,
       adminApproved: true,
       'deliveryCategories.mall': true,
@@ -809,6 +876,33 @@ class MallService {
       .sort({ 'ratings.average': -1 })
       .limit(limit)
       .lean();
+
+    // Fallback: lower threshold to 1 rating
+    if (stores.length === 0) {
+      stores = await Store.find({
+        isActive: true,
+        adminApproved: true,
+        'deliveryCategories.mall': true,
+        'ratings.count': { $gte: 1 },
+      })
+        .populate('category', 'name slug')
+        .sort({ 'ratings.average': -1 })
+        .limit(limit)
+        .lean();
+    }
+
+    // Final fallback: any mall stores sorted by rating
+    if (stores.length === 0) {
+      stores = await Store.find({
+        isActive: true,
+        adminApproved: true,
+        'deliveryCategories.mall': true,
+      })
+        .populate('category', 'name slug')
+        .sort({ 'ratings.average': -1 })
+        .limit(limit)
+        .lean();
+    }
 
     await redisService.set(cacheKey, stores, CACHE_TTL.BRANDS);
     return stores;
@@ -822,7 +916,7 @@ class MallService {
     const cached = await redisService.get<IStore[]>(cacheKey);
     if (cached) return cached;
 
-    const stores = await Store.find({
+    let stores = await Store.find({
       isActive: true,
       adminApproved: true,
       'deliveryCategories.mall': true,
@@ -832,6 +926,19 @@ class MallService {
       .sort({ 'ratings.average': -1 })
       .limit(limit)
       .lean();
+
+    // Fallback: if no premium stores, return highest-rated mall stores
+    if (stores.length === 0) {
+      stores = await Store.find({
+        isActive: true,
+        adminApproved: true,
+        'deliveryCategories.mall': true,
+      })
+        .populate('category', 'name slug')
+        .sort({ 'ratings.average': -1 })
+        .limit(limit)
+        .lean();
+    }
 
     await redisService.set(cacheKey, stores, CACHE_TTL.BRANDS);
     return stores;
@@ -1032,22 +1139,36 @@ class MallService {
   }
 
   /**
-   * Get trending mall stores (sorted by analytics views/clicks, recent activity)
+   * Get trending mall stores (sorted by orders, ratings, and recent activity)
    */
   async getTrendingMallStores(limit: number = 10): Promise<IStore[]> {
     const cacheKey = `${CACHE_KEYS.TRENDING_STORES}:${limit}`;
     const cached = await redisService.get<IStore[]>(cacheKey);
     if (cached) return cached;
 
-    const stores = await Store.find({
+    let stores = await Store.find({
       isActive: true,
       adminApproved: true,
       'deliveryCategories.mall': true,
+      'analytics.totalOrders': { $gt: 0 },
     })
       .populate('category', 'name slug')
-      .sort({ 'analytics.views': -1, 'analytics.orders': -1, 'ratings.average': -1 })
+      .sort({ 'analytics.totalOrders': -1, 'ratings.average': -1, 'ratings.count': -1 })
       .limit(limit)
       .lean();
+
+    // Fallback: if no stores have orders, return highest-rated mall stores
+    if (stores.length === 0) {
+      stores = await Store.find({
+        isActive: true,
+        adminApproved: true,
+        'deliveryCategories.mall': true,
+      })
+        .populate('category', 'name slug')
+        .sort({ 'ratings.average': -1, 'ratings.count': -1, createdAt: -1 })
+        .limit(limit)
+        .lean();
+    }
 
     await redisService.set(cacheKey, stores, CACHE_TTL.BRANDS);
     return stores;
@@ -1061,7 +1182,7 @@ class MallService {
     const cached = await redisService.get<IStore[]>(cacheKey);
     if (cached) return cached;
 
-    const stores = await Store.find({
+    let stores = await Store.find({
       isActive: true,
       adminApproved: true,
       'deliveryCategories.mall': true,
@@ -1071,6 +1192,36 @@ class MallService {
       .sort({ 'offers.cashback': -1, 'ratings.average': -1 })
       .limit(limit)
       .lean();
+
+    // Fallback: try stores with any reward rules configured
+    if (stores.length === 0) {
+      stores = await Store.find({
+        isActive: true,
+        adminApproved: true,
+        'deliveryCategories.mall': true,
+        $or: [
+          { 'rewardRules.baseCashbackPercent': { $gt: 0 } },
+          { 'offers.cashback': { $exists: true } },
+        ],
+      })
+        .populate('category', 'name slug')
+        .sort({ 'rewardRules.baseCashbackPercent': -1, 'ratings.average': -1 })
+        .limit(limit)
+        .lean();
+    }
+
+    // Final fallback: any mall stores
+    if (stores.length === 0) {
+      stores = await Store.find({
+        isActive: true,
+        adminApproved: true,
+        'deliveryCategories.mall': true,
+      })
+        .populate('category', 'name slug')
+        .sort({ 'ratings.average': -1 })
+        .limit(limit)
+        .lean();
+    }
 
     await redisService.set(cacheKey, stores, CACHE_TTL.BRANDS);
     return stores;
@@ -1085,7 +1236,7 @@ class MallService {
     if (cached) return cached;
 
     const now = new Date();
-    const offers = await MallOffer.find({
+    let offers = await MallOffer.find({
       isActive: true,
       validFrom: { $lte: now },
       validUntil: { $gte: now },
@@ -1099,6 +1250,20 @@ class MallService {
       .sort({ priority: -1, validUntil: 1 })
       .limit(limit)
       .lean();
+
+    // Fallback: if no flash-sale/limited-time offers, return any active offers
+    if (offers.length === 0) {
+      offers = await MallOffer.find({
+        isActive: true,
+        validFrom: { $lte: now },
+        validUntil: { $gte: now },
+      })
+        .populate('brand', 'name logo slug')
+        .populate('store', 'name logo tags')
+        .sort({ priority: -1, createdAt: -1 })
+        .limit(limit)
+        .lean();
+    }
 
     await redisService.set(cacheKey, offers, CACHE_TTL.OFFERS);
     return offers;
@@ -1125,15 +1290,27 @@ class MallService {
     const cached = await redisService.get<any>(cacheKey);
     if (cached) return cached;
 
-    // Fetch everything in parallel — each sub-method has its own Redis cache too
+    // Fetch everything in parallel with graceful degradation
+    // Each section is wrapped so one failure doesn't kill the entire batch
+    const safeCall = async <T>(fn: () => Promise<T>, fallback: T, label: string): Promise<T> => {
+      try {
+        return await fn();
+      } catch (err) {
+        console.error(`[MallService] getMallHomepageBatch - ${label} failed:`, err);
+        return fallback;
+      }
+    };
+
+    const defaultHomepage = { featuredStores: [], newStores: [], topRatedStores: [], premiumStores: [], categories: [] };
+
     const [homepageData, heroBanners, trendingStores, rewardBoosters, dealsOfDay, collections, exclusiveOffers] = await Promise.all([
-      this.getMallStoresHomepage(),
-      this.getHeroBanners(5),
-      this.getTrendingMallStores(10),
-      this.getRewardBoosterStores(10),
-      this.getDealsOfDay(10),
-      this.getCollections(5),
-      this.getExclusiveOffers(6),
+      safeCall(() => this.getMallStoresHomepage(), defaultHomepage, 'homepage'),
+      safeCall(() => this.getHeroBanners(5), [], 'heroBanners'),
+      safeCall(() => this.getTrendingMallStores(10), [], 'trendingStores'),
+      safeCall(() => this.getRewardBoosterStores(10), [], 'rewardBoosters'),
+      safeCall(() => this.getDealsOfDay(10), [], 'dealsOfDay'),
+      safeCall(() => this.getCollections(5), [], 'collections'),
+      safeCall(() => this.getExclusiveOffers(6), [], 'exclusiveOffers'),
     ]);
 
     const batch = {
@@ -1166,6 +1343,9 @@ class MallService {
       activeOffers,
       totalOffers,
       activeBanners,
+      totalBanners,
+      totalCollections,
+      activeCollections,
       totalMallStores,
     ] = await Promise.all([
       MallBrand.countDocuments(),
@@ -1175,6 +1355,9 @@ class MallService {
       MallOffer.countDocuments({ isActive: true, validUntil: { $gte: new Date() } }),
       MallOffer.countDocuments(),
       MallBanner.countDocuments({ isActive: true, validUntil: { $gte: new Date() } }),
+      MallBanner.countDocuments(),
+      MallCollection.countDocuments(),
+      MallCollection.countDocuments({ isActive: true }),
       Store.countDocuments({ isActive: true, 'deliveryCategories.mall': true }),
     ]);
 
@@ -1186,6 +1369,9 @@ class MallService {
       activeOffers,
       totalOffers,
       activeBanners,
+      totalBanners,
+      totalCollections,
+      activeCollections,
       totalMallStores,
     };
 

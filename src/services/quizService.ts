@@ -259,6 +259,28 @@ export async function submitAnswer(
     throw new Error('Quiz has expired');
   }
 
+  // Input validation — prevent exploits
+  if (questionIndex < 0 || questionIndex >= (quiz.metadata?.totalQuestions || 0)) {
+    throw new Error('Invalid question index: out of bounds');
+  }
+  if (answer < 0 || answer > 3) {
+    throw new Error('Invalid answer: must be 0-3');
+  }
+  if (timeSpent !== undefined && timeSpent !== null) {
+    if (timeSpent < 0) {
+      throw new Error('Invalid time spent: cannot be negative');
+    }
+    // Minimum 2 seconds per question to prevent bot submissions
+    if (timeSpent < 2000 && timeSpent > 0) {
+      console.warn(`⚠️ [QUIZ] Suspicious fast answer: ${timeSpent}ms for question ${questionIndex} in quiz ${quizId}`);
+    }
+  }
+  // Prevent answering the same question twice
+  const existingAnswers = quiz.metadata?.answers || [];
+  if (existingAnswers.some((a: any) => a.questionIndex === questionIndex)) {
+    throw new Error('Question already answered');
+  }
+
   const questions = quiz.metadata?.questions || [];
   const question = questions[questionIndex];
 

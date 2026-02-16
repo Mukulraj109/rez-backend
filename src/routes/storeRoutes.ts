@@ -26,7 +26,8 @@ import {
   getNearbyStoresForHomepage,
   getNewStores,
   getStoresByTag,
-  getCuisineCounts
+  getCuisineCounts,
+  getStoresByServiceType
 } from '../controllers/storeController';
 import { getStoreReviews } from '../controllers/reviewController';
 import {
@@ -63,6 +64,7 @@ router.get('/',
     ),
     sort: Joi.string().valid('rating', 'distance', 'name', 'popularity', 'newest'),
     sortBy: Joi.string().valid('rating', 'distance', 'name', 'popularity', 'newest').default('rating'),
+    serviceType: Joi.string().valid('homeDelivery', 'driveThru', 'tableBooking', 'dineIn', 'storePickup'),
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),
@@ -241,6 +243,21 @@ router.get('/by-tag/:tag',
 router.get('/cuisine-counts',
   optionalAuth,
   getCuisineCounts
+);
+
+// Get stores by service capability type
+router.get('/by-service-type/:serviceType',
+  optionalAuth,
+  validateParams(Joi.object({
+    serviceType: Joi.string().valid('homeDelivery', 'driveThru', 'tableBooking', 'dineIn', 'storePickup').required()
+  })),
+  validateQuery(Joi.object({
+    category: Joi.string().trim(),
+    sort: Joi.string().valid('rating', 'newest', 'popularity', 'name').default('rating'),
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(50).default(20)
+  })),
+  getStoresByServiceType
 );
 
 // Get single store by ID or slug

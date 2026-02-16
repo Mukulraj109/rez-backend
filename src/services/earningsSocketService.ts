@@ -144,6 +144,78 @@ class EarningsSocketService {
 
     console.log(`📤 [EARNINGS SOCKET] Notification sent to user ${userId}`);
   }
+
+  /**
+   * Emit when user earns coins from any gamification action
+   */
+  emitCoinsEarned(userId: string, amount: number, source: string, description: string) {
+    if (!this.io) {
+      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      return;
+    }
+
+    this.io.to(`earnings-${userId}`).emit('coins-earned', {
+      amount,
+      source, // e.g., 'quiz', 'spin_wheel', 'challenge', 'daily_checkin'
+      description,
+      timestamp: new Date().toISOString(),
+    });
+
+    console.log(`📤 [EARNINGS SOCKET] Coins earned event sent to user ${userId}: ${amount} from ${source}`);
+  }
+
+  /**
+   * Emit when a challenge is completed
+   */
+  emitChallengeCompleted(userId: string, challengeTitle: string, coinsReward: number) {
+    if (!this.io) {
+      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      return;
+    }
+
+    this.io.to(`earnings-${userId}`).emit('challenge-completed', {
+      challengeTitle,
+      coinsReward,
+      timestamp: new Date().toISOString(),
+    });
+
+    console.log(`📤 [EARNINGS SOCKET] Challenge completed event sent to user ${userId}: ${challengeTitle}`);
+  }
+
+  /**
+   * Emit when achievement is unlocked
+   */
+  emitAchievementUnlocked(userId: string, achievement: { title: string; icon: string; coinReward: number }) {
+    if (!this.io) {
+      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      return;
+    }
+
+    this.io.to(`earnings-${userId}`).emit('achievement-unlocked', {
+      ...achievement,
+      timestamp: new Date().toISOString(),
+    });
+
+    console.log(`📤 [EARNINGS SOCKET] Achievement unlocked event sent to user ${userId}: ${achievement.title}`);
+  }
+
+  /**
+   * Emit leaderboard rank change
+   */
+  emitLeaderboardUpdate(userId: string, rank: number, previousRank: number) {
+    if (!this.io) {
+      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      return;
+    }
+
+    this.io.to(`earnings-${userId}`).emit('leaderboard-update', {
+      rank,
+      previousRank,
+      timestamp: new Date().toISOString(),
+    });
+
+    console.log(`📤 [EARNINGS SOCKET] Leaderboard update sent to user ${userId}: rank ${previousRank} -> ${rank}`);
+  }
 }
 
 export default EarningsSocketService.getInstance();

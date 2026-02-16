@@ -6,6 +6,7 @@ import {
   getChallenges,
   getActiveChallenge,
   claimChallengeReward,
+  joinChallenge,
   getChallengeLeaderboard,
   getAchievements,
   getUserAchievements,
@@ -15,6 +16,7 @@ import {
   getUserBadges,
   getLeaderboard,
   getUserRank,
+  getMyRank,
   getCoinBalance,
   getCoinTransactions,
   awardCoins,
@@ -38,6 +40,8 @@ import {
   getPlayAndEarnData,
   claimSurpriseDrop,
   streakCheckin,
+  claimStreakMilestone,
+  getStreakMilestones,
   // Affiliate / Share endpoints
   getAffiliateStats,
   getPromotionalPosters,
@@ -64,6 +68,7 @@ router.get('/challenges/active', getActiveChallenge);
 router.get('/challenges/my-progress', getMyChallengeProgress);
 router.get('/challenges/:id/leaderboard', getChallengeLeaderboard);
 router.post('/challenges/:id/claim', claimChallengeReward);
+router.post('/challenges/:id/join', joinChallenge);
 
 // ========================================
 // ACHIEVEMENTS
@@ -86,6 +91,7 @@ router.get('/badges/user/:userId', getUserBadges);
 // type: spending | reviews | referrals | cashback | coins
 // period: daily | weekly | monthly | all-time
 router.get('/leaderboard', getLeaderboard);
+router.get('/leaderboard/my-rank', getMyRank);
 router.get('/leaderboard/rank/:userId', getUserRank);
 
 // ========================================
@@ -105,6 +111,9 @@ router.get('/streak/:userId', getDailyStreak);
 router.post('/streak/increment', incrementStreak);
 // New endpoint: Get current user's streak (JWT-based, no userId param)
 router.get('/streaks', streakController.getCurrentUserStreak.bind(streakController));
+// Streak milestones
+router.post('/streak/milestone/:day/claim', claimStreakMilestone);
+router.get('/streaks/:type/milestones', getStreakMilestones);
 
 // ========================================
 // MINI-GAMES

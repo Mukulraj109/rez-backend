@@ -87,6 +87,124 @@ export interface ICategory extends Document {
   isBestSeller: boolean;
   maxCashback?: number;
   promotions?: ICategoryPromotion[];
+
+  // Dynamic page configuration for main category pages
+  pageConfig?: {
+    isMainCategory: boolean;
+    theme: {
+      primaryColor: string;
+      gradientColors: string[];
+      icon: string;
+      accentColor?: string;
+      backgroundColor?: string;
+    };
+    banner: {
+      title: string;
+      subtitle: string;
+      discount: string;
+      tag: string;
+      image?: string;
+      ctaText?: string;
+      ctaRoute?: string;
+    };
+    tabs: Array<{
+      id: string;
+      label: string;
+      icon: string;
+      serviceFilter?: string;
+      sectionOverride?: string;
+      enabled: boolean;
+      sortOrder: number;
+    }>;
+    quickActions: Array<{
+      id: string;
+      label: string;
+      icon: string;
+      route: string;
+      color: string;
+      enabled: boolean;
+      sortOrder: number;
+    }>;
+    sections: Array<{
+      id?: string;
+      type: string;
+      title?: string;
+      subtitle?: string;
+      icon?: string;
+      enabled: boolean;
+      sortOrder: number;
+      config?: Record<string, any>;
+    }>;
+    serviceTypes: Array<{
+      id: string;
+      label: string;
+      icon: string;
+      description: string;
+      filterField: string;
+      color?: string;
+      gradient?: string[];
+      enabled: boolean;
+      sortOrder: number;
+    }>;
+    dietaryOptions?: Array<{
+      id: string;
+      label: string;
+      icon: string;
+      color: string;
+      tags: string[];
+    }>;
+    curatedCollections?: Array<{
+      id: string;
+      title: string;
+      subtitle: string;
+      icon: string;
+      gradient: string[];
+      tags: string;
+    }>;
+    searchPlaceholders?: Record<string, string[]>;
+    valuePropItems?: Array<{
+      icon: string;
+      text: string;
+      color: string;
+    }>;
+    sortOptions?: Array<{
+      id: string;
+      label: string;
+      icon: string;
+      enabled: boolean;
+      sortOrder: number;
+    }>;
+    filterOptions?: {
+      priceMax?: number;
+      priceLabel?: string;
+      ratingThreshold?: number;
+      showPriceFilter?: boolean;
+      showRatingFilter?: boolean;
+      showOpenNow?: boolean;
+    };
+    storeDisplayConfig?: {
+      storesPerPage?: number;
+      tagExclusions?: string[];
+      defaultCoinsMultiplier?: number;
+      defaultReviewBonus?: number;
+      defaultVisitMilestone?: number;
+    };
+    trustBadges?: Array<{
+      icon: string;
+      label: string;
+      color: string;
+    }>;
+    loyaltyConfig?: {
+      emptyMessage?: string;
+      displayLimit?: number;
+    };
+    experienceBenefits?: Array<{
+      icon: string;
+      title: string;
+      description: string;
+    }>;
+  };
+
   createdAt: Date;
   updatedAt: Date;
   _fullPath?: string;
@@ -321,7 +439,133 @@ const CategorySchema = new Schema<ICategory>({
     },
     isActive: { type: Boolean, default: true },
     validUntil: Date
-  }]
+  }],
+
+  // Dynamic page configuration for main category pages
+  pageConfig: {
+    isMainCategory: { type: Boolean, default: false },
+    theme: {
+      primaryColor: { type: String },
+      gradientColors: [{ type: String }],
+      icon: { type: String },
+      accentColor: { type: String },
+      backgroundColor: { type: String },
+    },
+    banner: {
+      title: { type: String },
+      subtitle: { type: String },
+      discount: { type: String },
+      tag: { type: String },
+      image: { type: String },
+      ctaText: { type: String },
+      ctaRoute: { type: String },
+    },
+    tabs: [{
+      id: { type: String, required: true },
+      label: { type: String, required: true },
+      icon: { type: String, required: true },
+      serviceFilter: { type: String },
+      sectionOverride: { type: String },
+      enabled: { type: Boolean, default: true },
+      sortOrder: { type: Number, default: 0 },
+    }],
+    quickActions: [{
+      id: { type: String, required: true },
+      label: { type: String, required: true },
+      icon: { type: String, required: true },
+      route: { type: String, required: true },
+      color: { type: String, default: '#6B7280' },
+      enabled: { type: Boolean, default: true },
+      sortOrder: { type: Number, default: 0 },
+    }],
+    sections: [{
+      id: { type: String },
+      type: {
+        type: String,
+        enum: [
+          'loyalty-hub', 'social-proof-ticker', 'browse-grid', 'ai-search',
+          'stores-list', 'popular-items', 'new-stores', 'curated-collections',
+          'ugc-social', 'offers-section', 'experiences-section', 'order-again',
+          'footer-trust', 'streak-loyalty', 'service-types', 'value-proposition'
+        ],
+        required: true,
+      },
+      title: { type: String },
+      subtitle: { type: String },
+      icon: { type: String },
+      enabled: { type: Boolean, default: true },
+      sortOrder: { type: Number, default: 0 },
+      config: { type: Schema.Types.Mixed },
+    }],
+    serviceTypes: [{
+      id: { type: String, required: true },
+      label: { type: String, required: true },
+      icon: { type: String, required: true },
+      description: { type: String },
+      filterField: { type: String, required: true },
+      color: { type: String, default: '#3B82F6' },
+      gradient: [{ type: String }],
+      enabled: { type: Boolean, default: true },
+      sortOrder: { type: Number, default: 0 },
+    }],
+    dietaryOptions: [{
+      id: { type: String, required: true },
+      label: { type: String, required: true },
+      icon: { type: String, required: true },
+      color: { type: String, required: true },
+      tags: [{ type: String }],
+    }],
+    curatedCollections: [{
+      id: { type: String, required: true },
+      title: { type: String, required: true },
+      subtitle: { type: String },
+      icon: { type: String },
+      gradient: [{ type: String }],
+      tags: { type: String },
+    }],
+    searchPlaceholders: { type: Schema.Types.Mixed },
+    valuePropItems: [{
+      icon: { type: String, required: true },
+      text: { type: String, required: true },
+      color: { type: String, required: true },
+    }],
+    sortOptions: [{
+      id: { type: String, required: true },
+      label: { type: String, required: true },
+      icon: { type: String, required: true },
+      enabled: { type: Boolean, default: true },
+      sortOrder: { type: Number, default: 0 },
+    }],
+    filterOptions: {
+      priceMax: { type: Number },
+      priceLabel: { type: String },
+      ratingThreshold: { type: Number },
+      showPriceFilter: { type: Boolean, default: true },
+      showRatingFilter: { type: Boolean, default: true },
+      showOpenNow: { type: Boolean, default: true },
+    },
+    storeDisplayConfig: {
+      storesPerPage: { type: Number, default: 10 },
+      tagExclusions: [{ type: String }],
+      defaultCoinsMultiplier: { type: Number, default: 4.5 },
+      defaultReviewBonus: { type: Number, default: 20 },
+      defaultVisitMilestone: { type: Number, default: 5 },
+    },
+    trustBadges: [{
+      icon: { type: String, required: true },
+      label: { type: String, required: true },
+      color: { type: String, required: true },
+    }],
+    loyaltyConfig: {
+      emptyMessage: { type: String },
+      displayLimit: { type: Number },
+    },
+    experienceBenefits: [{
+      icon: { type: String, required: true },
+      title: { type: String, required: true },
+      description: { type: String, required: true },
+    }],
+  }
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -337,6 +581,9 @@ CategorySchema.index({ createdAt: -1 });
 
 // Compound index for hierarchical queries
 CategorySchema.index({ type: 1, parentCategory: 1, sortOrder: 1 });
+
+// Main category page config index
+CategorySchema.index({ 'pageConfig.isMainCategory': 1, isActive: 1, sortOrder: 1 });
 
 // Indexes for best discount and best seller queries
 CategorySchema.index({ isBestDiscount: 1, isActive: 1, maxCashback: -1, sortOrder: 1 });

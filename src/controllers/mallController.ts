@@ -338,6 +338,15 @@ export const createMallBrand = asyncHandler(async (req: Request, res: Response) 
     $inc: { brandCount: 1 }
   });
 
+  // Update collection brand counts
+  if (brand.collections && brand.collections.length > 0) {
+    await Promise.all(
+      brand.collections.map((colId: Types.ObjectId) =>
+        (MallCollection as any).updateBrandCount(colId)
+      )
+    );
+  }
+
   // Invalidate caches
   await mallService.invalidateAllCaches();
 
@@ -356,16 +365,38 @@ export const updateMallBrand = asyncHandler(async (req: Request, res: Response) 
     return sendBadRequest(res, 'Invalid brand ID');
   }
 
+  // Get old brand to detect collection/category changes
+  const oldBrand = await MallBrand.findById(brandId);
+  if (!oldBrand) {
+    return sendNotFound(res, 'Brand not found');
+  }
+
   const brand = await MallBrand.findByIdAndUpdate(brandId, updateData, { new: true });
 
-  if (!brand) {
-    return sendNotFound(res, 'Brand not found');
+  // If category changed, update both old and new category brand counts
+  if (updateData.mallCategory && oldBrand.mallCategory?.toString() !== updateData.mallCategory) {
+    if (oldBrand.mallCategory) {
+      await (MallCategory as any).updateBrandCount(oldBrand.mallCategory);
+    }
+    await (MallCategory as any).updateBrandCount(new Types.ObjectId(updateData.mallCategory));
+  }
+
+  // If collections changed, update brand counts for all affected collections
+  if (updateData.collections) {
+    const oldCollections = (oldBrand.collections || []).map((c: Types.ObjectId) => c.toString());
+    const newCollections = (updateData.collections || []).map((c: string) => c.toString());
+    const allAffected = new Set([...oldCollections, ...newCollections]);
+    await Promise.all(
+      Array.from(allAffected).map((colId) =>
+        (MallCollection as any).updateBrandCount(new Types.ObjectId(colId))
+      )
+    );
   }
 
   // Invalidate caches
   await mallService.invalidateAllCaches();
 
-  return sendSuccess(res, brand, 'Mall brand updated successfully');
+  return sendSuccess(res, brand!, 'Mall brand updated successfully');
 });
 
 /**
@@ -390,6 +421,15 @@ export const deleteMallBrand = asyncHandler(async (req: Request, res: Response) 
     await MallCategory.findByIdAndUpdate(brand.mallCategory, {
       $inc: { brandCount: -1 }
     });
+  }
+
+  // Update collection brand counts
+  if (brand.collections && brand.collections.length > 0) {
+    await Promise.all(
+      brand.collections.map((colId: Types.ObjectId) =>
+        (MallCollection as any).updateBrandCount(colId)
+      )
+    );
   }
 
   await MallBrand.findByIdAndDelete(brandId);
@@ -994,4 +1034,214 @@ export const toggleStoreAlliance = asyncHandler(async (req: Request, res: Respon
   await mallService.invalidateAllCaches();
 
   return sendSuccess(res, store, `Store ${alliance ? 'added to' : 'removed from'} alliance`);
+});
+
+// ==================== STORE MALL MANAGEMENT ADMIN ENDPOINTS ====================
+
+/**
+ * Get All Stores for Mall Management
+ * GET /api/mall/admin/stores/manage
+ * Returns all approved stores with their mall-related flags for admin management
+ */
+export const getAdminMallStores = asyncHandler(async (req: Request, res: Response) => {
+  const { search, filter } = req.query;
+
+  const query: any = {
+    adminApproved: true,
+    isActive: true,
+  };
+
+  // Filter by mall status
+  if (filter === 'mall') {
+    query['deliveryCategories.mall'] = true;
+  } else if (filter === 'non-mall') {
+    query.$or = [
+      { 'deliveryCategories.mall': { $exists: false } },
+      { 'deliveryCategories.mall': false },
+    ];
+  }
+
+  if (search && (search as string).length >= 2) {
+    const escapedSearch = (search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const searchOr = [
+      { name: { $regex: escapedSearch, $options: 'i' } },
+      { tags: { $regex: escapedSearch, $options: 'i' } },
+    ];
+    if (query.$or) {
+      query.$and = [{ $or: query.$or }, { $or: searchOr }];
+      delete query.$or;
+    } else {
+      query.$or = searchOr;
+    }
+  }
+
+  const stores = await Store.find(query)
+    .select('name logo tags deliveryCategories ratings category isVerified isFeatured offers rewardRules createdAt')
+    .populate('category', 'name slug')
+    .sort({ 'deliveryCategories.mall': -1, name: 1 })
+    .limit(200)
+    .lean();
+
+  return sendSuccess(res, stores, 'Admin mall stores retrieved successfully');
+});
+
+/**
+ * Toggle Store Mall Status
+ * PUT /api/mall/admin/stores/:storeId/mall-toggle
+ * Sets or unsets deliveryCategories.mall on a store
+ */
+export const toggleStoreMall = asyncHandler(async (req: Request, res: Response) => {
+  const { storeId } = req.params;
+  const { mall } = req.body;
+
+  if (!Types.ObjectId.isValid(storeId)) {
+    return sendBadRequest(res, 'Invalid store ID');
+  }
+
+  if (typeof mall !== 'boolean') {
+    return sendBadRequest(res, 'mall must be a boolean');
+  }
+
+  const store = await Store.findOneAndUpdate(
+    { _id: storeId, adminApproved: true, isActive: true },
+    { $set: { 'deliveryCategories.mall': mall } },
+    { new: true }
+  ).select('name logo deliveryCategories isFeatured');
+
+  if (!store) {
+    return sendNotFound(res, 'Store not found or not approved');
+  }
+
+  await mallService.invalidateAllCaches();
+
+  return sendSuccess(res, store, `Store ${mall ? 'added to' : 'removed from'} mall`);
+});
+
+/**
+ * Update Store Mall Properties (Featured, Premium, Cashback)
+ * PUT /api/mall/admin/stores/:storeId/mall-properties
+ * Updates mall-related properties on a store
+ */
+export const updateStoreMallProperties = asyncHandler(async (req: Request, res: Response) => {
+  const { storeId } = req.params;
+  const { isFeatured, premium, cashbackPercent, maxCashback } = req.body;
+
+  if (!Types.ObjectId.isValid(storeId)) {
+    return sendBadRequest(res, 'Invalid store ID');
+  }
+
+  const updateObj: any = {};
+
+  if (typeof isFeatured === 'boolean') {
+    updateObj.isFeatured = isFeatured;
+  }
+  if (typeof premium === 'boolean') {
+    updateObj['deliveryCategories.premium'] = premium;
+  }
+  if (typeof cashbackPercent === 'number' && cashbackPercent >= 0 && cashbackPercent <= 100) {
+    updateObj['offers.cashback'] = cashbackPercent;
+    updateObj['rewardRules.baseCashbackPercent'] = cashbackPercent;
+  }
+  if (typeof maxCashback === 'number' && maxCashback >= 0) {
+    updateObj['offers.maxCashback'] = maxCashback;
+    updateObj['rewardRules.maxCashback'] = maxCashback;
+  }
+
+  if (Object.keys(updateObj).length === 0) {
+    return sendBadRequest(res, 'No valid properties to update');
+  }
+
+  const store = await Store.findOneAndUpdate(
+    { _id: storeId, adminApproved: true, 'deliveryCategories.mall': true },
+    { $set: updateObj },
+    { new: true }
+  ).select('name logo deliveryCategories isFeatured offers rewardRules ratings');
+
+  if (!store) {
+    return sendNotFound(res, 'Store not found or not a mall store');
+  }
+
+  await mallService.invalidateAllCaches();
+
+  return sendSuccess(res, store, 'Store mall properties updated successfully');
+});
+
+/**
+ * Get Admin Banners (All banners, including inactive/expired)
+ * GET /api/mall/admin/banners
+ */
+export const getAdminBanners = asyncHandler(async (req: Request, res: Response) => {
+  const banners = await MallBanner.find({})
+    .populate('ctaBrand', 'name slug logo')
+    .populate('ctaCategory', 'name slug')
+    .populate('ctaCollection', 'name slug')
+    .sort({ createdAt: -1 })
+    .lean();
+
+  return sendSuccess(res, banners, 'Admin banners retrieved successfully');
+});
+
+/**
+ * Get Admin Collections (All collections, including inactive)
+ * GET /api/mall/admin/collections
+ */
+export const getAdminCollections = asyncHandler(async (req: Request, res: Response) => {
+  const collections = await MallCollection.find({})
+    .sort({ sortOrder: 1, createdAt: -1 })
+    .lean();
+
+  return sendSuccess(res, collections, 'Admin collections retrieved successfully');
+});
+
+/**
+ * Get Admin Brands (All brands, including inactive)
+ * GET /api/mall/admin/brands
+ */
+export const getAdminBrands = asyncHandler(async (req: Request, res: Response) => {
+  const { search, tier } = req.query;
+  const query: any = {};
+
+  if (search && (search as string).length >= 2) {
+    const escapedSearch = (search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    query.$or = [
+      { name: { $regex: escapedSearch, $options: 'i' } },
+      { slug: { $regex: escapedSearch, $options: 'i' } },
+    ];
+  }
+  if (tier && tier !== 'all') query.tier = tier;
+
+  const brands = await MallBrand.find(query)
+    .populate('mallCategory', 'name slug')
+    .sort({ createdAt: -1 })
+    .limit(100)
+    .lean();
+
+  return sendSuccess(res, brands, 'Admin brands retrieved successfully');
+});
+
+/**
+ * Get Admin Categories (All categories, including inactive)
+ * GET /api/mall/admin/categories
+ */
+export const getAdminCategories = asyncHandler(async (req: Request, res: Response) => {
+  const categories = await MallCategory.find({})
+    .sort({ sortOrder: 1, createdAt: -1 })
+    .lean();
+
+  return sendSuccess(res, categories, 'Admin categories retrieved successfully');
+});
+
+/**
+ * Get Admin Offers (All offers, including inactive/expired)
+ * GET /api/mall/admin/offers
+ */
+export const getAdminOffers = asyncHandler(async (req: Request, res: Response) => {
+  const offers = await MallOffer.find({})
+    .populate('brand', 'name logo slug')
+    .populate('store', 'name logo tags')
+    .sort({ createdAt: -1 })
+    .limit(100)
+    .lean();
+
+  return sendSuccess(res, offers, 'Admin offers retrieved successfully');
 });

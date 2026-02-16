@@ -245,6 +245,9 @@ class ChallengeService {
   }
 
   // Claim challenge rewards
+  // TODO: Wrap in MongoDB transaction (withTransaction) once wallet atomic ops are confirmed stable.
+  // Currently the 3 writes (progress claim, wallet credit, transaction record) are sequential.
+  // The wallet credit is now atomic ($inc), so partial failure is less critical but still possible.
   async claimRewards(
     userId: string,
     progressId: string
@@ -285,98 +288,106 @@ class ChallengeService {
       try {
         console.log(`💰 [CHALLENGE SERVICE] Crediting ${coinsReward} coins to user ${userId} for challenge ${challenge.title}`);
 
-        // Get or create wallet
-        let wallet = await Wallet.findOne({ user: userId });
-        if (!wallet) {
-          wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
+        // Atomic wallet update (prevents race conditions on concurrent claims)
+        const updatedWallet = await Wallet.findOneAndUpdate(
+          { user: userId, 'coins.type': 'rez' },
+          {
+            $inc: {
+              'balance.available': coinsReward,
+              'balance.total': coinsReward,
+              'statistics.totalEarned': coinsReward,
+              'coins.$.amount': coinsReward
+            },
+            $set: {
+              'coins.$.lastUsed': new Date(),
+              lastTransactionAt: new Date()
+            }
+          },
+          { new: true }
+        );
+
+        if (!updatedWallet) {
+          // Wallet doesn't exist — create and retry
+          let wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
+          if (wallet) {
+            await Wallet.findOneAndUpdate(
+              { _id: wallet._id, 'coins.type': 'rez' },
+              {
+                $inc: {
+                  'balance.available': coinsReward,
+                  'balance.total': coinsReward,
+                  'statistics.totalEarned': coinsReward,
+                  'coins.$.amount': coinsReward
+                },
+                $set: { lastTransactionAt: new Date() }
+              },
+              { new: true }
+            );
+            newWalletBalance = (wallet.balance?.available || 0) + coinsReward;
+          }
+        } else {
+          newWalletBalance = updatedWallet.balance.available;
         }
 
-        if (wallet) {
-          // Add to rez coins (REZ coins)
-          const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-          if (rezCoin) {
-            rezCoin.amount += coinsReward;
-            rezCoin.lastUsed = new Date();
-          } else {
-            // If rez coin doesn't exist, create it
-            wallet.coins.push({
-              type: 'rez',
-              amount: coinsReward,
-              isActive: true,
-              color: '#00C06A',
-              earnedDate: new Date(),
-              lastUsed: new Date()
-            } as any);
-          }
+        console.log(`✅ [CHALLENGE SERVICE] Coins credited atomically. New balance: ${newWalletBalance}`);
 
-          // Update balances
-          wallet.balance.available += coinsReward;
-          wallet.balance.total += coinsReward;
-          wallet.statistics.totalEarned += coinsReward;
-
-          await wallet.save();
-          newWalletBalance = wallet.balance.available;
-
-          console.log(`✅ [CHALLENGE SERVICE] Coins credited successfully. New balance: ${newWalletBalance}`);
-
-          // Create transaction record
-          try {
-            await Transaction.create({
-              user: userId,
-              type: 'credit',
-              category: 'earning',
-              amount: coinsReward,
-              currency: 'RC',
-              description: `Challenge reward: ${challenge.title}`,
-              source: {
-                type: 'bonus',
-                reference: challenge._id,
-                description: `Earned ${coinsReward} coins from completing challenge: ${challenge.title}`,
-                metadata: {
-                  challengeId: String(challenge._id),
-                  challengeTitle: challenge.title,
-                  progressId: String(progress._id)
-                }
-              },
-              status: {
-                current: 'completed',
-                history: [{
-                  status: 'completed',
-                  timestamp: new Date(),
-                  reason: 'Challenge reward credited successfully'
-                }]
-              },
-              balanceBefore: wallet.balance.available - coinsReward,
-              balanceAfter: wallet.balance.available,
-              netAmount: coinsReward,
-              isReversible: false
-            });
-
-            console.log('✅ [CHALLENGE SERVICE] Transaction record created');
-          } catch (txError) {
-            console.error('❌ [CHALLENGE SERVICE] Failed to create transaction:', txError);
-            // Don't fail the whole operation if transaction creation fails
-          }
-
-          // CRITICAL: Also create CoinTransaction record for auto-sync to work
-          try {
-            await CoinTransaction.createTransaction(
-              userId,
-              'earned',
-              coinsReward,
-              'challenge_reward',
-              `Challenge reward: ${challenge.title}`,
-              {
+        // Create transaction record
+        try {
+          await Transaction.create({
+            user: userId,
+            type: 'credit',
+            category: 'earning',
+            amount: coinsReward,
+            currency: 'RC',
+            description: `Challenge reward: ${challenge.title}`,
+            source: {
+              type: 'bonus',
+              reference: challenge._id,
+              description: `Earned ${coinsReward} coins from completing challenge: ${challenge.title}`,
+              metadata: {
                 challengeId: String(challenge._id),
                 challengeTitle: challenge.title,
                 progressId: String(progress._id)
               }
-            );
-            console.log('✅ [CHALLENGE SERVICE] CoinTransaction record created for auto-sync');
-          } catch (coinTxError) {
-            console.error('❌ [CHALLENGE SERVICE] Failed to create CoinTransaction:', coinTxError);
-            // Don't fail - wallet was already updated directly
-          }
+            },
+            status: {
+              current: 'completed',
+              history: [{
+                status: 'completed',
+                timestamp: new Date(),
+                reason: 'Challenge reward credited successfully'
+              }]
+            },
+            balanceBefore: (newWalletBalance || 0) - coinsReward,
+            balanceAfter: newWalletBalance || 0,
+            netAmount: coinsReward,
+            isReversible: false
+          });
+
+          console.log('✅ [CHALLENGE SERVICE] Transaction record created');
+        } catch (txError) {
+          console.error('❌ [CHALLENGE SERVICE] Failed to create transaction:', txError);
+          // Don't fail the whole operation if transaction creation fails
+        }
+
+        // CRITICAL: Also create CoinTransaction record for auto-sync to work
+        try {
+          await CoinTransaction.createTransaction(
+            userId,
+            'earned',
+            coinsReward,
+            'challenge_reward',
+            `Challenge reward: ${challenge.title}`,
+            {
+              challengeId: String(challenge._id),
+              challengeTitle: challenge.title,
+              progressId: String(progress._id)
+            }
+          );
+          console.log('✅ [CHALLENGE SERVICE] CoinTransaction record created for auto-sync');
+        } catch (coinTxError) {
+          console.error('❌ [CHALLENGE SERVICE] Failed to create CoinTransaction:', coinTxError);
+          // Don't fail - wallet was already updated atomically
         }
       } catch (walletError) {
         console.error('❌ [CHALLENGE SERVICE] Error crediting coins to wallet:', walletError);

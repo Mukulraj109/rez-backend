@@ -124,6 +124,45 @@ const createStoreSchema = Joi.object({
       }).optional(),
       order: Joi.number().min(0).default(0)
     })).max(5).optional()
+  }).optional(),
+  // Service capabilities configuration
+  serviceCapabilities: Joi.object({
+    homeDelivery: Joi.object({
+      enabled: Joi.boolean().default(false),
+      deliveryRadius: Joi.number().min(0).optional(),
+      minOrder: Joi.number().min(0).optional(),
+      deliveryFee: Joi.number().min(0).optional(),
+      freeDeliveryAbove: Joi.number().min(0).optional(),
+      estimatedTime: Joi.string().allow('').optional(),
+    }).optional(),
+    driveThru: Joi.object({
+      enabled: Joi.boolean().default(false),
+      estimatedTime: Joi.string().allow('').optional(),
+      menuType: Joi.string().valid('full', 'limited').optional(),
+    }).optional(),
+    tableBooking: Joi.object({
+      enabled: Joi.boolean().default(false),
+    }).optional(),
+    dineIn: Joi.object({
+      enabled: Joi.boolean().default(false),
+    }).optional(),
+    storePickup: Joi.object({
+      enabled: Joi.boolean().default(false),
+      estimatedTime: Joi.string().allow('').optional(),
+    }).optional(),
+  }).optional(),
+  // Booking config
+  bookingConfig: Joi.object({
+    enabled: Joi.boolean().default(false),
+    slotDuration: Joi.number().min(15).max(240).optional(),
+    maxTableCapacity: Joi.number().min(1).max(100).optional(),
+    advanceBookingDays: Joi.number().min(1).max(90).optional(),
+    requiresAdvanceBooking: Joi.boolean().optional(),
+    allowWalkIn: Joi.boolean().optional(),
+    workingHours: Joi.object({
+      start: Joi.string().pattern(/^\d{2}:\d{2}$/).optional(),
+      end: Joi.string().pattern(/^\d{2}:\d{2}$/).optional(),
+    }).optional(),
   }).optional()
 });
 
@@ -332,10 +371,12 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     if (search) {
+      // Escape regex special characters to prevent ReDoS
+      const escaped = (search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { 'location.city': { $regex: search, $options: 'i' } }
+        { name: { $regex: escaped, $options: 'i' } },
+        { description: { $regex: escaped, $options: 'i' } },
+        { 'location.city': { $regex: escaped, $options: 'i' } }
       ];
     }
 
@@ -603,6 +644,20 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
       };
     }
 
+    // Update service capabilities (only merge sub-services that are present in updates)
+    if (updates.serviceCapabilities !== undefined) {
+      const existing = (store as any).serviceCapabilities || {};
+      const incoming = updates.serviceCapabilities;
+      (store as any).serviceCapabilities = {
+        ...existing,
+        ...(incoming.homeDelivery ? { homeDelivery: { ...existing.homeDelivery, ...incoming.homeDelivery } } : {}),
+        ...(incoming.driveThru ? { driveThru: { ...existing.driveThru, ...incoming.driveThru } } : {}),
+        ...(incoming.tableBooking ? { tableBooking: { ...existing.tableBooking, ...incoming.tableBooking } } : {}),
+        ...(incoming.dineIn ? { dineIn: { ...existing.dineIn, ...incoming.dineIn } } : {}),
+        ...(incoming.storePickup ? { storePickup: { ...existing.storePickup, ...incoming.storePickup } } : {}),
+      };
+    }
+
     // If banner was updated using raw MongoDB, we need to update other fields using raw MongoDB too
     // to prevent Mongoose from overwriting the banner with undefined
     if (updates.banner !== undefined && mongoose.connection.db) {
@@ -629,6 +684,7 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
       if (updates.isFeatured !== undefined) fieldsToUpdate.isFeatured = store.isFeatured;
       if (updates.actionButtons !== undefined) fieldsToUpdate.actionButtons = (store as any).actionButtons;
       if (updates.bookingConfig !== undefined) fieldsToUpdate.bookingConfig = (store as any).bookingConfig;
+      if (updates.serviceCapabilities !== undefined) fieldsToUpdate.serviceCapabilities = (store as any).serviceCapabilities;
       if (store.category) {
         // Ensure category is an ObjectId
         fieldsToUpdate.category = store.category instanceof mongoose.Types.ObjectId
@@ -663,7 +719,8 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
         if (updates.isActive !== undefined) fieldsToUpdate.isActive = store.isActive;
         if (updates.isFeatured !== undefined) fieldsToUpdate.isFeatured = store.isFeatured;
         if (updates.actionButtons !== undefined) fieldsToUpdate.actionButtons = (store as any).actionButtons;
-      if (updates.bookingConfig !== undefined) fieldsToUpdate.bookingConfig = (store as any).bookingConfig;
+        if (updates.bookingConfig !== undefined) fieldsToUpdate.bookingConfig = (store as any).bookingConfig;
+        if (updates.serviceCapabilities !== undefined) fieldsToUpdate.serviceCapabilities = (store as any).serviceCapabilities;
         if (store.category) {
           fieldsToUpdate.category = store.category instanceof mongoose.Types.ObjectId
             ? store.category

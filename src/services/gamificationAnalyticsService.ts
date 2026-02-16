@@ -94,7 +94,7 @@ class GamificationAnalyticsService {
       {
         $match: {
           $or: [
-            { unlockedAt: dateFilter.createdAt || {} },
+            { unlockedDate: dateFilter.createdAt || {} },
             { createdAt: dateFilter.createdAt || {} }
           ]
         }

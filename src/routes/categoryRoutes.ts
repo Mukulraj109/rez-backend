@@ -13,7 +13,8 @@ import {
   getCategoryHashtags,
   getCategoryAISuggestions,
   getCategoryLoyaltyStats,
-  getRecentOrders
+  getRecentOrders,
+  getCategoryPageConfig
 } from '../controllers/categoryController';
 import { optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams } from '../middleware/validation';
@@ -97,7 +98,16 @@ router.get('/best-seller',
   getBestSellerCategories
 );
 
-// Get category by slug  
+// Get category page config (full page configuration for frontend)
+router.get('/:slug/page-config',
+  optionalAuth,
+  validateParams(Joi.object({
+    slug: Joi.string().required()
+  })),
+  getCategoryPageConfig
+);
+
+// Get category by slug
 router.get('/:slug',
   // generalLimiter,, // Disabled for development
   optionalAuth,
