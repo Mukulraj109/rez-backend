@@ -89,8 +89,9 @@ export function cacheMiddleware(options: CacheOptions = {}) {
         // Only cache successful responses
         if (res.statusCode >= 200 && res.statusCode < 300) {
           // Cache the response asynchronously (don't block the response)
+          // P-13: Log as warning — cache write failures are non-critical
           redisService.set(cacheKey, data, ttl).catch((err) => {
-            console.error(`Failed to cache response for key ${cacheKey}:`, err);
+            console.warn(`[CACHE-WRITE-WARN] Failed to cache response for key ${cacheKey}:`, err);
           });
         }
 
@@ -197,10 +198,11 @@ export function cacheInvalidationMiddleware(
         const patterns = patternGenerator(req);
         const patternArray = Array.isArray(patterns) ? patterns : [patterns];
 
+        // P-13: Log invalidation failures as warnings — cache is best-effort
         Promise.all(
           patternArray.map((pattern) => redisService.delPattern(pattern))
         ).catch((err) => {
-          console.error('Failed to invalidate cache:', err);
+          console.warn('[CACHE-INVALIDATION-WARN] cacheInvalidationMiddleware — pattern invalidation failed:', err);
         });
       }
 

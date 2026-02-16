@@ -6,6 +6,7 @@
  */
 
 import mongoose, { Types } from 'mongoose';
+import { toPaise, pct } from '../utils/currency';
 import { MallAffiliateClick, IMallAffiliateClick } from '../models/MallAffiliateClick';
 import { MallPurchase, IMallPurchase, PurchaseStatus } from '../models/MallPurchase';
 import { MallBrand, IMallBrand } from '../models/MallBrand';
@@ -222,10 +223,8 @@ class MallAffiliateService {
       if (cashbackRate < 0 || cashbackRate > 100) {
         throw new Error('Cashback rate must be between 0 and 100');
       }
-      // Use paise-level math to avoid floating-point drift, then convert back
-      const orderAmountPaise = Math.round(data.orderAmount * 100);
-      const calculatedCashbackPaise = Math.round((orderAmountPaise * cashbackRate) / 100);
-      const calculatedCashback = calculatedCashbackPaise / 100;
+      // Use decimal.js for precision
+      const calculatedCashback = pct(data.orderAmount, cashbackRate);
       const maxCashback = click.brandSnapshot.maxCashback;
       const actualCashback = maxCashback
         ? Math.min(calculatedCashback, maxCashback)

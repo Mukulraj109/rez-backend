@@ -142,6 +142,7 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
     console.log('🔍 [GET STORES] Sort options:', sortOptions);
 
     const stores = await Store.find(query)
+      .select('name slug logo banner description category tags ratings location isActive isFeatured offers operationalInfo')
       .populate({
         path: 'category',
         select: 'name slug',
@@ -460,6 +461,7 @@ export const getNearbyStores = asyncHandler(async (req: Request, res: Response) 
     }
 
     const stores = await Store.find(query)
+      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo')
       .populate('category', 'name slug icon')
       .limit(Number(limit))
       .lean();
@@ -516,11 +518,14 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
       Object.assign(baseQuery, regionFilter);
     }
 
+    const storeListSelect = 'name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo';
+
     // First, try to get featured stores
     let stores = await Store.find({
       ...baseQuery,
       isFeatured: true
     })
+      .select(storeListSelect)
       .populate('category', 'name slug icon')
       .sort({ 'ratings.average': -1, createdAt: -1 })
       .limit(Number(limit))
@@ -529,6 +534,7 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
     // If no featured stores, get all active stores sorted by rating
     if (stores.length === 0) {
       stores = await Store.find(baseQuery)
+        .select(storeListSelect)
         .populate('category', 'name slug icon')
         .sort({ 'ratings.average': -1, createdAt: -1 })
         .limit(Number(limit))
@@ -541,6 +547,7 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
         ...baseQuery,
         _id: { $nin: featuredIds }
       })
+        .select(storeListSelect)
         .populate('category', 'name slug icon')
         .sort({ 'ratings.average': -1, createdAt: -1 })
         .limit(Number(limit) - stores.length)
@@ -628,6 +635,7 @@ export const searchStores = asyncHandler(async (req: Request, res: Response) => 
     const skip = (Number(page) - 1) * Number(limit);
 
     const stores = await Store.find(query)
+      .select('name slug logo banner description category tags ratings location isActive isFeatured offers operationalInfo')
       .populate('category', 'name slug')
       .sort({ 'ratings.average': -1, createdAt: -1 })
       .skip(skip)
@@ -683,6 +691,7 @@ export const getStoresByCategory = asyncHandler(async (req: Request, res: Respon
     const skip = (Number(page) - 1) * Number(limit);
 
     const stores = await Store.find(query)
+      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo')
       .populate('category', 'name slug')
       .sort(sortOptions)
       .skip(skip)
@@ -1047,6 +1056,7 @@ export const searchStoresByDeliveryTime = asyncHandler(async (req: Request, res:
     }
 
     const stores = await Store.find(query)
+      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo')
       .populate('category', 'name slug')
       .sort({ 'ratings.average': -1 })
       .skip((Number(page) - 1) * Number(limit))
@@ -1233,6 +1243,7 @@ export const advancedStoreSearch = asyncHandler(async (req: Request, res: Respon
     const skip = (Number(page) - 1) * Number(limit);
 
     const stores = await Store.find(query)
+      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo')
       .sort(sort)
       .skip(skip)
       .limit(Number(limit))
@@ -1835,6 +1846,7 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
 
       const [fallbackStores, fallbackTotal] = await Promise.all([
         Store.find(fallbackQuery)
+          .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo')
           .populate('category', 'name slug icon')
           .sort(fallbackSort)
           .skip(fallbackSkip)
@@ -1843,30 +1855,46 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
         Store.countDocuments(fallbackQuery)
       ]);
 
-      const fallbackStoresWithProducts = await Promise.all(
-        fallbackStores.map(async (store: any) => {
-          const products = await Product.find({ store: store._id, isActive: true })
-            .select('name pricing images slug ratings inventory subSubCategory')
-            .limit(4)
-            .lean();
+      // Batch fetch products for all fallback stores at once (avoids N+1)
+      const fallbackStoreIds = fallbackStores.map((s: any) => s._id);
+      const allFallbackProducts = await Product.find({
+        store: { $in: fallbackStoreIds },
+        isActive: true
+      })
+        .select('name pricing images slug ratings inventory subSubCategory store')
+        .lean();
 
-          const transformedProducts = products.map((product: any) => ({
-            _id: product._id,
-            productId: product._id,
-            name: product.name,
-            price: product.pricing?.selling || product.pricing?.current || product.price?.current || 0,
-            originalPrice: product.pricing?.original || product.price?.original || null,
-            discountPercentage: product.pricing?.discount || product.price?.discount || null,
-            imageUrl: product.images?.[0] || 'https://via.placeholder.com/150',
-            rating: product.ratings?.average || product.rating?.value || 0,
-            reviewCount: product.ratings?.count || product.rating?.count || 0,
-            inStock: product.inventory?.isAvailable !== false,
-            subSubCategory: product.subSubCategory || null
-          }));
+      // Group products by store ID (limit 4 per store)
+      const fallbackProductsByStore = new Map<string, any[]>();
+      for (const product of allFallbackProducts) {
+        const sid = product.store.toString();
+        if (!fallbackProductsByStore.has(sid)) {
+          fallbackProductsByStore.set(sid, []);
+        }
+        const arr = fallbackProductsByStore.get(sid)!;
+        if (arr.length < 4) {
+          arr.push(product);
+        }
+      }
 
-          return { ...store, products: transformedProducts };
-        })
-      );
+      const fallbackStoresWithProducts = fallbackStores.map((store: any) => {
+        const products = fallbackProductsByStore.get(store._id.toString()) || [];
+        const transformedProducts = products.map((product: any) => ({
+          _id: product._id,
+          productId: product._id,
+          name: product.name,
+          price: product.pricing?.selling || product.pricing?.current || product.price?.current || 0,
+          originalPrice: product.pricing?.original || product.price?.original || null,
+          discountPercentage: product.pricing?.discount || product.price?.discount || null,
+          imageUrl: product.images?.[0] || 'https://via.placeholder.com/150',
+          rating: product.ratings?.average || product.rating?.value || 0,
+          reviewCount: product.ratings?.count || product.rating?.count || 0,
+          inStock: product.inventory?.isAvailable !== false,
+          subSubCategory: product.subSubCategory || null
+        }));
+
+        return { ...store, products: transformedProducts };
+      });
 
       const fallbackTotalPages = Math.ceil(fallbackTotal / Number(limit));
 
@@ -1955,6 +1983,7 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
     // Fetch stores
     const [stores, total] = await Promise.all([
       Store.find(query)
+        .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo')
         .populate('category', 'name slug icon')
         .sort(sortOptions)
         .skip(skip)

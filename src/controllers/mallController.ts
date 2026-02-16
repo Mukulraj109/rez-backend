@@ -16,6 +16,7 @@ import { MallCategory } from '../models/MallCategory';
 import { MallCollection } from '../models/MallCollection';
 import { MallOffer } from '../models/MallOffer';
 import { MallBanner } from '../models/MallBanner';
+import { Store } from '../models/Store';
 import {
   sendSuccess,
   sendPaginated,
@@ -299,7 +300,13 @@ export const trackBrandPurchase = asyncHandler(async (req: Request, res: Respons
     return sendBadRequest(res, 'Invalid brand ID');
   }
 
-  await mallService.trackBrandPurchase(brandId, cashbackAmount);
+  // Validate cashbackAmount is a non-negative number
+  const amount = Number(cashbackAmount);
+  if (isNaN(amount) || amount < 0 || amount > 1000000) {
+    return sendBadRequest(res, 'Invalid cashback amount');
+  }
+
+  await mallService.trackBrandPurchase(brandId, amount);
   return sendSuccess(res, null, 'Purchase tracked successfully');
 });
 
@@ -540,14 +547,21 @@ export const deleteMallCollection = asyncHandler(async (req: Request, res: Respo
 export const createMallOffer = asyncHandler(async (req: Request, res: Response) => {
   const offerData = req.body;
 
-  if (!offerData.title || !offerData.image || !offerData.brand || !offerData.value) {
-    return sendBadRequest(res, 'Title, image, brand, and value are required');
+  if (!offerData.title || !offerData.image || !offerData.value) {
+    return sendBadRequest(res, 'Title, image, and value are required');
   }
 
-  // Check if brand exists
-  const brand = await MallBrand.findById(offerData.brand);
-  if (!brand) {
-    return sendBadRequest(res, 'Invalid brand');
+  // Validate referenced entity exists
+  if (offerData.brand) {
+    const brand = await MallBrand.findById(offerData.brand);
+    if (!brand) {
+      return sendBadRequest(res, 'Invalid brand ID');
+    }
+  } else if (offerData.store) {
+    const store = await Store.findById(offerData.store);
+    if (!store) {
+      return sendBadRequest(res, 'Invalid store ID');
+    }
   }
 
   const offer = new MallOffer(offerData);
@@ -919,4 +933,65 @@ export const getDealsOfDay = asyncHandler(async (req: Request, res: Response) =>
 export const getAdminStats = asyncHandler(async (req: Request, res: Response) => {
   const stats = await mallService.getAdminStats();
   return sendSuccess(res, stats, 'Admin stats retrieved successfully');
+});
+
+/**
+ * Get Admin Alliance Stores
+ * GET /api/mall/admin/stores/alliance
+ * Returns all approved mall stores with alliance status for admin management
+ */
+export const getAdminAllianceStores = asyncHandler(async (req: Request, res: Response) => {
+  const { search } = req.query;
+
+  const query: any = {
+    'deliveryCategories.mall': true,
+    adminApproved: true,
+    isActive: true,
+  };
+
+  if (search && (search as string).length >= 2) {
+    // Escape special regex characters to prevent ReDoS
+    const escapedSearch = (search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    query.$or = [
+      { name: { $regex: escapedSearch, $options: 'i' } },
+      { 'tags': { $regex: escapedSearch, $options: 'i' } },
+    ];
+  }
+
+  const stores = await Store.find(query)
+    .select('name logo tags deliveryCategories.alliance deliveryCategories.mall ratings category isVerified')
+    .populate('category', 'name slug')
+    .sort({ 'deliveryCategories.alliance': -1, name: 1 })
+    .limit(100)
+    .lean();
+
+  return sendSuccess(res, stores, 'Admin alliance stores retrieved successfully');
+});
+
+/**
+ * Toggle Store Alliance Status
+ * PUT /api/mall/admin/stores/:storeId/alliance
+ * Sets or unsets deliveryCategories.alliance on a store
+ */
+export const toggleStoreAlliance = asyncHandler(async (req: Request, res: Response) => {
+  const { storeId } = req.params;
+  const { alliance } = req.body;
+
+  if (!Types.ObjectId.isValid(storeId)) {
+    return sendBadRequest(res, 'Invalid store ID');
+  }
+
+  const store = await Store.findOneAndUpdate(
+    { _id: storeId, 'deliveryCategories.mall': true, adminApproved: true },
+    { $set: { 'deliveryCategories.alliance': alliance } },
+    { new: true }
+  ).select('name logo deliveryCategories');
+
+  if (!store) {
+    return sendNotFound(res, 'Store not found or not a mall store');
+  }
+
+  await mallService.invalidateAllCaches();
+
+  return sendSuccess(res, store, `Store ${alliance ? 'added to' : 'removed from'} alliance`);
 });

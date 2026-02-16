@@ -724,6 +724,7 @@ export const reportMessage = async (req: Request, res: Response): Promise<void> 
       reportDetails: details,
       reportedAt: new Date()
     };
+    message.markModified('metadata');
 
     await message.save();
 

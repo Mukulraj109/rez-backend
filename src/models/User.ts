@@ -204,7 +204,7 @@ const UserSchema = new Schema<IUser>({
   },
   password: {
     type: String,
-    minlength: 6,
+    minlength: 8,
     select: false // Don't include password in queries by default
   },
   profile: {
@@ -733,8 +733,8 @@ UserSchema.methods.generateOTP = function (): string {
 
 // Instance method to verify OTP
 UserSchema.methods.verifyOTP = function (otp: string): boolean {
-  // DEV MODE: Skip OTP verification for development
-  // TODO: UNCOMMENT BELOW SECTION FOR PRODUCTION DEPLOYMENT
+  // CRITICAL SECURITY WARNING: OTP verification is DISABLED (dev mode).
+  // For production deployment, uncomment the block below and remove the dev mode bypass.
   /*
   if (!this.auth.otpCode || !this.auth.otpExpiry) return false;
 

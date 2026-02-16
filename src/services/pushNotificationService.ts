@@ -83,7 +83,7 @@ class PushNotificationService {
         from: twilioPhone,
       });
 
-      console.log(`✅ [SMS] Sent to ${to}: ${result.sid}`);
+      console.log(`✅ [SMS] Sent to ***${to.slice(-4)}: ${result.sid}`);
       return true;
     } catch (error: any) {
       console.error('❌ [SMS] Failed to send:', error.message);

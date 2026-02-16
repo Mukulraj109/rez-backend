@@ -9,6 +9,7 @@ import { AppError } from '../middleware/errorHandler';
 import mongoose from 'mongoose';
 import activityService from '../services/activityService';
 import paymentGatewayService from '../services/paymentGatewayService';
+import redisService from '../services/redisService';
 import Stripe from 'stripe';
 
 /**
@@ -42,17 +43,28 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
     // Subtract any branded coin awards that were previously recorded as 'earned'
     // type, which incorrectly inflated the CoinTransaction running balance.
     // New awards use type 'branded_award' and don't affect the balance.
-    const brandedInflation = await CoinTransaction.aggregate([
-      {
-        $match: {
-          user: new mongoose.Types.ObjectId(userId),
-          source: 'merchant_award',
-          type: 'earned'
-        }
-      },
-      { $group: { _id: null, total: { $sum: '$amount' } } }
-    ]);
-    const brandedAmount = brandedInflation[0]?.total || 0;
+    // Cache in Redis for 5 minutes to avoid running this aggregation on every fetch.
+    const brandedCacheKey = `wallet:branded_inflation:${userId}`;
+    let brandedAmount = 0;
+    const cachedBranded = await redisService.get<number>(brandedCacheKey);
+    if (cachedBranded !== null && cachedBranded !== undefined) {
+      brandedAmount = cachedBranded;
+    } else {
+      const brandedInflation = await CoinTransaction.aggregate([
+        {
+          $match: {
+            user: new mongoose.Types.ObjectId(userId),
+            source: 'merchant_award',
+            type: 'earned',
+            amount: { $gt: 0 }
+          }
+        },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]);
+      brandedAmount = brandedInflation[0]?.total || 0;
+      // Cache for 5 minutes (300 seconds)
+      await redisService.set(brandedCacheKey, brandedAmount, 300);
+    }
     const actualRezBalance = coinTransactionBalance - brandedAmount;
 
     const currentBalance = wallet.balance.available || 0;
@@ -1157,6 +1169,7 @@ export const syncWalletBalance = asyncHandler(async (req: Request, res: Response
 
     // Subtract any branded coin awards that were previously recorded as 'earned'
     // type, which incorrectly inflated the CoinTransaction running balance.
+    // Explicit sync: always run fresh aggregation, then update Redis cache.
     const brandedInflation = await CoinTransaction.aggregate([
       {
         $match: {
@@ -1168,6 +1181,8 @@ export const syncWalletBalance = asyncHandler(async (req: Request, res: Response
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
     const brandedAmount = brandedInflation[0]?.total || 0;
+    // Update cache so subsequent getWalletBalance calls use fresh value
+    await redisService.set(`wallet:branded_inflation:${userId}`, brandedAmount, 300);
     const actualRezBalance = coinTransactionBalance - brandedAmount;
 
     console.log('📊 [WALLET SYNC] CoinTransaction balance:', coinTransactionBalance, 'branded correction:', -brandedAmount, 'actual ReZ:', actualRezBalance);

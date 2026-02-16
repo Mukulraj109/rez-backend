@@ -1,6 +1,7 @@
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import * as fs from 'fs';
 import * as path from 'path';
+import { ImageProcessingService } from './ImageProcessingService';
 
 // Configure Cloudinary
 cloudinary.config({
@@ -73,18 +74,26 @@ export class CloudinaryService {
   ): Promise<UploadApiResponse> {
     const folder = `merchants/${merchantId}/products${productId ? `/${productId}` : ''}`;
 
-    return this.uploadFile(filePath, {
-      folder,
-      width: 800,
-      height: 800,
-      crop: 'fill',
-      quality: 'auto',
-      transformation: [
-        { width: 800, height: 800, crop: 'fill' },
-        { quality: 'auto' },
-        { fetch_format: 'auto' },
-      ],
-    });
+    // Pre-process with Sharp before Cloudinary upload
+    const optimizedPath = await ImageProcessingService.processForUpload(filePath, 'product');
+
+    try {
+      const result = await this.uploadFile(optimizedPath, {
+        folder,
+        width: 800,
+        height: 800,
+        crop: 'fill',
+        quality: 'auto',
+        transformation: [
+          { width: 800, height: 800, crop: 'fill' },
+          { quality: 'auto' },
+          { fetch_format: 'auto' },
+        ],
+      });
+      return result;
+    } finally {
+      ImageProcessingService.cleanup(optimizedPath, filePath);
+    }
   }
 
   /**
@@ -115,12 +124,16 @@ export class CloudinaryService {
   ): Promise<UploadApiResponse> {
     const folder = `merchants/${merchantId}/store/logo`;
 
-    return this.uploadFile(filePath, {
-      folder,
-      // Removed fixed dimensions and crop: 'fill' to preserve full image
-      // Use limit crop to maintain aspect ratio without cropping
-      quality: 'auto',
-    });
+    const optimizedPath = await ImageProcessingService.processForUpload(filePath, 'storeLogo');
+
+    try {
+      return await this.uploadFile(optimizedPath, {
+        folder,
+        quality: 'auto',
+      });
+    } finally {
+      ImageProcessingService.cleanup(optimizedPath, filePath);
+    }
   }
 
   /**
@@ -132,12 +145,16 @@ export class CloudinaryService {
   ): Promise<UploadApiResponse> {
     const folder = `merchants/${merchantId}/store/banner`;
 
-    return this.uploadFile(filePath, {
-      folder,
-      // Removed fixed dimensions and crop: 'fill' to preserve full image
-      // Use limit crop to maintain aspect ratio without cropping
-      quality: 'auto',
-    });
+    const optimizedPath = await ImageProcessingService.processForUpload(filePath, 'storeBanner');
+
+    try {
+      return await this.uploadFile(optimizedPath, {
+        folder,
+        quality: 'auto',
+      });
+    } finally {
+      ImageProcessingService.cleanup(optimizedPath, filePath);
+    }
   }
 
   /**
@@ -180,13 +197,19 @@ export class CloudinaryService {
   ): Promise<UploadApiResponse> {
     const folder = `merchants/${merchantId}/stores/${storeId}/gallery/images`;
 
-    return this.uploadFile(filePath, {
-      folder,
-      width: 1200,
-      height: 800,
-      crop: 'limit', // Use limit to maintain aspect ratio without cropping
-      quality: 'auto',
-    });
+    const optimizedPath = await ImageProcessingService.processForUpload(filePath, 'gallery');
+
+    try {
+      return await this.uploadFile(optimizedPath, {
+        folder,
+        width: 1200,
+        height: 800,
+        crop: 'limit',
+        quality: 'auto',
+      });
+    } finally {
+      ImageProcessingService.cleanup(optimizedPath, filePath);
+    }
   }
 
   /**

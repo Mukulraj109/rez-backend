@@ -8,6 +8,8 @@ import { User } from '../models/User';
 // Note: StorePromoCoin removed - using wallet.brandedCoins instead
 import { Wallet } from '../models/Wallet';
 import coinService from './coinService';
+import { toPaise, pct, round2 } from '../utils/currency';
+import { razorpayCircuit } from '../utils/circuitBreaker';
 import merchantWalletService from './merchantWalletService';
 import mongoose, { Types } from 'mongoose';
 import stockSocketService from './stockSocketService';
@@ -91,8 +93,15 @@ class PaymentService {
         throw new Error('Order not found');
       }
 
+      // Validate payment amount matches order total (prevent underpayment/overpayment)
+      const orderTotal = order.totals?.total ?? 0;
+      if (Math.abs(amount - orderTotal) > 1) {
+        console.error('❌ [PAYMENT SERVICE] Amount mismatch:', { requested: amount, orderTotal });
+        throw new Error(`Payment amount ₹${amount} does not match order total ₹${orderTotal}`);
+      }
+
       // Convert amount to paise (smallest currency unit)
-      const amountInPaise = Math.round(amount * 100);
+      const amountInPaise = toPaise(amount);
 
       const orderOptions: IRazorpayOrderRequest = {
         amount: amountInPaise,
@@ -106,8 +115,10 @@ class PaymentService {
         payment_capture: 1 // Auto capture payment
       };
 
-      // Create Razorpay order
-      const razorpayOrder = await razorpayInstance.orders.create(orderOptions);
+      // Create Razorpay order (circuit breaker protects against cascade failures)
+      const razorpayOrder = await razorpayCircuit.exec(() =>
+        razorpayInstance!.orders.create(orderOptions)
+      );
 
       console.log('✅ [PAYMENT SERVICE] Razorpay order created:', razorpayOrder.id);
 
@@ -700,11 +711,13 @@ class PaymentService {
 
         try {
           // Find and restore the offer redemption to active status
+          // Match by order ID too (not just status='used') to avoid reversing wrong record on data corruption
           const offerRedemption = await OfferRedemption.findOneAndUpdate(
             {
               redemptionCode: redemptionCode,
               user: userId,
-              status: 'used'
+              status: 'used',
+              order: order._id
             },
             {
               $set: {
@@ -861,7 +874,7 @@ class PaymentService {
             throw new Error('Razorpay is not configured. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env');
           }
 
-          const refundAmountInPaise = Math.round(refundAmount * 100);
+          const refundAmountInPaise = toPaise(refundAmount);
 
           // Create refund via Razorpay
           const refund = await razorpayInstance.payments.refund(paymentId, {
@@ -889,7 +902,7 @@ class PaymentService {
             throw new Error('Stripe is not configured');
           }
 
-          const amountInPaise = Math.round(refundAmount * 100);
+          const amountInPaise = toPaise(refundAmount);
           const refund = await stripeService.createRefund({
             paymentIntentId,
             amount: amountInPaise,
@@ -1124,7 +1137,7 @@ class PaymentService {
     amount?: number;
     error?: string;
   }> {
-    const amountInPaise = Math.round((cashbackRequest.approvedAmount || cashbackRequest.requestedAmount) * 100);
+    const amountInPaise = toPaise(cashbackRequest.approvedAmount || cashbackRequest.requestedAmount);
 
     return this.createPayout({
       amount: amountInPaise,

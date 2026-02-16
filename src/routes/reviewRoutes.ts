@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   getStoreReviews,
+  getProductReviews,
   createReview,
   updateReview,
   deleteReview,
@@ -42,6 +43,20 @@ router.get('/store/:storeId',
     sortBy: Joi.string().valid('newest', 'oldest', 'highest', 'lowest', 'helpful').default('newest')
   })),
   getStoreReviews
+);
+
+// Get reviews for a product/service
+router.get('/product/:productId',
+  validateParams(Joi.object({
+    productId: commonSchemas.objectId()
+  })),
+  validateQuery(Joi.object({
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(50).default(20),
+    rating: Joi.number().integer().min(1).max(5),
+    sort: Joi.string().valid('newest', 'oldest', 'highest', 'lowest', 'helpful').default('newest')
+  })),
+  getProductReviews
 );
 
 // Check if user can review a store

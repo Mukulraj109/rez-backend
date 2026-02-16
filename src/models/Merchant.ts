@@ -162,6 +162,9 @@ export interface IMerchant extends Document {
   showBusinessHours?: boolean;
   allowCustomerMessages?: boolean;
   showPromotions?: boolean;
+
+  // Virtual: single canonical status derived from verificationStatus + isActive
+  readonly computedStatus?: 'approved' | 'suspended' | 'rejected' | 'pending';
 }
 
 // Merchant Schema
@@ -433,6 +436,7 @@ const MerchantSchema = new Schema<IMerchant>({
 }, {
   timestamps: true,
   toJSON: {
+    virtuals: true,
     transform: function (doc, ret: Partial<Record<string, any>>) {
       ret.id = ret._id;
       delete ret._id;
@@ -441,6 +445,20 @@ const MerchantSchema = new Schema<IMerchant>({
       return ret;
     }
   }
+});
+
+// Virtual: computedStatus - single canonical status derived from verificationStatus + isActive
+MerchantSchema.virtual('computedStatus').get(function (this: IMerchant) {
+  if (this.verificationStatus === 'rejected') {
+    return 'rejected';
+  }
+  if (this.verificationStatus === 'verified' && this.isActive) {
+    return 'approved';
+  }
+  if (this.verificationStatus === 'verified' && !this.isActive) {
+    return 'suspended';
+  }
+  return 'pending';
 });
 
 // Indexes

@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { Cart } from '../models/Cart';
 import { Product } from '../models/Product';
 import Event from '../models/Event';
+import { pct } from '../utils/currency';
 import {
   sendSuccess,
   sendNotFound,
@@ -1256,7 +1257,7 @@ const calculateLockFee = (productPrice: number, durationHours: number): { fee: n
   if (!config) {
     throw new Error('Invalid lock duration. Choose 2, 4, or 8 hours.');
   }
-  const fee = Math.ceil((productPrice * config.percentage) / 100);
+  const fee = Math.ceil(pct(productPrice, config.percentage));
   return { fee, percentage: config.percentage };
 };
 

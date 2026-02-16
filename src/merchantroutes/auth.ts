@@ -505,14 +505,6 @@ router.post('/login', /* authLimiter, */ validateRequest(loginSchema), async (re
       { expiresIn } as jwt.SignOptions
     );
 
-    console.log('🔐 LOGIN DEBUG: Generated token');
-    console.log('🔐 LOGIN DEBUG: Is Owner Login:', isOwnerLogin);
-    console.log('🔐 LOGIN DEBUG: Role:', role);
-    console.log('🔐 LOGIN DEBUG: MerchantId:', merchant._id);
-    if (merchantUser) {
-      console.log('🔐 LOGIN DEBUG: MerchantUserId:', merchantUser._id);
-    }
-
     // Check if email is verified
     const emailVerificationWarning = !merchant.emailVerified
       ? 'Please verify your email to access all features.'

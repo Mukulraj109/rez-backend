@@ -47,25 +47,28 @@ export const getExploreStats = asyncHandler(async (req: Request, res: Response) 
       endDate: { $gte: now }
     });
 
-    // Get nearby people (unique users active in last hour)
+    // Get nearby people count (unique users active in last hour) using $group + count
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-    const nearbyPeopleCount = await Activity.distinct('user', {
-      createdAt: { $gte: oneHourAgo }
-    });
-
-    // Get people who earned today
-    const peopleEarnedToday = await Activity.distinct('user', {
-      createdAt: { $gte: todayStart },
-      amount: { $gt: 0 }
-    });
+    const [nearbyPeopleResult, peopleEarnedTodayResult] = await Promise.all([
+      Activity.aggregate([
+        { $match: { createdAt: { $gte: oneHourAgo } } },
+        { $group: { _id: '$user' } },
+        { $count: 'total' }
+      ]),
+      Activity.aggregate([
+        { $match: { createdAt: { $gte: todayStart }, amount: { $gt: 0 } } },
+        { $group: { _id: '$user' } },
+        { $count: 'total' }
+      ])
+    ]);
 
     // Return real values without hardcoded fallbacks
     sendSuccess(res, {
       activeUsers: activeUsersCount,
       earnedToday: todayEarnings[0]?.total || 0,
       dealsLive: activeDealsCount,
-      peopleNearby: nearbyPeopleCount.length,
-      peopleEarnedToday: peopleEarnedToday.length
+      peopleNearby: nearbyPeopleResult[0]?.total || 0,
+      peopleEarnedToday: peopleEarnedTodayResult[0]?.total || 0
     }, 'Explore stats retrieved successfully');
   } catch (error) {
     console.error('Get explore stats error:', error);
@@ -93,6 +96,7 @@ export const getVerifiedReviews = asyncHandler(async (req: Request, res: Respons
       isActive: true,
       moderationStatus: 'approved'
     })
+      .select('user store rating comment verified createdAt')
       .populate('user', 'profile.name profile.avatar')
       .populate('store', 'name logo offers.cashback offers.maxCashback')
       .sort({ createdAt: -1 })
@@ -209,6 +213,7 @@ export const getFriendsActivity = asyncHandler(async (req: Request, res: Respons
 
     // Get activities (from friends if logged in with friends, otherwise community)
     const activities = await Activity.find(activityQuery)
+      .select('user type description title amount metadata createdAt')
       .populate('user', 'profile.name profile.avatar')
       .sort({ createdAt: -1 })
       .limit(Number(limit))
@@ -267,14 +272,17 @@ export const getExploreStatsSummary = asyncHandler(async (req: Request, res: Res
       .select('offers.cashback')
       .lean();
 
-    // Get total unique users (from activities)
-    const totalUsers = await Activity.distinct('user');
+    // Get total unique users count (from activities) using $group + $count
+    const totalUsersResult = await Activity.aggregate([
+      { $group: { _id: '$user' } },
+      { $count: 'total' }
+    ]);
 
     // Return real values without hardcoded fallbacks
     sendSuccess(res, {
       partnerStores: totalStoresCount,
       maxCashback: maxCashbackStore?.offers?.cashback || 0,
-      totalUsers: totalUsers.length
+      totalUsers: totalUsersResult[0]?.total || 0
     }, 'Explore stats summary retrieved successfully');
   } catch (error) {
     console.error('Get explore stats summary error:', error);

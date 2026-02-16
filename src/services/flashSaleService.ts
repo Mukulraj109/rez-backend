@@ -297,8 +297,13 @@ class FlashSaleService {
         return { valid: false, message: 'Product is not part of this flash sale' };
       }
 
-      // TODO: Check user purchase history for limitPerUser
-      // This would require checking Order model for user's previous purchases
+      // Check user purchase limit
+      if (flashSale.limitPerUser && data.userId) {
+        const purchaseCheck = await this.checkUserPurchaseLimit(data.userId, data.flashSaleId);
+        if (!purchaseCheck.canPurchase) {
+          return { valid: false, message: `Purchase limit reached (${purchaseCheck.limitPerUser} per user)` };
+        }
+      }
 
       return { valid: true, flashSale };
     } catch (error) {

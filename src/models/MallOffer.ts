@@ -16,7 +16,8 @@ export interface IMallOffer extends Document {
   subtitle?: string;
   description?: string;
   image: string;
-  brand: Types.ObjectId;
+  brand?: Types.ObjectId;
+  store?: Types.ObjectId;
   offerType: OfferType;
   value: number;
   valueType: ValueType;
@@ -61,8 +62,11 @@ const MallOfferSchema = new Schema<IMallOffer>({
   },
   brand: {
     type: Schema.Types.ObjectId,
-    ref: 'MallBrand',
-    required: true
+    ref: 'MallBrand'
+  },
+  store: {
+    type: Schema.Types.ObjectId,
+    ref: 'Store'
   },
   offerType: {
     type: String,
@@ -144,6 +148,23 @@ MallOfferSchema.index({ priority: -1, isActive: 1 });
 MallOfferSchema.index({ offerType: 1, isActive: 1 });
 MallOfferSchema.index({ badge: 1, isActive: 1 });
 MallOfferSchema.index({ createdAt: -1 });
+// Compound indexes for mall homepage queries
+MallOfferSchema.index({ isMallExclusive: 1, isActive: 1, validFrom: 1, validUntil: 1, priority: -1 }); // exclusive offers
+MallOfferSchema.index({ badge: 1, isActive: 1, validFrom: 1, validUntil: 1, priority: -1 }); // deals of the day
+MallOfferSchema.index({ store: 1, isActive: 1 });
+
+// Pre-validate: ensure exactly one of brand or store is set
+MallOfferSchema.pre('validate', function(next) {
+  const hasBrand = !!this.brand;
+  const hasStore = !!this.store;
+  if (!hasBrand && !hasStore) {
+    return next(new Error('Either brand or store must be provided'));
+  }
+  if (hasBrand && hasStore) {
+    return next(new Error('Only one of brand or store can be set, not both'));
+  }
+  next();
+});
 
 // Virtual to check if offer is currently valid
 MallOfferSchema.virtual('isCurrentlyValid').get(function() {
@@ -184,6 +205,7 @@ MallOfferSchema.statics.getExclusiveOffers = function(limit: number = 10) {
     ]
   })
     .populate('brand', 'name slug logo tier')
+    .populate('store', 'name logo tags')
     .sort({ priority: -1, createdAt: -1 })
     .limit(limit);
 };
@@ -211,6 +233,7 @@ MallOfferSchema.statics.getActiveOffers = function(filters: any = {}, limit: num
 
   return this.find(query)
     .populate('brand', 'name slug logo tier')
+    .populate('store', 'name logo tags')
     .sort({ priority: -1, createdAt: -1 })
     .limit(limit);
 };
@@ -225,6 +248,7 @@ MallOfferSchema.statics.getFlashSales = function(limit: number = 5) {
     validUntil: { $gte: now }
   })
     .populate('brand', 'name slug logo tier')
+    .populate('store', 'name logo tags')
     .sort({ validUntil: 1 }) // Ending soonest first
     .limit(limit);
 };

@@ -86,41 +86,35 @@ export const webhookAuth = async (
         return;
       }
 
-      // Validate HMAC signature — mandatory in production
-      if (process.env.NODE_ENV === 'production') {
-        if (!webhookConfig.secretKey) {
-          console.error(`⚠️ [WEBHOOK] Brand ${brand.name} has no secret key configured`);
-          res.status(401).json({
-            success: false,
-            message: 'Brand webhook signature not configured',
-          });
-          return;
-        }
-        if (!signature) {
-          res.status(401).json({
-            success: false,
-            message: 'Webhook signature required (x-webhook-signature header)',
-          });
-          return;
-        }
+      // S-14: Validate HMAC signature — mandatory in ALL environments (no dev bypass)
+      if (!webhookConfig.secretKey) {
+        console.error(`⚠️ [WEBHOOK] Brand ${brand.name} has no secret key configured`);
+        res.status(401).json({
+          success: false,
+          message: 'Brand webhook signature not configured',
+        });
+        return;
+      }
+      if (!signature) {
+        res.status(401).json({
+          success: false,
+          message: 'Webhook signature required (x-webhook-signature header)',
+        });
+        return;
       }
 
-      if (webhookConfig.secretKey && signature) {
-        const isValidSignature = verifySignature(
-          req.body,
-          signature,
-          webhookConfig.secretKey
-        );
+      const isValidSignature = verifySignature(
+        req.body,
+        signature,
+        webhookConfig.secretKey
+      );
 
-        if (!isValidSignature) {
-          res.status(401).json({
-            success: false,
-            message: 'Invalid webhook signature',
-          });
-          return;
-        }
-      } else if (process.env.NODE_ENV !== 'production') {
-        console.warn(`⚠️ [WEBHOOK] Skipping signature check in ${process.env.NODE_ENV} for brand ${brand.name}`);
+      if (!isValidSignature) {
+        res.status(401).json({
+          success: false,
+          message: 'Invalid webhook signature',
+        });
+        return;
       }
 
       console.log(`🔑 [WEBHOOK] Authenticated for brand: ${brand.name}`);
@@ -142,41 +136,35 @@ export const webhookAuth = async (
     if (brand) {
       const webhookConfig = (brand as any).webhookConfig;
 
-      // Validate HMAC signature — mandatory in production
-      if (process.env.NODE_ENV === 'production') {
-        if (!webhookConfig.secretKey) {
-          console.error(`⚠️ [WEBHOOK] Brand ${brand.name} has no secret key configured`);
-          res.status(401).json({
-            success: false,
-            message: 'Brand webhook signature not configured',
-          });
-          return;
-        }
-        if (!signature) {
-          res.status(401).json({
-            success: false,
-            message: 'Webhook signature required (x-webhook-signature header)',
-          });
-          return;
-        }
+      // S-14: Validate HMAC signature — mandatory in ALL environments (no dev bypass)
+      if (!webhookConfig.secretKey) {
+        console.error(`⚠️ [WEBHOOK] Brand ${brand.name} has no secret key configured`);
+        res.status(401).json({
+          success: false,
+          message: 'Brand webhook signature not configured',
+        });
+        return;
+      }
+      if (!signature) {
+        res.status(401).json({
+          success: false,
+          message: 'Webhook signature required (x-webhook-signature header)',
+        });
+        return;
       }
 
-      if (webhookConfig.secretKey && signature) {
-        const isValidSignature = verifySignature(
-          req.body,
-          signature,
-          webhookConfig.secretKey
-        );
+      const isValidSignatureBrand = verifySignature(
+        req.body,
+        signature,
+        webhookConfig.secretKey
+      );
 
-        if (!isValidSignature) {
-          res.status(401).json({
-            success: false,
-            message: 'Invalid webhook signature',
-          });
-          return;
-        }
-      } else if (process.env.NODE_ENV !== 'production') {
-        console.warn(`⚠️ [WEBHOOK] Skipping signature check in ${process.env.NODE_ENV} for brand ${brand.name}`);
+      if (!isValidSignatureBrand) {
+        res.status(401).json({
+          success: false,
+          message: 'Invalid webhook signature',
+        });
+        return;
       }
 
       console.log(`🔑 [WEBHOOK] Authenticated for brand: ${brand.name}`);

@@ -1,4 +1,6 @@
 import mongoose, { Schema, Document, Types, Model } from 'mongoose';
+import { logTransaction } from './TransactionAuditLog';
+import { div } from '../utils/currency';
 
 // Merchant Wallet Transaction interface
 export interface IMerchantWalletTransaction {
@@ -330,7 +332,7 @@ MerchantWalletSchema.methods.creditOrder = async function(
 
   // Recalculate average order value
   if (updated.statistics.totalOrders > 0) {
-    updated.statistics.averageOrderValue = updated.statistics.totalSales / updated.statistics.totalOrders;
+    updated.statistics.averageOrderValue = div(updated.statistics.totalSales, updated.statistics.totalOrders);
     await updated.save();
   }
 
@@ -338,6 +340,36 @@ MerchantWalletSchema.methods.creditOrder = async function(
   this.balance = updated.balance;
   this.statistics = updated.statistics;
   this.lastSettlementAt = updated.lastSettlementAt;
+
+  // Audit log — fire-and-forget
+  logTransaction({
+    userId: this.merchant,
+    walletId: this._id,
+    walletType: 'merchant',
+    operation: 'credit',
+    amount: netAmount,
+    currency: 'INR',
+    balanceBefore: {
+      total: updated.balance.total - grossAmount,
+      available: updated.balance.available - netAmount,
+      pending: updated.balance.pending,
+      cashback: 0,
+    },
+    balanceAfter: {
+      total: updated.balance.total,
+      available: updated.balance.available,
+      pending: updated.balance.pending,
+      cashback: 0,
+    },
+    reference: {
+      type: 'order',
+      id: orderId.toString(),
+      orderNumber,
+      description: `Order payment: gross ₹${grossAmount}, fee ₹${platformFee}, net ₹${netAmount}`,
+    },
+    metadata: { source: 'api' },
+    status: 'success',
+  });
 
   console.log(`💰 [MERCHANT WALLET] Credited order ${orderNumber}:`, {
     gross: grossAmount,
@@ -398,6 +430,34 @@ MerchantWalletSchema.methods.requestWithdrawal = async function(
 
   // Refresh local document
   this.balance = updated.balance;
+
+  // Audit log — fire-and-forget
+  logTransaction({
+    userId: this.merchant,
+    walletId: this._id,
+    walletType: 'merchant',
+    operation: 'withdrawal',
+    amount,
+    currency: 'INR',
+    balanceBefore: {
+      total: updated.balance.total,
+      available: updated.balance.available + amount,
+      pending: updated.balance.pending - amount,
+      cashback: 0,
+    },
+    balanceAfter: {
+      total: updated.balance.total,
+      available: updated.balance.available,
+      pending: updated.balance.pending,
+      cashback: 0,
+    },
+    reference: {
+      type: 'withdrawal',
+      description: `Withdrawal request for ₹${amount}`,
+    },
+    metadata: { source: 'api' },
+    status: 'success',
+  });
 
   console.log(`💸 [MERCHANT WALLET] Withdrawal requested: ₹${amount}`);
 

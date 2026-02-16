@@ -22,6 +22,8 @@ import {
   productBulkLimiter
 } from '../middleware/rateLimiter';
 import { sanitizeProductRequest } from '../middleware/sanitization';
+// P-12: Cache invalidation on product mutations
+import { CacheInvalidator } from '../utils/cacheHelper';
 
 const router = Router();
 
@@ -721,21 +723,16 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
       // Continue - merchant product creation should succeed even if sync fails
     }
 
-    // Invalidate cache for new arrivals (since new product should appear there)
-    try {
-      const { CacheInvalidator } = require('../utils/cacheHelper');
-      if (userProductId) {
-        await CacheInvalidator.invalidateProduct(userProductId);
-        console.log('🗑️ Invalidated cache for new product (new arrivals will refresh)');
-      } else {
-        // If we don't have user product ID, invalidate all new arrivals cache
-        const redisService = require('../services/redisService').default;
-        await redisService.delPattern('product:new-arrivals:*');
-        console.log('🗑️ Invalidated all new arrivals cache');
-      }
-    } catch (cacheError: any) {
-      console.error('⚠️ Warning: Failed to invalidate cache:', cacheError.message);
-      // Don't fail product creation if cache invalidation fails
+    // P-12: Invalidate product caches so the new product appears immediately.
+    // P-13: Failures are logged as warnings but never break the request.
+    if (userProductId) {
+      CacheInvalidator.invalidateProduct(userProductId).catch((err) => {
+        console.warn('[CACHE-INVALIDATION-WARN] product.created — invalidation failed:', err);
+      });
+    } else {
+      CacheInvalidator.invalidateProductLists().catch((err) => {
+        console.warn('[CACHE-INVALIDATION-WARN] product.created (lists) — invalidation failed:', err);
+      });
     }
 
     // Audit log: Product created
@@ -1045,6 +1042,12 @@ router.put('/:id',
         }
       }
 
+      // P-12: Invalidate product caches so the updated data is served fresh.
+      // P-13: Failures are logged as warnings but never break the request.
+      CacheInvalidator.invalidateProduct((product._id as any).toString()).catch((err) => {
+        console.warn('[CACHE-INVALIDATION-WARN] product.updated — invalidation failed:', err);
+      });
+
       // Send real-time notification
       if (global.io) {
         global.io.to(`merchant-${req.merchantId}`).emit('product_updated', {
@@ -1219,11 +1222,17 @@ router.delete('/:id', productDeleteLimiter, validateParams(productIdSchema), asy
     // Delete related reviews (optional - you may want to keep reviews)
     try {
       await Review.deleteMany({ productId: product._id.toString() });
-      console.log(`🗑️ Deleted reviews for product: ${product._id}`);
+      console.log(`Deleted reviews for product: ${product._id}`);
     } catch (error: any) {
-      console.error(`⚠️ Failed to delete reviews:`, error.message);
+      console.error(`Failed to delete reviews:`, error.message);
       // Continue even if review deletion fails
     }
+
+    // P-12: Invalidate product caches so the deleted product disappears immediately.
+    // P-13: Failures are logged as warnings but never break the request.
+    CacheInvalidator.invalidateProduct(product._id.toString()).catch((err) => {
+      console.warn('[CACHE-INVALIDATION-WARN] product.deleted — invalidation failed:', err);
+    });
 
     // Send real-time notification
     if (global.io) {

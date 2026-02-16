@@ -73,38 +73,38 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
                     event.payload?.refund?.entity?.id ||
                     `event_${Date.now()}`;
 
-    // Step 3: Check for duplicate events (idempotency)
-    const isProcessed = await (WebhookLog as any).isEventProcessed(eventId);
-    if (isProcessed) {
-      console.log('⚠️ [RAZORPAY WEBHOOK] Duplicate event detected:', eventId);
-      await (WebhookLog as any).markAsDuplicate(eventId);
-
-      // Return 200 to prevent retries
-      return res.status(200).json({
-        received: true,
-        status: 'duplicate',
-        message: 'Event already processed'
+    // Step 3+4: Atomic idempotency — try to insert log entry; if eventId exists, it's a duplicate
+    let webhookLog;
+    try {
+      webhookLog = await WebhookLog.create({
+        provider: 'razorpay',
+        eventId,
+        eventType,
+        payload: event,
+        signature: webhookSignature,
+        signatureValid: true,
+        processed: false,
+        status: 'processing',
+        metadata: {
+          paymentId: event.payload?.payment?.entity?.id,
+          orderId: event.payload?.payment?.entity?.notes?.orderId ||
+                   event.payload?.order?.entity?.notes?.orderId,
+          amount: event.payload?.payment?.entity?.amount,
+          currency: event.payload?.payment?.entity?.currency
+        }
       });
-    }
-
-    // Step 4: Create webhook log entry
-    const webhookLog = await WebhookLog.create({
-      provider: 'razorpay',
-      eventId,
-      eventType,
-      payload: event,
-      signature: webhookSignature,
-      signatureValid: true,
-      processed: false,
-      status: 'processing',
-      metadata: {
-        paymentId: event.payload?.payment?.entity?.id,
-        orderId: event.payload?.payment?.entity?.notes?.orderId ||
-                 event.payload?.order?.entity?.notes?.orderId,
-        amount: event.payload?.payment?.entity?.amount,
-        currency: event.payload?.payment?.entity?.currency
+    } catch (err: any) {
+      // Unique index violation = duplicate event
+      if (err.code === 11000) {
+        console.log('⚠️ [RAZORPAY WEBHOOK] Duplicate event detected:', eventId);
+        return res.status(200).json({
+          received: true,
+          status: 'duplicate',
+          message: 'Event already processed'
+        });
       }
-    });
+      throw err;
+    }
 
     console.log('📝 [RAZORPAY WEBHOOK] Log created:', webhookLog._id);
 
@@ -224,18 +224,39 @@ async function handleRazorpayPaymentCaptured(event: any): Promise<void> {
     return;
   }
 
+  // Validate captured amount matches order total (±₹1 tolerance for rounding)
+  const capturedAmount = payment.amount / 100;
+  const orderTotal = order.totals?.total ?? 0;
+  if (Math.abs(capturedAmount - orderTotal) > 1) {
+    console.error('🚨 [RAZORPAY WEBHOOK] Amount mismatch!', {
+      captured: capturedAmount,
+      orderTotal,
+      orderId,
+      paymentId: payment.id,
+    });
+    // Still save the order with a flag for manual review instead of silently proceeding
+    order.payment.status = 'review_required' as any;
+    order.timeline.push({
+      status: 'amount_mismatch',
+      message: `Captured ₹${capturedAmount} but order total is ₹${orderTotal}`,
+      timestamp: new Date(),
+    });
+    await order.save();
+    return;
+  }
+
   // Update order payment status
   order.payment.status = 'paid';
   order.payment.transactionId = payment.id;
   order.payment.paidAt = new Date(payment.created_at * 1000);
-  order.totals.paidAmount = payment.amount / 100;
+  order.totals.paidAmount = capturedAmount;
 
   // Update payment gateway details
   (order as any).paymentGateway = {
     gatewayPaymentId: payment.id,
     gateway: 'razorpay',
     currency: payment.currency,
-    amountPaid: payment.amount / 100,
+    amountPaid: capturedAmount,
     paidAt: new Date(payment.created_at * 1000)
   };
 
@@ -460,34 +481,34 @@ export const handleStripeWebhook = asyncHandler(async (req: Request, res: Respon
       eventId: event.id
     });
 
-    // Step 2: Check for duplicate events (idempotency)
-    const isProcessed = await (WebhookLog as any).isEventProcessed(event.id);
-    if (isProcessed) {
-      console.log('⚠️ [STRIPE WEBHOOK] Duplicate event detected:', event.id);
-      await (WebhookLog as any).markAsDuplicate(event.id);
-
-      return res.status(200).json({
-        received: true,
-        status: 'duplicate',
-        message: 'Event already processed'
-      });
-    }
-
-    // Step 3: Extract metadata
+    // Step 2: Extract metadata
     const metadata = extractStripeMetadata(event);
 
-    // Step 4: Create webhook log entry
-    const webhookLog = await WebhookLog.create({
-      provider: 'stripe',
-      eventId: event.id,
-      eventType: event.type,
-      payload: event,
-      signature: signature,
-      signatureValid: true,
-      processed: false,
-      status: 'processing',
-      metadata
-    });
+    // Step 3+4: Atomic idempotency — try to insert log; unique index catches duplicates
+    let webhookLog;
+    try {
+      webhookLog = await WebhookLog.create({
+        provider: 'stripe',
+        eventId: event.id,
+        eventType: event.type,
+        payload: event,
+        signature: signature,
+        signatureValid: true,
+        processed: false,
+        status: 'processing',
+        metadata
+      });
+    } catch (err: any) {
+      if (err.code === 11000) {
+        console.log('⚠️ [STRIPE WEBHOOK] Duplicate event detected:', event.id);
+        return res.status(200).json({
+          received: true,
+          status: 'duplicate',
+          message: 'Event already processed'
+        });
+      }
+      throw err;
+    }
 
     console.log('📝 [STRIPE WEBHOOK] Log created:', webhookLog._id);
 

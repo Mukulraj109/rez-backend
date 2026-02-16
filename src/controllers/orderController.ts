@@ -13,6 +13,7 @@ import {
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import stockSocketService from '../services/stockSocketService';
+import { pct } from '../utils/currency';
 import reorderService from '../services/reorderService';
 import activityService from '../services/activityService';
 import referralService from '../services/referralService';
@@ -72,24 +73,24 @@ import merchantNotificationService from '../services/merchantNotificationService
 // Create new order from cart
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
-  const { deliveryAddress, paymentMethod, specialInstructions, couponCode, voucherCode, coinsUsed, storeId, items: requestItems, redemptionCode, offerRedemptionCode, lockFeeDiscount: clientLockFeeDiscount } = req.body;
+  const { deliveryAddress, paymentMethod, specialInstructions, couponCode, voucherCode, coinsUsed, storeId, items: requestItems, redemptionCode, offerRedemptionCode, lockFeeDiscount: clientLockFeeDiscount, idempotencyKey } = req.body;
 
   // Start a MongoDB session for transaction
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    console.log('📦 [CREATE ORDER] Starting order creation for user:', userId);
-    console.log('📦 [CREATE ORDER] RAW req.body keys:', Object.keys(req.body));
-    console.log('📦 [CREATE ORDER] RAW req.body.storeId:', req.body.storeId);
-    console.log('📦 [CREATE ORDER] RAW req.body.items:', req.body.items?.length);
-    console.log('💰 [CREATE ORDER] coinsUsed received from frontend:', JSON.stringify(coinsUsed));
-    console.log('💳 [CREATE ORDER] Payment method:', paymentMethod);
-    console.log('🏪 [CREATE ORDER] StoreId filter:', storeId || 'none (all items)');
-    console.log('📦 [CREATE ORDER] Request items:', requestItems?.length || 'not provided');
-    console.log('🎁 [CREATE ORDER] Redemption code received:', redemptionCode || 'none');
-    console.log('🔒 [CREATE ORDER] Lock fee discount received:', clientLockFeeDiscount || 0);
-    console.log('🔍 [CREATE ORDER DEBUG] Full req.body:', JSON.stringify(req.body, null, 2));
+    console.log('📦 [CREATE ORDER] Starting order creation for user:', userId, 'items:', requestItems?.length || 0, 'payment:', paymentMethod);
+
+    // Idempotency check: prevent duplicate orders from network retries
+    if (idempotencyKey) {
+      const existingOrder = await Order.findOne({ user: userId, idempotencyKey }).session(session);
+      if (existingOrder) {
+        await session.abortTransaction();
+        session.endSession();
+        return sendSuccess(res, { order: existingOrder }, 'Order already exists');
+      }
+    }
 
     // Get user's cart
     const cart = await Cart.findOne({ user: userId })
@@ -224,7 +225,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
       // Validate promo coins
       if (coinsUsed.promoCoins > 0) {
-        const wallet = await Wallet.findOne({ user: userId });
+        const wallet = await Wallet.findOne({ user: userId }).session(session);
         const promoCoin = wallet?.coins?.find((c: any) => c.type === 'promo');
         const promoBalance = promoCoin?.amount || 0;
         if (promoBalance < coinsUsed.promoCoins) {
@@ -249,7 +250,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
         if (orderStoreId) {
           // Get branded coins balance from wallet
-          const wallet = await Wallet.findOne({ user: userId });
+          const wallet = await Wallet.findOne({ user: userId }).session(session);
           const brandedCoin = wallet?.brandedCoins?.find(
             (bc: any) => bc.merchantId?.toString() === orderStoreId.toString()
           );
@@ -581,7 +582,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
             if (match) {
               const value = parseInt(match[1]);
               redemptionDiscount = deal.cashback.includes('%')
-                ? Math.round(subtotal * (value / 100))
+                ? pct(subtotal, value)
                 : value;
             }
           } else if (deal?.discount) {
@@ -589,7 +590,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
             if (match) {
               const value = parseInt(match[1]);
               redemptionDiscount = deal.discount.includes('%')
-                ? Math.round(subtotal * (value / 100))
+                ? pct(subtotal, value)
                 : value;
             }
           }
@@ -665,7 +666,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
         // Calculate cashback
         const cashbackPercentage = offer?.cashbackPercentage || 0;
-        offerRedemptionCashback = Math.round(subtotal * (cashbackPercentage / 100));
+        offerRedemptionCashback = pct(subtotal, cashbackPercentage);
 
         // Apply max discount cap
         if (offer?.restrictions?.maxDiscountAmount && offerRedemptionCashback > offer.restrictions.maxDiscountAmount) {
@@ -743,6 +744,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       orderNumber,
       user: userId,
       store: primaryStoreId, // Set primary store for easy access/population
+      idempotencyKey: idempotencyKey || undefined,
       items: orderItems,
       totals: {
         subtotal,
@@ -1509,6 +1511,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
               rezCoin.amount += rezCoins;
               wallet.balance.available += rezCoins;
               wallet.balance.total += rezCoins;
+              wallet.markModified('coins');
               wallet.lastTransactionAt = new Date();
               await wallet.save({ session });
               console.log('✅ [CANCEL ORDER] REZ coins refunded:', rezCoins);
@@ -1536,6 +1539,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
             const promoCoin = wallet.coins.find((c: any) => c.type === 'promo');
             if (promoCoin) {
               promoCoin.amount += promoCoins;
+              wallet.markModified('coins');
               wallet.lastTransactionAt = new Date();
               await wallet.save({ session });
               console.log('✅ [CANCEL ORDER] Promo coins refunded:', promoCoins);
@@ -1620,6 +1624,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
               if (rezCoin) {
                 rezCoin.amount = Math.max(0, rezCoin.amount - cashbackAmount);
               }
+              wallet.markModified('coins');
 
               await wallet.save({ session });
 

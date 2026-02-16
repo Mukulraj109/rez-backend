@@ -2,6 +2,7 @@ import Partner, { IPartner, PARTNER_LEVELS } from '../models/Partner';
 import { User } from '../models/User';
 import { Order } from '../models/Order';
 import mongoose from 'mongoose';
+import { pct } from '../utils/currency';
 
 /**
  * Partner Service
@@ -555,7 +556,7 @@ class PartnerService {
       let discount = 0;
       if (offer.discount > 0 && offer.discount <= 100) {
         // Percentage discount
-        discount = Math.round((orderAmount * offer.discount) / 100);
+        discount = pct(orderAmount, offer.discount);
       } else if (offer.discount > 100) {
         // Flat discount (voucher amount)
         discount = offer.discount;

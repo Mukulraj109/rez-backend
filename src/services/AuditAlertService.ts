@@ -172,7 +172,7 @@ export class AuditAlertService {
       const message = this.formatSMSBody(merchant, log, rule);
 
       // TODO: Integrate with SMS service (Twilio, SNS, etc.)
-      console.log('📱 [ALERT] SMS would be sent to:', merchant.phone);
+      console.log('📱 [ALERT] SMS would be sent to: ***' + (merchant.phone ? merchant.phone.slice(-4) : 'N/A'));
       console.log('📱 [ALERT] Message:', message);
     } catch (error) {
       console.error('❌ [ALERT] Failed to send SMS:', error);

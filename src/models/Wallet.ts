@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types, Model } from 'mongoose';
+import { logTransaction } from './TransactionAuditLog';
 
 // Wallet Model interface with static methods
 export interface IWalletModel extends Model<IWallet> {
@@ -405,20 +406,34 @@ WalletSchema.virtual('formattedBalance').get(function() {
 
 // Pre-save hook to validate balances
 WalletSchema.pre('save', function(next) {
+  // Warn on negative balances (indicates a bug in deduction logic)
+  if (this.balance.available < 0) {
+    console.error(`⚠️ [WALLET] Negative available balance detected for wallet ${this._id}: ${this.balance.available}`);
+    this.balance.available = 0;
+  }
+  if (this.balance.pending < 0) {
+    console.error(`⚠️ [WALLET] Negative pending balance detected for wallet ${this._id}: ${this.balance.pending}`);
+    this.balance.pending = 0;
+  }
+  if (this.balance.cashback < 0) {
+    console.error(`⚠️ [WALLET] Negative cashback balance detected for wallet ${this._id}: ${this.balance.cashback}`);
+    this.balance.cashback = 0;
+  }
+
   // balance.total = available (ReZ) + pending + cashback + sum of all category balances
   // Branded coins are tracked separately in brandedCoins[] and NOT included here.
   // The frontend adds brandedCoinsTotal on top for the "Total Wallet Balance" display.
   let categoryTotal = 0;
   if (this.categoryBalances) {
     this.categoryBalances.forEach((catBal: any) => {
-      categoryTotal += catBal?.available || 0;
+      categoryTotal += Math.max(0, catBal?.available || 0);
     });
   }
   const calculatedTotal = this.balance.available + this.balance.pending + this.balance.cashback + categoryTotal;
 
   // Allow small rounding differences
   if (Math.abs(this.balance.total - calculatedTotal) > 0.01) {
-    this.balance.total = calculatedTotal;
+    this.balance.total = Math.max(0, calculatedTotal);
   }
 
   // Reset daily limit if needed
@@ -488,6 +503,14 @@ WalletSchema.methods.addFunds = async function(
       incUpdate['statistics.totalEarned'] = amount;
   }
 
+  // Snapshot balance before mutation
+  const balanceBefore = {
+    total: this.balance.total,
+    available: this.balance.available,
+    pending: this.balance.pending,
+    cashback: this.balance.cashback,
+  };
+
   // Atomic update — safe under concurrent requests
   const updated = await (this.constructor as any).findByIdAndUpdate(
     this._id,
@@ -507,6 +530,23 @@ WalletSchema.methods.addFunds = async function(
   this.statistics = updated.statistics;
   this.lastTransactionAt = updated.lastTransactionAt;
 
+  // Audit log (fire-and-forget)
+  logTransaction({
+    userId: this.user,
+    walletId: this._id,
+    walletType: 'user',
+    operation: type === 'cashback' ? 'cashback' : type === 'refund' ? 'refund' : type === 'topup' ? 'topup' : 'credit',
+    amount,
+    balanceBefore,
+    balanceAfter: {
+      total: updated.balance.total,
+      available: updated.balance.available,
+      pending: updated.balance.pending,
+      cashback: updated.balance.cashback,
+    },
+    reference: { type: type === 'cashback' ? 'cashback' : type === 'refund' ? 'refund' : type === 'topup' ? 'topup' : 'other' },
+  });
+
   // Sync with User model
   await this.syncWithUser();
 };
@@ -524,6 +564,14 @@ WalletSchema.methods.deductFunds = async function(amount: number): Promise<void>
   if (!this.canSpend(amount)) {
     throw new Error('Insufficient balance or daily limit exceeded');
   }
+
+  // Snapshot balance before mutation
+  const balanceBefore = {
+    total: this.balance.total,
+    available: this.balance.available,
+    pending: this.balance.pending,
+    cashback: this.balance.cashback,
+  };
 
   // Atomic deduction with balance guard — prevents going negative
   const updated = await (this.constructor as any).findOneAndUpdate(
@@ -552,6 +600,23 @@ WalletSchema.methods.deductFunds = async function(amount: number): Promise<void>
   this.statistics = updated.statistics;
   this.limits = updated.limits;
   this.lastTransactionAt = updated.lastTransactionAt;
+
+  // Audit log (fire-and-forget)
+  logTransaction({
+    userId: this.user,
+    walletId: this._id,
+    walletType: 'user',
+    operation: 'debit',
+    amount,
+    balanceBefore,
+    balanceAfter: {
+      total: updated.balance.total,
+      available: updated.balance.available,
+      pending: updated.balance.pending,
+      cashback: updated.balance.cashback,
+    },
+    reference: { type: 'other' },
+  });
 
   // Sync with User model
   await this.syncWithUser();
@@ -775,14 +840,17 @@ WalletSchema.methods.getFormattedBalance = function(): string {
 // Method to sync with User model
 WalletSchema.methods.syncWithUser = async function(): Promise<void> {
   const User = mongoose.model('User');
-  // balance.total = ReZ + pending + cashback (no branded).
-  // For the User model display, include branded coins so the profile shows the full total.
+  // Wallet.balance.total = ReZ + pending + cashback (excludes branded coins).
+  // User.wallet.balance = display total including branded coins for profile page.
+  // User.wallet.availableBalance = spendable ReZ balance only (no branded, no pending).
   const brandedTotal = (this.brandedCoins || []).reduce((sum: number, coin: any) => sum + (coin.amount || 0), 0);
   await User.findByIdAndUpdate(this.user, {
     'wallet.balance': this.balance.total + brandedTotal,
+    'wallet.availableBalance': this.balance.available,
     'wallet.totalEarned': this.statistics.totalEarned,
     'wallet.totalSpent': this.statistics.totalSpent,
-    'wallet.pendingAmount': this.balance.pending
+    'wallet.pendingAmount': this.balance.pending,
+    'wallet.brandedTotal': brandedTotal
   });
 };
 

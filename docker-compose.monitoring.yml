@@ -1,30 +1,17 @@
 version: '3.8'
 
-# REZ Backend Monitoring Stack
-# Usage: docker-compose -f docker-compose.monitoring.yml up -d
-# Access:
-#   - Prometheus: http://localhost:9090
-#   - Grafana: http://localhost:3000 (admin/admin)
-#   - AlertManager: http://localhost:9093
-
 services:
-  # Prometheus - Metrics collection and storage
   prometheus:
-    image: prom/prometheus:v2.45.0
-    container_name: rez-prometheus
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
     volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./monitoring/prometheus/alert.rules.yml:/etc/prometheus/alert.rules.yml:ro
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=15d'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
       - '--web.enable-lifecycle'
-    ports:
-      - "9090:9090"
     restart: unless-stopped
     networks:
       - rez-network
@@ -33,25 +20,34 @@ services:
         limits:
           cpus: '0.5'
           memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # Grafana - Visualization and dashboards
   grafana:
-    image: grafana/grafana:10.0.0
-    container_name: rez-grafana
+    image: grafana/grafana:latest
+    ports:
+      - "3002:3000"
     volumes:
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana-data:/var/lib/grafana
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:3000}
-      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-piechart-panel
-    ports:
-      - "3000:3000"
-    restart: unless-stopped
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
       - rez-network
     deploy:
@@ -59,83 +55,28 @@ services:
         limits:
           cpus: '0.5'
           memory: 512M
-
-  # AlertManager - Alert handling (optional)
-  alertmanager:
-    image: prom/alertmanager:v0.25.0
-    container_name: rez-alertmanager
-    volumes:
-      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-      - alertmanager-data:/alertmanager
-    command:
-      - '--config.file=/etc/alertmanager/alertmanager.yml'
-      - '--storage.path=/alertmanager'
-    ports:
-      - "9093:9093"
-    restart: unless-stopped
-    networks:
-      - rez-network
-    profiles:
-      - with-alerting
-
-  # Node Exporter - System metrics (optional)
-  node-exporter:
-    image: prom/node-exporter:v1.6.0
-    container_name: rez-node-exporter
-    volumes:
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /:/rootfs:ro
-    command:
-      - '--path.procfs=/host/proc'
-      - '--path.sysfs=/host/sys'
-      - '--path.rootfs=/rootfs'
-      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
-    ports:
-      - "9100:9100"
-    restart: unless-stopped
-    networks:
-      - rez-network
-    profiles:
-      - with-exporters
-
-  # Redis Exporter - Redis metrics (optional)
-  redis-exporter:
-    image: oliver006/redis_exporter:v1.52.0
-    container_name: rez-redis-exporter
-    environment:
-      - REDIS_ADDR=redis:6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
-    ports:
-      - "9121:9121"
-    restart: unless-stopped
-    networks:
-      - rez-network
-    profiles:
-      - with-exporters
-
-  # MongoDB Exporter - MongoDB metrics (optional)
-  mongodb-exporter:
-    image: percona/mongodb_exporter:0.39.0
-    container_name: rez-mongodb-exporter
-    environment:
-      - MONGODB_URI=${MONGODB_URI:-mongodb://mongo:27017}
-    ports:
-      - "9216:9216"
-    restart: unless-stopped
-    networks:
-      - rez-network
-    profiles:
-      - with-exporters
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   prometheus-data:
     driver: local
   grafana-data:
     driver: local
-  alertmanager-data:
-    driver: local
 
 networks:
   rez-network:
     external: true
+    name: rez-backend_rez-network

@@ -255,14 +255,14 @@ async function awardScratchCardPrize(userId: string, prize: ScratchCardPrize): P
       `Won ${prize.value} coins from Scratch Card`
     );
   } else if (prize.type === 'cashback') {
-    // TODO: Implement cashback awarding
-    console.log(`Awarded ${prize.value}% cashback to user ${userId}`);
+    // TODO: Implement cashback awarding via cashbackService
+    console.warn(`[SCRATCH CARD] Cashback prize not implemented - user ${userId} won ${prize.value}% cashback but it was NOT awarded`);
   } else if (prize.type === 'discount') {
     // TODO: Implement discount coupon creation
-    console.log(`Awarded ${prize.value}% discount to user ${userId}`);
+    console.warn(`[SCRATCH CARD] Discount prize not implemented - user ${userId} won ${prize.value}% discount but it was NOT awarded`);
   } else if (prize.type === 'voucher') {
-    // TODO: Implement voucher awarding
-    console.log(`Awarded ₹${prize.value} voucher to user ${userId}`);
+    // TODO: Implement voucher awarding via voucherRedemptionService
+    console.warn(`[SCRATCH CARD] Voucher prize not implemented - user ${userId} won ₹${prize.value} voucher but it was NOT awarded`);
   }
 }
 

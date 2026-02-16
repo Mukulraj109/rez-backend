@@ -5,8 +5,22 @@
  */
 
 import { Router } from 'express';
-import { authenticate, optionalAuth } from '../middleware/auth';
-import { cacheMiddleware } from '../middleware/cacheMiddleware';
+import { authenticate, optionalAuth, requireAdmin } from '../middleware/auth';
+import { validate, validateParams } from '../middleware/validation';
+import {
+  createBrandSchema,
+  updateBrandSchema,
+  createCategorySchema,
+  updateCategorySchema,
+  createCollectionSchema,
+  updateCollectionSchema,
+  createOfferSchema,
+  updateOfferSchema,
+  createBannerSchema,
+  updateBannerSchema,
+  objectIdParamsSchema,
+  toggleAllianceSchema
+} from '../validators/mallValidators';
 import {
   // Public endpoints
   getMallHomepageData,
@@ -61,7 +75,9 @@ import {
   deleteMallOffer,
   createMallBanner,
   updateMallBanner,
-  deleteMallBanner
+  deleteMallBanner,
+  toggleStoreAlliance,
+  getAdminAllianceStores
 } from '../controllers/mallController';
 
 const router = Router();
@@ -73,7 +89,7 @@ const router = Router();
  * @desc    Get aggregated mall homepage data
  * @access  Public (optionalAuth for personalization)
  */
-router.get('/homepage', optionalAuth, cacheMiddleware({ ttl: 300, keyPrefix: 'mall:hp', condition: () => true }), getMallHomepageData);
+router.get('/homepage', optionalAuth, getMallHomepageData);
 
 // ==================== BRAND ROUTES ====================
 
@@ -149,14 +165,14 @@ router.post('/brands/:brandId/purchase', authenticate, trackBrandPurchase);
  * @desc    Get ALL mall homepage data in one call (stores + banners + trending + reward boosters + deals)
  * @access  Public
  */
-router.get('/homepage-batch', optionalAuth, cacheMiddleware({ ttl: 300, keyPrefix: 'mall:hp-batch', condition: () => true }), getMallHomepageBatch);
+router.get('/homepage-batch', optionalAuth, getMallHomepageBatch);
 
 /**
  * @route   GET /api/mall/stores/homepage
  * @desc    Get mall stores homepage data (featured, new, top-rated, premium stores)
  * @access  Public
  */
-router.get('/stores/homepage', optionalAuth, cacheMiddleware({ ttl: 300, keyPrefix: 'mall:stores:hp', condition: () => true }), getMallStoresHomepage);
+router.get('/stores/homepage', optionalAuth, getMallStoresHomepage);
 
 /**
  * @route   GET /api/mall/stores/featured
@@ -198,14 +214,14 @@ router.get('/stores/alliance', optionalAuth, getAllianceMallStores);
  * @desc    Get trending mall stores (by views/activity)
  * @access  Public
  */
-router.get('/stores/trending', optionalAuth, cacheMiddleware({ ttl: 600, keyPrefix: 'mall:stores:trend', condition: () => true }), getTrendingMallStores);
+router.get('/stores/trending', optionalAuth, getTrendingMallStores);
 
 /**
  * @route   GET /api/mall/stores/reward-boosters
  * @desc    Get stores with highest coin reward percentages
  * @access  Public
  */
-router.get('/stores/reward-boosters', optionalAuth, cacheMiddleware({ ttl: 600, keyPrefix: 'mall:stores:rb', condition: () => true }), getRewardBoosterStores);
+router.get('/stores/reward-boosters', optionalAuth, getRewardBoosterStores);
 
 /**
  * @route   GET /api/mall/stores/search
@@ -295,7 +311,7 @@ router.get('/offers', optionalAuth, getMallOffers);
  * @desc    Get deals of the day (flash sales)
  * @access  Public
  */
-router.get('/offers/today', optionalAuth, cacheMiddleware({ ttl: 300, keyPrefix: 'mall:deals', condition: () => true }), getDealsOfDay);
+router.get('/offers/today', optionalAuth, getDealsOfDay);
 
 /**
  * @route   GET /api/mall/offers/exclusive
@@ -318,37 +334,40 @@ router.get('/banners', optionalAuth, getMallBanners);
  * @desc    Get hero banners
  * @access  Public
  */
-router.get('/banners/hero', optionalAuth, cacheMiddleware({ ttl: 600, keyPrefix: 'mall:banners:hero', condition: () => true }), getMallHeroBanners);
+router.get('/banners/hero', optionalAuth, getMallHeroBanners);
 
 // ==================== ADMIN ROUTES ====================
-// Note: In production, add admin role verification middleware
 
 // Admin Stats
-router.get('/admin/stats', authenticate, getAdminStats);
+router.get('/admin/stats', authenticate, requireAdmin, getAdminStats);
 
 // Brand Admin Routes
-router.post('/admin/brands', authenticate, createMallBrand);
-router.put('/admin/brands/:brandId', authenticate, updateMallBrand);
-router.delete('/admin/brands/:brandId', authenticate, deleteMallBrand);
+router.post('/admin/brands', authenticate, requireAdmin, validate(createBrandSchema), createMallBrand);
+router.put('/admin/brands/:brandId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), validate(updateBrandSchema), updateMallBrand);
+router.delete('/admin/brands/:brandId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), deleteMallBrand);
 
 // Category Admin Routes
-router.post('/admin/categories', authenticate, createMallCategory);
-router.put('/admin/categories/:categoryId', authenticate, updateMallCategory);
-router.delete('/admin/categories/:categoryId', authenticate, deleteMallCategory);
+router.post('/admin/categories', authenticate, requireAdmin, validate(createCategorySchema), createMallCategory);
+router.put('/admin/categories/:categoryId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), validate(updateCategorySchema), updateMallCategory);
+router.delete('/admin/categories/:categoryId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), deleteMallCategory);
 
 // Collection Admin Routes
-router.post('/admin/collections', authenticate, createMallCollection);
-router.put('/admin/collections/:collectionId', authenticate, updateMallCollection);
-router.delete('/admin/collections/:collectionId', authenticate, deleteMallCollection);
+router.post('/admin/collections', authenticate, requireAdmin, validate(createCollectionSchema), createMallCollection);
+router.put('/admin/collections/:collectionId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), validate(updateCollectionSchema), updateMallCollection);
+router.delete('/admin/collections/:collectionId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), deleteMallCollection);
 
 // Offer Admin Routes
-router.post('/admin/offers', authenticate, createMallOffer);
-router.put('/admin/offers/:offerId', authenticate, updateMallOffer);
-router.delete('/admin/offers/:offerId', authenticate, deleteMallOffer);
+router.post('/admin/offers', authenticate, requireAdmin, validate(createOfferSchema), createMallOffer);
+router.put('/admin/offers/:offerId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), validate(updateOfferSchema), updateMallOffer);
+router.delete('/admin/offers/:offerId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), deleteMallOffer);
 
 // Banner Admin Routes
-router.post('/admin/banners', authenticate, createMallBanner);
-router.put('/admin/banners/:bannerId', authenticate, updateMallBanner);
-router.delete('/admin/banners/:bannerId', authenticate, deleteMallBanner);
+router.post('/admin/banners', authenticate, requireAdmin, validate(createBannerSchema), createMallBanner);
+router.put('/admin/banners/:bannerId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), validate(updateBannerSchema), updateMallBanner);
+router.delete('/admin/banners/:bannerId', authenticate, requireAdmin, validateParams(objectIdParamsSchema), deleteMallBanner);
+
+// Alliance Store Admin Routes
+router.get('/admin/stores/alliance', authenticate, requireAdmin, getAdminAllianceStores);
+router.put('/admin/stores/:storeId/alliance', authenticate, requireAdmin, validateParams(objectIdParamsSchema), validate(toggleAllianceSchema), toggleStoreAlliance);
 
 export default router;

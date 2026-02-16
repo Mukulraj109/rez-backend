@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { requireAuth, requireAdmin, requireSeniorAdmin } from '../../middleware/auth';
 import { Order } from '../../models/Order';
 import { User } from '../../models/User';
+import { isSocketInitialized, getIO } from '../../config/socket';
 import { Product } from '../../models/Product';
 import { Wallet } from '../../models/Wallet';
 import { Subscription } from '../../models/Subscription';
@@ -300,6 +301,17 @@ router.post('/:id/refund', requireSeniorAdmin, async (req: Request, res: Respons
     }
 
     await order.save();
+
+    // Emit real-time notification to consumer app
+    if (isSocketInitialized()) {
+      getIO().emit('order_refunded', {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        userId: order.user,
+        refundAmount,
+        message: `Your order ${order.orderNumber} has been refunded (₹${refundAmount})`,
+      });
+    }
 
     console.log(`✅ [ADMIN ORDERS] Order ${order.orderNumber} refunded successfully`);
 

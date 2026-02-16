@@ -152,10 +152,6 @@ export const getCurrentSubscription = async (req: Request, res: Response) => {
  */
 export const subscribeToPlan = async (req: Request, res: Response) => {
   try {
-    console.log('🔷 [SUBSCRIBE] ========== NEW SUBSCRIPTION REQUEST ==========');
-    console.log('🔷 [SUBSCRIBE] Request body:', req.body);
-    console.log('🔷 [SUBSCRIBE] User ID from token:', req.user?._id || req.user?.id);
-
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       console.error('❌ [SUBSCRIBE] No user ID found - user not authenticated');

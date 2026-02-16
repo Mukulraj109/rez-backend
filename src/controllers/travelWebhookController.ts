@@ -9,6 +9,24 @@ import { Request, Response } from 'express';
 import { ServiceBooking } from '../models/ServiceBooking';
 import { sendSuccess, sendError } from '../utils/response';
 import { logger } from '../config/logger';
+import crypto from 'crypto';
+
+/**
+ * Verify HMAC-SHA256 webhook signature from travel partners
+ */
+function verifyWebhookSignature(body: string, signature: string): boolean {
+  const secret = process.env.TRAVEL_WEBHOOK_SECRET;
+  if (!secret) {
+    logger.warn('[TRAVEL WEBHOOK] TRAVEL_WEBHOOK_SECRET not configured');
+    return false;
+  }
+  const expected = crypto.createHmac('sha256', secret).update(body).digest('hex');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
 
 /**
  * POST /api/travel-webhooks/booking-update
@@ -35,8 +53,12 @@ export const handleBookingUpdate = async (req: Request, res: Response) => {
       signature,
     } = req.body;
 
-    // TODO: Verify webhook signature with partner-specific HMAC key
-    // For now, log and accept all requests
+    // Verify webhook signature
+    const sig = (req.headers['x-webhook-signature'] as string) || signature;
+    if (!sig || !verifyWebhookSignature(JSON.stringify(req.body), sig)) {
+      logger.warn('[TRAVEL WEBHOOK] Invalid or missing signature for booking update');
+      return sendError(res, 'Invalid webhook signature', 401);
+    }
     logger.info('[TRAVEL WEBHOOK] Booking update received:', {
       bookingNumber,
       externalReference,
@@ -102,7 +124,12 @@ export const handlePriceUpdate = async (req: Request, res: Response) => {
   try {
     const { serviceId, newPrice, effectiveFrom, signature } = req.body;
 
-    // TODO: Verify webhook signature
+    // Verify webhook signature
+    const sig = (req.headers['x-webhook-signature'] as string) || signature;
+    if (!sig || !verifyWebhookSignature(JSON.stringify(req.body), sig)) {
+      logger.warn('[TRAVEL WEBHOOK] Invalid or missing signature for price update');
+      return sendError(res, 'Invalid webhook signature', 401);
+    }
     logger.info('[TRAVEL WEBHOOK] Price update received:', {
       serviceId,
       newPrice,
@@ -113,8 +140,7 @@ export const handlePriceUpdate = async (req: Request, res: Response) => {
       return sendError(res, 'serviceId and newPrice are required', 400);
     }
 
-    // TODO: Update product pricing when partner integration is live
-    // For now, log the price update for monitoring
+    // STUB: Product pricing update not implemented. Will be enabled with partner API integration.
     logger.info('[TRAVEL WEBHOOK] Price update logged (stub) — will implement with partner API');
 
     sendSuccess(res, { serviceId, newPrice, acknowledged: true });

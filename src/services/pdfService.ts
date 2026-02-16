@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
 import { Response } from 'express';
+import { pct, add } from '../utils/currency';
 
 interface InvoiceData {
   _id?: any;
@@ -244,8 +245,8 @@ export class PDFService {
   ): void {
     const amount = invoiceData.price || invoiceData.amount || 0;
     const subtotal = amount;
-    const tax = subtotal * 0.18; // 18% GST
-    const total = subtotal + tax;
+    const tax = pct(subtotal, 18); // 18% GST
+    const total = add(subtotal, tax);
 
     const totalsY = 480;
 

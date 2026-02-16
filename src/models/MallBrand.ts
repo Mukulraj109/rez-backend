@@ -182,19 +182,18 @@ const MallBrandSchema = new Schema<IMallBrand>({
     type: String,
     trim: true
   },
-  affiliateCode: {
-    type: String,
-    trim: true
-  },
   // Webhook configuration for receiving conversion notifications
+  // NOTE: apiKey and secretKey are excluded from queries by default (select: false)
   webhookConfig: {
     apiKey: {
       type: String,
       trim: true,
+      select: false,
     },
     secretKey: {
       type: String,
       trim: true,
+      select: false,
     },
     webhookUrl: {
       type: String,
@@ -206,25 +205,35 @@ const MallBrandSchema = new Schema<IMallBrand>({
     },
   },
   // Affiliate network configuration for third-party integrations (Cuelinks, Vcommission, etc.)
+  // NOTE: Sensitive fields excluded from queries by default (select: false)
   affiliateConfig: {
     network: {
       type: String,
       enum: ['direct', 'cuelinks', 'vcommission', 'impact', 'other'],
       default: 'direct',
+      select: false,
     },
     merchantId: {
       type: String,
       trim: true,
+      select: false,
     },
     trackingTemplate: {
       type: String,
       trim: true,
+      select: false,
     },
     callbackFormat: {
       type: String,
       enum: ['json', 'query'],
       default: 'json',
+      select: false,
     },
+  },
+  affiliateCode: {
+    type: String,
+    trim: true,
+    select: false,
   },
   isActive: {
     type: Boolean,
@@ -341,7 +350,7 @@ MallBrandSchema.virtual('hasCashback').get(function(this: IMallBrand) {
 // Virtual for calculated cashback display
 MallBrandSchema.virtual('cashbackDisplay').get(function(this: IMallBrand) {
   if (this.cashback.maxAmount) {
-    return `Up to ₹${this.cashback.maxAmount}`;
+    return `Up to ${this.cashback.maxAmount}`;
   }
   return `${this.cashback.percentage}% cashback`;
 });
@@ -400,11 +409,13 @@ MallBrandSchema.statics.searchBrands = function(
   filters: any = {},
   limit: number = 20
 ) {
+  // Escape special regex characters to prevent ReDoS
+  const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const searchQuery: any = {
     isActive: true,
     $or: [
-      { name: { $regex: query, $options: 'i' } },
-      { tags: { $in: [new RegExp(query, 'i')] } }
+      { name: { $regex: escapedQuery, $options: 'i' } },
+      { tags: { $in: [new RegExp(escapedQuery, 'i')] } }
     ]
   };
 

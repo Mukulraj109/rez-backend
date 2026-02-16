@@ -6,6 +6,10 @@ import { ServiceCategory } from '../models/ServiceCategory';
 import { logger } from '../config/logger';
 import mongoose from 'mongoose';
 import travelCashbackService, { TRAVEL_CATEGORY_SLUGS } from '../services/travelCashbackService';
+import { createRefund as createRazorpayRefund } from '../services/razorpayService';
+import stripeService from '../services/stripeService';
+import { Refund } from '../models/Refund';
+import { pct } from '../utils/currency';
 
 // Use Express Request with user property (extended globally)
 
@@ -181,7 +185,7 @@ export const createBooking = async (req: Request, res: Response) => {
     }
     
     // Calculate cashback based on total price (not base price)
-    const cashbackEarned = Math.round((totalPrice * cashbackPercentage) / 100);
+    const cashbackEarned = pct(totalPrice, cashbackPercentage);
 
     // Generate booking number with category-specific prefix
     const categorySlug = (service.serviceCategory as any)?.slug || 'SB';
@@ -500,6 +504,58 @@ export const cancelBooking = async (req: Request, res: Response) => {
         } catch (refundError: any) {
           logger.error('Error processing travel cashback refund:', refundError);
           // Booking is still cancelled even if cashback clawback fails — admin will review
+        }
+      }
+
+      // Process payment gateway refund
+      if (booking.paymentStatus === 'paid' && booking.paymentId) {
+        try {
+          const paymentRefundAmount = (booking.pricing?.total || 0) * (refundPercentage / 100);
+          if (paymentRefundAmount > 0) {
+            const isRazorpay = booking.paymentId.startsWith('pay_');
+            let gatewayRefundId: string | undefined;
+
+            if (isRazorpay) {
+              const result = await createRazorpayRefund(booking.paymentId, paymentRefundAmount);
+              gatewayRefundId = result.id;
+            } else {
+              const result = await stripeService.createRefund({
+                paymentIntentId: booking.paymentId,
+                amount: Math.round(paymentRefundAmount * 100),
+                reason: 'requested_by_customer',
+              });
+              gatewayRefundId = result.id;
+            }
+
+            booking.paymentStatus = refundPercentage === 100 ? 'refunded' : 'partial';
+            await booking.save();
+
+            if (gatewayRefundId) {
+              await Refund.create({
+                order: booking._id,
+                user: booking.user,
+                orderNumber: booking.bookingNumber,
+                paymentMethod: isRazorpay ? 'razorpay' : 'stripe',
+                refundAmount: paymentRefundAmount,
+                refundType: refundPercentage === 100 ? 'full' : 'partial',
+                refundReason: reason || 'Travel booking cancelled',
+                gatewayRefundId,
+                status: 'processing',
+                requestedAt: new Date(),
+                metadata: { bookingType: 'service_booking', categorySlug: catSlug, refundPercentage },
+              });
+            }
+
+            logger.info('Payment refund processed:', {
+              bookingId: booking._id,
+              refundAmount: paymentRefundAmount,
+              refundPercentage,
+              gateway: isRazorpay ? 'razorpay' : 'stripe',
+              gatewayRefundId,
+            });
+          }
+        } catch (refundError: any) {
+          logger.error('Payment refund failed (admin will review):', refundError);
         }
       }
     } else {

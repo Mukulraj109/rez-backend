@@ -30,6 +30,13 @@ export const getRedisConfig = (): RedisConfig => {
 };
 
 /**
+ * Cache key version prefix (P-14: bump this when cache schema changes
+ * to prevent serving stale / incompatible cached data).
+ * All cache keys will be prefixed: "v{CACHE_VERSION}:{original_key}"
+ */
+export const CACHE_VERSION = 1;
+
+/**
  * Cache TTL (Time To Live) constants in seconds
  */
 export const CacheTTL = {
@@ -50,12 +57,12 @@ export const CacheTTL = {
   STORE_DETAIL: 60 * 60, // 1 hour
   STORE_PRODUCTS: 30 * 60, // 30 minutes
 
-  // Cart caching
-  CART_DATA: 5 * 60, // 5 minutes
-  CART_SUMMARY: 3 * 60, // 3 minutes
+  // Cart caching — short TTL to avoid stale pricing / stock issues
+  CART_DATA: 60, // 60 seconds (P-11: reduced from 5 min to prevent stale pricing)
+  CART_SUMMARY: 30, // 30 seconds (P-11: reduced from 3 min to prevent stale pricing)
 
-  // User caching
-  USER_PROFILE: 30 * 60, // 30 minutes
+  // User caching — contains PII (P-15: shorter TTL for sensitive data)
+  USER_PROFILE: 30, // 30 seconds (P-15: contains PII — name, email, phone)
   USER_ORDERS: 10 * 60, // 10 minutes
 
   // Offers and vouchers
@@ -64,6 +71,10 @@ export const CacheTTL = {
 
   // Static data
   STATIC_DATA: 60 * 60 * 24, // 24 hours
+
+  // Sensitive / PII data — keep very short to limit exposure window (P-15)
+  WALLET_DATA: 30, // 30 seconds (P-15: contains financial PII — balance, transactions)
+  SENSITIVE_DATA: 30, // 30 seconds (P-15: generic sensitive-data TTL)
 
   // Very short-lived cache
   SHORT_CACHE: 60, // 1 minute

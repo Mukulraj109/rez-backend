@@ -384,10 +384,6 @@ class GamificationIntegrationService {
       // Initialize achievements
       await achievementService.initializeUserAchievements(userId);
 
-      // Check for early adopter
-      // TODO: Implement checkSpecialAchievements method in achievementService
-      // await achievementService.checkSpecialAchievements(userId);
-
       console.log(`✅ Gamification initialized for new user ${userId}`);
     } catch (error) {
       console.error('Error in onUserRegistered gamification:', error);

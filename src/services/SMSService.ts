@@ -38,7 +38,7 @@ export class SMSService {
         to: options.to,
       });
 
-      console.log(`✅ SMS sent successfully to ${options.to} (SID: ${result.sid})`);
+      console.log(`✅ SMS sent successfully to ***${options.to.slice(-4)} (SID: ${result.sid})`);
     } catch (error: any) {
       console.error('❌ SMS send error:', error);
       throw new Error(`Failed to send SMS: ${error.message}`);

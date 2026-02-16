@@ -29,6 +29,24 @@ const devFormat = printf(({ level, message, timestamp, correlationId, service, .
   return msg;
 });
 
+// Sensitive data masking format — auto-redacts PII from log strings
+const maskSensitiveData = winston.format((info) => {
+  const msg = info.message;
+  if (typeof msg === 'string') {
+    let masked = msg;
+    // Mask phone numbers (+91XXXXXXXX → +91****XXXX)
+    masked = masked.replace(/(\+?\d{1,3})\d{6}(\d{4})/g, '$1****$2');
+    // Mask JWT tokens (eyJ... → eyJ***[REDACTED])
+    masked = masked.replace(/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, 'eyJ***[REDACTED]');
+    // Mask card numbers (1234567890123456 → ****3456)
+    masked = masked.replace(/\b\d{12,16}\b/g, (m: string) => '****' + m.slice(-4));
+    // Mask email addresses (user@example.com → u***@example.com)
+    masked = masked.replace(/([a-zA-Z0-9])[a-zA-Z0-9.+_-]*@/g, '$1***@');
+    info.message = masked;
+  }
+  return info;
+});
+
 // Production JSON format
 const prodFormat = json();
 
@@ -42,6 +60,7 @@ export const logger = winston.createLogger({
   format: combine(
     errors({ stack: true }),
     timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    maskSensitiveData(),
     process.env.NODE_ENV === 'production' ? prodFormat : devFormat
   ),
   transports: [
@@ -75,22 +94,22 @@ export const logger = winston.createLogger({
 
 // Add file transports in production
 if (process.env.NODE_ENV === 'production') {
-  // Combined logs
+  // Combined logs (90 days for financial compliance/PCI)
   logger.add(new DailyRotateFile({
     filename: path.join(logsDir, 'combined-%DATE%.log'),
     datePattern: 'YYYY-MM-DD',
     maxSize: '20m',
-    maxFiles: '14d',
+    maxFiles: '90d',
     format: json()
   }));
 
-  // Error logs
+  // Error logs (90 days for financial compliance/PCI)
   logger.add(new DailyRotateFile({
     level: 'error',
     filename: path.join(logsDir, 'error-%DATE%.log'),
     datePattern: 'YYYY-MM-DD',
     maxSize: '20m',
-    maxFiles: '30d',
+    maxFiles: '90d',
     format: json()
   }));
 

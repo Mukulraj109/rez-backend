@@ -20,16 +20,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     const authHeader = req.header('Authorization');
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
-    console.log('🔍 AUTH DEBUG: Request to', req.path);
-    console.log('🔍 AUTH DEBUG: Auth header exists:', !!authHeader);
-    console.log('🔍 AUTH DEBUG: Token exists:', !!token);
-
-    if (token) {
-      console.log('🔍 AUTH DEBUG: Token preview:', token.substring(0, 20) + '...');
-    }
-
     if (!token) {
-      console.log('🔍 AUTH DEBUG: No token provided');
       return res.status(401).json({
         success: false,
         message: 'No token provided, authorization denied'
@@ -39,25 +30,19 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     // Verify token using merchant-specific secret
     const merchantSecret = process.env.JWT_MERCHANT_SECRET;
     if (!merchantSecret) {
-      console.error('❌ CRITICAL ERROR: JWT_MERCHANT_SECRET is not configured in environment variables');
+      console.error('[MERCHANT AUTH] CRITICAL: JWT_MERCHANT_SECRET is not configured');
       return res.status(500).json({
         success: false,
         message: 'Server configuration error: JWT secret not configured'
       });
     }
-    console.log('🔍 AUTH DEBUG: Verifying token with merchant secret');
+
     const decoded = jwt.verify(token, merchantSecret) as any;
-    console.log('🔍 AUTH DEBUG: Token decoded successfully');
-    console.log('🔍 AUTH DEBUG: MerchantId:', decoded.merchantId);
-    console.log('🔍 AUTH DEBUG: MerchantUserId:', decoded.merchantUserId);
-    console.log('🔍 AUTH DEBUG: Role:', decoded.role);
 
     // Find merchant
     const merchant = await Merchant.findById(decoded.merchantId);
-    console.log('🔍 AUTH DEBUG: Merchant found:', !!merchant);
 
     if (!merchant) {
-      console.log('🔍 AUTH DEBUG: Merchant not found for ID:', decoded.merchantId);
       return res.status(401).json({
         success: false,
         message: 'Token is not valid - merchant not found'
@@ -65,9 +50,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     }
 
     // Check if merchant is active
-    console.log('🔍 AUTH DEBUG: Merchant isActive:', merchant.isActive);
     if (!merchant.isActive) {
-      console.log('🔍 AUTH DEBUG: Merchant account is deactivated');
       return res.status(401).json({
         success: false,
         message: 'Merchant account is deactivated'
@@ -80,11 +63,9 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
 
     // If this is a team member (has merchantUserId), load their data
     if (decoded.merchantUserId) {
-      console.log('🔍 AUTH DEBUG: Loading MerchantUser data');
       const merchantUser = await MerchantUser.findById(decoded.merchantUserId);
 
       if (!merchantUser) {
-        console.log('🔍 AUTH DEBUG: MerchantUser not found for ID:', decoded.merchantUserId);
         return res.status(401).json({
           success: false,
           message: 'Token is not valid - user not found'
@@ -93,7 +74,6 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
 
       // Check if user is active
       if (merchantUser.status !== 'active') {
-        console.log('🔍 AUTH DEBUG: MerchantUser account is', merchantUser.status);
         return res.status(403).json({
           success: false,
           message: `Account is ${merchantUser.status}. Please contact your administrator.`
@@ -102,7 +82,6 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
 
       // Check if account is locked
       if (merchantUser.accountLockedUntil && merchantUser.accountLockedUntil > new Date()) {
-        console.log('🔍 AUTH DEBUG: MerchantUser account is locked');
         return res.status(423).json({
           success: false,
           message: 'Account is temporarily locked. Please try again later.'
@@ -110,19 +89,11 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
       }
 
       req.merchantUser = merchantUser;
-      console.log('🔍 AUTH DEBUG: Authentication successful for team member:', merchantUser.name);
-    } else {
-      console.log('🔍 AUTH DEBUG: Authentication successful for merchant owner:', merchant.businessName);
     }
 
     return next();
   } catch (error: any) {
-    console.error('🔍 AUTH DEBUG: Auth middleware error:', error);
-    console.error('🔍 AUTH DEBUG: Error name:', error.name);
-    console.error('🔍 AUTH DEBUG: Error message:', error.message);
-
     if (error.name === 'JsonWebTokenError') {
-      console.log('🔍 AUTH DEBUG: JWT verification failed');
       return res.status(401).json({
         success: false,
         message: 'Token is not valid'
@@ -130,14 +101,13 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     }
 
     if (error.name === 'TokenExpiredError') {
-      console.log('🔍 AUTH DEBUG: JWT token expired');
       return res.status(401).json({
         success: false,
         message: 'Token has expired'
       });
     }
 
-    console.log('🔍 AUTH DEBUG: General authentication error');
+    console.error('[MERCHANT AUTH] Authentication error:', error.message);
     res.status(500).json({
       success: false,
       message: 'Authentication error'
@@ -155,7 +125,7 @@ export const optionalAuthMiddleware = async (req: Request, res: Response, next: 
       const merchantSecret = process.env.JWT_MERCHANT_SECRET;
       if (!merchantSecret) {
         // For optional auth, we just skip authentication if secret is not configured
-        console.warn('⚠️ WARNING: JWT_MERCHANT_SECRET not configured, skipping optional authentication');
+        console.warn('[MERCHANT AUTH] JWT_MERCHANT_SECRET not configured, skipping optional authentication');
         return next();
       }
       const decoded = jwt.verify(token, merchantSecret) as any;

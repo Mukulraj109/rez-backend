@@ -151,6 +151,7 @@ UserCashbackSchema.index({ user: 1, status: 1 });
 UserCashbackSchema.index({ user: 1, expiryDate: 1 });
 UserCashbackSchema.index({ status: 1, expiryDate: 1 });
 UserCashbackSchema.index({ earnedDate: -1 });
+UserCashbackSchema.index({ order: 1, user: 1 }, { unique: true, sparse: true });
 
 // Virtual for days until expiry
 UserCashbackSchema.virtual('daysUntilExpiry').get(function(this: IUserCashback) {

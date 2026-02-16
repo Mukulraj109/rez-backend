@@ -12,7 +12,7 @@ import { AppError } from '../middleware/errorHandler';
 
 // Get all categories with optional filtering
 export const getCategories = asyncHandler(async (req: Request, res: Response) => {
-  const { type, featured, parent } = req.query;
+  const { type, featured, parent, page = 1, limit = 50 } = req.query;
 
   try {
     const query: any = { isActive: true };
@@ -25,13 +25,33 @@ export const getCategories = asyncHandler(async (req: Request, res: Response) =>
       query.parentCategory = parent;
     }
 
-    const categories = await Category.find(query)
-      .populate('parentCategory', 'name slug')
-      .populate('childCategories', 'name slug image')
-      .sort({ sortOrder: 1, name: 1 })
-      .lean();
+    const pageNum = Number(page);
+    const limitNum = Math.min(Number(limit), 100); // cap at 100
+    const skip = (pageNum - 1) * limitNum;
 
-    sendSuccess(res, categories, 'Categories retrieved successfully');
+    const [categories, total] = await Promise.all([
+      Category.find(query)
+        .select('name slug image icon sortOrder type parentCategory childCategories metadata isActive')
+        .populate('parentCategory', 'name slug')
+        .populate('childCategories', 'name slug image')
+        .sort({ sortOrder: 1, name: 1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Category.countDocuments(query)
+    ]);
+
+    sendSuccess(res, {
+      categories,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum),
+        hasNext: pageNum < Math.ceil(total / limitNum),
+        hasPrev: pageNum > 1
+      }
+    }, 'Categories retrieved successfully');
 
   } catch (error) {
     throw new AppError('Failed to fetch categories', 500);
@@ -48,6 +68,7 @@ export const getCategoryTree = asyncHandler(async (req: Request, res: Response) 
     if (type) query.type = type;
 
     const rootCategories = await Category.find(query)
+      .select('name slug image icon sortOrder type childCategories isActive')
       .populate('childCategories', 'name slug image sortOrder')
       .sort({ sortOrder: 1, name: 1 })
       .lean();
@@ -104,49 +125,77 @@ export const getCategoryBySlug = asyncHandler(async (req: Request, res: Response
 
 // Get categories with product/store counts
 export const getCategoriesWithCounts = asyncHandler(async (req: Request, res: Response) => {
-  const { type = 'general' } = req.query;
+  const { type = 'general', page = 1, limit = 50 } = req.query;
 
   try {
     const query: any = { isActive: true };
     if (type) query.type = type;
 
+    const pageNum = Number(page);
+    const limitNum = Math.min(Number(limit), 100);
+    const skip = (pageNum - 1) * limitNum;
+
     const categories = await Category.find(query)
+      .select('name slug image icon sortOrder type storeCount productCount maxCashback isActive')
       .sort({ sortOrder: 1, name: 1 })
+      .skip(skip)
+      .limit(limitNum)
       .lean();
 
-    // Compute real counts and max cashback for each category
-    const categoriesWithCounts = await Promise.all(
-      categories.map(async (category: any) => {
-        // Get store count and max cashback for this category
-        const storeStats = await Store.aggregate([
-          { $match: { category: category._id, isActive: true } },
-          {
-            $group: {
-              _id: null,
-              count: { $sum: 1 },
-              maxCashback: { $max: '$offers.cashback' }
-            }
+    // Batch compute store stats and product counts for all categories at once
+    const categoryIds = categories.map((c: any) => c._id);
+
+    const [storeStatsArr, productStatsArr] = await Promise.all([
+      Store.aggregate([
+        { $match: { category: { $in: categoryIds }, isActive: true } },
+        {
+          $group: {
+            _id: '$category',
+            count: { $sum: 1 },
+            maxCashback: { $max: '$offers.cashback' }
           }
-        ]);
+        }
+      ]),
+      Product.aggregate([
+        { $match: { category: { $in: categoryIds }, isActive: true } },
+        {
+          $group: {
+            _id: '$category',
+            count: { $sum: 1 }
+          }
+        }
+      ])
+    ]);
 
-        // Get product count for this category
-        const productCount = await Product.countDocuments({
-          category: category._id,
-          isActive: true
-        });
+    const storeStatsMap = new Map(storeStatsArr.map((s: any) => [s._id?.toString(), s]));
+    const productStatsMap = new Map(productStatsArr.map((p: any) => [p._id?.toString(), p]));
 
-        const stats = storeStats[0] || { count: 0, maxCashback: 0 };
+    const categoriesWithCounts = categories.map((category: any) => {
+      const catId = category._id.toString();
+      const storeStats = storeStatsMap.get(catId);
+      const productStats = productStatsMap.get(catId);
 
-        return {
-          ...category,
-          storeCount: stats.count || category.storeCount || 0,
-          productCount: productCount || category.productCount || 0,
-          maxCashback: stats.maxCashback || category.maxCashback || 0
-        };
-      })
-    );
+      return {
+        ...category,
+        storeCount: storeStats?.count || category.storeCount || 0,
+        productCount: productStats?.count || category.productCount || 0,
+        maxCashback: storeStats?.maxCashback || category.maxCashback || 0
+      };
+    });
 
-    sendSuccess(res, categoriesWithCounts, 'Categories with counts retrieved successfully');
+    const total = await Category.countDocuments(query);
+
+    sendSuccess(res, {
+      categories: categoriesWithCounts,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum),
+        hasNext: pageNum < Math.ceil(total / limitNum),
+        hasPrev: pageNum > 1
+      }
+    }, 'Categories with counts retrieved successfully');
 
   } catch (error) {
     console.error('Error fetching categories with counts:', error);
@@ -156,17 +205,37 @@ export const getCategoriesWithCounts = asyncHandler(async (req: Request, res: Re
 
 // Get root categories (no parent)
 export const getRootCategories = asyncHandler(async (req: Request, res: Response) => {
-  const { type } = req.query;
+  const { type, page = 1, limit = 50 } = req.query;
 
   try {
     const query: any = { parentCategory: null, isActive: true };
     if (type) query.type = type;
 
-    const rootCategories = await Category.find(query)
-      .sort({ sortOrder: 1, name: 1 })
-      .lean();
+    const pageNum = Number(page);
+    const limitNum = Math.min(Number(limit), 100);
+    const skip = (pageNum - 1) * limitNum;
 
-    sendSuccess(res, rootCategories, 'Root categories retrieved successfully');
+    const [rootCategories, total] = await Promise.all([
+      Category.find(query)
+        .select('name slug image icon sortOrder type childCategories isActive')
+        .sort({ sortOrder: 1, name: 1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Category.countDocuments(query)
+    ]);
+
+    sendSuccess(res, {
+      categories: rootCategories,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum),
+        hasNext: pageNum < Math.ceil(total / limitNum),
+        hasPrev: pageNum > 1
+      }
+    }, 'Root categories retrieved successfully');
 
   } catch (error) {
     throw new AppError('Failed to fetch root categories', 500);
@@ -186,6 +255,7 @@ export const getFeaturedCategories = asyncHandler(async (req: Request, res: Resp
     if (type) query.type = type;
 
     const categories = await Category.find(query)
+      .select('name slug image icon sortOrder type metadata isActive')
       .sort({ sortOrder: 1, name: 1 })
       .limit(Number(limit))
       .lean();
@@ -207,6 +277,7 @@ export const getBestDiscountCategories = asyncHandler(async (req: Request, res: 
       isActive: true,
       isBestDiscount: true
     })
+      .select('name slug image icon sortOrder maxCashback storeCount isBestDiscount isActive')
       .sort({ maxCashback: -1, sortOrder: 1 })
       .limit(Number(limit))
       .lean();
@@ -234,7 +305,9 @@ export const getBestDiscountCategories = asyncHandler(async (req: Request, res: 
         categories = await Category.find({
           _id: { $in: categoryIds },
           isActive: true
-        }).lean();
+        })
+          .select('name slug image icon sortOrder maxCashback storeCount isActive')
+          .lean();
 
         // Add computed stats
         categories = categories.map((cat: any) => {
@@ -250,27 +323,28 @@ export const getBestDiscountCategories = asyncHandler(async (req: Request, res: 
         categories.sort((a: any, b: any) => (b.maxCashback || 0) - (a.maxCashback || 0));
       }
     } else {
-      // Add computed stats even for marked categories
-      categories = await Promise.all(
-        categories.map(async (category: any) => {
-          const storeStats = await Store.aggregate([
-            { $match: { category: category._id, isActive: true } },
-            {
-              $group: {
-                _id: null,
-                maxCashback: { $max: '$offers.cashback' },
-                storeCount: { $sum: 1 }
-              }
-            }
-          ]);
-          const stats = storeStats[0] || {};
-          return {
-            ...category,
-            maxCashback: stats.maxCashback || category.maxCashback || 0,
-            storeCount: stats.storeCount || category.storeCount || 0
-          };
-        })
-      );
+      // Batch compute stats for all marked categories at once
+      const markedCategoryIds = categories.map((c: any) => c._id);
+      const batchStoreStats = await Store.aggregate([
+        { $match: { category: { $in: markedCategoryIds }, isActive: true } },
+        {
+          $group: {
+            _id: '$category',
+            maxCashback: { $max: '$offers.cashback' },
+            storeCount: { $sum: 1 }
+          }
+        }
+      ]);
+      const discountStatsMap = new Map(batchStoreStats.map((s: any) => [s._id?.toString(), s]));
+
+      categories = categories.map((category: any) => {
+        const stats = discountStatsMap.get(category._id.toString());
+        return {
+          ...category,
+          maxCashback: stats?.maxCashback || category.maxCashback || 0,
+          storeCount: stats?.storeCount || category.storeCount || 0
+        };
+      });
     }
 
     sendSuccess(res, categories, 'Best discount categories retrieved successfully');
@@ -291,6 +365,7 @@ export const getBestSellerCategories = asyncHandler(async (req: Request, res: Re
       isActive: true,
       isBestSeller: true
     })
+      .select('name slug image icon sortOrder productCount storeCount isBestSeller isActive')
       .sort({ productCount: -1, storeCount: -1, sortOrder: 1 })
       .limit(Number(limit))
       .lean();
@@ -317,37 +392,55 @@ export const getBestSellerCategories = asyncHandler(async (req: Request, res: Re
         categories = await Category.find({
           _id: { $in: categoryIds },
           isActive: true
-        }).lean();
+        })
+          .select('name slug image icon sortOrder productCount storeCount isActive')
+          .lean();
 
-        // Add computed stats
-        categories = await Promise.all(
-          categories.map(async (cat: any) => {
-            const productStats = categoryMap.get(cat._id.toString());
-            const storeCount = await Store.countDocuments({ category: cat._id, isActive: true });
-            return {
-              ...cat,
-              productCount: productStats?.productCount || cat.productCount || 0,
-              storeCount: storeCount || cat.storeCount || 0
-            };
-          })
-        );
+        // Batch compute store counts for all categories at once
+        const fallbackCategoryIds = categories.map((c: any) => c._id);
+        const fallbackStoreStats = await Store.aggregate([
+          { $match: { category: { $in: fallbackCategoryIds }, isActive: true } },
+          { $group: { _id: '$category', count: { $sum: 1 } } }
+        ]);
+        const fallbackStoreMap = new Map(fallbackStoreStats.map((s: any) => [s._id?.toString(), s.count]));
+
+        categories = categories.map((cat: any) => {
+          const catId = cat._id.toString();
+          const productStats = categoryMap.get(catId);
+          return {
+            ...cat,
+            productCount: productStats?.productCount || cat.productCount || 0,
+            storeCount: fallbackStoreMap.get(catId) || cat.storeCount || 0
+          };
+        });
 
         // Sort by productCount
         categories.sort((a: any, b: any) => (b.productCount || 0) - (a.productCount || 0));
       }
     } else {
-      // Add computed stats even for marked categories
-      categories = await Promise.all(
-        categories.map(async (category: any) => {
-          const productCount = await Product.countDocuments({ category: category._id, isActive: true });
-          const storeCount = await Store.countDocuments({ category: category._id, isActive: true });
-          return {
-            ...category,
-            productCount: productCount || category.productCount || 0,
-            storeCount: storeCount || category.storeCount || 0
-          };
-        })
-      );
+      // Batch compute stats for all marked categories at once
+      const markedIds = categories.map((c: any) => c._id);
+      const [batchProductStats, batchStoreStats] = await Promise.all([
+        Product.aggregate([
+          { $match: { category: { $in: markedIds }, isActive: true } },
+          { $group: { _id: '$category', count: { $sum: 1 } } }
+        ]),
+        Store.aggregate([
+          { $match: { category: { $in: markedIds }, isActive: true } },
+          { $group: { _id: '$category', count: { $sum: 1 } } }
+        ])
+      ]);
+      const prodMap = new Map(batchProductStats.map((p: any) => [p._id?.toString(), p.count]));
+      const storeMap = new Map(batchStoreStats.map((s: any) => [s._id?.toString(), s.count]));
+
+      categories = categories.map((category: any) => {
+        const catId = category._id.toString();
+        return {
+          ...category,
+          productCount: prodMap.get(catId) || category.productCount || 0,
+          storeCount: storeMap.get(catId) || category.storeCount || 0
+        };
+      });
     }
 
     sendSuccess(res, categories, 'Best seller categories retrieved successfully');

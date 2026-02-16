@@ -1,6 +1,26 @@
 import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 import { User } from '../models/User';
+import redisService from '../services/redisService';
+
+// Token blacklist helpers (Redis-backed)
+const TOKEN_BLACKLIST_PREFIX = 'blacklist:token:';
+
+export async function blacklistToken(token: string, ttlSeconds: number): Promise<void> {
+  try {
+    await redisService.set(`${TOKEN_BLACKLIST_PREFIX}${token}`, '1', ttlSeconds);
+  } catch {
+    console.error('[AUTH] Failed to blacklist token (Redis unavailable)');
+  }
+}
+
+export async function isTokenBlacklisted(token: string): Promise<boolean> {
+  try {
+    return await redisService.exists(`${TOKEN_BLACKLIST_PREFIX}${token}`);
+  } catch {
+    return false; // Fail open if Redis is down — token still validated by JWT + DB
+  }
+}
 
 // JWT payload interface
 interface JWTPayload {
@@ -80,8 +100,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     console.log('🔐 [AUTH] Authenticating request:', {
       path: req.path,
       method: req.method,
-      hasToken: !!token,
-      tokenPreview: token ? token.substring(0, 20) + '...' : 'none'
+      hasToken: !!token
     });
 
     if (!token) {
@@ -93,8 +112,12 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     }
 
     try {
+      // Check if token is blacklisted (e.g. after logout or refresh)
+      if (await isTokenBlacklisted(token)) {
+        return res.status(401).json({ success: false, message: 'Token has been revoked' });
+      }
+
       const decoded = verifyToken(token);
-      console.log('🔓 [AUTH] Token decoded:', { userId: decoded.userId, role: decoded.role });
 
       const user = await User.findById(decoded.userId).select('-auth.refreshToken');
 
@@ -105,12 +128,6 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
           message: 'User not found'
         });
       }
-
-      console.log('✅ [AUTH] User found:', {
-        id: user._id,
-        phone: user.phoneNumber,
-        isActive: user.isActive
-      });
 
       if (!user.isActive) {
         console.warn('⚠️ [AUTH] Account deactivated:', user._id);
@@ -132,7 +149,6 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       req.user = user;
       req.userId = String(user._id);
 
-      console.log('✅ [AUTH] Authentication successful for user:', user._id);
       next();
     } catch (tokenError: any) {
       console.error('❌ [AUTH] Token verification failed:', {

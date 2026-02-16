@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import { mul, round2 } from '../utils/currency';
 
 // Service booking details for order items
 export interface IOrderServiceBookingDetails {
@@ -218,6 +219,8 @@ export interface IOrder extends Document {
     refundedAt?: Date;
     refundAmount?: number;
   };
+
+  idempotencyKey?: string;
 
   // Methods
   updateStatus(newStatus: string, message?: string, updatedBy?: string): Promise<void>;
@@ -595,6 +598,12 @@ const OrderSchema = new Schema<IOrder>({
     }
   },
 
+  idempotencyKey: {
+    type: String,
+    trim: true,
+    maxlength: 128
+  },
+
   // Payment gateway details
   paymentGateway: {
     gatewayOrderId: String,
@@ -628,6 +637,7 @@ OrderSchema.index({ createdAt: -1 });
 OrderSchema.index({ 'delivery.estimatedTime': 1 });
 
 // Compound indexes
+OrderSchema.index({ user: 1, idempotencyKey: 1 }, { unique: true, sparse: true });
 OrderSchema.index({ user: 1, status: 1, createdAt: -1 });
 OrderSchema.index({ 'items.store': 1, status: 1 });
 
@@ -756,12 +766,12 @@ OrderSchema.methods.calculateRefund = function (): number {
   // Apply cancellation charges based on timing
   const ageInHours = this.ageInHours;
   if (ageInHours > 24) {
-    refundAmount *= 0.9; // 10% cancellation fee after 24 hours
+    refundAmount = mul(refundAmount, 0.9); // 10% cancellation fee after 24 hours
   } else if (ageInHours > 2) {
-    refundAmount *= 0.95; // 5% cancellation fee after 2 hours
+    refundAmount = mul(refundAmount, 0.95); // 5% cancellation fee after 2 hours
   }
 
-  return Math.max(0, Math.round(refundAmount * 100) / 100);
+  return Math.max(0, round2(refundAmount));
 };
 
 // Method to check if order can be cancelled

@@ -4,7 +4,8 @@ import {
   generateToken,
   generateRefreshToken,
   verifyRefreshToken,
-  verifyToken
+  verifyToken,
+  blacklistToken
 } from '../middleware/auth';
 import {
   sendSuccess,
@@ -77,7 +78,7 @@ const smsService = {
         from: TWILIO_PHONE_NUMBER,
         to: phoneNumber
       });
-      console.log(`✅ [OTP_SERVICE] SMS sent to ${phoneNumber}`);
+      console.log(`✅ [OTP_SERVICE] SMS sent to ***${phoneNumber.slice(-4)}`);
       return true;
     } catch (error) {
       console.error("❌ [OTP_SERVICE] SMS send failed:", error instanceof Error ? error.message : String(error));
@@ -180,21 +181,15 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
       // This is normal login flow, continue with OTP generation
       // No need to create new user or modify existing user data
     } else if (user && !user.isActive) {
-      // Reactivate deactivated account - reset to fresh state
-      user.isActive = true;
-      user.auth.isVerified = false;
-      user.auth.isOnboarded = false;
-      user.auth.refreshToken = undefined;
-      user.auth.loginAttempts = 0;
-      user.auth.lockUntil = undefined;
-      
-      // Update email if provided and different
+      // Deactivated account — DON'T reactivate yet.
+      // Just generate OTP; reactivation happens in verifyOTP after successful verification.
+      // S-7: Do NOT reset loginAttempts or lockUntil here — failed login count
+      // must persist through deactivation/reactivation to prevent lockout bypass.
+
+      // S-13: Do NOT apply email changes during reactivation — email must be
+      // verified separately after the account is reactivated. Log if attempted.
       if (email && user.email !== email) {
-        const emailExists = await User.findOne({ email });
-        if (emailExists && String(emailExists._id) !== String(user._id)) {
-          return sendConflict(res, 'Email is already registered');
-        }
-        user.email = email;
+        console.log(`⚠️ [AUTH] Email change attempted during reactivation for user ${user._id} — will be ignored. User must update email after reactivation.`);
       }
     }
 
@@ -262,10 +257,7 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
     return sendNotFound(res, 'User not found');
   }
 
-  // Check if account is inactive
-  if (!user.isActive) {
-    return sendUnauthorized(res, 'Account is deactivated. Please contact support.');
-  }
+  // Deactivated accounts are allowed through OTP verification — reactivated below on success.
 
   // Check if account is locked
   if (user.isAccountLocked()) {
@@ -364,12 +356,29 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
           console.error('❌ [REFERRAL] Error updating partner referral task:', error);
         }
 
-        console.log(`🎁 [REFERRAL] New referral created! Referee ${user.phoneNumber} received ₹30 signup bonus.`);
+        console.log(`🎁 [REFERRAL] New referral created! Referee ${user._id} received ₹30 signup bonus.`);
       }
     } catch (error) {
       console.error('Error processing referral:', error);
       // Don't fail the OTP verification if referral processing fails
     }
+  }
+
+  // Reactivate deactivated accounts after successful OTP verification
+  if (!user.isActive) {
+    user.isActive = true;
+    user.auth.isVerified = false;
+    user.auth.isOnboarded = false;
+    user.auth.refreshToken = undefined;
+
+    // S-13: Do NOT apply any pending email changes during reactivation.
+    // Email changes must go through a separate verified flow (profile update with OTP/email verification).
+    // The original email on file is preserved to prevent unverified email takeover.
+    if ((user as any)._pendingReactivationEmail) {
+      console.log(`⚠️ [AUTH] Email change requested during reactivation for user ${user._id} — ignored. User must update email separately after reactivation.`);
+    }
+
+    console.log('✅ [AUTH] Deactivated account reactivated after OTP verification:', user._id);
   }
 
   // Update last login
@@ -438,6 +447,9 @@ export const refreshToken = asyncHandler(async (req: Request, res: Response) => 
       return sendUnauthorized(res, 'Account is deactivated');
     }
 
+    // Blacklist the old refresh token (TTL = 7 days to match refresh token lifetime)
+    blacklistToken(refreshToken, 7 * 24 * 60 * 60);
+
     // Generate new tokens
     const newAccessToken = generateToken(String(user._id), user.role);
     const newRefreshToken = generateRefreshToken(String(user._id));
@@ -466,15 +478,22 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
     const token = req.headers.authorization?.replace('Bearer ', '');
     
     if (token) {
+      // Blacklist the access token so it can't be reused (TTL = 24h to match token lifetime)
+      blacklistToken(token, 24 * 60 * 60);
+
       try {
         const decoded = verifyToken(token);
         const user = await User.findById(decoded.userId);
-        
+
         if (user) {
-          // Clear refresh token if user exists
+          // Blacklist the refresh token too
+          if (user.auth.refreshToken) {
+            blacklistToken(user.auth.refreshToken, 7 * 24 * 60 * 60);
+          }
+          // Clear refresh token from DB
           user.auth.refreshToken = undefined;
           await user.save();
-          console.log('✅ [LOGOUT] User refresh token cleared:', user._id);
+          console.log('✅ [LOGOUT] User tokens cleared:', user._id);
         }
       } catch (tokenError) {
         // Token is invalid/expired, but that's okay for logout
@@ -641,8 +660,13 @@ export const changePassword = asyncHandler(async (req: Request, res: Response) =
     throw new AppError('Current password and new password are required', 400);
   }
 
-  if (newPassword.length < 6) {
-    throw new AppError('New password must be at least 6 characters long', 400);
+  if (newPassword.length < 8) {
+    throw new AppError('New password must be at least 8 characters long', 400);
+  }
+
+  // S-10: Require at least one uppercase, one lowercase, and one digit
+  if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+    throw new AppError('Password must contain at least one uppercase letter, one lowercase letter, and one digit', 400);
   }
 
   try {

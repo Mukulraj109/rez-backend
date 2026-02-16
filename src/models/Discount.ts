@@ -2,6 +2,7 @@
 // Manages instant discounts, bill payment discounts, and promotional offers
 
 import mongoose, { Document, Schema, Types, Model } from 'mongoose';
+import { pct, roundInt } from '../utils/currency';
 
 export interface IDiscount extends Document {
   _id: Types.ObjectId;
@@ -304,7 +305,7 @@ DiscountSchema.methods.calculateDiscount = function(orderValue: number): number 
   let discountAmount: number;
 
   if (this.type === 'percentage') {
-    discountAmount = (orderValue * this.value) / 100;
+    discountAmount = pct(orderValue, this.value);
   } else {
     discountAmount = this.value;
   }
@@ -314,7 +315,7 @@ DiscountSchema.methods.calculateDiscount = function(orderValue: number): number 
     discountAmount = this.maxDiscountAmount;
   }
 
-  return Math.round(discountAmount);
+  return roundInt(discountAmount);
 };
 
 // Method to check if user can use discount

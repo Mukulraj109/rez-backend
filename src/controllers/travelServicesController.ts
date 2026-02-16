@@ -18,9 +18,27 @@ export const getTravelServicesCategories = asyncHandler(async (req: Request, res
       isActive: true,
       slug: { $in: ['flights', 'hotels', 'trains', 'bus', 'cab', 'packages'] }
     })
-      .select('name slug icon iconType cashbackPercentage serviceCount metadata')
+      .select('name slug icon iconType cashbackPercentage metadata')
       .sort({ sortOrder: 1 })
       .lean();
+
+    // Get live counts from actual Product documents per category
+    const categoryIds = categories.map(c => c._id);
+    const liveCounts = await Product.aggregate([
+      {
+        $match: {
+          productType: 'service',
+          isActive: true,
+          isDeleted: { $ne: true },
+          serviceCategory: { $in: categoryIds },
+        },
+      },
+      { $group: { _id: '$serviceCategory', count: { $sum: 1 } } },
+    ]);
+    const countMap: Record<string, number> = {};
+    for (const item of liveCounts) {
+      countMap[item._id.toString()] = item.count;
+    }
 
     // Transform to match frontend format
     const transformed = categories.map(cat => ({
@@ -28,7 +46,7 @@ export const getTravelServicesCategories = asyncHandler(async (req: Request, res
       title: cat.name,
       icon: cat.icon,
       color: cat.metadata?.color || '#3B82F6',
-      count: `${cat.serviceCount || 0}+ options`,
+      count: `${countMap[cat._id.toString()] || 0}+ options`,
       cashback: cat.cashbackPercentage
     }));
 

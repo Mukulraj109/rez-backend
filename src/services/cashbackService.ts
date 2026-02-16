@@ -7,6 +7,7 @@ import { Order } from '../models/Order';
 import { User } from '../models/User';
 import subscriptionBenefitsService from './subscriptionBenefitsService';
 import DoubleCashbackCampaign from '../models/DoubleCashbackCampaign';
+import { pct } from '../utils/currency';
 
 interface CreateCashbackData {
   userId: Types.ObjectId;
@@ -81,7 +82,7 @@ class CashbackService {
 
     // Calculate final rate and amount
     const finalRate = cashbackRate * tierMultiplier;
-    const cashbackAmount = Math.round((orderAmount * finalRate) / 100);
+    const cashbackAmount = pct(orderAmount, finalRate);
 
     const description = tierMultiplier > 1
       ? `${finalRate}% cashback (${cashbackRate}% × ${tierMultiplier}x tier bonus) on order of ₹${orderAmount}`

@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 import { MallPurchase } from '../models/MallPurchase';
 import { UserCashback } from '../models/UserCashback';
 import { Wallet } from '../models/Wallet';
+import { Order } from '../models/Order';
+import { MerchantWallet } from '../models/MerchantWallet';
 import redisService from '../services/redisService';
 
 /**
@@ -25,7 +27,7 @@ let reconciliationJob: ReturnType<typeof cron.schedule> | null = null;
 
 interface DiscrepancyRecord {
   userId: string;
-  type: 'purchase_vs_cashback' | 'wallet_vs_transactions';
+  type: 'purchase_vs_cashback' | 'wallet_vs_transactions' | 'order_vs_wallet_deduction' | 'order_vs_merchant_settlement';
   expected: number;
   actual: number;
   difference: number;
@@ -154,6 +156,82 @@ async function runReconciliation(): Promise<ReconciliationResult> {
       }
     }
 
+    // Step 3: Compare completed order totals vs wallet deductions per user
+    // Ensures every delivered/completed order had a matching wallet deduction
+    const orderSums = await Order.aggregate([
+      { $match: { 'status.current': { $in: ['delivered', 'completed'] }, 'payment.method': 'wallet' } },
+      {
+        $group: {
+          _id: '$user',
+          totalOrderAmount: { $sum: '$totals.total' },
+          orderCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    for (const os of orderSums) {
+      const walletDebits = await CoinTransaction.aggregate([
+        {
+          $match: {
+            user: os._id,
+            type: 'spent',
+            source: { $in: ['order', 'payment'] },
+          },
+        },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]);
+
+      const debitTotal = walletDebits[0]?.total || 0;
+      const diff = Math.abs(os.totalOrderAmount - debitTotal);
+
+      if (diff > 5) { // Allow ₹5 tolerance for rounding/fees
+        discrepancies.push({
+          userId: os._id.toString(),
+          type: 'order_vs_wallet_deduction',
+          expected: os.totalOrderAmount,
+          actual: debitTotal,
+          difference: diff,
+          severity: classifySeverity(diff),
+        });
+      }
+    }
+
+    // Step 4: Compare delivered orders vs merchant settlement amounts
+    const merchantOrderSums = await Order.aggregate([
+      { $match: { 'status.current': { $in: ['delivered', 'completed'] }, store: { $exists: true } } },
+      {
+        $group: {
+          _id: '$store',
+          totalOrderRevenue: { $sum: '$totals.subtotal' },
+          orderCount: { $sum: 1 },
+        },
+      },
+      { $limit: 500 }, // Cap to prevent excessive processing
+    ]);
+
+    for (const ms of merchantOrderSums) {
+      try {
+        const merchantWallet = await MerchantWallet.findOne({ storeId: ms._id }).lean();
+        if (merchantWallet) {
+          const settledAmount = (merchantWallet as any).balance?.totalSettled || (merchantWallet as any).statistics?.totalCredited || 0;
+          const diff = Math.abs(ms.totalOrderRevenue - settledAmount);
+
+          if (diff > 10) { // Allow ₹10 tolerance for platform fees
+            discrepancies.push({
+              userId: ms._id.toString(),
+              type: 'order_vs_merchant_settlement',
+              expected: ms.totalOrderRevenue,
+              actual: settledAmount,
+              difference: diff,
+              severity: classifySeverity(diff),
+            });
+          }
+        }
+      } catch {
+        // Skip if merchant wallet lookup fails
+      }
+    }
+
     const duration = Date.now() - startTime;
 
     // Build summary
@@ -163,7 +241,7 @@ async function runReconciliation(): Promise<ReconciliationResult> {
 
     const result: ReconciliationResult = {
       discrepancies,
-      usersChecked: purchaseSums.length + walletCashbackSums.length,
+      usersChecked: purchaseSums.length + walletCashbackSums.length + orderSums.length + merchantOrderSums.length,
       duration,
       timestamp: new Date(),
       summary: {

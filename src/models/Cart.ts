@@ -1,5 +1,6 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 import { Model } from 'mongoose';
+import { mul, sub, pct, round2, add } from '../utils/currency';
 
 // Service booking details for cart items
 export interface IServiceBookingDetails {
@@ -772,8 +773,7 @@ CartSchema.methods.calculateTotals = async function(): Promise<void> {
   });
   
   // Calculate tax (assume 5% GST for now - this should be configurable)
-  const taxRate = 0.05;
-  const tax = Math.round(subtotal * taxRate * 100) / 100;
+  const tax = pct(subtotal, 5);
   
   // Calculate delivery fee (this should be based on store policies and distance)
   let delivery = 0;
@@ -799,7 +799,7 @@ CartSchema.methods.calculateTotals = async function(): Promise<void> {
     });
     
     if (this.coupon.discountType === 'percentage') {
-      couponDiscount = Math.round((subtotal * this.coupon.discountValue / 100) * 100) / 100;
+      couponDiscount = pct(subtotal, this.coupon.discountValue);
     } else {
       couponDiscount = this.coupon.discountValue;
     }
@@ -813,8 +813,7 @@ CartSchema.methods.calculateTotals = async function(): Promise<void> {
   }
   
   // Calculate cashback (simplified - this should be based on store offers)
-  const cashbackRate = 0.02; // 2% cashback
-  const cashback = Math.round((subtotal - couponDiscount) * cashbackRate * 100) / 100;
+  const cashback = pct(sub(subtotal, couponDiscount), 2);
   
   // Calculate total with detailed logging
   const total = subtotal + tax + delivery - couponDiscount;
@@ -828,19 +827,18 @@ CartSchema.methods.calculateTotals = async function(): Promise<void> {
     formula: `${subtotal} + ${tax} + ${delivery} - ${couponDiscount} = ${total}`
   });
   
-  // Ensure all values are valid numbers
-  const finalSubtotal = Math.round((Number(subtotal) || 0) * 100) / 100;
-  const finalTax = Math.round((Number(tax) || 0) * 100) / 100;
-  const finalDelivery = Math.round((Number(delivery) || 0) * 100) / 100;
-  const finalDiscount = Math.round((Number(couponDiscount) || 0) * 100) / 100;
-  const finalCashback = Math.round((Number(cashback) || 0) * 100) / 100;
-  const finalTotal = Math.max(0, Math.round((Number(total) || 0) * 100) / 100);
-  const finalSavings = Math.round((Number(savings) || 0) * 100) / 100;
+  // Ensure all values are valid numbers (rounded to 2dp)
+  const finalSubtotal = round2(Number(subtotal) || 0);
+  const finalTax = round2(Number(tax) || 0);
+  const finalDelivery = round2(Number(delivery) || 0);
+  const finalDiscount = round2(Number(couponDiscount) || 0);
+  const finalCashback = round2(Number(cashback) || 0);
+  const finalTotal = Math.max(0, round2(Number(total) || 0));
+  const finalSavings = round2(Number(savings) || 0);
 
   // Calculate 15% platform fee preview (on subtotal only)
-  const platformFeeRate = 0.15;
-  const finalPlatformFee = Math.round((finalSubtotal * platformFeeRate) * 100) / 100;
-  const finalMerchantPayout = Math.round((finalSubtotal - finalPlatformFee) * 100) / 100;
+  const finalPlatformFee = pct(finalSubtotal, 15);
+  const finalMerchantPayout = sub(finalSubtotal, finalPlatformFee);
 
   this.totals = {
     subtotal: finalSubtotal,

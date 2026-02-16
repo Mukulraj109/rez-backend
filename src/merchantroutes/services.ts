@@ -130,7 +130,8 @@ router.post('/', merchantAuth, async (req: MerchantRequest, res: Response) => {
       cashbackPercentage,
       cashbackMaxAmount,
       tags,
-      isFeatured
+      isFeatured,
+      specifications
     } = req.body;
 
     // Validate required fields
@@ -178,7 +179,7 @@ router.post('/', merchantAuth, async (req: MerchantRequest, res: Response) => {
       pricing: {
         original: originalPrice || price,
         selling: price,
-        discount: originalPrice ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0,
+        discount: originalPrice && originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0,
         currency: 'INR'
       },
       inventory: {
@@ -203,7 +204,8 @@ router.post('/', merchantAuth, async (req: MerchantRequest, res: Response) => {
       tags: tags || [],
       isActive: true,
       isFeatured: isFeatured || false,
-      isDigital: serviceType === 'online'
+      isDigital: serviceType === 'online',
+      specifications: specifications || []
     });
 
     await service.save();
@@ -282,6 +284,7 @@ router.put('/:id', merchantAuth, async (req: MerchantRequest, res: Response) => 
       cashbackMaxAmount,
       tags,
       isFeatured,
+      specifications,
       isActive
     } = req.body;
 
@@ -293,13 +296,14 @@ router.put('/:id', merchantAuth, async (req: MerchantRequest, res: Response) => 
     if (tags) service.tags = tags;
     if (isFeatured !== undefined) service.isFeatured = isFeatured;
     if (isActive !== undefined) service.isActive = isActive;
+    if (specifications !== undefined) (service as any).specifications = specifications;
 
     // Update pricing
     if (price !== undefined) {
       service.pricing.selling = price;
       if (originalPrice !== undefined) {
         service.pricing.original = originalPrice;
-        service.pricing.discount = Math.round(((originalPrice - price) / originalPrice) * 100);
+        service.pricing.discount = originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
       }
     }
 
@@ -656,6 +660,54 @@ router.get('/bookings/stats', merchantAuth, async (req: MerchantRequest, res: Re
     res.status(500).json({
       success: false,
       message: 'Failed to fetch booking statistics',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Get a single service by ID
+ * GET /api/merchant/services/:id
+ * NOTE: This route MUST be after /bookings, /categories, /bookings/stats to avoid /:id matching those paths
+ */
+router.get('/:id', merchantAuth, async (req: MerchantRequest, res: Response) => {
+  try {
+    const merchantId = req.merchant?._id;
+    const serviceId = req.params.id;
+
+    if (!mongoose.Types.ObjectId.isValid(serviceId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid service ID'
+      });
+    }
+
+    const service = await Product.findOne({
+      _id: serviceId,
+      merchantId,
+      productType: 'service',
+      isDeleted: { $ne: true }
+    })
+      .populate('serviceCategory', 'name slug icon cashbackPercentage')
+      .populate('store', 'name logo')
+      .lean();
+
+    if (!service) {
+      return res.status(404).json({
+        success: false,
+        message: 'Service not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: service
+    });
+  } catch (error: any) {
+    logger.error('Error fetching service:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch service',
       error: error.message
     });
   }

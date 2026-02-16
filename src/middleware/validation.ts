@@ -1,6 +1,22 @@
 import { Request, Response, NextFunction } from 'express';
 import Joi from 'joi';
 
+// S-11: Helper to strip HTML tags from strings to prevent stored XSS
+const stripHtmlTags = (value: string): string => {
+  return value.replace(/<[^>]*>/g, '').trim();
+};
+
+// Custom Joi extension for sanitized strings (strips HTML tags)
+const sanitizedString = () => Joi.string().custom((value, helpers) => {
+  if (typeof value === 'string') {
+    const sanitized = stripHtmlTags(value);
+    if (sanitized !== value) {
+      return sanitized;
+    }
+  }
+  return value;
+}, 'HTML tag stripping');
+
 // Generic validation middleware
 export const validate = (schema: Joi.ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -92,11 +108,11 @@ export const commonSchemas = {
     search: Joi.string().trim().max(100)
   }),
   
-  // Phone number (international format) - accepts E.164 format: +XXXXXXXXXXX
-  // Supports various country codes including UAE (+971), India (+91), etc.
+  // S-12: Phone number (E.164 format) - requires country code prefix (+) and 10-15 digits total
+  // Supports various country codes including UAE (+971), India (+91), US (+1), etc.
   phoneNumber: Joi.string()
-    .pattern(/^\+?[1-9]\d{6,14}$/)
-    .message('Invalid phone number format. Please enter a valid phone number.'),
+    .pattern(/^\+[1-9]\d{9,14}$/)
+    .message('Invalid phone number format. Must start with + followed by country code and number (10-15 digits total).'),
   
   // Email
   email: Joi.string().email().lowercase(),
@@ -105,7 +121,14 @@ export const commonSchemas = {
   otp: Joi.string().pattern(/^\d{6}$/).message('OTP must be 6 digits'),
   
   // Password (for social login or password-based auth)
-  password: Joi.string().min(6).max(50),
+  // S-10: Require min 8 chars with at least one uppercase, one lowercase, and one digit
+  password: Joi.string().min(8).max(128)
+    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
+    .messages({
+      'string.min': 'Password must be at least 8 characters long',
+      'string.max': 'Password cannot exceed 128 characters',
+      'string.pattern.base': 'Password must contain at least one uppercase letter, one lowercase letter, and one number'
+    }),
   
   // Coordinates [longitude, latitude]
   coordinates: Joi.array().items(Joi.number().min(-180).max(180)).length(2),
@@ -146,17 +169,18 @@ export const authSchemas = {
   
   updateProfile: Joi.object({
     profile: Joi.object({
-      firstName: Joi.string().trim().max(50),
-      lastName: Joi.string().trim().max(50),
+      // S-11: Use sanitizedString() for user-facing text fields to strip HTML tags (prevent stored XSS)
+      firstName: sanitizedString().trim().max(50),
+      lastName: sanitizedString().trim().max(50),
       avatar: Joi.string().uri().allow(null, ''),
-      bio: Joi.string().trim().max(500),
+      bio: sanitizedString().trim().max(500),
       website: Joi.string().uri().allow(null, ''),
       dateOfBirth: Joi.date().iso().max('now'),
       gender: Joi.string().valid('male', 'female', 'other'),
       location: Joi.object({
-        address: Joi.string().trim().max(200),
-        city: Joi.string().trim().max(50),
-        state: Joi.string().trim().max(50),
+        address: sanitizedString().trim().max(200),
+        city: sanitizedString().trim().max(50),
+        state: sanitizedString().trim().max(50),
         pincode: Joi.string().pattern(/^\d{6}$/).message('Invalid pincode format'),
         coordinates: commonSchemas.coordinates
       })

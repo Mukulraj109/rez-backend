@@ -368,7 +368,8 @@ export const getProductById = asyncHandler(async (req: Request, res: Response) =
       isActive: true
     })
       .populate('category', 'name slug type')
-      .populate('store', 'name logo slug location contact ratings operationalInfo');
+      .populate('store', 'name logo slug location contact ratings operationalInfo')
+      .populate('serviceCategory', 'name slug icon cashbackPercentage');
 
     console.log('📦 [GET PRODUCT BY ID] Product found:', product ? 'Yes' : 'No');
 

@@ -5,6 +5,8 @@ import { MProduct } from '../models/MerchantProduct';
 import { Store } from '../models/Store';
 import mongoose from 'mongoose';
 import Joi from 'joi';
+// P-12: Cache invalidation on category mutations
+import { CacheInvalidator } from '../utils/cacheHelper';
 
 // Extend Request interface to include merchantId
 declare global {
@@ -538,6 +540,12 @@ router.post('/bulk-update', async (req, res) => {
       });
     }
 
+    // P-12: Invalidate all category caches after bulk update.
+    // P-13: Failures are logged as warnings but never break the request.
+    CacheInvalidator.invalidateAllCategories().catch((err) => {
+      console.warn('[CACHE-INVALIDATION-WARN] categories.bulk-update — invalidation failed:', err);
+    });
+
     return res.json({
       success: true,
       message: 'Bulk category update completed',
@@ -592,6 +600,12 @@ router.put('/organize', async (req, res) => {
 
     const results = await Promise.all(updatePromises);
     const totalModified = results.reduce((sum, result) => sum + result.modifiedCount, 0);
+
+    // P-12: Invalidate all category caches after reorganization.
+    // P-13: Failures are logged as warnings but never break the request.
+    CacheInvalidator.invalidateAllCategories().catch((err) => {
+      console.warn('[CACHE-INVALIDATION-WARN] categories.organize — invalidation failed:', err);
+    });
 
     return res.json({
       success: true,
@@ -771,6 +785,11 @@ router.post('/auto-categorize', async (req, res) => {
         success: true
       });
     }
+
+    // P-12: Invalidate category caches after auto-categorization.
+    CacheInvalidator.invalidateAllCategories().catch((err) => {
+      console.warn('[CACHE-INVALIDATION-WARN] categories.auto-categorize — invalidation failed:', err);
+    });
 
     return res.json({
       success: true,

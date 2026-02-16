@@ -6,6 +6,7 @@ import { Order } from '../models/Order';
 import { Product } from '../models/Product';
 import { Cart } from '../models/Cart';
 import { AppError } from '../middleware/errorHandler';
+import { pct, add, sub } from '../utils/currency';
 
 export interface ReorderItem {
   productId: string;
@@ -347,9 +348,9 @@ class ReorderService {
       }
 
       cart.totals.subtotal = subtotal;
-      cart.totals.tax = subtotal * 0.05; // 5% tax
+      cart.totals.tax = pct(subtotal, 5); // 5% tax
       cart.totals.delivery = subtotal > 500 ? 0 : 40; // Free delivery above ₹500
-      cart.totals.total = subtotal + cart.totals.tax + cart.totals.delivery - cart.totals.discount;
+      cart.totals.total = sub(add(subtotal, cart.totals.tax, cart.totals.delivery), cart.totals.discount);
 
       await cart.save({ session });
 

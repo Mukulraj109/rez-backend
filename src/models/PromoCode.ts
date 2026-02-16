@@ -1,5 +1,6 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 import { SubscriptionTier, BillingCycle } from './Subscription';
+import { pct } from '../utils/currency';
 
 // Discount types
 export type DiscountType = 'percentage' | 'fixed';
@@ -294,7 +295,7 @@ PromoCodeSchema.methods.calculateDiscount = function(
   originalPrice: number
 ): number {
   if (this.discountType === 'percentage') {
-    return Math.round((originalPrice * this.discountValue) / 100);
+    return pct(originalPrice, this.discountValue);
   } else {
     // Fixed amount
     return Math.min(this.discountValue, originalPrice);

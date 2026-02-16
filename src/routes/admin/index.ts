@@ -19,3 +19,4 @@ export { default as adminCoinDropsRoutes } from './coinDrops';
 export { default as adminVouchersRoutes } from './vouchers';
 export { default as adminCouponsRoutes } from './coupons';
 export { default as adminTravelRoutes } from './travel';
+export { default as adminSystemRoutes } from './system';

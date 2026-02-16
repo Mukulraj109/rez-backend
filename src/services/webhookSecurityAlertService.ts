@@ -57,17 +57,14 @@ export const sendSecurityAlert = async (
       console.error(logMessage, {
         ...fullAlert,
       });
-      // TODO: Send to error tracking service (Sentry, etc.)
-      // TODO: Send email/SMS notification to admins
-      // await notifyAdmins(fullAlert);
+      // TODO: Integrate with error tracking (Sentry) and admin notifications (email/SMS)
       break;
 
     case 'high':
       console.warn(logMessage, {
         ...fullAlert,
       });
-      // TODO: Send to error tracking service
-      // await logToErrorTracker(fullAlert);
+      // TODO: Integrate with error tracking service (Sentry)
       break;
 
     case 'medium':

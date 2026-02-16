@@ -7,7 +7,7 @@
 
 import { createClient, RedisClientType } from 'redis';
 import crypto from 'crypto';
-import { getRedisConfig, RedisConfig } from '../config/redis';
+import { getRedisConfig, RedisConfig, CACHE_VERSION } from '../config/redis';
 
 /**
  * Redis Service Class
@@ -517,12 +517,16 @@ class RedisService {
   }
 
   /**
-   * Get prefixed key
+   * Get prefixed key with version namespace (P-14: cache key versioning).
+   * Format: "{keyPrefix}v{CACHE_VERSION}:{key}"
+   * Bumping CACHE_VERSION in config/redis.ts automatically invalidates
+   * all old-format cached data without needing a manual flush.
+   *
    * @param key - Original key
-   * @returns Prefixed key
+   * @returns Prefixed + versioned key
    */
   private getPrefixedKey(key: string): string {
-    return `${this.config.keyPrefix}${key}`;
+    return `${this.config.keyPrefix}v${CACHE_VERSION}:${key}`;
   }
 
   /**

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin, requireSeniorAdmin } from '../../middleware/auth';
 import { Merchant } from '../../models/Merchant';
 import { Store } from '../../models/Store';
+import { isSocketInitialized, getIO } from '../../config/socket';
 
 const router = Router();
 
@@ -296,6 +297,14 @@ router.post('/:id/approve', requireSeniorAdmin, async (req: Request, res: Respon
 
     await merchant.save();
 
+    // Emit real-time notification to merchant app
+    if (isSocketInitialized()) {
+      getIO().emit('merchant_approved', {
+        merchantId: merchant._id,
+        message: 'Your merchant account has been approved!',
+      });
+    }
+
     res.json({
       success: true,
       message: 'Merchant approved successfully',
@@ -356,6 +365,15 @@ router.post('/:id/reject', requireSeniorAdmin, async (req: Request, res: Respons
     }
 
     await merchant.save();
+
+    // Emit real-time notification to merchant app
+    if (isSocketInitialized()) {
+      getIO().emit('merchant_rejected', {
+        merchantId: merchant._id,
+        reason,
+        message: `Your merchant application was rejected: ${reason || 'No reason provided'}`,
+      });
+    }
 
     res.json({
       success: true,

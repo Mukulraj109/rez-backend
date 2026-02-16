@@ -86,11 +86,13 @@ export class QueueService {
         return;
       }
 
+      // Use URL constructor for robust parsing (handles user:password@host:port)
+      const parsedUrl = new URL(redisConfig.url);
       const redisOptions = {
         redis: {
-          host: redisConfig.url.split('://')[1]?.split(':')[0] || 'localhost',
-          port: parseInt(redisConfig.url.split(':')[2] || '6379'),
-          password: redisConfig.password,
+          host: parsedUrl.hostname || 'localhost',
+          port: parseInt(parsedUrl.port || '6379', 10),
+          password: parsedUrl.password || redisConfig.password || undefined,
           maxRetriesPerRequest: redisConfig.maxRetries
         }
       };

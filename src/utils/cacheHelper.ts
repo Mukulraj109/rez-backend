@@ -48,11 +48,13 @@ export const CacheKeys = {
   // Homepage keys by region
   homepageByRegion: (region: string, section: string) => `region:${region}:homepage:${section}`,
 
-  // Cart keys
+  // Cart keys — use CacheTTL.CART_DATA / CART_SUMMARY (60s / 30s) to avoid stale pricing (P-11)
   cart: (userId: string) => `cart:user:${userId}`,
   cartSummary: (userId: string) => `cart:summary:${userId}`,
 
-  // User keys
+  // User keys — CONTAINS PII (P-15): name, email, phone, addresses.
+  // Use CacheTTL.USER_PROFILE (30s) or CacheTTL.SENSITIVE_DATA.
+  // Do NOT increase TTL without a privacy review.
   userProfile: (userId: string) => `user:${userId}:profile`,
   userOrders: (userId: string, filters: string) => `user:${userId}:orders:${filters}`,
   userWishlist: (userId: string) => `user:${userId}:wishlist`,
@@ -67,6 +69,12 @@ export const CacheKeys = {
   voucher: (id: string) => `voucher:${id}`,
   userVouchers: (userId: string) => `voucher:user:${userId}`,
 
+  // Wallet keys — CONTAINS FINANCIAL PII (P-15): balance, transactions, payment methods.
+  // Use CacheTTL.WALLET_DATA (30s) or CacheTTL.SENSITIVE_DATA.
+  // Do NOT increase TTL without a privacy review.
+  wallet: (userId: string) => `wallet:user:${userId}`,
+  walletTransactions: (userId: string, filters: string) => `wallet:user:${userId}:txns:${filters}`,
+
   // Stock keys
   stock: (productId: string) => `stock:${productId}`,
   stockByVariant: (productId: string, variantType: string, variantValue: string) =>
@@ -74,16 +82,30 @@ export const CacheKeys = {
 };
 
 /**
- * Cache invalidation helpers
+ * Cache invalidation helpers.
+ *
+ * P-13: Every invalidation method wraps its work in a try/catch so that
+ * failures are logged as warnings but never bubble up and break the
+ * calling request.  This is intentional -- cache invalidation is
+ * best-effort; the cache will self-heal when TTLs expire.
  */
 export class CacheInvalidator {
+  /** Internal helper: run invalidation ops and log any failures as warnings (P-13). */
+  private static async safeInvalidate(label: string, ops: Promise<any>[]): Promise<void> {
+    try {
+      await Promise.all(ops);
+    } catch (err) {
+      console.warn(`[CACHE-INVALIDATION-WARN] ${label} — one or more invalidation ops failed:`, err);
+    }
+  }
+
   /**
-   * Invalidate all product-related cache
+   * Invalidate all product-related cache (P-12: called on product create/update/delete)
    */
   static async invalidateProduct(productId: string): Promise<void> {
-    console.log(`🗑️ Invalidating cache for product: ${productId}`);
+    console.log(`Invalidating cache for product: ${productId}`);
 
-    await Promise.all([
+    await CacheInvalidator.safeInvalidate(`product:${productId}`, [
       // Delete specific product cache
       redisService.del(CacheKeys.product(productId)),
 
@@ -100,9 +122,25 @@ export class CacheInvalidator {
       // Delete recommendations
       redisService.delPattern(`product:recommendations:${productId}:*`),
 
+      // Delete trending products cache
+      redisService.delPattern('product:trending:*'),
+
+      // Delete suggestions / popular searches that may reference this product
+      redisService.delPattern('product:suggestions:*'),
+      redisService.delPattern('product:popular-searches:*'),
+
       // Delete stock cache
       redisService.del(CacheKeys.stock(productId)),
       redisService.delPattern(`stock:${productId}:variant:*`),
+
+      // Delete region-aware product caches (P-12)
+      redisService.delPattern('region:*:product:*'),
+
+      // Delete homepage caches that embed product data
+      redisService.delPattern('region:*:homepage:*'),
+
+      // Delete response-middleware caches for product routes
+      redisService.delPattern('response:*product*'),
     ]);
   }
 
@@ -110,41 +148,80 @@ export class CacheInvalidator {
    * Invalidate product list caches
    */
   static async invalidateProductLists(): Promise<void> {
-    console.log('🗑️ Invalidating all product list caches');
+    console.log('Invalidating all product list caches');
 
-    await Promise.all([
+    await CacheInvalidator.safeInvalidate('product-lists', [
       redisService.delPattern('product:list:*'),
       redisService.delPattern('product:featured:*'),
       redisService.delPattern('product:new-arrivals:*'),
       redisService.delPattern('product:search:*'),
+      redisService.delPattern('product:trending:*'),
+      redisService.delPattern('region:*:product:*'),
     ]);
   }
 
   /**
-   * Invalidate category-related cache
+   * Invalidate category-related cache (P-12: called on category create/update/delete)
    */
   static async invalidateCategory(categoryId: string, categorySlug?: string): Promise<void> {
-    console.log(`🗑️ Invalidating cache for category: ${categoryId}`);
+    console.log(`Invalidating cache for category: ${categoryId}`);
 
-    await Promise.all([
+    await CacheInvalidator.safeInvalidate(`category:${categoryId}`, [
       redisService.del(CacheKeys.category(categoryId)),
       categorySlug ? redisService.del(CacheKeys.categoryBySlug(categorySlug)) : Promise.resolve(),
       redisService.del(CacheKeys.categoryList()),
-      redisService.delPattern(`product:category:*`),
+      redisService.delPattern('product:category:*'),
+
+      // Region-aware category product caches (P-12)
+      redisService.delPattern('region:*:product:category:*'),
+
+      // Homepage sections that may embed category data
+      redisService.delPattern('region:*:homepage:*'),
+
+      // Response-middleware caches for category routes
+      redisService.delPattern('response:*categor*'),
     ]);
   }
 
   /**
-   * Invalidate store-related cache
+   * Invalidate ALL categories at once (P-12: useful after bulk category updates)
+   */
+  static async invalidateAllCategories(): Promise<void> {
+    console.log('Invalidating ALL category caches');
+
+    await CacheInvalidator.safeInvalidate('all-categories', [
+      redisService.delPattern('category:*'),
+      redisService.delPattern('product:category:*'),
+      redisService.delPattern('region:*:product:category:*'),
+      redisService.delPattern('region:*:homepage:*'),
+      redisService.delPattern('response:*categor*'),
+    ]);
+  }
+
+  /**
+   * Invalidate store-related cache (P-12: called on store create/update/delete)
    */
   static async invalidateStore(storeId: string): Promise<void> {
-    console.log(`🗑️ Invalidating cache for store: ${storeId}`);
+    console.log(`Invalidating cache for store: ${storeId}`);
 
-    await Promise.all([
+    await CacheInvalidator.safeInvalidate(`store:${storeId}`, [
       redisService.del(CacheKeys.store(storeId)),
       redisService.del(CacheKeys.storeProducts(storeId)),
       redisService.delPattern(`product:store:${storeId}:*`),
       redisService.delPattern('store:list:*'),
+
+      // Trending stores cache
+      redisService.delPattern('store:trending:*'),
+
+      // Region-aware store caches (P-12)
+      redisService.delPattern('region:*:store:*'),
+      redisService.delPattern('region:*:stores'),
+
+      // Homepage sections that may embed store data
+      redisService.delPattern('region:*:homepage:*'),
+
+      // Response-middleware caches for store routes
+      redisService.delPattern('response:*store*'),
     ]);
   }
 
@@ -152,9 +229,9 @@ export class CacheInvalidator {
    * Invalidate cart cache for a user
    */
   static async invalidateCart(userId: string): Promise<void> {
-    console.log(`🗑️ Invalidating cache for user cart: ${userId}`);
+    console.log(`Invalidating cache for user cart: ${userId}`);
 
-    await Promise.all([
+    await CacheInvalidator.safeInvalidate(`cart:${userId}`, [
       redisService.del(CacheKeys.cart(userId)),
       redisService.del(CacheKeys.cartSummary(userId)),
     ]);
@@ -164,9 +241,9 @@ export class CacheInvalidator {
    * Invalidate stock cache for a product
    */
   static async invalidateStock(productId: string): Promise<void> {
-    console.log(`🗑️ Invalidating stock cache for product: ${productId}`);
+    console.log(`Invalidating stock cache for product: ${productId}`);
 
-    await Promise.all([
+    await CacheInvalidator.safeInvalidate(`stock:${productId}`, [
       redisService.del(CacheKeys.stock(productId)),
       redisService.delPattern(`stock:${productId}:variant:*`),
 
@@ -179,9 +256,11 @@ export class CacheInvalidator {
    * Update stock cache atomically
    */
   static async updateStockCache(productId: string, newStock: number, ttl: number = CacheTTL.SHORT_CACHE): Promise<void> {
-    console.log(`💾 Updating stock cache for product ${productId}: ${newStock}`);
-
-    await redisService.set(CacheKeys.stock(productId), newStock, ttl);
+    try {
+      await redisService.set(CacheKeys.stock(productId), newStock, ttl);
+    } catch (err) {
+      console.warn(`[CACHE-INVALIDATION-WARN] updateStockCache(${productId}) failed:`, err);
+    }
   }
 
   /**
@@ -194,18 +273,20 @@ export class CacheInvalidator {
     newStock: number,
     ttl: number = CacheTTL.SHORT_CACHE
   ): Promise<void> {
-    console.log(`💾 Updating variant stock cache for product ${productId}: ${variantType}=${variantValue}, stock=${newStock}`);
-
-    await redisService.set(CacheKeys.stockByVariant(productId, variantType, variantValue), newStock, ttl);
+    try {
+      await redisService.set(CacheKeys.stockByVariant(productId, variantType, variantValue), newStock, ttl);
+    } catch (err) {
+      console.warn(`[CACHE-INVALIDATION-WARN] updateVariantStockCache(${productId}) failed:`, err);
+    }
   }
 
   /**
    * Invalidate user-related cache
    */
   static async invalidateUser(userId: string): Promise<void> {
-    console.log(`🗑️ Invalidating cache for user: ${userId}`);
+    console.log(`Invalidating cache for user: ${userId}`);
 
-    await Promise.all([
+    await CacheInvalidator.safeInvalidate(`user:${userId}`, [
       redisService.del(CacheKeys.userProfile(userId)),
       redisService.delPattern(`user:${userId}:orders:*`),
       redisService.del(CacheKeys.userWishlist(userId)),
@@ -220,9 +301,9 @@ export class CacheInvalidator {
    * Invalidate offer cache
    */
   static async invalidateOffer(offerId: string): Promise<void> {
-    console.log(`🗑️ Invalidating cache for offer: ${offerId}`);
+    console.log(`Invalidating cache for offer: ${offerId}`);
 
-    await Promise.all([
+    await CacheInvalidator.safeInvalidate(`offer:${offerId}`, [
       redisService.del(CacheKeys.offer(offerId)),
       redisService.delPattern('offer:list:*'),
       redisService.delPattern('offer:user:*'),
@@ -233,9 +314,9 @@ export class CacheInvalidator {
    * Invalidate voucher cache
    */
   static async invalidateVoucher(voucherId: string): Promise<void> {
-    console.log(`🗑️ Invalidating cache for voucher: ${voucherId}`);
+    console.log(`Invalidating cache for voucher: ${voucherId}`);
 
-    await Promise.all([
+    await CacheInvalidator.safeInvalidate(`voucher:${voucherId}`, [
       redisService.del(CacheKeys.voucher(voucherId)),
       redisService.delPattern('voucher:list:*'),
       redisService.delPattern('voucher:user:*'),
@@ -276,8 +357,9 @@ export async function withCache<T>(
   const data = await fetchFunction();
 
   // Store in cache (don't await to avoid blocking)
+  // P-13: log as warning, not error — cache write failures are non-critical
   redisService.set(cacheKey, data, ttl).catch((err) => {
-    console.error(`Failed to cache data for key ${cacheKey}:`, err);
+    console.warn(`[CACHE-WRITE-WARN] Failed to cache data for key ${cacheKey}:`, err);
   });
 
   return data;

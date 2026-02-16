@@ -12,6 +12,8 @@ import Joi from 'joi';
 import AuditService from '../services/AuditService';
 import mongoose from 'mongoose';
 import { sendSuccess, sendNotFound, sendBadRequest } from '../utils/response';
+// P-12: Cache invalidation on store mutations
+import { CacheInvalidator } from '../utils/cacheHelper';
 
 const router = Router();
 
@@ -262,6 +264,11 @@ router.post('/', validateRequest(createStoreSchema), async (req: Request, res: R
     });
 
     await store.save();
+
+    // P-12: Invalidate store list caches so the new store appears immediately
+    CacheInvalidator.invalidateStore((store._id as mongoose.Types.ObjectId).toString()).catch((err) => {
+      console.warn('[CACHE-INVALIDATION-WARN] store.created — invalidation failed:', err);
+    });
 
     // Audit log
     await AuditService.log({
@@ -693,6 +700,11 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
     // Use the reloaded store for response (falls back to original if reload failed)
     const responseStore = updatedStore || store;
 
+    // P-12: Invalidate caches for this store so consumers get fresh data
+    CacheInvalidator.invalidateStore((store._id as mongoose.Types.ObjectId).toString()).catch((err) => {
+      console.warn('[CACHE-INVALIDATION-WARN] store.updated — invalidation failed:', err);
+    });
+
     // Audit log
     await AuditService.log({
       merchantId: merchantId,
@@ -789,6 +801,11 @@ router.delete('/:id', validateParams(storeIdSchema), async (req: Request, res: R
       });
     }
 
+    // P-12: Invalidate caches for this store so deactivation is reflected immediately
+    CacheInvalidator.invalidateStore((deactivatedStore._id as mongoose.Types.ObjectId).toString()).catch((err) => {
+      console.warn('[CACHE-INVALIDATION-WARN] store.deleted — invalidation failed:', err);
+    });
+
     // Audit log
     await AuditService.log({
       merchantId: merchantId,
@@ -872,6 +889,11 @@ router.post('/:id/activate', validateParams(storeIdSchema), async (req: Request,
       });
     }
 
+    // P-12: Invalidate caches for this store so activation is reflected immediately
+    CacheInvalidator.invalidateStore((updatedStore._id as mongoose.Types.ObjectId).toString()).catch((err) => {
+      console.warn('[CACHE-INVALIDATION-WARN] store.activated — invalidation failed:', err);
+    });
+
     // Audit log
     await AuditService.log({
       merchantId: merchantId,
@@ -952,6 +974,11 @@ router.post('/:id/deactivate', validateParams(storeIdSchema), async (req: Reques
         message: 'Store not found after update'
       });
     }
+
+    // P-12: Invalidate caches for this store so deactivation is reflected immediately
+    CacheInvalidator.invalidateStore((updatedStore._id as mongoose.Types.ObjectId).toString()).catch((err) => {
+      console.warn('[CACHE-INVALIDATION-WARN] store.deactivated — invalidation failed:', err);
+    });
 
     // Audit log
     await AuditService.log({

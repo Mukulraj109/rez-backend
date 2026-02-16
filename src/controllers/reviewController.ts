@@ -177,6 +177,108 @@ export const getStoreReviews = asyncHandler(async (req: Request, res: Response) 
   }
 });
 
+// Get reviews for a product/service
+export const getProductReviews = asyncHandler(async (req: Request, res: Response) => {
+  const { productId } = req.params;
+  const { page = 1, limit = 20, rating, sort = 'newest' } = req.query;
+
+  try {
+    const query: any = {
+      product: productId,
+      isActive: true,
+      moderationStatus: 'approved',
+    };
+
+    if (rating) {
+      query.rating = Number(rating);
+    }
+
+    let sortOptions: any = {};
+    switch (sort) {
+      case 'newest': sortOptions = { createdAt: -1 }; break;
+      case 'oldest': sortOptions = { createdAt: 1 }; break;
+      case 'highest': sortOptions = { rating: -1, createdAt: -1 }; break;
+      case 'lowest': sortOptions = { rating: 1, createdAt: -1 }; break;
+      case 'helpful': sortOptions = { helpful: -1, createdAt: -1 }; break;
+      default: sortOptions = { createdAt: -1 };
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const reviews = await Review.find(query)
+      .populate('user', 'profile.firstName profile.lastName profile.avatar')
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(Number(limit))
+      .lean();
+
+    const total = await Review.countDocuments(query);
+
+    // Rating stats for this product
+    const statsAgg = await Review.aggregate([
+      { $match: { product: new Types.ObjectId(productId), isActive: true, moderationStatus: 'approved' } },
+      {
+        $group: {
+          _id: null,
+          average: { $avg: '$rating' },
+          count: { $sum: 1 },
+          r5: { $sum: { $cond: [{ $eq: ['$rating', 5] }, 1, 0] } },
+          r4: { $sum: { $cond: [{ $eq: ['$rating', 4] }, 1, 0] } },
+          r3: { $sum: { $cond: [{ $eq: ['$rating', 3] }, 1, 0] } },
+          r2: { $sum: { $cond: [{ $eq: ['$rating', 2] }, 1, 0] } },
+          r1: { $sum: { $cond: [{ $eq: ['$rating', 1] }, 1, 0] } },
+        },
+      },
+    ]);
+
+    const stats = statsAgg[0] || { average: 0, count: 0, r5: 0, r4: 0, r3: 0, r2: 0, r1: 0 };
+
+    const transformedReviews = reviews.map((review: any) => {
+      const firstName = review.user?.profile?.firstName || '';
+      const lastName = review.user?.profile?.lastName || '';
+      const fullName = [firstName, lastName].filter(Boolean).join(' ').trim() || 'Anonymous';
+
+      return {
+        id: review._id.toString(),
+        _id: review._id.toString(),
+        user: {
+          id: review.user?._id?.toString() || '',
+          _id: review.user?._id?.toString() || '',
+          name: fullName,
+          avatar: review.user?.profile?.avatar,
+        },
+        rating: review.rating,
+        title: review.title || '',
+        comment: review.comment || '',
+        helpful: review.helpful || 0,
+        createdAt: review.createdAt,
+        verified: review.verified || false,
+        images: review.images || [],
+      };
+    });
+
+    sendSuccess(res, {
+      reviews: transformedReviews,
+      summary: {
+        averageRating: Math.round((stats.average || 0) * 10) / 10,
+        totalReviews: stats.count || 0,
+        ratingBreakdown: { 5: stats.r5, 4: stats.r4, 3: stats.r3, 2: stats.r2, 1: stats.r1 },
+      },
+      pagination: {
+        current: Number(page),
+        pages: Math.ceil(total / Number(limit)),
+        total,
+        limit: Number(limit),
+        hasNext: skip + reviews.length < total,
+        hasPrevious: Number(page) > 1,
+      },
+    });
+  } catch (error) {
+    console.error('Get product reviews error:', error);
+    throw new AppError('Failed to fetch product reviews', 500);
+  }
+});
+
 // Create a new review
 export const createReview = asyncHandler(async (req: Request, res: Response) => {
   const { storeId } = req.params;

@@ -37,6 +37,11 @@ import { initializeInventoryAlertJob } from './jobs/inventoryAlerts';
 import { initializeDealExpiryJob } from './jobs/expireDealRedemptions';
 import { initializeVoucherExpiryJob } from './jobs/expireVoucherRedemptions';
 import { initializeTableBookingExpiryJob } from './jobs/expireTableBookings';
+import { startReconciliationJob } from './jobs/reconciliationJob';
+import { startReservationCleanup } from './jobs/reservationCleanup';
+
+// Import Bull-based scheduled job service (replaces node-cron with Bull repeatable jobs)
+import { ScheduledJobService } from './services/ScheduledJobService';
 
 // Import export worker (initializes automatically when imported)
 import './workers/exportWorker';
@@ -176,7 +181,8 @@ import {
   adminCoinDropsRoutes,
   adminVouchersRoutes,
   adminCouponsRoutes,
-  adminTravelRoutes
+  adminTravelRoutes,
+  adminSystemRoutes
 } from './routes/admin';
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
 import experienceRoutes from './routes/experienceRoutes';  // Store experience routes
@@ -279,11 +285,12 @@ app.use(helmet({
 // CORS configuration
 // Allow specific origins from environment variables or use defaults for development
 const getAllowedOrigins = (): string[] => {
+  // Production: CORS_ORIGIN env var is REQUIRED — explicit whitelist only
   if (process.env.CORS_ORIGIN) {
     return process.env.CORS_ORIGIN.split(',').map(origin => origin.trim());
   }
-  
-  // Development defaults
+
+  // Collect env-configured origins
   const origins: string[] = [];
   if (process.env.FRONTEND_URL) {
     origins.push(process.env.FRONTEND_URL);
@@ -291,20 +298,30 @@ const getAllowedOrigins = (): string[] => {
   if (process.env.MERCHANT_FRONTEND_URL) {
     origins.push(process.env.MERCHANT_FRONTEND_URL);
   }
-  
-  // Add localhost for development if not in production
-  if (process.env.NODE_ENV !== 'production') {
-    origins.push('http://localhost:3000');
-    origins.push('http://localhost:19006'); // Expo default
-    origins.push('http://localhost:8081'); // React Native / Customer frontend
-    origins.push('http://localhost:8082'); // Merchant portal
-    origins.push('http://localhost:8083'); // Admin portal
-    origins.push('http://localhost:19000'); // Expo web
-    origins.push('http://127.0.0.1:19006'); // Expo alternative
-    origins.push('http://127.0.0.1:19000'); // Expo web alternative
+  if (process.env.ADMIN_FRONTEND_URL) {
+    origins.push(process.env.ADMIN_FRONTEND_URL);
   }
-  
-  return origins.length > 0 ? origins : ['http://localhost:3000'];
+
+  // Only add localhost in development (explicit check for 'development')
+  if (process.env.NODE_ENV === 'development') {
+    origins.push(
+      'http://localhost:3000',
+      'http://localhost:19006',
+      'http://localhost:8081',
+      'http://localhost:8082',
+      'http://localhost:8083',
+      'http://localhost:19000',
+      'http://127.0.0.1:19006',
+      'http://127.0.0.1:19000'
+    );
+  }
+
+  if (origins.length === 0) {
+    console.warn('⚠️ [CORS] No origins configured! Set CORS_ORIGIN env var for production.');
+    return ['http://localhost:3000']; // Fallback for local dev only
+  }
+
+  return origins;
 };
 
 const corsOptions = {
@@ -407,10 +424,25 @@ console.log('✅ Swagger documentation available at /api-docs');
 app.get('/health', async (req, res) => {
   try {
     const dbHealth = await database.healthCheck();
+
+    // Check Redis health
+    let redisHealth: { status: string; latencyMs?: number } = { status: 'unknown' };
+    try {
+      const redisService = (await import('./services/redisService')).default;
+      const start = Date.now();
+      const connected = await redisService.exists('health:ping');
+      redisHealth = { status: connected !== undefined ? 'connected' : 'disconnected', latencyMs: Date.now() - start };
+    } catch {
+      redisHealth = { status: 'disconnected' };
+    }
+
+    const allHealthy = dbHealth && redisHealth.status !== 'disconnected';
+
     const health = {
-      status: 'ok',
+      status: allHealthy ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),
       database: dbHealth,
+      redis: redisHealth,
       environment: process.env.NODE_ENV || 'development',
       version: '1.0.0',
       api: {
@@ -873,6 +905,8 @@ app.use(`${API_PREFIX}/admin/coupons`, adminCouponsRoutes);
 console.log('✅ Admin coupons routes registered at /api/admin/coupons');
 app.use(`${API_PREFIX}/admin/travel`, adminTravelRoutes);
 console.log('✅ Admin travel routes registered at /api/admin/travel');
+app.use(`${API_PREFIX}/admin/system`, adminSystemRoutes);
+console.log('✅ Admin system routes registered at /api/admin/system');
 
 // Campaign Routes - Homepage exciting deals
 app.use(`${API_PREFIX}/campaigns`, campaignRoutes);
@@ -1172,6 +1206,22 @@ async function startServer() {
     initializeTableBookingExpiryJob();
     console.log('✅ Table booking expiry job started (runs every 30 min)');
 
+    // Initialize reconciliation job
+    console.log('🔄 Initializing reconciliation job...');
+    startReconciliationJob();
+    console.log('✅ Reconciliation job started (runs daily at 3:00 AM)');
+
+    // Initialize reservation cleanup job
+    console.log('🔄 Initializing reservation cleanup job...');
+    startReservationCleanup();
+    console.log('✅ Reservation cleanup job started (runs every 5 min)');
+
+    // Initialize Bull-based scheduled job service (preferred over node-cron above)
+    // The node-cron jobs above serve as fallback if Redis/Bull is unavailable
+    console.log('🔄 Initializing Bull scheduled job service...');
+    await ScheduledJobService.initialize();
+    console.log('✅ Bull scheduled job service initialized');
+
     // Initialize audit retention service
     console.log('🔄 Initializing audit retention service...');
     await AuditRetentionService.initialize();
@@ -1261,13 +1311,31 @@ async function startServer() {
     });
 
     // Graceful shutdown handling
+    let isShuttingDown = false;
     const shutdown = (signal: string) => {
+      if (isShuttingDown) return; // Prevent double-shutdown
+      isShuttingDown = true;
       console.log(`\n🛑 Received ${signal}. Graceful shutdown...`);
-      
+
+      // Stop accepting new connections, drain in-flight requests
       server.close(async () => {
-        console.log('✅ HTTP server closed');
-        
+        console.log('✅ HTTP server closed (in-flight requests drained)');
+
         try {
+          // Shut down Bull scheduled job service
+          try {
+            await ScheduledJobService.shutdown();
+            console.log('✅ Scheduled job service shut down');
+          } catch { /* May not be initialized */ }
+
+          // Disconnect Redis
+          try {
+            const redisService = (await import('./services/redisService')).default;
+            await redisService.disconnect();
+            console.log('✅ Redis disconnected');
+          } catch { /* Redis may not be connected */ }
+
+          // Disconnect MongoDB
           await database.disconnect();
           console.log('✅ Database disconnected');
           process.exit(0);
@@ -1277,11 +1345,11 @@ async function startServer() {
         }
       });
 
-      // Force close after 10 seconds
+      // Force close after 15 seconds
       setTimeout(() => {
         console.log('❌ Could not close connections in time, forcefully shutting down');
         process.exit(1);
-      }, 10000);
+      }, 15000);
     };
 
     process.on('SIGTERM', () => shutdown('SIGTERM'));

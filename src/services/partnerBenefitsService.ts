@@ -5,6 +5,7 @@ import Partner, { PARTNER_LEVELS, IPartnerBenefits } from '../models/Partner';
 import { User } from '../models/User';
 import { Wallet } from '../models/Wallet';
 import mongoose from 'mongoose';
+import { pct } from '../utils/currency';
 
 interface OrderBenefitData {
   subtotal: number;
@@ -75,7 +76,7 @@ class PartnerBenefitsService {
       // Default values (no partner benefits)
       const defaultResult: AppliedBenefits = {
         cashbackRate: 2, // Base 2% cashback
-        cashbackAmount: Math.round((orderData.subtotal * 2) / 100),
+        cashbackAmount: pct(orderData.subtotal, 2),
         deliveryFee: orderData.deliveryFee,
         deliverySavings: 0,
         birthdayDiscount: 0,
@@ -100,7 +101,7 @@ class PartnerBenefitsService {
       
       // Apply partner cashback rate
       const cashbackRate = benefits.cashbackRate;
-      const cashbackAmount = Math.round((orderData.subtotal * cashbackRate) / 100);
+      const cashbackAmount = pct(orderData.subtotal, cashbackRate);
       totalSavings += cashbackAmount;
       appliedBenefits.push(`${cashbackRate}% Partner Cashback`);
       console.log(`✅ [PARTNER BENEFITS] Applied ${cashbackRate}% cashback: ₹${cashbackAmount}`);
@@ -116,7 +117,7 @@ class PartnerBenefitsService {
       
       // Apply birthday discount if in birthday month
       if (isBirthdayMonth && benefits.birthdayDiscount > 0) {
-        birthdayDiscount = Math.round((orderData.subtotal * benefits.birthdayDiscount) / 100);
+        birthdayDiscount = pct(orderData.subtotal, benefits.birthdayDiscount);
         totalSavings += birthdayDiscount;
         appliedBenefits.push(`${benefits.birthdayDiscount}% Birthday Discount`);
         console.log(`🎂 [PARTNER BENEFITS] Applied birthday discount: ₹${birthdayDiscount}`);
@@ -138,7 +139,7 @@ class PartnerBenefitsService {
       console.error('❌ [PARTNER BENEFITS] Error applying benefits:', error);
       return {
         cashbackRate: 2,
-        cashbackAmount: Math.round((orderData.subtotal * 2) / 100),
+        cashbackAmount: pct(orderData.subtotal, 2),
         deliveryFee: orderData.deliveryFee,
         deliverySavings: 0,
         birthdayDiscount: 0,

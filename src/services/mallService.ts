@@ -14,6 +14,13 @@ import { Store, IStore } from '../models/Store';
 import { Category } from '../models/Category';
 import redisService from './redisService';
 
+/**
+ * Escape special regex characters to prevent ReDoS attacks
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Cache TTL constants (in seconds)
 const CACHE_TTL = {
   HOMEPAGE: 300,      // 5 minutes
@@ -291,8 +298,8 @@ class MallService {
 
     if (filters.search) {
       query.$or = [
-        { name: { $regex: filters.search, $options: 'i' } },
-        { tags: { $in: [new RegExp(filters.search, 'i')] } }
+        { name: { $regex: escapeRegex(filters.search), $options: 'i' } },
+        { tags: { $in: [new RegExp(escapeRegex(filters.search), 'i')] } }
       ];
     }
 
@@ -458,6 +465,7 @@ class MallService {
       validUntil: { $gte: now }
     })
       .populate('brand', 'name slug logo tier')
+      .populate('store', 'name logo tags')
       .sort({ priority: -1, createdAt: -1 })
       .limit(limit)
       .lean();
@@ -482,6 +490,7 @@ class MallService {
     const [offers, total] = await Promise.all([
       MallOffer.find(query)
         .populate('brand', 'name slug logo tier')
+        .populate('store', 'name logo tags')
         .sort({ priority: -1, createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -599,9 +608,9 @@ class MallService {
     const brands = await MallBrand.find({
       isActive: true,
       $or: [
-        { name: { $regex: query, $options: 'i' } },
-        { tags: { $in: [new RegExp(query, 'i')] } },
-        { description: { $regex: query, $options: 'i' } }
+        { name: { $regex: escapeRegex(query), $options: 'i' } },
+        { tags: { $in: [new RegExp(escapeRegex(query), 'i')] } },
+        { description: { $regex: escapeRegex(query), $options: 'i' } }
       ]
     })
       .populate('mallCategory', 'name slug color icon')
@@ -641,8 +650,7 @@ class MallService {
 
     for (const key of keys) {
       if (key.includes('*')) {
-        // Delete pattern - need to implement in redisService
-        await redisService.del(key.replace(':*', ''));
+        await redisService.delPattern(key);
       } else {
         await redisService.del(key);
       }
@@ -691,6 +699,7 @@ class MallService {
   ): Promise<{ stores: IStore[]; total: number; pages: number }> {
     const query: any = {
       isActive: true,
+      adminApproved: true,
       'deliveryCategories.mall': true,
     };
 
@@ -708,9 +717,9 @@ class MallService {
 
     if (filters.search) {
       query.$or = [
-        { name: { $regex: filters.search, $options: 'i' } },
-        { description: { $regex: filters.search, $options: 'i' } },
-        { tags: { $in: [new RegExp(filters.search, 'i')] } },
+        { name: { $regex: escapeRegex(filters.search), $options: 'i' } },
+        { description: { $regex: escapeRegex(filters.search), $options: 'i' } },
+        { tags: { $in: [new RegExp(escapeRegex(filters.search), 'i')] } },
       ];
     }
 
@@ -743,6 +752,7 @@ class MallService {
 
     const stores = await Store.find({
       isActive: true,
+      adminApproved: true,
       isFeatured: true,
       'deliveryCategories.mall': true,
     })
@@ -768,6 +778,7 @@ class MallService {
 
     const stores = await Store.find({
       isActive: true,
+      adminApproved: true,
       'deliveryCategories.mall': true,
       createdAt: { $gte: thirtyDaysAgo },
     })
@@ -790,6 +801,7 @@ class MallService {
 
     const stores = await Store.find({
       isActive: true,
+      adminApproved: true,
       'deliveryCategories.mall': true,
       'ratings.count': { $gte: 5 },
     })
@@ -812,6 +824,7 @@ class MallService {
 
     const stores = await Store.find({
       isActive: true,
+      adminApproved: true,
       'deliveryCategories.mall': true,
       'deliveryCategories.premium': true,
     })
@@ -835,6 +848,7 @@ class MallService {
     const store = await Store.findOne({
       _id: new Types.ObjectId(storeId),
       isActive: true,
+      adminApproved: true,
       'deliveryCategories.mall': true,
     })
       .populate('category', 'name slug')
@@ -860,6 +874,7 @@ class MallService {
       {
         $match: {
           isActive: true,
+          adminApproved: true,
           'deliveryCategories.mall': true,
         },
       },
@@ -910,11 +925,12 @@ class MallService {
 
     const stores = await Store.find({
       isActive: true,
+      adminApproved: true,
       'deliveryCategories.mall': true,
       $or: [
-        { name: { $regex: query, $options: 'i' } },
-        { description: { $regex: query, $options: 'i' } },
-        { tags: { $in: [new RegExp(query, 'i')] } },
+        { name: { $regex: escapeRegex(query), $options: 'i' } },
+        { description: { $regex: escapeRegex(query), $options: 'i' } },
+        { tags: { $in: [new RegExp(escapeRegex(query), 'i')] } },
       ],
     })
       .populate('category', 'name slug')
@@ -935,6 +951,7 @@ class MallService {
   ): Promise<{ stores: IStore[]; total: number }> {
     const query = {
       isActive: true,
+      adminApproved: true,
       'deliveryCategories.mall': true,
       category: new Types.ObjectId(categoryId),
     };
@@ -972,6 +989,7 @@ class MallService {
 
     const query = {
       isActive: true,
+      adminApproved: true,
       'deliveryCategories.mall': true,
       category: category._id,
     };
@@ -1001,6 +1019,7 @@ class MallService {
 
     const stores = await Store.find({
       isActive: true,
+      adminApproved: true,
       'deliveryCategories.alliance': true,
     })
       .populate('category', 'name slug')
@@ -1022,6 +1041,7 @@ class MallService {
 
     const stores = await Store.find({
       isActive: true,
+      adminApproved: true,
       'deliveryCategories.mall': true,
     })
       .populate('category', 'name slug')
@@ -1043,6 +1063,7 @@ class MallService {
 
     const stores = await Store.find({
       isActive: true,
+      adminApproved: true,
       'deliveryCategories.mall': true,
       'offers.cashback': { $gt: 0 },
     })
@@ -1074,6 +1095,7 @@ class MallService {
       ],
     })
       .populate('brand', 'name logo slug')
+      .populate('store', 'name logo tags')
       .sort({ priority: -1, validUntil: 1 })
       .limit(limit)
       .lean();
@@ -1096,18 +1118,22 @@ class MallService {
     trendingStores: IStore[];
     rewardBoosters: IStore[];
     dealsOfDay: IMallOffer[];
+    collections: IMallCollection[];
+    exclusiveOffers: IMallOffer[];
   }> {
     const cacheKey = `${CACHE_KEYS.MALL_STORES}:homepage-batch`;
     const cached = await redisService.get<any>(cacheKey);
     if (cached) return cached;
 
     // Fetch everything in parallel — each sub-method has its own Redis cache too
-    const [homepageData, heroBanners, trendingStores, rewardBoosters, dealsOfDay] = await Promise.all([
+    const [homepageData, heroBanners, trendingStores, rewardBoosters, dealsOfDay, collections, exclusiveOffers] = await Promise.all([
       this.getMallStoresHomepage(),
       this.getHeroBanners(5),
       this.getTrendingMallStores(10),
       this.getRewardBoosterStores(10),
       this.getDealsOfDay(10),
+      this.getCollections(5),
+      this.getExclusiveOffers(6),
     ]);
 
     const batch = {
@@ -1116,6 +1142,8 @@ class MallService {
       trendingStores,
       rewardBoosters,
       dealsOfDay,
+      collections,
+      exclusiveOffers,
     };
 
     await redisService.set(cacheKey, batch, CACHE_TTL.HOMEPAGE); // 5 min

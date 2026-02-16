@@ -5,6 +5,7 @@ import { Types } from 'mongoose';
 import { Coupon, ICoupon } from '../models/Coupon';
 import { UserCoupon, IUserCoupon } from '../models/UserCoupon';
 import { User } from '../models/User';
+import { pct, round2 } from '../utils/currency';
 
 interface CartItem {
   product: Types.ObjectId;
@@ -308,7 +309,7 @@ class CouponService {
     let discount = 0;
 
     if (coupon.discountType === 'PERCENTAGE') {
-      discount = (subtotal * coupon.discountValue) / 100;
+      discount = pct(subtotal, coupon.discountValue);
 
       // Apply max discount cap if set
       if (coupon.maxDiscountCap > 0 && discount > coupon.maxDiscountCap) {
@@ -323,7 +324,7 @@ class CouponService {
       }
     }
 
-    return Math.round(discount * 100) / 100; // Round to 2 decimal places
+    return round2(discount);
   }
 
   /**

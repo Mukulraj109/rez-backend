@@ -918,6 +918,22 @@ StoreSchema.index({ 'offers.isPartner': 1, 'ratings.average': -1 });
 StoreSchema.index({ isActive: 1, 'analytics.totalOrders': -1, 'ratings.average': -1 }); // trending stores
 StoreSchema.index({ isActive: 1, isFeatured: 1, 'ratings.average': -1 }); // featured stores sorted by rating
 
+// Mall tab compound indexes (optimizes mallService.ts queries)
+StoreSchema.index({ 'deliveryCategories.mall': 1, isFeatured: 1, isActive: 1, 'ratings.average': -1 }); // featured mall stores
+StoreSchema.index({ 'deliveryCategories.mall': 1, isActive: 1, createdAt: -1 }); // new mall stores
+StoreSchema.index({ 'deliveryCategories.mall': 1, isActive: 1, 'ratings.count': 1, 'ratings.average': -1 }); // top rated mall stores
+StoreSchema.index({ 'deliveryCategories.mall': 1, 'deliveryCategories.premium': 1, isActive: 1 }); // premium mall stores
+StoreSchema.index({ 'deliveryCategories.mall': 1, isActive: 1, 'analytics.views': -1 }); // trending mall stores
+StoreSchema.index({ 'deliveryCategories.mall': 1, isActive: 1, 'offers.cashback': -1 }); // reward booster stores
+StoreSchema.index({ 'deliveryCategories.mall': 1, category: 1, isActive: 1 }); // mall stores by category
+StoreSchema.index({ 'deliveryCategories.alliance': 1, isActive: 1, 'ratings.average': -1 }); // alliance stores
+
+// Text index for search (replaces slow $regex searches)
+StoreSchema.index(
+  { name: 'text', description: 'text', tags: 'text' },
+  { weights: { name: 10, tags: 5, description: 1 }, name: 'store_text_search' }
+);
+
 // Virtual for current operational status
 StoreSchema.virtual('isCurrentlyOpen').get(function () {
   if (typeof this.isOpen === 'function') {

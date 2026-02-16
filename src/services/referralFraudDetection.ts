@@ -300,8 +300,8 @@ export class ReferralFraudDetection {
 
     await referral.save();
 
-    // TODO: Send notification to admin
-    console.log(`Referral ${referralId} marked as fraud: ${reason}`);
+    // TODO: Send notification to admin when notification service is integrated
+    console.warn(`[FRAUD] Referral ${referralId} marked as fraud: ${reason}`);
 
     return referral;
   }
