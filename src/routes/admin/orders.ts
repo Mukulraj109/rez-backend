@@ -77,6 +77,11 @@ router.get('/', async (req: Request, res: Response) => {
       filter.orderNumber = { $regex: req.query.search, $options: 'i' };
     }
 
+    // Fulfillment type filter
+    if (req.query.fulfillmentType) {
+      filter.fulfillmentType = req.query.fulfillmentType;
+    }
+
     const [orders, total] = await Promise.all([
       Order.find(filter)
         .sort({ createdAt: -1 })
@@ -84,7 +89,7 @@ router.get('/', async (req: Request, res: Response) => {
         .limit(limit)
         .populate('user', 'profile.firstName profile.lastName phoneNumber email')
         .populate('items.store', 'name slug logo')
-        .select('orderNumber status totals payment.status payment.method payment.coinsUsed createdAt user items'),
+        .select('orderNumber status totals payment.status payment.method payment.coinsUsed createdAt user items fulfillmentType fulfillmentDetails'),
       Order.countDocuments(filter)
     ]);
 

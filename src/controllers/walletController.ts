@@ -1357,6 +1357,11 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
       amount,
     });
 
+    // Structured monitoring log for order-creation-failed refunds
+    if (reason === 'order_creation_failed') {
+      console.warn(`⚠️ [WALLET_REFUND_ORDER_FAILED] userId=${userId} txnId=${transactionId} amount=${amount} refundId=${(refundTransaction[0] as any)._id}`);
+    }
+
     sendSuccess(res, {
       refundId: (refundTransaction[0] as any)._id.toString(),
       refundedAmount: amount,

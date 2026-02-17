@@ -216,6 +216,82 @@ class EarningsSocketService {
 
     console.log(`📤 [EARNINGS SOCKET] Leaderboard update sent to user ${userId}: rank ${previousRank} -> ${rank}`);
   }
+
+  /**
+   * Emit when a creator earns commission from a conversion
+   */
+  emitCreatorConversion(userId: string, data: { pickTitle: string; commissionAmount: number; buyerName: string }) {
+    if (!this.io) {
+      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      return;
+    }
+
+    this.io.to(`earnings-${userId}`).emit('creator-conversion', {
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
+
+    console.log(`📤 [EARNINGS SOCKET] Creator conversion event sent to user ${userId}: +${data.commissionAmount} coins`);
+  }
+
+  /**
+   * Emit when a creator application status changes
+   */
+  emitCreatorApplicationUpdate(userId: string, data: { status: string; reason?: string }) {
+    if (!this.io) {
+      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      return;
+    }
+
+    this.io.to(`earnings-${userId}`).emit('creator-application-update', {
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
+
+    console.log(`📤 [EARNINGS SOCKET] Creator application update sent to user ${userId}: ${data.status}`);
+  }
+
+  /**
+   * Emit when a creator gets a new follower
+   */
+  /**
+   * Emit when a merchant approves or rejects a creator's pick
+   */
+  emitPickMerchantApproval(userId: string, data: {
+    pickTitle: string;
+    status: 'approved' | 'rejected';
+    reason?: string;
+    reward?: { type: string; amount: number };
+  }) {
+    if (!this.io) {
+      console.warn('[EARNINGS SOCKET] Socket.IO not initialized');
+      return;
+    }
+
+    this.io.to(`earnings-${userId}`).emit('pick-merchant-approval', {
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
+
+    console.log(`[EARNINGS SOCKET] Pick merchant approval sent to user ${userId}: ${data.status}`);
+  }
+
+  /**
+   * Emit when a creator gets a new follower
+   */
+  emitNewFollower(userId: string, data: { followerName: string }) {
+    if (!this.io) {
+      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      return;
+    }
+
+    this.io.to(`earnings-${userId}`).emit('new-follower', {
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
+
+    console.log(`📤 [EARNINGS SOCKET] New follower event sent to user ${userId}: ${data.followerName}`);
+  }
 }
 
 export default EarningsSocketService.getInstance();

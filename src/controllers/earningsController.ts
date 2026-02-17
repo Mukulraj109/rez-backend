@@ -2,16 +2,317 @@ import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { sendSuccess, sendBadRequest, sendNotFound, sendCreated } from '../utils/response';
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import spinWheelService from '../services/spinWheelService';
 import { Project } from '../models/Project';
 import SocialMediaPost from '../models/SocialMediaPost';
 import { SpinWheelSpin } from '../models/SpinWheel';
 import Referral from '../models/Referral';
 import earningsSocketService from '../services/earningsSocketService';
+import { CoinTransaction } from '../models/CoinTransaction';
+import { Wallet } from '../models/Wallet';
+import redisService from '../services/redisService';
 
 /**
- * Get user's complete earnings summary
+ * Source → UI category mapping for CoinTransaction aggregation
+ * Maps CoinTransaction.source enum values to frontend display categories
+ */
+const SOURCE_TO_CATEGORY: Record<string, string> = {
+  creator_pick_reward: 'videos',
+  order: 'projects',
+  referral: 'referrals',
+  cashback: 'cashback',
+  purchase_reward: 'cashback',
+  social_share_reward: 'socialMedia',
+  spin_wheel: 'games',
+  scratch_card: 'games',
+  quiz_game: 'games',
+  memory_match: 'games',
+  coin_hunt: 'games',
+  guess_price: 'games',
+  daily_login: 'dailyCheckIn',
+  achievement: 'bonus',
+  challenge: 'bonus',
+  admin: 'bonus',
+  review: 'bonus',
+  bill_upload: 'bonus',
+  survey: 'bonus',
+  merchant_award: 'bonus',
+};
+
+/**
+ * Filter type → CoinTransaction source mapping for history queries
+ */
+const TYPE_TO_SOURCES: Record<string, string[]> = {
+  videos: ['creator_pick_reward'],
+  projects: ['order'],
+  referrals: ['referral'],
+  cashback: ['cashback', 'purchase_reward'],
+  socialMedia: ['social_share_reward'],
+  games: ['spin_wheel', 'scratch_card', 'quiz_game', 'memory_match', 'coin_hunt', 'guess_price'],
+  dailyCheckIn: ['daily_login'],
+  bonus: ['achievement', 'challenge', 'admin', 'review', 'bill_upload', 'survey', 'merchant_award'],
+};
+
+/**
+ * Get user's consolidated earnings summary using CoinTransaction as source of truth
+ * GET /api/earnings/consolidated-summary
+ * @query period - '7d' | '30d' | '90d' | 'all' (default: 'all')
+ * @query startDate - ISO date string for custom range
+ * @query endDate - ISO date string for custom range
+ * @returns Accurate breakdown, statistics, pending, and recent transactions
+ */
+export const getConsolidatedEarningsSummary = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const userId = (req.user._id as Types.ObjectId).toString();
+  const { period = 'all', startDate, endDate } = req.query;
+
+  // Check Redis cache
+  const cacheKey = `earnings:consolidated:${userId}:${period}:${startDate || ''}:${endDate || ''}`;
+  try {
+    const cached = await redisService.get<any>(cacheKey);
+    if (cached) {
+      return sendSuccess(res, cached, 'Earnings summary retrieved successfully (cached)');
+    }
+  } catch (e) {
+    // Redis unavailable, continue without cache
+  }
+
+  try {
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    // Build date filter based on period or custom range
+    let dateFilter: any = {};
+    if (startDate && endDate) {
+      dateFilter.createdAt = {
+        $gte: new Date(startDate as string),
+        $lte: new Date(endDate as string)
+      };
+    } else if (period !== 'all') {
+      const days = period === '7d' ? 7 : period === '30d' ? 30 : period === '90d' ? 90 : 0;
+      if (days > 0) {
+        const fromDate = new Date();
+        fromDate.setDate(fromDate.getDate() - days);
+        dateFilter.createdAt = { $gte: fromDate };
+      }
+    }
+
+    // Earning types that count as income (exclude spent, expired, branded_award)
+    const earningTypes = ['earned', 'bonus', 'refunded'];
+
+    // 1. Aggregate CoinTransaction by source for breakdown
+    const breakdownAgg = await CoinTransaction.aggregate([
+      {
+        $match: {
+          user: userObjectId,
+          type: { $in: earningTypes },
+          ...dateFilter
+        }
+      },
+      {
+        $group: {
+          _id: '$source',
+          total: { $sum: '$amount' },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Map aggregation results to UI categories
+    const breakdown: Record<string, { amount: number; count: number }> = {
+      videos: { amount: 0, count: 0 },
+      projects: { amount: 0, count: 0 },
+      referrals: { amount: 0, count: 0 },
+      cashback: { amount: 0, count: 0 },
+      socialMedia: { amount: 0, count: 0 },
+      games: { amount: 0, count: 0 },
+      dailyCheckIn: { amount: 0, count: 0 },
+      bonus: { amount: 0, count: 0 },
+    };
+
+    let breakdownTotal = 0;
+    breakdownAgg.forEach((item: { _id: string; total: number; count: number }) => {
+      const category = SOURCE_TO_CATEGORY[item._id] || 'bonus';
+      breakdown[category].amount = Math.round((breakdown[category].amount + item.total) * 100) / 100;
+      breakdown[category].count += item.count;
+      breakdownTotal += item.total;
+    });
+    breakdownTotal = Math.round(breakdownTotal * 100) / 100;
+
+    // 2. Compute statistics (all-time for averages, regardless of period filter)
+    const statsAgg = await CoinTransaction.aggregate([
+      {
+        $match: {
+          user: userObjectId,
+          type: { $in: earningTypes }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$amount' },
+          count: { $sum: 1 },
+          firstDate: { $min: '$createdAt' },
+          lastDate: { $max: '$createdAt' }
+        }
+      }
+    ]);
+
+    const statsData = statsAgg[0] || { total: 0, count: 0, firstDate: new Date(), lastDate: new Date() };
+    const daysActive = Math.max(
+      1,
+      Math.ceil((Date.now() - new Date(statsData.firstDate).getTime()) / (1000 * 60 * 60 * 24))
+    );
+    const dailyAverage = Math.round((statsData.total / daysActive) * 100) / 100;
+
+    const statistics = {
+      dailyAverage,
+      weeklyAverage: Math.round(dailyAverage * 7 * 100) / 100,
+      monthlyAverage: Math.round(dailyAverage * 30 * 100) / 100,
+      transactionCount: statsData.count,
+      daysActive
+    };
+
+    // 3. Get available balance from Wallet
+    let availableBalance = 0;
+    try {
+      const wallet = await Wallet.findOne({ user: userId }).lean();
+      if (wallet) {
+        availableBalance = (wallet as any).balance?.available || (wallet as any).balance?.total || 0;
+      }
+    } catch (e) {
+      // Wallet may not exist yet
+    }
+
+    // 4. Calculate pending earnings from all pending sources in parallel
+    const [pendingProjects, pendingCashback, pendingRewards, pendingConversions] = await Promise.all([
+      // Pending project submissions
+      (async () => {
+        try {
+          const projects = await Project.find({
+            'submissions.user': userId,
+          }).lean();
+          let total = 0;
+          projects.forEach((project: any) => {
+            project.submissions?.forEach((sub: any) => {
+              if (sub.user && sub.user.toString() === userId &&
+                  (sub.status === 'pending' || sub.status === 'in_review' || sub.status === 'under_review') &&
+                  project.reward?.amount) {
+                total += project.reward.amount;
+              }
+            });
+          });
+          return total;
+        } catch { return 0; }
+      })(),
+      // Pending cashback
+      (async () => {
+        try {
+          const UserCashback = mongoose.model('UserCashback');
+          const result = await UserCashback.aggregate([
+            { $match: { user: userObjectId, status: 'pending' } },
+            { $group: { _id: null, total: { $sum: '$amount' } } }
+          ]);
+          return result[0]?.total || 0;
+        } catch { return 0; }
+      })(),
+      // Pending coin rewards (admin approval queue)
+      (async () => {
+        try {
+          const PendingCoinReward = mongoose.model('PendingCoinReward');
+          const result = await PendingCoinReward.aggregate([
+            { $match: { user: userObjectId, status: 'pending' } },
+            { $group: { _id: null, total: { $sum: '$amount' } } }
+          ]);
+          return result[0]?.total || 0;
+        } catch { return 0; }
+      })(),
+      // Pending creator conversions (creator field references CreatorProfile, not User)
+      (async () => {
+        try {
+          const CreatorProfile = mongoose.model('CreatorProfile');
+          const profile = await CreatorProfile.findOne({ user: userObjectId }).lean();
+          if (!profile) return 0;
+          const CreatorConversion = mongoose.model('CreatorConversion');
+          const result = await CreatorConversion.aggregate([
+            { $match: { creator: (profile as any)._id, status: { $in: ['pending', 'confirming'] } } },
+            { $group: { _id: null, total: { $sum: '$commissionAmount' } } }
+          ]);
+          return result[0]?.total || 0;
+        } catch { return 0; }
+      })(),
+    ]);
+
+    const pendingEarnings = Math.round((pendingProjects + pendingCashback + pendingRewards + pendingConversions) * 100) / 100;
+
+    // 5. Get recent earning transactions (last 10)
+    const recentTransactions = await CoinTransaction.find({
+      user: userObjectId,
+      type: { $in: earningTypes },
+      ...dateFilter
+    })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    const formattedRecent = recentTransactions.map((tx: any) => ({
+      _id: tx._id.toString(),
+      type: tx.type,
+      source: tx.source,
+      category: SOURCE_TO_CATEGORY[tx.source] || 'bonus',
+      amount: tx.amount,
+      description: tx.description,
+      createdAt: tx.createdAt,
+      metadata: tx.metadata
+    }));
+
+    // Use wallet statistics totalEarned for all-time total if period is 'all'
+    // This ensures consistency with the wallet display
+    let totalEarned = breakdownTotal;
+    if (period === 'all') {
+      try {
+        const wallet = await Wallet.findOne({ user: userId }).lean();
+        const walletTotal = (wallet as any)?.statistics?.totalEarned;
+        if (walletTotal && walletTotal > 0) {
+          // Use the larger of wallet stats vs CoinTransaction aggregate
+          // (wallet stats may include earnings not yet in CoinTransaction, or vice versa)
+          totalEarned = Math.max(walletTotal, breakdownTotal);
+        }
+      } catch { /* use breakdownTotal */ }
+    }
+
+    const result = {
+      totalEarned: Math.round(totalEarned * 100) / 100,
+      availableBalance: Math.round(availableBalance * 100) / 100,
+      pendingEarnings,
+      breakdown: {
+        ...breakdown,
+        total: period === 'all' ? Math.round(totalEarned * 100) / 100 : breakdownTotal
+      },
+      statistics,
+      period: period as string,
+      recentTransactions: formattedRecent
+    };
+
+    // Cache for 2 minutes
+    try {
+      await redisService.set(cacheKey, result, 120);
+    } catch (e) {
+      // Redis unavailable, continue without cache
+    }
+
+    sendSuccess(res, result, 'Earnings summary retrieved successfully');
+  } catch (error) {
+    console.error('[EARNINGS] Error getting consolidated summary:', error);
+    throw new AppError('Failed to fetch earnings summary', 500);
+  }
+});
+
+/**
+ * Get user's complete earnings summary (legacy endpoint)
  * GET /api/earnings/summary
  * @returns Total earnings with breakdown by source (projects, referrals, shareAndEarn, spin)
  */
@@ -403,9 +704,14 @@ export const getReferralInfo = asyncHandler(async (req: Request, res: Response) 
 });
 
 /**
- * Get user's earnings history
+ * Get user's earnings history using CoinTransaction as source of truth
  * GET /api/earnings/history
- * @returns List of earnings transactions with summary
+ * @query type - Filter by category: 'videos' | 'projects' | 'referrals' | 'cashback' | 'socialMedia' | 'games' | 'dailyCheckIn' | 'bonus'
+ * @query page - Page number (default: 1)
+ * @query limit - Items per page (default: 20, max: 50)
+ * @query startDate - ISO date for custom range
+ * @query endDate - ISO date for custom range
+ * @returns Paginated earning transactions with summary
  */
 export const getEarningsHistory = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
@@ -415,170 +721,99 @@ export const getEarningsHistory = asyncHandler(async (req: Request, res: Respons
   const userId = (req.user._id as Types.ObjectId).toString();
   const { type, page = 1, limit = 20, startDate, endDate } = req.query;
 
-  console.log('📜 [EARNINGS] Getting earnings history for user:', userId);
-
   try {
-    const transactions: any[] = [];
-    const userObjectId = new Types.ObjectId(userId);
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const earningTypes = ['earned', 'bonus', 'refunded'];
 
-    // Get project earnings (approved submissions)
-    if (!type || type === 'project') {
-      const projects = await Project.find({
-        'submissions.user': userObjectId
-      }).lean();
-
-      projects.forEach((project: any) => {
-        project.submissions?.forEach((sub: any) => {
-          if (sub.user && sub.user.toString() === userId && sub.status === 'approved' && sub.paidAmount > 0) {
-            transactions.push({
-              _id: sub._id || `${project._id}_${sub.submittedAt}`,
-              type: 'project',
-              source: 'Project Completion',
-              amount: sub.paidAmount,
-              currency: '₹',
-              status: 'completed',
-              description: `Earned from "${project.title}"`,
-              metadata: {
-                projectId: project._id,
-                projectTitle: project.title
-              },
-              createdAt: sub.paidAt || sub.submittedAt,
-              completedAt: sub.paidAt
-            });
-          }
-        });
-      });
-    }
-
-    // Get referral earnings
-    if (!type || type === 'referral') {
-      const referrals = await Referral.find({
-        referrer: userId,
-        referrerRewarded: true
-      }).lean();
-
-      referrals.forEach((ref: any) => {
-        if (ref.rewards && ref.rewards.referrerAmount > 0) {
-          transactions.push({
-            _id: `ref_${ref._id}`,
-            type: 'referral',
-            source: 'Referral Bonus',
-            amount: ref.rewards.referrerAmount,
-            currency: '₹',
-            status: 'completed',
-            description: `Referral bonus for ${ref.referredUser ? 'user' : 'signup'}`,
-            metadata: {
-              referralId: ref._id
-            },
-            createdAt: ref.rewardedAt || ref.createdAt,
-            completedAt: ref.rewardedAt
-          });
-        }
-      });
-    }
-
-    // Get social media earnings
-    if (!type || type === 'social_media') {
-      const socialPosts = await SocialMediaPost.find({
-        user: userId,
-        status: { $in: ['approved', 'credited'] }
-      }).sort({ createdAt: -1 }).lean();
-
-      socialPosts.forEach(post => {
-        transactions.push({
-          id: post._id.toString(),
-          type: 'social_media',
-          title: `${post.platform.charAt(0).toUpperCase() + post.platform.slice(1)} Post`,
-          description: `Cashback from social media post`,
-          amount: post.cashbackAmount,
-          currency: 'INR',
-          status: post.status === 'credited' ? 'completed' : 'pending',
-          createdAt: post.submittedAt || post.createdAt,
-          metadata: {
-            platform: post.platform,
-            postUrl: post.postUrl,
-            cashbackPercentage: post.cashbackPercentage
-          }
-        });
-      });
-    }
-
-    // Get spin earnings
-    if (!type || type === 'spin') {
-      const spins = await SpinWheelSpin.find({
-        userId,
-        status: { $in: ['pending', 'claimed'] },
-        rewardType: { $ne: 'nothing' }
-      }).sort({ spinTimestamp: -1 }).lean();
-
-      spins.forEach(spin => {
-        transactions.push({
-          id: spin._id.toString(),
-          type: 'spin',
-          title: `Spin Wheel - ${spin.segmentLabel}`,
-          description: `Reward from spin wheel`,
-          amount: spin.rewardValue,
-          currency: spin.rewardType === 'coins' ? 'COINS' : 'INR',
-          status: spin.status === 'claimed' ? 'completed' : 'pending',
-          createdAt: spin.spinTimestamp,
-          metadata: {
-            rewardType: spin.rewardType,
-            segmentLabel: spin.segmentLabel,
-            expiresAt: spin.expiresAt
-          }
-        });
-      });
-    }
-
-    // Sort by date (newest first)
-    transactions.sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-
-    // Filter by date range if provided
-    let filteredTransactions = transactions;
-    if (startDate || endDate) {
-      filteredTransactions = transactions.filter(t => {
-        const date = new Date(t.createdAt);
-        if (startDate && date < new Date(startDate as string)) return false;
-        if (endDate && date > new Date(endDate as string)) return false;
-        return true;
-      });
-    }
-
-    // Pagination
-    const total = filteredTransactions.length;
-    const skip = (Number(page) - 1) * Number(limit);
-    const paginatedTransactions = filteredTransactions.slice(skip, skip + Number(limit));
-    const totalPages = Math.ceil(total / Number(limit));
-
-    // Calculate summary
-    const totalEarned = transactions
-      .filter(t => t.type !== 'withdrawal')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const totalWithdrawn = transactions
-      .filter(t => t.type === 'withdrawal')
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    const pendingAmount = transactions
-      .filter(t => t.status === 'pending')
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    const breakdown = {
-      projects: transactions.filter(t => t.type === 'project').reduce((sum, t) => sum + t.amount, 0),
-      referrals: transactions.filter(t => t.type === 'referral').reduce((sum, t) => sum + t.amount, 0),
-      socialMedia: transactions.filter(t => t.type === 'social_media').reduce((sum, t) => sum + t.amount, 0),
-      spin: transactions.filter(t => t.type === 'spin').reduce((sum, t) => sum + t.amount, 0),
+    // Build query
+    const query: any = {
+      user: userObjectId,
+      type: { $in: earningTypes }
     };
 
+    // Map type filter to CoinTransaction source values
+    if (type && typeof type === 'string' && TYPE_TO_SOURCES[type]) {
+      query.source = { $in: TYPE_TO_SOURCES[type] };
+    }
+
+    // Date range filter
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate as string);
+      if (endDate) query.createdAt.$lte = new Date(endDate as string);
+    }
+
+    // Count total for pagination
+    const total = await CoinTransaction.countDocuments(query);
+    const skip = (Number(page) - 1) * Number(limit);
+    const totalPages = Math.ceil(total / Number(limit));
+
+    // Fetch paginated transactions (native Mongo sort + skip + limit)
+    const transactions = await CoinTransaction.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit))
+      .lean();
+
+    // Format transactions for frontend
+    const formattedTransactions = transactions.map((tx: any) => ({
+      _id: tx._id.toString(),
+      type: SOURCE_TO_CATEGORY[tx.source] || 'bonus',
+      source: tx.source,
+      amount: tx.amount,
+      status: 'completed', // CoinTransaction records are always completed
+      description: tx.description,
+      metadata: tx.metadata,
+      createdAt: tx.createdAt,
+    }));
+
+    // Compute summary using aggregation (unfiltered by type, but respecting date range)
+    const summaryQuery: any = {
+      user: userObjectId,
+      type: { $in: earningTypes }
+    };
+    if (startDate || endDate) {
+      summaryQuery.createdAt = {};
+      if (startDate) summaryQuery.createdAt.$gte = new Date(startDate as string);
+      if (endDate) summaryQuery.createdAt.$lte = new Date(endDate as string);
+    }
+
+    const summaryAgg = await CoinTransaction.aggregate([
+      { $match: summaryQuery },
+      {
+        $group: {
+          _id: '$source',
+          total: { $sum: '$amount' },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Build breakdown from aggregation
+    const breakdownMap: Record<string, number> = {};
+    let totalEarned = 0;
+    summaryAgg.forEach((item: { _id: string; total: number }) => {
+      const cat = SOURCE_TO_CATEGORY[item._id] || 'bonus';
+      breakdownMap[cat] = (breakdownMap[cat] || 0) + item.total;
+      totalEarned += item.total;
+    });
+
     const result = {
-      transactions: paginatedTransactions,
+      transactions: formattedTransactions,
       summary: {
-        totalEarned,
-        totalWithdrawn,
-        pendingAmount,
-        breakdown
+        totalEarned: Math.round(totalEarned * 100) / 100,
+        totalWithdrawn: 0, // Withdrawals are tracked in Transaction model, not CoinTransaction
+        pendingAmount: 0,  // Pending is computed in consolidated-summary endpoint
+        breakdown: {
+          videos: Math.round((breakdownMap.videos || 0) * 100) / 100,
+          projects: Math.round((breakdownMap.projects || 0) * 100) / 100,
+          referrals: Math.round((breakdownMap.referrals || 0) * 100) / 100,
+          cashback: Math.round((breakdownMap.cashback || 0) * 100) / 100,
+          socialMedia: Math.round((breakdownMap.socialMedia || 0) * 100) / 100,
+          games: Math.round((breakdownMap.games || 0) * 100) / 100,
+          dailyCheckIn: Math.round((breakdownMap.dailyCheckIn || 0) * 100) / 100,
+          bonus: Math.round((breakdownMap.bonus || 0) * 100) / 100,
+        }
       },
       pagination: {
         page: Number(page),
@@ -590,11 +825,9 @@ export const getEarningsHistory = asyncHandler(async (req: Request, res: Respons
       }
     };
 
-    console.log('✅ [EARNINGS] Earnings history retrieved:', total, 'transactions');
-
     sendSuccess(res, result, 'Earnings history retrieved successfully');
   } catch (error) {
-    console.error('❌ [EARNINGS] Error getting earnings history:', error);
+    console.error('[EARNINGS] Error getting earnings history:', error);
     throw new AppError('Failed to fetch earnings history', 500);
   }
 });

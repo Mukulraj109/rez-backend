@@ -21,6 +21,7 @@ import cashbackService from '../services/cashbackService';
 import userProductService from '../services/userProductService';
 import couponService from '../services/couponService';
 import achievementService from '../services/achievementService';
+import { processConversion } from '../services/creatorService';
 // Note: StorePromoCoin removed - using wallet.brandedCoins instead
 import { Wallet } from '../models/Wallet';
 import { calculatePromoCoinsEarned, calculatePromoCoinsWithTierBonus, getCoinsExpiryDate } from '../config/promoCoins.config';
@@ -73,7 +74,8 @@ import merchantNotificationService from '../services/merchantNotificationService
 // Create new order from cart
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
-  const { deliveryAddress, paymentMethod, specialInstructions, couponCode, voucherCode, coinsUsed, storeId, items: requestItems, redemptionCode, offerRedemptionCode, lockFeeDiscount: clientLockFeeDiscount, idempotencyKey } = req.body;
+  const { deliveryAddress, paymentMethod, specialInstructions, couponCode, voucherCode, coinsUsed, storeId, items: requestItems, redemptionCode, offerRedemptionCode, lockFeeDiscount: clientLockFeeDiscount, idempotencyKey, pickId, fulfillmentType: reqFulfillmentType, fulfillmentDetails: reqFulfillmentDetails } = req.body;
+  const fulfillmentType = reqFulfillmentType || 'delivery';
 
   // Start a MongoDB session for transaction
   const session = await mongoose.startSession();
@@ -494,11 +496,12 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     console.log('👥 [PARTNER BENEFITS] Applying partner benefits to order...');
     const partnerBenefitsService = require('../services/partnerBenefitsService').default;
 
-    // BUGFIX: Calculate base delivery fee for THIS order's subtotal, not full cart
-    // Standard: ₹50 delivery fee, free if subtotal >= ₹500
+    // Calculate base delivery fee for THIS order's subtotal
+    // For non-delivery fulfillment types (pickup, drive_thru, dine_in), delivery fee is 0
     const FREE_DELIVERY_THRESHOLD = 500;
     const STANDARD_DELIVERY_FEE = 50;
-    const baseDeliveryFee = subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : STANDARD_DELIVERY_FEE;
+    const baseDeliveryFee = fulfillmentType !== 'delivery' ? 0 :
+      (subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : STANDARD_DELIVERY_FEE);
 
     const partnerBenefits = await partnerBenefitsService.applyPartnerBenefits({
       subtotal,
@@ -739,22 +742,94 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     const primaryStoreId = storeId || orderItems[0]?.store;
     console.log('🏪 [CREATE ORDER] Primary store for order:', primaryStoreId);
 
+    // Validate fulfillment type against store serviceCapabilities
+    const FULFILLMENT_TO_CAPABILITY: Record<string, string> = {
+      delivery: 'homeDelivery',
+      pickup: 'storePickup',
+      drive_thru: 'driveThru',
+      dine_in: 'dineIn'
+    };
+
+    if (fulfillmentType !== 'delivery' && primaryStoreId) {
+      const storeDoc = await Store.findById(primaryStoreId).select('serviceCapabilities name location').session(session);
+      const capKey = FULFILLMENT_TO_CAPABILITY[fulfillmentType];
+      const capEnabled = (storeDoc?.serviceCapabilities as any)?.[capKey]?.enabled;
+      if (!capEnabled) {
+        console.warn(`⚠️ [FULFILLMENT_REJECTED] storeId=${primaryStoreId} userId=${userId} requestedType=${fulfillmentType} capKey=${capKey} storeCaps=${JSON.stringify(storeDoc?.serviceCapabilities || {})}`);
+        await session.abortTransaction();
+        session.endSession();
+        return sendBadRequest(res, `This store does not support ${fulfillmentType.replace('_', ' ')} orders`);
+      }
+    }
+
+    // Map fulfillment type to delivery method
+    const FULFILLMENT_TO_METHOD: Record<string, string> = {
+      delivery: 'standard',
+      pickup: 'pickup',
+      drive_thru: 'drive_thru',
+      dine_in: 'dine_in'
+    };
+    const deliveryMethod = FULFILLMENT_TO_METHOD[fulfillmentType] || 'standard';
+
+    // For non-delivery fulfillment types, override delivery fee to 0
+    const finalDeliveryFee = fulfillmentType === 'delivery' ? deliveryFee : 0;
+
+    // Recalculate total if delivery fee changed due to fulfillment type
+    let finalTotal = total;
+    if (finalDeliveryFee !== deliveryFee) {
+      finalTotal = subtotal + tax + finalDeliveryFee - discount - lockFeeDiscount - coinDiscount;
+      if (finalTotal < 0) finalTotal = 0;
+    }
+
+    // Build delivery address: for non-delivery types, use minimal address or store address
+    let orderDeliveryAddress = deliveryAddress;
+    if (fulfillmentType !== 'delivery' && (!deliveryAddress || !deliveryAddress.addressLine1)) {
+      const storeForAddr = await Store.findById(primaryStoreId).select('name location').session(session);
+      orderDeliveryAddress = {
+        name: deliveryAddress?.name || 'Store Pickup',
+        phone: deliveryAddress?.phone || '',
+        addressLine1: storeForAddr?.location?.address || 'Store Address',
+        city: storeForAddr?.location?.city || '',
+        state: storeForAddr?.location?.state || '',
+        pincode: storeForAddr?.location?.pincode || '',
+        country: 'India'
+      };
+    }
+
+    // Build fulfillment details
+    let fulfillmentDetailsData: any = undefined;
+    if (fulfillmentType !== 'delivery') {
+      const storeForDetails = await Store.findById(primaryStoreId).select('name location serviceCapabilities').session(session);
+      fulfillmentDetailsData = {
+        storeAddress: storeForDetails?.location?.address,
+        storeCoordinates: storeForDetails?.location?.coordinates,
+        ...(reqFulfillmentDetails || {}),
+      };
+      if (fulfillmentType === 'pickup') {
+        fulfillmentDetailsData.estimatedReadyTime = new Date(Date.now() + 20 * 60 * 1000);
+      } else if (fulfillmentType === 'drive_thru') {
+        fulfillmentDetailsData.estimatedReadyTime = new Date(Date.now() + 10 * 60 * 1000);
+      }
+    }
+
     // Create order
     const order = new Order({
       orderNumber,
       user: userId,
-      store: primaryStoreId, // Set primary store for easy access/population
+      store: primaryStoreId,
+      fulfillmentType,
+      fulfillmentDetails: fulfillmentDetailsData,
       idempotencyKey: idempotencyKey || undefined,
       items: orderItems,
       totals: {
         subtotal,
         tax,
-        delivery: deliveryFee,
+        delivery: finalDeliveryFee,
         discount,
         lockFeeDiscount,
         cashback,
-        total,
-        paidAmount: paymentMethod === 'cod' ? 0 : total,
+        total: finalTotal,
+        paidAmount: paymentMethod === 'cod' ? 0 : finalTotal,
         platformFee,
         merchantPayout
       },
@@ -769,14 +844,18 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         } : undefined
       },
       delivery: {
-        method: 'standard',
+        method: deliveryMethod,
         status: 'pending',
-        address: deliveryAddress,
-        deliveryFee
+        address: orderDeliveryAddress,
+        deliveryFee: finalDeliveryFee
       },
       timeline: [{
         status: 'placed',
-        message: 'Order placed - awaiting payment',
+        message: fulfillmentType === 'delivery' ? 'Order placed - awaiting payment' :
+                 fulfillmentType === 'pickup' ? 'Pickup order placed' :
+                 fulfillmentType === 'drive_thru' ? 'Drive-thru order placed' :
+                 fulfillmentType === 'dine_in' ? 'Dine-in order placed' :
+                 'Order placed - awaiting payment',
         timestamp: new Date()
       }],
       status: 'placed',
@@ -793,7 +872,9 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         code: appliedOfferRedemption.redemptionCode,
         cashback: offerRedemptionCashback,
         offerTitle: (appliedOfferRedemption.offer as any)?.title || 'Offer Cashback',
-      } : undefined
+      } : undefined,
+      // Creator pick attribution
+      analytics: pickId ? { attributionPickId: pickId } : undefined,
     });
 
     await order.save({ session });
@@ -1957,6 +2038,25 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         // Don't fail the order update if user product creation fails
       }
 
+      // Process creator pick conversion attribution on delivery
+      try {
+        const attributionPickId = populatedOrder.analytics?.attributionPickId;
+        if (attributionPickId) {
+          console.log('🎯 [ORDER] Processing creator pick conversion for pickId:', attributionPickId);
+          await processConversion(
+            attributionPickId.toString(),
+            (populatedOrder._id as Types.ObjectId).toString(),
+            userIdObj.toString(),
+            populatedOrder.totals.subtotal,
+            req.ip
+          );
+          console.log('✅ [ORDER] Creator conversion processed');
+        }
+      } catch (conversionError) {
+        console.error('❌ [ORDER] Error processing creator conversion:', conversionError);
+        // Don't fail the order update if conversion processing fails
+      }
+
       // Award store promo coins for delivered order
       try {
         console.log('💎 [ORDER] Awarding store promo coins for delivered order:', populatedOrder._id);
@@ -2051,8 +2151,9 @@ export const getOrderTracking = asyncHandler(async (req: Request, res: Response)
       _id: orderId, 
       user: userId 
     })
-    .select('status tracking estimatedDeliveryTime deliveredAt createdAt items')
+    .select('status tracking estimatedDeliveryTime deliveredAt createdAt items fulfillmentType fulfillmentDetails delivery store orderNumber timeline')
     .populate('items.product', 'name images')
+    .populate('store', 'name location')
     .lean();
 
     if (!order) {

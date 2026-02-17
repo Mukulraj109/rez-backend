@@ -788,6 +788,41 @@ class MerchantNotificationService {
       data: {},
     });
   }
+  /**
+   * Notify merchant when a creator submits a pick for their store/product
+   */
+  async notifyNewCreatorPick(params: {
+    merchantId: string;
+    storeId: string;
+    pickTitle: string;
+    creatorName: string;
+    productName: string;
+    pickId: string;
+  }): Promise<void> {
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: 'New Creator Pick',
+      message: `${params.creatorName} wants to promote "${params.productName}" — review and approve their pick.`,
+      type: 'info',
+      category: 'general',
+      priority: 'medium',
+      data: {
+        storeId: params.storeId,
+        deepLink: `/stores/${params.storeId}/creator-analytics`,
+        actionButton: {
+          text: 'Review Pick',
+          action: 'navigate',
+          target: `/stores/${params.storeId}/creator-analytics`,
+        },
+        metadata: {
+          pickId: params.pickId,
+          pickTitle: params.pickTitle,
+          creatorName: params.creatorName,
+          productName: params.productName,
+        },
+      },
+    });
+  }
 }
 
 // Export singleton instance

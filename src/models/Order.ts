@@ -88,9 +88,23 @@ export interface IOrderAddress {
   addressType?: 'home' | 'work' | 'other';
 }
 
+// Fulfillment type for orders
+export type FulfillmentType = 'delivery' | 'pickup' | 'drive_thru' | 'dine_in';
+
+// Fulfillment details interface
+export interface IFulfillmentDetails {
+  storeAddress?: string;
+  storeCoordinates?: [number, number];
+  tableNumber?: string;
+  vehicleInfo?: string;
+  estimatedReadyTime?: Date;
+  pickupInstructions?: string;
+  driveThruLane?: string;
+}
+
 // Delivery information interface
 export interface IOrderDelivery {
-  method: 'standard' | 'express' | 'pickup' | 'scheduled';
+  method: 'standard' | 'express' | 'pickup' | 'drive_thru' | 'dine_in' | 'scheduled';
   status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'dispatched' | 'out_for_delivery' | 'delivered' | 'failed' | 'returned';
   address: IOrderAddress;
   estimatedTime?: Date;
@@ -136,6 +150,7 @@ export interface IOrderAnalytics {
   source: 'app' | 'web' | 'social' | 'referral';
   campaign?: string;
   referralCode?: string;
+  attributionPickId?: Types.ObjectId; // Creator pick that led to this purchase
   deviceInfo?: {
     platform: string;
     version: string;
@@ -148,6 +163,8 @@ export interface IOrder extends Document {
   orderNumber: string;
   user: Types.ObjectId;
   store?: Types.ObjectId; // Primary store for the order (for single-store orders or main store)
+  fulfillmentType: FulfillmentType;
+  fulfillmentDetails?: IFulfillmentDetails;
   items: IOrderItem[];
   totals: IOrderTotals;
   payment: IOrderPayment;
@@ -250,6 +267,24 @@ const OrderSchema = new Schema<IOrder>({
     type: Schema.Types.ObjectId,
     ref: 'Store',
     index: true
+  },
+  fulfillmentType: {
+    type: String,
+    enum: ['delivery', 'pickup', 'drive_thru', 'dine_in'],
+    default: 'delivery',
+    index: true
+  },
+  fulfillmentDetails: {
+    storeAddress: String,
+    storeCoordinates: {
+      type: [Number],
+      index: '2dsphere'
+    },
+    tableNumber: String,
+    vehicleInfo: String,
+    estimatedReadyTime: Date,
+    pickupInstructions: String,
+    driveThruLane: String
   },
   items: [{
     product: {
@@ -423,7 +458,7 @@ const OrderSchema = new Schema<IOrder>({
     method: {
       type: String,
       required: true,
-      enum: ['standard', 'express', 'pickup', 'scheduled'],
+      enum: ['standard', 'express', 'pickup', 'drive_thru', 'dine_in', 'scheduled'],
       default: 'standard'
     },
     status: {
@@ -433,14 +468,14 @@ const OrderSchema = new Schema<IOrder>({
       default: 'pending'
     },
     address: {
-      name: { type: String, required: true },
-      phone: { type: String, required: true },
+      name: { type: String },
+      phone: { type: String },
       email: String,
-      addressLine1: { type: String, required: true },
+      addressLine1: { type: String },
       addressLine2: String,
-      city: { type: String, required: true },
-      state: { type: String, required: true },
-      pincode: { type: String, required: true },
+      city: { type: String },
+      state: { type: String },
+      pincode: { type: String },
       country: { type: String, default: 'India' },
       coordinates: {
         type: [Number], // [longitude, latitude]
@@ -514,6 +549,10 @@ const OrderSchema = new Schema<IOrder>({
     },
     campaign: String,
     referralCode: String,
+    attributionPickId: {
+      type: Schema.Types.ObjectId,
+      ref: 'CreatorPick',
+    },
     deviceInfo: {
       platform: String,
       version: String,
@@ -635,6 +674,7 @@ OrderSchema.index({ 'delivery.status': 1 });
 OrderSchema.index({ 'items.store': 1, createdAt: -1 });
 OrderSchema.index({ createdAt: -1 });
 OrderSchema.index({ 'delivery.estimatedTime': 1 });
+OrderSchema.index({ fulfillmentType: 1, status: 1 });
 
 // Compound indexes
 OrderSchema.index({ user: 1, idempotencyKey: 1 }, { unique: true, sparse: true });

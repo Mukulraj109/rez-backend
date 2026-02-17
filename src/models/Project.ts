@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import redisService from '../services/redisService';
 
 // Project requirements interface
 export interface IProjectRequirements {
@@ -703,14 +704,19 @@ ProjectSchema.methods.reviewSubmission = async function(
     const payout = this.calculatePayout(submission);
     submission.paidAmount = payout;
     submission.paidAt = new Date();
-    
+
     this.analytics.approvedSubmissions += 1;
     this.analytics.totalPayout += payout;
   } else {
     this.analytics.rejectedSubmissions += 1;
   }
-  
+
   await this.save();
+
+  // Invalidate earnings cache for the submitter (pending amount changed)
+  if (submission.user) {
+    try { await redisService.delPattern(`earnings:consolidated:${submission.user.toString()}:*`); } catch (e) {}
+  }
 };
 
 // Method to calculate payout

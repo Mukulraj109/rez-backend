@@ -1,8 +1,9 @@
 import { Router } from 'express';
-import { 
-  getEarningsSummary, 
-  getProjectStats, 
-  getNotifications, 
+import {
+  getConsolidatedEarningsSummary,
+  getEarningsSummary,
+  getProjectStats,
+  getNotifications,
   getReferralInfo,
   markNotificationAsRead,
   getEarningsHistory,
@@ -17,7 +18,17 @@ const router = Router();
 // All routes require authentication
 router.use(authenticate);
 
-// Get user's earnings summary
+// Get consolidated earnings summary (primary endpoint for My Earnings page)
+router.get('/consolidated-summary',
+  validateQuery(Joi.object({
+    period: Joi.string().valid('7d', '30d', '90d', 'all').default('all'),
+    startDate: Joi.date().optional(),
+    endDate: Joi.date().optional()
+  })),
+  getConsolidatedEarningsSummary
+);
+
+// Get user's earnings summary (legacy)
 router.get('/summary', getEarningsSummary);
 
 // Get user's project statistics
@@ -40,7 +51,7 @@ router.get('/referral-info', getReferralInfo);
 // Get user's earnings history
 router.get('/history',
   validateQuery(Joi.object({
-    type: Joi.string().valid('project', 'referral', 'social_media', 'spin', 'withdrawal').optional(),
+    type: Joi.string().valid('videos', 'projects', 'referrals', 'cashback', 'socialMedia', 'games', 'dailyCheckIn', 'bonus').optional(),
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20),
     startDate: Joi.date().optional(),

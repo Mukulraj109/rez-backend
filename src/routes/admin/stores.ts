@@ -122,6 +122,7 @@ router.get('/', async (req: Request, res: Response) => {
             categoryInfo: 1,
             merchantId: 1,
             merchantInfo: 1,
+            serviceCapabilities: 1,
             'ratings.average': 1,
             'ratings.count': 1,
             createdAt: 1,
@@ -237,6 +238,7 @@ router.get('/category/:categoryId', async (req: Request, res: Response) => {
             isSuspended: 1,
             category: 1,
             categoryInfo: 1,
+            serviceCapabilities: 1,
             'ratings.average': 1,
             'ratings.count': 1,
             createdAt: 1
@@ -404,6 +406,80 @@ router.put('/:storeId/category', requireSeniorAdmin, async (req: Request, res: R
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to reassign store category'
+    });
+  }
+});
+
+// ============================================
+// PUT /admin/stores/:storeId/service-capabilities - Toggle a service capability
+// ============================================
+const VALID_CAPABILITIES = ['homeDelivery', 'driveThru', 'tableBooking', 'dineIn', 'storePickup'] as const;
+
+const serviceCapabilitySchema = Joi.object({
+  capability: Joi.string().valid(...VALID_CAPABILITIES).required(),
+  enabled: Joi.boolean().required(),
+});
+
+router.put('/:storeId/service-capabilities', async (req: Request, res: Response) => {
+  try {
+    const { error, value } = serviceCapabilitySchema.validate(req.body);
+    if (error) {
+      return sendBadRequest(res, error.details[0].message);
+    }
+
+    const { capability, enabled } = value as { capability: string; enabled: boolean };
+
+    const updateFields: any = {
+      [`serviceCapabilities.${capability}.enabled`]: enabled,
+    };
+
+    // Sync legacy fields to keep frontend consistent
+    switch (capability) {
+      case 'tableBooking':
+        updateFields['bookingConfig.enabled'] = enabled;
+        break;
+      case 'storePickup':
+        updateFields['hasStorePickup'] = enabled;
+        break;
+      case 'dineIn':
+        // If enabling dineIn on a food store without a bookingType, set a sensible default
+        if (enabled) {
+          const existing = await Store.findById(req.params.storeId).select('bookingType').lean();
+          if (existing && !(existing as any).bookingType) {
+            updateFields['bookingType'] = 'RESTAURANT';
+          }
+        }
+        break;
+      case 'homeDelivery':
+        if (enabled) {
+          updateFields['is60MinDelivery'] = true;
+        }
+        break;
+    }
+
+    const store = await Store.findByIdAndUpdate(
+      req.params.storeId,
+      { $set: updateFields },
+      { new: true }
+    )
+      .select('name slug serviceCapabilities bookingConfig hasStorePickup bookingType is60MinDelivery')
+      .lean();
+
+    if (!store) {
+      return sendNotFound(res, 'Store not found');
+    }
+
+    // Invalidate cache
+    CacheInvalidator.invalidateStore(req.params.storeId).catch((err) => {
+      console.error('[ADMIN STORES] Cache invalidation error:', err);
+    });
+
+    return sendSuccess(res, { store }, `${capability} ${enabled ? 'enabled' : 'disabled'} successfully`);
+  } catch (error: any) {
+    console.error('[ADMIN STORES] Error updating service capability:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update service capability',
     });
   }
 });

@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Types, Model } from 'mongoose';
+import redisService from '../services/redisService';
 
 // Pending Coin Reward interface
 export interface IPendingCoinReward extends Document {
@@ -132,6 +133,10 @@ PendingCoinRewardSchema.methods.approve = async function(
   }
 
   await this.save();
+
+  // Invalidate earnings cache (pending amount changed)
+  try { await redisService.delPattern(`earnings:consolidated:${this.user.toString()}:*`); } catch (e) {}
+
   console.log(`✅ [PENDING REWARD] Approved reward ${this._id} for user ${this.user}`);
 };
 
@@ -150,6 +155,10 @@ PendingCoinRewardSchema.methods.reject = async function(
   this.rejectionReason = reason;
 
   await this.save();
+
+  // Invalidate earnings cache (pending amount changed)
+  try { await redisService.delPattern(`earnings:consolidated:${this.user.toString()}:*`); } catch (e) {}
+
   console.log(`❌ [PENDING REWARD] Rejected reward ${this._id}: ${reason}`);
 };
 
@@ -179,6 +188,10 @@ PendingCoinRewardSchema.methods.creditCoins = async function(): Promise<void> {
   this.creditedAt = new Date();
 
   await this.save();
+
+  // Invalidate earnings cache (pending→credited, CoinTransaction.createTransaction also invalidates but this covers the pending change)
+  try { await redisService.delPattern(`earnings:consolidated:${this.user.toString()}:*`); } catch (e) {}
+
   console.log(`🪙 [PENDING REWARD] Credited ${this.amount} coins to user ${this.user}`);
 };
 

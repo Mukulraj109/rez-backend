@@ -2,6 +2,7 @@
 // Manages user cashback earnings and redemptions
 
 import mongoose, { Schema, Document, Types } from 'mongoose';
+import redisService from '../services/redisService';
 
 export interface ICashbackMetadata {
   orderAmount: number;
@@ -212,6 +213,9 @@ UserCashbackSchema.methods.creditToWallet = async function() {
   this.redeemedAt = new Date();
   await this.save();
 
+  // Invalidate earnings cache (pending→credited)
+  try { await redisService.delPattern(`earnings:consolidated:${this.user.toString()}:*`); } catch (e) {}
+
   console.log(`✅ [CASHBACK] Credited ₹${this.amount} to user wallet`);
 };
 
@@ -219,6 +223,10 @@ UserCashbackSchema.methods.creditToWallet = async function() {
 UserCashbackSchema.methods.markAsExpired = async function() {
   this.status = 'expired';
   await this.save();
+
+  // Invalidate earnings cache (pending amount changed)
+  try { await redisService.delPattern(`earnings:consolidated:${this.user.toString()}:*`); } catch (e) {}
+
   console.log(`⏰ [CASHBACK] Cashback ₹${this.amount} marked as expired`);
 };
 
@@ -230,6 +238,10 @@ UserCashbackSchema.methods.cancelCashback = async function(reason?: string) {
 
   this.status = 'cancelled';
   await this.save();
+
+  // Invalidate earnings cache (pending amount changed)
+  try { await redisService.delPattern(`earnings:consolidated:${this.user.toString()}:*`); } catch (e) {}
+
   console.log(`❌ [CASHBACK] Cashback ₹${this.amount} cancelled: ${reason || 'No reason provided'}`);
 };
 

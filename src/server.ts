@@ -41,6 +41,7 @@ import { startReconciliationJob } from './jobs/reconciliationJob';
 import { startReservationCleanup } from './jobs/reservationCleanup';
 import { initializeLeaderboardRefreshJob } from './jobs/leaderboardRefreshJob';
 import { initializeBillVerificationJob } from './jobs/billVerificationJob';
+import { startCreatorJobs } from './jobs/creatorJobs';
 
 // Import Bull-based scheduled job service (replaces node-cron with Bull repeatable jobs)
 import { ScheduledJobService } from './services/ScheduledJobService';
@@ -127,6 +128,7 @@ import billingRoutes from './routes/billingRoutes';
 import activityFeedRoutes from './routes/activityFeedRoutes';
 import unifiedGamificationRoutes from './routes/unifiedGamificationRoutes';
 import creatorRoutes from './routes/creatorRoutes';
+import adminCreatorRoutes from './routes/adminCreatorRoutes';
 import socialProofRoutes from './routes/socialProofRoutes';
 import partnerRoutes from './routes/partnerRoutes';
 import earningsRoutes from './routes/earningsRoutes';
@@ -224,6 +226,8 @@ import merchantCoinDropRoutes from './routes/merchant/coinDrops';
 import merchantBrandedCoinRoutes from './routes/merchant/brandedCoins';
 // Merchant Earning Analytics routes (Phase 4.3)
 import merchantEarningAnalyticsRoutes from './routes/merchant/earningAnalytics';
+// Merchant Creator Analytics routes
+import merchantCreatorAnalyticsRoutes from './routes/merchant/creatorAnalytics';
 // Bulk product operations routes (Agent 4)
 import bulkRoutes from './merchantroutes/bulk';
 import storeRoutesM from './merchantroutes/stores';  // Merchant store management routes
@@ -877,6 +881,10 @@ console.log('✅ Explore routes registered at /api/explore');
 app.use(`${API_PREFIX}/admin/explore`, adminExploreRoutes);
 console.log('✅ Admin explore routes registered at /api/admin/explore');
 
+// Admin creator management routes
+app.use(`${API_PREFIX}/admin/creators`, adminCreatorRoutes);
+console.log('✅ Admin creator routes registered at /api/admin/creators');
+
 // Admin authentication routes (for rez-admin portal)
 app.use(`${API_PREFIX}/auth`, adminAuthRoutes);
 console.log('✅ Admin auth routes registered at /api/auth');
@@ -1080,6 +1088,10 @@ console.log('✅ Merchant branded coin routes registered at /api/merchant/stores
 app.use('/api/merchant', merchantEarningAnalyticsRoutes);
 console.log('✅ Merchant earning analytics routes registered');
 
+// Merchant Creator Analytics Routes - Creator program analytics for merchants
+app.use('/api/merchant/stores', merchantCreatorAnalyticsRoutes);
+console.log('✅ Merchant creator analytics routes registered');
+
 // Root endpoint (MUST be before 404 handler)
 app.get('/', (req, res) => {
   res.json({
@@ -1266,6 +1278,11 @@ async function startServer() {
     console.log('🔄 Initializing bill verification job...');
     initializeBillVerificationJob();
     console.log('✅ Bill verification job started (runs every 10 min)');
+
+    // Initialize creator program background jobs
+    console.log('🔄 Starting creator program jobs...');
+    startCreatorJobs();
+    console.log('✅ Creator jobs started (trending, stats, conversions, tiers)');
 
     // Initialize Bull-based scheduled job service (preferred over node-cron above)
     // The node-cron jobs above serve as fallback if Redis/Bull is unavailable

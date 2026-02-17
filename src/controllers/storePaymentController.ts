@@ -227,6 +227,7 @@ export const lookupStoreByQR = async (req: Request, res: Response) => {
 
     // Validate QR code format
     if (!QRCodeService.isValidQRCode(qrCode)) {
+      console.warn(`⚠️ [QR_INVALID_FORMAT] qrCode=${qrCode?.substring(0, 50)} ip=${req.ip}`);
       return res.status(400).json({
         success: false,
         message: 'Invalid QR code format',
@@ -237,6 +238,7 @@ export const lookupStoreByQR = async (req: Request, res: Response) => {
     const result = await QRCodeService.lookupStoreByQR(qrCode);
 
     if (!result.success) {
+      console.warn(`⚠️ [QR_LOOKUP_FAILED] qrCode=${qrCode} error=${result.error || 'Store not found'} ip=${req.ip}`);
       return res.status(404).json({
         success: false,
         message: result.error || 'Store not found',

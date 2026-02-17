@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import redisService from '../services/redisService';
 
 export type MainCategorySlug = 'food-dining' | 'beauty-wellness' | 'grocery-essentials' | 'fitness-sports' | 'healthcare' | 'fashion' | 'education-learning' | 'home-services' | 'travel-experiences' | 'entertainment' | 'financial-lifestyle' | 'electronics';
 
@@ -7,7 +8,7 @@ export interface ICoinTransaction extends Document {
   type: 'earned' | 'spent' | 'expired' | 'refunded' | 'bonus';
   amount: number;
   balance: number; // Balance after transaction
-  source: 'spin_wheel' | 'scratch_card' | 'quiz_game' | 'challenge' | 'achievement' | 'referral' | 'order' | 'review' | 'bill_upload' | 'daily_login' | 'admin' | 'purchase' | 'redemption' | 'expiry' | 'survey' | 'memory_match' | 'coin_hunt' | 'guess_price' | 'purchase_reward' | 'social_share_reward' | 'merchant_award' | 'cashback';
+  source: 'spin_wheel' | 'scratch_card' | 'quiz_game' | 'challenge' | 'achievement' | 'referral' | 'order' | 'review' | 'bill_upload' | 'daily_login' | 'admin' | 'purchase' | 'redemption' | 'expiry' | 'survey' | 'memory_match' | 'coin_hunt' | 'guess_price' | 'purchase_reward' | 'social_share_reward' | 'merchant_award' | 'cashback' | 'creator_pick_reward';
   description: string;
   category?: MainCategorySlug | null; // MainCategory this transaction belongs to
   metadata?: {
@@ -89,7 +90,8 @@ const CoinTransactionSchema: Schema = new Schema(
         'purchase_reward',      // 5% auto coin after purchase
         'social_share_reward',  // 5% coin on social sharing
         'merchant_award',       // merchant gives coins to customer
-        'cashback'              // cashback from orders or affiliate purchases
+        'cashback',             // cashback from orders or affiliate purchases
+        'creator_pick_reward'   // merchant rewards creator for pick approval
       ],
       required: true,
       index: true
@@ -205,6 +207,13 @@ CoinTransactionSchema.statics.createTransaction = async function(
     metadata,
     category: category || null
   });
+
+  // Invalidate consolidated earnings cache for this user
+  try {
+    await redisService.delPattern(`earnings:consolidated:${userId}:*`);
+  } catch (e) {
+    // Cache invalidation is best-effort; don't fail the transaction
+  }
 
   return transaction;
 };

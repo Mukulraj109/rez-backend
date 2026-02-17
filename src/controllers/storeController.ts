@@ -152,7 +152,7 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
     console.log('🔍 [GET STORES] Sort options:', sortOptions);
 
     const stores = await Store.find(query)
-      .select('name slug logo banner description category tags ratings location isActive isFeatured offers operationalInfo')
+      .select('name slug logo banner description category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
       .populate({
         path: 'category',
         select: 'name slug',
@@ -471,7 +471,7 @@ export const getNearbyStores = asyncHandler(async (req: Request, res: Response) 
     }
 
     const stores = await Store.find(query)
-      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo')
+      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
       .populate('category', 'name slug icon')
       .limit(Number(limit))
       .lean();
@@ -645,7 +645,7 @@ export const searchStores = asyncHandler(async (req: Request, res: Response) => 
     const skip = (Number(page) - 1) * Number(limit);
 
     const stores = await Store.find(query)
-      .select('name slug logo banner description category tags ratings location isActive isFeatured offers operationalInfo')
+      .select('name slug logo banner description category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
       .populate('category', 'name slug')
       .sort({ 'ratings.average': -1, createdAt: -1 })
       .skip(skip)
@@ -701,7 +701,7 @@ export const getStoresByCategory = asyncHandler(async (req: Request, res: Respon
     const skip = (Number(page) - 1) * Number(limit);
 
     const stores = await Store.find(query)
-      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo')
+      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
       .populate('category', 'name slug')
       .sort(sortOptions)
       .skip(skip)
@@ -874,7 +874,7 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
           select: 'name slug',
           options: { strictPopulate: false }
         })
-        .select('name slug description logo banner location ratings operationalInfo deliveryCategories isActive isFeatured offers tags createdAt contact')
+        .select('name slug description logo banner location ratings operationalInfo deliveryCategories isActive isFeatured offers tags createdAt contact serviceCapabilities bookingConfig bookingType hasStorePickup')
         .sort(sortOptions)
         .skip(skip)
         .limit(Number(limit))
@@ -1066,7 +1066,7 @@ export const searchStoresByDeliveryTime = asyncHandler(async (req: Request, res:
     }
 
     const stores = await Store.find(query)
-      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo')
+      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
       .populate('category', 'name slug')
       .sort({ 'ratings.average': -1 })
       .skip((Number(page) - 1) * Number(limit))
@@ -1253,7 +1253,7 @@ export const advancedStoreSearch = asyncHandler(async (req: Request, res: Respon
     const skip = (Number(page) - 1) * Number(limit);
 
     const stores = await Store.find(query)
-      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo')
+      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
       .sort(sort)
       .skip(skip)
       .limit(Number(limit))
@@ -1856,7 +1856,7 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
 
       const [fallbackStores, fallbackTotal] = await Promise.all([
         Store.find(fallbackQuery)
-          .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo')
+          .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
           .populate('category', 'name slug icon')
           .sort(fallbackSort)
           .skip(fallbackSkip)
@@ -1993,7 +1993,7 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
     // Fetch stores
     const [stores, total] = await Promise.all([
       Store.find(query)
-        .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo')
+        .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
         .populate('category', 'name slug icon')
         .sort(sortOptions)
         .skip(skip)
@@ -2416,7 +2416,7 @@ export const getNearbyStoresForHomepage = asyncHandler(async (req: Request, res:
         }
       }
     })
-      .select('name slug logo location operationalInfo offers rewardRules storeVisitConfig isActive')
+      .select('name slug logo location operationalInfo offers rewardRules storeVisitConfig isActive serviceCapabilities bookingConfig bookingType hasStorePickup')
       .limit(Number(limit) * 2) // Fetch more to filter closed stores if needed
       .lean();
 

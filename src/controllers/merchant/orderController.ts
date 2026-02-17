@@ -260,6 +260,12 @@ export const getMerchantOrders = asyncHandler(async (req: Request, res: Response
       query.status = status;
     }
 
+    // Fulfillment type filter
+    const { fulfillmentType: ftFilter } = req.query;
+    if (ftFilter) {
+      query.fulfillmentType = ftFilter;
+    }
+
     // Payment status filter
     if (paymentStatus) {
       query['payment.status'] = paymentStatus;

@@ -274,43 +274,62 @@ export const cartSchemas = {
 };
 
 // Order validation schemas
+const deliveryAddressFull = Joi.object({
+  name: Joi.string().trim().max(50).required(),
+  phone: Joi.string().trim().min(10).max(15).required(),
+  addressLine1: Joi.string().trim().max(200).required(),
+  addressLine2: Joi.string().trim().max(200).allow(''),
+  city: Joi.string().trim().max(50).required(),
+  state: Joi.string().trim().max(50).required(),
+  pincode: Joi.string().pattern(/^\d{6}$/).required(),
+  landmark: Joi.string().trim().max(100).allow(''),
+  addressType: Joi.string().valid('home', 'work', 'other')
+});
+
+const deliveryAddressMinimal = Joi.object({
+  name: Joi.string().trim().max(50).required(),
+  phone: Joi.string().trim().min(10).max(15).required(),
+  addressLine1: Joi.string().trim().max(200).allow('').optional(),
+  addressLine2: Joi.string().trim().max(200).allow('').optional(),
+  city: Joi.string().trim().max(50).allow('').optional(),
+  state: Joi.string().trim().max(50).allow('').optional(),
+  pincode: Joi.string().allow('').optional(),
+  landmark: Joi.string().trim().max(100).allow('').optional(),
+  addressType: Joi.string().valid('home', 'work', 'other').optional()
+});
+
 export const orderSchemas = {
   createOrder: Joi.object({
-    deliveryAddress: Joi.object({
-      name: Joi.string().trim().max(50).required(),
-      phone: Joi.string().trim().min(10).max(15).required(), // More lenient phone validation for placeholders
-      addressLine1: Joi.string().trim().max(200).required(),
-      addressLine2: Joi.string().trim().max(200).allow(''), // Allow empty string
-      city: Joi.string().trim().max(50).required(),
-      state: Joi.string().trim().max(50).required(),
-      pincode: Joi.string().pattern(/^\d{6}$/).required(),
-      landmark: Joi.string().trim().max(100).allow(''), // Allow empty string
-      addressType: Joi.string().valid('home', 'work', 'other')
-    }).required(),
+    fulfillmentType: Joi.string().valid('delivery', 'pickup', 'drive_thru', 'dine_in').default('delivery'),
+    fulfillmentDetails: Joi.object({
+      tableNumber: Joi.string().trim().max(20).optional(),
+      vehicleInfo: Joi.string().trim().max(100).optional(),
+      pickupInstructions: Joi.string().trim().max(500).allow('').optional()
+    }).optional(),
+    deliveryAddress: Joi.when('fulfillmentType', {
+      is: 'delivery',
+      then: deliveryAddressFull.required(),
+      otherwise: Joi.alternatives().try(deliveryAddressMinimal, Joi.any().strip()).optional()
+    }),
     paymentMethod: Joi.string().valid('wallet', 'card', 'upi', 'cod', 'razorpay').required(),
-    specialInstructions: Joi.string().trim().max(500).allow(''), // Allow empty string
+    specialInstructions: Joi.string().trim().max(500).allow(''),
     couponCode: Joi.string().trim().uppercase(),
-    coinsUsed: Joi.object({ // Add coinsUsed validation
-      rezCoins: Joi.number().min(0).default(0), // Primary field for REZ coins
-      wasilCoins: Joi.number().min(0).default(0), // Legacy field
+    coinsUsed: Joi.object({
+      rezCoins: Joi.number().min(0).default(0),
+      wasilCoins: Joi.number().min(0).default(0),
       promoCoins: Joi.number().min(0).default(0),
       storePromoCoins: Joi.number().min(0).default(0),
       totalCoinsValue: Joi.number().min(0).default(0)
     }),
-    // Multi-store order support - filter cart items to specific store
     storeId: Joi.string().trim().optional(),
-    // Direct items for multi-store checkout (frontend sends items per store)
     items: Joi.array().items(Joi.object({
       product: Joi.string().trim().required(),
       quantity: Joi.number().integer().min(1).required(),
       price: Joi.number().min(0).required(),
       name: Joi.string().trim().optional()
     })).optional(),
-    // Deal redemption code (spin wheel deals)
     redemptionCode: Joi.string().trim().uppercase().optional(),
-    // Offer redemption code (cashback vouchers from My Vouchers - RED-xxx format)
     offerRedemptionCode: Joi.string().trim().uppercase().optional(),
-    // Lock fee discount (amount already paid when locking item)
     lockFeeDiscount: Joi.number().min(0).optional()
   })
 };

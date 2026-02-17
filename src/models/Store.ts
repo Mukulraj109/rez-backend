@@ -1029,6 +1029,36 @@ StoreSchema.pre('save', function (next) {
   next();
 });
 
+// Pre-save hook to keep legacy fields in sync with serviceCapabilities
+StoreSchema.pre('save', function (this: any, next) {
+  if (this.isModified('serviceCapabilities')) {
+    const caps = this.serviceCapabilities;
+
+    // Sync tableBooking -> bookingConfig.enabled
+    if (caps?.tableBooking && this.bookingConfig) {
+      this.bookingConfig.enabled = caps.tableBooking.enabled;
+    }
+
+    // Sync storePickup -> hasStorePickup
+    if (caps?.storePickup !== undefined) {
+      this.hasStorePickup = !!caps.storePickup.enabled;
+    }
+
+    // Sync homeDelivery -> is60MinDelivery flag
+    if (caps?.homeDelivery !== undefined) {
+      if (caps.homeDelivery.enabled && !this.is60MinDelivery) {
+        this.is60MinDelivery = true;
+      }
+    }
+
+    // Sync dineIn -> bookingType (only set if not already set)
+    if (caps?.dineIn?.enabled && !this.bookingType) {
+      this.bookingType = 'RESTAURANT';
+    }
+  }
+  next();
+});
+
 // Post-save hook to update parent Category's materialized store count
 // Uses pre-save tracking to only update when category or isActive actually changed
 StoreSchema.pre('save', function (this: any, next) {

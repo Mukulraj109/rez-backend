@@ -1094,7 +1094,7 @@ export const searchProducts = asyncHandler(async (req: Request, res: Response) =
     if (filters.rating) searchQuery.averageRating = { $gte: filters.rating };
     if (filters.inStock) searchQuery.inventory = { $gt: 0 };
 
-    const products = await Product.find(searchQuery)
+    let products = await Product.find(searchQuery)
       .populate('category', 'name slug')
       .populate('store', 'name slug')
       .skip(options.skip)
@@ -1102,14 +1102,41 @@ export const searchProducts = asyncHandler(async (req: Request, res: Response) =
       .sort({ score: { $meta: 'textScore' }, createdAt: -1 })
       .lean();
 
-    // Get total count for the same search
-    const totalQuery = Product.find({
-      $text: { $search: searchText as string },
-      isActive: true,
-      ...filters
-    });
+    let total = 0;
 
-    const total = await totalQuery.countDocuments();
+    if (products.length > 0) {
+      // Get total count for text search
+      total = await Product.countDocuments({
+        $text: { $search: searchText as string },
+        isActive: true,
+        ...filters
+      });
+    } else {
+      // Fallback to regex search for partial matches (e.g. "ch" -> "chicken")
+      const regexQuery: any = {
+        isActive: true,
+        name: { $regex: searchText as string, $options: 'i' },
+      };
+      if (filters.category) regexQuery.category = filters.category;
+      if (filters.store) regexQuery.store = filters.store;
+      if (filters.priceRange) {
+        regexQuery.basePrice = {};
+        if (filters.priceRange.min) regexQuery.basePrice.$gte = filters.priceRange.min;
+        if (filters.priceRange.max) regexQuery.basePrice.$lte = filters.priceRange.max;
+      }
+      if (filters.rating) regexQuery.averageRating = { $gte: filters.rating };
+      if (filters.inStock) regexQuery.inventory = { $gt: 0 };
+
+      products = await Product.find(regexQuery)
+        .populate('category', 'name slug')
+        .populate('store', 'name slug')
+        .skip(options.skip)
+        .limit(options.limit)
+        .sort({ createdAt: -1 })
+        .lean();
+
+      total = await Product.countDocuments(regexQuery);
+    }
 
     // Cache the results
     await redisService.set(

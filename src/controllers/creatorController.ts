@@ -1,236 +1,120 @@
 import { Request, Response } from 'express';
-import mongoose from 'mongoose';
-import { User } from '../models/User';
-import { Video } from '../models/Video';
-import { Product } from '../models/Product';
-import Follow from '../models/Follow';
+import creatorService from '../services/creatorService';
 import {
   sendSuccess,
   sendNotFound,
   sendError,
-  sendPaginated
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
-import redisService from '../services/redisService';
-import { CacheTTL } from '../config/redis';
 
-// Cache key helpers
-const CACHE_KEYS = {
-  featuredCreators: (limit: number) => `creators:featured:${limit}`,
-  creatorProfile: (id: string) => `creators:profile:${id}`,
-  creatorPicks: (id: string, limit: number) => `creators:picks:${id}:${limit}`,
-  trendingPicks: (limit: number, category?: string) => `creators:trending-picks:${limit}:${category || 'all'}`,
-};
+// ============================================
+// PUBLIC ENDPOINTS
+// ============================================
 
 /**
  * Get featured creators
- * Aggregates users with most video engagement
  * GET /api/creators/featured
  */
 export const getFeaturedCreators = asyncHandler(async (req: Request, res: Response) => {
   const { limit = 6 } = req.query;
-  const limitNum = Number(limit);
-
-  // Try cache first
-  const cacheKey = CACHE_KEYS.featuredCreators(limitNum);
-  const cached = await redisService.get<any>(cacheKey);
-  if (cached) {
-    console.log('[CREATORS] Returning featured creators from cache');
-    return sendSuccess(res, cached, 'Featured creators fetched');
-  }
-
-  try {
-    // Aggregate videos to find top creators by engagement
-    const creatorStats = await Video.aggregate([
-      {
-        $match: {
-          isPublished: true,
-          moderationStatus: 'approved'
-        }
-      },
-      {
-        $group: {
-          _id: '$creator',
-          totalViews: { $sum: '$engagement.views' },
-          totalLikes: { $sum: { $size: { $ifNull: ['$engagement.likes', []] } } },
-          totalShares: { $sum: '$engagement.shares' },
-          totalPicks: { $sum: 1 },
-          avgEngagementRate: { $avg: '$analytics.engagementRate' }
-        }
-      },
-      {
-        $sort: { totalViews: -1, totalPicks: -1 }
-      },
-      {
-        $limit: limitNum
-      },
-      {
-        $lookup: {
-          from: 'users',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'user'
-        }
-      },
-      {
-        $unwind: '$user'
-      },
-      {
-        $lookup: {
-          from: 'follows',
-          let: { creatorId: '$_id' },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ['$following', '$$creatorId'] }
-              }
-            },
-            {
-              $count: 'count'
-            }
-          ],
-          as: 'followers'
-        }
-      },
-      {
-        $project: {
-          id: '$_id',
-          name: {
-            $trim: {
-              input: {
-                $concat: [
-                  { $ifNull: ['$user.profile.firstName', ''] },
-                  ' ',
-                  { $ifNull: ['$user.profile.lastName', ''] }
-                ]
-              }
-            }
-          },
-          avatar: { $ifNull: ['$user.profile.avatar', 'https://i.pravatar.cc/150?img=1'] },
-          bio: '$user.profile.bio',
-          verified: { $eq: ['$user.auth.isVerified', true] },
-          rating: {
-            $round: [
-              { $min: [5, { $max: [1, { $divide: [{ $ifNull: ['$avgEngagementRate', 50] }, 20] }] }] },
-              1
-            ]
-          },
-          totalPicks: 1,
-          totalViews: 1,
-          totalLikes: 1,
-          followers: { $ifNull: [{ $arrayElemAt: ['$followers.count', 0] }, 0] }
-        }
-      }
-    ]);
-
-    // If no creators found via videos, get verified users as fallback
-    let creators = creatorStats;
-    if (creators.length === 0) {
-      const verifiedUsers = await User.find({
-        'auth.isVerified': true,
-        isActive: true
-      })
-        .select('profile.firstName profile.lastName profile.avatar profile.bio auth.isVerified')
-        .limit(limitNum)
-        .lean();
-
-      creators = verifiedUsers.map((user: any) => ({
-        id: user._id,
-        name: `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`.trim() || 'ReZ Creator',
-        avatar: user.profile?.avatar || 'https://i.pravatar.cc/150?img=1',
-        bio: user.profile?.bio || '',
-        verified: true,
-        rating: 4.5,
-        totalPicks: 0,
-        totalViews: 0,
-        followers: 0
-      }));
-    }
-
-    const responseData = {
-      creators,
-      total: creators.length
-    };
-
-    // Cache for 5 minutes
-    await redisService.set(cacheKey, responseData, 300);
-
-    return sendSuccess(res, responseData, 'Featured creators fetched');
-  } catch (error: any) {
-    console.error('[CREATORS] Error fetching featured creators:', error);
-    return sendError(res, error.message || 'Failed to fetch featured creators', 500);
-  }
+  const result = await creatorService.getFeaturedCreators(Number(limit));
+  return sendSuccess(res, result, 'Featured creators fetched');
 });
 
 /**
- * Get creator by ID
+ * Get trending picks from all creators
+ * GET /api/creators/trending-picks
+ */
+export const getTrendingPicks = asyncHandler(async (req: Request, res: Response) => {
+  const { limit = 10, category } = req.query;
+  const result = await creatorService.getTrendingPicks(Number(limit), category as string);
+  return sendSuccess(res, result, 'Trending picks fetched');
+});
+
+/**
+ * Get all approved creators with filters
+ * GET /api/creators/all
+ */
+export const getAllCreators = asyncHandler(async (req: Request, res: Response) => {
+  const { limit = 20, page = 1, category, sort, search } = req.query;
+  const result = await creatorService.getApprovedCreators({
+    limit: Number(limit),
+    page: Number(page),
+    category: category as string,
+    sort: sort as string,
+    search: search as string,
+  });
+  return sendSuccess(res, result, 'Creators fetched');
+});
+
+/**
+ * Get single pick detail
+ * GET /api/creators/picks/:pickId
+ */
+export const getPickDetail = asyncHandler(async (req: Request, res: Response) => {
+  const { pickId } = req.params;
+  const pick = await creatorService.getPickById(pickId);
+  if (!pick) return sendNotFound(res, 'Pick not found');
+  return sendSuccess(res, pick, 'Pick fetched');
+});
+
+/**
+ * Track pick view
+ * POST /api/creators/picks/:pickId/view
+ */
+export const trackPickView = asyncHandler(async (req: Request, res: Response) => {
+  const { pickId } = req.params;
+  const viewerUserId = (req as any).user?.id || (req as any).user?._id;
+  await creatorService.trackPickView(pickId, viewerUserId?.toString());
+  return sendSuccess(res, null, 'View tracked');
+});
+
+/**
+ * Track pick click (product link)
+ * POST /api/creators/picks/:pickId/click
+ */
+export const trackPickClick = asyncHandler(async (req: Request, res: Response) => {
+  const { pickId } = req.params;
+  const viewerUserId = (req as any).user?.id || (req as any).user?._id;
+  await creatorService.trackPickClick(pickId, viewerUserId?.toString());
+  return sendSuccess(res, null, 'Click tracked');
+});
+
+/**
+ * Toggle pick like
+ * POST /api/creators/picks/:pickId/like
+ */
+export const togglePickLike = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id || (req as any).user?._id;
+  if (!userId) return sendError(res, 'Authentication required', 401);
+
+  const { pickId } = req.params;
+  const isLiked = await creatorService.togglePickLike(pickId, userId);
+  return sendSuccess(res, { isLiked }, isLiked ? 'Pick liked' : 'Pick unliked');
+});
+
+/**
+ * Toggle pick bookmark
+ * POST /api/creators/picks/:pickId/bookmark
+ */
+export const togglePickBookmark = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id || (req as any).user?._id;
+  if (!userId) return sendError(res, 'Authentication required', 401);
+
+  const { pickId } = req.params;
+  const isBookmarked = await creatorService.togglePickBookmark(pickId, userId);
+  return sendSuccess(res, { isBookmarked }, isBookmarked ? 'Pick bookmarked' : 'Bookmark removed');
+});
+
+/**
+ * Get creator by user ID
  * GET /api/creators/:id
  */
 export const getCreatorById = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-
-  // Try cache first
-  const cacheKey = CACHE_KEYS.creatorProfile(id);
-  const cached = await redisService.get<any>(cacheKey);
-  if (cached) {
-    return sendSuccess(res, cached, 'Creator fetched');
-  }
-
-  try {
-    const user = await User.findById(id)
-      .select('profile auth wallet createdAt')
-      .lean();
-
-    if (!user) {
-      return sendNotFound(res, 'Creator not found');
-    }
-
-    // Get video stats
-    const videoStats = await Video.aggregate([
-      {
-        $match: {
-          creator: new mongoose.Types.ObjectId(id),
-          isPublished: true
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          totalVideos: { $sum: 1 },
-          totalViews: { $sum: '$engagement.views' },
-          totalLikes: { $sum: { $size: { $ifNull: ['$engagement.likes', []] } } },
-          totalShares: { $sum: '$engagement.shares' }
-        }
-      }
-    ]);
-
-    // Get follower count
-    const followerCount = await Follow.countDocuments({ following: id });
-
-    const creator = {
-      id: user._id,
-      name: `${(user as any).profile?.firstName || ''} ${(user as any).profile?.lastName || ''}`.trim() || 'ReZ Creator',
-      avatar: (user as any).profile?.avatar || 'https://i.pravatar.cc/150?img=1',
-      bio: (user as any).profile?.bio || '',
-      verified: (user as any).auth?.isVerified || false,
-      joinedAt: (user as any).createdAt,
-      stats: {
-        totalVideos: videoStats[0]?.totalVideos || 0,
-        totalViews: videoStats[0]?.totalViews || 0,
-        totalLikes: videoStats[0]?.totalLikes || 0,
-        totalShares: videoStats[0]?.totalShares || 0,
-        followers: followerCount
-      }
-    };
-
-    // Cache for 10 minutes
-    await redisService.set(cacheKey, creator, 600);
-
-    return sendSuccess(res, creator, 'Creator fetched');
-  } catch (error: any) {
-    console.error('[CREATORS] Error fetching creator:', error);
-    return sendError(res, error.message || 'Failed to fetch creator', 500);
-  }
+  const profile = await creatorService.getCreatorProfileByUserId(id);
+  if (!profile) return sendNotFound(res, 'Creator not found');
+  return sendSuccess(res, profile, 'Creator fetched');
 });
 
 /**
@@ -240,198 +124,498 @@ export const getCreatorById = asyncHandler(async (req: Request, res: Response) =
 export const getCreatorPicks = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const { limit = 10 } = req.query;
-  const limitNum = Number(limit);
 
-  // Try cache first
-  const cacheKey = CACHE_KEYS.creatorPicks(id, limitNum);
-  const cached = await redisService.get<any>(cacheKey);
-  if (cached) {
-    return sendSuccess(res, cached, 'Creator picks fetched');
-  }
+  // Find creator profile by user ID
+  const profile = await creatorService.getCreatorProfileByUserId(id);
+  if (!profile) return sendNotFound(res, 'Creator not found');
 
-  try {
-    // Verify creator exists
-    const user = await User.findById(id).select('_id').lean();
-    if (!user) {
-      return sendNotFound(res, 'Creator not found');
-    }
-
-    // Get videos with associated products
-    const videos = await Video.find({
-      creator: id,
-      isPublished: true,
-      'products.0': { $exists: true }
-    })
-      .populate({
-        path: 'products',
-        select: 'name pricing images brand tags',
-        model: 'Product'
-      })
-      .sort({ 'engagement.views': -1 })
-      .limit(limitNum)
-      .lean();
-
-    const picks = videos.map((video: any) => {
-      const product = video.products?.[0];
-      return {
-        id: video._id,
-        title: video.title?.substring(0, 30) + (video.title?.length > 30 ? '...' : '') || 'Product Pick',
-        productImage: product?.images?.[0] || video.thumbnail,
-        productPrice: product?.pricing?.selling || product?.pricing?.original || 0,
-        productBrand: product?.brand || '',
-        tag: video.hashtags?.[0] || '#picks',
-        views: video.engagement?.views || 0,
-        purchases: video.engagement?.shares || 0
-      };
-    });
-
-    const responseData = {
-      picks,
-      total: picks.length
-    };
-
-    // Cache for 5 minutes
-    await redisService.set(cacheKey, responseData, 300);
-
-    return sendSuccess(res, responseData, 'Creator picks fetched');
-  } catch (error: any) {
-    console.error('[CREATORS] Error fetching creator picks:', error);
-    return sendError(res, error.message || 'Failed to fetch creator picks', 500);
-  }
+  const result = await creatorService.getCreatorPicksByProfileId(
+    (profile as any)._id.toString(),
+    Number(limit)
+  );
+  return sendSuccess(res, result, 'Creator picks fetched');
 });
 
 /**
- * Get trending picks from all creators
- * GET /api/creators/trending-picks
- */
-export const getTrendingPicks = asyncHandler(async (req: Request, res: Response) => {
-  const { limit = 10, category } = req.query;
-  const limitNum = Number(limit);
-
-  // Try cache first
-  const cacheKey = CACHE_KEYS.trendingPicks(limitNum, category as string);
-  const cached = await redisService.get<any>(cacheKey);
-  if (cached) {
-    return sendSuccess(res, cached, 'Trending picks fetched');
-  }
-
-  try {
-    // Build query
-    const query: any = {
-      isPublished: true,
-      moderationStatus: 'approved',
-      'products.0': { $exists: true }
-    };
-
-    if (category) {
-      query.category = category;
-    }
-
-    // Get trending videos with products
-    const videos = await Video.find(query)
-      .populate({
-        path: 'products',
-        select: 'name pricing images brand tags category',
-        model: 'Product'
-      })
-      .populate({
-        path: 'creator',
-        select: 'profile.firstName profile.lastName profile.avatar auth.isVerified',
-        model: 'User'
-      })
-      .sort({ 'engagement.views': -1, 'engagement.likes': -1 })
-      .limit(limitNum)
-      .lean();
-
-    const picks = videos.map((video: any) => {
-      const product = video.products?.[0];
-      const creator = video.creator;
-      return {
-        id: video._id,
-        title: video.title?.substring(0, 30) + (video.title?.length > 30 ? '...' : '') || 'Trending Pick',
-        productImage: product?.images?.[0] || video.thumbnail,
-        productPrice: product?.pricing?.selling || product?.pricing?.original || 0,
-        productBrand: product?.brand || '',
-        tag: video.hashtags?.[0] || '#trending',
-        views: video.engagement?.views || 0,
-        purchases: video.engagement?.shares || 0,
-        creator: creator ? {
-          id: creator._id,
-          name: `${creator.profile?.firstName || ''} ${creator.profile?.lastName || ''}`.trim(),
-          avatar: creator.profile?.avatar,
-          verified: creator.auth?.isVerified || false
-        } : null
-      };
-    });
-
-    const responseData = {
-      picks,
-      total: picks.length
-    };
-
-    // Cache for 5 minutes
-    await redisService.set(cacheKey, responseData, 300);
-
-    return sendSuccess(res, responseData, 'Trending picks fetched');
-  } catch (error: any) {
-    console.error('[CREATORS] Error fetching trending picks:', error);
-    return sendError(res, error.message || 'Failed to fetch trending picks', 500);
-  }
-});
-
-/**
- * Get creator stats
+ * Get creator's stats
  * GET /api/creators/:id/stats
  */
 export const getCreatorStats = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
+  const profile = await creatorService.getCreatorProfileByUserId(id);
+  if (!profile) return sendNotFound(res, 'Creator not found');
+
+  return sendSuccess(res, {
+    videos: (profile as any).stats?.totalPicks || 0,
+    views: (profile as any).stats?.totalViews || 0,
+    likes: (profile as any).stats?.totalLikes || 0,
+    shares: 0,
+    comments: 0,
+    engagementRate: (profile as any).stats?.engagementRate || 0,
+    followers: (profile as any).stats?.totalFollowers || 0,
+    following: 0,
+  }, 'Creator stats fetched');
+});
+
+// ============================================
+// AUTHENTICATED ENDPOINTS
+// ============================================
+
+/**
+ * Check creator eligibility
+ * GET /api/creators/eligibility
+ */
+export const checkEligibility = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id || (req as any).user?._id;
+  if (!userId) return sendError(res, 'Authentication required', 401);
+
+  const result = await creatorService.checkEligibility(userId);
+  return sendSuccess(res, result, 'Eligibility checked');
+});
+
+/**
+ * Apply as creator
+ * POST /api/creators/apply
+ */
+export const applyAsCreator = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id || (req as any).user?._id;
+  if (!userId) return sendError(res, 'Authentication required', 401);
+
+  const { displayName, bio, category, tags, socialLinks } = req.body;
+
+  if (!displayName || !category) {
+    return sendError(res, 'Display name and category are required', 400);
+  }
 
   try {
-    // Check if creator exists
-    const user = await User.findById(id).select('_id').lean();
-    if (!user) {
-      return sendNotFound(res, 'Creator not found');
-    }
-
-    // Get comprehensive stats
-    const [videoStats, followerCount, followingCount] = await Promise.all([
-      Video.aggregate([
-        {
-          $match: {
-            creator: new mongoose.Types.ObjectId(id),
-            isPublished: true
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            totalVideos: { $sum: 1 },
-            totalViews: { $sum: '$engagement.views' },
-            totalLikes: { $sum: { $size: { $ifNull: ['$engagement.likes', []] } } },
-            totalShares: { $sum: '$engagement.shares' },
-            totalComments: { $sum: '$engagement.comments' },
-            avgEngagement: { $avg: '$analytics.engagementRate' }
-          }
-        }
-      ]),
-      Follow.countDocuments({ following: id }),
-      Follow.countDocuments({ follower: id })
-    ]);
-
-    const stats = {
-      videos: videoStats[0]?.totalVideos || 0,
-      views: videoStats[0]?.totalViews || 0,
-      likes: videoStats[0]?.totalLikes || 0,
-      shares: videoStats[0]?.totalShares || 0,
-      comments: videoStats[0]?.totalComments || 0,
-      engagementRate: Math.round(videoStats[0]?.avgEngagement || 0),
-      followers: followerCount,
-      following: followingCount
-    };
-
-    return sendSuccess(res, stats, 'Creator stats fetched');
+    const profile = await creatorService.applyAsCreator(userId, {
+      displayName,
+      bio: bio || '',
+      category,
+      tags,
+      socialLinks,
+    });
+    return sendSuccess(res, profile, 'Application submitted successfully');
   } catch (error: any) {
-    console.error('[CREATORS] Error fetching creator stats:', error);
-    return sendError(res, error.message || 'Failed to fetch creator stats', 500);
+    return sendError(res, error.message, 400);
   }
+});
+
+/**
+ * Get my creator profile
+ * GET /api/creators/my-profile
+ */
+export const getMyProfile = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id || (req as any).user?._id;
+  if (!userId) return sendError(res, 'Authentication required', 401);
+
+  const profile = await creatorService.getCreatorProfileByUserId(userId);
+  if (!profile) return sendSuccess(res, null, 'No creator profile found');
+  return sendSuccess(res, profile, 'Profile fetched');
+});
+
+/**
+ * Update my creator profile
+ * PUT /api/creators/my-profile
+ */
+export const updateMyProfile = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id || (req as any).user?._id;
+  if (!userId) return sendError(res, 'Authentication required', 401);
+
+  const { displayName, bio, avatar, coverImage, tags, socialLinks } = req.body;
+
+  try {
+    const profile = await creatorService.updateCreatorProfile(userId, {
+      displayName,
+      bio,
+      avatar,
+      coverImage,
+      tags,
+      socialLinks,
+    });
+    return sendSuccess(res, profile, 'Profile updated');
+  } catch (error: any) {
+    return sendError(res, error.message, 400);
+  }
+});
+
+/**
+ * Submit a new pick
+ * POST /api/creators/picks
+ */
+export const submitPick = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id || (req as any).user?._id;
+  if (!userId) return sendError(res, 'Authentication required', 401);
+
+  const { productId, title, description, image, videoUrl, tags, videoId } = req.body;
+
+  if (!productId || !title) {
+    return sendError(res, 'Product ID and title are required', 400);
+  }
+
+  try {
+    const pick = await creatorService.submitPick(userId, {
+      productId,
+      title,
+      description,
+      image,
+      videoUrl,
+      tags,
+      videoId,
+    });
+    return sendSuccess(res, pick, 'Pick submitted for review');
+  } catch (error: any) {
+    return sendError(res, error.message, 400);
+  }
+});
+
+/**
+ * Get my picks
+ * GET /api/creators/my-picks
+ */
+export const getMyPicks = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id || (req as any).user?._id;
+  if (!userId) return sendError(res, 'Authentication required', 401);
+
+  const { limit = 20, page = 1, status } = req.query;
+  const result = await creatorService.getMyPicks(userId, {
+    limit: Number(limit),
+    page: Number(page),
+    status: status as string,
+  });
+  return sendSuccess(res, result, 'My picks fetched');
+});
+
+/**
+ * Get my earnings
+ * GET /api/creators/my-earnings
+ */
+export const getMyEarnings = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id || (req as any).user?._id;
+  if (!userId) return sendError(res, 'Authentication required', 401);
+
+  const result = await creatorService.getMyEarnings(userId);
+  return sendSuccess(res, result, 'Earnings fetched');
+});
+
+/**
+ * Delete my pick
+ * DELETE /api/creators/my-picks/:pickId
+ */
+export const deleteMyPick = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id || (req as any).user?._id;
+  if (!userId) return sendError(res, 'Authentication required', 401);
+
+  const { pickId } = req.params;
+
+  try {
+    const result = await creatorService.deleteMyPick(userId, pickId);
+    return sendSuccess(res, result, result.archived ? 'Pick archived' : 'Pick deleted');
+  } catch (error: any) {
+    const statusCode = error.message.includes('only delete your own') ? 403 : 400;
+    return sendError(res, error.message, statusCode);
+  }
+});
+
+/**
+ * Update my pick
+ * PATCH /api/creators/my-picks/:pickId
+ */
+export const updateMyPick = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id || (req as any).user?._id;
+  if (!userId) return sendError(res, 'Authentication required', 401);
+
+  const { pickId } = req.params;
+  const { title, description, tags, image, videoUrl } = req.body;
+
+  try {
+    const pick = await creatorService.updateMyPick(userId, pickId, {
+      title,
+      description,
+      tags,
+      image,
+      videoUrl,
+    });
+    return sendSuccess(res, pick, 'Pick updated');
+  } catch (error: any) {
+    const statusCode = error.message.includes('only edit your own') ? 403 : 400;
+    return sendError(res, error.message, statusCode);
+  }
+});
+
+// ============================================
+// ADMIN ENDPOINTS
+// ============================================
+
+/**
+ * Get creator applications (admin)
+ * GET /admin/creators
+ */
+export const adminGetCreators = asyncHandler(async (req: Request, res: Response) => {
+  const { status, page = 1, limit = 20, search } = req.query;
+  const result = await creatorService.getCreatorApplications(
+    status as string,
+    Number(page),
+    Number(limit),
+    search as string
+  );
+  return sendSuccess(res, result, 'Creator applications fetched');
+});
+
+/**
+ * Approve creator (admin)
+ * PATCH /admin/creators/:id/approve
+ */
+export const adminApproveCreator = asyncHandler(async (req: Request, res: Response) => {
+  const adminId = (req as any).user?.id || (req as any).user?._id;
+  const { id } = req.params;
+
+  try {
+    const profile = await creatorService.approveCreator(id, adminId);
+    return sendSuccess(res, profile, 'Creator approved');
+  } catch (error: any) {
+    return sendError(res, error.message, 400);
+  }
+});
+
+/**
+ * Reject creator (admin)
+ * PATCH /admin/creators/:id/reject
+ */
+export const adminRejectCreator = asyncHandler(async (req: Request, res: Response) => {
+  const adminId = (req as any).user?.id || (req as any).user?._id;
+  const { id } = req.params;
+  const { reason } = req.body;
+
+  try {
+    const profile = await creatorService.rejectCreator(id, adminId, reason || 'Rejected by admin');
+    return sendSuccess(res, profile, 'Creator rejected');
+  } catch (error: any) {
+    return sendError(res, error.message, 400);
+  }
+});
+
+/**
+ * Toggle featured (admin)
+ * PATCH /admin/creators/:id/feature
+ */
+export const adminToggleFeatured = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const isFeatured = await creatorService.toggleFeatured(id);
+    return sendSuccess(res, { isFeatured }, isFeatured ? 'Creator featured' : 'Creator unfeatured');
+  } catch (error: any) {
+    return sendError(res, error.message, 400);
+  }
+});
+
+/**
+ * Update creator tier (admin)
+ * PATCH /admin/creators/:id/tier
+ */
+export const adminUpdateTier = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { tier } = req.body;
+
+  if (!['starter', 'bronze', 'silver', 'gold', 'platinum'].includes(tier)) {
+    return sendError(res, 'Invalid tier', 400);
+  }
+
+  await creatorService.updateCreatorTier(id, tier);
+  return sendSuccess(res, { tier }, 'Tier updated');
+});
+
+/**
+ * Suspend creator (admin)
+ * PATCH /admin/creators/:id/suspend
+ */
+export const adminSuspendCreator = asyncHandler(async (req: Request, res: Response) => {
+  const adminId = (req as any).user?.id || (req as any).user?._id;
+  const { id } = req.params;
+  const { reason } = req.body;
+
+  try {
+    const profile = await creatorService.suspendCreator(id, adminId, reason || 'Suspended by admin');
+    return sendSuccess(res, profile, 'Creator suspended');
+  } catch (error: any) {
+    return sendError(res, error.message, 400);
+  }
+});
+
+/**
+ * Unsuspend creator (admin)
+ * PATCH /admin/creators/:id/unsuspend
+ */
+export const adminUnsuspendCreator = asyncHandler(async (req: Request, res: Response) => {
+  const adminId = (req as any).user?.id || (req as any).user?._id;
+  const { id } = req.params;
+
+  try {
+    const profile = await creatorService.unsuspendCreator(id, adminId);
+    return sendSuccess(res, profile, 'Creator unsuspended');
+  } catch (error: any) {
+    return sendError(res, error.message, 400);
+  }
+});
+
+/**
+ * Get creator program stats (admin)
+ * GET /admin/creators/stats
+ */
+export const adminGetStats = asyncHandler(async (req: Request, res: Response) => {
+  const stats = await creatorService.getCreatorProgramStats();
+  return sendSuccess(res, stats, 'Creator program stats fetched');
+});
+
+/**
+ * Get all picks for moderation (admin)
+ * GET /admin/creators/picks
+ */
+export const adminGetPicks = asyncHandler(async (req: Request, res: Response) => {
+  const { status = 'pending', page = 1, limit = 20 } = req.query;
+
+  // Import CreatorPick model directly for admin queries
+  const { CreatorPick } = require('../models/CreatorPick');
+
+  const query: any = {};
+  if (status !== 'all') query.moderationStatus = status;
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const [rawPicks, total] = await Promise.all([
+    CreatorPick.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit))
+      .populate('product', 'name pricing images brand')
+      .populate({
+        path: 'creator',
+        select: 'displayName avatar user',
+        populate: { path: 'user', select: 'profile.firstName profile.lastName' },
+      })
+      .lean(),
+    CreatorPick.countDocuments(query),
+  ]);
+
+  // Flatten populated data to match admin frontend expectations
+  const picks = rawPicks.map((pick: any) => ({
+    id: pick._id?.toString(),
+    title: pick.title || '',
+    productImage: pick.product?.images?.[0] || '',
+    productPrice: pick.product?.pricing?.selling || pick.product?.pricing?.original || 0,
+    productBrand: pick.product?.brand || '',
+    creatorName: pick.creator?.displayName || '',
+    creatorId: pick.creator?._id?.toString() || '',
+    status: pick.status,
+    moderationStatus: pick.moderationStatus,
+    isPublished: pick.isPublished,
+    views: pick.engagement?.views || 0,
+    likes: Array.isArray(pick.engagement?.likes) ? pick.engagement.likes.length : 0,
+    clicks: pick.engagement?.clicks || 0,
+    purchases: pick.conversions?.totalPurchases || 0,
+    trendingScore: pick.trendingScore || 0,
+    createdAt: pick.createdAt,
+  }));
+
+  return sendSuccess(res, { picks, total }, 'Picks fetched');
+});
+
+/**
+ * Moderate a pick (admin)
+ * PATCH /admin/creators/picks/:pickId/moderate
+ */
+export const adminModeratePick = asyncHandler(async (req: Request, res: Response) => {
+  const adminId = (req as any).user?.id || (req as any).user?._id;
+  const { pickId } = req.params;
+  const { action, reason } = req.body;
+
+  if (!['approve', 'reject'].includes(action)) {
+    return sendError(res, 'Action must be approve or reject', 400);
+  }
+
+  try {
+    await creatorService.moderatePick(pickId, action, adminId, reason);
+    return sendSuccess(res, null, `Pick ${action}d`);
+  } catch (error: any) {
+    return sendError(res, error.message, 400);
+  }
+});
+
+/**
+ * Get creator program config (admin)
+ * GET /admin/creators/config
+ */
+export const adminGetConfig = asyncHandler(async (req: Request, res: Response) => {
+  const config = await creatorService.getCreatorConfig();
+  return sendSuccess(res, config, 'Config fetched');
+});
+
+/**
+ * Update creator program config (admin)
+ * PUT /admin/creators/config
+ */
+export const adminUpdateConfig = asyncHandler(async (req: Request, res: Response) => {
+  const adminId = (req as any).user?.id || (req as any).user?._id;
+
+  const EarningConfig = require('../models/EarningConfig').default;
+
+  let config = await EarningConfig.findOne();
+  if (!config) {
+    config = new EarningConfig({ updatedBy: adminId });
+  }
+
+  config.creatorProgram = { ...config.creatorProgram, ...req.body };
+  config.updatedBy = adminId;
+  await config.save();
+
+  // Invalidate config cache
+  const redisService = require('../services/redisService').default;
+  await redisService.del('creator:program:config');
+
+  return sendSuccess(res, config.creatorProgram, 'Config updated');
+});
+
+/**
+ * Get conversions (admin)
+ * GET /admin/creators/conversions
+ */
+export const adminGetConversions = asyncHandler(async (req: Request, res: Response) => {
+  const { status, page = 1, limit = 20 } = req.query;
+
+  const { CreatorConversion } = require('../models/CreatorConversion');
+
+  const query: any = {};
+  if (status && status !== 'all') query.status = status;
+
+  const skip = (Number(page) - 1) * Number(limit);
+  const [rawConversions, total] = await Promise.all([
+    CreatorConversion.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit))
+      .populate('product', 'name images')
+      .populate('buyer', 'profile.firstName profile.lastName')
+      .populate({
+        path: 'creator',
+        select: 'displayName avatar user',
+        populate: { path: 'user', select: 'profile.firstName profile.lastName' },
+      })
+      .lean(),
+    CreatorConversion.countDocuments(query),
+  ]);
+
+  // Flatten populated data to match admin frontend expectations
+  const conversions = rawConversions.map((conv: any) => ({
+    id: conv._id?.toString(),
+    pickTitle: conv.product?.name || 'Unknown Product',
+    creatorName: conv.creator?.displayName || '',
+    buyerName: conv.buyer
+      ? `${conv.buyer.profile?.firstName || ''} ${conv.buyer.profile?.lastName || ''}`.trim()
+      : 'Unknown',
+    purchaseAmount: conv.purchaseAmount || 0,
+    commissionAmount: conv.commissionAmount || 0,
+    status: conv.status,
+    createdAt: conv.createdAt,
+  }));
+
+  return sendSuccess(res, { conversions, total }, 'Conversions fetched');
 });
