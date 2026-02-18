@@ -290,89 +290,21 @@ export const getImprovementTips = async (req: Request, res: Response) => {
 
 /**
  * POST /api/prive/check-in
- * Daily check-in with streak tracking and coin reward
+ * DEPRECATED: Delegates to gamification streakCheckin for correct CoinTransaction tracking.
+ * The old implementation directly mutated wallet without creating CoinTransaction records,
+ * causing earnings history to be incomplete. Now forwards to the unified gamification endpoint.
  */
 export const dailyCheckIn = async (req: Request, res: Response) => {
   try {
-    const userId = req.user?.id;
-
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: 'Authentication required',
-      });
-    }
-
-    // Check if already checked in today
-    const hasCheckedIn = await DailyCheckIn.hasCheckedInToday(
-      new mongoose.Types.ObjectId(userId)
-    );
-
-    if (hasCheckedIn) {
-      return res.status(400).json({
-        success: false,
-        error: 'Already checked in today',
-        message: 'You have already checked in today. Come back tomorrow!',
-      });
-    }
-
-    // Get current streak
-    const currentStreak = await DailyCheckIn.getCurrentStreak(
-      new mongoose.Types.ObjectId(userId)
-    );
-    const newStreak = currentStreak + 1;
-
-    // Calculate rewards
-    const baseCoins = 10;
-    const bonusCoins = calculateStreakBonus(newStreak);
-    const totalCoins = baseCoins + bonusCoins;
-
-    // Create check-in record
-    const checkIn = await DailyCheckIn.create({
-      userId: new mongoose.Types.ObjectId(userId),
-      date: new Date(),
-      streak: newStreak,
-      coinsEarned: baseCoins,
-      bonusEarned: bonusCoins,
-      totalEarned: totalCoins,
-      coinType: 'rez',
-    });
-
-    // Award ReZ coins to user wallet
-    try {
-      const wallet = await Wallet.findOne({ user: new mongoose.Types.ObjectId(userId) });
-      if (wallet) {
-        // Update balance
-        wallet.balance.total += totalCoins;
-        wallet.balance.available += totalCoins;
-        wallet.statistics.totalEarned += totalCoins;
-        wallet.lastTransactionAt = new Date();
-
-        // Also update the ReZ coins specifically in the coins array
-        const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-        if (rezCoin) {
-          rezCoin.amount += totalCoins;
-          rezCoin.lastUsed = new Date();
-        }
-
-        await wallet.save();
-      }
-    } catch (walletError) {
-      console.warn('[PRIVE] Failed to update wallet:', walletError);
-    }
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        streak: newStreak,
-        coinsEarned: baseCoins,
-        bonusEarned: bonusCoins,
-        totalEarned: totalCoins,
-        message: getStreakMessage(newStreak),
-      },
-    });
+    // Delegate to the gamification streakCheckin handler which:
+    // 1. Uses atomic findOneAndUpdate (prevents race conditions)
+    // 2. Creates CoinTransaction via coinService.awardCoins (earnings tracking)
+    // 3. Updates UserStreak model (unified streak tracking)
+    // 4. Awards escalating day rewards (matches frontend calendar)
+    const { streakCheckin } = await import('./gamificationController');
+    return (streakCheckin as any)(req, res);
   } catch (error: any) {
-    console.error('[PRIVE] Error checking in:', error);
+    console.error('[PRIVE] Error delegating check-in:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to check in',

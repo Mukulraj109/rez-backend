@@ -21,8 +21,16 @@ import {
 } from '../controllers/storePaymentController';
 import { authenticate } from '../middleware/auth';
 import { authMiddleware as merchantAuth } from '../middleware/merchantauth';
+import { createRateLimiter } from '../middleware/rateLimiter';
 
 const router = express.Router();
+
+// Rate limiter for payment initiation (10 per minute per user)
+const paymentInitLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: 'Too many payment attempts. Please try again later.',
+});
 
 /**
  * Store Payment Routes
@@ -86,8 +94,8 @@ router.get('/offers/:storeId', authenticate, getStorePaymentOffers);
 
 // ==================== PAYMENT ROUTES (CUSTOMER) ====================
 
-// Initiate store payment
-router.post('/initiate', authenticate, initiateStorePayment);
+// Initiate store payment (rate limited)
+router.post('/initiate', authenticate, paymentInitLimiter, initiateStorePayment);
 
 // Confirm store payment
 router.post('/confirm', authenticate, confirmStorePayment);

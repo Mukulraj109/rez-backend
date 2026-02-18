@@ -42,6 +42,7 @@ import { startReservationCleanup } from './jobs/reservationCleanup';
 import { initializeLeaderboardRefreshJob } from './jobs/leaderboardRefreshJob';
 import { initializeBillVerificationJob } from './jobs/billVerificationJob';
 import { startCreatorJobs } from './jobs/creatorJobs';
+import { initializeStreakResetJob } from './jobs/streakResetJob';
 
 // Import Bull-based scheduled job service (replaces node-cron with Bull repeatable jobs)
 import { ScheduledJobService } from './services/ScheduledJobService';
@@ -83,6 +84,7 @@ import syncRoutes from './routes/syncRoutes';
 import locationRoutes from './routes/locationRoutes';
 import walletRoutes from './routes/walletRoutes';
 import offerRoutes from './routes/offerRoutes';
+import offerCommentRoutes from './routes/offerCommentRoutes';
 import offerCategoryRoutes from './routes/offerCategoryRoutes';
 import heroBannerRoutes from './routes/heroBannerRoutes';
 import whatsNewRoutes from './routes/whatsNewRoutes';
@@ -194,8 +196,11 @@ import {
   adminFeatureFlagsRoutes,
   adminAchievementsRoutes,
   adminGamificationStatsRoutes,
+  adminDailyCheckinConfigRoutes,
 } from './routes/admin';
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
+import lockDealRoutes from './routes/lockDealRoutes';  // Lock Price Deal routes
+import playEarnRoutes from './routes/playEarnRoutes';  // Play & Earn config routes
 import experienceRoutes from './routes/experienceRoutes';  // Store experience routes
 import authRoutes1 from './merchantroutes/auth';  // Temporarily disabled
 import merchantRoutes from './merchantroutes/merchants';  // Temporarily disabled
@@ -228,6 +233,8 @@ import merchantBrandedCoinRoutes from './routes/merchant/brandedCoins';
 import merchantEarningAnalyticsRoutes from './routes/merchant/earningAnalytics';
 // Merchant Creator Analytics routes
 import merchantCreatorAnalyticsRoutes from './routes/merchant/creatorAnalytics';
+// Merchant Social Impact routes
+import merchantSocialImpactRoutes from './routes/merchant/socialImpact';
 // Bulk product operations routes (Agent 4)
 import bulkRoutes from './merchantroutes/bulk';
 import storeRoutesM from './merchantroutes/stores';  // Merchant store management routes
@@ -707,6 +714,8 @@ app.use(`${API_PREFIX}/wishlist`, wishlistRoutes);
 app.use(`${API_PREFIX}/sync`, syncRoutes);
 app.use(`${API_PREFIX}/location`, locationRoutes);
 app.use(`${API_PREFIX}/wallet`, walletRoutes);
+app.use(`${API_PREFIX}/offers`, offerCommentRoutes);
+console.log('✅ Offer comment routes registered at /api/offers');
 app.use(`${API_PREFIX}/offers`, offerRoutes);
 app.use(`${API_PREFIX}/zones`, zoneVerificationRoutes);
 console.log('✅ Zone verification routes registered at /api/zones');
@@ -738,6 +747,12 @@ app.use(`${API_PREFIX}/streak`, streakRoutes);
 console.log('✅ Streak routes registered at /api/streak');
 app.use(`${API_PREFIX}/shares`, shareRoutes);  // plural to match frontend
 console.log('✅ Share routes registered at /api/shares');
+import photoUploadRoutes from './routes/photoUploadRoutes';
+app.use(`${API_PREFIX}/photos`, photoUploadRoutes);
+console.log('✅ Photo upload routes registered at /api/photos');
+import pollRoutes from './routes/pollRoutes';
+app.use(`${API_PREFIX}/polls`, pollRoutes);
+console.log('✅ Poll routes registered at /api/polls');
 app.use(`${API_PREFIX}/tournaments`, tournamentRoutes);
 console.log('✅ Tournament routes registered at /api/tournaments');
 app.use(`${API_PREFIX}/programs`, programRoutes);
@@ -944,10 +959,31 @@ app.use(`${API_PREFIX}/admin/achievements`, adminAchievementsRoutes);
 console.log('✅ Admin achievements routes registered at /api/admin/achievements');
 app.use(`${API_PREFIX}/admin/gamification-stats`, adminGamificationStatsRoutes);
 console.log('✅ Admin gamification stats routes registered at /api/admin/gamification-stats');
+app.use(`${API_PREFIX}/admin/daily-checkin-config`, adminDailyCheckinConfigRoutes);
+console.log('✅ Admin daily check-in config routes registered at /api/admin/daily-checkin-config');
+
+// Admin Engagement Config Routes
+import { Router as EngagementConfigRouter } from 'express';
+import { authenticate as authTokenMiddleware } from './middleware/auth';
+import { getAllConfigs, updateConfig, setCampaign } from './controllers/engagementConfigController';
+const engagementConfigRouter = EngagementConfigRouter();
+engagementConfigRouter.get('/', getAllConfigs);
+engagementConfigRouter.patch('/:action', updateConfig);
+engagementConfigRouter.post('/:action/campaign', setCampaign);
+app.use(`${API_PREFIX}/admin/engagement-config`, authTokenMiddleware, engagementConfigRouter);
+console.log('✅ Admin engagement config routes registered at /api/admin/engagement-config');
 
 // Campaign Routes - Homepage exciting deals
 app.use(`${API_PREFIX}/campaigns`, campaignRoutes);
 console.log('✅ Campaign routes registered at /api/campaigns');
+
+// Lock Price Deal Routes - Lock deals with deposit, double earnings, pickup rewards
+app.use(`${API_PREFIX}/lock-deals`, lockDealRoutes);
+console.log('✅ Lock deal routes registered at /api/lock-deals');
+
+// Play & Earn Config Routes
+app.use(`${API_PREFIX}/play-earn`, playEarnRoutes);
+console.log('✅ Play & Earn routes registered at /api/play-earn');
 
 // Experience Routes - Store experiences
 app.use(`${API_PREFIX}/experiences`, experienceRoutes);
@@ -1091,6 +1127,10 @@ console.log('✅ Merchant earning analytics routes registered');
 // Merchant Creator Analytics Routes - Creator program analytics for merchants
 app.use('/api/merchant/stores', merchantCreatorAnalyticsRoutes);
 console.log('✅ Merchant creator analytics routes registered');
+
+// Merchant Social Impact Routes - Social impact event management for merchants
+app.use('/api/merchant/programs/social-impact', merchantSocialImpactRoutes);
+console.log('✅ Merchant social impact routes registered');
 
 // Root endpoint (MUST be before 404 handler)
 app.get('/', (req, res) => {
@@ -1283,6 +1323,11 @@ async function startServer() {
     console.log('🔄 Starting creator program jobs...');
     startCreatorJobs();
     console.log('✅ Creator jobs started (trending, stats, conversions, tiers)');
+
+    // Initialize streak reset job (resets broken streaks daily at 00:05 UTC)
+    console.log('🔄 Initializing streak reset job...');
+    initializeStreakResetJob();
+    console.log('✅ Streak reset job started (runs daily at 00:05 UTC)');
 
     // Initialize Bull-based scheduled job service (preferred over node-cron above)
     // The node-cron jobs above serve as fallback if Redis/Bull is unavailable

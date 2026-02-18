@@ -96,6 +96,7 @@ export interface IStoreRewardRules {
   coinsPerRupee?: number;            // Coins earned per rupee spent (e.g., 0.1 = 1 coin per ₹10)
   extraRewardThreshold?: number;     // e.g., Spend ₹400 → get extra coins
   extraRewardCoins?: number;         // Extra coins when threshold met
+  firstVisitBonus?: number;          // Bonus coins for first-ever payment at this store
   visitMilestoneRewards?: {          // Rewards for visit milestones
     visits: number;                  // e.g., 5th visit
     coinsReward: number;
@@ -842,6 +843,11 @@ const StoreSchema = new Schema<IStore>({
     },
     extraRewardCoins: {
       type: Number,
+      min: 0
+    },
+    firstVisitBonus: {
+      type: Number,
+      default: 0,
       min: 0
     },
     visitMilestoneRewards: [{

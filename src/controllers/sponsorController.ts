@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import sponsorService from '../services/sponsorService';
+import { SponsorAllocation } from '../models/SponsorAllocation';
 
 class SponsorController {
   // GET /api/sponsors
@@ -226,6 +227,151 @@ class SponsorController {
           message: error.message
         });
       }
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+  // POST /api/sponsors/:id/fund - Fund sponsor budget
+  async fundSponsor(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const adminId = req.user?.id;
+      const { amount, description } = req.body;
+
+      if (!amount || amount <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'amount must be a positive number'
+        });
+      }
+
+      const entry = await SponsorAllocation.recordFund(
+        id,
+        amount,
+        adminId,
+        description || `Budget funding of ${amount} coins`
+      );
+
+      res.json({
+        success: true,
+        message: `Successfully funded ${amount} branded coins`,
+        data: entry
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // GET /api/sponsors/:id/budget - Get budget summary
+  async getSponsorBudget(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      const balance = await SponsorAllocation.getSponsorBalance(id);
+
+      // Get total funded and disbursed
+      const fundEntries = await SponsorAllocation.aggregate([
+        { $match: { sponsor: new (require('mongoose').Types.ObjectId)(id) } },
+        {
+          $group: {
+            _id: '$type',
+            total: { $sum: '$amount' }
+          }
+        }
+      ]);
+
+      const totals: any = {};
+      fundEntries.forEach((entry: any) => {
+        totals[entry._id] = entry.total;
+      });
+
+      res.json({
+        success: true,
+        data: {
+          currentBalance: balance,
+          totalFunded: totals.fund || 0,
+          totalAllocated: totals.allocate || 0,
+          totalDisbursed: totals.disburse || 0,
+          totalRefunded: totals.refund || 0
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // POST /api/sponsors/:id/allocate - Allocate budget to event
+  async allocateBudget(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const adminId = req.user?.id;
+      const { programId, amount } = req.body;
+
+      if (!programId || !amount || amount <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'programId and a positive amount are required'
+        });
+      }
+
+      const entry = await SponsorAllocation.recordAllocate(id, programId, amount, adminId);
+
+      res.json({
+        success: true,
+        message: `Allocated ${amount} branded coins to event`,
+        data: entry
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // GET /api/sponsors/:id/ledger - Get allocation ledger
+  async getSponsorLedger(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { page = '1', limit = '20', type } = req.query;
+
+      const query: any = { sponsor: id };
+      if (type) {
+        query.type = type;
+      }
+
+      const pageNum = parseInt(page as string);
+      const limitNum = parseInt(limit as string);
+
+      const [entries, total] = await Promise.all([
+        SponsorAllocation.find(query)
+          .sort({ createdAt: -1 })
+          .skip((pageNum - 1) * limitNum)
+          .limit(limitNum)
+          .populate('program', 'name eventType')
+          .lean(),
+        SponsorAllocation.countDocuments(query)
+      ]);
+
+      res.json({
+        success: true,
+        data: entries,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum)
+        }
+      });
+    } catch (error: any) {
       res.status(500).json({
         success: false,
         message: error.message

@@ -8,7 +8,7 @@ export interface ICoinTransaction extends Document {
   type: 'earned' | 'spent' | 'expired' | 'refunded' | 'bonus';
   amount: number;
   balance: number; // Balance after transaction
-  source: 'spin_wheel' | 'scratch_card' | 'quiz_game' | 'challenge' | 'achievement' | 'referral' | 'order' | 'review' | 'bill_upload' | 'daily_login' | 'admin' | 'purchase' | 'redemption' | 'expiry' | 'survey' | 'memory_match' | 'coin_hunt' | 'guess_price' | 'purchase_reward' | 'social_share_reward' | 'merchant_award' | 'cashback' | 'creator_pick_reward';
+  source: 'spin_wheel' | 'scratch_card' | 'quiz_game' | 'challenge' | 'achievement' | 'referral' | 'order' | 'review' | 'bill_upload' | 'daily_login' | 'admin' | 'purchase' | 'redemption' | 'expiry' | 'survey' | 'memory_match' | 'coin_hunt' | 'guess_price' | 'purchase_reward' | 'social_share_reward' | 'merchant_award' | 'cashback' | 'creator_pick_reward' | 'poll_vote' | 'photo_upload' | 'offer_comment' | 'event_rating' | 'ugc_reel' | 'social_impact_reward';
   description: string;
   category?: MainCategorySlug | null; // MainCategory this transaction belongs to
   metadata?: {
@@ -91,7 +91,13 @@ const CoinTransactionSchema: Schema = new Schema(
         'social_share_reward',  // 5% coin on social sharing
         'merchant_award',       // merchant gives coins to customer
         'cashback',             // cashback from orders or affiliate purchases
-        'creator_pick_reward'   // merchant rewards creator for pick approval
+        'creator_pick_reward',  // merchant rewards creator for pick approval
+        'poll_vote',            // voting in polls
+        'photo_upload',         // uploading store/product photos
+        'offer_comment',        // commenting on offers
+        'event_rating',         // rating events after attendance
+        'ugc_reel',             // creating UGC reel content
+        'social_impact_reward'  // earned from social impact event participation
       ],
       required: true,
       index: true

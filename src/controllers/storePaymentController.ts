@@ -1233,8 +1233,14 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
         rewards.bonusCoins = rewardRules.extraRewardCoins || 0;
       }
 
+      // First visit bonus — award extra coins on first-ever completed payment at this store
+      if (visitCount === 0 && rewardRules?.firstVisitBonus && rewardRules.firstVisitBonus > 0) {
+        rewards.firstVisitBonus = rewardRules.firstVisitBonus;
+        console.log('🎉 [STORE PAYMENT] First visit bonus awarded:', rewards.firstVisitBonus, 'coins');
+      }
+
       // Credit reward coins to user's wallet (ATOMIC)
-      const totalRewardCoins = rewards.coinsEarned + rewards.bonusCoins;
+      const totalRewardCoins = rewards.coinsEarned + rewards.bonusCoins + (rewards.firstVisitBonus || 0);
       if (totalRewardCoins > 0) {
         const wallet = await Wallet.findOne({ user: storePayment.userId }).session(session);
         if (wallet) {
@@ -1286,6 +1292,27 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
             retryCount: 0,
             maxRetries: 0,
           }], { session });
+
+          // Create CoinTransaction record for earned rewards (CRITICAL for earnings sync)
+          // This ensures store payment rewards appear in GET /earnings/consolidated-summary
+          await CoinTransaction.createTransaction(
+            storePayment.userId.toString(),
+            'earned',
+            totalRewardCoins,
+            'purchase_reward',
+            `Rewards for payment at ${storePayment.storeName}`,
+            {
+              storePaymentId: storePayment._id,
+              paymentId: storePayment.paymentId,
+              storeId: storePayment.storeId,
+              storeName: storePayment.storeName,
+              cashbackEarned: rewards.cashbackEarned,
+              coinsEarned: rewards.coinsEarned,
+              bonusCoins: rewards.bonusCoins,
+            },
+            paymentCategorySlug
+          );
+          console.log('✅ [STORE PAYMENT] CoinTransaction record created for earned rewards:', totalRewardCoins, 'category:', paymentCategorySlug);
         }
       }
 

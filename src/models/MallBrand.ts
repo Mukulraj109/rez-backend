@@ -437,37 +437,48 @@ MallBrandSchema.statics.searchBrands = function(
     .limit(limit);
 };
 
-// Method to record view
+// Method to record view (atomic $inc to prevent race conditions)
 MallBrandSchema.methods.recordView = async function() {
-  this.analytics.views += 1;
-  await this.save();
+  const Model = this.constructor as any;
+  await Model.findByIdAndUpdate(this._id, {
+    $inc: { 'analytics.views': 1 },
+  });
 };
 
-// Method to record click
+// Method to record click (atomic $inc + recalculate conversion rate)
 MallBrandSchema.methods.recordClick = async function() {
-  this.analytics.clicks += 1;
-  // Update conversion rate (purchases / clicks)
-  if (this.analytics.clicks > 0) {
-    this.analytics.conversionRate = Math.min(
-      100,
-      (this.analytics.purchases / this.analytics.clicks) * 100
-    );
+  const Model = this.constructor as any;
+  const updated = await Model.findByIdAndUpdate(
+    this._id,
+    { $inc: { 'analytics.clicks': 1 } },
+    { new: true }
+  );
+  if (updated && updated.analytics.clicks > 0) {
+    const rate = Math.min(100, (updated.analytics.purchases / updated.analytics.clicks) * 100);
+    await Model.findByIdAndUpdate(this._id, {
+      $set: { 'analytics.conversionRate': rate },
+    });
   }
-  await this.save();
 };
 
-// Method to record purchase
+// Method to record purchase (atomic $inc + recalculate conversion rate)
 MallBrandSchema.methods.recordPurchase = async function(cashbackAmount: number = 0) {
-  this.analytics.purchases += 1;
-  this.analytics.totalCashbackGiven += cashbackAmount;
-  // Update conversion rate (purchases / clicks)
-  if (this.analytics.clicks > 0) {
-    this.analytics.conversionRate = Math.min(
-      100,
-      (this.analytics.purchases / this.analytics.clicks) * 100
-    );
+  const Model = this.constructor as any;
+  const incFields: any = { 'analytics.purchases': 1 };
+  if (cashbackAmount > 0) {
+    incFields['analytics.totalCashbackGiven'] = cashbackAmount;
   }
-  await this.save();
+  const updated = await Model.findByIdAndUpdate(
+    this._id,
+    { $inc: incFields },
+    { new: true }
+  );
+  if (updated && updated.analytics.clicks > 0) {
+    const rate = Math.min(100, (updated.analytics.purchases / updated.analytics.clicks) * 100);
+    await Model.findByIdAndUpdate(this._id, {
+      $set: { 'analytics.conversionRate': rate },
+    });
+  }
 };
 
 // Delete cached model if exists (for development)

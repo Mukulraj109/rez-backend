@@ -24,6 +24,11 @@ const SOURCE_TO_CATEGORY: Record<string, string> = {
   cashback: 'cashback',
   purchase_reward: 'cashback',
   social_share_reward: 'socialMedia',
+  poll_vote: 'socialMedia',
+  offer_comment: 'socialMedia',
+  photo_upload: 'socialMedia',
+  ugc_reel: 'socialMedia',
+  event_rating: 'bonus',
   spin_wheel: 'games',
   scratch_card: 'games',
   quiz_game: 'games',
@@ -38,6 +43,7 @@ const SOURCE_TO_CATEGORY: Record<string, string> = {
   bill_upload: 'bonus',
   survey: 'bonus',
   merchant_award: 'bonus',
+  social_impact_reward: 'socialImpact',
 };
 
 /**
@@ -48,10 +54,11 @@ const TYPE_TO_SOURCES: Record<string, string[]> = {
   projects: ['order'],
   referrals: ['referral'],
   cashback: ['cashback', 'purchase_reward'],
-  socialMedia: ['social_share_reward'],
+  socialMedia: ['social_share_reward', 'poll_vote', 'offer_comment', 'photo_upload', 'ugc_reel'],
   games: ['spin_wheel', 'scratch_card', 'quiz_game', 'memory_match', 'coin_hunt', 'guess_price'],
   dailyCheckIn: ['daily_login'],
-  bonus: ['achievement', 'challenge', 'admin', 'review', 'bill_upload', 'survey', 'merchant_award'],
+  bonus: ['achievement', 'challenge', 'admin', 'review', 'bill_upload', 'survey', 'merchant_award', 'event_rating'],
+  socialImpact: ['social_impact_reward'],
 };
 
 /**

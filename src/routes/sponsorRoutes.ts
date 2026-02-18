@@ -32,4 +32,17 @@ router.get('/:id/events', requireAdmin, sponsorController.getSponsorEvents.bind(
 // GET /api/sponsors/:id/analytics - Get sponsor analytics
 router.get('/:id/analytics', requireAdmin, sponsorController.getSponsorAnalytics.bind(sponsorController));
 
+// Budget management
+// POST /api/sponsors/:id/fund - Fund sponsor budget
+router.post('/:id/fund', requireAdmin, sponsorController.fundSponsor.bind(sponsorController));
+
+// GET /api/sponsors/:id/budget - Get budget summary
+router.get('/:id/budget', requireAdmin, sponsorController.getSponsorBudget.bind(sponsorController));
+
+// POST /api/sponsors/:id/allocate - Allocate budget to event
+router.post('/:id/allocate', requireAdmin, sponsorController.allocateBudget.bind(sponsorController));
+
+// GET /api/sponsors/:id/ledger - Get allocation ledger
+router.get('/:id/ledger', requireAdmin, sponsorController.getSponsorLedger.bind(sponsorController));
+
 export default router;

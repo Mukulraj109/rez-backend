@@ -1090,6 +1090,80 @@ export const claimSurpriseDrop = asyncHandler(async (req: Request, res: Response
   }, 'Surprise drop claimed successfully');
 });
 
+// ========================================
+// DAILY CHECK-IN CONFIG
+// ========================================
+
+// Default escalating daily check-in rewards for 7-day cycle
+const DEFAULT_DAY_REWARDS = [10, 15, 20, 25, 30, 40, 100];
+
+// In-memory cache for config (refreshed every 5 minutes)
+let _cachedConfig: { dayRewards: number[]; proTips: string[]; affiliateTip: string; reviewTimeframe: string; isEnabled: boolean } | null = null;
+let _configCachedAt = 0;
+const CONFIG_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/** Invalidate the in-memory config cache (called by admin after config update) */
+export function invalidateCheckinConfigCache() {
+  _cachedConfig = null;
+  _configCachedAt = 0;
+}
+
+async function getCheckinConfig() {
+  if (_cachedConfig && (Date.now() - _configCachedAt) < CONFIG_CACHE_TTL) {
+    return _cachedConfig;
+  }
+  try {
+    const DailyCheckInConfig = (await import('../models/DailyCheckInConfig')).default;
+    const config = await DailyCheckInConfig.getActiveConfig();
+    _cachedConfig = {
+      dayRewards: config.dayRewards,
+      proTips: config.proTips,
+      affiliateTip: config.affiliateTip,
+      reviewTimeframe: config.reviewTimeframe,
+      isEnabled: config.isEnabled,
+    };
+    _configCachedAt = Date.now();
+    return _cachedConfig;
+  } catch {
+    return {
+      dayRewards: DEFAULT_DAY_REWARDS,
+      proTips: [
+        'Check in at the same time daily to build a habit',
+        'Share posters daily to maximize your affiliate earnings',
+        'Track your affiliate performance to see which posters work best',
+        'Missing even one day resets your streak to zero',
+      ],
+      affiliateTip: 'Share posters → Friends download the app → Earn 100 coins/download + 5% commission on their first 3 purchases!',
+      reviewTimeframe: 'within 24 hours',
+      isEnabled: true,
+    };
+  }
+}
+
+/**
+ * Get daily check-in configuration
+ * GET /api/gamification/checkin-config
+ */
+export const getCheckinConfigEndpoint = asyncHandler(async (req: Request, res: Response) => {
+  const config = await getCheckinConfig();
+  sendSuccess(res, config, 'Check-in config retrieved successfully');
+});
+
+// Escalating daily check-in rewards for 7-day cycle (matches frontend calendar)
+const DAY_REWARDS = DEFAULT_DAY_REWARDS; // Fallback; streakCheckin reads from config dynamically
+
+/**
+ * Get the coin reward for a given streak day based on 7-day cycle.
+ * Day 1 → 10, Day 2 → 15, ..., Day 7 → 100, Day 8 → 10 (new cycle), etc.
+ * Uses cached config; falls back to DEFAULT_DAY_REWARDS.
+ */
+async function getDayReward(streakDay: number): Promise<number> {
+  const config = await getCheckinConfig();
+  const rewards = config.dayRewards || DEFAULT_DAY_REWARDS;
+  const dayIndex = ((streakDay - 1) % 7); // 0-6
+  return rewards[dayIndex] ?? 10;
+}
+
 /**
  * Check in for daily streak
  * POST /api/gamification/streak/checkin
@@ -1156,9 +1230,10 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
       ]
     });
 
-    // Award base check-in coins
+    // Award escalating day reward based on 7-day cycle
+    const day1Reward = await getDayReward(1);
     const result = await coinService.awardCoins(
-      userId, 10, 'daily_login', 'Day 1 streak bonus', { streakDay: 1 }
+      userId, day1Reward, 'daily_login', `Day 1 streak bonus (+${day1Reward} coins)`, { streakDay: 1 }
     );
 
     // Create DailyCheckIn record
@@ -1166,7 +1241,7 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
     try {
       await DailyCheckIn.findOneAndUpdate(
         { userId: new Types.ObjectId(userId), date: todayStart },
-        { userId: new Types.ObjectId(userId), date: todayStart, streak: 1, coinsEarned: 10, bonusEarned: 0, totalEarned: 10, coinType: 'rez' },
+        { userId: new Types.ObjectId(userId), date: todayStart, streak: 1, coinsEarned: day1Reward, bonusEarned: 0, totalEarned: day1Reward, coinType: 'rez' },
         { upsert: true, new: true }
       );
     } catch (checkInError) {
@@ -1177,11 +1252,11 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
       streakUpdated: true,
       currentStreak: 1,
       longestStreak: 1,
-      coinsEarned: 10,
-      totalEarned: 10,
+      coinsEarned: day1Reward,
+      totalEarned: day1Reward,
       milestoneReached: null,
       newBalance: result.newBalance,
-      message: 'Day 1 streak! +10 coins'
+      message: `Day 1 streak! +${day1Reward} coins`
     }, 'Streak check-in successful');
   }
 
@@ -1236,7 +1311,8 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
 
   // Step 4: Check for milestone rewards
   let milestoneReached = null;
-  let coinsEarned = 10; // Base daily check-in coins
+  const baseDayReward = await getDayReward(newCurrentStreak); // Escalating reward based on 7-day cycle
+  let coinsEarned = baseDayReward;
 
   for (const milestone of updatedStreak.milestones) {
     if (newCurrentStreak >= milestone.day && !milestone.rewardsClaimed) {
@@ -1278,7 +1354,7 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
         userId: new Types.ObjectId(userId),
         date: todayStart,
         streak: newCurrentStreak,
-        coinsEarned: 10,
+        coinsEarned: baseDayReward,
         bonusEarned: milestoneReached ? milestoneReached.coins : 0,
         totalEarned: coinsEarned,
         coinType: 'rez'
@@ -1438,31 +1514,62 @@ export const getAffiliateStats = asyncHandler(async (req: Request, res: Response
   }
 
   const userId = (req.user._id as Types.ObjectId).toString();
+  const userObjectId = new Types.ObjectId(userId);
 
   // Import models
   const Referral = (await import('../models/Referral')).default;
   const SocialMediaPost = (await import('../models/SocialMediaPost')).default;
 
-  // Get referral stats
-  const referrals = await Referral.find({ referrer: userId });
-  const completedReferrals = referrals.filter(r => r.status === 'completed' || r.status === 'qualified');
+  // Use aggregation pipelines for efficient stats (avoids loading all documents into memory)
+  const [referralStats, postStats] = await Promise.all([
+    Referral.aggregate([
+      { $match: { referrer: userObjectId } },
+      {
+        $group: {
+          _id: null,
+          totalReferrals: { $sum: 1 },
+          appDownloads: { $sum: { $cond: [{ $ne: ['$status', 'pending'] }, 1, 0] } },
+          purchases: { $sum: { $cond: [{ $in: ['$status', ['completed', 'qualified']] }, 1, 0] } },
+          referrerCommission: {
+            $sum: {
+              $cond: [
+                { $in: ['$status', ['completed', 'qualified']] },
+                { $ifNull: ['$rewards.referrerAmount', 0] },
+                0
+              ]
+            }
+          },
+        },
+      },
+    ]),
+    SocialMediaPost.aggregate([
+      { $match: { user: userObjectId } },
+      {
+        $group: {
+          _id: null,
+          totalShares: { $sum: 1 },
+          postCommission: {
+            $sum: {
+              $cond: [
+                { $in: ['$status', ['approved', 'credited']] },
+                { $ifNull: ['$cashbackAmount', 0] },
+                0
+              ]
+            }
+          },
+        },
+      },
+    ]),
+  ]);
 
-  // Get social media post stats
-  const posts = await SocialMediaPost.find({ user: userId });
-  const approvedPosts = posts.filter(p => p.status === 'approved' || p.status === 'credited');
-
-  // Calculate stats
-  const totalShares = posts.length;
-  const appDownloads = referrals.filter(r => r.status !== 'pending').length;
-  const purchases = completedReferrals.length;
-  const commissionEarned = completedReferrals.reduce((sum, r) => sum + (r.rewards?.referrerAmount || 0), 0) +
-    approvedPosts.reduce((sum, p) => sum + (p.cashbackAmount || 0), 0);
+  const refStats = referralStats[0] || { appDownloads: 0, purchases: 0, referrerCommission: 0 };
+  const pStats = postStats[0] || { totalShares: 0, postCommission: 0 };
 
   sendSuccess(res, {
-    totalShares,
-    appDownloads,
-    purchases,
-    commissionEarned,
+    totalShares: pStats.totalShares,
+    appDownloads: refStats.appDownloads,
+    purchases: refStats.purchases,
+    commissionEarned: refStats.referrerCommission + pStats.postCommission,
   }, 'Affiliate stats retrieved successfully');
 });
 
@@ -1522,19 +1629,26 @@ export const getShareSubmissions = asyncHandler(async (req: Request, res: Respon
   }
 
   const userId = (req.user._id as Types.ObjectId).toString();
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
+  const skip = (page - 1) * limit;
 
   // Import SocialMediaPost model
   const SocialMediaPost = (await import('../models/SocialMediaPost')).default;
 
-  // Get user's submissions
-  const posts = await SocialMediaPost.find({ user: userId })
-    .sort({ submittedAt: -1 })
-    .limit(50) as ISocialMediaPost[];
+  // Get user's submissions with pagination
+  const [posts, total] = await Promise.all([
+    SocialMediaPost.find({ user: userId })
+      .sort({ submittedAt: -1 })
+      .skip(skip)
+      .limit(limit) as Promise<ISocialMediaPost[]>,
+    SocialMediaPost.countDocuments({ user: userId }),
+  ]);
 
   // Transform to frontend format
   const submissions = posts.map(post => ({
     id: (post._id as string).toString(),
-    posterTitle: post.metadata?.orderNumber ? `Order #${post.metadata.orderNumber}` : 'Promotional Poster',
+    posterTitle: post.metadata?.orderNumber || 'Promotional Poster',
     posterId: post.metadata?.postId,
     postUrl: post.postUrl,
     platform: post.platform,
@@ -1545,7 +1659,10 @@ export const getShareSubmissions = asyncHandler(async (req: Request, res: Respon
     rejectionReason: post.rejectionReason,
   }));
 
-  sendSuccess(res, { submissions }, 'Share submissions retrieved successfully');
+  sendSuccess(res, {
+    submissions,
+    pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+  }, 'Share submissions retrieved successfully');
 });
 
 /**
@@ -1574,18 +1691,32 @@ export const submitSharePost = asyncHandler(async (req: Request, res: Response) 
   // Import SocialMediaPost model
   const SocialMediaPost = (await import('../models/SocialMediaPost')).default;
 
-  // Check for duplicate submission
-  const existingPost = await SocialMediaPost.findOne({
+  // FRAUD PREVENTION: Daily submission limit (50 per day)
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const dailyCount = await SocialMediaPost.countDocuments({
     user: userId,
+    submittedAt: { $gte: oneDayAgo }
+  });
+  if (dailyCount >= 50) {
+    return sendBadRequest(res, 'Maximum 50 submissions per day reached. Please try again tomorrow.');
+  }
+
+  // FRAUD PREVENTION: Check for duplicate URL (any user, not just current)
+  const existingPost = await SocialMediaPost.findOne({
     postUrl: postUrl,
     status: { $in: ['pending', 'approved', 'credited'] }
   });
 
   if (existingPost) {
-    return sendBadRequest(res, 'This post has already been submitted');
+    return sendBadRequest(res, 'This post URL has already been submitted');
   }
 
-  // Create new submission
+  // Capture fraud metadata from request
+  const submissionIp = req.ip || req.socket?.remoteAddress || req.headers['x-forwarded-for'];
+  const deviceFingerprint = req.headers['x-device-id'] as string;
+  const userAgent = req.headers['user-agent'];
+
+  // Create new submission with fraud tracking
   const newPost = new SocialMediaPost({
     user: userId,
     platform: platform.toLowerCase(),
@@ -1594,6 +1725,9 @@ export const submitSharePost = asyncHandler(async (req: Request, res: Response) 
     cashbackAmount: shareBonus || 50,
     cashbackPercentage: 5,
     submittedAt: new Date(),
+    submissionIp: typeof submissionIp === 'string' ? submissionIp : Array.isArray(submissionIp) ? submissionIp[0] : undefined,
+    deviceFingerprint,
+    userAgent,
     metadata: {
       postId: posterId,
       orderNumber: posterTitle,
@@ -1634,29 +1768,32 @@ export const getStreakBonuses = asyncHandler(async (req: Request, res: Response)
 
   const currentStreak = streak?.currentStreak || 0;
 
-  // Define streak bonuses with achieved status
-  const bonuses = [
-    { days: 7, reward: 100, achieved: currentStreak >= 7 },
-    { days: 30, reward: 500, achieved: currentStreak >= 30 },
-    { days: 100, reward: 2000, achieved: currentStreak >= 100 },
+  // Define all 6 streak bonuses (matches milestone config in streakCheckin)
+  const defaultBonuses = [
+    { days: 3, reward: 50, achieved: currentStreak >= 3 },
+    { days: 7, reward: 200, achieved: currentStreak >= 7 },
+    { days: 14, reward: 500, achieved: currentStreak >= 14 },
+    { days: 30, reward: 2000, achieved: currentStreak >= 30 },
+    { days: 60, reward: 5000, achieved: currentStreak >= 60 },
+    { days: 100, reward: 10000, achieved: currentStreak >= 100 },
   ];
 
-  // If user has milestones, use those instead
+  // If user has milestones on their streak, use those (with claimed status)
   if (streak?.milestones && streak.milestones.length > 0) {
     const userBonuses = streak.milestones
-      .filter(m => [7, 30, 100].includes(m.day))
       .map(m => ({
         days: m.day,
         reward: m.coinsReward,
         achieved: m.rewardsClaimed || currentStreak >= m.day,
-      }));
+      }))
+      .sort((a, b) => a.days - b.days);
 
     if (userBonuses.length > 0) {
       return sendSuccess(res, { bonuses: userBonuses }, 'Streak bonuses retrieved successfully');
     }
   }
 
-  sendSuccess(res, { bonuses }, 'Streak bonuses retrieved successfully');
+  sendSuccess(res, { bonuses: defaultBonuses }, 'Streak bonuses retrieved successfully');
 });
 
 /**

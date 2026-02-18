@@ -17,6 +17,8 @@ export interface ISponsor extends Document {
   totalEventsSponsored: number;
   totalParticipants: number;
   totalCoinsDistributed: number;
+  totalBudgetFunded: number;
+  currentBalance: number;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -87,6 +89,16 @@ const SponsorSchema: Schema = new Schema(
       min: 0
     },
     totalCoinsDistributed: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    totalBudgetFunded: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    currentBalance: {
       type: Number,
       default: 0,
       min: 0

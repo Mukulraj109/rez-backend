@@ -291,9 +291,18 @@ export const getExcitingDeals = asyncHandler(async (req: Request, res: Response)
       };
     });
 
+    // Server-side dedup: remove duplicate campaigns by title (case-insensitive)
+    const seen = new Set<string>();
+    const uniqueDealCategories = dealCategories.filter(cat => {
+      const key = cat.title?.toLowerCase().trim();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     sendSuccess(res, {
-      dealCategories,
-      total: dealCategories.length,
+      dealCategories: uniqueDealCategories,
+      total: uniqueDealCategories.length,
     }, 'Exciting deals retrieved successfully');
 
   } catch (error) {

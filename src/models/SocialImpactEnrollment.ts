@@ -27,6 +27,22 @@ export interface ISocialImpactEnrollment extends Document {
     submittedAt?: Date;
   };
   cancellationReason?: string;
+  rewardIdempotencyKey?: string;
+  verification?: {
+    method?: 'manual' | 'qr' | 'otp' | 'geo';
+    qrToken?: string;
+    qrScannedAt?: Date;
+    otpCode?: string;
+    otpExpiresAt?: Date;
+    otpVerifiedAt?: Date;
+    geoLocation?: {
+      lat: number;
+      lng: number;
+    };
+    geoDistanceMeters?: number;
+    geoVerifiedAt?: Date;
+    verifiedAt?: Date;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -88,6 +104,24 @@ const SocialImpactEnrollmentSchema: Schema = new Schema(
     },
     cancellationReason: {
       type: String
+    },
+    rewardIdempotencyKey: {
+      type: String
+    },
+    verification: {
+      method: { type: String, enum: ['manual', 'qr', 'otp', 'geo'] },
+      qrToken: { type: String },
+      qrScannedAt: { type: Date },
+      otpCode: { type: String },
+      otpExpiresAt: { type: Date },
+      otpVerifiedAt: { type: Date },
+      geoLocation: {
+        lat: { type: Number },
+        lng: { type: Number }
+      },
+      geoDistanceMeters: { type: Number },
+      geoVerifiedAt: { type: Date },
+      verifiedAt: { type: Date }
     }
   },
   {
@@ -106,5 +140,11 @@ SocialImpactEnrollmentSchema.index({ user: 1, registeredAt: -1 });
 
 // Index for completed enrollments (for stats)
 SocialImpactEnrollmentSchema.index({ user: 1, status: 1, completedAt: -1 });
+
+// Unique sparse index for idempotency on reward crediting
+SocialImpactEnrollmentSchema.index({ rewardIdempotencyKey: 1 }, { unique: true, sparse: true });
+
+// Sparse index for QR token lookup
+SocialImpactEnrollmentSchema.index({ 'verification.qrToken': 1 }, { sparse: true });
 
 export default mongoose.model<ISocialImpactEnrollment>('SocialImpactEnrollment', SocialImpactEnrollmentSchema);

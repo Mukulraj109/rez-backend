@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { getVideosByStore } from '../controllers/videoController';
-import { optionalAuth } from '../middleware/auth';
+import { optionalAuth, authenticate as authenticateToken } from '../middleware/auth';
 import { validateParams, validateQuery, commonSchemas } from '../middleware/validation';
 import { Joi } from '../middleware/validation';
+import { createUgcReel, getMyReels, getUgcFeed, getPendingReels, moderateUgcReel } from '../controllers/ugcController';
 
 const router = Router();
 
@@ -10,8 +11,18 @@ const router = Router();
  * UGC (User Generated Content) Routes
  *
  * These routes provide access to user-generated content (photos and videos).
- * Currently aliased to video controller as UGC content is stored in videos collection.
  */
+
+// User endpoints
+router.post('/create', authenticateToken, createUgcReel);
+router.get('/my-reels', authenticateToken, getMyReels);
+
+// Public feed
+router.get('/feed', optionalAuth, getUgcFeed);
+
+// Admin moderation
+router.get('/pending', authenticateToken, getPendingReels);
+router.patch('/:id/moderate', authenticateToken, moderateUgcReel);
 
 // Get UGC content for a store
 router.get('/store/:storeId',

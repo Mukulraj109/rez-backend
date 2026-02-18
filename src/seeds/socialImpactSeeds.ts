@@ -5,6 +5,8 @@
 import mongoose from 'mongoose';
 import Sponsor from '../models/Sponsor';
 import Program from '../models/Program';
+import { SponsorAllocation } from '../models/SponsorAllocation';
+import { Merchant } from '../models/Merchant';
 import { connectDatabase } from '../config/database';
 
 // Sponsor seed data
@@ -23,6 +25,8 @@ const sponsorSeeds = [
     },
     website: 'https://www.tata.com',
     industry: 'manufacturing',
+    totalBudgetFunded: 50000,
+    currentBalance: 50000,
     isActive: true
   },
   {
@@ -39,6 +43,8 @@ const sponsorSeeds = [
     },
     website: 'https://www.ril.com',
     industry: 'energy',
+    totalBudgetFunded: 75000,
+    currentBalance: 75000,
     isActive: true
   },
   {
@@ -55,6 +61,8 @@ const sponsorSeeds = [
     },
     website: 'https://www.infosysfoundation.org',
     industry: 'technology',
+    totalBudgetFunded: 40000,
+    currentBalance: 40000,
     isActive: true
   },
   {
@@ -71,6 +79,8 @@ const sponsorSeeds = [
     },
     website: 'https://www.wiprofoundation.org',
     industry: 'technology',
+    totalBudgetFunded: 35000,
+    currentBalance: 35000,
     isActive: true
   },
   {
@@ -87,6 +97,8 @@ const sponsorSeeds = [
     },
     website: 'https://www.itcportal.com',
     industry: 'fmcg',
+    totalBudgetFunded: 45000,
+    currentBalance: 45000,
     isActive: true
   },
   {
@@ -103,6 +115,8 @@ const sponsorSeeds = [
     },
     website: 'https://www.hdfcbank.com',
     industry: 'finance',
+    totalBudgetFunded: 60000,
+    currentBalance: 60000,
     isActive: true
   },
   {
@@ -119,6 +133,8 @@ const sponsorSeeds = [
     },
     website: 'https://www.sunpharma.com',
     industry: 'healthcare',
+    totalBudgetFunded: 30000,
+    currentBalance: 30000,
     isActive: true
   }
 ];
@@ -152,6 +168,8 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
       eventTime: { start: '9:00 AM', end: '4:00 PM' },
       rewards: { rezCoins: 200, brandCoins: 300 },
       capacity: { goal: 500, enrolled: 245 },
+      sponsorBudget: { allocated: 30000, disbursed: 0 },
+      verificationConfig: { methods: ['qr', 'manual'], geoFenceRadiusMeters: 500, requireCheckInBeforeComplete: true },
       impact: {
         description: 'Save up to 1,500 lives',
         metric: 'lives_saved',
@@ -168,7 +186,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Free health checkup',
         'Refreshments provided',
         'Donation certificate',
-        'ReZ Coins + Tata Coins'
+        'Nuqta Coins + Tata Coins'
       ],
       schedule: [
         { time: '9:00 AM', activity: 'Registration & Health Screening' },
@@ -203,6 +221,8 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
       eventTime: { start: '7:00 AM', end: '12:00 PM' },
       rewards: { rezCoins: 150, brandCoins: 250 },
       capacity: { goal: 200, enrolled: 89 },
+      sponsorBudget: { allocated: 40000, disbursed: 0 },
+      verificationConfig: { methods: ['geo', 'manual'], geoFenceRadiusMeters: 1000, requireCheckInBeforeComplete: true },
       impact: {
         description: 'Plant 1,000 trees',
         metric: 'trees_planted',
@@ -218,7 +238,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Tree planting kit provided',
         'Breakfast included',
         'Certificate of appreciation',
-        'ReZ Coins + Reliance Coins'
+        'Nuqta Coins + Reliance Coins'
       ],
       schedule: [
         { time: '7:00 AM', activity: 'Arrival & Briefing' },
@@ -253,6 +273,8 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
       eventTime: { start: '6:00 AM', end: '10:00 AM' },
       rewards: { rezCoins: 120, brandCoins: 180 },
       capacity: { goal: 150, enrolled: 67 },
+      sponsorBudget: { allocated: 20000, disbursed: 0 },
+      verificationConfig: { methods: ['qr', 'otp', 'manual'], geoFenceRadiusMeters: 500, requireCheckInBeforeComplete: true },
       impact: {
         description: 'Clean 2km of beach',
         metric: 'area_cleaned',
@@ -268,7 +290,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Cleanup kit provided',
         'Breakfast included',
         'Eco-warrior badge',
-        'ReZ Coins + Infosys Coins'
+        'Nuqta Coins + Infosys Coins'
       ],
       schedule: [
         { time: '6:00 AM', activity: 'Registration' },
@@ -302,6 +324,8 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
       eventTime: { start: '10:00 AM', end: '4:00 PM' },
       rewards: { rezCoins: 180, brandCoins: 220 },
       capacity: { goal: 100, enrolled: 42 },
+      sponsorBudget: { allocated: 20000, disbursed: 0 },
+      verificationConfig: { methods: ['otp', 'manual'], geoFenceRadiusMeters: 300, requireCheckInBeforeComplete: true },
       impact: {
         description: 'Train 500 students',
         metric: 'students_educated',
@@ -317,7 +341,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Teaching materials provided',
         'Lunch included',
         'Volunteer certificate',
-        'ReZ Coins + Wipro Coins'
+        'Nuqta Coins + Wipro Coins'
       ],
       schedule: [
         { time: '10:00 AM', activity: 'Volunteer Orientation' },
@@ -351,6 +375,8 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
       eventTime: { start: '11:00 AM', end: '3:00 PM' },
       rewards: { rezCoins: 100, brandCoins: 150 },
       capacity: { goal: 300, enrolled: 156 },
+      sponsorBudget: { allocated: 25000, disbursed: 0 },
+      verificationConfig: { methods: ['qr', 'manual'], geoFenceRadiusMeters: 500, requireCheckInBeforeComplete: true },
       impact: {
         description: 'Serve 5,000 meals',
         metric: 'meals_served',
@@ -365,7 +391,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Apron & gloves provided',
         'Lunch included',
         'Appreciation certificate',
-        'ReZ Coins + ITC Coins'
+        'Nuqta Coins + ITC Coins'
       ],
       schedule: [
         { time: '11:00 AM', activity: 'Registration & Hygiene Kit' },
@@ -398,6 +424,8 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
       eventTime: { start: '10:00 AM', end: '5:00 PM' },
       rewards: { rezCoins: 200, brandCoins: 300 },
       capacity: { goal: 80, enrolled: 34 },
+      sponsorBudget: { allocated: 20000, disbursed: 0 },
+      verificationConfig: { methods: ['otp', 'manual'], geoFenceRadiusMeters: 300, requireCheckInBeforeComplete: true },
       impact: {
         description: 'Train 200 women',
         metric: 'hours_contributed',
@@ -413,7 +441,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Training materials provided',
         'Meals included',
         'Trainer certificate',
-        'ReZ Coins + HDFC Coins'
+        'Nuqta Coins + HDFC Coins'
       ],
       schedule: [
         { time: '10:00 AM', activity: 'Trainer Briefing' },
@@ -447,6 +475,8 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
       eventTime: { start: '8:00 AM', end: '5:00 PM' },
       rewards: { rezCoins: 170, brandCoins: 230 },
       capacity: { goal: 100, enrolled: 45 },
+      sponsorBudget: { allocated: 20000, disbursed: 0 },
+      verificationConfig: { methods: ['qr', 'geo', 'manual'], geoFenceRadiusMeters: 800, requireCheckInBeforeComplete: true },
       impact: {
         description: 'Conduct 1,000 checkups',
         metric: 'lives_impacted',
@@ -462,7 +492,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Medical kit provided',
         'Meals included',
         'Healthcare volunteer certificate',
-        'ReZ Coins + Sun Pharma Coins'
+        'Nuqta Coins + Sun Pharma Coins'
       ],
       schedule: [
         { time: '8:00 AM', activity: 'Registration & Setup' },
@@ -496,6 +526,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
       eventTime: { start: '8:00 AM', end: '6:00 PM' },
       rewards: { rezCoins: 200, brandCoins: 0 },
       capacity: { goal: 300, enrolled: 123 },
+      verificationConfig: { methods: ['qr', 'manual'], geoFenceRadiusMeters: 500, requireCheckInBeforeComplete: true },
       impact: {
         description: 'Save 900 lives',
         metric: 'lives_saved',
@@ -511,7 +542,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Free health screening',
         'Refreshments provided',
         'Donation certificate',
-        'ReZ Coins'
+        'Nuqta Coins'
       ],
       schedule: [
         { time: '8:00 AM', activity: 'Registration Opens' },
@@ -537,9 +568,10 @@ async function seedSocialImpact() {
     await connectDatabase();
 
     // Clear existing data
-    console.log('🗑️ Clearing existing sponsors and social impact events...');
+    console.log('🗑️ Clearing existing sponsors, events and allocations...');
     await Sponsor.deleteMany({});
     await Program.deleteMany({ type: 'social_impact' });
+    await SponsorAllocation.deleteMany({});
 
     // Seed sponsors
     console.log('📝 Seeding sponsors...');
@@ -557,6 +589,71 @@ async function seedSocialImpact() {
     const eventData = createSocialImpactEvents(sponsorMap);
     const createdEvents = await Program.insertMany(eventData);
     console.log(`✅ Created ${createdEvents.length} social impact events`);
+
+    // Assign a merchant to seeded events (if a merchant exists)
+    const testMerchant = await Merchant.findOne({ isActive: true }).sort({ createdAt: 1 });
+    if (testMerchant) {
+      await Program.updateMany(
+        { type: 'social_impact', _id: { $in: createdEvents.map(e => e._id) } },
+        { $set: { merchant: testMerchant._id } }
+      );
+      console.log(`✅ Assigned merchant "${testMerchant.businessName}" to all seeded events`);
+    } else {
+      console.log('⚠️ No active merchant found — events created without merchant assignment');
+    }
+
+    // Create SponsorAllocation fund entries for each sponsor
+    console.log('💰 Creating sponsor budget allocations...');
+    const budgetMap: Record<string, number> = {
+      'tata-group': 50000,
+      'reliance-industries': 75000,
+      'infosys-foundation': 40000,
+      'wipro-foundation': 35000,
+      'itc-limited': 45000,
+      'hdfc-bank': 60000,
+      'sun-pharma': 30000,
+    };
+    let allocationsCreated = 0;
+    for (const sponsor of createdSponsors) {
+      const budget = budgetMap[sponsor.slug] || 0;
+      if (budget > 0) {
+        await SponsorAllocation.create({
+          sponsor: sponsor._id,
+          type: 'fund',
+          amount: budget,
+          balanceAfter: budget,
+          description: `Initial budget funding for ${sponsor.name}`,
+          metadata: { adminId: 'seed', reason: 'initial_seed' },
+        });
+
+        // Also create allocation entries for each event that has this sponsor
+        const sponsorId = (sponsor as any)._id;
+        const sponsoredEvents = createdEvents.filter(
+          (e: any) => e.sponsor && e.sponsor.toString() === sponsorId.toString()
+        );
+        let remaining = budget;
+        for (const event of sponsoredEvents) {
+          const allocated = (event as any).sponsorBudget?.allocated || 0;
+          if (allocated > 0) {
+            remaining -= allocated;
+            await SponsorAllocation.create({
+              sponsor: sponsor._id,
+              program: event._id,
+              type: 'allocate',
+              amount: allocated,
+              balanceAfter: remaining,
+              description: `Allocated to ${event.name}`,
+              metadata: { adminId: 'seed' },
+            });
+          }
+        }
+
+        // Update sponsor's currentBalance to reflect allocations
+        await Sponsor.findByIdAndUpdate(sponsor._id, { currentBalance: remaining });
+        allocationsCreated++;
+      }
+    }
+    console.log(`✅ Created budget allocations for ${allocationsCreated} sponsors`);
 
     // Update sponsor stats
     console.log('📊 Updating sponsor statistics...');
@@ -577,6 +674,7 @@ async function seedSocialImpact() {
     console.log('\n📊 Seeding Summary:');
     console.log(`   Sponsors: ${createdSponsors.length}`);
     console.log(`   Events: ${createdEvents.length}`);
+    console.log(`   Budget allocations: ${allocationsCreated}`);
 
     process.exit(0);
   } catch (error) {

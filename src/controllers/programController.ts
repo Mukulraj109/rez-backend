@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import Program from '../models/Program';
 import programService from '../services/programService';
 import socialImpactService from '../services/socialImpactService';
 
@@ -441,6 +442,138 @@ class ProgramController {
     }
   }
 
+  // ========== ATTENDANCE VERIFICATION ENDPOINTS ==========
+
+  // POST /api/programs/social-impact/:id/generate-qr (admin)
+  async generateQRCheckIn(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { userId } = req.body;
+
+      if (!userId) {
+        return res.status(400).json({ success: false, message: 'userId is required' });
+      }
+
+      const result = await socialImpactService.generateCheckInQR(id, userId);
+
+      res.json({
+        success: true,
+        message: 'QR check-in token generated',
+        data: result
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  // POST /api/programs/social-impact/:id/my-qr (user generates own QR)
+  async generateMyQRCheckIn(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const { id } = req.params;
+
+      const result = await socialImpactService.generateCheckInQR(id, userId);
+
+      res.json({
+        success: true,
+        message: 'QR check-in token generated',
+        data: result
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  // POST /api/programs/social-impact/:id/verify-qr (admin scans)
+  async verifyQRCheckIn(req: Request, res: Response) {
+    try {
+      const adminId = req.user?.id;
+      const { qrToken } = req.body;
+
+      if (!qrToken) {
+        return res.status(400).json({ success: false, message: 'qrToken is required' });
+      }
+
+      const enrollment = await socialImpactService.verifyQRCheckIn(qrToken, adminId);
+
+      res.json({
+        success: true,
+        message: 'User checked in via QR',
+        data: enrollment
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  // POST /api/programs/social-impact/:id/generate-otp (admin)
+  async generateOTPCheckIn(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { userId } = req.body;
+
+      if (!userId) {
+        return res.status(400).json({ success: false, message: 'userId is required' });
+      }
+
+      const result = await socialImpactService.generateEventOTP(id, userId);
+
+      res.json({
+        success: true,
+        message: 'OTP generated for check-in',
+        data: result
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  // POST /api/programs/social-impact/:id/verify-otp (user self check-in)
+  async verifyOTPCheckIn(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const { id } = req.params;
+      const { otpCode } = req.body;
+
+      if (!otpCode) {
+        return res.status(400).json({ success: false, message: 'otpCode is required' });
+      }
+
+      const enrollment = await socialImpactService.verifyOTPCheckIn(id, userId, otpCode);
+
+      res.json({
+        success: true,
+        message: 'Checked in via OTP',
+        data: enrollment
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  // POST /api/programs/social-impact/:id/verify-geo (user self check-in)
+  async verifyGeoCheckIn(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const { id } = req.params;
+      const { latitude, longitude } = req.body;
+
+      if (!latitude || !longitude) {
+        return res.status(400).json({ success: false, message: 'latitude and longitude are required' });
+      }
+
+      const enrollment = await socialImpactService.verifyGeoCheckIn(id, userId, latitude, longitude);
+
+      res.json({
+        success: true,
+        message: 'Checked in via location',
+        data: enrollment
+      });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
   // GET /api/programs/my-programs
   async getMyPrograms(req: Request, res: Response) {
     try {
@@ -503,6 +636,75 @@ class ProgramController {
         success: false,
         message: error.message
       });
+    }
+  }
+  // POST /social-impact/:id/approve — Admin approves a merchant-created event
+  async approveSocialImpactEvent(req: Request, res: Response) {
+    try {
+      const event = await Program.findOne({
+        _id: req.params.id,
+        type: 'social_impact',
+        status: 'pending_approval'
+      });
+      if (!event) {
+        return res.status(404).json({ success: false, message: 'Event not found or not pending approval' });
+      }
+      event.status = 'active';
+      await event.save();
+      return res.json({ success: true, message: 'Event approved successfully', data: event });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  // POST /social-impact/:id/reject — Admin rejects a merchant-created event
+  async rejectSocialImpactEvent(req: Request, res: Response) {
+    try {
+      const { reason } = req.body;
+      const event = await Program.findOne({
+        _id: req.params.id,
+        type: 'social_impact',
+        status: 'pending_approval'
+      });
+      if (!event) {
+        return res.status(404).json({ success: false, message: 'Event not found or not pending approval' });
+      }
+      event.status = 'rejected';
+      await event.save();
+      return res.json({ success: true, message: 'Event rejected', data: { event, reason } });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+
+  // GET /social-impact/pending — Admin lists events pending approval
+  async getPendingApprovalEvents(req: Request, res: Response) {
+    try {
+      const { page, limit } = req.query;
+      const pg = {
+        page: Math.max(1, parseInt(page as string) || 1),
+        limit: Math.min(100, Math.max(1, parseInt(limit as string) || 20))
+      };
+
+      const query = { type: 'social_impact', status: 'pending_approval' };
+      const total = await Program.countDocuments(query);
+      const events = await Program.find(query)
+        .select('-participants')
+        .populate('sponsor', 'name logo brandCoinName brandCoinLogo')
+        .populate('merchant', 'businessName logo')
+        .sort({ createdAt: -1 })
+        .skip((pg.page - 1) * pg.limit)
+        .limit(pg.limit);
+
+      return res.json({
+        success: true,
+        data: {
+          events,
+          pagination: { page: pg.page, limit: pg.limit, total, totalPages: Math.ceil(total / pg.limit) }
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message });
     }
   }
 }

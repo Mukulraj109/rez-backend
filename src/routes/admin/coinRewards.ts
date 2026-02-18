@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { requireAuth, requireAdmin, requireSeniorAdmin, requireOperator } from '../../middleware/auth';
-import { PendingCoinReward } from '../../models/PendingCoinReward';
-import { CoinTransaction } from '../../models/CoinTransaction';
+import SocialMediaPost from '../../models/SocialMediaPost';
+import { awardCoins } from '../../services/coinService';
 
 const router = Router();
 
@@ -11,8 +11,35 @@ router.use(requireAuth);
 router.use(requireAdmin);
 
 /**
+ * Map a SocialMediaPost document to the admin frontend's expected format
+ */
+function mapPostToReward(post: any) {
+  return {
+    _id: post._id,
+    user: post.user,
+    amount: post.cashbackAmount || 0,
+    percentage: post.cashbackPercentage || 0,
+    source: 'social_media_post',
+    referenceType: 'post',
+    referenceId: post.postUrl || '',
+    postUrl: post.postUrl || '',
+    platform: post.platform || '',
+    posterTitle: post.metadata?.orderNumber || 'Promotional Poster',
+    posterId: post.metadata?.postId || '',
+    status: post.status,
+    submittedAt: post.submittedAt,
+    reviewedAt: post.reviewedAt,
+    creditedAt: post.creditedAt,
+    reviewedBy: post.reviewedBy,
+    rejectionReason: post.rejectionReason,
+    approvalNotes: post.approvalNotes,
+    metadata: post.metadata,
+  };
+}
+
+/**
  * @route   GET /api/admin/coin-rewards
- * @desc    Get pending coin rewards for approval
+ * @desc    Get social media post submissions for review
  * @access  Admin
  */
 router.get('/', async (req: Request, res: Response) => {
@@ -21,15 +48,14 @@ router.get('/', async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
 
-    // Build filter
     const filter: any = {};
 
     // Status filter (default to pending)
     filter.status = req.query.status || 'pending';
 
-    // Source filter
+    // Source filter (platform)
     if (req.query.source) {
-      filter.source = req.query.source;
+      filter.platform = req.query.source;
     }
 
     // Date range filter
@@ -43,15 +69,17 @@ router.get('/', async (req: Request, res: Response) => {
       }
     }
 
-    const [rewards, total] = await Promise.all([
-      PendingCoinReward.find(filter)
+    const [posts, total] = await Promise.all([
+      SocialMediaPost.find(filter)
         .sort({ submittedAt: -1 })
         .skip(skip)
         .limit(limit)
         .populate('user', 'profile.firstName profile.lastName phoneNumber email')
         .populate('reviewedBy', 'profile.firstName profile.lastName'),
-      PendingCoinReward.countDocuments(filter)
+      SocialMediaPost.countDocuments(filter)
     ]);
+
+    const rewards = posts.map(mapPostToReward);
 
     res.json({
       success: true,
@@ -68,7 +96,7 @@ router.get('/', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN COIN REWARDS] Error fetching rewards:', error);
+    console.error('[ADMIN COIN REWARDS] Error fetching rewards:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch coin rewards'
@@ -78,72 +106,37 @@ router.get('/', async (req: Request, res: Response) => {
 
 /**
  * @route   GET /api/admin/coin-rewards/stats
- * @desc    Get coin reward statistics
+ * @desc    Get submission statistics
  * @access  Admin
  */
 router.get('/stats', async (req: Request, res: Response) => {
   try {
-    const stats = await PendingCoinReward.aggregate([
+    const stats = await SocialMediaPost.aggregate([
       {
         $facet: {
-          // By status
           byStatus: [
-            { $group: { _id: '$status', count: { $sum: 1 }, totalAmount: { $sum: '$amount' } } }
+            { $group: { _id: '$status', count: { $sum: 1 }, totalAmount: { $sum: '$cashbackAmount' } } }
           ],
-          // By source
-          bySource: [
-            { $group: { _id: '$source', count: { $sum: 1 }, totalAmount: { $sum: '$amount' } } }
-          ],
-          // Pending count
-          pendingCount: [
-            { $match: { status: 'pending' } },
+          total: [
             { $count: 'count' }
-          ],
-          // Total credited today
-          creditedToday: [
-            {
-              $match: {
-                status: 'credited',
-                creditedAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) }
-              }
-            },
-            { $group: { _id: null, count: { $sum: 1 }, totalAmount: { $sum: '$amount' } } }
           ]
         }
       }
     ]);
 
-    // Also get coin transaction stats
-    const coinStats = await CoinTransaction.aggregate([
-      {
-        $match: {
-          source: { $in: ['purchase_reward', 'social_share_reward'] }
-        }
-      },
-      {
-        $group: {
-          _id: '$source',
-          totalCoins: { $sum: '$amount' },
-          count: { $sum: 1 }
-        }
-      }
-    ]);
+    const byStatus = stats[0].byStatus.reduce((acc: any, item: any) => {
+      acc[item._id] = { count: item.count, totalAmount: item.totalAmount };
+      return acc;
+    }, {});
 
     const result = {
-      byStatus: stats[0].byStatus.reduce((acc: any, item: any) => {
-        acc[item._id] = { count: item.count, totalAmount: item.totalAmount };
-        return acc;
-      }, {}),
-      bySource: stats[0].bySource.reduce((acc: any, item: any) => {
-        acc[item._id] = { count: item.count, totalAmount: item.totalAmount };
-        return acc;
-      }, {}),
-      pendingCount: stats[0].pendingCount[0]?.count || 0,
-      creditedToday: stats[0].creditedToday[0] || { count: 0, totalAmount: 0 },
-      coinTransactions: coinStats.reduce((acc: any, item: any) => {
-        acc[item._id] = { totalCoins: item.totalCoins, count: item.count };
-        return acc;
-      }, {})
+      total: stats[0].total[0]?.count || 0,
+      pending: byStatus.pending?.count || 0,
+      approved: byStatus.approved?.count || 0,
+      rejected: byStatus.rejected?.count || 0,
+      credited: byStatus.credited?.count || 0,
+      totalCoinsAwarded: byStatus.credited?.totalAmount || 0,
+      totalCoinsPending: byStatus.pending?.totalAmount || 0,
     };
 
     res.json({
@@ -151,111 +144,127 @@ router.get('/stats', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN COIN REWARDS] Error fetching stats:', error);
+    console.error('[ADMIN COIN REWARDS] Error fetching stats:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch coin reward stats'
+      message: error.message || 'Failed to fetch stats'
     });
   }
 });
 
 /**
  * @route   GET /api/admin/coin-rewards/:id
- * @desc    Get single coin reward details
+ * @desc    Get single submission details
  * @access  Admin
  */
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    const reward = await PendingCoinReward.findById(req.params.id)
+    const post = await SocialMediaPost.findById(req.params.id)
       .populate('user', 'profile phoneNumber email')
       .populate('reviewedBy', 'profile.firstName profile.lastName');
 
-    if (!reward) {
+    if (!post) {
       return res.status(404).json({
         success: false,
-        message: 'Coin reward not found'
+        message: 'Submission not found'
       });
     }
 
     res.json({
       success: true,
-      data: reward
+      data: mapPostToReward(post)
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN COIN REWARDS] Error fetching reward:', error);
+    console.error('[ADMIN COIN REWARDS] Error fetching reward:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch coin reward'
+      message: error.message || 'Failed to fetch submission'
     });
   }
 });
 
 /**
  * @route   POST /api/admin/coin-rewards/:id/approve
- * @desc    Approve a pending coin reward and credit coins
+ * @desc    Approve a pending submission and credit coins to user
  * @access  Admin
  */
-router.post('/:id/approve', requireSeniorAdmin, async (req: Request, res: Response) => {
+router.post('/:id/approve', async (req: Request, res: Response) => {
   try {
-    const reward = await PendingCoinReward.findById(req.params.id);
+    const post = await SocialMediaPost.findById(req.params.id);
 
-    if (!reward) {
+    if (!post) {
       return res.status(404).json({
         success: false,
-        message: 'Coin reward not found'
+        message: 'Submission not found'
       });
     }
 
-    if (reward.status !== 'pending') {
+    if (post.status !== 'pending') {
       return res.status(400).json({
         success: false,
-        message: `Cannot approve reward with status: ${reward.status}`
+        message: `Cannot approve submission with status: ${post.status}`
       });
     }
 
     const adminId = new Types.ObjectId(req.userId);
     const { notes } = req.body;
 
-    // Approve the reward
-    await reward.approve(adminId, notes);
+    // Update status to credited and set review metadata
+    post.status = 'credited';
+    post.reviewedAt = new Date();
+    post.creditedAt = new Date();
+    post.reviewedBy = adminId;
+    if (notes) post.approvalNotes = notes;
+    await post.save();
 
-    // Credit the coins
-    await reward.creditCoins();
+    // Credit coins to user via coinService
+    const userId = post.user.toString();
+    const coinsToAward = post.cashbackAmount || 0;
+
+    if (coinsToAward > 0) {
+      await awardCoins(
+        userId,
+        coinsToAward,
+        'social_share_reward',
+        `Social media share bonus (${post.platform}) - poster: ${post.metadata?.orderNumber || 'Promotional'}`,
+        { postId: (post._id as any).toString(), platform: post.platform, postUrl: post.postUrl }
+      );
+    }
 
     res.json({
       success: true,
-      message: `Successfully approved and credited ${reward.amount} coins to user`,
-      data: reward
+      message: `Approved and credited ${coinsToAward} coins to user`,
+      data: mapPostToReward(post)
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN COIN REWARDS] Error approving reward:', error);
+    console.error('[ADMIN COIN REWARDS] Error approving:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to approve coin reward'
+      message: error.message || 'Failed to approve submission'
     });
   }
 });
 
 /**
  * @route   POST /api/admin/coin-rewards/:id/reject
- * @desc    Reject a pending coin reward
+ * @desc    Reject a pending submission
  * @access  Admin
  */
-router.post('/:id/reject', requireOperator, async (req: Request, res: Response) => {
+router.post('/:id/reject', async (req: Request, res: Response) => {
   try {
-    const reward = await PendingCoinReward.findById(req.params.id);
+    const post = await SocialMediaPost.findById(req.params.id);
 
-    if (!reward) {
+    if (!post) {
       return res.status(404).json({
         success: false,
-        message: 'Coin reward not found'
+        message: 'Submission not found'
       });
     }
 
-    if (reward.status !== 'pending') {
+    if (post.status !== 'pending') {
       return res.status(400).json({
         success: false,
-        message: `Cannot reject reward with status: ${reward.status}`
+        message: `Cannot reject submission with status: ${post.status}`
       });
     }
 
@@ -269,28 +278,32 @@ router.post('/:id/reject', requireOperator, async (req: Request, res: Response) 
     }
 
     const adminId = new Types.ObjectId(req.userId);
-    await reward.reject(adminId, reason);
+    post.status = 'rejected';
+    post.reviewedAt = new Date();
+    post.reviewedBy = adminId;
+    post.rejectionReason = reason;
+    await post.save();
 
     res.json({
       success: true,
-      message: 'Coin reward rejected',
-      data: reward
+      message: 'Submission rejected',
+      data: mapPostToReward(post)
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN COIN REWARDS] Error rejecting reward:', error);
+    console.error('[ADMIN COIN REWARDS] Error rejecting:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to reject coin reward'
+      message: error.message || 'Failed to reject submission'
     });
   }
 });
 
 /**
  * @route   POST /api/admin/coin-rewards/bulk-approve
- * @desc    Bulk approve multiple pending coin rewards
+ * @desc    Bulk approve multiple pending submissions
  * @access  Admin
  */
-router.post('/bulk-approve', requireSeniorAdmin, async (req: Request, res: Response) => {
+router.post('/bulk-approve', async (req: Request, res: Response) => {
   try {
     const { rewardIds, notes } = req.body;
 
@@ -302,49 +315,60 @@ router.post('/bulk-approve', requireSeniorAdmin, async (req: Request, res: Respo
     }
 
     const adminId = new Types.ObjectId(req.userId);
-    const results = {
-      approved: 0,
-      failed: 0,
-      errors: [] as string[]
-    };
+    const results = { approved: 0, failed: 0, errors: [] as string[] };
 
     for (const rewardId of rewardIds) {
       try {
-        const reward = await PendingCoinReward.findById(rewardId);
-        if (reward && reward.status === 'pending') {
-          await reward.approve(adminId, notes);
-          await reward.creditCoins();
+        const post = await SocialMediaPost.findById(rewardId);
+        if (post && post.status === 'pending') {
+          post.status = 'credited';
+          post.reviewedAt = new Date();
+          post.creditedAt = new Date();
+          post.reviewedBy = adminId;
+          if (notes) post.approvalNotes = notes;
+          await post.save();
+
+          const coinsToAward = post.cashbackAmount || 0;
+          if (coinsToAward > 0) {
+            await awardCoins(
+              post.user.toString(),
+              coinsToAward,
+              'social_share_reward',
+              `Social media share bonus (${post.platform})`,
+              { postId: (post._id as any).toString(), platform: post.platform, postUrl: post.postUrl }
+            );
+          }
           results.approved++;
         } else {
           results.failed++;
-          results.errors.push(`Reward ${rewardId}: Not found or not pending`);
+          results.errors.push(`${rewardId}: Not found or not pending`);
         }
       } catch (err: any) {
         results.failed++;
-        results.errors.push(`Reward ${rewardId}: ${err.message}`);
+        results.errors.push(`${rewardId}: ${err.message}`);
       }
     }
 
     res.json({
       success: true,
-      message: `Approved ${results.approved} rewards, ${results.failed} failed`,
-      data: results
+      message: `Approved ${results.approved} submissions, ${results.failed} failed`,
+      data: { processed: results.approved, ...results }
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN COIN REWARDS] Error bulk approving:', error);
+    console.error('[ADMIN COIN REWARDS] Error bulk approving:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to bulk approve coin rewards'
+      message: error.message || 'Failed to bulk approve'
     });
   }
 });
 
 /**
  * @route   POST /api/admin/coin-rewards/bulk-reject
- * @desc    Bulk reject multiple pending coin rewards
+ * @desc    Bulk reject multiple pending submissions
  * @access  Admin
  */
-router.post('/bulk-reject', requireOperator, async (req: Request, res: Response) => {
+router.post('/bulk-reject', async (req: Request, res: Response) => {
   try {
     const { rewardIds, reason } = req.body;
 
@@ -363,38 +387,38 @@ router.post('/bulk-reject', requireOperator, async (req: Request, res: Response)
     }
 
     const adminId = new Types.ObjectId(req.userId);
-    const results = {
-      rejected: 0,
-      failed: 0,
-      errors: [] as string[]
-    };
+    const results = { rejected: 0, failed: 0, errors: [] as string[] };
 
     for (const rewardId of rewardIds) {
       try {
-        const reward = await PendingCoinReward.findById(rewardId);
-        if (reward && reward.status === 'pending') {
-          await reward.reject(adminId, reason);
+        const post = await SocialMediaPost.findById(rewardId);
+        if (post && post.status === 'pending') {
+          post.status = 'rejected';
+          post.reviewedAt = new Date();
+          post.reviewedBy = adminId;
+          post.rejectionReason = reason;
+          await post.save();
           results.rejected++;
         } else {
           results.failed++;
-          results.errors.push(`Reward ${rewardId}: Not found or not pending`);
+          results.errors.push(`${rewardId}: Not found or not pending`);
         }
       } catch (err: any) {
         results.failed++;
-        results.errors.push(`Reward ${rewardId}: ${err.message}`);
+        results.errors.push(`${rewardId}: ${err.message}`);
       }
     }
 
     res.json({
       success: true,
-      message: `Rejected ${results.rejected} rewards, ${results.failed} failed`,
-      data: results
+      message: `Rejected ${results.rejected} submissions, ${results.failed} failed`,
+      data: { processed: results.rejected, ...results }
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN COIN REWARDS] Error bulk rejecting:', error);
+    console.error('[ADMIN COIN REWARDS] Error bulk rejecting:', error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to bulk reject coin rewards'
+      message: error.message || 'Failed to bulk reject'
     });
   }
 });

@@ -219,6 +219,32 @@ export const submitReview = async (req: Request, res: Response) => {
 
     // The post-save hook in EventReview model will update the event's rating
 
+    // Award coins for event rating via engagement reward service
+    let coinReward = null;
+    try {
+      const engagementRewardService = require('../services/engagementRewardService').default;
+      const rewardResult = await engagementRewardService.grantReward(
+        userId.toString(),
+        'event_rating',
+        eventId,
+        {
+          reviewId: newReview._id,
+          rating: newReview.rating,
+          isVerifiedBooking,
+          eventName: event.title,
+        }
+      );
+      if (rewardResult.success) {
+        coinReward = {
+          coinsAwarded: rewardResult.coinsAwarded,
+          status: rewardResult.status,
+          message: rewardResult.message,
+        };
+      }
+    } catch (rewardError) {
+      console.error('[EVENT REVIEW] Failed to award engagement coins:', rewardError);
+    }
+
     res.status(201).json({
       success: true,
       message: 'Review submitted successfully',
@@ -229,6 +255,7 @@ export const submitReview = async (req: Request, res: Response) => {
         review: newReview.review,
         isVerifiedBooking: newReview.isVerifiedBooking,
         createdAt: newReview.createdAt,
+        coinReward,
       },
     });
   } catch (error: any) {

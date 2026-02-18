@@ -25,5 +25,6 @@ export { default as adminGameConfigRoutes } from './gameConfig';
 export { default as adminFeatureFlagsRoutes } from './featureFlags';
 export { default as adminAchievementsRoutes } from './achievements';
 export { default as adminGamificationStatsRoutes } from './gamificationStats';
+export { default as adminDailyCheckinConfigRoutes } from './dailyCheckinConfig';
 export { default as adminCategoriesRoutes } from './categories';
 export { default as adminStoresRoutes } from './stores';

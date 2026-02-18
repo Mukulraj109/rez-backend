@@ -1,5 +1,19 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth';
+import { createRateLimiter } from '../middleware/rateLimiter';
+
+// Rate limiters for sensitive gamification endpoints
+const checkInLimiter = createRateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5, // 5 attempts per minute (idempotent, but prevents abuse)
+  message: 'Too many check-in attempts. Please wait a moment.',
+});
+
+const affiliateSubmitLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20, // 20 submissions per hour
+  message: 'Too many submissions. Please try again later.',
+});
 
 // Import all gamification controllers
 import {
@@ -49,7 +63,8 @@ import {
   submitSharePost,
   getStreakBonuses,
   getReviewableItems,
-  getBonusOpportunities
+  getBonusOpportunities,
+  getCheckinConfigEndpoint
 } from '../controllers/gamificationController';
 
 // Import streak controller
@@ -155,15 +170,18 @@ router.get('/bonus-opportunities', getBonusOpportunities);
 // Surprise Coin Drops
 router.post('/surprise-drop/claim', claimSurpriseDrop);
 
-// Daily Streak Check-in
-router.post('/streak/checkin', streakCheckin);
+// Daily Check-in Config (day rewards, pro tips, etc.)
+router.get('/checkin-config', getCheckinConfigEndpoint);
+
+// Daily Streak Check-in (rate-limited to prevent rapid-fire abuse)
+router.post('/streak/checkin', checkInLimiter, streakCheckin);
 
 // ========================================
 // AFFILIATE / SHARE
 // ========================================
 router.get('/affiliate/stats', getAffiliateStats);
 router.get('/affiliate/submissions', getShareSubmissions);
-router.post('/affiliate/submit', submitSharePost);
+router.post('/affiliate/submit', affiliateSubmitLimiter, submitSharePost);
 
 // Promotional Posters (for sharing)
 router.get('/promotional-posters', getPromotionalPosters);

@@ -21,6 +21,7 @@ export interface IPaymentRewards {
   cashbackEarned: number;
   coinsEarned: number;
   bonusCoins: number;
+  firstVisitBonus?: number;
   loyaltyProgress?: {
     currentVisits: number;
     nextMilestone: number;

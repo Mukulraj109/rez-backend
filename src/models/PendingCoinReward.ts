@@ -6,8 +6,8 @@ export interface IPendingCoinReward extends Document {
   user: Types.ObjectId;
   amount: number;
   percentage: number;
-  source: 'purchase_bonus' | 'social_media_post' | 'review_bonus' | 'referral_bonus' | 'content_creation';
-  referenceType: 'order' | 'post' | 'review' | 'referral' | 'content';
+  source: 'purchase_bonus' | 'social_media_post' | 'review_bonus' | 'referral_bonus' | 'content_creation' | 'photo_upload' | 'offer_comment' | 'ugc_reel';
+  referenceType: 'order' | 'post' | 'review' | 'referral' | 'content' | 'photo' | 'comment' | 'reel';
   referenceId: Types.ObjectId;
   status: 'pending' | 'approved' | 'rejected' | 'credited';
   submittedAt: Date;
@@ -59,13 +59,13 @@ const PendingCoinRewardSchema = new Schema<IPendingCoinReward, IPendingCoinRewar
   },
   source: {
     type: String,
-    enum: ['purchase_bonus', 'social_media_post', 'review_bonus', 'referral_bonus', 'content_creation'],
+    enum: ['purchase_bonus', 'social_media_post', 'review_bonus', 'referral_bonus', 'content_creation', 'photo_upload', 'offer_comment', 'ugc_reel'],
     required: true,
     index: true
   },
   referenceType: {
     type: String,
-    enum: ['order', 'post', 'review', 'referral', 'content'],
+    enum: ['order', 'post', 'review', 'referral', 'content', 'photo', 'comment', 'reel'],
     required: true
   },
   referenceId: {
@@ -171,10 +171,23 @@ PendingCoinRewardSchema.methods.creditCoins = async function(): Promise<void> {
   // Import coinService dynamically to avoid circular dependency
   const coinService = require('../services/coinService').default;
 
+  // Map PendingCoinReward source to CoinTransaction source
+  const sourceMap: Record<string, string> = {
+    'social_media_post': 'social_share_reward',
+    'purchase_bonus': 'purchase_reward',
+    'review_bonus': 'review',
+    'referral_bonus': 'referral',
+    'content_creation': 'ugc_reel',
+    'photo_upload': 'photo_upload',
+    'offer_comment': 'offer_comment',
+    'ugc_reel': 'ugc_reel',
+  };
+  const coinSource = sourceMap[this.source] || 'purchase_reward';
+
   await coinService.awardCoins(
     this.user.toString(),
     this.amount,
-    this.source === 'social_media_post' ? 'social_share_reward' : 'purchase_reward',
+    coinSource,
     `${this.percentage}% bonus reward - ${this.source}`,
     {
       pendingRewardId: this._id,

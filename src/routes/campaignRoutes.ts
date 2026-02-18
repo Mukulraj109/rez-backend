@@ -15,8 +15,16 @@ import {
 } from '../controllers/campaignController';
 import { optionalAuth, requireAuth } from '../middleware/auth';
 import { validateQuery, validateParams, validateBody, Joi } from '../middleware/validation';
+import { createRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
+
+// Rate limiter for deal redemption (5 per minute per user)
+const redeemLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 5,
+  message: 'Too many redemption attempts. Please try again later.',
+});
 
 // ============================================================================
 // STATIC ROUTES (Must come BEFORE dynamic /:campaignId routes)
@@ -173,6 +181,7 @@ router.delete('/redemptions/:id',
  */
 router.post('/:campaignId/deals/:dealIndex/redeem',
   requireAuth,
+  redeemLimiter,
   validateParams(Joi.object({
     campaignId: Joi.string().required(),
     dealIndex: Joi.string().pattern(/^\d+$/).required(), // Express params are always strings

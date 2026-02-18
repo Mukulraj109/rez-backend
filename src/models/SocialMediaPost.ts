@@ -8,7 +8,7 @@ export interface ISocialMediaPost extends Document {
   order?: Types.ObjectId;
   store?: Types.ObjectId; // Store that the order belongs to (for merchant verification)
   merchant?: Types.ObjectId; // Merchant who owns the store
-  platform: 'instagram' | 'facebook' | 'twitter' | 'tiktok';
+  platform: 'instagram' | 'facebook' | 'twitter' | 'tiktok' | 'whatsapp';
   postUrl: string;
   submissionType: 'url' | 'media';
   proofMedia?: { type: 'image' | 'video'; url: string; publicId: string }[];
@@ -84,7 +84,7 @@ const SocialMediaPostSchema = new Schema<ISocialMediaPost>({
     type: String,
     required: [true, 'Platform is required'],
     enum: {
-      values: ['instagram', 'facebook', 'twitter', 'tiktok'],
+      values: ['instagram', 'facebook', 'twitter', 'tiktok', 'whatsapp'],
       message: '{VALUE} is not a valid platform'
     },
     index: true

@@ -24,35 +24,86 @@ const DAILY_SHARE_LIMITS = {
 };
 
 class ShareService {
-  // Get shareable content
+  // Get shareable content — fetches real stores, offers, and products from DB
   async getShareableContent(userId: string): Promise<any> {
-    // In production, fetch from database based on user preferences
-    const content = {
-      products: [
-        { id: 'p1', name: 'Wireless Earbuds Pro', image: '/products/earbuds.jpg', reward: SHARE_REWARDS.product },
-        { id: 'p2', name: 'Smart Watch Series 5', image: '/products/watch.jpg', reward: SHARE_REWARDS.product }
-      ],
-      offers: [
-        { id: 'o1', title: '50% off on Electronics', image: '/offers/electronics.jpg', reward: SHARE_REWARDS.offer },
-        { id: 'o2', title: 'Buy 1 Get 1 Free', image: '/offers/bogo.jpg', reward: SHARE_REWARDS.offer }
-      ],
-      stores: [
-        { id: 's1', name: 'TechMart Store', image: '/stores/techmart.jpg', reward: SHARE_REWARDS.store }
-      ],
-      referral: {
-        code: await this.getUserReferralCode(userId),
-        reward: SHARE_REWARDS.referral,
-        message: 'Join ReZ and get 100 coins free!'
+    const mongoose = require('mongoose');
+    const Store = mongoose.model('Store');
+    const Product = mongoose.model('Product');
+
+    // Fetch real data in parallel
+    const [stores, products] = await Promise.all([
+      // Popular active stores
+      Store.find({ isActive: true })
+        .sort({ 'analytics.viewsCount': -1 })
+        .limit(5)
+        .select('name logo slug tags')
+        .lean(),
+      // Trending active products
+      Product.find({ isActive: true })
+        .sort({ viewCount: -1 })
+        .limit(5)
+        .select('name images price')
+        .lean(),
+    ]);
+
+    // Also try to fetch active offers if Offer model exists
+    let offers: any[] = [];
+    try {
+      const Offer = mongoose.model('Offer');
+      offers = await Offer.find({ isActive: true, expiresAt: { $gte: new Date() } })
+        .sort({ viewCount: -1 })
+        .limit(5)
+        .select('title description image discountPercentage store')
+        .populate('store', 'name')
+        .lean();
+    } catch {
+      // Offer model may not exist or field names may differ — skip silently
+    }
+
+    // Get user referral code
+    let referralCode = `REZ${userId.substring(0, 6).toUpperCase()}`;
+    try {
+      const User = mongoose.model('User');
+      const user = await User.findById(userId).select('referralCode').lean();
+      if (user?.referralCode) {
+        referralCode = user.referralCode;
       }
+    } catch {
+      // Use fallback
+    }
+
+    return {
+      stores: stores.map((s: any) => ({
+        id: s._id.toString(),
+        type: 'store',
+        name: s.name,
+        image: s.logo || null,
+        reward: SHARE_REWARDS.store,
+      })),
+      products: products.map((p: any) => ({
+        id: p._id.toString(),
+        type: 'product',
+        name: p.name,
+        image: p.images?.[0] || null,
+        price: p.price,
+        reward: SHARE_REWARDS.product,
+      })),
+      offers: offers.map((o: any) => ({
+        id: o._id.toString(),
+        type: 'offer',
+        title: o.title,
+        description: o.description,
+        image: o.image || null,
+        discount: o.discountPercentage,
+        storeName: o.store?.name,
+        reward: SHARE_REWARDS.offer,
+      })),
+      referral: {
+        code: referralCode,
+        reward: SHARE_REWARDS.referral,
+        message: 'Join ReZ and get 100 coins free!',
+      },
     };
-
-    return content;
-  }
-
-  // Generate user referral code (placeholder - integrate with referral service)
-  private async getUserReferralCode(userId: string): Promise<string> {
-    // In production, fetch from User model or Referral service
-    return `REZ${userId.substring(0, 6).toUpperCase()}`;
   }
 
   // Create share tracking

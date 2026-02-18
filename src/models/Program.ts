@@ -50,6 +50,7 @@ export type SocialImpactEventType =
 export interface ISocialImpactFields {
   eventType?: SocialImpactEventType;
   sponsor?: mongoose.Types.ObjectId;
+  merchant?: mongoose.Types.ObjectId;
   organizer?: {
     name: string;
     logo?: string;
@@ -102,7 +103,7 @@ export interface IProgram extends Document {
   name: string;
   type: 'college_ambassador' | 'corporate_employee' | 'social_impact';
   description: string;
-  status: 'active' | 'inactive' | 'upcoming' | 'completed';
+  status: 'active' | 'inactive' | 'upcoming' | 'completed' | 'pending_approval' | 'rejected';
   startDate: Date;
   endDate?: Date;
   requirements: string[];
@@ -123,6 +124,7 @@ export interface IProgram extends Document {
   // Social impact specific fields
   eventType?: SocialImpactEventType;
   sponsor?: mongoose.Types.ObjectId;
+  merchant?: mongoose.Types.ObjectId;
   organizer?: {
     name: string;
     logo?: string;
@@ -169,6 +171,15 @@ export interface IProgram extends Document {
   eventStatus?: 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
   isCsrActivity?: boolean;
   distance?: string;
+  verificationConfig?: {
+    methods: Array<'manual' | 'qr' | 'otp' | 'geo'>;
+    geoFenceRadiusMeters?: number;
+    requireCheckInBeforeComplete?: boolean;
+  };
+  sponsorBudget?: {
+    allocated: number;
+    disbursed: number;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -235,7 +246,7 @@ const ProgramSchema: Schema = new Schema(
     description: { type: String, required: true },
     status: {
       type: String,
-      enum: ['active', 'inactive', 'upcoming', 'completed'],
+      enum: ['active', 'inactive', 'upcoming', 'completed', 'pending_approval', 'rejected'],
       default: 'active'
     },
     startDate: { type: Date, required: true },
@@ -276,6 +287,10 @@ const ProgramSchema: Schema = new Schema(
     sponsor: {
       type: Schema.Types.ObjectId,
       ref: 'Sponsor'
+    },
+    merchant: {
+      type: Schema.Types.ObjectId,
+      ref: 'Merchant'
     },
     organizer: {
       name: { type: String },
@@ -326,7 +341,16 @@ const ProgramSchema: Schema = new Schema(
       default: 'upcoming'
     },
     isCsrActivity: { type: Boolean, default: false },
-    distance: { type: String }
+    distance: { type: String },
+    verificationConfig: {
+      methods: [{ type: String, enum: ['manual', 'qr', 'otp', 'geo'] }],
+      geoFenceRadiusMeters: { type: Number, default: 500 },
+      requireCheckInBeforeComplete: { type: Boolean, default: true }
+    },
+    sponsorBudget: {
+      allocated: { type: Number, default: 0 },
+      disbursed: { type: Number, default: 0 }
+    }
   },
   { timestamps: true }
 );
@@ -337,6 +361,7 @@ ProgramSchema.index({ 'participants.user': 1 });
 // Social impact specific indexes
 ProgramSchema.index({ type: 1, eventStatus: 1, eventDate: 1 });
 ProgramSchema.index({ sponsor: 1 });
+ProgramSchema.index({ merchant: 1, type: 1 });
 ProgramSchema.index({ eventType: 1 });
 
 export default mongoose.model<IProgram>('Program', ProgramSchema);

@@ -36,40 +36,53 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
   }
 
   // AUTO-SYNC: Ensure wallet balance matches CoinTransaction (source of truth)
+  // Uses aggregation (sum earned - spent) instead of running balance to avoid
+  // data corruption from stale/wrong balance fields on individual transactions.
   try {
     const { CoinTransaction } = require('../models/CoinTransaction');
-    const coinTransactionBalance = await CoinTransaction.getUserBalance(userId);
+    const userObjId = new mongoose.Types.ObjectId(userId);
 
-    // Subtract any branded coin awards that were previously recorded as 'earned'
-    // type, which incorrectly inflated the CoinTransaction running balance.
-    // New awards use type 'branded_award' and don't affect the balance.
-    // Cache in Redis for 5 minutes to avoid running this aggregation on every fetch.
-    const brandedCacheKey = `wallet:branded_inflation:${userId}`;
-    let brandedAmount = 0;
-    const cachedBranded = await redisService.get<number>(brandedCacheKey);
-    if (cachedBranded !== null && cachedBranded !== undefined) {
-      brandedAmount = cachedBranded;
+    // Cache the computed balance for 2 minutes to avoid heavy aggregation on every request
+    const balanceCacheKey = `wallet:computed_balance:${userId}`;
+    let actualRezBalance: number | null = null;
+    const cachedBalance = await redisService.get<number>(balanceCacheKey);
+
+    if (cachedBalance !== null && cachedBalance !== undefined) {
+      actualRezBalance = cachedBalance;
     } else {
-      const brandedInflation = await CoinTransaction.aggregate([
+      // Aggregate: sum all earned/bonus/refunded minus spent/expired, excluding branded awards
+      const result = await CoinTransaction.aggregate([
+        { $match: { user: userObjId } },
         {
-          $match: {
-            user: new mongoose.Types.ObjectId(userId),
-            source: 'merchant_award',
-            type: 'earned',
-            amount: { $gt: 0 }
+          $group: {
+            _id: null,
+            earned: {
+              $sum: {
+                $cond: [
+                  { $and: [
+                    { $in: ['$type', ['earned', 'refunded', 'bonus']] },
+                    { $ne: ['$source', 'merchant_award'] }
+                  ]},
+                  '$amount',
+                  0
+                ]
+              }
+            },
+            spent: {
+              $sum: {
+                $cond: [{ $in: ['$type', ['spent', 'expired']] }, '$amount', 0]
+              }
+            }
           }
-        },
-        { $group: { _id: null, total: { $sum: '$amount' } } }
+        }
       ]);
-      brandedAmount = brandedInflation[0]?.total || 0;
-      // Cache for 5 minutes (300 seconds)
-      await redisService.set(brandedCacheKey, brandedAmount, 300);
+      actualRezBalance = Math.max(0, (result[0]?.earned || 0) - (result[0]?.spent || 0));
+      await redisService.set(balanceCacheKey, actualRezBalance, 120);
     }
-    const actualRezBalance = coinTransactionBalance - brandedAmount;
 
     const currentBalance = wallet.balance.available || 0;
     if (Math.abs(actualRezBalance - currentBalance) > 0.01) {
-      console.log(`🔄 [WALLET] Auto-syncing balance: ${currentBalance} → ${actualRezBalance} (CoinTx: ${coinTransactionBalance}, branded correction: -${brandedAmount})`);
+      console.log(`🔄 [WALLET] Auto-syncing balance: ${currentBalance} → ${actualRezBalance}`);
 
       // Update wallet balance (ReZ coins only, branded tracked separately)
       wallet.balance.available = actualRezBalance;
@@ -1163,29 +1176,40 @@ export const syncWalletBalance = asyncHandler(async (req: Request, res: Response
   try {
     // Import CoinTransaction to get the true balance
     const { CoinTransaction } = require('../models/CoinTransaction');
+    const userObjId = new mongoose.Types.ObjectId(userId);
 
-    // Get accurate balance from CoinTransaction
-    const coinTransactionBalance = await CoinTransaction.getUserBalance(userId);
-
-    // Subtract any branded coin awards that were previously recorded as 'earned'
-    // type, which incorrectly inflated the CoinTransaction running balance.
-    // Explicit sync: always run fresh aggregation, then update Redis cache.
-    const brandedInflation = await CoinTransaction.aggregate([
+    // Use aggregation (sum earned - spent) for accurate balance, excluding branded awards
+    const result = await CoinTransaction.aggregate([
+      { $match: { user: userObjId } },
       {
-        $match: {
-          user: new mongoose.Types.ObjectId(userId),
-          source: 'merchant_award',
-          type: 'earned'
+        $group: {
+          _id: null,
+          earned: {
+            $sum: {
+              $cond: [
+                { $and: [
+                  { $in: ['$type', ['earned', 'refunded', 'bonus']] },
+                  { $ne: ['$source', 'merchant_award'] }
+                ]},
+                '$amount',
+                0
+              ]
+            }
+          },
+          spent: {
+            $sum: {
+              $cond: [{ $in: ['$type', ['spent', 'expired']] }, '$amount', 0]
+            }
+          }
         }
-      },
-      { $group: { _id: null, total: { $sum: '$amount' } } }
+      }
     ]);
-    const brandedAmount = brandedInflation[0]?.total || 0;
-    // Update cache so subsequent getWalletBalance calls use fresh value
-    await redisService.set(`wallet:branded_inflation:${userId}`, brandedAmount, 300);
-    const actualRezBalance = coinTransactionBalance - brandedAmount;
+    const actualRezBalance = Math.max(0, (result[0]?.earned || 0) - (result[0]?.spent || 0));
 
-    console.log('📊 [WALLET SYNC] CoinTransaction balance:', coinTransactionBalance, 'branded correction:', -brandedAmount, 'actual ReZ:', actualRezBalance);
+    // Update computed balance cache
+    await redisService.set(`wallet:computed_balance:${userId}`, actualRezBalance, 120);
+
+    console.log('📊 [WALLET SYNC] Aggregated balance — earned:', result[0]?.earned || 0, 'spent:', result[0]?.spent || 0, 'actual ReZ:', actualRezBalance);
 
     // Get or create wallet
     let wallet = await Wallet.findOne({ user: userId });
@@ -1217,7 +1241,7 @@ export const syncWalletBalance = asyncHandler(async (req: Request, res: Response
 
     sendSuccess(res, {
       previousBalance: oldBalance,
-      newBalance: coinTransactionBalance,
+      newBalance: actualRezBalance,
       wallet: {
         balance: wallet.balance,
         coins: wallet.coins,
