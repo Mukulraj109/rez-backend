@@ -28,38 +28,82 @@ const SPIN_WHEEL_PRIZES: SpinReward[] = [
   { segment: 8, prize: '1000 Coins', type: 'coins', value: 1000, weight: 2, color: '#EF4444' }
 ];
 
-const COOLDOWN_HOURS = 24;
+const MAX_DAILY_SPINS = 3;
+
+/**
+ * Get spin wheel prize segments (for display only, no session creation)
+ */
+export function getSpinWheelSegments() {
+  return SPIN_WHEEL_PRIZES.map(p => ({
+    segment: p.segment,
+    prize: p.prize,
+    color: p.color,
+    type: p.type,
+    value: p.value,
+    weight: p.weight,
+  }));
+}
 
 /**
  * Check if user is eligible to spin the wheel
+ * Uses daily limit (3 spins per day, resets at midnight UTC)
  */
 export async function checkEligibility(userId: string): Promise<{
-  eligible: boolean;
-  nextAvailableAt?: Date;
-  reason?: string;
+  canSpin: boolean;
+  spinsRemaining: number;
+  spinsUsedToday: number;
+  maxDailySpins: number;
+  totalCoinsEarned: number;
+  nextResetAt: string;
+  lastSpinAt: string | null;
 }> {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  // Count spins completed today (since midnight UTC)
+  const spinsToday = await MiniGame.countDocuments({
+    user: userId,
+    gameType: 'spin_wheel',
+    status: 'completed',
+    completedAt: { $gte: today }
+  });
+
+  // Calculate today's coin winnings
+  const todaySessions = await MiniGame.find({
+    user: userId,
+    gameType: 'spin_wheel',
+    status: 'completed',
+    completedAt: { $gte: today }
+  }).select('reward');
+
+  let totalCoinsEarned = 0;
+  todaySessions.forEach(s => {
+    if (s.reward?.coins) totalCoinsEarned += s.reward.coins;
+  });
+
+  // Get last spin timestamp
   const lastSpin = await MiniGame.findOne({
     user: userId,
     gameType: 'spin_wheel',
     status: 'completed'
-  }).sort({ completedAt: -1 });
+  }).sort({ completedAt: -1 }).select('completedAt');
 
-  if (!lastSpin || !lastSpin.completedAt) {
-    return { eligible: true };
-  }
+  // Next reset at midnight UTC
+  const tomorrow = new Date();
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  tomorrow.setUTCHours(0, 0, 0, 0);
 
-  const nextAvailable = new Date(lastSpin.completedAt.getTime() + COOLDOWN_HOURS * 60 * 60 * 1000);
-  const now = new Date();
+  const spinsRemaining = Math.max(0, MAX_DAILY_SPINS - spinsToday);
 
-  if (now < nextAvailable) {
-    return {
-      eligible: false,
-      nextAvailableAt: nextAvailable,
-      reason: `Cooldown active. Next spin available at ${nextAvailable.toLocaleString()}`
-    };
-  }
-
-  return { eligible: true };
+  return {
+    canSpin: spinsRemaining > 0,
+    spinsRemaining,
+    spinsUsedToday: spinsToday,
+    maxDailySpins: MAX_DAILY_SPINS,
+    totalCoinsEarned,
+    nextResetAt: tomorrow.toISOString(),
+    lastSpinAt: lastSpin?.completedAt?.toISOString() || null,
+  };
 }
 
 /**
@@ -582,62 +626,100 @@ export async function awardSpinPrize(userId: string, prize: SpinResult): Promise
 /**
  * Get user's spin wheel history
  */
-export async function getSpinHistory(userId: string, limit: number = 10): Promise<any[]> {
-  const sessions = await MiniGame.find({
-    user: userId,
-    gameType: 'spin_wheel',
-    status: 'completed'
-  })
-    .sort({ completedAt: -1 })
-    .limit(limit);
+export async function getSpinHistory(userId: string, limit: number = 10, page: number = 1): Promise<{ history: any[]; total: number; pagination: { page: number; limit: number; total: number; pages: number } }> {
+  const skip = (page - 1) * limit;
 
-  return sessions.map(s => ({
+  const [sessions, total] = await Promise.all([
+    MiniGame.find({
+      user: userId,
+      gameType: 'spin_wheel',
+      status: 'completed'
+    })
+      .sort({ completedAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    MiniGame.countDocuments({
+      user: userId,
+      gameType: 'spin_wheel',
+      status: 'completed'
+    })
+  ]);
+
+  const history = sessions.map(s => ({
     id: s._id,
     completedAt: s.completedAt,
     prize: s.metadata?.prize,
     segment: s.metadata?.segment,
-    reward: s.reward
+    type: s.metadata?.couponMetadata ? (s.reward?.cashback ? 'cashback' : s.reward?.discount ? 'discount' : s.reward?.voucher ? 'voucher' : 'coins') : 'coins',
+    reward: s.reward,
+    couponMetadata: s.metadata?.couponMetadata || null,
   }));
+
+  return {
+    history,
+    total,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+    }
+  };
 }
 
 /**
  * Get spin wheel statistics for user
  */
 export async function getSpinStats(userId: string): Promise<any> {
-  const sessions = await MiniGame.find({
-    user: userId,
-    gameType: 'spin_wheel',
-    status: 'completed'
-  });
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
 
-  const totalSpins = sessions.length;
+  const [allSessions, todaySessions] = await Promise.all([
+    MiniGame.find({
+      user: userId,
+      gameType: 'spin_wheel',
+      status: 'completed'
+    }).select('reward'),
+    MiniGame.find({
+      user: userId,
+      gameType: 'spin_wheel',
+      status: 'completed',
+      completedAt: { $gte: today }
+    }).select('reward'),
+  ]);
+
   let totalCoinsWon = 0;
   let totalCashbackWon = 0;
   let totalDiscountsWon = 0;
   let totalVouchersWon = 0;
 
-  sessions.forEach(session => {
+  allSessions.forEach(session => {
     if (session.reward?.coins) totalCoinsWon += session.reward.coins;
     if (session.reward?.cashback) totalCashbackWon += session.reward.cashback;
     if (session.reward?.discount) totalDiscountsWon += session.reward.discount;
     if (session.reward?.voucher) totalVouchersWon += 1;
   });
 
-  const eligibility = await checkEligibility(userId);
+  let todayCoinsWon = 0;
+  todaySessions.forEach(session => {
+    if (session.reward?.coins) todayCoinsWon += session.reward.coins;
+  });
 
   return {
-    totalSpins,
+    totalSpins: allSessions.length,
+    todaySpins: todaySessions.length,
     totalCoinsWon,
+    todayCoinsWon,
     totalCashbackWon,
     totalDiscountsWon,
     totalVouchersWon,
-    eligibility
   };
 }
 
 export default {
   checkEligibility,
   createSpinSession,
+  getSpinWheelSegments,
   selectPrize,
   spin,
   awardSpinPrize,

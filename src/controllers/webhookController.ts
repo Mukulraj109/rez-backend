@@ -10,6 +10,9 @@ import stripeService from '../services/stripeService';
 import { razorpayService } from '../services/razorpayService';
 import { sendSuccess, sendBadRequest, sendUnauthorized } from '../utils/response';
 import Stripe from 'stripe';
+import EventBooking from '../models/EventBooking';
+import Event from '../models/Event';
+import eventRewardService from '../services/eventRewardService';
 
 /**
  * Enhanced Razorpay Webhook Handler
@@ -713,8 +716,15 @@ async function handleStripeCheckoutSessionAsyncPaymentFailed(event: Stripe.Event
 async function handleStripePaymentIntentSucceeded(event: Stripe.Event): Promise<void> {
   const paymentIntent = event.data.object as Stripe.PaymentIntent;
   const orderId = paymentIntent.metadata?.orderId || paymentIntent.metadata?.subscriptionId;
+  const bookingId = paymentIntent.metadata?.bookingId;
 
   console.log('✅ [STRIPE WEBHOOK] Payment intent succeeded:', paymentIntent.id);
+
+  // Handle event booking payment
+  if (bookingId) {
+    await handleEventBookingPaymentSuccess(bookingId, paymentIntent);
+    return;
+  }
 
   if (!orderId) {
     console.error('❌ [STRIPE WEBHOOK] Order ID not found in metadata');
@@ -758,6 +768,50 @@ async function handleStripePaymentIntentSucceeded(event: Stripe.Event): Promise<
   await order.save();
 
   console.log('✅ [STRIPE WEBHOOK] Order updated with payment details');
+}
+
+/**
+ * Handle event booking payment success (called from payment_intent.succeeded and checkout.session.completed)
+ */
+async function handleEventBookingPaymentSuccess(bookingId: string, paymentIntent: { id: string; amount: number; created: number }): Promise<void> {
+  try {
+    const booking = await EventBooking.findById(bookingId);
+    if (!booking) {
+      console.error('❌ [STRIPE WEBHOOK] Event booking not found:', bookingId);
+      return;
+    }
+
+    // Already confirmed - idempotent
+    if (booking.status === 'confirmed' || booking.status === 'completed') {
+      console.log('⚠️ [STRIPE WEBHOOK] Event booking already confirmed:', bookingId);
+      return;
+    }
+
+    // Confirm the booking
+    booking.status = 'confirmed';
+    booking.paymentStatus = 'completed';
+    booking.lockedUntil = undefined;
+    await booking.save();
+
+    console.log('✅ [STRIPE WEBHOOK] Event booking confirmed:', bookingId);
+
+    // Grant purchase reward for paid events
+    try {
+      const event = await Event.findById(booking.eventId);
+      await eventRewardService.grantEventReward(
+        booking.userId.toString(),
+        booking.eventId.toString(),
+        booking._id.toString(),
+        'purchase_reward',
+        { eventName: event?.title || 'Event' }
+      );
+      console.log('✅ [STRIPE WEBHOOK] Purchase reward granted for booking:', bookingId);
+    } catch (rewardErr) {
+      console.error('[STRIPE WEBHOOK] Reward grant failed (non-blocking):', rewardErr);
+    }
+  } catch (error) {
+    console.error('❌ [STRIPE WEBHOOK] Error handling event booking payment:', error);
+  }
 }
 
 /**
@@ -839,6 +893,18 @@ async function handleStripeCheckoutSessionCompleted(event: Stripe.Event): Promis
   const subscriptionId = metadata.subscriptionId;
   if (subscriptionId) {
     console.log('✅ [STRIPE WEBHOOK] Subscription payment completed:', subscriptionId);
+    return;
+  }
+
+  // Handle event booking payment completion
+  const bookingId = metadata.bookingId;
+  if (bookingId) {
+    console.log('✅ [STRIPE WEBHOOK] Event booking checkout completed:', bookingId);
+    await handleEventBookingPaymentSuccess(bookingId, {
+      id: session.payment_intent as string,
+      amount: (session.amount_total || 0),
+      created: Math.floor(Date.now() / 1000),
+    } as any);
     return;
   }
 

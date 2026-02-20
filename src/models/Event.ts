@@ -52,6 +52,40 @@ export interface IEventAnalytics {
   lastViewed?: Date;
 }
 
+// Event Sponsor Interface
+export interface IEventSponsor {
+  name: string;
+  logo?: string;
+  brandId?: Types.ObjectId;
+  fundingAmount?: number;
+}
+
+// Event Schedule Item Interface
+export interface IEventScheduleItem {
+  title: string;
+  startTime: string;
+  endTime: string;
+  description?: string;
+}
+
+// Event Ticket Type Interface
+export interface IEventTicketType {
+  name: string;
+  price: number;
+  currency: string;
+  maxQuantity: number;
+  soldCount: number;
+  description?: string;
+}
+
+// Structured Cancellation Policy Interface
+export interface IEventCancellationPolicy {
+  isRefundable: boolean;
+  refundPercentage?: number; // 0-100
+  refundDeadlineHours?: number; // Hours before event
+  policyText?: string;
+}
+
 // Main Event Interface
 export interface IEvent extends Document {
   _id: Types.ObjectId;
@@ -66,6 +100,7 @@ export interface IEvent extends Document {
   time: string;
   endTime?: string;
   category: string;
+  categoryId?: Types.ObjectId; // Reference to EventCategory model
   subcategory?: string;
   organizer: IEventOrganizer;
   merchantId?: Types.ObjectId; // Reference to merchant who hosts this event
@@ -81,12 +116,22 @@ export interface IEvent extends Document {
   includes?: string[]; // What's included in the event
   refundPolicy?: string;
   cancellationPolicy?: string;
+  cancellationPolicyDetails?: IEventCancellationPolicy;
   analytics: IEventAnalytics;
   featured: boolean; // For homepage display
   priority: number; // For sorting
   rating: number; // Average rating (1-5)
   reviewCount: number; // Total number of reviews
   cashback: number; // Cashback percentage (merchant-configured)
+  // New fields for production system
+  sponsors?: IEventSponsor[];
+  rewardConfigId?: Types.ObjectId; // Reference to EventRewardConfig (falls back to global)
+  geoLocation?: {
+    type: 'Point';
+    coordinates: [number, number]; // [lng, lat]
+  };
+  schedule?: IEventScheduleItem[];
+  ticketTypes?: IEventTicketType[];
   createdAt: Date;
   updatedAt: Date;
   publishedAt?: Date;
@@ -196,6 +241,11 @@ const EventSchema = new Schema<IEvent>({
       'Music', 'Technology', 'Wellness', 'Sports', 'Education', 'Business', 'Arts', 'Food', 'Entertainment', 'Other'
     ]
   },
+  categoryId: {
+    type: Schema.Types.ObjectId,
+    ref: 'EventCategory',
+    index: true,
+  },
   subcategory: { type: String },
   organizer: { 
     type: EventOrganizerSchema, 
@@ -228,9 +278,15 @@ const EventSchema = new Schema<IEvent>({
   includes: [{ type: String }],
   refundPolicy: { type: String },
   cancellationPolicy: { type: String },
-  analytics: { 
-    type: EventAnalyticsSchema, 
-    default: () => ({}) 
+  cancellationPolicyDetails: {
+    isRefundable: { type: Boolean, default: false },
+    refundPercentage: { type: Number, min: 0, max: 100 },
+    refundDeadlineHours: { type: Number, min: 0 },
+    policyText: { type: String, maxlength: 1000 },
+  },
+  analytics: {
+    type: EventAnalyticsSchema,
+    default: () => ({})
   },
   featured: {
     type: Boolean,
@@ -256,6 +312,35 @@ const EventSchema = new Schema<IEvent>({
     min: 0,
     max: 100 // Percentage (0-100%)
   },
+  // New production fields
+  sponsors: [{
+    name: { type: String, required: true },
+    logo: { type: String },
+    brandId: { type: Schema.Types.ObjectId, ref: 'Brand' },
+    fundingAmount: { type: Number, min: 0 },
+  }],
+  rewardConfigId: {
+    type: Schema.Types.ObjectId,
+    ref: 'EventRewardConfig',
+  },
+  geoLocation: {
+    type: { type: String, enum: ['Point'] },
+    coordinates: { type: [Number] }, // [lng, lat]
+  },
+  schedule: [{
+    title: { type: String, required: true },
+    startTime: { type: String, required: true },
+    endTime: { type: String, required: true },
+    description: { type: String },
+  }],
+  ticketTypes: [{
+    name: { type: String, required: true },
+    price: { type: Number, required: true, min: 0 },
+    currency: { type: String, default: '₹' },
+    maxQuantity: { type: Number, required: true, min: 1 },
+    soldCount: { type: Number, default: 0, min: 0 },
+    description: { type: String },
+  }],
   publishedAt: { type: Date },
   expiresAt: { type: Date }
 }, {
@@ -280,6 +365,9 @@ EventSchema.index({ publishedAt: 1, status: 1 }); // For time-based queries
 EventSchema.index({ 'organizer.email': 1 }); // For organizer lookups
 EventSchema.index({ rating: -1, status: 1 }); // For sorting by rating
 EventSchema.index({ cashback: -1, status: 1 }); // For sorting by cashback
+EventSchema.index({ geoLocation: '2dsphere' }); // For geo-based discovery
+EventSchema.index({ categoryId: 1, status: 1, date: 1 }); // For category + date filtering
+EventSchema.index({ status: 1, date: 1, categoryId: 1, featured: 1 }); // For combined queries
 
 // Virtual for available capacity
 EventSchema.virtual('availableCapacity').get(function() {
@@ -305,12 +393,20 @@ EventSchema.pre('save', function(next) {
   if (this.isModified('status') && this.status === 'published' && !this.publishedAt) {
     this.publishedAt = new Date();
   }
-  
+
   // Auto-set isOnline based on location
   if (this.location && this.location.isOnline !== undefined) {
     this.isOnline = this.location.isOnline;
   }
-  
+
+  // Auto-populate geoLocation from location.coordinates for geo-queries
+  if (this.location?.coordinates?.lat && this.location?.coordinates?.lng) {
+    this.geoLocation = {
+      type: 'Point',
+      coordinates: [this.location.coordinates.lng, this.location.coordinates.lat],
+    };
+  }
+
   next();
 });
 

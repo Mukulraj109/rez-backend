@@ -115,6 +115,10 @@ UserChallengeProgressSchema.methods.addProgress = async function(amount: number,
       timestamp: new Date(),
       source
     });
+    // Cap progressHistory to last 100 entries to prevent unbounded growth
+    if (this.progressHistory.length > 100) {
+      this.progressHistory = this.progressHistory.slice(-100);
+    }
   }
 
   // Check if completed

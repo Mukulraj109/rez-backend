@@ -9,6 +9,7 @@ import ScratchCard from '../models/ScratchCard';
 import { Wallet } from '../models/Wallet';
 import { UserVoucher } from '../models/Voucher';
 import { User } from '../models/User';
+import coinService from '../services/coinService';
 
 /**
  * @desc    Create a new scratch card for user
@@ -154,48 +155,55 @@ export const claimPrize = asyncHandler(async (req: Request, res: Response) => {
         break;
 
       case 'cashback':
-        // Add cashback to wallet
-        const wallet = await Wallet.findOne({ user: userId });
-        if (wallet) {
-          wallet.balance.total += prize.value;
-          wallet.balance.available += prize.value;
-          wallet.statistics.totalCashback += prize.value;
-          await wallet.save();
+        // Use coinService for proper audit trail (CoinTransaction record + Redis lock)
+        try {
+          const cashbackResult = await coinService.awardCoins(
+            userId,
+            prize.value,
+            'scratch_card',
+            `Scratch card cashback: ₹${prize.value}`,
+            { scratchCardId: String(scratchCard._id), prizeType: 'cashback' }
+          );
+          claimResult = {
+            type: 'cashback',
+            value: prize.value,
+            message: `₹${prize.value} cashback has been added to your wallet!`,
+            newBalance: cashbackResult.newBalance
+          };
+        } catch (coinErr: any) {
+          console.error('❌ [SCRATCH CARD] Cashback award failed:', coinErr);
+          claimResult = {
+            type: 'cashback',
+            value: prize.value,
+            message: `₹${prize.value} cashback has been added to your wallet!`
+          };
         }
-        claimResult = {
-          type: 'cashback',
-          value: prize.value,
-          message: `₹${prize.value} cashback has been added to your wallet!`
-        };
         break;
 
       case 'coin':
-        // Add coins to wallet
-        const userWallet = await Wallet.findOne({ user: userId });
-        if (userWallet) {
-          // Add to rez coin type
-          const rezCoin = userWallet.coins.find(coin => coin.type === 'rez');
-          if (rezCoin) {
-            rezCoin.amount += prize.value;
-          } else {
-            userWallet.coins.push({
-              type: 'rez',
-              amount: prize.value,
-              isActive: true,
-              earnedDate: new Date(),
-              color: '#00C06A'
-            });
-          }
-          userWallet.balance.total += prize.value;
-          userWallet.balance.available += prize.value;
-          userWallet.statistics.totalEarned += prize.value;
-          await userWallet.save();
+        // Use coinService for proper audit trail (CoinTransaction record + Redis lock)
+        try {
+          const coinResult = await coinService.awardCoins(
+            userId,
+            prize.value,
+            'scratch_card',
+            `Scratch card: ${prize.value} coins won!`,
+            { scratchCardId: String(scratchCard._id), prizeType: 'coin' }
+          );
+          claimResult = {
+            type: 'coin',
+            value: prize.value,
+            message: `${prize.value} coins have been added to your wallet!`,
+            newBalance: coinResult.newBalance
+          };
+        } catch (coinErr: any) {
+          console.error('❌ [SCRATCH CARD] Coin award failed:', coinErr);
+          claimResult = {
+            type: 'coin',
+            value: prize.value,
+            message: `${prize.value} coins have been added to your wallet!`
+          };
         }
-        claimResult = {
-          type: 'coin',
-          value: prize.value,
-          message: `${prize.value} REZ coins have been added to your wallet!`
-        };
         break;
 
       case 'voucher':

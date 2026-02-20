@@ -8,7 +8,7 @@ export interface ICoinTransaction extends Document {
   type: 'earned' | 'spent' | 'expired' | 'refunded' | 'bonus';
   amount: number;
   balance: number; // Balance after transaction
-  source: 'spin_wheel' | 'scratch_card' | 'quiz_game' | 'challenge' | 'achievement' | 'referral' | 'order' | 'review' | 'bill_upload' | 'daily_login' | 'admin' | 'purchase' | 'redemption' | 'expiry' | 'survey' | 'memory_match' | 'coin_hunt' | 'guess_price' | 'purchase_reward' | 'social_share_reward' | 'merchant_award' | 'cashback' | 'creator_pick_reward' | 'poll_vote' | 'photo_upload' | 'offer_comment' | 'event_rating' | 'ugc_reel' | 'social_impact_reward';
+  source: 'spin_wheel' | 'scratch_card' | 'quiz_game' | 'challenge' | 'achievement' | 'referral' | 'order' | 'review' | 'bill_upload' | 'daily_login' | 'admin' | 'purchase' | 'redemption' | 'expiry' | 'survey' | 'memory_match' | 'coin_hunt' | 'guess_price' | 'purchase_reward' | 'social_share_reward' | 'merchant_award' | 'cashback' | 'creator_pick_reward' | 'poll_vote' | 'photo_upload' | 'offer_comment' | 'event_rating' | 'ugc_reel' | 'social_impact_reward' | 'program_task_reward' | 'program_multiplier_bonus' | 'event_booking' | 'event_checkin' | 'event_participation' | 'event_sharing' | 'event_entry' | 'bonus_campaign' | 'tournament_prize' | 'tournament_entry' | 'tournament_refund' | 'challenge_reward' | 'learning_reward' | 'leaderboard_prize';
   description: string;
   category?: MainCategorySlug | null; // MainCategory this transaction belongs to
   metadata?: {
@@ -97,7 +97,22 @@ const CoinTransactionSchema: Schema = new Schema(
         'offer_comment',        // commenting on offers
         'event_rating',         // rating events after attendance
         'ugc_reel',             // creating UGC reel content
-        'social_impact_reward'  // earned from social impact event participation
+        'social_impact_reward', // earned from social impact event participation
+        'program_task_reward',      // coins from special program task completion
+        'program_multiplier_bonus', // bonus coins from program multiplier
+        'event_booking',        // coins earned on successful event booking
+        'event_checkin',        // coins earned for verified event check-in
+        'event_participation',  // coins earned for completing event activities
+        'event_sharing',        // coins earned for sharing an event
+        'event_entry',          // coins earned on event entry/registration
+        'event_review',         // coins earned for reviewing an event (distinct from rating)
+        'bonus_campaign',       // coins from bonus zone campaign rewards
+        'tournament_prize',     // coins awarded as tournament prize winnings
+        'tournament_entry',     // coins spent on tournament entry fee
+        'tournament_refund',    // coins refunded from tournament entry fee
+        'challenge_reward',     // coins from completing challenges
+        'learning_reward',      // coins from completing learning content
+        'leaderboard_prize'     // coins awarded as leaderboard prize at cycle end
       ],
       required: true,
       index: true
@@ -129,6 +144,33 @@ CoinTransactionSchema.index({ user: 1, type: 1, createdAt: -1 });
 CoinTransactionSchema.index({ user: 1, source: 1, createdAt: -1 });
 CoinTransactionSchema.index({ expiresAt: 1 });
 CoinTransactionSchema.index({ user: 1, category: 1, createdAt: -1 });
+
+// Idempotency index: prevents duplicate achievement rewards for the same user+achievement
+CoinTransactionSchema.index(
+  { user: 1, source: 1, 'metadata.achievementId': 1 },
+  {
+    unique: true,
+    sparse: true,
+    partialFilterExpression: {
+      source: 'achievement',
+      'metadata.achievementId': { $exists: true, $ne: null }
+    },
+    name: 'achievement_idempotency_idx'
+  }
+);
+
+// General idempotency index: prevents duplicate rewards using idempotencyKey
+CoinTransactionSchema.index(
+  { user: 1, 'metadata.idempotencyKey': 1 },
+  {
+    unique: true,
+    sparse: true,
+    partialFilterExpression: {
+      'metadata.idempotencyKey': { $exists: true, $ne: null }
+    },
+    name: 'general_idempotency_idx'
+  }
+);
 
 // Virtual for display amount (positive/negative)
 CoinTransactionSchema.virtual('displayAmount').get(function(this: ICoinTransaction) {
@@ -179,6 +221,7 @@ CoinTransactionSchema.statics.getUserCategoryBalance = async function(userId: st
 };
 
 // Static method to create transaction and update balance
+// Uses Redis distributed lock to prevent race conditions on balance read-then-write
 CoinTransactionSchema.statics.createTransaction = async function(
   userId: string,
   type: string,
@@ -188,40 +231,65 @@ CoinTransactionSchema.statics.createTransaction = async function(
   metadata?: any,
   category?: string | null
 ) {
-  // Get current balance (global, not category-specific for the balance field)
-  const currentBalance = await (this as ICoinTransactionModel).getUserBalance(userId);
+  const lockKey = `coin-tx:${userId}`;
+  let lockToken: string | null = null;
 
-  // Calculate new balance
-  let newBalance = currentBalance;
-  if (type === 'earned' || type === 'refunded' || type === 'bonus') {
-    newBalance += amount;
-  } else if (type === 'spent' || type === 'expired') {
-    if (currentBalance < amount) {
-      throw new Error('Insufficient coin balance');
-    }
-    newBalance -= amount;
-  }
-
-  // Create transaction
-  const transaction = await this.create({
-    user: userId,
-    type,
-    amount,
-    balance: newBalance,
-    source,
-    description,
-    metadata,
-    category: category || null
-  });
-
-  // Invalidate consolidated earnings cache for this user
   try {
-    await redisService.delPattern(`earnings:consolidated:${userId}:*`);
-  } catch (e) {
-    // Cache invalidation is best-effort; don't fail the transaction
-  }
+    // Acquire per-user lock (5s TTL) to prevent concurrent balance modifications
+    lockToken = await redisService.acquireLock(lockKey, 5);
+    if (!lockToken) {
+      // Retry once after a short delay
+      await new Promise(resolve => setTimeout(resolve, 200));
+      lockToken = await redisService.acquireLock(lockKey, 5);
+      if (!lockToken) {
+        throw new Error('Transaction temporarily unavailable. Please try again.');
+      }
+    }
 
-  return transaction;
+    // Get current balance (global, not category-specific for the balance field)
+    const currentBalance = await (this as ICoinTransactionModel).getUserBalance(userId);
+
+    // Calculate new balance
+    let newBalance = currentBalance;
+    if (type === 'earned' || type === 'refunded' || type === 'bonus') {
+      newBalance += amount;
+    } else if (type === 'spent' || type === 'expired') {
+      if (currentBalance < amount) {
+        throw new Error('Insufficient coin balance');
+      }
+      newBalance -= amount;
+    }
+
+    // Create transaction
+    const transaction = await this.create({
+      user: userId,
+      type,
+      amount,
+      balance: newBalance,
+      source,
+      description,
+      metadata,
+      category: category || null
+    });
+
+    // Invalidate consolidated earnings cache for this user
+    try {
+      await redisService.delPattern(`earnings:consolidated:${userId}:*`);
+    } catch (e) {
+      // Cache invalidation is best-effort; don't fail the transaction
+    }
+
+    return transaction;
+  } finally {
+    // Always release lock
+    if (lockToken) {
+      try {
+        await redisService.releaseLock(lockKey, lockToken);
+      } catch (e) {
+        // Lock will auto-expire after TTL
+      }
+    }
+  }
 };
 
 // Static method to expire old coins (FIFO) — category-aware

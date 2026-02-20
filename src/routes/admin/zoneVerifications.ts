@@ -3,6 +3,7 @@ import Joi from 'joi';
 import { Types } from 'mongoose';
 import UserZoneVerification from '../../models/UserZoneVerification';
 import { User } from '../../models/User';
+import ProgramMembership from '../../models/ProgramMembership';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { NotificationService } from '../../services/notificationService';
 
@@ -19,7 +20,7 @@ const reviewSchema = Joi.object({
   status: Joi.string().valid('approved', 'rejected').required(),
   rejectionReason: Joi.string().max(500).when('status', {
     is: 'rejected',
-    then: Joi.required(),
+    then: Joi.optional(), // Optional for revocations (admin may or may not give a reason)
     otherwise: Joi.optional(),
   }),
   expiresAt: Joi.date().optional(), // For verifications that expire (e.g., student)
@@ -229,13 +230,21 @@ router.patch('/:id/review', async (req: Request, res: Response) => {
       });
     }
 
-    // Check if already reviewed
-    if (verification.status !== 'pending') {
+    // Check valid transitions: pending -> approved/rejected, approved -> rejected (revoke)
+    if (verification.status === 'rejected' && status === 'rejected') {
       return res.status(400).json({
         success: false,
-        message: `Verification already ${verification.status}`,
+        message: 'Verification is already rejected',
       });
     }
+    if (verification.status === 'approved' && status === 'approved') {
+      return res.status(400).json({
+        success: false,
+        message: 'Verification is already approved',
+      });
+    }
+
+    const isRevoke = verification.status === 'approved' && status === 'rejected';
 
     // Update verification
     verification.status = status;
@@ -283,16 +292,55 @@ router.patch('/:id/review', async (req: Request, res: Response) => {
         deliveryChannels: ['in_app', 'push'],
       });
     } else {
-      // Send rejection notification to user
+      // If revoking an approved verification, remove the verified flag and suspend membership
+      if (isRevoke) {
+        const updatePath = `verifications.${verification.verificationType}`;
+        await User.findByIdAndUpdate(verification.userId, {
+          $set: {
+            [`${updatePath}.verified`]: false,
+          },
+          $unset: {
+            [`${updatePath}.verifiedAt`]: 1,
+          },
+        });
+
+        // Suspend any active program membership linked to this verification zone
+        const ZONE_TO_PROGRAM: Record<string, string> = {
+          student: 'student_zone',
+          corporate: 'corporate_perks',
+        };
+        const programSlug = ZONE_TO_PROGRAM[verification.verificationType];
+        if (programSlug) {
+          const activeMembership = await ProgramMembership.findOne({
+            user: verification.userId,
+            programSlug,
+            status: 'active',
+          });
+          if (activeMembership) {
+            activeMembership.status = 'suspended' as any;
+            (activeMembership as any).statusHistory.push({
+              status: 'suspended',
+              changedAt: new Date(),
+              reason: `Verification revoked by admin${rejectionReason ? ': ' + rejectionReason : ''}`,
+              changedBy: adminId,
+            });
+            await activeMembership.save();
+          }
+        }
+      }
+
+      // Send rejection/revocation notification to user
       await NotificationService.createNotification({
         userId: verification.userId,
-        title: 'Verification Update',
-        message: `Your ${verification.verificationType} verification was not approved. ${rejectionReason || 'Please try again with valid documents.'}`,
+        title: isRevoke ? 'Verification Revoked' : 'Verification Update',
+        message: isRevoke
+          ? `Your ${verification.verificationType} verification has been revoked. ${rejectionReason || 'Please contact support for details.'}`
+          : `Your ${verification.verificationType} verification was not approved. ${rejectionReason || 'Please try again with valid documents.'}`,
         type: 'warning',
         category: 'general',
         priority: 'medium',
         data: {
-          type: 'verification_rejected',
+          type: isRevoke ? 'verification_revoked' : 'verification_rejected',
           verificationType: verification.verificationType,
           zoneSlug: verification.zoneSlug,
           reason: rejectionReason,

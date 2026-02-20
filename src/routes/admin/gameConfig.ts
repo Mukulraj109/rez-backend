@@ -1,13 +1,18 @@
 /**
  * Admin Routes - Game Configuration
- * CRUD for GameConfig model (used by Game Configuration admin page)
+ * CRUD for GameConfig model + Analytics + Game Ban + Manual Coin Ops
  */
 
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import GameConfig from '../../models/GameConfig';
+import { User } from '../../models/User';
+import GameSession from '../../models/GameSession';
 import { sendSuccess, sendError } from '../../utils/response';
+import gameService from '../../services/gameService';
+import coinService from '../../services/coinService';
+import { invalidateGameConfigCache } from '../../services/gameService';
 
 const router = Router();
 
@@ -299,6 +304,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       return sendError(res, 'Game config not found', 404);
     }
 
+    invalidateGameConfigCache(gameConfig.gameType);
     return sendSuccess(res, gameConfig, 'Game config updated');
   } catch (error) {
     console.error('[Admin] Error updating game config:', error);
@@ -401,10 +407,213 @@ router.delete('/:id', async (req: Request, res: Response) => {
       return sendError(res, 'Game config not found', 404);
     }
 
+    invalidateGameConfigCache(gameConfig.gameType);
     return sendSuccess(res, null, 'Game config deleted');
   } catch (error) {
     console.error('[Admin] Error deleting game config:', error);
     return sendError(res, 'Failed to delete game config', 500);
+  }
+});
+
+// ======== PHASE 5: GAME ANALYTICS ========
+
+/**
+ * GET /api/admin/game-config/analytics
+ * Game analytics dashboard data
+ */
+router.get('/analytics/overview', async (req: Request, res: Response) => {
+  try {
+    const { gameType, days = '30' } = req.query;
+    const analytics = await gameService.getGameAnalytics(
+      gameType as string | undefined,
+      parseInt(days as string) || 30
+    );
+    return sendSuccess(res, analytics, 'Game analytics fetched');
+  } catch (error) {
+    console.error('[Admin] Error fetching game analytics:', error);
+    return sendError(res, 'Failed to fetch game analytics', 500);
+  }
+});
+
+/**
+ * GET /api/admin/game-config/user/:userId/history
+ * Get a specific user's game history (for admin investigation)
+ */
+router.get('/user/:userId/history', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { gameType, limit = '50' } = req.query;
+
+    if (!Types.ObjectId.isValid(userId)) {
+      return sendError(res, 'Invalid user ID', 400);
+    }
+
+    const query: any = { user: userId };
+    if (gameType) query.gameType = gameType;
+
+    const [sessions, user] = await Promise.all([
+      GameSession.find(query)
+        .sort({ createdAt: -1 })
+        .limit(parseInt(limit as string) || 50)
+        .lean(),
+      User.findById(userId).select('fullName username phoneNumber gameBanned gameBanReason gameBannedAt').lean()
+    ]);
+
+    return sendSuccess(res, { user, sessions, total: sessions.length }, 'User game history fetched');
+  } catch (error) {
+    console.error('[Admin] Error fetching user game history:', error);
+    return sendError(res, 'Failed to fetch user game history', 500);
+  }
+});
+
+// ======== PHASE 5: GAME BAN MANAGEMENT ========
+
+/**
+ * POST /api/admin/game-config/user/:userId/ban
+ * Ban a user from playing games
+ */
+router.post('/user/:userId/ban', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { reason } = req.body;
+
+    if (!Types.ObjectId.isValid(userId)) {
+      return sendError(res, 'Invalid user ID', 400);
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          gameBanned: true,
+          gameBanReason: reason || 'Banned by admin',
+          gameBannedAt: new Date()
+        }
+      },
+      { new: true }
+    ).select('fullName username phoneNumber gameBanned gameBanReason gameBannedAt');
+
+    if (!user) return sendError(res, 'User not found', 404);
+
+    return sendSuccess(res, user, `User ${user.fullName || userId} banned from games`);
+  } catch (error) {
+    console.error('[Admin] Error banning user from games:', error);
+    return sendError(res, 'Failed to ban user', 500);
+  }
+});
+
+/**
+ * POST /api/admin/game-config/user/:userId/unban
+ * Unban a user from playing games
+ */
+router.post('/user/:userId/unban', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    if (!Types.ObjectId.isValid(userId)) {
+      return sendError(res, 'Invalid user ID', 400);
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: { gameBanned: false },
+        $unset: { gameBanReason: 1, gameBannedAt: 1 }
+      },
+      { new: true }
+    ).select('fullName username phoneNumber gameBanned');
+
+    if (!user) return sendError(res, 'User not found', 404);
+
+    return sendSuccess(res, user, `User ${user.fullName || userId} unbanned from games`);
+  } catch (error) {
+    console.error('[Admin] Error unbanning user from games:', error);
+    return sendError(res, 'Failed to unban user', 500);
+  }
+});
+
+// ======== PHASE 5: MANUAL COIN OPERATIONS ========
+
+/**
+ * POST /api/admin/game-config/user/:userId/credit-coins
+ * Manually credit coins to a user (with reason logged)
+ */
+router.post('/user/:userId/credit-coins', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { amount, reason } = req.body;
+
+    if (!Types.ObjectId.isValid(userId)) {
+      return sendError(res, 'Invalid user ID', 400);
+    }
+    if (!amount || amount <= 0 || amount > 10000) {
+      return sendError(res, 'Amount must be between 1 and 10000', 400);
+    }
+    if (!reason || reason.trim().length < 3) {
+      return sendError(res, 'A reason is required (min 3 characters)', 400);
+    }
+
+    const result = await coinService.awardCoins(
+      userId,
+      amount,
+      'admin',
+      `Admin credit: ${reason}`,
+      { adminAction: true, reason, adminId: (req.user as any)?.id }
+    );
+
+    return sendSuccess(res, { amount, newBalance: result.newBalance, reason }, `Credited ${amount} coins to user`);
+  } catch (error: any) {
+    console.error('[Admin] Error crediting coins:', error);
+    return sendError(res, error.message || 'Failed to credit coins', 500);
+  }
+});
+
+/**
+ * POST /api/admin/game-config/user/:userId/revoke-coins
+ * Manually revoke (deduct) coins from a user (with reason logged)
+ */
+router.post('/user/:userId/revoke-coins', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { amount, reason } = req.body;
+
+    if (!Types.ObjectId.isValid(userId)) {
+      return sendError(res, 'Invalid user ID', 400);
+    }
+    if (!amount || amount <= 0 || amount > 10000) {
+      return sendError(res, 'Amount must be between 1 and 10000', 400);
+    }
+    if (!reason || reason.trim().length < 3) {
+      return sendError(res, 'A reason is required (min 3 characters)', 400);
+    }
+
+    // Deduct coins via coinService (negative amount)
+    const result = await coinService.awardCoins(
+      userId,
+      -amount,
+      'admin',
+      `Admin revoke: ${reason}`,
+      { adminAction: true, reason, adminId: (req.user as any)?.id, revoke: true }
+    );
+
+    return sendSuccess(res, { amount, newBalance: result.newBalance, reason }, `Revoked ${amount} coins from user`);
+  } catch (error: any) {
+    console.error('[Admin] Error revoking coins:', error);
+    return sendError(res, error.message || 'Failed to revoke coins', 500);
+  }
+});
+
+/**
+ * POST /api/admin/game-config/invalidate-cache
+ * Invalidate game config cache (after admin changes)
+ */
+router.post('/invalidate-cache', async (_req: Request, res: Response) => {
+  try {
+    invalidateGameConfigCache();
+    return sendSuccess(res, null, 'Game config cache invalidated');
+  } catch (error) {
+    console.error('[Admin] Error invalidating cache:', error);
+    return sendError(res, 'Failed to invalidate cache', 500);
   }
 });
 

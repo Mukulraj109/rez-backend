@@ -1,5 +1,7 @@
 import Tournament, { ITournament } from '../models/Tournament';
 import { Wallet } from '../models/Wallet';
+import { CoinTransaction } from '../models/CoinTransaction';
+import gamificationSocketService from './gamificationSocketService';
 import mongoose from 'mongoose';
 
 class TournamentService {
@@ -73,6 +75,45 @@ class TournamentService {
       throw new Error('Already joined this tournament');
     }
 
+    // Enforce entry fee
+    if (tournament.entryFee > 0) {
+      const wallet = await Wallet.findOne({ user: userId });
+      if (!wallet || wallet.balance.available < tournament.entryFee) {
+        throw new Error(`Insufficient coins. Entry fee is ${tournament.entryFee} coins.`);
+      }
+
+      // Deduct entry fee atomically
+      const deducted = await Wallet.findOneAndUpdate(
+        { user: userId, 'balance.available': { $gte: tournament.entryFee } },
+        {
+          $inc: {
+            'balance.available': -tournament.entryFee,
+            'balance.total': -tournament.entryFee,
+          },
+          $set: { lastTransactionAt: new Date() }
+        },
+        { new: true }
+      );
+
+      if (!deducted) {
+        throw new Error('Failed to deduct entry fee. Please try again.');
+      }
+
+      // Record the transaction
+      try {
+        await CoinTransaction.createTransaction(
+          userId,
+          'spent',
+          tournament.entryFee,
+          'tournament_entry',
+          `Tournament entry fee: ${tournament.name}`,
+          { tournamentId: String(tournament._id), tournamentName: tournament.name }
+        );
+      } catch (txErr) {
+        console.error('[TOURNAMENT] Failed to record entry fee transaction:', txErr);
+      }
+    }
+
     // Add participant
     tournament.participants.push({
       user: new mongoose.Types.ObjectId(userId),
@@ -139,6 +180,34 @@ class TournamentService {
     participant.lastPlayedAt = new Date();
 
     await tournament.save();
+
+    // Emit live leaderboard update via socket (non-blocking)
+    try {
+      const sorted = [...tournament.participants]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 20);
+      const userRank = sorted.findIndex(p => p.user.toString() === userId) + 1;
+
+      gamificationSocketService.emitScoreUpdate(
+        tournamentId,
+        userId,
+        participant.score,
+        userRank > 0 ? userRank : sorted.length + 1
+      );
+
+      gamificationSocketService.emitLeaderboardUpdate(
+        tournamentId,
+        sorted.map((p, idx) => ({
+          userId: p.user.toString(),
+          username: '',  // populated on client
+          score: p.score,
+          rank: idx + 1,
+        }))
+      );
+    } catch (socketErr) {
+      // Socket errors should never block game flow
+      console.error('[TOURNAMENT] Socket emission error:', socketErr);
+    }
   }
 
   // Get tournament leaderboard
@@ -284,8 +353,38 @@ class TournamentService {
       tournament.status = 'completed';
       await tournament.save();
 
-      // Distribute prizes to winners
-      await this.distributeTournamentPrizes(tournament);
+      // Only distribute prizes if minimum participants met
+      if (tournament.participants.length >= (tournament.minParticipants || 0)) {
+        await this.distributeTournamentPrizes(tournament);
+      } else {
+        console.log(`⚠️ [TOURNAMENT] Skipping prize distribution for "${tournament.name}" - only ${tournament.participants.length}/${tournament.minParticipants} participants`);
+        // Refund entry fees if applicable
+        if (tournament.entryFee > 0) {
+          for (const participant of tournament.participants) {
+            try {
+              await Wallet.findOneAndUpdate(
+                { user: participant.user },
+                {
+                  $inc: {
+                    'balance.available': tournament.entryFee,
+                    'balance.total': tournament.entryFee,
+                  }
+                }
+              );
+              await CoinTransaction.createTransaction(
+                participant.user.toString(),
+                'earned',
+                tournament.entryFee,
+                'tournament_refund',
+                `Entry fee refund: ${tournament.name} (minimum participants not met)`,
+                { tournamentId: String(tournament._id) }
+              );
+            } catch (refundErr) {
+              console.error(`❌ [TOURNAMENT] Failed to refund entry fee for user ${participant.user}:`, refundErr);
+            }
+          }
+        }
+      }
     }
 
     return tournaments.length;
@@ -293,12 +392,21 @@ class TournamentService {
 
   /**
    * Distribute prizes to tournament winners
+   *
+   * Fixes applied:
+   * 1. Creates CoinTransaction records (source of truth for earnings)
+   * 2. Uses atomic $inc wallet update (no markModified needed)
+   * 3. Idempotent: skips participants with prizeAwarded=true
+   * 4. Sets prizeAwarded AFTER successful wallet+CoinTransaction updates
+   * 5. Individual try/catch per winner so one failure doesn't block others
    */
   private async distributeTournamentPrizes(tournament: ITournament): Promise<void> {
     console.log(`🏆 [TOURNAMENT] Distributing prizes for tournament: ${tournament.name}`);
 
     const sortedParticipants = [...tournament.participants].sort((a, b) => b.score - a.score);
     const prizes = tournament.prizes || [];
+    let awarded = 0;
+    let skipped = 0;
 
     for (let i = 0; i < Math.min(sortedParticipants.length, prizes.length); i++) {
       const participant = sortedParticipants[i];
@@ -306,60 +414,105 @@ class TournamentService {
 
       if (!participant || !prize) continue;
 
+      // Fix #3: Idempotency guard - skip already awarded prizes
+      if (participant.prizeAwarded) {
+        skipped++;
+        console.log(`⏭️ [TOURNAMENT] Skipping rank ${i + 1} - prize already awarded`);
+        continue;
+      }
+
       try {
         const userId = participant.user.toString();
+        const coinsReward = prize.coins || 0;
 
-        // Credit prize coins to winner's wallet
-        if (prize.coins && prize.coins > 0) {
-          const wallet = await Wallet.findOne({ user: userId });
+        if (coinsReward > 0) {
+          // Fix #2: Atomic wallet update using $inc (matches challengeService pattern)
+          let updatedWallet = await Wallet.findOneAndUpdate(
+            { user: userId, 'coins.type': 'rez' },
+            {
+              $inc: {
+                'balance.available': coinsReward,
+                'balance.total': coinsReward,
+                'statistics.totalEarned': coinsReward,
+                'coins.$.amount': coinsReward
+              },
+              $set: {
+                'coins.$.lastEarned': new Date(),
+                lastTransactionAt: new Date()
+              }
+            },
+            { new: true }
+          );
 
-          if (wallet) {
-            // Find or create promotion coin type
-            let promoCoin = wallet.coins.find((c: any) => c.type === 'promotion');
-            if (!promoCoin) {
-              wallet.coins.push({
-                type: 'promotion',
-                amount: 0,
-                label: 'Promo Coins',
-                color: '#FF6B35',
-                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-              } as any);
-              promoCoin = wallet.coins[wallet.coins.length - 1];
+          if (!updatedWallet) {
+            // Wallet doesn't exist — create and retry
+            const wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
+            if (wallet) {
+              updatedWallet = await Wallet.findOneAndUpdate(
+                { _id: wallet._id, 'coins.type': 'rez' },
+                {
+                  $inc: {
+                    'balance.available': coinsReward,
+                    'balance.total': coinsReward,
+                    'statistics.totalEarned': coinsReward,
+                    'coins.$.amount': coinsReward
+                  },
+                  $set: { lastTransactionAt: new Date() }
+                },
+                { new: true }
+              );
             }
-
-            promoCoin.amount += prize.coins;
-            promoCoin.lastEarned = new Date();
-
-            // Update wallet statistics
-            wallet.balance.available += prize.coins;
-            wallet.balance.total += prize.coins;
-            wallet.statistics.totalEarned += prize.coins;
-            wallet.lastTransactionAt = new Date();
-
-            await wallet.save();
-
-            console.log(`✅ [TOURNAMENT] Awarded ${prize.coins} coins to rank ${i + 1} (${userId})`);
           }
+
+          // Fix #1: Create CoinTransaction record (source of truth for earnings)
+          try {
+            await CoinTransaction.createTransaction(
+              userId,
+              'earned',
+              coinsReward,
+              'tournament_prize',
+              `Tournament prize: Rank ${i + 1} in ${tournament.name}`,
+              {
+                tournamentId: String(tournament._id),
+                tournamentName: tournament.name,
+                rank: i + 1,
+                badge: prize.badge || null
+              }
+            );
+          } catch (coinTxError) {
+            console.error(`❌ [TOURNAMENT] Failed to create CoinTransaction for rank ${i + 1}:`, coinTxError);
+            // Don't fail - wallet was already updated atomically
+          }
+
+          console.log(`✅ [TOURNAMENT] Awarded ${coinsReward} coins to rank ${i + 1} (${userId})`);
         }
 
-        // Update participant with prize awarded flag
-        participant.prizeAwarded = true;
-        participant.prizeDetails = {
-          rank: i + 1,
-          coins: prize.coins || 0,
-          badge: prize.badge,
-          exclusiveDeal: prize.exclusiveDeal,
-          awardedAt: new Date()
-        };
+        // Fix #4: Set prizeAwarded AFTER successful wallet update + CoinTransaction
+        // Find the actual participant in tournament.participants (not the sorted copy)
+        const tournamentParticipant = tournament.participants.find(
+          tp => tp.user.toString() === participant.user.toString()
+        );
+        if (tournamentParticipant) {
+          tournamentParticipant.prizeAwarded = true;
+          tournamentParticipant.prizeDetails = {
+            rank: i + 1,
+            coins: coinsReward,
+            badge: prize.badge,
+            exclusiveDeal: prize.exclusiveDeal,
+            awardedAt: new Date()
+          };
+        }
+
+        awarded++;
       } catch (prizeError) {
+        // Fix #5: Individual try/catch - continue to next winner
         console.error(`❌ [TOURNAMENT] Failed to award prize to rank ${i + 1}:`, prizeError);
-        // Continue to next winner even if one fails
       }
     }
 
     // Save updated participant prize statuses
     await tournament.save();
-    console.log(`✅ [TOURNAMENT] Prize distribution complete for: ${tournament.name}`);
+    console.log(`✅ [TOURNAMENT] Prize distribution complete for: ${tournament.name} (awarded: ${awarded}, skipped: ${skipped})`);
   }
 
   // Get featured tournaments
@@ -474,7 +627,7 @@ class TournamentService {
         startDate: tournament.startDate,
         endDate: tournament.endDate,
         featured: tournament.featured,
-        path: `/explore/tournaments/${tournament._id}`,
+        path: `/playandearn/TournamentDetail?id=${tournament._id}`,
         // User-specific data
         isParticipant,
         userRank,

@@ -1,5 +1,6 @@
 import Program, { IProgram } from '../models/Program';
 import mongoose from 'mongoose';
+import { awardCoins } from './coinService';
 
 class ProgramService {
   // Get programs by type
@@ -367,7 +368,14 @@ class ProgramService {
       participant.completedTasks += 1;
       participant.totalCoinsEarned += task.coins;
 
-      // TODO: Credit coins to user's wallet
+      // Credit coins to user's wallet
+      await awardCoins(
+        participant.user.toString(),
+        task.coins,
+        'program_task_reward',
+        `Task completed: ${task.title || 'Program task'}`,
+        { programId: programId, taskId: taskId }
+      );
     }
 
     await program.save();

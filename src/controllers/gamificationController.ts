@@ -12,6 +12,8 @@ import coinService from '../services/coinService';
 import streakService from '../services/streakService';
 import spinWheelService from '../services/spinWheelService';
 import quizService from '../services/quizService';
+import tournamentService from '../services/tournamentService';
+import Tournament from '../models/Tournament';
 import scratchCardService from '../services/scratchCardService';
 import SurpriseCoinDrop from '../models/SurpriseCoinDrop';
 import UserStreak from '../models/UserStreak';
@@ -117,6 +119,28 @@ export const joinChallenge = asyncHandler(async (req: Request, res: Response) =>
       endDate: challenge.endDate
     }
   }, 'Successfully joined challenge', 201);
+});
+
+/**
+ * Get unified challenges with user state and server time.
+ * Single source of truth for Play & Earn + Missions pages.
+ * GET /api/gamification/challenges/unified?type=daily&limit=6
+ */
+export const getUnifiedChallenges = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const userId = (req.user._id as Types.ObjectId).toString();
+  const { type, limit, visibility } = req.query;
+
+  const result = await challengeService.getUnifiedChallenges(userId, {
+    type: type as string,
+    limit: limit ? parseInt(limit as string) : undefined,
+    visibility: visibility as string,
+  });
+
+  sendSuccess(res, result, 'Unified challenges retrieved successfully');
 });
 
 export const getChallengeLeaderboard = asyncHandler(async (req: Request, res: Response) => {
@@ -293,50 +317,55 @@ const mapPeriodToBackend = (period: string): 'day' | 'week' | 'month' | 'all' =>
 };
 
 export const getLeaderboard = asyncHandler(async (req: Request, res: Response) => {
-  const { period = 'weekly', type = 'spending', limit = 10 } = req.query;
+  const { period = 'weekly', type = 'spending', limit = 50, page = 1 } = req.query;
+  const userId = req.user ? (req.user._id as Types.ObjectId).toString() : undefined;
 
-  // Map frontend period format to backend format
-  const backendPeriod = mapPeriodToBackend(period as string);
+  const pageNum = Math.max(1, parseInt(page as string) || 1);
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 50));
 
-  let leaderboard;
+  // Use config-driven leaderboard service for all types
+  const result = await leaderboardService.getLeaderboard(
+    type as string,
+    period as string,
+    pageNum,
+    limitNum
+  );
 
-  switch (type) {
-    case 'spending':
-      leaderboard = await leaderboardService.getSpendingLeaderboard(
-        backendPeriod,
-        parseInt(limit as string)
-      );
-      break;
-    case 'reviews':
-      leaderboard = await leaderboardService.getReviewLeaderboard(
-        backendPeriod,
-        parseInt(limit as string)
-      );
-      break;
-    case 'referrals':
-      leaderboard = await leaderboardService.getReferralLeaderboard(
-        backendPeriod,
-        parseInt(limit as string)
-      );
-      break;
-    case 'cashback':
-      leaderboard = await leaderboardService.getCashbackLeaderboard(
-        backendPeriod,
-        parseInt(limit as string)
-      );
-      break;
-    case 'coins':
-      // coinService uses frontend period format directly (daily, weekly, monthly, all-time)
-      leaderboard = await coinService.getCoinLeaderboard(
-        period as 'daily' | 'weekly' | 'monthly' | 'all-time',
-        parseInt(limit as string)
-      );
-      break;
-    default:
-      leaderboard = await leaderboardService.getLeaderboardStats();
+  // Fetch user's rank if authenticated
+  let myRank = null;
+  if (userId) {
+    const rankResult = await leaderboardService.getUserRank(userId, type as string, period as string);
+    if (rankResult) {
+      myRank = {
+        rank: rankResult.rank,
+        value: rankResult.value,
+        total: rankResult.total,
+      };
+    }
   }
 
-  sendSuccess(res, leaderboard, 'Leaderboard retrieved successfully');
+  // Fetch prize pool from config
+  let prizePool: any[] = [];
+  const LeaderboardConfigModel = (await import('../models/LeaderboardConfig')).default;
+  const config = await LeaderboardConfigModel.findOne({
+    leaderboardType: type,
+    period: result.config.period,
+    status: 'active',
+  }).select('prizePool').lean();
+  if (config?.prizePool) {
+    prizePool = config.prizePool;
+  }
+
+  sendSuccess(res, {
+    entries: result.entries,
+    pagination: result.pagination,
+    config: {
+      ...result.config,
+      prizePool,
+    },
+    myRank,
+    lastUpdated: result.lastUpdated,
+  }, 'Leaderboard retrieved successfully');
 });
 
 export const getUserRank = asyncHandler(async (req: Request, res: Response) => {
@@ -361,8 +390,20 @@ export const getMyRank = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const userId = (req.user._id as Types.ObjectId).toString();
-  const { period = 'weekly' } = req.query;
+  const { period = 'weekly', type } = req.query;
 
+  // If a specific type is requested, return just that rank
+  if (type) {
+    const rankResult = await leaderboardService.getUserRank(userId, type as string, period as string);
+    if (rankResult) {
+      sendSuccess(res, rankResult, 'User rank retrieved successfully');
+    } else {
+      sendSuccess(res, { rank: 0, total: 0, value: 0, nearby: [] }, 'Not ranked yet');
+    }
+    return;
+  }
+
+  // Otherwise return all ranks (legacy behavior)
   const backendPeriod = mapPeriodToBackend(period as string);
   const ranks = await leaderboardService.getAllUserRanks(userId, backendPeriod);
 
@@ -490,29 +531,16 @@ export const spinWheel = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req.user._id as Types.ObjectId).toString();
   console.log('🎰 [SPIN_WHEEL] Spin request from user:', userId);
 
-  // ✅ FIX: Check daily spin limit instead of 24-hour cooldown
-  // Count spins completed TODAY (since midnight UTC)
-  const { MiniGame } = await import('../models/MiniGame');
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-
-  const spinsToday = await MiniGame.countDocuments({
-    user: userId,
-    gameType: 'spin_wheel',
-    status: 'completed',
-    completedAt: { $gte: today }
-  });
-
-  const MAX_DAILY_SPINS = 3;
-  if (spinsToday >= MAX_DAILY_SPINS) {
-    console.log(`❌ [SPIN_WHEEL] Daily limit reached: ${spinsToday}/${MAX_DAILY_SPINS} spins used today`);
-    const tomorrow = new Date();
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-    tomorrow.setUTCHours(0, 0, 0, 0);
-    return sendBadRequest(res, `Daily spin limit reached (${MAX_DAILY_SPINS} spins per day). Next spin available at midnight UTC (${tomorrow.toISOString()})`);
+  // Check daily spin limit using eligibility service
+  const eligibility = await spinWheelService.checkEligibility(userId);
+  if (!eligibility.canSpin) {
+    console.log(`❌ [SPIN_WHEEL] Daily limit reached: ${eligibility.spinsUsedToday}/${eligibility.maxDailySpins} spins used today`);
+    return sendBadRequest(res, `Daily spin limit reached (${eligibility.maxDailySpins} spins per day). Next spin available at ${eligibility.nextResetAt}`);
   }
 
-  console.log(`✅ [SPIN_WHEEL] User eligible: ${spinsToday}/${MAX_DAILY_SPINS} spins used today`);
+  console.log(`✅ [SPIN_WHEEL] User eligible: ${eligibility.spinsUsedToday}/${eligibility.maxDailySpins} spins used today`);
+
+  const { MiniGame } = await import('../models/MiniGame');
 
   // Create a session and immediately spin
   const session = await spinWheelService.createSpinSession(userId);
@@ -523,19 +551,12 @@ export const spinWheel = asyncHandler(async (req: Request, res: Response) => {
 
   // SECURITY: Post-spin race condition check
   // After the spin is completed, verify we haven't exceeded the limit
-  // (catches the case where concurrent requests both passed the initial count check)
-  const finalSpinCount = await MiniGame.countDocuments({
-    user: userId,
-    gameType: 'spin_wheel',
-    status: 'completed',
-    completedAt: { $gte: today }
-  });
-
-  if (finalSpinCount > MAX_DAILY_SPINS) {
-    // Race condition detected — mark this spin as expired to roll back
-    console.warn(`⚠️ [SPIN_WHEEL] Race condition detected for user ${userId}: ${finalSpinCount} spins today, rolling back`);
+  const postSpinEligibility = await spinWheelService.checkEligibility(userId);
+  // If spinsUsedToday > maxDailySpins, a race condition allowed an extra spin
+  if (postSpinEligibility.spinsUsedToday > postSpinEligibility.maxDailySpins) {
+    console.warn(`⚠️ [SPIN_WHEEL] Race condition detected for user ${userId}: ${postSpinEligibility.spinsUsedToday} spins today, rolling back`);
     await MiniGame.findByIdAndUpdate(session.sessionId, { status: 'expired' });
-    return sendBadRequest(res, `Daily spin limit reached (${MAX_DAILY_SPINS} spins per day). This spin has been voided.`);
+    return sendBadRequest(res, `Daily spin limit reached. This spin has been voided.`);
   }
 
   // ✅ FIX: Get user's coin balance from WALLET (single source of truth)
@@ -581,8 +602,45 @@ export const spinWheel = asyncHandler(async (req: Request, res: Response) => {
       }
     },
     coinsAdded: spinResult.type === 'coins' ? spinResult.value : 0,
-    newBalance: actualBalance // ✅ Return wallet balance (synced with homepage)
+    newBalance: actualBalance,
+    spinsRemaining: postSpinEligibility.spinsRemaining,
+    tournamentUpdate: null as any,
   };
+
+  // Update tournament scores if coins were won
+  if (spinResult.type === 'coins' && spinResult.value > 0) {
+    try {
+      const activeTournaments = await Tournament.find({
+        status: 'active',
+        gameType: { $in: ['spin_wheel', 'mixed'] },
+        'participants.user': userId
+      }).select('_id name participants');
+
+      for (const t of activeTournaments) {
+        try {
+          await tournamentService.updateParticipantScore(String(t._id), userId, spinResult.value);
+          if (!response.tournamentUpdate) {
+            const sorted = [...t.participants].sort((a, b) => {
+              const aScore = a.user.toString() === userId ? a.score + spinResult.value : a.score;
+              const bScore = b.user.toString() === userId ? b.score + spinResult.value : b.score;
+              return bScore - aScore;
+            });
+            const newRank = sorted.findIndex(p => p.user.toString() === userId) + 1;
+            response.tournamentUpdate = { tournamentName: t.name, pointsAdded: spinResult.value, newRank: newRank || 1 };
+          }
+        } catch (err: any) {
+          console.error(`[SPIN_WHEEL] Tournament score update failed for ${t.name}:`, err.message);
+        }
+      }
+    } catch (err: any) {
+      console.error('[SPIN_WHEEL] Tournament lookup failed:', err.message);
+    }
+  }
+
+  // Remove null tournamentUpdate from response if not set
+  if (!response.tournamentUpdate) {
+    delete response.tournamentUpdate;
+  }
 
   console.log('💰 [SPIN_WHEEL] User balance after spin:', actualBalance);
   sendSuccess(res, response, 'Spin completed successfully');
@@ -606,55 +664,36 @@ export const getSpinWheelData = asyncHandler(async (req: Request, res: Response)
   const userId = (req.user._id as Types.ObjectId).toString();
   console.log('📊 [SPIN_WHEEL] Getting spin wheel data for user:', userId);
 
-  // Get stats for analytics
-  const stats = await spinWheelService.getSpinStats(userId);
+  // Get segments from constant (no session creation needed)
+  const segments = spinWheelService.getSpinWheelSegments();
 
-  // Get session data which includes prizes
-  const session = await spinWheelService.createSpinSession(userId).catch(() => null);
+  // Get eligibility and stats in parallel
+  const [eligibility, stats] = await Promise.all([
+    spinWheelService.checkEligibility(userId),
+    spinWheelService.getSpinStats(userId),
+  ]);
 
-  const segments = session?.prizes || [
-    { segment: 1, prize: '50 Coins', color: '#10B981' },
-    { segment: 2, prize: '100 Coins', color: '#3B82F6' },
-    { segment: 3, prize: '5% Cashback', color: '#F59E0B' },
-    { segment: 4, prize: '200 Coins', color: '#10B981' },
-    { segment: 5, prize: '10% Discount', color: '#EC4899' },
-    { segment: 6, prize: '500 Coins', color: '#8B5CF6' },
-    { segment: 7, prize: '₹50 Voucher', color: '#F59E0B' },
-    { segment: 8, prize: '1000 Coins', color: '#EF4444' }
-  ];
-
-  // ✅ FIX: Count actual spins completed TODAY (since midnight UTC)
-  // This replaces the broken cooldown-based logic
-  const { MiniGame } = await import('../models/MiniGame');
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0); // Midnight UTC
-
-  const spinsToday = await MiniGame.countDocuments({
-    user: userId,
-    gameType: 'spin_wheel',
-    status: 'completed',
-    completedAt: { $gte: today }
-  });
-
-  const MAX_DAILY_SPINS = 3;
-  const spinsRemaining = Math.max(0, MAX_DAILY_SPINS - spinsToday);
-
-  console.log(`📊 [SPIN_WHEEL] User ${userId}: ${spinsToday} spins used today, ${spinsRemaining} remaining`);
+  // Calculate probability percentages for frontend display
+  const totalWeight = segments.reduce((sum, s) => sum + s.weight, 0);
 
   const data = {
-    segments: segments.map((s: any) => ({
+    segments: segments.map((s) => ({
       id: s.segment.toString(),
       label: s.prize,
-      value: parseInt(s.prize) || 0,
+      value: s.value,
       color: s.color,
-      type: 'coins',
-      icon: 'star'
+      type: s.type,
+      icon: 'star',
+      probability: Math.round((s.weight / totalWeight) * 100),
     })),
-    spinsRemaining, // ✅ Now correctly reflects daily usage
-    stats // ✅ Include stats (totalCoinsWon, totalSpins, etc.) for earnings calculation
+    spinsRemaining: eligibility.spinsRemaining,
+    spinsUsedToday: eligibility.spinsUsedToday,
+    maxDailySpins: eligibility.maxDailySpins,
+    nextResetAt: eligibility.nextResetAt,
+    stats,
   };
 
-  console.log('✅ [SPIN_WHEEL] Spin wheel data retrieved');
+  console.log(`📊 [SPIN_WHEEL] User ${userId}: ${eligibility.spinsUsedToday} used, ${eligibility.spinsRemaining} remaining`);
   sendSuccess(res, data, 'Spin wheel data retrieved successfully');
 });
 
@@ -668,15 +707,16 @@ export const getSpinWheelHistory = asyncHandler(async (req: Request, res: Respon
   }
 
   const userId = (req.user._id as Types.ObjectId).toString();
-  const limit = parseInt(req.query.limit as string) || 20;
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
 
-  console.log('📜 [SPIN_WHEEL] Getting spin history for user:', userId, 'limit:', limit);
+  console.log('📜 [SPIN_WHEEL] Getting spin history for user:', userId, 'page:', page, 'limit:', limit);
 
-  const history = await spinWheelService.getSpinHistory(userId, limit);
+  const result = await spinWheelService.getSpinHistory(userId, limit, page);
 
-  console.log('✅ [SPIN_WHEEL] Found', history.length, 'spin records');
+  console.log('✅ [SPIN_WHEEL] Found', result.history.length, 'spin records (page', page, 'of', result.pagination.pages, ')');
 
-  sendSuccess(res, { history, total: history.length }, 'Spin wheel history retrieved successfully');
+  sendSuccess(res, result, 'Spin wheel history retrieved successfully');
 });
 
 // ========================================
@@ -736,6 +776,7 @@ export const startQuiz = asyncHandler(async (req: Request, res: Response) => {
 export const submitQuizAnswer = asyncHandler(async (req: Request, res: Response) => {
   const { quizId } = req.params;
   const { questionIndex, answer, timeSpent } = req.body;
+  const userId = req.user ? (req.user._id as Types.ObjectId).toString() : '';
 
   if (questionIndex === undefined || answer === undefined) {
     return sendBadRequest(res, 'Question index and answer required');
@@ -743,7 +784,39 @@ export const submitQuizAnswer = asyncHandler(async (req: Request, res: Response)
 
   const result = await quizService.submitAnswer(quizId, questionIndex, answer, timeSpent || 0);
 
-  sendSuccess(res, result, result.correct ? 'Correct answer!' : 'Incorrect answer');
+  // When quiz is completed, update tournament scores
+  let tournamentUpdate = null;
+  if (result.completed && userId && result.currentScore > 0) {
+    try {
+      const activeTournaments = await Tournament.find({
+        status: 'active',
+        gameType: { $in: ['quiz', 'mixed'] },
+        'participants.user': userId
+      }).select('_id name participants');
+
+      for (const t of activeTournaments) {
+        try {
+          await tournamentService.updateParticipantScore(String(t._id), userId, result.currentScore);
+          if (!tournamentUpdate) {
+            const sorted = [...t.participants].sort((a, b) => {
+              const aScore = a.user.toString() === userId ? a.score + result.currentScore : a.score;
+              const bScore = b.user.toString() === userId ? b.score + result.currentScore : b.score;
+              return bScore - aScore;
+            });
+            const newRank = sorted.findIndex(p => p.user.toString() === userId) + 1;
+            tournamentUpdate = { tournamentName: t.name, pointsAdded: result.currentScore, newRank: newRank || 1 };
+          }
+        } catch (err: any) {
+          console.error(`[QUIZ] Tournament score update failed for ${t.name}:`, err.message);
+        }
+      }
+    } catch (err: any) {
+      console.error('[QUIZ] Tournament lookup failed:', err.message);
+    }
+  }
+
+  const responseData = { ...result, tournamentUpdate };
+  sendSuccess(res, responseData, result.correct ? 'Correct answer!' : 'Incorrect answer');
 });
 
 export const getQuizProgress = asyncHandler(async (req: Request, res: Response) => {
@@ -756,10 +829,44 @@ export const getQuizProgress = asyncHandler(async (req: Request, res: Response) 
 
 export const completeQuiz = asyncHandler(async (req: Request, res: Response) => {
   const { quizId } = req.params;
+  const userId = req.user ? (req.user._id as Types.ObjectId).toString() : '';
 
   const result = await quizService.completeQuiz(quizId);
 
-  sendSuccess(res, result, 'Quiz completed successfully');
+  // Update tournament scores if coins were earned
+  let tournamentUpdate = null;
+  const coinsEarned = result?.score || result?.coins || result?.reward?.coins || 0;
+  if (userId && coinsEarned > 0) {
+    try {
+      const activeTournaments = await Tournament.find({
+        status: 'active',
+        gameType: { $in: ['quiz', 'mixed'] },
+        'participants.user': userId
+      }).select('_id name participants');
+
+      for (const t of activeTournaments) {
+        try {
+          await tournamentService.updateParticipantScore(String(t._id), userId, coinsEarned);
+          if (!tournamentUpdate) {
+            const sorted = [...t.participants].sort((a, b) => {
+              const aScore = a.user.toString() === userId ? a.score + coinsEarned : a.score;
+              const bScore = b.user.toString() === userId ? b.score + coinsEarned : b.score;
+              return bScore - aScore;
+            });
+            const newRank = sorted.findIndex(p => p.user.toString() === userId) + 1;
+            tournamentUpdate = { tournamentName: t.name, pointsAdded: coinsEarned, newRank: newRank || 1 };
+          }
+        } catch (err: any) {
+          console.error(`[QUIZ] Tournament score update failed for ${t.name}:`, err.message);
+        }
+      }
+    } catch (err: any) {
+      console.error('[QUIZ] Tournament lookup failed:', err.message);
+    }
+  }
+
+  const responseData = { ...result, tournamentUpdate };
+  sendSuccess(res, responseData, 'Quiz completed successfully');
 });
 
 // ========================================
@@ -948,15 +1055,13 @@ export const getPlayAndEarnData = asyncHandler(async (req: Request, res: Respons
 
   const spinEligibility = spinEligibilityResult.status === 'fulfilled'
     ? spinEligibilityResult.value
-    : { eligible: false, nextAvailableAt: null as Date | null };
+    : { canSpin: false, spinsRemaining: 0, spinsUsedToday: 0, maxDailySpins: 3, totalCoinsEarned: 0, nextResetAt: '', lastSpinAt: null as string | null };
   const spinsToday = spinsTodayResult.status === 'fulfilled' ? spinsTodayResult.value : 0;
   const lastSpin = lastSpinResult.status === 'fulfilled' ? lastSpinResult.value : null;
   const activeChallenges = activeChallengesResult.status === 'fulfilled' ? activeChallengesResult.value : [];
   const userStreaks = userStreaksResult.status === 'fulfilled' ? userStreaksResult.value : [];
   const availableDrops = availableDropsResult.status === 'fulfilled' ? availableDropsResult.value : [];
   const coinBalance = coinBalanceResult.status === 'fulfilled' ? coinBalanceResult.value : 0;
-
-  const spinsRemaining = Math.max(0, MAX_DAILY_SPINS - spinsToday);
 
   // Get the most significant available drop (if any)
   const activeDrop = Array.isArray(availableDrops) && availableDrops.length > 0 ? availableDrops[0] : null;
@@ -993,11 +1098,11 @@ export const getPlayAndEarnData = asyncHandler(async (req: Request, res: Respons
 
   const data = {
     dailySpin: {
-      spinsRemaining,
-      maxSpins: MAX_DAILY_SPINS,
-      lastSpinAt: lastSpin?.completedAt || null,
-      canSpin: (spinEligibility?.eligible ?? false) && spinsRemaining > 0,
-      nextSpinAt: spinEligibility?.nextAvailableAt || null
+      spinsRemaining: spinEligibility.spinsRemaining,
+      maxSpins: spinEligibility.maxDailySpins,
+      lastSpinAt: spinEligibility.lastSpinAt || lastSpin?.completedAt || null,
+      canSpin: spinEligibility.canSpin,
+      nextSpinAt: spinEligibility.nextResetAt || null
     },
     challenges: {
       active: challengesArray

@@ -174,6 +174,11 @@ export interface IUser extends Document {
   location?: string; // Direct access to profile.location (city or address)
   interests?: string[]; // User interests/categories for personalization
   phone?: string; // Alias for phoneNumber (for compatibility with services)
+
+  // Game access control
+  gameBanned?: boolean;
+  gameBanReason?: string;
+  gameBannedAt?: Date;
   lastLogin?: Date; // Alias for auth.lastLogin (for compatibility with services)
 
   // Methods
@@ -561,7 +566,19 @@ const UserSchema = new Schema<IUser>({
   interests: [{
     type: String,
     trim: true
-  }]
+  }],
+  gameBanned: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  gameBanReason: {
+    type: String,
+    trim: true
+  },
+  gameBannedAt: {
+    type: Date
+  }
 }, {
   timestamps: true,
   toJSON: {

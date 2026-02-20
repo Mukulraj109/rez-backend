@@ -8,8 +8,16 @@ import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import Achievement from '../../models/Achievement';
 import UserAchievement from '../../models/UserAchievement';
-import { ACHIEVEMENTS } from '../../config/achievements';
 import { sendSuccess, sendError } from '../../utils/response';
+import { ACHIEVEMENT_METRICS } from '../../config/achievementMetrics';
+
+// Legacy config import — used only for seed endpoint fallback
+let ACHIEVEMENTS: any = {};
+try {
+  ACHIEVEMENTS = require('../../config/achievements').ACHIEVEMENTS;
+} catch {
+  // Legacy config may have been removed after migration
+}
 
 const router = Router();
 
@@ -157,6 +165,25 @@ router.get('/stats', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/admin/achievements/metrics
+ * List available metrics for the achievement condition builder
+ */
+router.get('/metrics', async (_req: Request, res: Response) => {
+  try {
+    const metrics = Object.values(ACHIEVEMENT_METRICS).map(m => ({
+      key: m.key,
+      label: m.label,
+      description: m.description,
+      aggregation: m.aggregation,
+    }));
+    return sendSuccess(res, { metrics }, 'Achievement metrics fetched');
+  } catch (error) {
+    console.error('[Admin] Error fetching achievement metrics:', error);
+    return sendError(res, 'Failed to fetch metrics', 500);
+  }
+});
+
+/**
  * GET /api/admin/achievements/:id
  * Get single achievement by ID with unlock stats
  */
@@ -192,7 +219,11 @@ router.get('/:id', async (req: Request, res: Response) => {
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { type, title, description, icon, coinReward, target, color, category, badge, isActive, sortOrder } = req.body;
+    const {
+      type, title, description, icon, coinReward, target, color, category, badge,
+      isActive, sortOrder, conditions, visibility, repeatability, tier, reward,
+      prerequisites, trackedMetrics
+    } = req.body;
 
     if (!type || !title || !description || !icon || coinReward === undefined || !target) {
       return sendError(res, 'type, title, description, icon, coinReward, and target are required', 400);
@@ -202,6 +233,12 @@ router.post('/', async (req: Request, res: Response) => {
     const existing = await Achievement.findOne({ type });
     if (existing) {
       return sendError(res, `Achievement with type "${type}" already exists`, 400);
+    }
+
+    // Derive trackedMetrics from conditions.rules if not explicitly provided
+    let derivedTrackedMetrics = trackedMetrics;
+    if (!derivedTrackedMetrics && conditions?.rules?.length) {
+      derivedTrackedMetrics = conditions.rules.map((r: any) => r.metric).filter(Boolean);
     }
 
     const achievement = await Achievement.create({
@@ -216,6 +253,13 @@ router.post('/', async (req: Request, res: Response) => {
       badge,
       isActive: isActive !== undefined ? isActive : true,
       sortOrder: sortOrder || 0,
+      conditions: conditions || undefined,
+      visibility: visibility || 'visible',
+      repeatability: repeatability || 'one_time',
+      tier: tier || 'bronze',
+      reward: reward || { coins: coinReward },
+      prerequisites: prerequisites || [],
+      trackedMetrics: derivedTrackedMetrics || [],
     });
 
     return sendSuccess(res, achievement, 'Achievement created');
@@ -236,7 +280,7 @@ router.post('/seed', async (req: Request, res: Response) => {
 
     const achievementEntries = Object.values(ACHIEVEMENTS);
 
-    for (const def of achievementEntries) {
+    for (const def of achievementEntries as any[]) {
       const exists = await Achievement.findOne({ type: def.id });
       if (exists) {
         skipped++;

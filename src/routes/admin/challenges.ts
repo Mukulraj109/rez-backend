@@ -8,6 +8,7 @@ import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import Challenge from '../../models/Challenge';
 import { CHALLENGE_TEMPLATES } from '../../config/challengeTemplates';
+import challengeService from '../../services/challengeService';
 import { sendSuccess, sendError } from '../../utils/response';
 
 const router = Router();
@@ -37,17 +38,16 @@ router.get('/', async (req: Request, res: Response) => {
       filter.difficulty = req.query.difficulty;
     }
 
-    // Filter by status
-    if (req.query.status === 'active') {
-      const now = new Date();
-      filter.active = true;
-      filter.startDate = { $lte: now };
-      filter.endDate = { $gte: now };
-    } else if (req.query.status === 'inactive') {
-      filter.active = false;
-    } else if (req.query.status === 'expired') {
-      const now = new Date();
-      filter.endDate = { $lt: now };
+    // Filter by status - supports both legacy and new lifecycle statuses
+    const statusParam = req.query.status as string;
+    if (statusParam) {
+      const lifecycleStatuses = ['draft', 'scheduled', 'active', 'paused', 'completed', 'expired', 'disabled'];
+      if (lifecycleStatuses.includes(statusParam)) {
+        filter.status = statusParam;
+      } else if (statusParam === 'inactive') {
+        // Legacy: inactive = disabled or paused
+        filter.status = { $in: ['disabled', 'paused'] };
+      }
     }
 
     // Filter by featured
@@ -159,6 +159,75 @@ router.get('/stats', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/admin/challenges/analytics
+ * Get challenge analytics: participants, completion rate, coin liability, conversion funnel
+ */
+router.get('/analytics', async (req: Request, res: Response) => {
+  try {
+    const now = new Date();
+    const ChallengeAnalytics = (await import('../../models/ChallengeAnalytics')).default;
+
+    const activeChallenges = await Challenge.find({
+      active: true,
+      startDate: { $lte: now },
+      endDate: { $gte: now }
+    }).lean();
+
+    const totalParticipants = activeChallenges.reduce((sum, c) => sum + (c.participantCount || 0), 0);
+    const totalCompletions = activeChallenges.reduce((sum, c) => sum + (c.completionCount || 0), 0);
+    const avgCompletionRate = totalParticipants > 0
+      ? Math.round((totalCompletions / totalParticipants) * 100)
+      : 0;
+
+    // Coin liability: max possible coin payout for active challenges
+    const totalCoinLiability = activeChallenges.reduce((sum, c) => {
+      const maxPayout = (c.rewards?.coins || 0) * (c.maxParticipants || c.participantCount || 0);
+      return sum + maxPayout;
+    }, 0);
+
+    const byType: Record<string, number> = {};
+    for (const c of activeChallenges) {
+      byType[c.type] = (byType[c.type] || 0) + 1;
+    }
+
+    // Per-challenge breakdown
+    const challengeBreakdown = activeChallenges.map(c => ({
+      _id: String(c._id),
+      title: c.title,
+      participants: c.participantCount || 0,
+      completions: c.completionCount || 0,
+      completionRate: (c.participantCount || 0) > 0
+        ? Math.round(((c.completionCount || 0) / c.participantCount) * 100)
+        : 0,
+      coinReward: c.rewards?.coins || 0,
+    }));
+
+    // Conversion funnel from ChallengeAnalytics (last 30 days)
+    let conversionFunnel: Record<string, { count: number; uniqueUsers: number }> = {};
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      conversionFunnel = await (ChallengeAnalytics as any).getConversionFunnel(undefined, thirtyDaysAgo, now);
+    } catch {
+      // ChallengeAnalytics may not have data yet
+    }
+
+    return sendSuccess(res, {
+      activeChallenges: activeChallenges.length,
+      totalParticipants,
+      totalCompletions,
+      avgCompletionRate,
+      totalCoinLiability,
+      byType,
+      challengeBreakdown,
+      conversionFunnel,
+    }, 'Challenge analytics retrieved');
+  } catch (error) {
+    console.error('[Admin] Error fetching analytics:', error);
+    return sendError(res, 'Failed to fetch analytics', 500);
+  }
+});
+
+/**
  * GET /api/admin/challenges/:id
  * Get single challenge by ID
  */
@@ -200,6 +269,10 @@ router.post('/', async (req: Request, res: Response) => {
       featured,
       active,
       maxParticipants,
+      status,
+      visibility,
+      priority,
+      scheduledPublishAt,
     } = req.body;
 
     // Validate required fields
@@ -221,6 +294,27 @@ router.post('/', async (req: Request, res: Response) => {
       return sendError(res, 'endDate must be after startDate', 400);
     }
 
+    // Validate optional lifecycle fields
+    const validStatuses = ['draft', 'scheduled', 'active', 'paused', 'completed', 'expired', 'disabled'];
+    if (status && !validStatuses.includes(status)) {
+      return sendError(res, `Invalid status. Must be one of: ${validStatuses.join(', ')}`, 400);
+    }
+
+    const validVisibilities = ['play_and_earn', 'missions', 'both'];
+    if (visibility && !validVisibilities.includes(visibility)) {
+      return sendError(res, `Invalid visibility. Must be one of: ${validVisibilities.join(', ')}`, 400);
+    }
+
+    if (priority !== undefined && (typeof priority !== 'number' || priority < 0 || priority > 100)) {
+      return sendError(res, 'Priority must be a number between 0 and 100', 400);
+    }
+
+    if (status === 'scheduled' && !scheduledPublishAt) {
+      return sendError(res, 'scheduledPublishAt is required when status is scheduled', 400);
+    }
+
+    const resolvedStatus = status || 'active';
+
     const challenge = await Challenge.create({
       type,
       title,
@@ -232,7 +326,11 @@ router.post('/', async (req: Request, res: Response) => {
       startDate: start,
       endDate: end,
       featured: featured || false,
-      active: active !== false,
+      active: resolvedStatus === 'active',
+      status: resolvedStatus,
+      visibility: visibility || 'both',
+      priority: priority || 0,
+      scheduledPublishAt: scheduledPublishAt ? new Date(scheduledPublishAt) : undefined,
       maxParticipants,
     });
 
@@ -295,9 +393,26 @@ router.put('/:id', async (req: Request, res: Response) => {
       return sendError(res, 'Invalid challenge ID', 400);
     }
 
+    // Whitelist allowed fields to prevent corruption of system fields
+    const allowedFields = [
+      'type', 'title', 'description', 'icon', 'requirements', 'rewards',
+      'difficulty', 'startDate', 'endDate', 'featured', 'active', 'maxParticipants',
+      'status', 'visibility', 'priority', 'scheduledPublishAt',
+    ];
+    const updateData: any = {};
+    for (const key of allowedFields) {
+      if (req.body[key] !== undefined) {
+        updateData[key] = req.body[key];
+      }
+    }
+    // Keep active in sync with status
+    if (updateData.status) {
+      updateData.active = updateData.status === 'active';
+    }
+
     const challenge = await Challenge.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body },
+      { $set: updateData },
       { new: true, runValidators: true }
     );
 
@@ -331,6 +446,8 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
     }
 
     challenge.active = !challenge.active;
+    // Keep status in sync with active toggle
+    challenge.status = challenge.active ? 'active' : 'disabled';
     await challenge.save();
 
     return sendSuccess(res, challenge, `Challenge ${challenge.active ? 'activated' : 'deactivated'}`);
@@ -380,10 +497,187 @@ router.delete('/:id', async (req: Request, res: Response) => {
       return sendError(res, 'Challenge not found', 404);
     }
 
+    // Cascade: clean up orphaned progress and analytics records
+    try {
+      const UserChallengeProgress = (await import('../../models/UserChallengeProgress')).default;
+      const ChallengeAnalytics = (await import('../../models/ChallengeAnalytics')).default;
+      await Promise.all([
+        UserChallengeProgress.deleteMany({ challenge: req.params.id }),
+        ChallengeAnalytics.deleteMany({ challenge: req.params.id }),
+      ]);
+    } catch (cleanupErr) {
+      console.error('[Admin] Error cleaning up related records:', cleanupErr);
+      // Don't fail the delete - challenge is already removed
+    }
+
     return sendSuccess(res, null, 'Challenge deleted');
   } catch (error) {
     console.error('[Admin] Error deleting challenge:', error);
     return sendError(res, 'Failed to delete challenge', 500);
+  }
+});
+
+/**
+ * PATCH /api/admin/challenges/:id/status
+ * Change challenge lifecycle status (pause, resume, disable, activate, schedule)
+ */
+router.patch('/:id/status', async (req: Request, res: Response) => {
+  try {
+    if (!Types.ObjectId.isValid(req.params.id)) {
+      return sendError(res, 'Invalid challenge ID', 400);
+    }
+
+    const { status, reason, scheduledPublishAt } = req.body;
+    const validStatuses = ['draft', 'scheduled', 'active', 'paused', 'completed', 'expired', 'disabled'];
+    if (!status || !validStatuses.includes(status)) {
+      return sendError(res, `Invalid status. Must be one of: ${validStatuses.join(', ')}`, 400);
+    }
+
+    if (status === 'scheduled' && !scheduledPublishAt) {
+      return sendError(res, 'scheduledPublishAt is required when setting status to scheduled', 400);
+    }
+
+    const adminId = (req as any).user?._id?.toString();
+
+    // Validate status transition
+    const existing = await Challenge.findById(req.params.id);
+    if (!existing) {
+      return sendError(res, 'Challenge not found', 404);
+    }
+    const currentStatus = existing.status || (existing.active ? 'active' : 'disabled');
+    const validation = challengeService.validateStatusTransition(currentStatus, status);
+    if (!validation.valid) {
+      return sendError(res, validation.message!, 400);
+    }
+
+    let challenge;
+
+    switch (status) {
+      case 'paused':
+        challenge = await challengeService.pauseChallenge(req.params.id, reason, adminId);
+        break;
+      case 'active':
+        challenge = await challengeService.resumeChallenge(req.params.id, adminId);
+        break;
+      case 'disabled':
+        challenge = await challengeService.disableChallenge(req.params.id, reason, adminId);
+        break;
+      default: {
+        const updateSet: any = { status, active: status === 'active' };
+        if (status === 'scheduled' && scheduledPublishAt) {
+          updateSet.scheduledPublishAt = new Date(scheduledPublishAt);
+        }
+        challenge = await Challenge.findByIdAndUpdate(
+          req.params.id,
+          {
+            $set: updateSet,
+            $push: {
+              statusHistory: {
+                status,
+                changedAt: new Date(),
+                changedBy: adminId ? new Types.ObjectId(adminId) : undefined,
+                reason: reason || `Status changed to ${status} by admin`
+              }
+            }
+          },
+          { new: true }
+        );
+      }
+    }
+
+    if (!challenge) {
+      return sendError(res, 'Challenge not found', 404);
+    }
+
+    return sendSuccess(res, challenge, `Challenge status changed to ${status}`);
+  } catch (error) {
+    console.error('[Admin] Error changing challenge status:', error);
+    return sendError(res, 'Failed to change challenge status', 500);
+  }
+});
+
+/**
+ * POST /api/admin/challenges/:id/clone
+ * Clone a challenge with new dates
+ */
+router.post('/:id/clone', async (req: Request, res: Response) => {
+  try {
+    if (!Types.ObjectId.isValid(req.params.id)) {
+      return sendError(res, 'Invalid challenge ID', 400);
+    }
+
+    const overrides = req.body || {};
+    const cloned = await challengeService.cloneChallenge(req.params.id, overrides);
+
+    return sendSuccess(res, cloned, 'Challenge cloned successfully', 201);
+  } catch (error: any) {
+    console.error('[Admin] Error cloning challenge:', error);
+    return sendError(res, error.message || 'Failed to clone challenge', 500);
+  }
+});
+
+/**
+ * PATCH /api/admin/challenges/:id/visibility
+ * Set challenge visibility (play_and_earn | missions | both)
+ */
+router.patch('/:id/visibility', async (req: Request, res: Response) => {
+  try {
+    if (!Types.ObjectId.isValid(req.params.id)) {
+      return sendError(res, 'Invalid challenge ID', 400);
+    }
+
+    const { visibility } = req.body;
+    const validVisibilities = ['play_and_earn', 'missions', 'both'];
+    if (!visibility || !validVisibilities.includes(visibility)) {
+      return sendError(res, `Invalid visibility. Must be one of: ${validVisibilities.join(', ')}`, 400);
+    }
+
+    const challenge = await Challenge.findByIdAndUpdate(
+      req.params.id,
+      { $set: { visibility } },
+      { new: true }
+    );
+
+    if (!challenge) {
+      return sendError(res, 'Challenge not found', 404);
+    }
+
+    return sendSuccess(res, challenge, `Challenge visibility set to ${visibility}`);
+  } catch (error) {
+    console.error('[Admin] Error setting visibility:', error);
+    return sendError(res, 'Failed to set challenge visibility', 500);
+  }
+});
+
+/**
+ * PATCH /api/admin/challenges/:id/priority
+ * Set challenge priority (0-100)
+ */
+router.patch('/:id/priority', async (req: Request, res: Response) => {
+  try {
+    if (!Types.ObjectId.isValid(req.params.id)) {
+      return sendError(res, 'Invalid challenge ID', 400);
+    }
+
+    const { priority } = req.body;
+    if (typeof priority !== 'number' || priority < 0 || priority > 100) {
+      return sendError(res, 'Priority must be a number between 0 and 100', 400);
+    }
+
+    const challenge = await Challenge.findByIdAndUpdate(
+      req.params.id,
+      { $set: { priority } },
+      { new: true }
+    );
+
+    if (!challenge) {
+      return sendError(res, 'Challenge not found', 404);
+    }
+
+    return sendSuccess(res, challenge, `Challenge priority set to ${priority}`);
+  } catch (error) {
+    console.error('[Admin] Error setting priority:', error);
+    return sendError(res, 'Failed to set challenge priority', 500);
   }
 });
 

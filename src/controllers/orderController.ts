@@ -18,9 +18,11 @@ import reorderService from '../services/reorderService';
 import activityService from '../services/activityService';
 import referralService from '../services/referralService';
 import cashbackService from '../services/cashbackService';
+import challengeService from '../services/challengeService';
 import userProductService from '../services/userProductService';
 import couponService from '../services/couponService';
 import achievementService from '../services/achievementService';
+import gamificationEventBus from '../events/gamificationEventBus';
 import { processConversion } from '../services/creatorService';
 // Note: StorePromoCoin removed - using wallet.brandedCoins instead
 import { Wallet } from '../models/Wallet';
@@ -1252,12 +1254,14 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       );
     }
 
-    // Trigger achievement update for order creation
-    try {
-      await achievementService.triggerAchievementUpdate(userId, 'order_created');
-    } catch (error) {
-      console.error('❌ [ORDER] Error triggering achievement update:', error);
-    }
+    // Emit gamification event for order creation
+    gamificationEventBus.emit('order_placed', {
+      userId,
+      entityId: String(populatedOrder?._id),
+      entityType: 'order',
+      amount: total,
+      source: { controller: 'orderController', action: 'createOrder' }
+    });
 
     // Send notifications to customer and merchant
     try {
@@ -1882,6 +1886,17 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         storeName
       );
 
+      // Update challenge progress for order delivery (non-blocking)
+      challengeService.updateProgress(
+        String(userIdObj), 'order_count', 1,
+        { orderId: String(populatedOrder._id) }
+      ).catch(err => console.error('[ORDER] Challenge progress update failed:', err));
+
+      challengeService.updateProgress(
+        String(userIdObj), 'spend_amount', populatedOrder.totals.total,
+        { orderId: String(populatedOrder._id) }
+      ).catch(err => console.error('[ORDER] Challenge spend progress update failed:', err));
+
       // Process referral rewards when order is delivered
       try {
         // Check if this is referee's first order (process referral completion)
@@ -1935,6 +1950,60 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         }
       } catch (coinError) {
         console.error('[ORDER] Failed to award purchase reward coins:', coinError);
+      }
+
+      // Auto-trigger matching bonus campaigns on order delivery
+      try {
+        const bonusCampaignService = require('../services/bonusCampaignService');
+        const firstItemForBonus = populatedOrder.items[0];
+        const bonusStoreId = firstItemForBonus?.store
+          ? (typeof firstItemForBonus.store === 'object' ? (firstItemForBonus.store as any)._id : firstItemForBonus.store)
+          : null;
+        const bonusCategory = bonusStoreId ? await getStoreCategorySlug(bonusStoreId.toString()) : null;
+
+        const orderIdStr = (populatedOrder as any)._id.toString();
+        await bonusCampaignService.autoClaimForTransaction('cashback_boost', userIdObj.toString(), {
+          transactionRef: { type: 'order' as const, refId: orderIdStr },
+          transactionAmount: populatedOrder.totals.subtotal,
+          paymentMethod: populatedOrder.payment?.method,
+          category: bonusCategory || undefined,
+          storeId: bonusStoreId?.toString(),
+        });
+        // Also check for category_multiplier campaigns
+        if (bonusCategory) {
+          await bonusCampaignService.autoClaimForTransaction('category_multiplier', userIdObj.toString(), {
+            transactionRef: { type: 'order' as const, refId: orderIdStr },
+            transactionAmount: populatedOrder.totals.subtotal,
+            category: bonusCategory,
+            storeId: bonusStoreId?.toString(),
+          });
+        }
+        // Also check for first_transaction_bonus campaigns
+        await bonusCampaignService.autoClaimForTransaction('first_transaction_bonus', userIdObj.toString(), {
+          transactionRef: { type: 'order' as const, refId: orderIdStr },
+          transactionAmount: populatedOrder.totals.subtotal,
+          paymentMethod: populatedOrder.payment?.method,
+          category: bonusCategory || undefined,
+          storeId: bonusStoreId?.toString(),
+        });
+        // Also check for festival_offer campaigns
+        await bonusCampaignService.autoClaimForTransaction('festival_offer', userIdObj.toString(), {
+          transactionRef: { type: 'order' as const, refId: orderIdStr },
+          transactionAmount: populatedOrder.totals.subtotal,
+          paymentMethod: populatedOrder.payment?.method,
+          category: bonusCategory || undefined,
+          storeId: bonusStoreId?.toString(),
+        });
+        // Also check for bank_offer campaigns (bank-specific validation happens in service)
+        await bonusCampaignService.autoClaimForTransaction('bank_offer', userIdObj.toString(), {
+          transactionRef: { type: 'order' as const, refId: orderIdStr },
+          transactionAmount: populatedOrder.totals.subtotal,
+          paymentMethod: populatedOrder.payment?.method,
+          category: bonusCategory || undefined,
+          storeId: bonusStoreId?.toString(),
+        });
+      } catch (bonusErr) {
+        console.error('[ORDER] Bonus campaign auto-claim failed (non-blocking):', bonusErr);
       }
 
       // Credit merchant wallet on delivery (merchant gets subtotal minus 15% platform fee)
@@ -2112,12 +2181,14 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         // Don't fail the order update if promo coin creation fails
       }
 
-      // Trigger achievement update for order delivery
-      try {
-        await achievementService.triggerAchievementUpdate(populatedOrder.user, 'order_delivered');
-      } catch (error) {
-        console.error('❌ [ORDER] Error triggering achievement update:', error);
-      }
+      // Emit gamification event for order delivery
+      gamificationEventBus.emit('order_delivered', {
+        userId: String(populatedOrder.user),
+        entityId: String(populatedOrder._id),
+        entityType: 'order',
+        amount: populatedOrder.totals?.total,
+        source: { controller: 'orderController', action: 'updateOrderStatus' }
+      });
 
       // Update partner progress for order delivery
       try {

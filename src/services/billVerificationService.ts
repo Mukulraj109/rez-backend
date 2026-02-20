@@ -8,6 +8,7 @@ import { Bill, IBill } from '../models/Bill';
 import { Merchant } from '../models/Merchant';
 import { ocrService } from './ocrService';
 import { fraudDetectionService } from './fraudDetectionService';
+import challengeService from './challengeService';
 
 interface VerificationResult {
   success: boolean;
@@ -166,6 +167,27 @@ class BillVerificationService {
 
     if (isHighConfidence && isLowFraud && isReasonableAmount) {
       await bill.approve(undefined);
+
+      // Auto-trigger bill_upload_bonus campaign on auto-approval
+      try {
+        const bonusCampaignService = require('./bonusCampaignService');
+        const billUserId = bill.user.toString();
+        const billId = (bill._id as Types.ObjectId).toString();
+        console.log('[BILL VERIFICATION] Triggering bill_upload_bonus for auto-approved bill:', billId);
+        await bonusCampaignService.autoClaimForTransaction('bill_upload_bonus', billUserId, {
+          transactionRef: { type: 'bill' as const, refId: billId },
+          transactionAmount: bill.amount,
+        });
+      } catch (bonusErr) {
+        console.error('[BILL VERIFICATION] bill_upload_bonus auto-claim failed (non-blocking):', bonusErr);
+      }
+
+      // Update challenge progress for bill upload (non-blocking)
+      challengeService.updateProgress(
+        bill.user.toString(), 'upload_bills', 1,
+        { billId: (bill._id as Types.ObjectId).toString() }
+      ).catch(err => console.error('[BILL] Challenge progress update failed:', err));
+
       return {
         status: 'approved',
         message: 'Bill automatically approved',
@@ -221,6 +243,26 @@ class BillVerificationService {
       }
 
       console.log('✅ [MANUAL APPROVAL] Bill approved successfully');
+
+      // Auto-trigger bill_upload_bonus campaign on manual approval
+      try {
+        const bonusCampaignService = require('./bonusCampaignService');
+        const billUserId = bill.user.toString();
+        const billIdStr = (bill._id as Types.ObjectId).toString();
+        console.log('[MANUAL APPROVAL] Triggering bill_upload_bonus for bill:', billIdStr);
+        await bonusCampaignService.autoClaimForTransaction('bill_upload_bonus', billUserId, {
+          transactionRef: { type: 'bill' as const, refId: billIdStr },
+          transactionAmount: bill.amount,
+        });
+      } catch (bonusErr) {
+        console.error('[MANUAL APPROVAL] bill_upload_bonus auto-claim failed (non-blocking):', bonusErr);
+      }
+
+      // Update challenge progress for bill upload (non-blocking)
+      challengeService.updateProgress(
+        bill.user.toString(), 'upload_bills', 1,
+        { billId: (bill._id as Types.ObjectId).toString() }
+      ).catch(err => console.error('[BILL MANUAL] Challenge progress update failed:', err));
 
       return {
         success: true,

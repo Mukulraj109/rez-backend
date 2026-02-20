@@ -24,6 +24,7 @@ import { Wallet } from '../models/Wallet';
 import { Types } from 'mongoose';
 import achievementService from '../services/achievementService';
 import gamificationIntegrationService from '../services/gamificationIntegrationService';
+import gamificationEventBus from '../events/gamificationEventBus';
 
 import twilio from "twilio";
 import dotenv from 'dotenv';
@@ -325,13 +326,14 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
         referrerUser.referral.totalReferrals += 1;
         await referrerUser.save();
 
-        // Trigger achievement update for the REFERRER (not the new user)
-        try {
-          await achievementService.triggerAchievementUpdate(String(referrerUser._id), 'referral_completed');
-          console.log(`🏆 [REFERRAL] Achievement update triggered for referrer: ${referrerUser._id}`);
-        } catch (achievementError) {
-          console.error('❌ [REFERRAL] Error triggering referrer achievement:', achievementError);
-        }
+        // Emit gamification event for referral completion (for the REFERRER)
+        gamificationEventBus.emit('referral_completed', {
+          userId: String(referrerUser._id),
+          entityId: String(user._id),
+          entityType: 'referral',
+          source: { controller: 'authController', action: 'verifyOTP' }
+        });
+        console.log(`🏆 [REFERRAL] Gamification event emitted for referrer: ${referrerUser._id}`);
 
         // Update referrer's partner referral task progress
         try {
@@ -384,14 +386,11 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
   // Update last login
   user.auth.lastLogin = new Date();
 
-  // Trigger gamification events for login
-  try {
-    await gamificationIntegrationService.onUserLogin(String(user._id));
-    console.log(`✅ [GAMIFICATION] Login tracking completed for user: ${user._id}`);
-  } catch (gamificationError) {
-    // Don't fail login if gamification fails
-    console.error(`❌ [GAMIFICATION] Error tracking login:`, gamificationError);
-  }
+  // Emit gamification event for login (fire-and-forget, non-blocking)
+  gamificationEventBus.emit('login', {
+    userId: String(user._id),
+    source: { controller: 'authController', action: 'verifyOTP' }
+  });
 
   // Generate tokens
   const accessToken = generateToken(String(user._id), user.role);

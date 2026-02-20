@@ -1,10 +1,45 @@
 import GameSession, { IGameSession } from '../models/GameSession';
+import GameConfig, { IGameConfig } from '../models/GameConfig';
+import Tournament from '../models/Tournament';
+import { User } from '../models/User';
+import tournamentService from './tournamentService';
 // @ts-ignore
 import { v4 as uuidv4 } from 'uuid';
 import coinService from './coinService';
+import gamificationEventBus from '../events/gamificationEventBus';
 
-// Spin Wheel Prize Configuration
-const SPIN_WHEEL_PRIZES = [
+// In-memory cache for GameConfig (5-min TTL)
+const gameConfigCache: Map<string, { config: IGameConfig | null; cachedAt: number }> = new Map();
+const GAME_CONFIG_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getCachedGameConfig(gameType: string): Promise<IGameConfig | null> {
+  const cached = gameConfigCache.get(gameType);
+  if (cached && Date.now() - cached.cachedAt < GAME_CONFIG_CACHE_TTL) {
+    return cached.config;
+  }
+
+  try {
+    const config = await GameConfig.findOne({ gameType, isEnabled: true });
+    gameConfigCache.set(gameType, { config, cachedAt: Date.now() });
+    return config;
+  } catch (err) {
+    console.error(`[GAME SERVICE] Failed to fetch GameConfig for ${gameType}:`, err);
+    return null;
+  }
+}
+
+/** Invalidate cached game config (called when admin updates config) */
+export function invalidateGameConfigCache(gameType?: string): void {
+  if (gameType) {
+    gameConfigCache.delete(gameType);
+  } else {
+    gameConfigCache.clear();
+  }
+}
+
+// ======== DEFAULT PRIZE CONFIGURATIONS (fallback if DB config not found) ========
+
+const DEFAULT_SPIN_WHEEL_PRIZES = [
   { type: 'coins', value: 50, weight: 30, description: '50 Coins' },
   { type: 'coins', value: 100, weight: 25, description: '100 Coins' },
   { type: 'coins', value: 200, weight: 15, description: '200 Coins' },
@@ -15,34 +50,185 @@ const SPIN_WHEEL_PRIZES = [
   { type: 'cashback_multiplier', value: 1.5, weight: 8, description: '1.5x Cashback' },
   { type: 'cashback_multiplier', value: 2, weight: 5, description: '2x Cashback' },
   { type: 'coins', value: 1000, weight: 2, description: 'JACKPOT - 1000 Coins!' }
-] as const;
+];
 
-// Scratch Card Prize Configuration
-const SCRATCH_CARD_PRIZES = [
+const DEFAULT_SCRATCH_CARD_PRIZES = [
   { type: 'coins', value: 25, weight: 40, description: '25 Coins' },
   { type: 'coins', value: 50, weight: 30, description: '50 Coins' },
   { type: 'coins', value: 100, weight: 20, description: '100 Coins' },
   { type: 'coins', value: 250, weight: 8, description: '250 Coins' },
   { type: 'badge', value: 'lucky_winner', weight: 2, description: 'Lucky Winner Badge!' }
-] as const;
+];
 
-// Memory Match Prize Configuration
-const MEMORY_MATCH_PRIZES = {
+const DEFAULT_MEMORY_MATCH_PRIZES: Record<string, { baseCoins: number; perfectBonus: number; timeBonus: number }> = {
   easy: { baseCoins: 10, perfectBonus: 20, timeBonus: 5 },
   medium: { baseCoins: 25, perfectBonus: 50, timeBonus: 10 },
   hard: { baseCoins: 50, perfectBonus: 100, timeBonus: 20 }
 };
 
-// Daily game limits
-const DAILY_GAME_LIMITS = {
+const DEFAULT_GUESS_PRICE_PRODUCTS = [
+  { id: '1', name: 'Wireless Earbuds', image: '/products/earbuds.jpg', actualPrice: 2499 },
+  { id: '2', name: 'Smart Watch', image: '/products/watch.jpg', actualPrice: 4999 },
+  { id: '3', name: 'Bluetooth Speaker', image: '/products/speaker.jpg', actualPrice: 1799 },
+  { id: '4', name: 'Power Bank 20000mAh', image: '/products/powerbank.jpg', actualPrice: 1299 },
+  { id: '5', name: 'Gaming Mouse', image: '/products/mouse.jpg', actualPrice: 899 }
+];
+
+// Default daily game limits (fallback if GameConfig not found in DB)
+const DEFAULT_DAILY_GAME_LIMITS: Record<string, number> = {
   memory_match: 3,
   coin_hunt: 3,
   guess_price: 5,
   spin_wheel: 1,
-  quiz: 3
+  quiz: 3,
+  scratch_card: 2
+};
+
+// Minimum play duration per game type (in seconds) to prevent instant-complete cheating
+const MIN_PLAY_DURATION_SECONDS: Record<string, number> = {
+  spin_wheel: 1,      // Spin animation takes ~1s
+  scratch_card: 1,    // Scratch takes ~1s
+  quiz: 3,            // At least 3s to read and answer
+  memory_match: 3,    // At least 3s to match cards
+  coin_hunt: 2,       // At least 2s to play
+  guess_price: 2,     // At least 2s to guess
 };
 
 class GameService {
+  /**
+   * Anti-cheat: validate that enough time has passed since session creation.
+   * Rejects sessions completed suspiciously fast.
+   */
+  private validateMinPlayDuration(session: IGameSession): void {
+    const minSeconds = MIN_PLAY_DURATION_SECONDS[session.gameType] || 2;
+    const elapsedMs = Date.now() - new Date(session.startedAt).getTime();
+    if (elapsedMs < minSeconds * 1000) {
+      console.warn(
+        `[ANTI-CHEAT] Suspiciously fast completion: ${session.gameType} session ${session.sessionId} ` +
+        `completed in ${elapsedMs}ms (min: ${minSeconds * 1000}ms), user: ${session.user}`
+      );
+      this.emitFraudEvent(session.user.toString(), session.gameType, 'fast_completion', {
+        elapsedMs, minMs: minSeconds * 1000, sessionId: session.sessionId
+      });
+      throw new Error('Game completed too quickly. Please play fairly.');
+    }
+  }
+
+  /**
+   * Check if user is banned from playing games.
+   */
+  private async checkUserGameAccess(userId: string): Promise<void> {
+    const user = await User.findById(userId).select('isActive gameBanned').lean();
+    if (!user) throw new Error('User not found');
+    if (!user.isActive) throw new Error('Your account is inactive');
+    if ((user as any).gameBanned) throw new Error('Your game access has been suspended. Contact support for help.');
+  }
+
+  /**
+   * Load prizes from DB GameConfig, falling back to default prizes.
+   */
+  private async getSpinWheelPrizes(): Promise<any[]> {
+    const config = await getCachedGameConfig('spin_wheel');
+    if (config?.config?.prizes && Array.isArray(config.config.prizes) && config.config.prizes.length > 0) {
+      return config.config.prizes;
+    }
+    return DEFAULT_SPIN_WHEEL_PRIZES;
+  }
+
+  private async getScratchCardPrizes(): Promise<any[]> {
+    const config = await getCachedGameConfig('scratch_card');
+    if (config?.config?.prizes && Array.isArray(config.config.prizes) && config.config.prizes.length > 0) {
+      return config.config.prizes;
+    }
+    return DEFAULT_SCRATCH_CARD_PRIZES;
+  }
+
+  private async getMemoryMatchPrizes(difficulty: string): Promise<{ baseCoins: number; perfectBonus: number; timeBonus: number }> {
+    const config = await getCachedGameConfig('memory_match');
+    if (config?.config?.prizes && config.config.prizes[difficulty]) {
+      return config.config.prizes[difficulty];
+    }
+    return DEFAULT_MEMORY_MATCH_PRIZES[difficulty] || DEFAULT_MEMORY_MATCH_PRIZES.easy;
+  }
+
+  private async getGuessPriceProducts(): Promise<any[]> {
+    const config = await getCachedGameConfig('guess_price');
+    if (config?.config?.products && Array.isArray(config.config.products) && config.config.products.length > 0) {
+      return config.config.products;
+    }
+    return DEFAULT_GUESS_PRICE_PRODUCTS;
+  }
+
+  /**
+   * Emit game event to the gamification event bus.
+   */
+  private emitGameEvent(userId: string, gameType: string, won: boolean, reward: number, metadata?: Record<string, any>): void {
+    gamificationEventBus.emit('game_won', {
+      userId,
+      entityId: gameType,
+      entityType: 'game',
+      amount: reward,
+      metadata: { gameType, won, ...metadata },
+      source: { controller: 'gameService', action: `complete_${gameType}` }
+    });
+  }
+
+  /**
+   * Emit fraud suspicion event for monitoring.
+   */
+  private emitFraudEvent(userId: string, gameType: string, reason: string, data: Record<string, any>): void {
+    console.warn(`[FRAUD] ${reason} for user ${userId} on ${gameType}:`, data);
+    // Log to gamification event bus for monitoring
+    gamificationEventBus.emit('game_won', {
+      userId,
+      entityId: gameType,
+      entityType: 'fraud_alert',
+      amount: 0,
+      metadata: { reason, gameType, fraudAlert: true, ...data },
+      source: { controller: 'gameService', action: 'fraud_detection' }
+    });
+  }
+
+  /**
+   * Update tournament scores for a user after game completion.
+   * Non-blocking: errors are logged but don't affect game results.
+   */
+  private async updateTournamentScores(userId: string, gameType: string, score: number): Promise<{ tournamentName: string; pointsAdded: number; newRank: number } | null> {
+    try {
+      const activeTournaments = await Tournament.find({
+        status: 'active',
+        gameType: { $in: [gameType, 'mixed'] },
+        'participants.user': userId
+      }).select('_id name participants');
+
+      let firstUpdate: { tournamentName: string; pointsAdded: number; newRank: number } | null = null;
+
+      for (const tournament of activeTournaments) {
+        try {
+          await tournamentService.updateParticipantScore(String(tournament._id), userId, score);
+
+          // Calculate new rank for feedback
+          if (!firstUpdate) {
+            const sorted = [...tournament.participants].sort((a, b) => {
+              const aScore = a.user.toString() === userId ? a.score + score : a.score;
+              const bScore = b.user.toString() === userId ? b.score + score : b.score;
+              return bScore - aScore;
+            });
+            const newRank = sorted.findIndex(p => p.user.toString() === userId) + 1;
+            firstUpdate = { tournamentName: tournament.name, pointsAdded: score, newRank: newRank || 1 };
+          }
+        } catch (err) {
+          console.error(`[GAME SERVICE] Tournament score update failed for ${tournament.name}:`, err);
+        }
+      }
+
+      return firstUpdate;
+    } catch (err) {
+      console.error('[GAME SERVICE] Tournament score lookup failed:', err);
+      return null;
+    }
+  }
+
   // ======== SPIN WHEEL ========
 
   // Create spin wheel session
@@ -50,26 +236,21 @@ class GameService {
     userId: string,
     earnedFrom: string = 'daily_free'
   ): Promise<IGameSession> {
-    // Check daily limit
-    if (earnedFrom === 'daily_free') {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const existingToday = await GameSession.countDocuments({
-        user: userId,
-        gameType: 'spin_wheel',
-        earnedFrom: 'daily_free',
-        createdAt: { $gte: today }
-      });
-
-      if (existingToday > 0) {
-        throw new Error('Daily free spin already used');
-      }
-    }
+    await this.checkUserGameAccess(userId);
 
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 24); // 24 hour expiry
 
+    if (earnedFrom === 'daily_free') {
+      // Use atomic daily limit guard for free spins
+      return this.createSessionWithDailyLimitGuard(userId, 'spin_wheel', {
+        status: 'pending',
+        earnedFrom,
+        expiresAt
+      });
+    }
+
+    // Non-daily-free spins (earned from purchases etc.) skip daily limit
     return GameSession.create({
       user: userId,
       gameType: 'spin_wheel',
@@ -81,29 +262,29 @@ class GameService {
   }
 
   // Play spin wheel
-  async playSpinWheel(sessionId: string): Promise<IGameSession> {
-    const session = await GameSession.findOne({ sessionId });
+  async playSpinWheel(sessionId: string, userId?: string): Promise<IGameSession> {
+    // Atomic status transition: only one request can play a spin
+    const query: any = { sessionId, status: 'pending', expiresAt: { $gt: new Date() } };
+    if (userId) query.user = userId; // Ownership validation
+    const session = await GameSession.findOneAndUpdate(
+      query,
+      { $set: { status: 'completed', completedAt: new Date() } },
+      { new: true }
+    );
 
     if (!session) {
-      throw new Error('Game session not found');
-    }
-
-    if (session.status === 'completed') {
+      const existing = await GameSession.findOne({ sessionId });
+      if (!existing) throw new Error('Game session not found');
+      if (existing.status === 'completed') throw new Error('Game already played');
+      if (existing.status === 'expired' || new Date() > existing.expiresAt) throw new Error('Game session expired');
       throw new Error('Game already played');
     }
 
-    if (session.status === 'expired') {
-      throw new Error('Game session expired');
-    }
+    this.validateMinPlayDuration(session);
 
-    if (new Date() > session.expiresAt) {
-      session.status = 'expired';
-      await session.save();
-      throw new Error('Game session expired');
-    }
-
-    // Determine prize using weighted random selection
-    const prize = this.getWeightedRandomPrize(SPIN_WHEEL_PRIZES);
+    // Determine prize using weighted random selection (DB-driven with fallback)
+    const prizes = await this.getSpinWheelPrizes();
+    const prize = this.getWeightedRandomPrize(prizes);
 
     const result = {
       won: true,
@@ -114,7 +295,43 @@ class GameService {
       }
     };
 
-    await session.complete(result);
+    // Save result to the already-completed session
+    session.result = result;
+    await session.save();
+
+    const spinUserId = session.user.toString();
+
+    // Credit coins to user's wallet (if prize is coins)
+    if (result.prize.type === 'coins' && typeof result.prize.value === 'number' && result.prize.value > 0) {
+      try {
+        await coinService.awardCoins(
+          spinUserId,
+          result.prize.value,
+          'spin_wheel',
+          `Spin & Win: ${result.prize.description}`,
+          { sessionId }
+        );
+      } catch (err) {
+        console.error(`[GAME SERVICE] Spin wheel coin award failed for user ${spinUserId}:`, err);
+      }
+    }
+
+    // Emit game event (Phase 6: Analytics)
+    this.emitGameEvent(spinUserId, 'spin_wheel', true, result.prize.type === 'coins' ? (result.prize.value as number) : 0, { sessionId, prizeType: result.prize.type });
+
+    // Update tournament scores
+    let tournamentUpdate = null;
+    if (result.prize?.value && result.prize.type === 'coins') {
+      tournamentUpdate = await this.updateTournamentScores(spinUserId, 'spin_wheel', result.prize.value as number).catch((err) => {
+        console.error('[GAME] Tournament score update failed:', err.message);
+        return null;
+      });
+    }
+
+    // Attach tournament data to session for response
+    if (tournamentUpdate) {
+      (session as any)._tournamentUpdate = tournamentUpdate;
+    }
 
     return session;
   }
@@ -126,6 +343,7 @@ class GameService {
     userId: string,
     earnedFrom: string
   ): Promise<IGameSession> {
+    await this.checkUserGameAccess(userId);
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 day expiry
 
@@ -140,25 +358,29 @@ class GameService {
   }
 
   // Play scratch card
-  async playScratchCard(sessionId: string): Promise<IGameSession> {
-    const session = await GameSession.findOne({ sessionId });
+  async playScratchCard(sessionId: string, userId?: string): Promise<IGameSession> {
+    // Atomic status transition: only one request can play a scratch card
+    const query: any = { sessionId, status: 'pending', expiresAt: { $gt: new Date() } };
+    if (userId) query.user = userId; // Ownership validation
+    const session = await GameSession.findOneAndUpdate(
+      query,
+      { $set: { status: 'completed', completedAt: new Date() } },
+      { new: true }
+    );
 
     if (!session) {
-      throw new Error('Game session not found');
-    }
-
-    if (session.status === 'completed') {
+      const existing = await GameSession.findOne({ sessionId });
+      if (!existing) throw new Error('Game session not found');
+      if (existing.status === 'completed') throw new Error('Game already played');
+      if (existing.status === 'expired' || new Date() > existing.expiresAt) throw new Error('Game session expired');
       throw new Error('Game already played');
     }
 
-    if (session.status === 'expired' || new Date() > session.expiresAt) {
-      session.status = 'expired';
-      await session.save();
-      throw new Error('Game session expired');
-    }
+    this.validateMinPlayDuration(session);
 
-    // Determine prize
-    const prize = this.getWeightedRandomPrize(SCRATCH_CARD_PRIZES);
+    // Determine prize (DB-driven with fallback)
+    const prizes = await this.getScratchCardPrizes();
+    const prize = this.getWeightedRandomPrize(prizes);
 
     const result = {
       won: true,
@@ -169,7 +391,29 @@ class GameService {
       }
     };
 
-    await session.complete(result);
+    // Save result to the already-completed session
+    session.result = result;
+    await session.save();
+
+    const scratchUserId = session.user.toString();
+
+    // Credit coins to user's wallet (if prize is coins)
+    if (result.prize.type === 'coins' && typeof result.prize.value === 'number' && result.prize.value > 0) {
+      try {
+        await coinService.awardCoins(
+          scratchUserId,
+          result.prize.value,
+          'scratch_card',
+          `Scratch & Win: ${result.prize.description}`,
+          { sessionId }
+        );
+      } catch (err) {
+        console.error(`[GAME SERVICE] Scratch card coin award failed for user ${scratchUserId}:`, err);
+      }
+    }
+
+    // Emit game event
+    this.emitGameEvent(scratchUserId, 'scratch_card', true, result.prize.type === 'coins' ? (result.prize.value as number) : 0, { sessionId });
 
     return session;
   }
@@ -181,6 +425,7 @@ class GameService {
     userId: string,
     questions: any[]
   ): Promise<IGameSession> {
+    await this.checkUserGameAccess(userId);
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 1); // 1 hour expiry
 
@@ -211,23 +456,27 @@ class GameService {
   async submitQuizAnswers(
     sessionId: string,
     answers: { questionId: string; answer: string }[],
-    _clientCorrectAnswers?: { questionId: string; answer: string }[] // Ignored for security
+    _clientCorrectAnswers?: { questionId: string; answer: string }[], // Ignored for security
+    userId?: string
   ): Promise<IGameSession> {
-    const session = await GameSession.findOne({ sessionId });
+    // Atomic status transition: only one request can submit a quiz
+    const query: any = { sessionId, status: { $in: ['pending', 'playing'] }, expiresAt: { $gt: new Date() } };
+    if (userId) query.user = userId; // Ownership validation
+    const session = await GameSession.findOneAndUpdate(
+      query,
+      { $set: { status: 'completed', completedAt: new Date() } },
+      { new: true }
+    );
 
     if (!session) {
-      throw new Error('Game session not found');
-    }
-
-    if (session.status === 'completed') {
+      const existing = await GameSession.findOne({ sessionId });
+      if (!existing) throw new Error('Game session not found');
+      if (existing.status === 'completed') throw new Error('Quiz already submitted');
+      if (new Date() > existing.expiresAt) throw new Error('Quiz session expired');
       throw new Error('Quiz already submitted');
     }
 
-    if (new Date() > session.expiresAt) {
-      session.status = 'expired';
-      await session.save();
-      throw new Error('Quiz session expired');
-    }
+    this.validateMinPlayDuration(session);
 
     // SECURITY: Retrieve correct answers from stored session metadata, NOT from client
     const storedCorrectAnswers = session.metadata?.correctAnswers || [];
@@ -265,7 +514,42 @@ class GameService {
       score: percentage
     };
 
-    await session.complete(result);
+    // Save result to the already-completed session
+    session.result = result;
+    await session.save();
+
+    const quizUserId = session.user.toString();
+
+    // Credit coins to user's wallet (if any earned)
+    if (coins > 0) {
+      try {
+        await coinService.awardCoins(
+          quizUserId,
+          coins,
+          'quiz_game',
+          `Quiz: ${coins} coins for ${score}/${total} correct!`,
+          { sessionId, score, total, percentage: Math.round(percentage) }
+        );
+      } catch (err) {
+        console.error(`[GAME SERVICE] Quiz coin award failed for user ${quizUserId}:`, err);
+      }
+    }
+
+    // Emit game event
+    this.emitGameEvent(quizUserId, 'quiz', score > 0, coins, { sessionId, score, total, percentage: Math.round(percentage) });
+
+    // Update tournament scores
+    let tournamentUpdate = null;
+    if (coins > 0) {
+      tournamentUpdate = await this.updateTournamentScores(quizUserId, 'quiz', coins).catch((err) => {
+        console.error('[GAME] Tournament score update failed:', err.message);
+        return null;
+      });
+    }
+
+    if (tournamentUpdate) {
+      (session as any)._tournamentUpdate = tournamentUpdate;
+    }
 
     return session;
   }
@@ -311,14 +595,14 @@ class GameService {
     questionId: string,
     answer: string
   ): Promise<{ correct: boolean; coins: number }> {
-    // Check if already answered today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Check if already answered today (UTC boundary)
+    const todayUTC = new Date().toISOString().split('T')[0];
+    const todayStart = new Date(todayUTC + 'T00:00:00.000Z');
 
     const existingToday = await GameSession.countDocuments({
       user: userId,
       gameType: 'daily_trivia',
-      createdAt: { $gte: today }
+      createdAt: { $gte: todayStart }
     });
 
     if (existingToday > 0) {
@@ -340,10 +624,11 @@ class GameService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 1);
 
+    const triviaSessionId = uuidv4();
     await GameSession.create({
       user: userId,
       gameType: 'daily_trivia',
-      sessionId: uuidv4(),
+      sessionId: triviaSessionId,
       status: 'completed',
       earnedFrom: 'daily_trivia',
       expiresAt,
@@ -356,6 +641,21 @@ class GameService {
         } : undefined
       }
     });
+
+    // Credit coins to user's wallet (if correct answer)
+    if (coins > 0) {
+      try {
+        await coinService.awardCoins(
+          userId,
+          coins,
+          'quiz_game',
+          `Daily Trivia: ${coins} coins for correct answer!`,
+          { sessionId: triviaSessionId, questionId }
+        );
+      } catch (err) {
+        console.error(`[GAME SERVICE] Daily trivia coin award failed for user ${userId}:`, err);
+      }
+    }
 
     return {
       correct: isCorrect,
@@ -441,6 +741,75 @@ class GameService {
     return gameStats;
   }
 
+  // ======== DAILY LIMIT GUARD (RACE-CONDITION SAFE) ========
+
+  /**
+   * Atomically check and enforce daily play limits.
+   * Creates the session first, then verifies count. If over limit,
+   * deletes the session and throws. This eliminates the TOCTOU race
+   * where two concurrent requests both pass the count check.
+   */
+  private async createSessionWithDailyLimitGuard(
+    userId: string,
+    gameType: string,
+    sessionData: Partial<IGameSession>
+  ): Promise<IGameSession> {
+    const config = await getCachedGameConfig(gameType);
+
+    // Check if game is disabled
+    if (config && !config.isEnabled) {
+      throw new Error(`${gameType} is currently disabled`);
+    }
+
+    // Check schedule availability (UTC day of week)
+    if (config?.schedule?.availableDays && config.schedule.availableDays.length > 0) {
+      const todayDayOfWeek = new Date().getUTCDay();
+      if (!config.schedule.availableDays.includes(todayDayOfWeek)) {
+        throw new Error(`${gameType} is not available today`);
+      }
+    }
+
+    const limit = config?.dailyLimit ?? DEFAULT_DAILY_GAME_LIMITS[gameType] ?? 3;
+
+    // UTC daily boundary
+    const todayUTC = new Date().toISOString().split('T')[0];
+    const todayStart = new Date(todayUTC + 'T00:00:00.000Z');
+
+    // Pre-check (fast reject for obvious over-limit)
+    const currentCount = await GameSession.countDocuments({
+      user: userId,
+      gameType,
+      createdAt: { $gte: todayStart }
+    });
+
+    if (currentCount >= limit) {
+      throw new Error(`Daily limit reached for ${gameType}`);
+    }
+
+    // Create session
+    const session = await GameSession.create({
+      user: userId,
+      gameType,
+      sessionId: uuidv4(),
+      ...sessionData
+    });
+
+    // Post-creation verification: if concurrent requests slipped through, roll back
+    const verifiedCount = await GameSession.countDocuments({
+      user: userId,
+      gameType,
+      createdAt: { $gte: todayStart }
+    });
+
+    if (verifiedCount > limit) {
+      // Race condition detected — roll back this session
+      await GameSession.deleteOne({ _id: session._id });
+      throw new Error(`Daily limit reached for ${gameType}`);
+    }
+
+    return session;
+  }
+
   // ======== MEMORY MATCH ========
 
   // Start memory match game
@@ -448,12 +817,7 @@ class GameService {
     userId: string,
     difficulty: 'easy' | 'medium' | 'hard' = 'easy'
   ): Promise<any> {
-    // Check daily limit
-    const playsRemaining = await this.getDailyPlaysRemaining(userId, 'memory_match');
-    if (playsRemaining <= 0) {
-      throw new Error('Daily limit reached for Memory Match');
-    }
-
+    await this.checkUserGameAccess(userId);
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10); // 10 minute expiry
 
@@ -461,10 +825,8 @@ class GameService {
     const pairCounts = { easy: 6, medium: 8, hard: 12 };
     const pairs = pairCounts[difficulty];
 
-    const session = await GameSession.create({
-      user: userId,
-      gameType: 'memory_match',
-      sessionId: uuidv4(),
+    // Atomic daily limit check + session creation
+    const session = await this.createSessionWithDailyLimitGuard(userId, 'memory_match', {
       status: 'playing',
       earnedFrom: 'game_play',
       expiresAt,
@@ -475,12 +837,13 @@ class GameService {
       }
     });
 
+    const rewards = await this.getMemoryMatchPrizes(difficulty);
     return {
       sessionId: session.sessionId,
       difficulty,
       pairs,
       expiresAt,
-      rewards: MEMORY_MATCH_PRIZES[difficulty]
+      rewards
     };
   }
 
@@ -489,45 +852,49 @@ class GameService {
     sessionId: string,
     score: number,
     timeSpent: number,
-    moves: number
+    moves: number,
+    userId?: string
   ): Promise<any> {
-    const session = await GameSession.findOne({ sessionId });
+    // Input validation (before DB lookup)
+    if (score < 0) throw new Error('Invalid score: cannot be negative');
+    if (timeSpent < 0) throw new Error('Invalid time spent: cannot be negative');
+    if (moves < 0) throw new Error('Invalid moves: cannot be negative');
+
+    // Atomic status transition: only one request can complete a session
+    const query: any = { sessionId, status: { $in: ['pending', 'playing'] } };
+    if (userId) query.user = userId; // Ownership validation
+    const session = await GameSession.findOneAndUpdate(
+      query,
+      { $set: { status: 'completed', completedAt: new Date() } },
+      { new: true }
+    );
 
     if (!session) {
-      throw new Error('Game session not found');
-    }
-
-    if (session.status === 'completed') {
+      // Either not found or already completed
+      const existing = await GameSession.findOne({ sessionId });
+      if (!existing) throw new Error('Game session not found');
       throw new Error('Game already completed');
     }
 
-    const userId = session.user.toString();
+    this.validateMinPlayDuration(session);
+
+    const sessionOwnerId = session.user.toString();
     const metadata = session.metadata as any;
     const difficulty = metadata?.difficulty || 'easy';
-    const prizes = MEMORY_MATCH_PRIZES[difficulty as keyof typeof MEMORY_MATCH_PRIZES];
+    const prizes = await this.getMemoryMatchPrizes(difficulty);
     const pairs = metadata?.pairs || 6;
 
-    // Input validation
-    if (score < 0) {
-      throw new Error('Invalid score: cannot be negative');
-    }
-    if (timeSpent < 0) {
-      throw new Error('Invalid time spent: cannot be negative');
-    }
-    if (moves < 0) {
-      throw new Error('Invalid moves: cannot be negative');
-    }
     // Minimum time check — realistic minimum is ~10 seconds
     if (timeSpent > 0 && timeSpent < 10000) {
-      console.warn(`⚠️ [MEMORY_MATCH] Suspicious fast completion: ${timeSpent}ms, ${moves} moves for session ${sessionId}`);
+      console.warn(`[ANTI-CHEAT] Suspicious fast completion: ${timeSpent}ms, ${moves} moves for session ${sessionId}`);
     }
     // Maximum score sanity check
-    const maxPossibleCoins = (metadata?.pairs || 6) * 100; // generous upper bound
+    const maxPossibleCoins = pairs * 100; // generous upper bound
     if (score > maxPossibleCoins) {
       throw new Error('Invalid score: exceeds maximum possible');
     }
     // Moves must be at least equal to number of pairs (minimum to complete)
-    if (moves < (metadata?.pairs || 6)) {
+    if (moves < pairs) {
       throw new Error('Invalid moves: fewer than minimum required');
     }
 
@@ -539,8 +906,8 @@ class GameService {
       coins += prizes.perfectBonus;
     }
 
-    // Time bonus (complete within 30 seconds)
-    if (timeSpent < 30) {
+    // Time bonus (complete within 30 seconds — timeSpent is in milliseconds)
+    if (timeSpent > 0 && timeSpent < 30000) {
       coins += prizes.timeBonus;
     }
 
@@ -554,20 +921,32 @@ class GameService {
       score
     };
 
-    await session.complete(result);
+    // Save result to the already-completed session
+    session.result = result;
+    await session.save();
 
-    // Credit coins to user's wallet
+    // Credit coins to user's wallet (try-catch: session is already completed, don't fail the response)
     let newBalance = 0;
     if (coins > 0) {
-      const coinResult = await coinService.awardCoins(
-        userId,
-        coins,
-        'memory_match',
-        `Memory Match game: ${coins} coins earned!`,
-        { sessionId, timeSpent, moves, perfectMatch: moves === pairs }
-      );
-      newBalance = coinResult.newBalance;
+      try {
+        const coinResult = await coinService.awardCoins(
+          sessionOwnerId,
+          coins,
+          'memory_match',
+          `Memory Match game: ${coins} coins earned!`,
+          { sessionId, timeSpent, moves, perfectMatch: moves === pairs }
+        );
+        newBalance = coinResult.newBalance;
+      } catch (err) {
+        console.error(`[GAME SERVICE] Memory Match coin award failed for user ${sessionOwnerId}:`, err);
+      }
     }
+
+    // Emit game event
+    this.emitGameEvent(sessionOwnerId, 'memory_match', true, coins, { sessionId, score, timeSpent, moves, difficulty });
+
+    // Update tournament scores (non-blocking)
+    this.updateTournamentScores(sessionOwnerId, 'memory_match', score).catch((err) => console.error('[GAME] Tournament score update failed:', err.message));
 
     return {
       sessionId,
@@ -576,7 +955,7 @@ class GameService {
       timeSpent,
       moves,
       perfectMatch: moves === pairs,
-      timeBonus: timeSpent < 30,
+      timeBonus: timeSpent > 0 && timeSpent < 30000,
       newBalance // Return updated wallet balance
     };
   }
@@ -585,16 +964,11 @@ class GameService {
 
   // Start coin hunt game
   async startCoinHunt(userId: string): Promise<any> {
-    // Check daily limit
-    const playsRemaining = await this.getDailyPlaysRemaining(userId, 'coin_hunt');
-    if (playsRemaining <= 0) {
-      throw new Error('Daily limit reached for Coin Hunt');
-    }
-
+    await this.checkUserGameAccess(userId);
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 5); // 5 minute expiry
 
-    // Generate coin positions (in production, could be more dynamic)
+    // Generate coin positions server-side (stored in session for validation)
     const coins = Array.from({ length: 20 }, (_, i) => ({
       id: i + 1,
       value: Math.random() < 0.1 ? 10 : Math.random() < 0.3 ? 5 : 1,
@@ -602,16 +976,15 @@ class GameService {
       y: Math.random() * 100
     }));
 
-    const session = await GameSession.create({
-      user: userId,
-      gameType: 'coin_hunt',
-      sessionId: uuidv4(),
+    // Atomic daily limit check + session creation
+    const session = await this.createSessionWithDailyLimitGuard(userId, 'coin_hunt', {
       status: 'playing',
       earnedFrom: 'game_play',
       expiresAt,
       metadata: {
         totalCoins: coins.length,
         maxValue: coins.reduce((sum, c) => sum + c.value, 0),
+        coinPositions: coins, // Store for server-side validation on complete
         startTime: new Date()
       }
     });
@@ -628,25 +1001,30 @@ class GameService {
   async completeCoinHunt(
     sessionId: string,
     coinsCollected: number,
-    score: number
+    score: number,
+    userId?: string
   ): Promise<any> {
-    const session = await GameSession.findOne({ sessionId });
+    // Input validation (before DB lookup)
+    if (coinsCollected < 0) throw new Error('Invalid coins collected: cannot be negative');
+    if (score < 0) throw new Error('Invalid score: cannot be negative');
+
+    // Atomic status transition: only one request can complete a session
+    const query: any = { sessionId, status: { $in: ['pending', 'playing'] } };
+    if (userId) query.user = userId; // Ownership validation
+    const session = await GameSession.findOneAndUpdate(
+      query,
+      { $set: { status: 'completed', completedAt: new Date() } },
+      { new: true }
+    );
 
     if (!session) {
-      throw new Error('Game session not found');
-    }
-
-    if (session.status === 'completed') {
+      const existing = await GameSession.findOne({ sessionId });
+      if (!existing) throw new Error('Game session not found');
       throw new Error('Game already completed');
     }
 
-    // Input validation
-    if (coinsCollected < 0) {
-      throw new Error('Invalid coins collected: cannot be negative');
-    }
-    if (score < 0) {
-      throw new Error('Invalid score: cannot be negative');
-    }
+    this.validateMinPlayDuration(session);
+
     // Sanity check: score can't exceed theoretical maximum
     const maxValue = session.metadata?.maxValue || 200;
     if (score > maxValue) {
@@ -656,7 +1034,7 @@ class GameService {
       throw new Error('Invalid coins collected: exceeds total available');
     }
 
-    const userId = session.user.toString();
+    const sessionOwnerId = session.user.toString();
 
     const result = {
       won: coinsCollected > 0,
@@ -668,20 +1046,40 @@ class GameService {
       score
     };
 
-    await session.complete(result);
+    // Save result to the already-completed session
+    session.result = result;
+    await session.save();
 
-    // Credit coins to user's wallet
+    // Credit coins to user's wallet (try-catch: session is already completed, don't fail the response)
     let newBalance = 0;
     if (score > 0) {
-      const coinResult = await coinService.awardCoins(
-        userId,
-        score,
-        'coin_hunt',
-        `Coin Hunt game: ${score} coins collected!`,
-        { sessionId, coinsCollected }
-      );
-      newBalance = coinResult.newBalance;
+      try {
+        const coinResult = await coinService.awardCoins(
+          sessionOwnerId,
+          score,
+          'coin_hunt',
+          `Coin Hunt game: ${score} coins collected!`,
+          { sessionId, coinsCollected }
+        );
+        newBalance = coinResult.newBalance;
+      } catch (err) {
+        console.error(`[GAME SERVICE] Coin Hunt coin award failed for user ${sessionOwnerId}:`, err);
+      }
     }
+
+    // Emit game event
+    this.emitGameEvent(sessionOwnerId, 'coin_hunt', coinsCollected > 0, score, { sessionId, coinsCollected });
+
+    // Fraud check: abnormally high collection rate
+    const totalCoins = session.metadata?.totalCoins || 20;
+    if (coinsCollected === totalCoins && score > (session.metadata?.maxValue || 200) * 0.9) {
+      this.emitFraudEvent(sessionOwnerId, 'coin_hunt', 'perfect_collection', {
+        coinsCollected, score, totalCoins, sessionId
+      });
+    }
+
+    // Update tournament scores (non-blocking)
+    this.updateTournamentScores(sessionOwnerId, 'coin_hunt', score).catch((err) => console.error('[GAME] Tournament score update failed:', err.message));
 
     return {
       sessionId,
@@ -696,30 +1094,16 @@ class GameService {
 
   // Start guess price game
   async startGuessPrice(userId: string): Promise<any> {
-    // Check daily limit
-    const playsRemaining = await this.getDailyPlaysRemaining(userId, 'guess_price');
-    if (playsRemaining <= 0) {
-      throw new Error('Daily limit reached for Guess the Price');
-    }
-
+    await this.checkUserGameAccess(userId);
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 5);
 
-    // Sample products (in production, fetch from database)
-    const products = [
-      { id: '1', name: 'Wireless Earbuds', image: '/products/earbuds.jpg', actualPrice: 2499 },
-      { id: '2', name: 'Smart Watch', image: '/products/watch.jpg', actualPrice: 4999 },
-      { id: '3', name: 'Bluetooth Speaker', image: '/products/speaker.jpg', actualPrice: 1799 },
-      { id: '4', name: 'Power Bank 20000mAh', image: '/products/powerbank.jpg', actualPrice: 1299 },
-      { id: '5', name: 'Gaming Mouse', image: '/products/mouse.jpg', actualPrice: 899 }
-    ];
-
+    // Load products from DB config with fallback to defaults
+    const products = await this.getGuessPriceProducts();
     const product = products[Math.floor(Math.random() * products.length)];
 
-    const session = await GameSession.create({
-      user: userId,
-      gameType: 'guess_price',
-      sessionId: uuidv4(),
+    // Atomic daily limit check + session creation
+    const session = await this.createSessionWithDailyLimitGuard(userId, 'guess_price', {
       status: 'playing',
       earnedFrom: 'game_play',
       expiresAt,
@@ -736,11 +1120,9 @@ class GameService {
       product: {
         id: product.id,
         name: product.name,
-        image: product.image
-      },
-      priceRange: {
-        min: Math.floor(product.actualPrice * 0.5),
-        max: Math.floor(product.actualPrice * 1.5)
+        image: product.image,
+        // Only provide a general category hint, NOT a price range (prevents binary-search exploitation)
+        category: product.actualPrice >= 3000 ? 'Premium' : product.actualPrice >= 1000 ? 'Mid-Range' : 'Budget'
       },
       expiresAt
     };
@@ -749,27 +1131,31 @@ class GameService {
   // Submit guess price answer
   async submitGuessPrice(
     sessionId: string,
-    guessedPrice: number
+    guessedPrice: number,
+    userId?: string
   ): Promise<any> {
-    const session = await GameSession.findOne({ sessionId });
+    // Input validation (before DB lookup)
+    if (guessedPrice <= 0) throw new Error('Invalid guess: price must be positive');
+    if (guessedPrice > 1000000) throw new Error('Invalid guess: price unreasonably high');
+
+    // Atomic status transition: only one request can complete a session
+    const query: any = { sessionId, status: { $in: ['pending', 'playing'] } };
+    if (userId) query.user = userId; // Ownership validation
+    const session = await GameSession.findOneAndUpdate(
+      query,
+      { $set: { status: 'completed', completedAt: new Date() } },
+      { new: true }
+    );
 
     if (!session) {
-      throw new Error('Game session not found');
-    }
-
-    if (session.status === 'completed') {
+      const existing = await GameSession.findOne({ sessionId });
+      if (!existing) throw new Error('Game session not found');
       throw new Error('Game already completed');
     }
 
-    // Input validation
-    if (guessedPrice <= 0) {
-      throw new Error('Invalid guess: price must be positive');
-    }
-    if (guessedPrice > 1000000) {
-      throw new Error('Invalid guess: price unreasonably high');
-    }
+    this.validateMinPlayDuration(session);
 
-    const userId = session.user.toString();
+    const sessionOwnerId = session.user.toString();
     const metadata = session.metadata as any;
     const actualPrice = metadata?.actualPrice || 0;
 
@@ -808,20 +1194,32 @@ class GameService {
       score: Math.round(accuracy)
     };
 
-    await session.complete(result);
+    // Save result to the already-completed session
+    session.result = result;
+    await session.save();
 
-    // Credit coins to user's wallet
+    // Credit coins to user's wallet (try-catch: session is already completed, don't fail the response)
     let newBalance = 0;
     if (coins > 0) {
-      const coinResult = await coinService.awardCoins(
-        userId,
-        coins,
-        'guess_price',
-        `Guess the Price game: ${coins} coins earned!`,
-        { sessionId, accuracy: Math.round(accuracy), guessedPrice, actualPrice }
-      );
-      newBalance = coinResult.newBalance;
+      try {
+        const coinResult = await coinService.awardCoins(
+          sessionOwnerId,
+          coins,
+          'guess_price',
+          `Guess the Price game: ${coins} coins earned!`,
+          { sessionId, accuracy: Math.round(accuracy), guessedPrice, actualPrice }
+        );
+        newBalance = coinResult.newBalance;
+      } catch (err) {
+        console.error(`[GAME SERVICE] Guess Price coin award failed for user ${sessionOwnerId}:`, err);
+      }
     }
+
+    // Emit game event
+    this.emitGameEvent(sessionOwnerId, 'guess_price', coins > 0, coins, { sessionId, accuracy: Math.round(accuracy) });
+
+    // Update tournament scores (non-blocking)
+    this.updateTournamentScores(sessionOwnerId, 'guess_price', Math.round(accuracy)).catch((err) => console.error('[GAME] Tournament score update failed:', err.message));
 
     return {
       sessionId,
@@ -838,30 +1236,55 @@ class GameService {
   // ======== DAILY LIMITS ========
 
   // Get remaining plays for a game type
+  // All daily limits use UTC midnight as the reset boundary
   async getDailyPlaysRemaining(userId: string, gameType: string): Promise<number> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Check GameConfig first, fall back to hardcoded defaults
+    const config = await getCachedGameConfig(gameType);
+
+    // If game is disabled in config, return 0 plays
+    if (config && !config.isEnabled) {
+      return 0;
+    }
+
+    // Check schedule availability
+    if (config?.schedule?.availableDays && config.schedule.availableDays.length > 0) {
+      const today = new Date().getUTCDay();
+      if (!config.schedule.availableDays.includes(today)) {
+        return 0;
+      }
+    }
+
+    // UTC daily boundary (consistent with createSessionWithDailyLimitGuard)
+    const todayUTC = new Date().toISOString().split('T')[0];
+    const todayStart = new Date(todayUTC + 'T00:00:00.000Z');
 
     const playedToday = await GameSession.countDocuments({
       user: userId,
       gameType,
-      createdAt: { $gte: today }
+      createdAt: { $gte: todayStart }
     });
 
-    const limit = DAILY_GAME_LIMITS[gameType as keyof typeof DAILY_GAME_LIMITS] || 3;
+    const limit = config?.dailyLimit ?? DEFAULT_DAILY_GAME_LIMITS[gameType] ?? 3;
     return Math.max(0, limit - playedToday);
+  }
+
+  // Get the configured daily limit for a game type
+  async getDailyLimitForGame(gameType: string): Promise<number> {
+    const config = await getCachedGameConfig(gameType);
+    return config?.dailyLimit ?? DEFAULT_DAILY_GAME_LIMITS[gameType] ?? 3;
   }
 
   // Get all daily limits status
   async getDailyLimits(userId: string): Promise<any> {
-    const gameTypes = Object.keys(DAILY_GAME_LIMITS);
+    const gameTypes = Object.keys(DEFAULT_DAILY_GAME_LIMITS);
 
     const limits = await Promise.all(
-      gameTypes.map(async gameType => ({
-        gameType,
-        limit: DAILY_GAME_LIMITS[gameType as keyof typeof DAILY_GAME_LIMITS],
-        remaining: await this.getDailyPlaysRemaining(userId, gameType)
-      }))
+      gameTypes.map(async gameType => {
+        const config = await getCachedGameConfig(gameType);
+        const limit = config?.dailyLimit ?? DEFAULT_DAILY_GAME_LIMITS[gameType] ?? 3;
+        const remaining = await this.getDailyPlaysRemaining(userId, gameType);
+        return { gameType, limit, remaining };
+      })
     );
 
     return limits.reduce((acc, item) => {
@@ -872,6 +1295,142 @@ class GameService {
       };
       return acc;
     }, {} as any);
+  }
+
+  // Get game status for a specific game type (Phase 4: Frontend Polish)
+  async getGameStatus(userId: string, gameType: string): Promise<{
+    playsToday: number;
+    maxPlays: number;
+    playsRemaining: number;
+    nextResetAt: string;
+    isAvailable: boolean;
+    cooldownMinutes: number;
+    lastPlayedAt: string | null;
+  }> {
+    const config = await getCachedGameConfig(gameType);
+    const maxPlays = config?.dailyLimit ?? DEFAULT_DAILY_GAME_LIMITS[gameType] ?? 3;
+    const cooldownMinutes = config?.cooldownMinutes ?? 0;
+
+    // UTC daily boundary
+    const todayUTC = new Date().toISOString().split('T')[0];
+    const todayStart = new Date(todayUTC + 'T00:00:00.000Z');
+
+    const playedToday = await GameSession.countDocuments({
+      user: userId,
+      gameType,
+      createdAt: { $gte: todayStart }
+    });
+
+    // Get last played session
+    const lastSession = await GameSession.findOne({
+      user: userId,
+      gameType,
+      status: 'completed'
+    }).sort({ completedAt: -1 }).select('completedAt').lean();
+
+    // Calculate next UTC midnight reset
+    const tomorrow = new Date(todayStart);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+
+    const remaining = Math.max(0, maxPlays - playedToday);
+
+    // Check cooldown
+    let isAvailable = remaining > 0;
+    if (isAvailable && cooldownMinutes > 0 && lastSession?.completedAt) {
+      const cooldownEnd = new Date(lastSession.completedAt);
+      cooldownEnd.setMinutes(cooldownEnd.getMinutes() + cooldownMinutes);
+      if (new Date() < cooldownEnd) {
+        isAvailable = false;
+      }
+    }
+
+    // Check if game is enabled
+    if (config && !config.isEnabled) {
+      isAvailable = false;
+    }
+
+    return {
+      playsToday: playedToday,
+      maxPlays,
+      playsRemaining: remaining,
+      nextResetAt: tomorrow.toISOString(),
+      isAvailable,
+      cooldownMinutes,
+      lastPlayedAt: lastSession?.completedAt ? new Date(lastSession.completedAt).toISOString() : null,
+    };
+  }
+
+  // Get game analytics for admin (Phase 5: Admin Dashboard)
+  async getGameAnalytics(gameType?: string, days: number = 30): Promise<any> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const matchFilter: any = { status: 'completed', createdAt: { $gte: startDate } };
+    if (gameType) matchFilter.gameType = gameType;
+
+    const [stats, dailyStats, topPlayers] = await Promise.all([
+      // Overall stats per game type
+      GameSession.aggregate([
+        { $match: matchFilter },
+        {
+          $group: {
+            _id: '$gameType',
+            totalPlayed: { $sum: 1 },
+            totalWon: { $sum: { $cond: ['$result.won', 1, 0] } },
+            totalCoins: {
+              $sum: { $cond: [{ $eq: ['$result.prize.type', 'coins'] }, '$result.prize.value', 0] }
+            },
+            avgScore: { $avg: '$result.score' },
+            uniquePlayers: { $addToSet: '$user' },
+          }
+        },
+        { $project: {
+          _id: 1, totalPlayed: 1, totalWon: 1, totalCoins: 1, avgScore: 1,
+          uniquePlayers: { $size: '$uniquePlayers' },
+          winRate: { $multiply: [{ $divide: ['$totalWon', { $max: ['$totalPlayed', 1] }] }, 100] }
+        }}
+      ]),
+      // Daily participation trend
+      GameSession.aggregate([
+        { $match: matchFilter },
+        {
+          $group: {
+            _id: {
+              date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+              gameType: '$gameType'
+            },
+            count: { $sum: 1 },
+            coins: { $sum: { $cond: [{ $eq: ['$result.prize.type', 'coins'] }, '$result.prize.value', 0] } }
+          }
+        },
+        { $sort: { '_id.date': 1 } }
+      ]),
+      // Top players by coins earned
+      GameSession.aggregate([
+        { $match: { ...matchFilter, 'result.prize.type': 'coins' } },
+        {
+          $group: {
+            _id: '$user',
+            totalCoins: { $sum: '$result.prize.value' },
+            gamesPlayed: { $sum: 1 }
+          }
+        },
+        { $sort: { totalCoins: -1 } },
+        { $limit: 20 },
+        {
+          $lookup: {
+            from: 'users',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'user',
+            pipeline: [{ $project: { fullName: 1, username: 1, phoneNumber: 1 } }]
+          }
+        },
+        { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } }
+      ])
+    ]);
+
+    return { stats, dailyStats, topPlayers, period: { days, startDate } };
   }
 
   // Helper: Weighted random selection
@@ -895,10 +1454,10 @@ class GameService {
     return result.modifiedCount || 0;
   }
 
-  // Get today's total earnings for a user
+  // Get today's total earnings for a user (UTC boundary)
   async getTodaysEarnings(userId: string): Promise<number> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayUTC = new Date().toISOString().split('T')[0];
+    const today = new Date(todayUTC + 'T00:00:00.000Z');
 
     const result = await GameSession.aggregate([
       {
@@ -920,64 +1479,64 @@ class GameService {
     return result[0]?.total || 0;
   }
 
-  // Get available games with status (for frontend display)
+  // Default game display info (fallback if no DB config)
+  private static readonly DEFAULT_GAME_DISPLAY: Record<string, { title: string; description: string; icon: string; path: string; reward: string }> = {
+    spin_wheel: { title: 'Spin & Win', description: 'Spin the wheel to win coins and rewards', icon: '🎰', path: '/explore/spin-win', reward: 'Up to 1000 coins' },
+    memory_match: { title: 'Memory Match', description: 'Match pairs to earn coins', icon: '🧠', path: '/playandearn/memorymatch', reward: 'Up to 170 coins' },
+    coin_hunt: { title: 'Coin Hunt', description: 'Collect coins before time runs out', icon: '🪙', path: '/playandearn/coinhunt', reward: 'Up to 50 coins' },
+    guess_price: { title: 'Guess the Price', description: 'Guess product prices to win', icon: '🏷️', path: '/playandearn/guessprice', reward: 'Up to 50 coins' },
+    quiz: { title: 'Daily Quiz', description: 'Test your knowledge', icon: '❓', path: '/playandearn/quiz', reward: 'Up to 150 coins' },
+    scratch_card: { title: 'Scratch & Win', description: 'Scratch to reveal prizes', icon: '🎫', path: '/playandearn/luckydraw', reward: 'Up to 250 coins' },
+  };
+
+  // Get available games with status (DB-driven with fallback)
   async getAvailableGames(userId?: string): Promise<any[]> {
-    const games = [
-      {
-        id: 'spin-wheel',
-        title: 'Spin & Win',
-        description: 'Spin the wheel to win coins and rewards',
-        icon: '🎰',
-        path: '/explore/spin-win',
-        maxDaily: DAILY_GAME_LIMITS.spin_wheel,
-        reward: 'Up to 1000 coins'
-      },
-      {
-        id: 'memory-match',
-        title: 'Memory Match',
-        description: 'Match pairs to earn coins',
-        icon: '🧠',
-        path: '/playandearn/memorymatch',
-        maxDaily: DAILY_GAME_LIMITS.memory_match,
-        reward: 'Up to 170 coins'
-      },
-      {
-        id: 'coin-hunt',
-        title: 'Coin Hunt',
-        description: 'Collect coins before time runs out',
-        icon: '🪙',
-        path: '/playandearn/coinhunt',
-        maxDaily: DAILY_GAME_LIMITS.coin_hunt,
-        reward: 'Up to 50 coins'
-      },
-      {
-        id: 'guess-price',
-        title: 'Guess the Price',
-        description: 'Guess product prices to win',
-        icon: '🏷️',
-        path: '/playandearn/guessprice',
-        maxDaily: DAILY_GAME_LIMITS.guess_price,
-        reward: 'Up to 50 coins'
-      },
-      {
-        id: 'quiz',
-        title: 'Daily Quiz',
-        description: 'Test your knowledge',
-        icon: '❓',
-        path: '/playandearn/quiz',
-        maxDaily: DAILY_GAME_LIMITS.quiz,
-        reward: 'Up to 150 coins'
-      },
-      {
-        id: 'scratch-card',
-        title: 'Scratch & Win',
-        description: 'Scratch to reveal prizes',
-        icon: '🎫',
-        path: '/playandearn/luckydraw',
-        maxDaily: 0, // Earned through other activities
-        reward: 'Up to 250 coins'
-      }
-    ];
+    // Try loading game configs from DB
+    let dbConfigs: IGameConfig[] = [];
+    try {
+      dbConfigs = await GameConfig.find({}).sort({ sortOrder: 1 }).lean() as IGameConfig[];
+    } catch (err) {
+      console.error('[GAME SERVICE] Failed to load GameConfig from DB, using defaults:', err);
+    }
+
+    let games: any[];
+
+    if (dbConfigs.length > 0) {
+      // DB-driven: build game list from GameConfig entries
+      const defaultPaths: Record<string, string> = {
+        spin_wheel: '/explore/spin-win', memory_match: '/playandearn/memorymatch',
+        coin_hunt: '/playandearn/coinhunt', guess_price: '/playandearn/guessprice',
+        quiz: '/playandearn/quiz', scratch_card: '/playandearn/luckydraw',
+      };
+      games = dbConfigs
+        .filter(c => c.isEnabled)
+        .map(c => ({
+          id: c.gameType.replace(/_/g, '-'),
+          title: c.displayName,
+          description: c.description,
+          icon: c.config?.emoji || GameService.DEFAULT_GAME_DISPLAY[c.gameType]?.icon || '🎮',
+          path: c.config?.path || defaultPaths[c.gameType] || `/playandearn/${c.gameType}`,
+          maxDaily: c.dailyLimit,
+          reward: c.config?.rewardText || `Up to ${c.rewards?.maxCoins || 100} coins`,
+          featured: c.featured,
+          sortOrder: c.sortOrder,
+          cooldownMinutes: c.cooldownMinutes,
+        }));
+    } else {
+      // Fallback: use hardcoded defaults
+      games = Object.entries(GameService.DEFAULT_GAME_DISPLAY).map(([gameType, display]) => ({
+        id: gameType.replace(/_/g, '-'),
+        title: display.title,
+        description: display.description,
+        icon: display.icon,
+        path: display.path,
+        maxDaily: DEFAULT_DAILY_GAME_LIMITS[gameType] ?? 3,
+        reward: display.reward,
+        featured: false,
+        sortOrder: 0,
+        cooldownMinutes: 0,
+      }));
+    }
 
     // If user is authenticated, add their remaining plays
     if (userId) {
@@ -985,7 +1544,7 @@ class GameService {
       const todaysEarnings = await this.getTodaysEarnings(userId);
 
       return games.map(game => {
-        const gameTypeKey = game.id.replace('-', '_');
+        const gameTypeKey = game.id.replace(/-/g, '_');
         const limitData = limits[gameTypeKey];
 
         return {
@@ -993,7 +1552,7 @@ class GameService {
           playsRemaining: limitData?.remaining ?? game.maxDaily,
           playsUsed: limitData?.played ?? 0,
           isAvailable: limitData ? limitData.remaining > 0 : true,
-          todaysEarnings: todaysEarnings
+          todaysEarnings
         };
       });
     }

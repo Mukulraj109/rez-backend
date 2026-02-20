@@ -11,7 +11,9 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import activityService from '../services/activityService';
 import achievementService from '../services/achievementService';
+import gamificationEventBus from '../events/gamificationEventBus';
 import coinService from '../services/coinService';
+import challengeService from '../services/challengeService';
 import { Types } from 'mongoose';
 
 // Get reviews for a store
@@ -334,12 +336,13 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
       store.name
     );
 
-    // Trigger achievement update for review creation
-    try {
-      await achievementService.triggerAchievementUpdate(userId, 'review_created');
-    } catch (error) {
-      console.error('❌ [REVIEW] Error triggering achievement update:', error);
-    }
+    // Emit gamification event for review submission
+    gamificationEventBus.emit('review_submitted', {
+      userId,
+      entityId: String(review._id),
+      entityType: 'review',
+      source: { controller: 'reviewController', action: 'createReview' }
+    });
 
     // Coin award moved to moderateReview (merchant approval)
 
@@ -422,6 +425,14 @@ export const moderateReview = asyncHandler(async (req: Request, res: Response) =
       } catch (coinError) {
         console.error('❌ [MODERATION] Error awarding review coins:', coinError);
         // Don't fail the moderation if coin award fails
+      }
+
+      // 3. Update challenge progress for review (non-blocking)
+      if (review.user) {
+        challengeService.updateProgress(
+          String((review.user as any)._id), 'review_count', 1,
+          { reviewId: String(review._id), storeId: String(review.store._id) }
+        ).catch(err => console.error('[REVIEW] Challenge progress update failed:', err));
       }
     }
 

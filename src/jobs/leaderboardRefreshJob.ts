@@ -1,21 +1,21 @@
 import * as cron from 'node-cron';
 import redisService from '../services/redisService';
-import { CoinTransaction } from '../models/CoinTransaction';
-import mongoose from 'mongoose';
+import leaderboardService from '../services/leaderboardService';
+import LeaderboardConfig, { ILeaderboardConfig } from '../models/LeaderboardConfig';
 
 /**
- * Leaderboard Refresh Background Job
+ * Leaderboard Refresh Background Job (Config-Driven)
  *
  * This module schedules a background job that recalculates leaderboard aggregations
- * for daily/weekly/monthly/all-time periods and caches results in Redis.
+ * based on active LeaderboardConfig documents and caches results in Redis.
  *
  * - Runs every 5 minutes via cron
- * - Aggregates CoinTransaction by userId where type = 'earned' (or 'bonus')
- * - Sums amounts, sorts descending, limits to top 100 users
- * - Looks up user details (name, avatar)
- * - Caches result in Redis with key pattern: leaderboard:{period}:{page}
- *
- * Uses Redis distributed locks with owner tokens for multi-instance safety.
+ * - Loads all active LeaderboardConfig documents
+ * - For each config, runs the CoinTransaction aggregation pipeline
+ *   filtered by config.coinTransactionSources and date range based on config.period
+ * - Caches the full top-N list at: leaderboard:{slug}:full
+ * - Caches metadata at: leaderboard:{slug}:meta
+ * - Uses Redis distributed locks with owner tokens for multi-instance safety
  */
 
 // Job instance
@@ -25,154 +25,115 @@ let leaderboardRefreshJob: ReturnType<typeof cron.schedule> | null = null;
 const LEADERBOARD_REFRESH_SCHEDULE = '*/5 * * * *'; // Every 5 minutes
 const LEADERBOARD_CACHE_TTL = 300; // 5 minutes
 const LEADERBOARD_LOCK_TTL = 120; // 2 minutes (should finish well within this)
-const TOP_N = 100; // Top 100 users per leaderboard
-
-type LeaderboardPeriod = 'daily' | 'weekly' | 'monthly' | 'all';
-
-interface LeaderboardEntry {
-  userId: string;
-  name: string;
-  avatar?: string;
-  totalCoins: number;
-  rank: number;
-}
 
 interface RefreshStats {
-  period: LeaderboardPeriod;
+  slug: string;
+  period: string;
   entriesCount: number;
   duration: number;
 }
 
 /**
- * Calculate the date filter start based on the period
+ * Refresh a single leaderboard based on its config
  */
-function getDateFilter(period: LeaderboardPeriod): Date | null {
-  const now = new Date();
-
-  switch (period) {
-    case 'daily': {
-      const start = new Date(now);
-      start.setHours(0, 0, 0, 0);
-      return start;
-    }
-    case 'weekly': {
-      const start = new Date(now);
-      start.setDate(start.getDate() - start.getDay()); // Start of week (Sunday)
-      start.setHours(0, 0, 0, 0);
-      return start;
-    }
-    case 'monthly': {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      start.setHours(0, 0, 0, 0);
-      return start;
-    }
-    case 'all':
-      return null; // No date filter for all-time
-  }
-}
-
-/**
- * Refresh a single leaderboard period
- */
-async function refreshLeaderboard(period: LeaderboardPeriod): Promise<RefreshStats> {
+async function refreshLeaderboardForConfig(config: ILeaderboardConfig): Promise<RefreshStats> {
   const startTime = Date.now();
 
-  // Build match stage
-  const matchStage: any = {
-    type: { $in: ['earned', 'bonus', 'refunded'] },
-  };
+  // Run the full aggregation via the unified service
+  const entries = await leaderboardService.runFullAggregation(config);
 
-  const dateFilter = getDateFilter(period);
-  if (dateFilter) {
-    matchStage.createdAt = { $gte: dateFilter };
-  }
+  // Cache the full top-N list
+  const fullCacheKey = `leaderboard:${config.slug}:full`;
+  await redisService.set(fullCacheKey, entries, LEADERBOARD_CACHE_TTL);
 
-  // Aggregate CoinTransaction: sum amounts per user, sort descending, limit top N
-  const pipeline: mongoose.PipelineStage[] = [
-    { $match: matchStage },
-    {
-      $group: {
-        _id: '$user',
-        totalCoins: { $sum: '$amount' },
-      },
-    },
-    { $sort: { totalCoins: -1 } },
-    { $limit: TOP_N },
-    {
-      $lookup: {
-        from: 'users',
-        localField: '_id',
-        foreignField: '_id',
-        as: 'userInfo',
-        pipeline: [
-          { $project: { name: 1, avatar: 1, profilePicture: 1 } },
-        ],
-      },
-    },
-    { $unwind: { path: '$userInfo', preserveNullAndEmptyArrays: true } },
-    {
-      $project: {
-        _id: 0,
-        userId: '$_id',
-        totalCoins: 1,
-        name: { $ifNull: ['$userInfo.name', 'Anonymous'] },
-        avatar: { $ifNull: ['$userInfo.avatar', '$userInfo.profilePicture'] },
-      },
-    },
-  ];
-
-  const results = await CoinTransaction.aggregate(pipeline);
-
-  // Add rank
-  const leaderboard: LeaderboardEntry[] = results.map((entry: any, index: number) => ({
-    userId: entry.userId.toString(),
-    name: entry.name,
-    avatar: entry.avatar || undefined,
-    totalCoins: entry.totalCoins,
-    rank: index + 1,
-  }));
-
-  // Cache page 1 (the full top-N list) in Redis
-  // Future: could paginate (e.g., 20 per page) if needed
-  await redisService.set(`leaderboard:${period}:1`, leaderboard, LEADERBOARD_CACHE_TTL);
-
-  // Also cache metadata (total count, last updated)
-  await redisService.set(`leaderboard:${period}:meta`, {
-    totalEntries: leaderboard.length,
+  // Cache metadata (total count, last updated, config info)
+  const metaCacheKey = `leaderboard:${config.slug}:meta`;
+  await redisService.set(metaCacheKey, {
+    totalEntries: entries.length,
     lastUpdated: new Date().toISOString(),
-    period,
+    slug: config.slug,
+    period: config.period,
+    leaderboardType: config.leaderboardType,
+    title: config.title
   }, LEADERBOARD_CACHE_TTL);
+
+  // Pre-cache page 1 with default limit of 20
+  const page1CacheKey = `leaderboard:${config.slug}:page:1:limit:20`;
+  const page1Entries = entries.slice(0, 20);
+  await redisService.set(page1CacheKey, {
+    entries: page1Entries,
+    pagination: {
+      page: 1,
+      limit: 20,
+      total: entries.length,
+      pages: Math.ceil(entries.length / 20)
+    },
+    config: {
+      slug: config.slug,
+      title: config.title,
+      subtitle: config.subtitle,
+      leaderboardType: config.leaderboardType,
+      period: config.period,
+      topN: config.topN
+    },
+    lastUpdated: new Date().toISOString()
+  }, LEADERBOARD_CACHE_TTL);
+
+  // Invalidate any stale page-specific caches for this config
+  // (they will be re-populated on demand)
+  await redisService.delPattern(`leaderboard:${config.slug}:rank:*`);
 
   const duration = Date.now() - startTime;
 
   return {
-    period,
-    entriesCount: leaderboard.length,
-    duration,
+    slug: config.slug,
+    period: config.period,
+    entriesCount: entries.length,
+    duration
   };
 }
 
 /**
- * Run all leaderboard refreshes
+ * Run all leaderboard refreshes based on active configs
  */
 async function runLeaderboardRefresh(): Promise<void> {
   const startTime = Date.now();
 
-  console.log('🏆 [LEADERBOARD JOB] Running leaderboard refresh...');
+  console.log('[LEADERBOARD JOB] Running config-driven leaderboard refresh...');
 
-  const results = await Promise.all([
-    refreshLeaderboard('daily'),
-    refreshLeaderboard('weekly'),
-    refreshLeaderboard('monthly'),
-    refreshLeaderboard('all'),
-  ]);
+  // Load all active configs
+  const activeConfigs = await LeaderboardConfig.find({ status: 'active' });
+
+  if (activeConfigs.length === 0) {
+    console.log('[LEADERBOARD JOB] No active leaderboard configs found, skipping refresh');
+    return;
+  }
+
+  console.log(`[LEADERBOARD JOB] Found ${activeConfigs.length} active configs to refresh`);
+
+  // Refresh all configs in parallel
+  const results = await Promise.allSettled(
+    activeConfigs.map(config => refreshLeaderboardForConfig(config))
+  );
+
+  const succeeded: RefreshStats[] = [];
+  const failed: string[] = [];
+
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      succeeded.push(result.value);
+    } else {
+      failed.push(`${activeConfigs[index].slug}: ${result.reason?.message || 'Unknown error'}`);
+    }
+  });
 
   const totalDuration = Date.now() - startTime;
 
-  console.log('✅ [LEADERBOARD JOB] Refresh completed:', {
-    periods: results.map(r => `${r.period}(${r.entriesCount} entries, ${r.duration}ms)`),
+  console.log('[LEADERBOARD JOB] Refresh completed:', {
+    succeeded: succeeded.map(r => `${r.slug}(${r.entriesCount} entries, ${r.duration}ms)`),
+    failed: failed.length > 0 ? failed : 'none',
     totalDuration: `${totalDuration}ms`,
-    timestamp: new Date().toISOString(),
+    timestamp: new Date().toISOString()
   });
 }
 
@@ -181,33 +142,33 @@ async function runLeaderboardRefresh(): Promise<void> {
  */
 export function startLeaderboardRefreshJob(): void {
   if (leaderboardRefreshJob) {
-    console.log('⚠️ [LEADERBOARD JOB] Leaderboard refresh job already running');
+    console.log('[LEADERBOARD JOB] Leaderboard refresh job already running');
     return;
   }
 
-  console.log('🏆 [LEADERBOARD JOB] Starting leaderboard refresh job (runs every 5 minutes)');
+  console.log('[LEADERBOARD JOB] Starting config-driven leaderboard refresh job (runs every 5 minutes)');
 
   leaderboardRefreshJob = cron.schedule(LEADERBOARD_REFRESH_SCHEDULE, async () => {
-    // Acquire distributed lock with owner token — only one instance runs the job
+    // Acquire distributed lock with owner token -- only one instance runs the job
     const lockToken = await redisService.acquireLock('leaderboard_refresh_job', LEADERBOARD_LOCK_TTL);
     if (!lockToken) {
-      console.log('⏭️ [LEADERBOARD JOB] Another instance is running the refresh job, skipping');
+      console.log('[LEADERBOARD JOB] Another instance is running the refresh job, skipping');
       return;
     }
 
     try {
       await runLeaderboardRefresh();
     } catch (error: any) {
-      console.error('❌ [LEADERBOARD JOB] Error:', {
+      console.error('[LEADERBOARD JOB] Error:', {
         error: error.message,
-        timestamp: new Date().toISOString(),
+        timestamp: new Date().toISOString()
       });
     } finally {
       await redisService.releaseLock('leaderboard_refresh_job', lockToken);
     }
   });
 
-  console.log('✅ [LEADERBOARD JOB] Leaderboard refresh job started');
+  console.log('[LEADERBOARD JOB] Leaderboard refresh job started');
 }
 
 /**
@@ -217,7 +178,7 @@ export function stopLeaderboardRefreshJob(): void {
   if (leaderboardRefreshJob) {
     leaderboardRefreshJob.stop();
     leaderboardRefreshJob = null;
-    console.log('🛑 [LEADERBOARD JOB] Leaderboard refresh job stopped');
+    console.log('[LEADERBOARD JOB] Leaderboard refresh job stopped');
   }
 }
 
@@ -230,7 +191,7 @@ export async function triggerManualLeaderboardRefresh(): Promise<void> {
     throw new Error('Leaderboard refresh already in progress (locked by another instance)');
   }
 
-  console.log('🏆 [LEADERBOARD JOB] Manual leaderboard refresh triggered');
+  console.log('[LEADERBOARD JOB] Manual leaderboard refresh triggered');
 
   try {
     await runLeaderboardRefresh();
@@ -248,7 +209,7 @@ export function getLeaderboardJobStatus(): {
 } {
   return {
     running: leaderboardRefreshJob !== null,
-    schedule: LEADERBOARD_REFRESH_SCHEDULE,
+    schedule: LEADERBOARD_REFRESH_SCHEDULE
   };
 }
 
@@ -265,5 +226,5 @@ export default {
   start: startLeaderboardRefreshJob,
   stop: stopLeaderboardRefreshJob,
   triggerManual: triggerManualLeaderboardRefresh,
-  getStatus: getLeaderboardJobStatus,
+  getStatus: getLeaderboardJobStatus
 };

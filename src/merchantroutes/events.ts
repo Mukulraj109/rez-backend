@@ -52,13 +52,7 @@ const createEventSchema = Joi.object({
   date: Joi.date().required(),
   time: Joi.string().required(),
   endTime: Joi.string().optional(),
-  category: Joi.string().valid(
-    // Lowercase categories (new)
-    'movies', 'concerts', 'parks', 'workshops', 'gaming', 'sports', 'entertainment',
-    // Legacy title-case categories
-    'Music', 'Technology', 'Wellness', 'Sports', 'Education',
-    'Business', 'Arts', 'Food', 'Entertainment', 'Other'
-  ).required(),
+  category: Joi.string().required().min(1).max(100), // Dynamic categories from backend, no hardcoded enum
   subcategory: Joi.string().optional(),
   organizer: Joi.object({
     name: Joi.string().required(),
@@ -82,7 +76,24 @@ const createEventSchema = Joi.object({
   status: Joi.string().valid('draft', 'published').default('draft'),
   featured: Joi.boolean().default(false),
   priority: Joi.number().min(0).default(0),
-  cashback: Joi.number().min(0).max(100).default(0) // Cashback percentage (0-100%)
+  cashback: Joi.number().min(0).max(100).default(0),
+  schedule: Joi.array().items(Joi.object({
+    title: Joi.string().required().max(200),
+    startTime: Joi.string().required(),
+    endTime: Joi.string().required(),
+    description: Joi.string().max(500).optional().allow(''),
+  })).optional(),
+  ticketTypes: Joi.array().items(Joi.object({
+    name: Joi.string().required().max(100),
+    price: Joi.number().min(0).required(),
+    currency: Joi.string().default('₹'),
+    maxQuantity: Joi.number().min(1).required(),
+    description: Joi.string().max(300).optional().allow(''),
+  })).optional(),
+  sponsors: Joi.array().items(Joi.object({
+    name: Joi.string().required().max(200),
+    logo: Joi.string().uri().optional().allow(''),
+  })).optional(),
 });
 
 const updateEventSchema = createEventSchema.fork(
@@ -387,10 +398,12 @@ router.put('/:id', validateParams(eventIdSchema), validateRequest(updateEventSch
     // Update fields
     const allowedUpdates = [
       'title', 'subtitle', 'description', 'image', 'images', 'price',
-      'location', 'date', 'time', 'endTime', 'category', 'subcategory',
+      'location', 'date', 'time', 'endTime', 'category', 'categoryId', 'subcategory',
       'organizer', 'isOnline', 'registrationRequired', 'bookingUrl',
       'availableSlots', 'maxCapacity', 'minAge', 'requirements', 'includes',
-      'refundPolicy', 'cancellationPolicy', 'tags', 'featured', 'priority'
+      'refundPolicy', 'cancellationPolicy', 'cancellationPolicyDetails',
+      'tags', 'featured', 'priority',
+      'schedule', 'ticketTypes', 'sponsors'
     ];
 
     allowedUpdates.forEach(field => {
@@ -677,7 +690,11 @@ router.post('/:id/cancel', validateParams(eventIdSchema), validateRequest(Joi.ob
     const oldStatus = event.status;
     event.status = 'cancelled';
     if (reason) {
-      event.cancellationPolicy = reason;
+      // Store cancellation reason in policyDetails, not in the user-facing cancellationPolicy text
+      if (!event.cancellationPolicyDetails) {
+        (event as any).cancellationPolicyDetails = {};
+      }
+      (event as any).cancellationPolicyDetails.policyText = reason;
     }
     await event.save();
 

@@ -2,6 +2,18 @@ import { Request, Response } from 'express';
 import gameService from '../services/gameService';
 
 class GameController {
+  /**
+   * Sanitize session data before sending to client.
+   * Strips sensitive metadata (correctAnswers, actualPrice, coinPositions, etc.)
+   */
+  private sanitizeSession(session: any) {
+    if (!session) return session;
+    const obj = session.toObject ? session.toObject() : { ...session };
+    delete obj.metadata; // Never expose internal metadata to client
+    delete obj.__v;
+    return obj;
+  }
+
   // ======== SPIN WHEEL ========
 
   // POST /api/games/spin-wheel/create
@@ -14,7 +26,7 @@ class GameController {
 
       res.json({
         success: true,
-        data: session,
+        data: this.sanitizeSession(session),
         message: 'Spin wheel session created'
       });
     } catch (error: any) {
@@ -28,13 +40,20 @@ class GameController {
   // POST /api/games/spin-wheel/play
   async playSpinWheel(req: Request, res: Response) {
     try {
+      const userId = req.user?.id;
       const { sessionId } = req.body;
 
-      const session = await gameService.playSpinWheel(sessionId);
+      const session = await gameService.playSpinWheel(sessionId, userId);
+      const sanitized = this.sanitizeSession(session);
+
+      // Include tournament update data if present
+      if ((session as any)._tournamentUpdate) {
+        sanitized.tournamentUpdate = (session as any)._tournamentUpdate;
+      }
 
       res.json({
         success: true,
-        data: session,
+        data: sanitized,
         message: 'Spin complete!'
       });
     } catch (error: any) {
@@ -57,7 +76,7 @@ class GameController {
 
       res.json({
         success: true,
-        data: session,
+        data: this.sanitizeSession(session),
         message: 'Scratch card session created'
       });
     } catch (error: any) {
@@ -71,13 +90,14 @@ class GameController {
   // POST /api/games/scratch-card/play
   async playScratchCard(req: Request, res: Response) {
     try {
+      const userId = req.user?.id;
       const { sessionId } = req.body;
 
-      const session = await gameService.playScratchCard(sessionId);
+      const session = await gameService.playScratchCard(sessionId, userId);
 
       res.json({
         success: true,
-        data: session,
+        data: this.sanitizeSession(session),
         message: 'Scratch card revealed!'
       });
     } catch (error: any) {
@@ -100,7 +120,7 @@ class GameController {
 
       res.json({
         success: true,
-        data: session,
+        data: this.sanitizeSession(session),
         message: 'Quiz session created'
       });
     } catch (error: any) {
@@ -114,17 +134,26 @@ class GameController {
   // POST /api/games/quiz/submit
   async submitQuiz(req: Request, res: Response) {
     try {
+      const userId = req.user?.id;
       const { sessionId, answers, correctAnswers } = req.body;
 
       const session = await gameService.submitQuizAnswers(
         sessionId,
         answers,
-        correctAnswers
+        correctAnswers,
+        userId
       );
+
+      const sanitized = this.sanitizeSession(session);
+
+      // Include tournament update data if present
+      if ((session as any)._tournamentUpdate) {
+        sanitized.tournamentUpdate = (session as any)._tournamentUpdate;
+      }
 
       res.json({
         success: true,
-        data: session,
+        data: sanitized,
         message: 'Quiz submitted successfully'
       });
     } catch (error: any) {
@@ -191,7 +220,7 @@ class GameController {
 
       res.json({
         success: true,
-        data: sessions
+        data: sessions.map(s => this.sanitizeSession(s))
       });
     } catch (error: any) {
       res.status(500).json({
@@ -210,7 +239,7 @@ class GameController {
 
       res.json({
         success: true,
-        data: games
+        data: games.map(g => this.sanitizeSession(g))
       });
     } catch (error: any) {
       res.status(500).json({
@@ -247,8 +276,6 @@ class GameController {
       const userId = req.user?.id;
       const { difficulty = 'easy' } = req.body;
 
-      console.log('[MEMORY MATCH START] userId:', userId, 'difficulty:', difficulty);
-
       if (!userId) {
         return res.status(401).json({
           success: false,
@@ -258,15 +285,12 @@ class GameController {
 
       const result = await gameService.startMemoryMatch(userId, difficulty);
 
-      console.log('[MEMORY MATCH START] Session created:', result.sessionId);
-
       res.json({
         success: true,
         data: result,
         message: 'Memory Match game started'
       });
     } catch (error: any) {
-      console.error('[MEMORY MATCH START] Error:', error.message);
       res.status(400).json({
         success: false,
         message: error.message
@@ -277,13 +301,10 @@ class GameController {
   // POST /api/games/memory-match/complete
   async completeMemoryMatch(req: Request, res: Response) {
     try {
+      const userId = req.user?.id;
       const { sessionId, score, timeSpent, moves } = req.body;
 
-      console.log('[MEMORY MATCH COMPLETE] sessionId:', sessionId, 'score:', score, 'timeSpent:', timeSpent, 'moves:', moves);
-
-      const result = await gameService.completeMemoryMatch(sessionId, score, timeSpent, moves);
-
-      console.log('[MEMORY MATCH COMPLETE] Result:', JSON.stringify(result));
+      const result = await gameService.completeMemoryMatch(sessionId, score, timeSpent, moves, userId);
 
       res.json({
         success: true,
@@ -291,7 +312,6 @@ class GameController {
         message: `You earned ${result.coins} coins!`
       });
     } catch (error: any) {
-      console.error('[MEMORY MATCH COMPLETE] Error:', error.message);
       res.status(400).json({
         success: false,
         message: error.message
@@ -324,9 +344,10 @@ class GameController {
   // POST /api/games/coin-hunt/complete
   async completeCoinHunt(req: Request, res: Response) {
     try {
+      const userId = req.user?.id;
       const { sessionId, coinsCollected, score } = req.body;
 
-      const result = await gameService.completeCoinHunt(sessionId, coinsCollected, score);
+      const result = await gameService.completeCoinHunt(sessionId, coinsCollected, score, userId);
 
       res.json({
         success: true,
@@ -366,9 +387,10 @@ class GameController {
   // POST /api/games/guess-price/submit
   async submitGuessPrice(req: Request, res: Response) {
     try {
+      const userId = req.user?.id;
       const { sessionId, guessedPrice } = req.body;
 
-      const result = await gameService.submitGuessPrice(sessionId, guessedPrice);
+      const result = await gameService.submitGuessPrice(sessionId, guessedPrice, userId);
 
       res.json({
         success: true,
@@ -423,6 +445,31 @@ class GameController {
       });
     } catch (error: any) {
       res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // GET /api/games/:gameType/status
+  // Returns play status for a specific game type (Phase 4: Frontend Polish)
+  async getGameStatus(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const { gameType } = req.params;
+
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'User not authenticated' });
+      }
+
+      const status = await gameService.getGameStatus(userId, gameType);
+
+      res.json({
+        success: true,
+        data: status
+      });
+    } catch (error: any) {
+      res.status(400).json({
         success: false,
         message: error.message
       });

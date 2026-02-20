@@ -1328,6 +1328,19 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
       await session.commitTransaction();
       console.log('✅ [STORE PAYMENT] Payment completed (atomic):', paymentId);
 
+      // Auto-trigger bank_offer bonus campaign on successful store payment
+      try {
+        const bonusCampaignService = require('../services/bonusCampaignService');
+        console.log('[STORE PAYMENT] Triggering bank_offer for payment:', paymentId);
+        await bonusCampaignService.autoClaimForTransaction('bank_offer', userId, {
+          transactionRef: { type: 'payment' as const, refId: (storePayment._id as Types.ObjectId).toString() },
+          transactionAmount: storePayment.billAmount,
+          paymentMethod: storePayment.paymentMethod,
+        });
+      } catch (bonusErr) {
+        console.error('[STORE PAYMENT] bank_offer auto-claim failed (non-blocking):', bonusErr);
+      }
+
       res.status(200).json({
         success: true,
         message: 'Payment confirmed successfully',

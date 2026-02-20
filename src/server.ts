@@ -43,6 +43,10 @@ import { initializeLeaderboardRefreshJob } from './jobs/leaderboardRefreshJob';
 import { initializeBillVerificationJob } from './jobs/billVerificationJob';
 import { startCreatorJobs } from './jobs/creatorJobs';
 import { initializeStreakResetJob } from './jobs/streakResetJob';
+import { initBonusCampaignJobs } from './jobs/bonusCampaignJob';
+import { initChallengeLifecycleJobs } from './jobs/challengeLifecycleJob';
+import { initializeTournamentLifecycleJobs } from './jobs/tournamentLifecycleJob';
+import { initializePrizeDistributionJob } from './jobs/leaderboardPrizeDistributionJob';
 
 // Import Bull-based scheduled job service (replaces node-cron with Bull repeatable jobs)
 import { ScheduledJobService } from './services/ScheduledJobService';
@@ -109,6 +113,7 @@ import streakRoutes from './routes/streakRoutes';
 import shareRoutes from './routes/shareRoutes';
 import tournamentRoutes from './routes/tournamentRoutes';
 import programRoutes from './routes/programRoutes';
+import specialProgramRoutes from './routes/specialProgramRoutes';
 import sponsorRoutes from './routes/sponsorRoutes';
 import surveyRoutes from './routes/surveyRoutes';
 import verificationRoutes from './routes/verificationRoutes';
@@ -197,11 +202,25 @@ import {
   adminAchievementsRoutes,
   adminGamificationStatsRoutes,
   adminDailyCheckinConfigRoutes,
+  adminSpecialProgramsRoutes,
+  adminEventsRoutes,
+  adminEventCategoriesRoutes,
+  adminEventRewardsRoutes,
+  adminTournamentsRoutes,
+  adminLearningContentRoutes,
+  adminLeaderboardConfigRoutes,
+  adminQuickActionRoutes,
+  adminValueCardRoutes,
 } from './routes/admin';
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
+import bonusZoneRoutes from './routes/bonusZoneRoutes';  // Bonus Zone campaign routes
+import adminBonusZoneRoutes from './routes/admin/bonusZone';  // Admin Bonus Zone management
 import lockDealRoutes from './routes/lockDealRoutes';  // Lock Price Deal routes
 import playEarnRoutes from './routes/playEarnRoutes';  // Play & Earn config routes
+import learningRoutes from './routes/learningRoutes';  // Learning content routes
 import experienceRoutes from './routes/experienceRoutes';  // Store experience routes
+import contentRoutes from './routes/contentRoutes';  // Public content routes (value cards, quick actions)
+import earnRoutes from './routes/earnRoutes';  // Earn nearby routes
 import authRoutes1 from './merchantroutes/auth';  // Temporarily disabled
 import merchantRoutes from './merchantroutes/merchants';  // Temporarily disabled
 import merchantProfileRoutes from './merchantroutes/merchant-profile'; // Disabled due to missing properties
@@ -256,6 +275,7 @@ import { RealTimeService } from './merchantservices/RealTimeService';  // Tempor
 import { ReportService } from './merchantservices/ReportService';  // Temporarily disabled
 import stockSocketService from './services/stockSocketService';
 import earningsSocketService from './services/earningsSocketService';
+import gamificationSocketService from './services/gamificationSocketService';
 import AuditRetentionService from './services/AuditRetentionService';
 
 // Load environment variables
@@ -757,6 +777,8 @@ app.use(`${API_PREFIX}/tournaments`, tournamentRoutes);
 console.log('✅ Tournament routes registered at /api/tournaments');
 app.use(`${API_PREFIX}/programs`, programRoutes);
 console.log('✅ Program routes registered at /api/programs');
+app.use(`${API_PREFIX}/special-programs`, specialProgramRoutes);
+console.log('✅ Special Program routes registered at /api/special-programs');
 app.use(`${API_PREFIX}/sponsors`, sponsorRoutes);
 console.log('✅ Sponsor routes registered at /api/sponsors');
 app.use(`${API_PREFIX}/surveys`, surveyRoutes);
@@ -813,6 +835,10 @@ console.log('✅ Partner program routes registered at /api/partner');
 // // Earnings Routes - User earnings summary with breakdown
 app.use(`${API_PREFIX}/earnings`, earningsRoutes);
 console.log('✅ Earnings routes registered at /api/earnings');
+
+// Learning Content Routes - Educational content with coin rewards
+app.use(`${API_PREFIX}/learning`, learningRoutes);
+console.log('✅ Learning routes registered at /api/learning');
 
 // Menu Routes - Restaurant/Store menus and pre-orders
 app.use(`${API_PREFIX}/menu`, menuRoutes);
@@ -921,6 +947,8 @@ app.use(`${API_PREFIX}/admin/wallet`, adminWalletRoutes);
 console.log('✅ Admin wallet routes registered at /api/admin/wallet');
 app.use(`${API_PREFIX}/admin/campaigns`, adminCampaignsRoutes);
 console.log('✅ Admin campaigns routes registered at /api/admin/campaigns');
+app.use(`${API_PREFIX}/admin/bonus-zone`, adminBonusZoneRoutes);
+console.log('✅ Admin bonus zone routes registered at /api/admin/bonus-zone');
 app.use(`${API_PREFIX}/admin/uploads`, adminUploadsRoutes);
 console.log('✅ Admin uploads routes registered at /api/admin/uploads');
 app.use(`${API_PREFIX}/admin/experiences`, adminExperiencesRoutes);
@@ -953,6 +981,8 @@ app.use(`${API_PREFIX}/admin/challenges`, adminChallengesRoutes);
 console.log('✅ Admin challenges routes registered at /api/admin/challenges');
 app.use(`${API_PREFIX}/admin/game-config`, adminGameConfigRoutes);
 console.log('✅ Admin game config routes registered at /api/admin/game-config');
+app.use(`${API_PREFIX}/admin/tournaments`, adminTournamentsRoutes);
+console.log('✅ Admin tournament routes registered at /api/admin/tournaments');
 app.use(`${API_PREFIX}/admin/feature-flags`, adminFeatureFlagsRoutes);
 console.log('✅ Admin feature flags routes registered at /api/admin/feature-flags');
 app.use(`${API_PREFIX}/admin/achievements`, adminAchievementsRoutes);
@@ -961,6 +991,22 @@ app.use(`${API_PREFIX}/admin/gamification-stats`, adminGamificationStatsRoutes);
 console.log('✅ Admin gamification stats routes registered at /api/admin/gamification-stats');
 app.use(`${API_PREFIX}/admin/daily-checkin-config`, adminDailyCheckinConfigRoutes);
 console.log('✅ Admin daily check-in config routes registered at /api/admin/daily-checkin-config');
+app.use(`${API_PREFIX}/admin/special-programs`, adminSpecialProgramsRoutes);
+console.log('✅ Admin special programs routes registered at /api/admin/special-programs');
+app.use(`${API_PREFIX}/admin/events`, adminEventsRoutes);
+console.log('✅ Admin events routes registered at /api/admin/events');
+app.use(`${API_PREFIX}/admin/event-categories`, adminEventCategoriesRoutes);
+console.log('✅ Admin event categories routes registered at /api/admin/event-categories');
+app.use(`${API_PREFIX}/admin/event-rewards`, adminEventRewardsRoutes);
+console.log('✅ Admin event rewards routes registered at /api/admin/event-rewards');
+app.use(`${API_PREFIX}/admin/learning-content`, adminLearningContentRoutes);
+console.log('✅ Admin learning content routes registered at /api/admin/learning-content');
+app.use(`${API_PREFIX}/admin/leaderboard/configs`, adminLeaderboardConfigRoutes);
+console.log('✅ Admin leaderboard config routes registered at /api/admin/leaderboard/configs');
+app.use(`${API_PREFIX}/admin/quick-actions`, adminQuickActionRoutes);
+console.log('✅ Admin quick action routes registered at /api/admin/quick-actions');
+app.use(`${API_PREFIX}/admin/value-cards`, adminValueCardRoutes);
+console.log('✅ Admin value card routes registered at /api/admin/value-cards');
 
 // Admin Engagement Config Routes
 import { Router as EngagementConfigRouter } from 'express';
@@ -977,6 +1023,10 @@ console.log('✅ Admin engagement config routes registered at /api/admin/engagem
 app.use(`${API_PREFIX}/campaigns`, campaignRoutes);
 console.log('✅ Campaign routes registered at /api/campaigns');
 
+// Bonus Zone Routes - Production campaign reward engine
+app.use(`${API_PREFIX}/bonus-zone`, bonusZoneRoutes);
+console.log('✅ Bonus Zone routes registered at /api/bonus-zone');
+
 // Lock Price Deal Routes - Lock deals with deposit, double earnings, pickup rewards
 app.use(`${API_PREFIX}/lock-deals`, lockDealRoutes);
 console.log('✅ Lock deal routes registered at /api/lock-deals');
@@ -988,6 +1038,14 @@ console.log('✅ Play & Earn routes registered at /api/play-earn');
 // Experience Routes - Store experiences
 app.use(`${API_PREFIX}/experiences`, experienceRoutes);
 console.log('✅ Experience routes registered at /api/experiences');
+
+// Content Routes - Public content (value cards, quick actions)
+app.use(`${API_PREFIX}/content`, contentRoutes);
+console.log('✅ Content routes registered at /api/content');
+
+// Earn Routes - Nearby earn, earning opportunities
+app.use(`${API_PREFIX}/earn`, earnRoutes);
+console.log('✅ Earn routes registered at /api/earn');
 
 // // Search Routes - Global search across products, stores, and articles
 app.use(`${API_PREFIX}/search`, searchRoutes);
@@ -1212,6 +1270,9 @@ stockSocketService.initialize(io);
 // Initialize earnings socket service
 earningsSocketService.initialize(io);
 
+// Initialize gamification socket service (live tournament leaderboards)
+gamificationSocketService.initialize(io);
+
 // Initialize real-time service
 const realTimeServiceInstance = RealTimeService.getInstance(io);
 global.realTimeService = realTimeServiceInstance;
@@ -1329,6 +1390,21 @@ async function startServer() {
     initializeStreakResetJob();
     console.log('✅ Streak reset job started (runs daily at 00:05 UTC)');
 
+    // Initialize bonus campaign jobs (status transitions every 5m, expire claims every 30m)
+    console.log('🔄 Initializing bonus campaign jobs...');
+    initBonusCampaignJobs();
+    console.log('✅ Bonus campaign jobs started (transitions: 5m, expire claims: 30m)');
+
+    // Initialize challenge lifecycle jobs (status transitions every 5m, cleanup every 30m)
+    console.log('🔄 Initializing challenge lifecycle jobs...');
+    initChallengeLifecycleJobs();
+    console.log('✅ Challenge lifecycle jobs started (transitions: 5m, cleanup: 30m)');
+
+    // Initialize tournament lifecycle jobs (activation + completion + prize distribution)
+    console.log('🔄 Initializing tournament lifecycle jobs...');
+    initializeTournamentLifecycleJobs();
+    console.log('✅ Tournament lifecycle jobs started (activation: 5m, completion: 5m)');
+
     // Initialize Bull-based scheduled job service (preferred over node-cron above)
     // The node-cron jobs above serve as fallback if Redis/Bull is unavailable
     console.log('🔄 Initializing Bull scheduled job service...');
@@ -1339,6 +1415,17 @@ async function startServer() {
     console.log('🔄 Initializing audit retention service...');
     await AuditRetentionService.initialize();
     console.log('✅ Audit retention service initialized');
+
+    // Initialize leaderboard prize distribution job (hourly check for period-end prizes)
+    console.log('🔄 Initializing leaderboard prize distribution job...');
+    initializePrizeDistributionJob();
+    console.log('✅ Leaderboard prize distribution job started (runs hourly)');
+
+    // Initialize gamification event bus
+    console.log('🔄 Initializing gamification event bus...');
+    const gamificationEventBus = (await import('./events/gamificationEventBus')).default;
+    await gamificationEventBus.initialize();
+    console.log('✅ Gamification event bus initialized');
 
     // Start HTTP server (with Socket.IO attached)
     server.listen(Number(PORT), '0.0.0.0', () => {

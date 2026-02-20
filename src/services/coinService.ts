@@ -2,6 +2,7 @@ import { CoinTransaction, MainCategorySlug } from '../models/CoinTransaction';
 import { Wallet } from '../models/Wallet';
 import { UserLoyalty } from '../models/UserLoyalty';
 import mongoose from 'mongoose';
+import specialProgramService from './specialProgramService';
 
 /**
  * Get user's current coin balance (global or category-specific)
@@ -112,10 +113,30 @@ export async function awardCoins(
     throw new Error('Amount must be positive');
   }
 
+  // Program cap enforcement (fail-open: if service fails, award proceeds)
+  let adjustedAmount = amount;
+  try {
+    const capCheck = await specialProgramService.checkEarningCap(userId, amount, source);
+    if (!capCheck.allowed && capCheck.adjustedAmount === 0) {
+      return {
+        transactionId: null,
+        amount: 0,
+        newBalance: await getCoinBalance(userId),
+        source,
+        description,
+        category: category || null,
+        cappedReason: capCheck.reason,
+      };
+    }
+    adjustedAmount = capCheck.adjustedAmount;
+  } catch (capError) {
+    console.error('[COIN SERVICE] Program cap check failed (proceeding with original amount):', capError);
+  }
+
   const transaction = await CoinTransaction.createTransaction(
     userId,
     'earned',
-    amount,
+    adjustedAmount,
     source,
     description,
     metadata,
@@ -161,7 +182,7 @@ export async function awardCoins(
           }
         );
       }
-      console.log(`✅ [COIN SERVICE] Wallet updated atomically: +${amount} coins${category ? ` (${category})` : ''}`);
+      console.log(`✅ [COIN SERVICE] Wallet updated atomically: +${adjustedAmount} coins${category ? ` (${category})` : ''}`);
     }
   } catch (walletError) {
     console.error('❌ [COIN SERVICE] Failed to update wallet:', walletError);
@@ -173,7 +194,7 @@ export async function awardCoins(
       let loyalty = await UserLoyalty.findOne({ userId });
       if (loyalty) {
         const catCoins = loyalty.categoryCoins?.get(category) || { available: 0, expiring: 0 };
-        catCoins.available += amount;
+        catCoins.available += adjustedAmount;
         if (!loyalty.categoryCoins) {
           loyalty.categoryCoins = new Map();
         }
@@ -186,13 +207,79 @@ export async function awardCoins(
     }
   }
 
+  // Program multiplier bonus (fail-open: if bonus fails, base award still succeeded)
+  let multiplierBonus = 0;
+  try {
+    const { bonus, programSlug, programBonuses } = await specialProgramService.calculateMultiplierBonus(userId, adjustedAmount, source);
+    if (bonus > 0) {
+      const slugLabel = programBonuses.map(pb => pb.slug).join('+');
+      // Create separate bonus transaction for auditability
+      await CoinTransaction.createTransaction(
+        userId,
+        'bonus',
+        bonus,
+        'program_multiplier_bonus',
+        `${slugLabel} multiplier bonus on ${source}`,
+        { originalTransactionId: transaction._id, programSlug: slugLabel, programBonuses },
+        category || null
+      );
+
+      // Update Wallet with bonus
+      try {
+        const bonusWallet = await Wallet.findOne({ user: userId });
+        if (bonusWallet) {
+          if (category) {
+            await Wallet.findByIdAndUpdate(bonusWallet._id, {
+              $inc: {
+                [`categoryBalances.${category}.available`]: bonus,
+                [`categoryBalances.${category}.earned`]: bonus,
+                'statistics.totalEarned': bonus,
+                'balance.total': bonus,
+              },
+              $set: { lastTransactionAt: new Date() },
+            });
+          } else {
+            await Wallet.findOneAndUpdate(
+              { _id: bonusWallet._id, 'coins.type': 'rez' },
+              {
+                $inc: {
+                  'balance.available': bonus,
+                  'balance.total': bonus,
+                  'statistics.totalEarned': bonus,
+                  'coins.$.amount': bonus,
+                },
+                $set: { 'coins.$.lastUsed': new Date(), lastTransactionAt: new Date() },
+              }
+            );
+          }
+        }
+      } catch (bonusWalletErr) {
+        console.error('[COIN SERVICE] Failed to update wallet with multiplier bonus:', bonusWalletErr);
+      }
+
+      multiplierBonus = bonus;
+      console.log(`✅ [COIN SERVICE] Multiplier bonus: +${bonus} coins (${slugLabel})`);
+
+      // Track bonus per program in each membership
+      for (const pb of programBonuses) {
+        await specialProgramService.incrementMultiplierBonus(userId, pb.slug, pb.bonus).catch(() => {});
+      }
+    }
+
+    // Track monthly earnings for active memberships
+    await specialProgramService.incrementMonthlyEarnings(userId, adjustedAmount + multiplierBonus).catch(() => {});
+  } catch (multiplierError) {
+    console.error('[COIN SERVICE] Program multiplier calculation failed:', multiplierError);
+  }
+
   return {
     transactionId: transaction._id,
     amount: transaction.amount,
     newBalance: transaction.balance,
     source: transaction.source,
     description: transaction.description,
-    category: category || null
+    category: category || null,
+    ...(multiplierBonus > 0 && { multiplierBonus }),
   };
 }
 

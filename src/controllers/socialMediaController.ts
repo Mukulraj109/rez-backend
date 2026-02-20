@@ -11,6 +11,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { sendSuccess, sendError, sendNotFound } from '../utils/response';
 import achievementService from '../services/achievementService';
+import gamificationEventBus from '../events/gamificationEventBus';
 import merchantNotificationService from '../services/merchantNotificationService';
 import { User } from '../models/User';
 
@@ -247,12 +248,12 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
       userAgent: userAgent || 'unknown'
     });
 
-    // Trigger achievement update for social media post submission
-    try {
-      await achievementService.triggerAchievementUpdate(userId, 'social_media_post_submitted');
-    } catch (error) {
-      console.error('❌ [SOCIAL MEDIA] Error triggering achievement update:', error);
-    }
+    // Emit gamification event for social media post submission
+    gamificationEventBus.emit('social_media_submitted', {
+      userId,
+      entityType: 'social_media_post',
+      source: { controller: 'socialMediaController', action: 'submitPost' }
+    });
 
     // Notify merchant about new cashback request
     if (merchantId) {
@@ -452,12 +453,12 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
       userAgent: userAgent || 'unknown'
     });
 
-    // Trigger achievement update
-    try {
-      await achievementService.triggerAchievementUpdate(userId, 'social_media_post_submitted');
-    } catch (error) {
-      console.error('❌ [SOCIAL MEDIA] Error triggering achievement update:', error);
-    }
+    // Emit gamification event for social media post submission
+    gamificationEventBus.emit('social_media_submitted', {
+      userId,
+      entityType: 'social_media_post',
+      source: { controller: 'socialMediaController', action: 'submitCashbackPost' }
+    });
 
     // Notify merchant about new cashback request
     if (merchantId) {
@@ -634,12 +635,13 @@ export const updatePostStatus = asyncHandler(async (req: Request, res: Response)
         userAgent: (req.headers['user-agent'] || 'unknown') as string
       });
 
-      // Trigger achievement update for social media post approval
-      try {
-        await achievementService.triggerAchievementUpdate(post.user, 'social_media_post_approved');
-      } catch (error) {
-        console.error('❌ [SOCIAL MEDIA] Error triggering achievement update for approval:', error);
-      }
+      // Emit gamification event for social media post approval
+      gamificationEventBus.emit('social_media_approved', {
+        userId: String(post.user),
+        entityId: String(post._id),
+        entityType: 'social_media_post',
+        source: { controller: 'socialMediaController', action: 'moderatePost' }
+      });
     } else if (status === 'rejected') {
       await post.reject(new Types.ObjectId(reviewerId), rejectionReason);
 
@@ -705,12 +707,14 @@ export const updatePostStatus = asyncHandler(async (req: Request, res: Response)
         console.error('❌ [SOCIAL MEDIA] Failed to credit coins via coinService:', coinError);
       }
 
-      // Trigger achievement update
-      try {
-        await achievementService.triggerAchievementUpdate(post.user, 'social_media_post_credited');
-      } catch (error) {
-        console.error('❌ [SOCIAL MEDIA] Error triggering achievement update for crediting:', error);
-      }
+      // Emit gamification event for social media post crediting
+      gamificationEventBus.emit('social_media_credited', {
+        userId: String(post.user),
+        entityId: String(post._id),
+        entityType: 'social_media_post',
+        amount: post.cashbackAmount,
+        source: { controller: 'socialMediaController', action: 'creditPost' }
+      });
     }
 
     sendSuccess(res, {

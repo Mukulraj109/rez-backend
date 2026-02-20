@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Campaign from '../models/Campaign';
 import DealRedemption from '../models/DealRedemption';
+import ProgramMembership from '../models/ProgramMembership';
 import { sendSuccess, sendNotFound, sendBadRequest, sendError } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
@@ -44,10 +45,25 @@ export const getActiveCampaigns = asyncHandler(async (req: Request, res: Respons
 
     console.log(`🔍 [CAMPAIGNS] Fetching active campaigns for region: ${region || 'all'}...`);
 
-    const campaigns = await Campaign.find(query)
+    let campaigns = await Campaign.find(query)
       .sort({ priority: -1 })
       .limit(Number(limit))
       .lean();
+
+    // Filter out program-exclusive campaigns for non-members
+    const exclusiveCampaigns = campaigns.filter((c: any) => c.exclusiveToProgramSlug);
+    if (exclusiveCampaigns.length > 0 && req.user) {
+      const userMemberships = await ProgramMembership.find({
+        user: req.user._id,
+        status: 'active',
+      }).select('programSlug').lean();
+      const activeSlugs = new Set(userMemberships.map(m => m.programSlug));
+      campaigns = campaigns.filter((c: any) =>
+        !c.exclusiveToProgramSlug || activeSlugs.has(c.exclusiveToProgramSlug)
+      );
+    } else if (exclusiveCampaigns.length > 0 && !req.user) {
+      campaigns = campaigns.filter((c: any) => !c.exclusiveToProgramSlug);
+    }
 
     console.log(`✅ [CAMPAIGNS] Found ${campaigns.length} active campaigns`);
 
@@ -94,10 +110,25 @@ export const getCampaignsByType = asyncHandler(async (req: Request, res: Respons
       ];
     }
 
-    const campaigns = await Campaign.find(query)
+    let campaigns = await Campaign.find(query)
       .sort({ priority: -1 })
       .limit(Number(limit))
       .lean();
+
+    // Filter out program-exclusive campaigns for non-members
+    const exclusiveCampaigns = campaigns.filter((c: any) => c.exclusiveToProgramSlug);
+    if (exclusiveCampaigns.length > 0 && req.user) {
+      const userMemberships = await ProgramMembership.find({
+        user: req.user._id,
+        status: 'active',
+      }).select('programSlug').lean();
+      const activeSlugs = new Set(userMemberships.map(m => m.programSlug));
+      campaigns = campaigns.filter((c: any) =>
+        !c.exclusiveToProgramSlug || activeSlugs.has(c.exclusiveToProgramSlug)
+      );
+    } else if (exclusiveCampaigns.length > 0 && !req.user) {
+      campaigns = campaigns.filter((c: any) => !c.exclusiveToProgramSlug);
+    }
 
     sendSuccess(res, {
       campaigns,

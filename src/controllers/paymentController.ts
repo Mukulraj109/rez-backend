@@ -213,6 +213,19 @@ export const verifyPayment = asyncHandler(async (req: Request, res: Response) =>
 
     console.log('✅ [PAYMENT CONTROLLER] Payment verified and processed successfully');
 
+    // Auto-trigger bank_offer bonus campaign on successful payment
+    try {
+      const bonusCampaignService = require('../services/bonusCampaignService');
+      console.log('[PAYMENT] Triggering bank_offer for order:', orderId);
+      await bonusCampaignService.autoClaimForTransaction('bank_offer', userId, {
+        transactionRef: { type: 'payment' as const, refId: razorpay_payment_id },
+        transactionAmount: order.totals.total,
+        paymentMethod: order.payment?.method,
+      });
+    } catch (bonusErr) {
+      console.error('[PAYMENT] bank_offer auto-claim failed (non-blocking):', bonusErr);
+    }
+
     // Populate order for response
     const populatedOrder = await Order.findById(updatedOrder._id)
       .populate('items.product', 'name image images')

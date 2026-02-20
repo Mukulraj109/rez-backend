@@ -28,7 +28,6 @@ const SOURCE_TO_CATEGORY: Record<string, string> = {
   offer_comment: 'socialMedia',
   photo_upload: 'socialMedia',
   ugc_reel: 'socialMedia',
-  event_rating: 'bonus',
   spin_wheel: 'games',
   scratch_card: 'games',
   quiz_game: 'games',
@@ -43,7 +42,17 @@ const SOURCE_TO_CATEGORY: Record<string, string> = {
   bill_upload: 'bonus',
   survey: 'bonus',
   merchant_award: 'bonus',
+  bonus_campaign: 'bonus',
   social_impact_reward: 'socialImpact',
+  program_task_reward: 'programs',
+  program_multiplier_bonus: 'programs',
+  event_booking: 'events',
+  event_checkin: 'events',
+  event_participation: 'events',
+  event_sharing: 'events',
+  event_entry: 'events',
+  event_review: 'events',
+  event_rating: 'events',
 };
 
 /**
@@ -57,8 +66,10 @@ const TYPE_TO_SOURCES: Record<string, string[]> = {
   socialMedia: ['social_share_reward', 'poll_vote', 'offer_comment', 'photo_upload', 'ugc_reel'],
   games: ['spin_wheel', 'scratch_card', 'quiz_game', 'memory_match', 'coin_hunt', 'guess_price'],
   dailyCheckIn: ['daily_login'],
-  bonus: ['achievement', 'challenge', 'admin', 'review', 'bill_upload', 'survey', 'merchant_award', 'event_rating'],
+  bonus: ['achievement', 'challenge', 'admin', 'review', 'bill_upload', 'survey', 'merchant_award', 'bonus_campaign'],
   socialImpact: ['social_impact_reward'],
+  programs: ['program_task_reward', 'program_multiplier_bonus'],
+  events: ['event_booking', 'event_checkin', 'event_participation', 'event_sharing', 'event_entry', 'event_review', 'event_rating'],
 };
 
 /**
@@ -137,6 +148,7 @@ export const getConsolidatedEarningsSummary = asyncHandler(async (req: Request, 
       socialMedia: { amount: 0, count: 0 },
       games: { amount: 0, count: 0 },
       dailyCheckIn: { amount: 0, count: 0 },
+      events: { amount: 0, count: 0 },
       bonus: { amount: 0, count: 0 },
     };
 
@@ -819,6 +831,7 @@ export const getEarningsHistory = asyncHandler(async (req: Request, res: Respons
           socialMedia: Math.round((breakdownMap.socialMedia || 0) * 100) / 100,
           games: Math.round((breakdownMap.games || 0) * 100) / 100,
           dailyCheckIn: Math.round((breakdownMap.dailyCheckIn || 0) * 100) / 100,
+          events: Math.round((breakdownMap.events || 0) * 100) / 100,
           bonus: Math.round((breakdownMap.bonus || 0) * 100) / 100,
         }
       },

@@ -9,6 +9,7 @@ import {
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+import challengeService from '../services/challengeService';
 
 // Add store to favorites
 export const addToFavorites = asyncHandler(async (req: Request, res: Response) => {
@@ -128,6 +129,12 @@ export const toggleFavorite = asyncHandler(async (req: Request, res: Response) =
       await favorite.save();
       await favorite.populate('store', 'name logo description location ratings operationalInfo deliveryCategories isActive isFeatured isVerified');
       isFavorited = true;
+
+      // Update challenge progress for adding favorite (non-blocking)
+      challengeService.updateProgress(
+        String(userId), 'add_favorites', 1,
+        { storeId: String(storeId) }
+      ).catch(err => console.error('[FAVORITE] Challenge progress update failed:', err));
     }
 
     sendSuccess(res, {

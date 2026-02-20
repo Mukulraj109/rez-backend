@@ -10,6 +10,7 @@ import {
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import achievementService from '../services/achievementService';
+import gamificationEventBus from '../events/gamificationEventBus';
 import { sendCreated } from '../utils/response';
 
 // Create a new video
@@ -90,12 +91,13 @@ export const createVideo = asyncHandler(async (req: Request, res: Response) => {
 
     console.log('✅ [VIDEO] Video created successfully:', video._id);
 
-    // Trigger achievement update for video creation
-    try {
-      await achievementService.triggerAchievementUpdate(userId, 'video_created');
-    } catch (error) {
-      console.error('❌ [VIDEO] Error triggering achievement update:', error);
-    }
+    // Emit gamification event for video creation
+    gamificationEventBus.emit('video_created', {
+      userId,
+      entityId: String(video._id),
+      entityType: 'video',
+      source: { controller: 'videoController', action: 'createVideo' }
+    });
 
     // Populate creator info for response
     await video.populate('creator', 'profile.firstName profile.lastName profile.avatar');

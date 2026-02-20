@@ -4,12 +4,19 @@ import {
   getUnlockedAchievements,
   getAchievementProgress,
   initializeUserAchievements,
-  updateAchievementProgress,
   recalculateAchievements
 } from '../controllers/achievementController';
 import { authenticate } from '../middleware/auth';
+import { createRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
+
+// Rate limiter for achievement recalculation (1 per minute per IP — per-user lock is in controller)
+const recalculateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 3,
+  message: 'Achievement recalculation is rate limited. Please wait a moment.',
+});
 
 // All routes require authentication
 router.use(authenticate);
@@ -19,7 +26,7 @@ router.get('/', getUserAchievements);
 router.get('/unlocked', getUnlockedAchievements);
 router.get('/progress', getAchievementProgress);
 router.post('/initialize', initializeUserAchievements);
-router.put('/update-progress', updateAchievementProgress);
-router.post('/recalculate', recalculateAchievements);
+// REMOVED: PUT /update-progress — accepting user-submitted progress values is a security vulnerability
+router.post('/recalculate', recalculateLimiter, recalculateAchievements);
 
 export default router;

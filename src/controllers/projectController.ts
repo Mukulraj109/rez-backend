@@ -9,6 +9,7 @@ import {
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import achievementService from '../services/achievementService';
+import gamificationEventBus from '../events/gamificationEventBus';
 import { sendCreated } from '../utils/response';
 import earningsSocketService from '../services/earningsSocketService';
 
@@ -231,12 +232,13 @@ export const submitProject = asyncHandler(async (req: Request, res: Response) =>
           console.error('❌ [PROJECT] Error emitting project status update:', error);
         }
 
-    // Trigger achievement update for project submission
-    try {
-      await achievementService.triggerAchievementUpdate(userId, 'project_submitted');
-    } catch (error) {
-      console.error('❌ [PROJECT] Error triggering achievement update:', error);
-    }
+    // Emit gamification event for project submission
+    gamificationEventBus.emit('project_completed', {
+      userId,
+      entityId: String(project._id),
+      entityType: 'project',
+      source: { controller: 'projectController', action: 'submitProject' }
+    });
 
     // Get the created submission with its generated _id
     const createdSubmission = project.submissions[project.submissions.length - 1];

@@ -2,10 +2,14 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Event, EventBooking } from '../models';
 import Payment from '../models/Payment';
+import EventCategory from '../models/EventCategory';
+import UserEventFavorite from '../models/UserEventFavorite';
+import EventAttendance from '../models/EventAttendance';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { IEvent } from '../models/Event';
 import { IEventBooking } from '../models/EventBooking';
 import paymentGatewayService from '../services/paymentGatewayService';
+import eventRewardService from '../services/eventRewardService';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
 
 // Helper function to escape regex special characters to prevent ReDoS attacks
@@ -27,13 +31,15 @@ export const getAllEvents = asyncHandler(async (req: Request, res: Response) => 
     category,
     location,
     date,
-    limit = 20,
-    offset = 0,
+    limit: rawLimit = 20,
+    offset: rawOffset = 0,
     featured,
     upcoming,
     todayAndFuture,
     sortBy = 'date'
   } = req.query;
+  const limit = Math.min(Number(rawLimit) || 20, 100);
+  const offset = Math.max(Number(rawOffset) || 0, 0);
 
   // Build query
   const query: any = { status: 'published' };
@@ -98,8 +104,8 @@ export const getAllEvents = asyncHandler(async (req: Request, res: Response) => 
 
   const events = await Event.find(query)
     .sort(sort)
-    .limit(Number(limit))
-    .skip(Number(offset))
+    .limit(limit)
+    .skip(offset)
     .lean();
 
   const total = await Event.countDocuments(query);
@@ -109,8 +115,8 @@ export const getAllEvents = asyncHandler(async (req: Request, res: Response) => 
     data: {
       events,
       total,
-      hasMore: Number(offset) + events.length < total,
-      limit: Number(limit),
+      hasMore: offset + events.length < total,
+      limit,
       offset: Number(offset)
     }
   });
@@ -160,7 +166,9 @@ export const getEventById = asyncHandler(async (req: Request, res: Response) => 
 // @access  Public
 export const getEventsByCategory = asyncHandler(async (req: Request, res: Response) => {
   const { category } = req.params;
-  const { limit = 20, offset = 0, subcategory, tags } = req.query;
+  const { limit: rawLim = 20, offset: rawOff = 0, subcategory, tags, dateFilter } = req.query;
+  const limit = Math.min(Number(rawLim) || 20, 100);
+  const offset = Math.max(Number(rawOff) || 0, 0);
 
   // Build query for category filtering
   const query: any = {
@@ -173,6 +181,25 @@ export const getEventsByCategory = asyncHandler(async (req: Request, res: Respon
   if (regionHeader && isValidRegion(regionHeader)) {
     const regionFilter = regionService.getEventFilter(regionHeader as RegionId);
     Object.assign(query, regionFilter);
+  }
+
+  // Apply date filter
+  if (dateFilter && dateFilter !== 'all') {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    if (dateFilter === 'today') {
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      query.date = { $gte: today, $lt: tomorrow };
+    } else if (dateFilter === 'thisWeek') {
+      const endOfWeek = new Date(today);
+      endOfWeek.setDate(endOfWeek.getDate() + (7 - endOfWeek.getDay()));
+      query.date = { $gte: today, $lte: endOfWeek };
+    } else if (dateFilter === 'thisMonth') {
+      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      query.date = { $gte: today, $lte: endOfMonth };
+    }
   }
 
   // Add subcategory filter if provided
@@ -188,8 +215,8 @@ export const getEventsByCategory = asyncHandler(async (req: Request, res: Respon
 
   const events = await Event.find(query)
     .sort({ featured: -1, priority: -1, date: 1 })
-    .limit(Number(limit))
-    .skip(Number(offset))
+    .limit(limit)
+    .skip(offset)
     .lean();
 
   const total = await Event.countDocuments(query);
@@ -199,7 +226,7 @@ export const getEventsByCategory = asyncHandler(async (req: Request, res: Respon
     data: {
       events,
       total,
-      hasMore: Number(offset) + events.length < total
+      hasMore: offset + events.length < total
     }
   });
 });
@@ -216,9 +243,11 @@ export const searchEvents = asyncHandler(async (req: Request, res: Response) => 
     priceMin,
     priceMax,
     isOnline,
-    limit = 20,
-    offset = 0
+    limit: rawLim2 = 20,
+    offset: rawOff2 = 0
   } = req.query;
+  const limit = Math.min(Number(rawLim2) || 20, 100);
+  const offset = Math.max(Number(rawOff2) || 0, 0);
 
   // Build search query
   const query: any = { status: 'published' };
@@ -270,8 +299,8 @@ export const searchEvents = asyncHandler(async (req: Request, res: Response) => 
 
   const events = await Event.find(query, q ? { score: { $meta: 'textScore' } } : {})
     .sort(sort)
-    .limit(Number(limit))
-    .skip(Number(offset))
+    .limit(limit)
+    .skip(offset)
     .lean();
 
   const total = await Event.countDocuments(query);
@@ -284,7 +313,7 @@ export const searchEvents = asyncHandler(async (req: Request, res: Response) => 
     data: {
       events,
       total,
-      hasMore: Number(offset) + events.length < total,
+      hasMore: offset + events.length < total,
       suggestions
     }
   });
@@ -294,7 +323,8 @@ export const searchEvents = asyncHandler(async (req: Request, res: Response) => 
 // @route   GET /api/events/featured
 // @access  Public
 export const getFeaturedEvents = asyncHandler(async (req: Request, res: Response) => {
-  const { limit = 10 } = req.query;
+  const { limit: rawLimFeat = 10 } = req.query;
+  const limit = Math.min(Number(rawLimFeat) || 10, 50);
 
   // Build query
   const query: any = {
@@ -312,7 +342,7 @@ export const getFeaturedEvents = asyncHandler(async (req: Request, res: Response
 
   const events = await Event.find(query)
     .sort({ priority: -1, date: 1 })
-    .limit(Number(limit))
+    .limit(limit)
     .lean();
 
   res.json({
@@ -321,60 +351,46 @@ export const getFeaturedEvents = asyncHandler(async (req: Request, res: Response
   });
 });
 
-// @desc    Book event slot
+// @desc    Book event slot (HARDENED: atomic inventory + idempotency + rewards)
 // @route   POST /api/events/:id/book
 // @access  Private
 export const bookEventSlot = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { slotId, attendeeInfo } = req.body;
+  const { slotId, ticketTypeId, attendeeInfo, idempotencyKey } = req.body;
   const userId = (req as any).user?.id;
 
   if (!userId) {
-    return res.status(401).json({
-      success: false,
-      message: 'Authentication required'
-    });
+    return res.status(401).json({ success: false, message: 'Authentication required' });
   }
 
-  // Validate attendeeInfo
+  // 1. Idempotency check: if same key was used before, return existing booking
+  if (idempotencyKey) {
+    const existingByKey = await EventBooking.findOne({ idempotencyKey });
+    if (existingByKey) {
+      return res.status(200).json({
+        success: true,
+        data: { booking: existingByKey },
+        message: 'Booking already exists (idempotent)',
+      });
+    }
+  }
+
+  // 2. Validate attendeeInfo
   if (!attendeeInfo || typeof attendeeInfo !== 'object') {
-    return res.status(400).json({
-      success: false,
-      message: 'Attendee information is required'
-    });
+    return res.status(400).json({ success: false, message: 'Attendee information is required' });
   }
-
-  // Validate required fields
   if (!attendeeInfo.name || typeof attendeeInfo.name !== 'string' || attendeeInfo.name.trim().length < 2) {
-    return res.status(400).json({
-      success: false,
-      message: 'Valid attendee name is required (minimum 2 characters)'
-    });
+    return res.status(400).json({ success: false, message: 'Valid attendee name is required (minimum 2 characters)' });
   }
-
-  // Validate email format
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!attendeeInfo.email || !emailRegex.test(attendeeInfo.email)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Valid email address is required'
-    });
+    return res.status(400).json({ success: false, message: 'Valid email address is required' });
   }
-
-  // Validate phone format if provided
   if (attendeeInfo.phone && !/^\+?[\d\s\-()]{10,}$/.test(attendeeInfo.phone)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid phone number format'
-    });
+    return res.status(400).json({ success: false, message: 'Invalid phone number format' });
   }
-
-  // Validate age if provided
   if (attendeeInfo.age !== undefined && (typeof attendeeInfo.age !== 'number' || attendeeInfo.age < 0 || attendeeInfo.age > 150)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid age (must be between 0 and 150)'
-    });
+    return res.status(400).json({ success: false, message: 'Invalid age (must be between 0 and 150)' });
   }
 
   // Sanitize input
@@ -383,144 +399,179 @@ export const bookEventSlot = asyncHandler(async (req: Request, res: Response) =>
   if (attendeeInfo.phone) attendeeInfo.phone = attendeeInfo.phone.trim();
   if (attendeeInfo.specialRequirements) attendeeInfo.specialRequirements = attendeeInfo.specialRequirements.trim().substring(0, 500);
 
-  // Find event
+  // 3. Find event
   const event = await Event.findById(id);
   if (!event || event.status !== 'published') {
-    return res.status(404).json({
-      success: false,
-      message: 'Event not found'
-    });
+    return res.status(404).json({ success: false, message: 'Event not found' });
   }
-
-  // Check if event is in the future
   if (event.date < new Date()) {
-    return res.status(400).json({
-      success: false,
-      message: 'Cannot book past events'
-    });
+    return res.status(400).json({ success: false, message: 'Cannot book past events' });
   }
 
-  // Check if user already booked this event
-  // Allow re-booking if previous booking failed (cancelled) or if pending booking has no payment info
+  // 4. Check for existing active booking
   const existingBooking = await EventBooking.findOne({
-    eventId: id,
-    userId,
-    status: { $in: ['pending', 'confirmed'] }
+    eventId: id, userId, status: { $in: ['pending', 'confirmed'] }
   });
-
   if (existingBooking) {
-    // If booking is confirmed, user can't book again
     if (existingBooking.status === 'confirmed') {
-      return res.status(400).json({
-        success: false,
-        message: 'You have already booked this event'
-      });
+      return res.status(400).json({ success: false, message: 'You have already booked this event' });
     }
-
-    // If booking is pending, check if it has payment info
-    // If no payment info, we can reuse this booking and create payment
+    // Clean up stale pending bookings (expired lock or no payment)
     if (existingBooking.status === 'pending') {
-      // Check if this is a paid event
-      if (!event.price.isFree && event.price.amount > 0) {
-        // For paid events with pending booking, we'll create payment for existing booking
-        // Delete the old booking and create a new one to ensure fresh payment intent
-        console.log('🔄 [EVENT BOOKING] Found existing pending booking, deleting and creating new one');
+      if (existingBooking.lockedUntil && existingBooking.lockedUntil < new Date()) {
+        // Lock expired — release slot and delete
+        if (existingBooking.slotId) {
+          await Event.findOneAndUpdate(
+            { _id: id, 'availableSlots.id': existingBooking.slotId },
+            { $inc: { 'availableSlots.$.bookedCount': -1 } }
+          );
+        }
         await EventBooking.findByIdAndDelete(existingBooking._id);
       } else {
-        // For free events, pending booking shouldn't exist, but if it does, delete it
-        console.log('🔄 [EVENT BOOKING] Found existing pending booking for free event, deleting');
         await EventBooking.findByIdAndDelete(existingBooking._id);
       }
     }
   }
 
-  // Handle slot-based events
+  // 5. ATOMIC slot inventory update (prevents overselling under concurrency)
   if (event.availableSlots && event.availableSlots.length > 0) {
     if (!slotId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Slot ID is required for this event'
-      });
+      return res.status(400).json({ success: false, message: 'Slot ID is required for this event' });
     }
 
-    const slot = event.availableSlots.find(s => s.id === slotId);
-    if (!slot || !slot.available) {
-      return res.status(400).json({
-        success: false,
-        message: 'Selected slot is not available'
-      });
-    }
+    // Atomic: increment bookedCount only if slot is available AND under capacity
+    // Uses $elemMatch to ensure bookedCount < maxCapacity in the same query
+    const slotUpdate = await Event.findOneAndUpdate(
+      {
+        _id: id,
+        availableSlots: {
+          $elemMatch: {
+            id: slotId,
+            available: true,
+            $expr: { $lt: ['$bookedCount', '$maxCapacity'] },
+          },
+        },
+      },
+      {
+        $inc: { 'availableSlots.$.bookedCount': 1 },
+      },
+      { new: true }
+    );
 
-    if (slot.bookedCount >= slot.maxCapacity) {
-      return res.status(400).json({
-        success: false,
-        message: 'Selected slot is fully booked'
-      });
+    // Fallback: $expr inside $elemMatch isn't supported in all MongoDB versions
+    // Try simpler approach if first query didn't match
+    if (!slotUpdate) {
+      // Check if slot exists but is full vs doesn't exist
+      const existingEvent = await Event.findOne(
+        { _id: id, 'availableSlots.id': slotId, 'availableSlots.available': true }
+      );
+      if (!existingEvent) {
+        return res.status(409).json({ success: false, message: 'Selected slot is not available' });
+      }
+      const slot = existingEvent.availableSlots?.find(s => s.id === slotId);
+      if (slot && slot.bookedCount >= slot.maxCapacity) {
+        return res.status(409).json({ success: false, message: 'Slot is fully booked' });
+      }
+      // Try simple atomic increment with post-check
+      const simpleUpdate = await Event.findOneAndUpdate(
+        { _id: id, 'availableSlots.id': slotId, 'availableSlots.available': true },
+        { $inc: { 'availableSlots.$.bookedCount': 1 } },
+        { new: true }
+      );
+      if (!simpleUpdate) {
+        return res.status(409).json({ success: false, message: 'Selected slot is not available or fully booked' });
+      }
+      // Post-check: verify we didn't exceed capacity
+      const updatedSlot = simpleUpdate.availableSlots?.find(s => s.id === slotId);
+      if (updatedSlot && updatedSlot.bookedCount > updatedSlot.maxCapacity) {
+        await Event.findOneAndUpdate(
+          { _id: id, 'availableSlots.id': slotId },
+          { $inc: { 'availableSlots.$.bookedCount': -1 } }
+        );
+        return res.status(409).json({ success: false, message: 'Slot is fully booked' });
+      }
     }
-
-    // Update slot booking count
-    slot.bookedCount += 1;
-    await event.save();
   }
 
-  // Generate booking reference before creating booking
-  const generateBookingReference = (): string => {
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-    return `EVT${timestamp}${random}`;
-  };
+  // 6. Determine booking amount (support ticketTypes)
+  let bookingAmount = event.price.amount;
+  if (ticketTypeId && event.ticketTypes && event.ticketTypes.length > 0) {
+    const ticketType = event.ticketTypes.find((t: any) => t._id?.toString() === ticketTypeId || t.name === ticketTypeId);
+    if (ticketType) {
+      bookingAmount = ticketType.price;
+    }
+  }
 
-  // Create booking
+  // 7. Generate booking reference
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const bookingReference = `EVT${timestamp}${random}`;
+
+  const isFree = event.price.isFree || bookingAmount === 0;
+  const lockDuration = 10 * 60 * 1000; // 10 minutes for payment
+
+  // 8. Create booking
   const booking = new EventBooking({
     eventId: id,
     userId,
     slotId,
-    amount: event.price.amount,
+    ticketTypeId,
+    quantity: 1,
+    amount: bookingAmount,
     currency: event.price.currency,
     attendeeInfo,
-    bookingReference: generateBookingReference(), // Explicitly set booking reference
-    status: event.price.isFree ? 'confirmed' : 'pending' // Free events are confirmed immediately
+    bookingReference,
+    idempotencyKey: idempotencyKey || undefined,
+    status: isFree ? 'confirmed' : 'pending',
+    lockedUntil: isFree ? undefined : new Date(Date.now() + lockDuration),
+    rewardsEarned: [],
   });
 
   await booking.save();
 
   // Increment event booking count
-  await (event as any).incrementBookings();
+  await Event.findByIdAndUpdate(id, { $inc: { 'analytics.bookings': 1 } });
 
-  // For paid events, create Stripe payment intent
-  let paymentData = null;
-  if (!event.price.isFree && event.price.amount > 0) {
+  // Increment ticketType soldCount if applicable
+  if (ticketTypeId && event.ticketTypes && event.ticketTypes.length > 0) {
+    await Event.findOneAndUpdate(
+      { _id: id, 'ticketTypes._id': ticketTypeId },
+      { $inc: { 'ticketTypes.$.soldCount': 1 } }
+    );
+  }
+
+  // 9. Grant booking reward for free events (paid events get reward on confirmation)
+  let rewardResult = null;
+  if (isFree) {
     try {
-      // Normalize currency: convert symbol to ISO code (e.g., ₹ -> inr)
+      rewardResult = await eventRewardService.grantEventReward(
+        userId.toString(), id, booking._id.toString(),
+        'entry_reward',
+        { eventName: event.title }
+      );
+    } catch (err) {
+      console.error('[EVENT BOOKING] Reward grant failed (non-blocking):', err);
+    }
+  }
+
+  // 10. For paid events, create Stripe payment intent
+  let paymentData = null;
+  if (!isFree && bookingAmount > 0) {
+    try {
       const normalizeCurrency = (currency: string): string => {
         const currencyMap: { [key: string]: string } = {
-          '₹': 'inr',
-          '$': 'usd',
-          '€': 'eur',
-          '£': 'gbp',
-          '¥': 'jpy',
-          'INR': 'inr',
-          'USD': 'usd',
-          'EUR': 'eur',
-          'GBP': 'gbp',
-          'JPY': 'jpy',
+          '₹': 'inr', '$': 'usd', '€': 'eur', '£': 'gbp', '¥': 'jpy',
+          'INR': 'inr', 'USD': 'usd', 'EUR': 'eur', 'GBP': 'gbp', 'JPY': 'jpy',
+          'AED': 'aed', 'د.إ': 'aed',
         };
-        const normalized = currencyMap[currency] || currency.toLowerCase();
-        return normalized;
+        return currencyMap[currency] || currency.toLowerCase();
       };
 
       const normalizedCurrency = normalizeCurrency(event.price.currency || '₹');
 
-      console.log('💳 [EVENT BOOKING] Creating payment intent for paid event:', {
-        amount: event.price.amount,
-        originalCurrency: event.price.currency,
-        normalizedCurrency,
-        bookingId: booking._id.toString()
-      });
-
       const paymentResponse = await paymentGatewayService.initiatePayment(
         {
-          amount: event.price.amount,
+          amount: bookingAmount,
           currency: normalizedCurrency,
           paymentMethod: 'stripe',
           paymentMethodType: 'card',
@@ -540,17 +591,10 @@ export const bookEventSlot = asyncHandler(async (req: Request, res: Response) =>
         userId.toString()
       );
 
-      console.log('💳 [EVENT BOOKING] Payment response received:', {
-        paymentId: paymentResponse.paymentId,
-        hasGatewayResponse: !!paymentResponse.gatewayResponse,
-        hasClientSecret: !!paymentResponse.gatewayResponse?.clientSecret
-      });
-
       if (!paymentResponse.gatewayResponse || !paymentResponse.gatewayResponse.clientSecret) {
         throw new Error('Payment gateway did not return client secret');
       }
 
-      // Safely extract payment data with proper null checks
       const sessionId = paymentResponse.paymentUrl && typeof paymentResponse.paymentUrl === 'string'
         ? paymentResponse.paymentUrl.split('/').pop() || null
         : null;
@@ -560,18 +604,16 @@ export const bookEventSlot = asyncHandler(async (req: Request, res: Response) =>
         clientSecret: paymentResponse.gatewayResponse?.clientSecret || '',
         sessionId,
       };
-
-      console.log('✅ [EVENT BOOKING] Payment intent created successfully:', {
-        paymentIntentId: paymentData.paymentIntentId,
-        hasClientSecret: !!paymentData.clientSecret
-      });
     } catch (paymentError: any) {
-      console.error('❌ [EVENT BOOKING] Failed to create payment intent:', {
-        error: paymentError.message,
-        stack: paymentError.stack,
-        bookingId: booking._id.toString()
-      });
-      // For paid events, we need payment info - throw error instead of silently failing
+      console.error('❌ [EVENT BOOKING] Failed to create payment intent:', paymentError.message);
+      // Rollback slot on payment failure
+      if (slotId) {
+        await Event.findOneAndUpdate(
+          { _id: id, 'availableSlots.id': slotId },
+          { $inc: { 'availableSlots.$.bookedCount': -1 } }
+        );
+      }
+      await EventBooking.findByIdAndDelete(booking._id);
       throw new Error(`Failed to create payment intent: ${paymentError.message || 'Payment gateway error'}`);
     }
   }
@@ -580,11 +622,12 @@ export const bookEventSlot = asyncHandler(async (req: Request, res: Response) =>
     success: true,
     data: {
       booking,
-      payment: paymentData, // Include payment info for paid events
+      payment: paymentData,
+      reward: rewardResult?.success ? { coinsAwarded: rewardResult.coinsAwarded, message: rewardResult.message } : null,
     },
-    message: event.price.isFree 
-      ? 'Event booked successfully' 
-      : 'Booking created. Please complete payment to confirm your booking.'
+    message: isFree
+      ? `Event booked successfully${rewardResult?.success ? ` — +${rewardResult.coinsAwarded} coins earned!` : ''}`
+      : 'Booking created. Please complete payment to confirm your booking.',
   });
 });
 
@@ -593,7 +636,9 @@ export const bookEventSlot = asyncHandler(async (req: Request, res: Response) =>
 // @access  Private
 export const getUserBookings = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).user?.id;
-  const { status, limit = 20, offset = 0 } = req.query;
+  const { status, limit: rawLim3 = 20, offset: rawOff3 = 0 } = req.query;
+  const limit = Math.min(Number(rawLim3) || 20, 100);
+  const offset = Math.max(Number(rawOff3) || 0, 0);
 
   if (!userId) {
     return res.status(401).json({
@@ -610,8 +655,8 @@ export const getUserBookings = asyncHandler(async (req: Request, res: Response) 
   const bookings = await EventBooking.find(query)
     .populate('eventId')
     .sort({ createdAt: -1 })
-    .limit(Number(limit))
-    .skip(Number(offset))
+    .limit(limit)
+    .skip(offset)
     .lean();
 
   const total = await EventBooking.countDocuments(query);
@@ -684,9 +729,8 @@ export const confirmBooking = asyncHandler(async (req: Request, res: Response) =
     });
   }
 
-  // Verify payment if paymentIntentId is provided (optional - for immediate confirmation)
-  // Note: Payment might not be marked as completed yet if called immediately after payment
-  // The webhook will also update the status as a backup
+  // Verify payment if paymentIntentId is provided
+  // For paid events, we require a paymentIntentId and verify it exists
   if (paymentIntentId) {
     try {
       const payment = await Payment.findOne({
@@ -697,22 +741,34 @@ export const confirmBooking = asyncHandler(async (req: Request, res: Response) =
         user: userId
       });
 
-      // If payment exists, log it but don't block confirmation
-      // Payment status might still be 'pending' if called immediately after payment
       if (payment) {
         console.log('✅ [EVENT BOOKING] Payment found for confirmation:', {
           paymentId: payment.paymentId,
           status: payment.status,
           bookingId
         });
+        // Accept if payment is completed or processing (webhook may update later)
+        if (payment.status === 'failed' || payment.status === 'cancelled' || payment.status === 'expired') {
+          return res.status(400).json({
+            success: false,
+            message: `Cannot confirm booking — payment is ${payment.status}`,
+          });
+        }
       } else {
-        console.warn('⚠️ [EVENT BOOKING] Payment not found yet, but confirming booking anyway:', paymentIntentId);
-        // Continue anyway - payment might not be saved yet or webhook will handle it
+        // Payment record not created yet — allow a small window for webhook to process
+        // The webhook will handle final confirmation as a backup
+        console.warn('⚠️ [EVENT BOOKING] Payment not found yet — proceeding with confirmation. Webhook will validate:', paymentIntentId);
       }
     } catch (error) {
       console.error('❌ [EVENT BOOKING] Error verifying payment:', error);
-      // Continue anyway if payment verification fails - webhook will handle it
+      // Continue — webhook will handle final validation
     }
+  } else if (booking.amount > 0) {
+    // Paid booking but no paymentIntentId provided — reject
+    return res.status(400).json({
+      success: false,
+      message: 'Payment intent ID is required to confirm a paid booking',
+    });
   }
 
   // Update booking status to confirmed
@@ -721,18 +777,37 @@ export const confirmBooking = asyncHandler(async (req: Request, res: Response) =
     if (booking.paymentStatus) {
       booking.paymentStatus = 'completed';
     }
+    booking.lockedUntil = undefined; // Clear inventory lock
     await booking.save();
-    
+
     console.log('✅ [EVENT BOOKING] Booking confirmed successfully:', {
       bookingId: booking._id,
       status: booking.status,
       paymentStatus: booking.paymentStatus
     });
 
+    // Grant purchase reward on payment confirmation (paid events)
+    let rewardResult = null;
+    try {
+      const event = await Event.findById(booking.eventId);
+      rewardResult = await eventRewardService.grantEventReward(
+        userId.toString(),
+        booking.eventId.toString(),
+        booking._id.toString(),
+        'purchase_reward',
+        { eventName: event?.title || 'Event' }
+      );
+    } catch (err) {
+      console.error('[EVENT BOOKING] Reward grant on confirm failed (non-blocking):', err);
+    }
+
     res.json({
       success: true,
-      message: 'Booking confirmed successfully',
-      data: { booking }
+      message: `Booking confirmed successfully${rewardResult?.success ? ` — +${rewardResult.coinsAwarded} coins earned!` : ''}`,
+      data: {
+        booking,
+        reward: rewardResult?.success ? { coinsAwarded: rewardResult.coinsAwarded, message: rewardResult.message } : null,
+      }
     });
   } catch (error: any) {
     console.error('❌ [EVENT BOOKING] Error saving booking:', error);
@@ -797,7 +872,7 @@ export const cancelBooking = asyncHandler(async (req: Request, res: Response) =>
   });
 });
 
-// @desc    Toggle event favorite
+// @desc    Toggle event favorite (per-user persistence)
 // @route   POST /api/events/:id/favorite
 // @access  Private
 export const toggleEventFavorite = asyncHandler(async (req: Request, res: Response) => {
@@ -805,27 +880,28 @@ export const toggleEventFavorite = asyncHandler(async (req: Request, res: Respon
   const userId = (req as any).user?.id;
 
   if (!userId) {
-    return res.status(401).json({
-      success: false,
-      message: 'Authentication required'
-    });
+    return res.status(401).json({ success: false, message: 'Authentication required' });
   }
 
-  // This would typically interact with a UserFavorites model
-  // For now, we'll just increment the favorites count
   const event = await Event.findById(id);
   if (!event) {
-    return res.status(404).json({
-      success: false,
-      message: 'Event not found'
-    });
+    return res.status(404).json({ success: false, message: 'Event not found' });
   }
 
-  await (event as any).incrementFavorites();
+  // Toggle using UserEventFavorite model (per-user tracking)
+  const result = await (UserEventFavorite as any).toggle(userId, id);
+
+  // Update analytics counter
+  if (result.isFavorited) {
+    await Event.findByIdAndUpdate(id, { $inc: { 'analytics.favorites': 1 } });
+  } else {
+    await Event.findByIdAndUpdate(id, { $inc: { 'analytics.favorites': -1 } });
+  }
 
   res.json({
     success: true,
-    message: 'Event favorited successfully'
+    data: { isFavorited: result.isFavorited },
+    message: result.isFavorited ? 'Event added to favorites' : 'Event removed from favorites',
   });
 });
 
@@ -890,25 +966,48 @@ export const getRelatedEvents = asyncHandler(async (req: Request, res: Response)
   }
 });
 
-// @desc    Share event
+// @desc    Share event (with optional reward for authenticated users)
 // @route   POST /api/events/:id/share
-// @access  Public
+// @access  Public (reward only for authenticated)
 export const shareEvent = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
+  const userId = (req as any).user?.id;
 
   const event = await Event.findById(id);
   if (!event) {
-    return res.status(404).json({
-      success: false,
-      message: 'Event not found'
-    });
+    return res.status(404).json({ success: false, message: 'Event not found' });
   }
 
-  await (event as any).incrementShares();
+  await Event.findByIdAndUpdate(id, { $inc: { 'analytics.shares': 1 } });
+
+  // Grant sharing reward if user is authenticated
+  let rewardResult = null;
+  if (userId) {
+    try {
+      // Check if user has a booking for this event (required for share reward)
+      const hasBooking = await EventBooking.findOne({
+        eventId: id, userId, status: { $in: ['confirmed', 'completed'] }
+      });
+      if (hasBooking) {
+        rewardResult = await eventRewardService.grantEventReward(
+          userId.toString(), id, hasBooking._id.toString(),
+          'sharing_reward',
+          { eventName: event.title }
+        );
+      }
+    } catch (err) {
+      console.error('[EVENT SHARE] Reward grant failed (non-blocking):', err);
+    }
+  }
 
   res.json({
     success: true,
-    message: 'Event share recorded'
+    message: rewardResult?.success
+      ? `Event shared — +${rewardResult.coinsAwarded} coins earned!`
+      : userId
+        ? 'Event share recorded. Book this event to earn sharing rewards!'
+        : 'Event share recorded',
+    data: rewardResult?.success ? { reward: { coinsAwarded: rewardResult.coinsAwarded } } : undefined,
   });
 });
 
@@ -1045,3 +1144,250 @@ export const trackEventAnalytics = asyncHandler(async (req: Request, res: Respon
     });
   }
 });
+
+// @desc    Get dynamic event categories (public)
+// @route   GET /api/events/categories
+// @access  Public
+export const getEventCategories = asyncHandler(async (req: Request, res: Response) => {
+  const { featured } = req.query;
+
+  let categories;
+  if (featured === 'true') {
+    categories = await (EventCategory as any).getFeatured();
+  } else {
+    categories = await (EventCategory as any).getActive();
+  }
+
+  res.json({
+    success: true,
+    data: { categories },
+  });
+});
+
+// @desc    Get global reward config (for entry card "Ways to earn")
+// @route   GET /api/events/reward-config
+// @access  Public
+export const getGlobalRewardConfig = asyncHandler(async (req: Request, res: Response) => {
+  const rewardInfo = await eventRewardService.getGlobalRewardConfig();
+
+  res.json({
+    success: true,
+    data: rewardInfo,
+  });
+});
+
+// @desc    Check-in to event (verified attendance + reward)
+// @route   POST /api/events/:id/checkin
+// @access  Private
+export const checkInToEvent = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { bookingId, method, location } = req.body;
+  const userId = (req as any).user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Authentication required' });
+  }
+  if (!bookingId) {
+    return res.status(400).json({ success: false, message: 'bookingId is required' });
+  }
+
+  // Verify booking exists and is confirmed
+  const booking = await EventBooking.findOne({
+    _id: bookingId, eventId: id, userId, status: 'confirmed',
+  });
+  if (!booking) {
+    return res.status(404).json({ success: false, message: 'Confirmed booking not found' });
+  }
+
+  const event = await Event.findById(id);
+  if (!event) {
+    return res.status(404).json({ success: false, message: 'Event not found' });
+  }
+
+  // Validate event is in a checkable state
+  if (event.status === 'cancelled') {
+    return res.status(400).json({ success: false, message: 'Cannot check in to a cancelled event' });
+  }
+  if (event.status === 'draft') {
+    return res.status(400).json({ success: false, message: 'Cannot check in to an unpublished event' });
+  }
+
+  // Geo-fence validation (if location provided and event has coordinates)
+  if (method === 'geo_fence' && location && event.location?.coordinates) {
+    const distance = getDistanceInMeters(
+      location.lat, location.lng,
+      event.location.coordinates.lat, event.location.coordinates.lng
+    );
+    if (distance > 500) { // 500m radius
+      return res.status(400).json({
+        success: false,
+        message: 'You are too far from the event venue. Please check in within 500m.',
+      });
+    }
+  }
+
+  // Get or create attendance record (idempotent)
+  const attendance = await (EventAttendance as any).getOrCreate(id, userId, bookingId);
+
+  if (attendance.isVerified) {
+    return res.json({
+      success: true,
+      data: { attendance },
+      message: 'Already checked in',
+    });
+  }
+
+  // Mark as verified
+  attendance.checkInMethod = method || 'organiser_manual';
+  attendance.checkInTime = new Date();
+  attendance.isVerified = true;
+  if (location) {
+    attendance.checkInLocation = { lat: location.lat, lng: location.lng };
+  }
+  await attendance.save();
+
+  // Update booking status
+  booking.checkInTime = new Date();
+  booking.status = 'completed';
+  await booking.save();
+
+  // Grant check-in reward
+  let rewardResult = null;
+  try {
+    rewardResult = await eventRewardService.grantEventReward(
+      userId.toString(), id, bookingId,
+      'checkin_reward',
+      { eventName: event.title, checkInMethod: method }
+    );
+  } catch (err) {
+    console.error('[EVENT CHECKIN] Reward grant failed (non-blocking):', err);
+  }
+
+  res.json({
+    success: true,
+    data: {
+      attendance,
+      reward: rewardResult?.success ? { coinsAwarded: rewardResult.coinsAwarded } : null,
+    },
+    message: `Checked in successfully${rewardResult?.success ? ` — +${rewardResult.coinsAwarded} coins earned!` : ''}`,
+  });
+});
+
+// @desc    Check if user has favorited a specific event
+// @route   GET /api/events/:id/favorite-status
+// @access  Private
+export const getFavoriteStatus = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const userId = (req as any).user?.id;
+
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Authentication required' });
+  }
+
+  const favorite = await UserEventFavorite.findOne({ userId, eventId: id });
+  res.json({ success: true, data: { isFavorited: !!favorite } });
+});
+
+// @desc    Get user's favorited events
+// @route   GET /api/events/my-favorites
+// @access  Private
+export const getMyFavorites = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id;
+  const { limit = 20, offset = 0 } = req.query;
+
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Authentication required' });
+  }
+
+  const favoriteIds = await (UserEventFavorite as any).getUserFavoriteIds(userId);
+
+  const events = await Event.find({
+    _id: { $in: favoriteIds },
+    status: 'published',
+  })
+    .sort({ date: 1 })
+    .limit(Number(limit))
+    .skip(Number(offset))
+    .lean();
+
+  res.json({
+    success: true,
+    data: { events, total: favoriteIds.length },
+  });
+});
+
+// @desc    Get user's event overview (bookings + favorites + attended)
+// @route   GET /api/events/my-events
+// @access  Private
+export const getMyEvents = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.id;
+  const { tab = 'upcoming' } = req.query; // upcoming, past, favorites
+
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Authentication required' });
+  }
+
+  if (tab === 'favorites') {
+    const favoriteIds = await (UserEventFavorite as any).getUserFavoriteIds(userId);
+    const events = await Event.find({ _id: { $in: favoriteIds }, status: 'published' })
+      .sort({ date: 1 }).limit(50).lean();
+    return res.json({ success: true, data: { events, tab: 'favorites' } });
+  }
+
+  const now = new Date();
+  const bookingFilter: any = { userId };
+
+  if (tab === 'upcoming') {
+    bookingFilter.status = { $in: ['confirmed', 'pending'] };
+  } else if (tab === 'past') {
+    bookingFilter.status = { $in: ['completed', 'cancelled', 'refunded'] };
+  }
+
+  const bookings = await EventBooking.find(bookingFilter)
+    .populate('eventId')
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean();
+
+  // For past bookings, enrich with reward info
+  if (tab === 'past') {
+    for (const booking of bookings) {
+      const attendance = await EventAttendance.findOne({
+        eventId: (booking as any).eventId?._id,
+        userId,
+      }).lean();
+      (booking as any).attendance = attendance;
+    }
+  }
+
+  res.json({
+    success: true,
+    data: { bookings, tab },
+  });
+});
+
+// @desc    Get reward info for an event
+// @route   GET /api/events/:id/rewards
+// @access  Public
+export const getEventRewardInfo = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  const rewardInfo = await eventRewardService.getEventRewardInfo(id);
+
+  res.json({
+    success: true,
+    data: rewardInfo,
+  });
+});
+
+// Helper: calculate distance between two coordinates in meters (Haversine formula)
+function getDistanceInMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000; // Earth's radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}

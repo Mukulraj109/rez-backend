@@ -100,7 +100,7 @@ class AchievementService {
           achievement.unlockedDate = new Date();
           console.log(`🎉 [ACHIEVEMENT] User ${userId} unlocked achievement: ${achievement.title}`);
 
-          // Award coins for unlocking achievement
+          // Award coins for unlocking achievement (idempotent via CoinTransaction unique index)
           if (definition.reward?.coins && definition.reward.coins > 0) {
             try {
               await coinService.awardCoins(
@@ -111,8 +111,13 @@ class AchievementService {
                 { achievementType: achievement.type, achievementId: achievement._id }
               );
               console.log(`💰 [ACHIEVEMENT] Awarded ${definition.reward.coins} coins for achievement: ${achievement.title}`);
-            } catch (coinError) {
-              console.error(`❌ [ACHIEVEMENT] Failed to award coins for ${achievement.title}:`, coinError);
+            } catch (coinError: any) {
+              if (coinError.code === 11000) {
+                // Duplicate key — reward already granted for this achievement (idempotent success)
+                console.log(`ℹ️ [ACHIEVEMENT] Reward already granted for: ${achievement.title}`);
+              } else {
+                console.error(`❌ [ACHIEVEMENT] Failed to award coins for ${achievement.title}:`, coinError);
+              }
             }
           }
         }

@@ -8,6 +8,7 @@ import { Transaction } from '../models/Transaction';
 import { Wallet } from '../models/Wallet';
 import activityService from './activityService';
 import { ActivityType } from '../models/Activity';
+import challengeService from './challengeService';
 
 interface CreateReferralParams {
   referrerId: Types.ObjectId;
@@ -169,6 +170,12 @@ class ReferralService {
     if (referral.referrerRewarded && referral.refereeRewarded) {
       referral.status = ReferralStatus.COMPLETED;
       referral.completedAt = new Date();
+
+      // Update challenge progress for referral completion (non-blocking)
+      challengeService.updateProgress(
+        String(referral.referrer), 'refer_friends', 1,
+        { referralId: String(referral._id) }
+      ).catch(err => console.error('[REFERRAL] Challenge progress update failed:', err));
     }
 
     await referral.save();

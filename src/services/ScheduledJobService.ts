@@ -275,6 +275,44 @@ const JOB_DEFINITIONS: ScheduledJobDefinition[] = [
     description: 'Send trial expiry notifications (3d, 1d, today) and auto-downgrade',
     runner: triggerTrialExpiryCheck,
   },
+
+  // specialProgramService.ts (3 sub-jobs)
+  {
+    name: 'special-program-monthly-reset',
+    cron: '5 0 1 * *',           // 1st of month at 00:05 UTC
+    description: 'Reset monthly earnings for all active special program memberships',
+    runner: async () => {
+      const sps = (await import('./specialProgramService')).default;
+      return sps.resetMonthlyEarnings();
+    },
+  },
+  {
+    name: 'special-program-prive-recheck',
+    cron: '0 3 * * 0',           // Every Sunday at 3:00 AM
+    description: 'Re-evaluate Privé members — suspend if score dropped below threshold',
+    runner: async () => {
+      const sps = (await import('./specialProgramService')).default;
+      return sps.recheckPriveEligibility();
+    },
+  },
+  {
+    name: 'special-program-verification-recheck',
+    cron: '0 4 * * 0',           // Every Sunday at 4:00 AM (after Privé recheck)
+    description: 'Re-check student/corporate verification — suspend if verification revoked',
+    runner: async () => {
+      const sps = (await import('./specialProgramService')).default;
+      return sps.recheckVerificationEligibility();
+    },
+  },
+  {
+    name: 'special-program-expire-memberships',
+    cron: '0 2 * * *',           // Daily at 2:00 AM
+    description: 'Expire special program memberships past their expiresAt date',
+    runner: async () => {
+      const sps = (await import('./specialProgramService')).default;
+      return sps.expireMemberships();
+    },
+  },
 ];
 
 // ── Service class ───────────────────────────────────────────────────────────

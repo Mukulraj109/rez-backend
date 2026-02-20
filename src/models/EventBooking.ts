@@ -1,11 +1,20 @@
 import mongoose, { Document, Schema, Types } from 'mongoose';
 
+// Reward earned summary
+export interface IBookingRewardEarned {
+  action: string;
+  coins: number;
+  grantedAt: Date;
+}
+
 // Event Booking Interface
 export interface IEventBooking extends Document {
   _id: Types.ObjectId;
   eventId: Types.ObjectId;
   userId: Types.ObjectId;
   slotId?: string; // For events with time slots
+  ticketTypeId?: string; // For multi-tier ticket pricing
+  quantity: number; // Number of tickets (default 1)
   bookingDate: Date;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'refunded';
   paymentId?: Types.ObjectId;
@@ -20,13 +29,16 @@ export interface IEventBooking extends Document {
     specialRequirements?: string;
   };
   bookingReference: string; // Unique booking reference
+  idempotencyKey?: string; // Client-generated UUID to prevent duplicate bookings
   qrCode?: string; // QR code for event entry
+  lockedUntil?: Date; // Inventory lock expiry for pending payment (10-min TTL)
   checkInTime?: Date;
   checkOutTime?: Date;
   notes?: string;
   refundAmount?: number;
   refundReason?: string;
   refundedAt?: Date;
+  rewardsEarned: IBookingRewardEarned[]; // Summary of all rewards from this booking
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,7 +56,9 @@ const EventBookingSchema = new Schema<IEventBooking>({
     required: true 
   },
   slotId: { type: String },
-  bookingDate: { 
+  ticketTypeId: { type: String },
+  quantity: { type: Number, default: 1, min: 1, max: 20 },
+  bookingDate: {
     type: Date, 
     required: true,
     default: Date.now
@@ -101,12 +115,17 @@ const EventBookingSchema = new Schema<IEventBooking>({
       maxlength: [500, 'Special requirements cannot exceed 500 characters']
     }
   },
-  bookingReference: { 
-    type: String, 
-    required: true, 
-    unique: true 
+  bookingReference: {
+    type: String,
+    required: true,
+    unique: true
+  },
+  idempotencyKey: {
+    type: String,
+    sparse: true, // Allow null but enforce uniqueness when present
   },
   qrCode: { type: String },
+  lockedUntil: { type: Date },
   checkInTime: { type: Date },
   checkOutTime: { type: Date },
   notes: {
@@ -128,7 +147,12 @@ const EventBookingSchema = new Schema<IEventBooking>({
     type: String,
     maxlength: [500, 'Refund reason cannot exceed 500 characters']
   },
-  refundedAt: { type: Date }
+  refundedAt: { type: Date },
+  rewardsEarned: [{
+    action: { type: String, required: true },
+    coins: { type: Number, required: true, min: 0 },
+    grantedAt: { type: Date, required: true, default: Date.now },
+  }],
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -141,6 +165,8 @@ EventBookingSchema.index({ userId: 1, status: 1 });
 EventBookingSchema.index({ bookingReference: 1 });
 EventBookingSchema.index({ status: 1, bookingDate: 1 });
 EventBookingSchema.index({ paymentStatus: 1 });
+EventBookingSchema.index({ idempotencyKey: 1 }, { unique: true, sparse: true });
+EventBookingSchema.index({ lockedUntil: 1 }); // For expired lock cleanup
 
 // Pre-save middleware to generate booking reference
 EventBookingSchema.pre('save', function(next) {

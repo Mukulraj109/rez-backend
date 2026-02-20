@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireAdmin } from '../middleware/auth';
 import { createRateLimiter } from '../middleware/rateLimiter';
 
 // Rate limiters for sensitive gamification endpoints
@@ -7,6 +7,18 @@ const checkInLimiter = createRateLimiter({
   windowMs: 60 * 1000, // 1 minute
   max: 5, // 5 attempts per minute (idempotent, but prevents abuse)
   message: 'Too many check-in attempts. Please wait a moment.',
+});
+
+const challengeJoinLimiter = createRateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 join attempts per minute
+  message: 'Too many join attempts. Please wait a moment.',
+});
+
+const challengeClaimLimiter = createRateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5, // 5 claim attempts per minute
+  message: 'Too many claim attempts. Please wait a moment.',
 });
 
 const affiliateSubmitLimiter = createRateLimiter({
@@ -19,13 +31,13 @@ const affiliateSubmitLimiter = createRateLimiter({
 import {
   getChallenges,
   getActiveChallenge,
+  getUnifiedChallenges,
   claimChallengeReward,
   joinChallenge,
   getChallengeLeaderboard,
   getAchievements,
   getUserAchievements,
   getMyAchievements,
-  unlockAchievement,
   getBadges,
   getUserBadges,
   getLeaderboard,
@@ -79,11 +91,12 @@ router.use(authenticate);
 // CHALLENGES
 // ========================================
 router.get('/challenges', getChallenges);
+router.get('/challenges/unified', getUnifiedChallenges);
 router.get('/challenges/active', getActiveChallenge);
 router.get('/challenges/my-progress', getMyChallengeProgress);
 router.get('/challenges/:id/leaderboard', getChallengeLeaderboard);
-router.post('/challenges/:id/claim', claimChallengeReward);
-router.post('/challenges/:id/join', joinChallenge);
+router.post('/challenges/:id/claim', challengeClaimLimiter, claimChallengeReward);
+router.post('/challenges/:id/join', challengeJoinLimiter, joinChallenge);
 
 // ========================================
 // ACHIEVEMENTS
@@ -91,7 +104,7 @@ router.post('/challenges/:id/join', joinChallenge);
 router.get('/achievements', getAchievements);
 router.get('/achievements/me', getMyAchievements); // Current user's achievements
 router.get('/achievements/user/:userId', getUserAchievements);
-router.post('/achievements/unlock', unlockAchievement);
+// REMOVED: POST /achievements/unlock — achievement unlocking must be server-driven only
 
 // ========================================
 // BADGES
@@ -102,20 +115,32 @@ router.get('/badges/user/:userId', getUserBadges);
 // ========================================
 // LEADERBOARD
 // ========================================
+// Rate limiters for leaderboard (prevents cache-busting spam)
+const leaderboardLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: 'Too many leaderboard requests. Please wait.',
+});
+const myRankLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: 10,
+  message: 'Too many rank requests. Please wait.',
+});
 // GET /api/gamification/leaderboard?type=spending&period=weekly&limit=10
 // type: spending | reviews | referrals | cashback | coins
 // period: daily | weekly | monthly | all-time
-router.get('/leaderboard', getLeaderboard);
-router.get('/leaderboard/my-rank', getMyRank);
-router.get('/leaderboard/rank/:userId', getUserRank);
+router.get('/leaderboard', leaderboardLimiter, getLeaderboard);
+router.get('/leaderboard/my-rank', myRankLimiter, getMyRank);
+router.get('/leaderboard/rank/:userId', myRankLimiter, getUserRank);
 
 // ========================================
 // COINS (CURRENCY SYSTEM)
 // ========================================
 router.get('/coins/balance', getCoinBalance);
 router.get('/coins/transactions', getCoinTransactions);
-router.post('/coins/award', awardCoins);
-router.post('/coins/deduct', deductCoins);
+// Admin-only: direct coin manipulation must not be user-callable
+router.post('/coins/award', requireAdmin, awardCoins);
+router.post('/coins/deduct', requireAdmin, deductCoins);
 
 // ========================================
 // DAILY STREAK
@@ -188,5 +213,22 @@ router.get('/promotional-posters', getPromotionalPosters);
 
 // REVIEWABLE ITEMS
 router.get('/reviewable-items', getReviewableItems);
+
+// ========================================
+// QUICK ACTIONS (Personalized)
+// ========================================
+router.get('/quick-actions', async (req, res) => {
+  try {
+    const userId = (req as any).userId;
+    const quickActionService = (await import('../services/quickActionService')).default;
+    const actions = await quickActionService.getPersonalized(userId);
+    const { sendSuccess } = await import('../utils/response');
+    sendSuccess(res, { actions });
+  } catch (error: any) {
+    console.error('[QUICK ACTIONS] Error:', error);
+    const { sendError } = await import('../utils/response');
+    sendError(res, error.message || 'Failed to fetch quick actions');
+  }
+});
 
 export default router;

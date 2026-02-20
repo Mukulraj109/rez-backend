@@ -106,15 +106,24 @@ async function checkAchievements(
         achievement.unlocked = true;
         achievement.unlockedDate = new Date();
 
-        // Award achievement rewards
+        // Award achievement rewards (idempotent via CoinTransaction unique index)
         if (definition.reward?.coins) {
-          await coinService.awardCoins(
-            userId,
-            definition.reward.coins,
-            'achievement',
-            `Unlocked achievement: ${achievement.title}`,
-            { achievementId: achievement._id }
-          );
+          try {
+            await coinService.awardCoins(
+              userId,
+              definition.reward.coins,
+              'achievement',
+              `Unlocked achievement: ${achievement.title}`,
+              { achievementId: achievement._id, achievementType: achievement.type }
+            );
+          } catch (err: any) {
+            if (err.code === 11000) {
+              // Duplicate key — reward already granted for this achievement (idempotent success)
+              console.log(`   ℹ️ Achievement reward already granted for: ${achievement.title}`);
+            } else {
+              throw err;
+            }
+          }
         }
 
         console.log(`   🏆 Achievement unlocked: ${achievement.title}`);
