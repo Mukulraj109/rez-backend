@@ -62,6 +62,47 @@ router.get('/stats', async (req: Request, res: Response) => {
 });
 
 /**
+ * @route   GET /api/admin/merchant-wallets/pending-withdrawals
+ * @desc    Get all pending withdrawal requests
+ * @access  Admin
+ * NOTE: Must be defined BEFORE /:merchantId to avoid Express matching "pending-withdrawals" as a merchantId param
+ */
+router.get('/pending-withdrawals', async (_req: Request, res: Response) => {
+  try {
+    const walletsWithPending = await MerchantWallet.find({
+      'balance.pending': { $gt: 0 }
+    })
+      .populate('merchant', 'profile.firstName profile.lastName phoneNumber email')
+      .populate('store', 'name')
+      .select('merchant store balance.pending balance.available transactions');
+
+    // Filter to only get pending withdrawal transactions
+    const pendingWithdrawals = walletsWithPending.map(wallet => {
+      const pendingTransactions = wallet.transactions.filter(
+        t => t.type === 'withdrawal' && t.status === 'pending'
+      );
+      return {
+        merchantId: wallet.merchant,
+        store: wallet.store,
+        pendingAmount: wallet.balance.pending,
+        pendingTransactions
+      };
+    }).filter(w => w.pendingTransactions.length > 0);
+
+    res.json({
+      success: true,
+      data: pendingWithdrawals
+    });
+  } catch (error: any) {
+    console.error('❌ [ADMIN MERCHANT WALLETS] Error fetching pending withdrawals:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch pending withdrawals'
+    });
+  }
+});
+
+/**
  * @route   GET /api/admin/merchant-wallets/:merchantId
  * @desc    Get single merchant wallet details
  * @access  Admin
@@ -160,6 +201,41 @@ router.post('/:merchantId/process-withdrawal', requireSeniorAdmin, async (req: R
 });
 
 /**
+ * @route   POST /api/admin/merchant-wallets/:merchantId/reject-withdrawal
+ * @desc    Reject a pending withdrawal request
+ * @access  Admin (Senior)
+ */
+router.post('/:merchantId/reject-withdrawal', requireSeniorAdmin, async (req: Request, res: Response) => {
+  try {
+    const { transactionId, reason } = req.body;
+
+    if (!transactionId || !reason) {
+      return res.status(400).json({
+        success: false,
+        message: 'Transaction ID and rejection reason are required'
+      });
+    }
+
+    await merchantWalletService.rejectWithdrawal(
+      req.params.merchantId,
+      transactionId,
+      reason
+    );
+
+    res.json({
+      success: true,
+      message: 'Withdrawal rejected successfully'
+    });
+  } catch (error: any) {
+    console.error('❌ [ADMIN MERCHANT WALLETS] Error rejecting withdrawal:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to reject withdrawal'
+    });
+  }
+});
+
+/**
  * @route   POST /api/admin/merchant-wallets/:merchantId/verify-bank
  * @desc    Verify merchant bank details
  * @access  Admin
@@ -177,46 +253,6 @@ router.post('/:merchantId/verify-bank', requireOperator, async (req: Request, re
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to verify bank details'
-    });
-  }
-});
-
-/**
- * @route   GET /api/admin/merchant-wallets/pending-withdrawals
- * @desc    Get all pending withdrawal requests
- * @access  Admin
- */
-router.get('/pending-withdrawals', async (_req: Request, res: Response) => {
-  try {
-    const walletsWithPending = await MerchantWallet.find({
-      'balance.pending': { $gt: 0 }
-    })
-      .populate('merchant', 'profile.firstName profile.lastName phoneNumber email')
-      .populate('store', 'name')
-      .select('merchant store balance.pending balance.available transactions');
-
-    // Filter to only get pending withdrawal transactions
-    const pendingWithdrawals = walletsWithPending.map(wallet => {
-      const pendingTransactions = wallet.transactions.filter(
-        t => t.type === 'withdrawal' && t.status === 'pending'
-      );
-      return {
-        merchantId: wallet.merchant,
-        store: wallet.store,
-        pendingAmount: wallet.balance.pending,
-        pendingTransactions
-      };
-    }).filter(w => w.pendingTransactions.length > 0);
-
-    res.json({
-      success: true,
-      data: pendingWithdrawals
-    });
-  } catch (error: any) {
-    console.error('❌ [ADMIN MERCHANT WALLETS] Error fetching pending withdrawals:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch pending withdrawals'
     });
   }
 });

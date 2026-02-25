@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import gameService from '../services/gameService';
+import gameService, { RequestMeta } from '../services/gameService';
 
 class GameController {
   /**
@@ -66,13 +66,46 @@ class GameController {
 
   // ======== SCRATCH CARD ========
 
+  /** Extract request metadata for audit/fraud logging */
+  private extractRequestMeta(req: Request): RequestMeta {
+    return {
+      ip: req.ip || req.headers['x-forwarded-for'] as string || undefined,
+      userAgent: req.headers['user-agent'] || undefined,
+      deviceFingerprint: req.headers['x-device-fingerprint'] as string || undefined,
+    };
+  }
+
+  // GET /api/games/scratch-card/eligibility
+  async getScratchCardEligibility(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'User not authenticated' });
+      }
+
+      const eligibility = await gameService.getScratchCardEligibility(userId);
+
+      res.json({
+        success: true,
+        data: eligibility,
+        message: 'Eligibility checked'
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
   // POST /api/games/scratch-card/create
   async createScratchCard(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
       const { earnedFrom } = req.body;
+      const requestMeta = this.extractRequestMeta(req);
 
-      const session = await gameService.createScratchCardSession(userId, earnedFrom);
+      const session = await gameService.createScratchCardSession(userId, earnedFrom || 'daily_free', requestMeta);
 
       res.json({
         success: true,
@@ -99,6 +132,32 @@ class GameController {
         success: true,
         data: this.sanitizeSession(session),
         message: 'Scratch card revealed!'
+      });
+    } catch (error: any) {
+      const status = error.message?.includes('try again') ? 500 : 400;
+      res.status(status).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // POST /api/games/scratch-card/retry-claim
+  async retryScratchCardClaim(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const { sessionId } = req.body;
+
+      if (!userId || !sessionId) {
+        return res.status(400).json({ success: false, message: 'userId and sessionId required' });
+      }
+
+      const session = await gameService.retryScratchCardClaim(sessionId, userId);
+
+      res.json({
+        success: true,
+        data: this.sanitizeSession(session),
+        message: 'Prize claimed successfully!'
       });
     } catch (error: any) {
       res.status(400).json({

@@ -256,6 +256,45 @@ router.get('/stores', async (req: Request, res: Response) => {
 });
 
 /**
+ * @route   GET /api/admin/offers/pending-approval
+ * @desc    Get offers awaiting admin approval
+ * @access  Admin
+ */
+router.get('/pending-approval', async (req: Request, res: Response) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const filter = { $or: [{ adminApproved: false }, { adminApproved: { $exists: false } }] };
+
+    const [offers, total] = await Promise.all([
+      Offer.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      Offer.countDocuments(filter),
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        offers,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          totalPages: Math.ceil(total / Number(limit)),
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error('[ADMIN] Get pending offers error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to fetch pending offers', error: error.message });
+  }
+});
+
+/**
  * @route   GET /api/admin/offers/:id
  * @desc    Get single offer details
  * @access  Admin
@@ -508,6 +547,77 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
       message: 'Failed to toggle offer',
       error: error.message,
     });
+  }
+});
+
+/**
+ * @route   PUT /api/admin/offers/:id/approve
+ * @desc    Approve a merchant-created offer
+ * @access  Admin
+ */
+router.put('/:id/approve', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const adminId = (req as any).user._id;
+
+    if (!Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid offer ID' });
+    }
+
+    const offer = await Offer.findByIdAndUpdate(
+      id,
+      { $set: { adminApproved: true, adminNotes: req.body.notes || '', approvedBy: adminId, approvedAt: new Date() } },
+      { new: true }
+    );
+
+    if (!offer) {
+      return res.status(404).json({ success: false, message: 'Offer not found' });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Offer approved successfully',
+      data: offer,
+    });
+  } catch (error: any) {
+    console.error('[ADMIN] Approve offer error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to approve offer', error: error.message });
+  }
+});
+
+/**
+ * @route   PUT /api/admin/offers/:id/reject
+ * @desc    Reject a merchant-created offer
+ * @access  Admin
+ */
+router.put('/:id/reject', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const adminId = (req as any).user._id;
+    const { reason } = req.body;
+
+    if (!Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, message: 'Invalid offer ID' });
+    }
+
+    const offer = await Offer.findByIdAndUpdate(
+      id,
+      { $set: { adminApproved: false, adminNotes: reason || 'Rejected by admin', rejectedBy: adminId, rejectedAt: new Date() } },
+      { new: true }
+    );
+
+    if (!offer) {
+      return res.status(404).json({ success: false, message: 'Offer not found' });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Offer rejected',
+      data: offer,
+    });
+  } catch (error: any) {
+    console.error('[ADMIN] Reject offer error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to reject offer', error: error.message });
   }
 });
 

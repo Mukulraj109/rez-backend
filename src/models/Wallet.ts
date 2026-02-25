@@ -250,7 +250,7 @@ const WalletSchema = new Schema<IWallet>({
     type: String,
     required: true,
     default: 'RC',
-    enum: ['RC', 'REZ_COIN', 'INR']
+    enum: ['RC', 'NC', 'REZ_COIN', 'INR']
   },
   statistics: {
     totalEarned: {

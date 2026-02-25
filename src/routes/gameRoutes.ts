@@ -30,8 +30,10 @@ router.post('/spin-wheel/create', gameSessionLimiter, gameController.createSpinW
 router.post('/spin-wheel/play', gameCompletionLimiter, gameController.playSpinWheel.bind(gameController));
 
 // ======== SCRATCH CARD ========
+router.get('/scratch-card/eligibility', gameController.getScratchCardEligibility.bind(gameController));
 router.post('/scratch-card/create', gameSessionLimiter, gameController.createScratchCard.bind(gameController));
 router.post('/scratch-card/play', gameCompletionLimiter, gameController.playScratchCard.bind(gameController));
+router.post('/scratch-card/retry-claim', gameCompletionLimiter, gameController.retryScratchCardClaim.bind(gameController));
 
 // ======== QUIZ ========
 router.post('/quiz/create', gameSessionLimiter, gameController.createQuiz.bind(gameController));

@@ -13,8 +13,12 @@
  */
 
 export const razorpayConfig = {
-  keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_dummy_key',
-  keySecret: process.env.RAZORPAY_KEY_SECRET || 'dummy_secret',
+  keyId: process.env.RAZORPAY_KEY_ID || (process.env.NODE_ENV === 'production'
+    ? (() => { throw new Error('RAZORPAY_KEY_ID is required in production'); })()
+    : 'rzp_test_dummy_key') as string,
+  keySecret: process.env.RAZORPAY_KEY_SECRET || (process.env.NODE_ENV === 'production'
+    ? (() => { throw new Error('RAZORPAY_KEY_SECRET is required in production'); })()
+    : 'dummy_secret') as string,
   
   // Currency
   currency: 'INR',

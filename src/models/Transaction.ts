@@ -325,56 +325,77 @@ TransactionSchema.pre('save', async function (next) {
 });
 
 // Method to update transaction status
+// Uses atomic findOneAndUpdate with status guard to prevent double-credit race condition
 TransactionSchema.methods.updateStatus = async function (
   newStatus: string,
   reason?: string,
   updatedBy?: string
 ): Promise<void> {
   const oldStatus = this.status.current;
-  this.status.current = newStatus;
 
-  // Add to status history
-  this.status.history.push({
-    status: newStatus,
-    timestamp: new Date(),
-    reason,
-    updatedBy: updatedBy ? new mongoose.Types.ObjectId(updatedBy) : undefined
-  });
+  // Build the atomic update
+  const updateOps: any = {
+    $set: { 'status.current': newStatus },
+    $push: {
+      'status.history': {
+        status: newStatus,
+        timestamp: new Date(),
+        reason,
+        updatedBy: updatedBy ? new mongoose.Types.ObjectId(updatedBy) : undefined
+      }
+    }
+  };
 
-  // Handle specific status transitions
   if (newStatus === 'failed' && reason) {
-    this.failureReason = reason;
+    updateOps.$set.failureReason = reason;
   }
 
   if (newStatus === 'completed') {
-    this.processedAt = new Date();
-    this.processingTime = Math.floor((Date.now() - this.createdAt.getTime()) / 1000);
-
-    // Clear expiry date
-    this.expiresAt = undefined;
+    updateOps.$set.processedAt = new Date();
+    updateOps.$set.processingTime = Math.floor((Date.now() - this.createdAt.getTime()) / 1000);
+    updateOps.$unset = { expiresAt: 1 };
   }
 
   if (newStatus === 'cancelled') {
-    this.expiresAt = undefined;
+    updateOps.$unset = { expiresAt: 1 };
   }
 
-  await this.save();
+  // Atomic transition: only update if status still matches expected oldStatus
+  // This prevents two concurrent calls from both seeing 'pending' and both transitioning to 'completed'
+  const TransactionModel = this.constructor as any;
+  const result = await TransactionModel.findOneAndUpdate(
+    { _id: this._id, 'status.current': oldStatus },
+    updateOps,
+    { new: true }
+  );
+
+  if (!result) {
+    throw new Error(`Transaction status transition failed: expected '${oldStatus}', document may have been updated concurrently`);
+  }
+
+  // Sync local document state
+  this.status.current = newStatus;
 
   // Update user wallet balance if transaction is completed
+  // Uses atomic $inc — safe even if called concurrently because the findOneAndUpdate above
+  // guarantees only ONE caller passes the status guard
   if (newStatus === 'completed' && oldStatus !== 'completed') {
     const User = this.model('User');
-    const user = await User.findById(this.user);
 
-    if (user) {
-      if (this.type === 'credit') {
-        user.wallet.balance += this.netAmount;
-        user.wallet.totalEarned += this.netAmount;
-      } else {
-        user.wallet.balance -= this.amount;
-        user.wallet.totalSpent += this.amount;
-      }
-
-      await user.save();
+    if (this.type === 'credit') {
+      await User.findByIdAndUpdate(this.user, {
+        $inc: {
+          'wallet.balance': this.netAmount,
+          'wallet.totalEarned': this.netAmount
+        }
+      });
+    } else {
+      await User.findByIdAndUpdate(this.user, {
+        $inc: {
+          'wallet.balance': -this.amount,
+          'wallet.totalSpent': this.amount
+        }
+      });
     }
   }
 };

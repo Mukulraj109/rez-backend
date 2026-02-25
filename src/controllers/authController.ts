@@ -20,8 +20,11 @@ import {
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import referralService from '../services/referralService';
+import { ReferralFraudDetection } from '../services/referralFraudDetection';
 import { Wallet } from '../models/Wallet';
 import { Types } from 'mongoose';
+
+const referralFraudDetection = new ReferralFraudDetection();
 import achievementService from '../services/achievementService';
 import gamificationIntegrationService from '../services/gamificationIntegrationService';
 import gamificationEventBus from '../events/gamificationEventBus';
@@ -288,6 +291,26 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
     try {
       const referrerUser = await User.findOne({ 'referral.referralCode': user.referral.referredBy });
       if (referrerUser) {
+        // Fraud check before processing referral
+        const fraudCheck = await referralFraudDetection.checkReferral(
+          String(referrerUser._id),
+          String(user._id),
+          {
+            ipAddress: req.ip || req.headers['x-forwarded-for'],
+            userAgent: req.headers['user-agent'],
+            deviceId: req.headers['x-device-id'],
+          }
+        );
+
+        if (fraudCheck.action === 'block') {
+          console.warn(`🚫 [REFERRAL] Fraud blocked for referral ${user.referral.referredBy}: ${fraudCheck.reasons.join(', ')} (score: ${fraudCheck.riskScore})`);
+          // Clear the referral code but still let user verify OTP
+          user.referral.referredBy = '';
+        } else {
+          if (fraudCheck.action === 'review') {
+            console.warn(`⚠️ [REFERRAL] Flagged for review: ${user.referral.referredBy} (score: ${fraudCheck.riskScore}, reasons: ${fraudCheck.reasons.join(', ')})`);
+          }
+
         // Create referral relationship using referral service
         await referralService.createReferral({
           referrerId: new Types.ObjectId(String(referrerUser._id)),
@@ -359,6 +382,7 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
         }
 
         console.log(`🎁 [REFERRAL] New referral created! Referee ${user._id} received ₹30 signup bonus.`);
+        } // end else (fraud check passed)
       }
     } catch (error) {
       console.error('Error processing referral:', error);

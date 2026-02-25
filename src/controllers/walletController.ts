@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Wallet } from '../models/Wallet';
 import { Transaction } from '../models/Transaction';
+import { CoinTransaction } from '../models/CoinTransaction';
 import { User } from '../models/User';
 import { Payment } from '../models/Payment';
 import { sendSuccess, sendError, sendBadRequest, sendNotFound } from '../utils/response';
@@ -11,6 +12,7 @@ import activityService from '../services/activityService';
 import paymentGatewayService from '../services/paymentGatewayService';
 import redisService from '../services/redisService';
 import Stripe from 'stripe';
+import { validateAmount, sanitizeErrorMessage, validatePagination } from '../utils/walletValidation';
 
 /**
  * @desc    Get user wallet balance
@@ -85,8 +87,8 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
       console.log(`🔄 [WALLET] Auto-syncing balance: ${currentBalance} → ${actualRezBalance}`);
 
       // Update wallet balance (ReZ coins only, branded tracked separately)
+      // balance.total is recalculated by the pre-save hook
       wallet.balance.available = actualRezBalance;
-      wallet.balance.total = actualRezBalance + (wallet.balance.pending || 0) + (wallet.balance.cashback || 0);
 
       // Update ReZ coin amount
       const rezCoinToUpdate = wallet.coins.find((c: any) => c.type === 'rez');
@@ -104,6 +106,40 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
     // Continue with existing wallet data if sync fails
   }
 
+
+  // Compute savings insights from CoinTransaction (source of truth)
+  let savingsInsights = { totalSaved: 0, thisMonth: 0, avgPerVisit: 0 };
+  try {
+    const { CoinTransaction } = require('../models/CoinTransaction');
+    const userObjId = new mongoose.Types.ObjectId(userId);
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [insightsResult] = await CoinTransaction.aggregate([
+      { $match: { user: userObjId, type: 'earned' } },
+      {
+        $facet: {
+          allTime: [
+            { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } }
+          ],
+          thisMonth: [
+            { $match: { createdAt: { $gte: startOfMonth } } },
+            { $group: { _id: null, total: { $sum: '$amount' } } }
+          ]
+        }
+      }
+    ]);
+
+    const allTime = insightsResult?.allTime?.[0];
+    const thisMonthData = insightsResult?.thisMonth?.[0];
+    savingsInsights = {
+      totalSaved: Math.round(allTime?.total || 0),
+      thisMonth: Math.round(thisMonthData?.total || 0),
+      avgPerVisit: allTime?.count ? Math.round((allTime.total || 0) / allTime.count) : 0
+    };
+  } catch (insightsError) {
+    console.error('⚠️ [WALLET] Insights computation failed:', insightsError);
+  }
 
   // Get ReZ and Promo coins from coins array
   const rezCoin = wallet.coins?.find((c: any) => c.type === 'rez');
@@ -167,12 +203,8 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
     },
     // Coin usage order (for transparency)
     coinUsageOrder: ['promo', 'branded', 'rez'],
-    // Savings insights
-    savingsInsights: wallet.savingsInsights || {
-      totalSaved: 0,
-      thisMonth: 0,
-      avgPerVisit: 0
-    },
+    // Savings insights (computed from CoinTransaction)
+    savingsInsights,
     // Legacy format for compatibility
     balance: wallet.balance,
     coins: wallet.coins || [],
@@ -184,6 +216,7 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
       dailySpentToday: wallet.limits.dailySpent,
       remainingToday: wallet.limits.dailySpendLimit - wallet.limits.dailySpent
     },
+    settings: wallet.settings,
     status: {
       isActive: wallet.isActive,
       isFrozen: wallet.isFrozen,
@@ -206,11 +239,11 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
     return sendError(res, 'User not authenticated', 401);
   }
 
-  if (!amount || amount <= 0) {
-    return sendBadRequest(res, 'Invalid amount');
-  }
+  const amountCheck = validateAmount(amount, { fieldName: 'Loyalty points' });
+  if (!amountCheck.valid) return sendBadRequest(res, amountCheck.error);
+  const validatedAmount = amountCheck.amount;
 
-  console.log('💰 [WALLET] Crediting loyalty points:', { userId, amount, source });
+  console.log('💰 [WALLET] Crediting loyalty points:', { userId, amount: validatedAmount, source });
 
   // Get or create wallet
   let wallet = await Wallet.findOne({ user: userId });
@@ -223,30 +256,44 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
     return sendError(res, 'Failed to create wallet', 500);
   }
 
-  // Add to ReZ coins (universal coins)
-  const rezCoin = wallet.coins.find(c => c.type === 'rez');
-  if (rezCoin) {
-    rezCoin.amount += amount;
-    rezCoin.lastUsed = new Date();
-  } else {
-    // If ReZ coin doesn't exist, create it
-    wallet.coins.push({
-      type: 'rez',
-      amount: amount,
-      isActive: true,
-      color: '#00C06A',
-      earnedDate: new Date(),
-      lastUsed: new Date(),
-      expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
-    } as any);
+  // Atomic balance update — prevents race conditions from concurrent requests
+  const updatedWallet = await Wallet.findOneAndUpdate(
+    { _id: wallet._id },
+    {
+      $inc: {
+        'balance.available': validatedAmount,
+        'statistics.totalEarned': validatedAmount
+      },
+      $set: { lastTransactionAt: new Date() }
+    },
+    { new: true }
+  );
+
+  if (!updatedWallet) {
+    return sendError(res, 'Failed to update wallet balance', 500);
   }
 
-  // Update balances
-  wallet.balance.available += amount;
-  wallet.balance.total += amount;
-  wallet.statistics.totalEarned += amount;
-
-  await wallet.save();
+  // Update ReZ coin type tracking (non-critical, separate from balance)
+  const rezCoin = updatedWallet.coins.find(c => c.type === 'rez');
+  if (rezCoin) {
+    await Wallet.updateOne(
+      { _id: wallet._id, 'coins.type': 'rez' },
+      { $inc: { 'coins.$.amount': validatedAmount }, $set: { 'coins.$.lastUsed': new Date() } }
+    );
+  } else {
+    await Wallet.updateOne(
+      { _id: wallet._id },
+      { $push: { coins: {
+        type: 'rez',
+        amount: validatedAmount,
+        isActive: true,
+        color: '#00C06A',
+        earnedDate: new Date(),
+        lastUsed: new Date(),
+        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      } as any } }
+    );
+  }
 
   // Create transaction record
   try {
@@ -254,7 +301,7 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
       user: userId,
       type: 'credit',
       category: 'earning',
-      amount: amount,
+      amount: validatedAmount,
       currency: 'RC',
       description: source?.description || 'Loyalty points credited',
       source: {
@@ -271,8 +318,8 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
           reason: 'Loyalty points credited successfully'
         }]
       },
-      balanceBefore: wallet.balance.available - amount,
-      balanceAfter: wallet.balance.available,
+      balanceBefore: updatedWallet.balance.available - amount,
+      balanceAfter: updatedWallet.balance.available,
       netAmount: amount,
       isReversible: false
     });
@@ -280,7 +327,21 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
     console.log('✅ [WALLET] Transaction created for loyalty points credit');
   } catch (txError) {
     console.error('❌ [WALLET] Failed to create transaction:', txError);
-    // Don't fail the whole operation if transaction creation fails
+  }
+
+  // Create CoinTransaction (source of truth for auto-sync)
+  try {
+    await CoinTransaction.createTransaction(
+      userId,
+      'earned',
+      validatedAmount,
+      source?.type === 'admin' ? 'admin' : 'bonus',
+      source?.description || 'Loyalty points credited',
+      { loyaltySource: source?.type || 'loyalty_sync', reference: source?.reference }
+    );
+    console.log('✅ [WALLET] CoinTransaction created for loyalty points');
+  } catch (ctxError) {
+    console.error('❌ [WALLET] Failed to create CoinTransaction:', ctxError);
   }
 
   // Log activity
@@ -295,13 +356,13 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
 
   console.log('✅ [WALLET] Loyalty points credited successfully:', {
     amount,
-    newBalance: wallet.balance.available,
+    newBalance: updatedWallet.balance.available,
     rezCoins: rezCoin?.amount
   });
 
   sendSuccess(res, {
-    balance: wallet.balance,
-    coins: wallet.coins,
+    balance: updatedWallet.balance,
+    coins: updatedWallet.coins,
     credited: amount,
     message: `${amount} loyalty points credited to your wallet`
   }, 'Loyalty points credited successfully');
@@ -421,10 +482,12 @@ export const topupWallet = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Validate amount
-  if (!amount || amount <= 0) {
+  const topupAmountCheck = validateAmount(amount, { fieldName: 'Topup amount' });
+  if (!topupAmountCheck.valid) {
     console.error('❌ [TOPUP] Invalid amount:', amount);
-    return sendBadRequest(res, 'Invalid topup amount');
+    return sendBadRequest(res, topupAmountCheck.error);
   }
+  const topupAmount = topupAmountCheck.amount;
 
   // Get wallet
   console.log('🔍 [TOPUP] Finding wallet for user:', userId);
@@ -468,7 +531,7 @@ export const topupWallet = asyncHandler(async (req: Request, res: Response) => {
       user: new mongoose.Types.ObjectId(userId),
       type: 'credit',
       category: 'topup',
-      amount: Number(amount),
+      amount: topupAmount,
       currency: wallet.currency,
       description: `Wallet topup - ${paymentMethod || 'Payment Gateway'}`,
       source: {
@@ -481,7 +544,7 @@ export const topupWallet = asyncHandler(async (req: Request, res: Response) => {
         }
       },
       balanceBefore: Number(balanceBefore),
-      balanceAfter: Number(balanceBefore) + Number(amount),
+      balanceAfter: Number(balanceBefore) + topupAmount,
       status: {
         current: 'completed',
         history: [{
@@ -497,13 +560,27 @@ export const topupWallet = asyncHandler(async (req: Request, res: Response) => {
 
     // Add funds to wallet
     console.log('💰 [TOPUP] Adding funds to wallet');
-    await wallet.addFunds(Number(amount), 'topup');
+    await wallet.addFunds(topupAmount, 'topup');
     console.log('✅ [TOPUP] Funds added, new balance:', wallet.balance.total);
+
+    // Create CoinTransaction (source of truth for auto-sync)
+    try {
+      await CoinTransaction.createTransaction(
+        userId,
+        'earned',
+        topupAmount,
+        'recharge',
+        `Wallet topup via ${paymentMethod || 'Payment Gateway'}`,
+        { paymentId: paymentId || `PAY_${Date.now()}`, paymentMethod: paymentMethod || 'gateway' }
+      );
+    } catch (ctxError) {
+      console.error('❌ [TOPUP] Failed to create CoinTransaction:', ctxError);
+    }
 
     // Create activity for wallet topup
     await activityService.wallet.onMoneyAdded(
       new mongoose.Types.ObjectId(userId),
-      Number(amount)
+      topupAmount
     );
 
     sendSuccess(res, {
@@ -614,6 +691,20 @@ export const withdrawFunds = asyncHandler(async (req: Request, res: Response) =>
   wallet.statistics.totalWithdrawals += amount;
   await wallet.save();
 
+  // Create CoinTransaction (source of truth for auto-sync)
+  try {
+    await CoinTransaction.createTransaction(
+      userId,
+      'spent',
+      amount,
+      'withdrawal',
+      `Withdrawal via ${method}`,
+      { withdrawalId, method, fees, netAmount }
+    );
+  } catch (ctxError) {
+    console.error('❌ [WITHDRAW] Failed to create CoinTransaction:', ctxError);
+  }
+
   sendSuccess(res, {
     transaction,
     withdrawalId,
@@ -654,10 +745,12 @@ export const processPayment = asyncHandler(async (req: Request, res: Response) =
   }
 
   // Validate amount
-  if (!amount || amount <= 0) {
+  const payAmountCheck = validateAmount(amount, { fieldName: 'Payment amount' });
+  if (!payAmountCheck.valid) {
     console.error('❌ [PAYMENT] Invalid amount:', amount);
-    return sendBadRequest(res, 'Invalid payment amount');
+    return sendBadRequest(res, payAmountCheck.error);
   }
+  const payAmount = payAmountCheck.amount;
 
   // Get wallet
   console.log('🔍 [PAYMENT] Finding wallet for user:', userId);
@@ -678,8 +771,8 @@ export const processPayment = asyncHandler(async (req: Request, res: Response) =
   }
 
   // Check if can spend
-  if (!wallet.canSpend(amount)) {
-    if (wallet.balance.available < amount) {
+  if (!wallet.canSpend(payAmount)) {
+    if (wallet.balance.available < payAmount) {
       console.error('❌ [PAYMENT] Insufficient balance');
       return sendBadRequest(res, 'Insufficient wallet balance');
     } else {
@@ -698,7 +791,7 @@ export const processPayment = asyncHandler(async (req: Request, res: Response) =
       user: new mongoose.Types.ObjectId(userId),
       type: 'debit',
       category: 'spending',
-      amount: Number(amount),
+      amount: payAmount,
       currency: wallet.currency,
       description: description || `Payment for order ${orderId || 'N/A'}`,
       source: {
@@ -715,7 +808,7 @@ export const processPayment = asyncHandler(async (req: Request, res: Response) =
         }
       },
       balanceBefore: Number(balanceBefore),
-      balanceAfter: Number(balanceBefore) - Number(amount),
+      balanceAfter: Number(balanceBefore) - payAmount,
       status: {
         current: 'completed',
         history: [{
@@ -731,13 +824,27 @@ export const processPayment = asyncHandler(async (req: Request, res: Response) =
 
     // Deduct funds
     console.log('💰 [PAYMENT] Deducting funds from wallet');
-    await wallet.deductFunds(Number(amount));
+    await wallet.deductFunds(payAmount);
     console.log('✅ [PAYMENT] Funds deducted, new balance:', wallet.balance.total);
+
+    // Create CoinTransaction (source of truth for auto-sync)
+    try {
+      await CoinTransaction.createTransaction(
+        userId,
+        'spent',
+        payAmount,
+        'order',
+        description || `Payment for order ${orderId || 'N/A'}`,
+        { orderId, storeId, storeName }
+      );
+    } catch (ctxError) {
+      console.error('❌ [PAYMENT] Failed to create CoinTransaction:', ctxError);
+    }
 
     // Create activity for wallet spending
     await activityService.wallet.onMoneySpent(
       new mongoose.Types.ObjectId(userId),
-      Number(amount),
+      payAmount,
       storeName || 'order'
     );
 
@@ -875,12 +982,13 @@ export const getCategoriesBreakdown = asyncHandler(async (req: Request, res: Res
  */
 export const initiatePayment = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
-  const { 
-    amount, 
-    currency, 
-    paymentMethod, 
+  const {
+    amount,
+    currency,
+    paymentMethod,
     paymentMethodType,
-    userDetails, 
+    purpose,
+    userDetails,
     metadata,
     returnUrl,
     cancelUrl
@@ -919,14 +1027,46 @@ export const initiatePayment = asyncHandler(async (req: Request, res: Response) 
   }
 
   try {
+    // NC/RC are internal coin currencies — map to region's fiat currency (1 NC = 1 fiat unit)
+    // Frontend sends fiatCurrency in metadata from its RegionContext
+    const regionCurrency = metadata?.fiatCurrency || process.env.PLATFORM_CURRENCY || 'AED';
+    const fiatCurrency = (currency === 'NC' || currency === 'RC') ? regionCurrency : (currency || regionCurrency);
+
+    // Reject if the requested gateway isn't configured
+    if (!paymentGatewayService.isGatewayConfigured(paymentMethod)) {
+      return sendBadRequest(res, `Payment gateway '${paymentMethod}' is not configured. Please choose a different payment method.`);
+    }
+
+    // For wallet topup, apply recharge discount (pay less, get full NC)
+    let chargeAmount = Number(amount);
+    let creditAmount = Number(amount); // NC to credit to wallet
+    if (purpose === 'wallet_topup') {
+      try {
+        const { WalletConfig } = require('../models/WalletConfig');
+        const config = await WalletConfig.getOrCreate();
+        if (config.rechargeConfig.isEnabled) {
+          const sortedTiers = [...config.rechargeConfig.tiers].sort((a: any, b: any) => b.minAmount - a.minAmount);
+          const applicableTier = sortedTiers.find((t: any) => creditAmount >= t.minAmount);
+          if (applicableTier) {
+            const rawDiscount = Math.floor(creditAmount * applicableTier.cashbackPercentage / 100);
+            const discount = Math.min(rawDiscount, config.rechargeConfig.maxCashback);
+            chargeAmount = creditAmount - discount;
+            console.log('💰 [PAYMENT] Recharge discount applied:', { creditAmount, discount, chargeAmount });
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ [PAYMENT] Failed to calculate discount, charging full amount');
+      }
+    }
+
     // Use payment gateway service
     const paymentData = {
-      amount: Number(amount),
-      currency: currency || 'INR',
+      amount: chargeAmount,
+      currency: fiatCurrency,
       paymentMethod: paymentMethod as 'stripe' | 'razorpay' | 'paypal',
       paymentMethodType: paymentMethodType as 'card' | 'upi' | 'wallet' | 'netbanking',
       userDetails: userDetails || {},
-      metadata: metadata || {},
+      metadata: { ...(metadata || {}), purpose: purpose || 'other', creditAmount },
       returnUrl,
       cancelUrl
     };
@@ -938,7 +1078,74 @@ export const initiatePayment = asyncHandler(async (req: Request, res: Response) 
     sendSuccess(res, gatewayResponse, 'Payment initiated successfully');
   } catch (error: any) {
     console.error('❌ [PAYMENT] Payment initiation failed:', error);
-    sendError(res, error.message, 500);
+    sendError(res, sanitizeErrorMessage(error, 'Payment initiation failed'), 500);
+  }
+});
+
+/**
+ * @desc    Confirm payment after frontend Stripe.js confirmCardPayment succeeds
+ *          Verifies with Stripe API, then credits wallet if purpose is wallet_topup
+ * @route   POST /api/wallet/confirm-payment
+ * @access  Private
+ */
+export const confirmPayment = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  const { paymentIntentId } = req.body;
+
+  if (!paymentIntentId) {
+    return sendBadRequest(res, 'Payment intent ID is required');
+  }
+
+  console.log('💳 [PAYMENT] Confirming payment:', { userId, paymentIntentId });
+
+  try {
+    // Find the Payment record FIRST (before status check updates it)
+    const { Payment } = require('../models/Payment');
+    const payment = await Payment.findOne({
+      $or: [
+        { paymentId: paymentIntentId },
+        { 'gatewayResponse.paymentIntentId': paymentIntentId }
+      ]
+    });
+
+    if (!payment) {
+      return sendError(res, 'Payment record not found', 404);
+    }
+
+    // Prevent double wallet credit — check if already processed
+    if (payment.walletCredited) {
+      console.log('ℹ️ [PAYMENT] Already credited, skipping:', paymentIntentId);
+      return sendSuccess(res, { status: 'completed', alreadyProcessed: true }, 'Payment already confirmed');
+    }
+
+    // Verify with Stripe that the payment actually succeeded (don't trust frontend alone)
+    const stripeStatus = await paymentGatewayService.checkPaymentStatus(
+      paymentIntentId,
+      'stripe',
+      userId
+    );
+
+    if (stripeStatus.status !== 'completed') {
+      return sendError(res, `Payment not completed. Status: ${stripeStatus.status}`, 400);
+    }
+
+    // Re-fetch payment (checkPaymentStatus may have updated it)
+    const freshPayment = await Payment.findById(payment._id);
+
+    // Credit wallet if this is a wallet topup
+    const purpose = freshPayment.purpose || freshPayment.metadata?.purpose;
+    if (purpose === 'wallet_topup') {
+      await paymentGatewayService.creditWalletFromPayment(freshPayment);
+      // Mark as credited to prevent double processing
+      freshPayment.walletCredited = true;
+      await freshPayment.save();
+      console.log('✅ [PAYMENT] Wallet credited for confirmed payment:', paymentIntentId);
+    }
+
+    sendSuccess(res, { status: 'completed' }, 'Payment confirmed and processed');
+  } catch (error: any) {
+    console.error('❌ [PAYMENT] Confirm payment failed:', error);
+    sendError(res, sanitizeErrorMessage(error, 'Failed to confirm payment'), 500);
   }
 });
 
@@ -975,7 +1182,7 @@ export const checkPaymentStatus = asyncHandler(async (req: Request, res: Respons
     sendSuccess(res, paymentStatus, 'Payment status retrieved successfully');
   } catch (error: any) {
     console.error('❌ [PAYMENT] Status check failed:', error);
-    sendError(res, error.message, 500);
+    sendError(res, sanitizeErrorMessage(error, 'Failed to check payment status'), 500);
   }
 });
 
@@ -986,75 +1193,84 @@ export const checkPaymentStatus = asyncHandler(async (req: Request, res: Respons
  */
 export const getPaymentMethods = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
-  const { currency = 'INR' } = req.query;
+  const defaultCurrency = process.env.PLATFORM_CURRENCY || 'AED';
+  const { currency: rawCurrency = defaultCurrency, fiatCurrency: regionFiat } = req.query;
 
-  console.log('💳 [PAYMENT] Fetching payment methods for user:', userId, 'currency:', currency);
+  // NC/RC are internal coin currencies — use region's fiat currency from frontend, or env default
+  const resolvedCurrency = (regionFiat as string) || defaultCurrency;
+  const fiatCurrency = (rawCurrency === 'NC' || rawCurrency === 'RC') ? resolvedCurrency : rawCurrency as string;
+
+  console.log('💳 [PAYMENT] Fetching payment methods for user:', userId, 'currency:', fiatCurrency);
 
   try {
+    // Method display config
+    const methodInfo: Record<string, { name: string; icon: string; processingTime: string }> = {
+      upi: { name: 'UPI', icon: '📱', processingTime: 'Instant' },
+      card: { name: 'Debit/Credit Card', icon: '💳', processingTime: '2-3 minutes' },
+      wallet: { name: 'Digital Wallet', icon: '👛', processingTime: 'Instant' },
+      netbanking: { name: 'Net Banking', icon: '🏦', processingTime: '5-10 minutes' },
+      paypal: { name: 'PayPal', icon: '🅿️', processingTime: '2-5 minutes' },
+    };
+
+    // Gateway priority: prefer Razorpay for INR, Stripe for international, PayPal as fallback
+    const gatewayPriority = fiatCurrency === 'INR'
+      ? ['razorpay', 'stripe', 'paypal']
+      : ['stripe', 'paypal', 'razorpay'];
+
+    // Collect all available methods per gateway (only if credentials are configured)
+    const gatewayMethods: Record<string, { gateway: string; methods: string[]; fee: Record<string, number> }> = {};
+
+    if (paymentGatewayService.isGatewayConfigured('stripe') &&
+        paymentGatewayService.getSupportedCurrencies('stripe').includes(fiatCurrency)) {
+      gatewayMethods['stripe'] = {
+        gateway: 'stripe',
+        methods: paymentGatewayService.getAvailablePaymentMethods('stripe', fiatCurrency),
+        fee: { card: 2.9 }
+      };
+    }
+
+    if (fiatCurrency === 'INR' && paymentGatewayService.isGatewayConfigured('razorpay')) {
+      gatewayMethods['razorpay'] = {
+        gateway: 'razorpay',
+        methods: paymentGatewayService.getAvailablePaymentMethods('razorpay', fiatCurrency),
+        fee: { card: 2.0 }
+      };
+    }
+
+    if (paymentGatewayService.isGatewayConfigured('paypal') &&
+        paymentGatewayService.getSupportedCurrencies('paypal').includes(fiatCurrency)) {
+      gatewayMethods['paypal'] = {
+        gateway: 'paypal',
+        methods: paymentGatewayService.getAvailablePaymentMethods('paypal', fiatCurrency),
+        fee: { card: 3.4, paypal: 2.9 }
+      };
+    }
+
+    // Deduplicate: one entry per method type, pick the highest-priority gateway
+    const seen = new Set<string>();
     const paymentMethods: any[] = [];
 
-    // Stripe methods
-    if (paymentGatewayService.getSupportedCurrencies('stripe').includes(currency as string)) {
-      const stripeMethods = paymentGatewayService.getAvailablePaymentMethods('stripe');
-      stripeMethods.forEach(method => {
-        paymentMethods.push({
-          id: `stripe_${method}`,
-          name: method === 'card' ? 'Credit/Debit Card (Stripe)' : 
-                method === 'upi' ? 'UPI (Stripe)' : 
-                method === 'wallet' ? 'Digital Wallet (Stripe)' : method,
-          type: method,
-          gateway: 'stripe',
-          icon: method === 'card' ? '💳' : method === 'upi' ? '📱' : '👛',
-          isAvailable: true,
-          processingFee: method === 'card' ? 2.9 : 0,
-          processingTime: 'Instant',
-          description: `Pay using ${method} via Stripe`,
-          supportedCurrencies: paymentGatewayService.getSupportedCurrencies('stripe')
-        });
-      });
-    }
+    for (const gw of gatewayPriority) {
+      const entry = gatewayMethods[gw];
+      if (!entry) continue;
 
-    // Razorpay methods (for INR)
-    if (currency === 'INR') {
-      const razorpayMethods = paymentGatewayService.getAvailablePaymentMethods('razorpay');
-      razorpayMethods.forEach(method => {
-        paymentMethods.push({
-          id: `razorpay_${method}`,
-          name: method === 'card' ? 'Credit/Debit Card (Razorpay)' : 
-                method === 'upi' ? 'UPI (Razorpay)' : 
-                method === 'wallet' ? 'Digital Wallet (Razorpay)' : 
-                method === 'netbanking' ? 'Net Banking (Razorpay)' : method,
-          type: method,
-          gateway: 'razorpay',
-          icon: method === 'card' ? '💳' : method === 'upi' ? '📱' : 
-                method === 'wallet' ? '👛' : '🏦',
-          isAvailable: true,
-          processingFee: method === 'card' ? 2.0 : 0,
-          processingTime: method === 'netbanking' ? '5-10 minutes' : 'Instant',
-          description: `Pay using ${method} via Razorpay`,
-          supportedCurrencies: paymentGatewayService.getSupportedCurrencies('razorpay')
-        });
-      });
-    }
+      for (const method of entry.methods) {
+        if (seen.has(method)) continue;
+        seen.add(method);
 
-    // PayPal methods
-    if (paymentGatewayService.getSupportedCurrencies('paypal').includes(currency as string)) {
-      const paypalMethods = paymentGatewayService.getAvailablePaymentMethods('paypal');
-      paypalMethods.forEach(method => {
+        const info = methodInfo[method] || { name: method, icon: '💰', processingTime: 'Varies' };
         paymentMethods.push({
-          id: `paypal_${method}`,
-          name: method === 'card' ? 'Credit/Debit Card (PayPal)' : 
-                method === 'paypal' ? 'PayPal Account' : method,
+          id: `${gw}_${method}`,
+          name: info.name,
           type: method,
-          gateway: 'paypal',
-          icon: method === 'card' ? '💳' : '🅿️',
+          gateway: gw,
+          icon: info.icon,
           isAvailable: true,
-          processingFee: method === 'card' ? 3.4 : 2.9,
-          processingTime: '2-5 minutes',
-          description: `Pay using ${method} via PayPal`,
-          supportedCurrencies: paymentGatewayService.getSupportedCurrencies('paypal')
+          processingFee: entry.fee[method] ?? 0,
+          processingTime: info.processingTime,
+          description: `Pay using ${info.name}`,
         });
-      });
+      }
     }
 
     console.log('✅ [PAYMENT] Payment methods retrieved:', paymentMethods.length);
@@ -1098,14 +1314,23 @@ export const handlePaymentWebhook = asyncHandler(async (req: Request, res: Respo
  */
 export const devTopup = asyncHandler(async (req: Request, res: Response) => {
   // Only allow in development
-  if (process.env.NODE_ENV === 'production') {
-    return sendError(res, 'This endpoint is not available in production', 403);
+  if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging') {
+    return sendError(res, 'This endpoint is only available in development', 403);
   }
 
   const userId = (req as any).userId;
-  const { amount = 1000, type = 'rez' } = req.body; // type: 'rez' | 'promo' | 'cashback'
+  const { amount = 1000, type = 'rez' } = req.body;
 
-  console.log('🧪 [DEV TOPUP] Adding test funds:', { userId, amount, type });
+  // Validate dev topup inputs
+  const devAmount = Number(amount);
+  if (!Number.isFinite(devAmount) || devAmount <= 0 || devAmount > 100000) {
+    return sendBadRequest(res, 'Dev topup amount must be between 1 and 100,000');
+  }
+  if (!['rez', 'promo', 'cashback'].includes(type)) {
+    return sendBadRequest(res, 'Invalid coin type. Must be rez, promo, or cashback');
+  }
+
+  console.log('🧪 [DEV TOPUP] Adding test funds:', { userId, amount: devAmount, type });
 
   if (!userId) {
     return sendError(res, 'User not authenticated', 401);
@@ -1126,20 +1351,20 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
     if (type === 'promo') {
       const promoCoin = wallet.coins.find((c: any) => c.type === 'promo');
       if (promoCoin) {
-        promoCoin.amount += Number(amount);
+        promoCoin.amount += devAmount;
       }
     } else if (type === 'cashback') {
-      wallet.balance.cashback = (wallet.balance.cashback || 0) + Number(amount);
+      wallet.balance.cashback = (wallet.balance.cashback || 0) + devAmount;
     } else {
       // Default to ReZ Coins
       const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
       if (rezCoin) {
-        rezCoin.amount += Number(amount);
+        rezCoin.amount += devAmount;
       }
-      wallet.balance.available = (wallet.balance.available || 0) + Number(amount);
+      wallet.balance.available = (wallet.balance.available || 0) + devAmount;
     }
 
-    wallet.balance.total = (wallet.balance.total || 0) + Number(amount);
+    wallet.balance.total = (wallet.balance.total || 0) + devAmount;
     await wallet.save();
 
     console.log('✅ [DEV TOPUP] Test funds added:', wallet.balance);
@@ -1150,12 +1375,12 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
         coins: wallet.coins,
         currency: wallet.currency
       },
-      addedAmount: amount,
+      addedAmount: devAmount,
       type: type
     }, `Test ${type} funds added successfully`);
   } catch (error: any) {
     console.error('❌ [DEV TOPUP] Error:', error);
-    sendError(res, error.message, 500);
+    sendError(res, sanitizeErrorMessage(error, 'Failed to add test funds'), 500);
   }
 });
 
@@ -1251,7 +1476,7 @@ export const syncWalletBalance = asyncHandler(async (req: Request, res: Response
     }, 'Wallet balance synced successfully');
   } catch (error: any) {
     console.error('❌ [WALLET SYNC] Error:', error);
-    sendError(res, error.message, 500);
+    sendError(res, sanitizeErrorMessage(error, 'Failed to sync wallet balance'), 500);
   }
 });
 
@@ -1270,9 +1495,12 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
     return sendError(res, 'User not authenticated', 401);
   }
 
-  if (!transactionId || !amount || amount <= 0) {
-    return sendBadRequest(res, 'Transaction ID and positive amount are required');
+  if (!transactionId) {
+    return sendBadRequest(res, 'Transaction ID is required');
   }
+  const refundAmountCheck = validateAmount(amount, { fieldName: 'Refund amount' });
+  if (!refundAmountCheck.valid) return sendBadRequest(res, refundAmountCheck.error);
+  const refundAmount = refundAmountCheck.amount;
 
   // Start a MongoDB session for atomic operation
   const session = await mongoose.startSession();
@@ -1293,10 +1521,10 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
     }
 
     // Validate amount doesn't exceed original transaction
-    if (amount > originalTransaction.amount) {
+    if (refundAmount > originalTransaction.amount) {
       await session.abortTransaction();
       session.endSession();
-      return sendBadRequest(res, `Refund amount cannot exceed original transaction amount of ₹${originalTransaction.amount}`);
+      return sendBadRequest(res, `Refund amount cannot exceed original transaction amount of ${originalTransaction.amount} NC`);
     }
 
     // Check if already refunded
@@ -1318,12 +1546,12 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
     // Credit the refund amount back to wallet
     const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
     if (rezCoin) {
-      rezCoin.amount += amount;
+      rezCoin.amount += refundAmount;
     }
 
-    wallet.balance.available += amount;
-    wallet.balance.total += amount;
-    wallet.statistics.totalRefunds += amount;
+    wallet.balance.available += refundAmount;
+    wallet.balance.total += refundAmount;
+    wallet.statistics.totalRefunds += refundAmount;
     wallet.lastTransactionAt = new Date();
 
     await wallet.save({ session });
@@ -1333,8 +1561,8 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
       user: userId,
       type: 'credit',
       category: 'refund',
-      amount,
-      balanceBefore: wallet.balance.available - amount,
+      amount: refundAmount,
+      balanceBefore: wallet.balance.available - refundAmount,
       balanceAfter: wallet.balance.available,
       description: `Refund for transaction ${transactionId}: ${reason || 'Order creation failed'}`,
       source: {
@@ -1372,23 +1600,34 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
 
     await originalTransaction.save({ session });
 
+    // Create CoinTransaction (source of truth for auto-sync)
+    await CoinTransaction.create([{
+      user: userId,
+      type: 'refunded',
+      amount: refundAmount,
+      balance: wallet.balance.available,
+      source: 'order',
+      description: `Refund for transaction ${transactionId}: ${reason || 'Order creation failed'}`,
+      metadata: { originalTransactionId: transactionId, refundReason: reason }
+    }], { session });
+
     // Commit transaction
     await session.commitTransaction();
     session.endSession();
 
     console.log('✅ [WALLET REFUND] Refund processed successfully:', {
       refundId: (refundTransaction[0] as any)._id,
-      amount,
+      amount: refundAmount,
     });
 
     // Structured monitoring log for order-creation-failed refunds
     if (reason === 'order_creation_failed') {
-      console.warn(`⚠️ [WALLET_REFUND_ORDER_FAILED] userId=${userId} txnId=${transactionId} amount=${amount} refundId=${(refundTransaction[0] as any)._id}`);
+      console.warn(`⚠️ [WALLET_REFUND_ORDER_FAILED] userId=${userId} txnId=${transactionId} amount=${refundAmount} refundId=${(refundTransaction[0] as any)._id}`);
     }
 
     sendSuccess(res, {
       refundId: (refundTransaction[0] as any)._id.toString(),
-      refundedAmount: amount,
+      refundedAmount: refundAmount,
       wallet: {
         balance: {
           total: wallet.balance.total,
@@ -1403,6 +1642,288 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
     await session.abortTransaction();
     session.endSession();
     console.error('❌ [WALLET REFUND] Error:', error);
-    sendError(res, error.message || 'Failed to process refund', 500);
+    sendError(res, sanitizeErrorMessage(error, 'Failed to process refund'), 500);
   }
+});
+
+/**
+ * @desc    Get expiring coins grouped by time period
+ * @route   GET /api/wallet/expiring-coins
+ * @access  Private
+ */
+export const getExpiringCoins = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  if (!userId) return sendError(res, 'User not authenticated', 401);
+
+  const now = new Date();
+  const endOfWeek = new Date(now);
+  endOfWeek.setDate(endOfWeek.getDate() + 7);
+  const endOfMonth = new Date(now);
+  endOfMonth.setMonth(endOfMonth.getMonth() + 1);
+  const endOfNextMonth = new Date(now);
+  endOfNextMonth.setMonth(endOfNextMonth.getMonth() + 2);
+
+  const { CoinTransaction } = require('../models/CoinTransaction');
+
+  // Query earned coins that have expiry dates and haven't been spent/expired yet
+  const expiringCoins = await CoinTransaction.aggregate([
+    {
+      $match: {
+        user: new mongoose.Types.ObjectId(userId),
+        type: 'earned',
+        expiresAt: { $exists: true, $gt: now }
+      }
+    },
+    {
+      $addFields: {
+        period: {
+          $cond: [
+            { $lte: ['$expiresAt', endOfWeek] },
+            'this_week',
+            {
+              $cond: [
+                { $lte: ['$expiresAt', endOfMonth] },
+                'this_month',
+                'next_month'
+              ]
+            }
+          ]
+        },
+        daysLeft: {
+          $ceil: {
+            $divide: [
+              { $subtract: ['$expiresAt', now] },
+              86400000 // ms per day
+            ]
+          }
+        }
+      }
+    },
+    {
+      $group: {
+        _id: '$period',
+        totalAmount: { $sum: '$amount' },
+        coins: {
+          $push: {
+            id: '$_id',
+            amount: '$amount',
+            source: '$source',
+            description: '$description',
+            expiresAt: '$expiresAt',
+            daysLeft: '$daysLeft',
+            category: '$category'
+          }
+        },
+        count: { $sum: 1 }
+      }
+    },
+    { $sort: { _id: 1 } }
+  ]);
+
+  // Also check promo coins from wallet
+  const wallet = await Wallet.findOne({ user: userId });
+  const promoCoin = wallet?.coins.find((c: any) => c.type === 'promo' && c.amount > 0);
+  let promoExpiry = null;
+  if (promoCoin?.promoDetails?.expiryDate || promoCoin?.expiryDate) {
+    const expDate = new Date(promoCoin.promoDetails?.expiryDate || promoCoin.expiryDate!);
+    if (expDate > now) {
+      const daysLeft = Math.ceil((expDate.getTime() - now.getTime()) / 86400000);
+      promoExpiry = {
+        type: 'promo',
+        amount: promoCoin.amount,
+        expiresAt: expDate,
+        daysLeft,
+        period: daysLeft <= 7 ? 'this_week' : daysLeft <= 30 ? 'this_month' : 'next_month'
+      };
+    }
+  }
+
+  const result: Record<string, any> = {
+    this_week: { totalAmount: 0, coins: [], count: 0 },
+    this_month: { totalAmount: 0, coins: [], count: 0 },
+    next_month: { totalAmount: 0, coins: [], count: 0 },
+  };
+
+  for (const group of expiringCoins) {
+    if (result[group._id]) {
+      result[group._id] = {
+        totalAmount: group.totalAmount,
+        coins: group.coins.slice(0, 20), // Limit to 20 per group
+        count: group.count
+      };
+    }
+  }
+
+  // Add promo coin to appropriate group
+  if (promoExpiry) {
+    result[promoExpiry.period].coins.unshift(promoExpiry);
+    result[promoExpiry.period].totalAmount += promoExpiry.amount;
+    result[promoExpiry.period].count += 1;
+  }
+
+  sendSuccess(res, {
+    expiringCoins: result,
+    totalExpiring: Object.values(result).reduce((sum: number, g: any) => sum + g.totalAmount, 0)
+  }, 'Expiring coins retrieved');
+});
+
+/**
+ * @desc    Preview recharge cashback
+ * @route   GET /api/wallet/recharge/preview
+ * @access  Private
+ */
+export const previewRechargeCashback = asyncHandler(async (req: Request, res: Response) => {
+  const { amount } = req.query;
+  const rechargeAmount = Number(amount);
+
+  if (!rechargeAmount || rechargeAmount <= 0) {
+    return sendBadRequest(res, 'Valid recharge amount required');
+  }
+
+  const { WalletConfig } = require('../models/WalletConfig');
+  const config = await WalletConfig.getOrCreate();
+
+  if (!config.rechargeConfig.isEnabled) {
+    return sendSuccess(res, {
+      rechargeAmount, discountPercentage: 0, discountAmount: 0, payableAmount: rechargeAmount,
+      cashback: 0, cashbackPercentage: 0, message: 'Recharge discount currently disabled'
+    });
+  }
+
+  if (rechargeAmount < config.rechargeConfig.minRecharge) {
+    return sendBadRequest(res, `Minimum recharge amount is ${config.rechargeConfig.minRecharge} NC`);
+  }
+
+  // Find applicable tier (highest tier that rechargeAmount qualifies for)
+  const sortedTiers = [...config.rechargeConfig.tiers].sort((a: any, b: any) => b.minAmount - a.minAmount);
+  const applicableTier = sortedTiers.find((t: any) => rechargeAmount >= t.minAmount);
+
+  if (!applicableTier) {
+    return sendSuccess(res, {
+      rechargeAmount, discountPercentage: 0, discountAmount: 0, payableAmount: rechargeAmount,
+      cashback: 0, cashbackPercentage: 0, message: 'Amount below minimum tier'
+    });
+  }
+
+  const percentage = applicableTier.cashbackPercentage;
+  const rawDiscount = Math.floor(rechargeAmount * percentage / 100);
+  const discountAmount = Math.min(rawDiscount, config.rechargeConfig.maxCashback);
+  const payableAmount = rechargeAmount - discountAmount;
+
+  sendSuccess(res, {
+    rechargeAmount,
+    discountPercentage: percentage,
+    discountAmount,
+    payableAmount,
+    // Keep legacy fields for backward compatibility
+    cashbackPercentage: percentage,
+    cashback: discountAmount,
+    maxCashback: config.rechargeConfig.maxCashback,
+    cappedAt: rawDiscount > config.rechargeConfig.maxCashback ? config.rechargeConfig.maxCashback : null,
+  }, 'Recharge preview calculated');
+});
+
+/**
+ * @desc    Get scheduled drops for user (CoinDrops + SurpriseCoinDrops + daily login)
+ * @route   GET /api/wallet/scheduled-drops
+ * @access  Private
+ */
+export const getScheduledDrops = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  if (!userId) return sendError(res, 'User not authenticated', 401);
+
+  const CoinDrop = require('../models/CoinDrop').default;
+  const { SurpriseCoinDrop } = require('../models/SurpriseCoinDrop');
+  const { CoinTransaction } = require('../models/CoinTransaction');
+
+  const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+
+  // 1. Active CoinDrops (boosted cashback at stores)
+  const coinDrops = await CoinDrop.find({
+    isActive: true,
+    endTime: { $gte: now },
+  })
+    .sort({ priority: -1, multiplier: -1 })
+    .limit(20)
+    .lean();
+
+  // 2. Unclaimed SurpriseCoinDrops for this user
+  const surpriseDrops = await SurpriseCoinDrop.find({
+    userId: new mongoose.Types.ObjectId(userId),
+    status: 'available',
+    expiresAt: { $gte: now },
+  })
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
+
+  // 3. Check daily login eligibility
+  const dailyLoginToday = await CoinTransaction.findOne({
+    user: new mongoose.Types.ObjectId(userId),
+    source: 'daily_login',
+    createdAt: { $gte: todayStart },
+  }).lean();
+
+  const drops = [];
+
+  // Map CoinDrops
+  for (const cd of coinDrops) {
+    drops.push({
+      id: String(cd._id),
+      title: `${cd.storeName} Boost`,
+      amount: cd.boostedCashback || Math.round(cd.normalCashback * cd.multiplier),
+      type: 'cashback' as const,
+      scheduledDate: cd.endTime,
+      description: `${cd.multiplier}x cashback at ${cd.storeName}`,
+      icon: 'flash-outline',
+      source: 'coin_drop',
+      claimable: false,
+      storeLogo: cd.storeLogo,
+    });
+  }
+
+  // Map SurpriseCoinDrops
+  for (const sd of surpriseDrops) {
+    drops.push({
+      id: String(sd._id),
+      title: sd.message || 'Surprise Coins!',
+      amount: sd.coins,
+      type: 'special' as const,
+      scheduledDate: sd.expiresAt,
+      description: sd.reason === 'daily_login' ? 'Daily reward' : `Surprise ${sd.reason} reward`,
+      icon: 'gift-outline',
+      source: 'surprise_drop',
+      claimable: true,
+    });
+  }
+
+  // Daily login entry
+  drops.push({
+    id: 'daily_login',
+    title: 'Daily Login Bonus',
+    amount: 5,
+    type: 'daily' as const,
+    scheduledDate: dailyLoginToday ? todayStart : now,
+    description: dailyLoginToday ? 'Already claimed today' : 'Log in to claim',
+    icon: 'calendar-outline',
+    source: 'daily_login',
+    claimable: !dailyLoginToday,
+  });
+
+  const totalUpcoming = drops.reduce((sum, d) => sum + (d.claimable ? d.amount : 0), 0);
+
+  sendSuccess(res, { drops, totalUpcoming }, 'Scheduled drops retrieved');
+});
+
+/**
+ * @desc    Get coin rules (dynamic, admin-configurable)
+ * @route   GET /api/wallet/coin-rules
+ * @access  Private
+ */
+export const getCoinRules = asyncHandler(async (req: Request, res: Response) => {
+  const { WalletConfig } = require('../models/WalletConfig');
+  const config = await WalletConfig.getOrCreate();
+  sendSuccess(res, { coinRules: config.coinRules || {} }, 'Coin rules retrieved');
 });

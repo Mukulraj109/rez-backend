@@ -58,6 +58,22 @@ export class SMSService {
   }
 
   /**
+   * Send OTP for user authentication / transfer verification
+   */
+  static async sendOTP(phoneNumber: string, otp: string): Promise<boolean> {
+    try {
+      await this.send({
+        to: phoneNumber,
+        message: `Your REZ App OTP is ${otp}. Valid for 10 minutes. Do not share this OTP with anyone.`,
+      });
+      return true;
+    } catch (error) {
+      console.error('❌ [SMSService] Failed to send OTP:', error);
+      return false;
+    }
+  }
+
+  /**
    * Send order confirmation to customer
    */
   static async sendOrderConfirmation(

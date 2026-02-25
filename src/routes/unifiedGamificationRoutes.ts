@@ -101,9 +101,10 @@ router.post('/challenges/:id/join', challengeJoinLimiter, joinChallenge);
 // ========================================
 // ACHIEVEMENTS
 // ========================================
-router.get('/achievements', getAchievements);
-router.get('/achievements/me', getMyAchievements); // Current user's achievements
-router.get('/achievements/user/:userId', getUserAchievements);
+// Moved to standalone route file: achievementRoutes.ts (registered at /api/achievements)
+// router.get('/achievements', getAchievements);
+// router.get('/achievements/me', getMyAchievements);
+// router.get('/achievements/user/:userId', getUserAchievements);
 // REMOVED: POST /achievements/unlock — achievement unlocking must be server-driven only
 
 // ========================================
@@ -145,15 +146,13 @@ router.post('/coins/deduct', requireAdmin, deductCoins);
 // ========================================
 // DAILY STREAK
 // ========================================
-// Streak Bonuses - MUST be before /streak/:userId to avoid route conflict
-router.get('/streak/bonuses', getStreakBonuses);
-router.get('/streak/:userId', getDailyStreak);
-router.post('/streak/increment', incrementStreak);
-// New endpoint: Get current user's streak (JWT-based, no userId param)
-router.get('/streaks', streakController.getCurrentUserStreak.bind(streakController));
-// Streak milestones
-router.post('/streak/milestone/:day/claim', claimStreakMilestone);
-router.get('/streaks/:type/milestones', getStreakMilestones);
+// Moved to standalone route file: streakRoutes.ts (registered at /api/streak)
+// router.get('/streak/bonuses', getStreakBonuses);
+// router.get('/streak/:userId', getDailyStreak);
+// router.post('/streak/increment', incrementStreak);
+// router.get('/streaks', streakController.getCurrentUserStreak.bind(streakController));
+// router.post('/streak/milestone/:day/claim', claimStreakMilestone);
+// router.get('/streaks/:type/milestones', getStreakMilestones);
 
 // ========================================
 // MINI-GAMES
@@ -167,9 +166,11 @@ router.get('/spin-wheel/data', getSpinWheelData);
 router.get('/spin-wheel/history', getSpinWheelHistory);
 
 // Scratch Card
-router.post('/scratch-card/create', createScratchCard);
-router.post('/scratch-card/scratch', scratchCard);
-router.post('/scratch-card/:id/claim', claimScratchCard);
+// Moved to standalone route file: scratchCardRoutes.ts (registered at /api/scratch-cards)
+// Also available via gameRoutes.ts (registered at /api/games)
+// router.post('/scratch-card/create', createScratchCard);
+// router.post('/scratch-card/scratch', scratchCard);
+// router.post('/scratch-card/:id/claim', claimScratchCard);
 
 // Quiz Game
 router.post('/quiz/start', startQuiz);
@@ -198,8 +199,8 @@ router.post('/surprise-drop/claim', claimSurpriseDrop);
 // Daily Check-in Config (day rewards, pro tips, etc.)
 router.get('/checkin-config', getCheckinConfigEndpoint);
 
-// Daily Streak Check-in (rate-limited to prevent rapid-fire abuse)
-router.post('/streak/checkin', checkInLimiter, streakCheckin);
+// Daily Streak Check-in — Moved to standalone route file: streakRoutes.ts (registered at /api/streak)
+// router.post('/streak/checkin', checkInLimiter, streakCheckin);
 
 // ========================================
 // AFFILIATE / SHARE

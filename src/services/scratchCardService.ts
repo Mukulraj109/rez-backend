@@ -1,5 +1,8 @@
 import { MiniGame } from '../models/MiniGame';
 import { CoinTransaction } from '../models/CoinTransaction';
+import { Coupon } from '../models/Coupon';
+import { UserCoupon } from '../models/UserCoupon';
+import { Wallet } from '../models/Wallet';
 import mongoose from 'mongoose';
 
 interface ScratchCardPrize {
@@ -214,9 +217,9 @@ export async function scratchCell(sessionId: string, cellIndex: number): Promise
       };
       scratchCard.metadata.revealed = true;
 
-      // Award prize
+      // Award prize with idempotency key to prevent duplicate awards on retry
       if (prize.type !== 'nothing') {
-        await awardScratchCardPrize(scratchCard.user.toString(), prize);
+        await awardScratchCardPrize(scratchCard.user.toString(), prize, String(scratchCard._id));
       }
     }
   }
@@ -244,25 +247,125 @@ export async function scratchCell(sessionId: string, cellIndex: number): Promise
 
 /**
  * Award scratch card prize
+ * Uses sessionId as idempotency key to prevent duplicate awards on retry
  */
-async function awardScratchCardPrize(userId: string, prize: ScratchCardPrize): Promise<void> {
+async function awardScratchCardPrize(userId: string, prize: ScratchCardPrize, sessionId: string): Promise<void> {
+  const idempotencyKey = `scratch_card:${sessionId}:${prize.type}`;
+
   if (prize.type === 'coins') {
     await CoinTransaction.createTransaction(
       userId,
       'earned',
       prize.value,
       'scratch_card',
-      `Won ${prize.value} coins from Scratch Card`
+      `Won ${prize.value} coins from Scratch Card`,
+      { idempotencyKey, sessionId }
     );
   } else if (prize.type === 'cashback') {
-    // TODO: Implement cashback awarding via cashbackService
-    console.warn(`[SCRATCH CARD] Cashback prize not implemented - user ${userId} won ${prize.value}% cashback but it was NOT awarded`);
+    const cashbackAmount = prize.value;
+    await CoinTransaction.createTransaction(
+      userId,
+      'earned',
+      cashbackAmount,
+      'scratch_card',
+      `Won ${prize.value}% cashback from Scratch Card (${cashbackAmount} NC credited)`,
+      { prizeType: 'cashback', cashbackPercentage: prize.value, idempotencyKey, sessionId }
+    );
   } else if (prize.type === 'discount') {
-    // TODO: Implement discount coupon creation
-    console.warn(`[SCRATCH CARD] Discount prize not implemented - user ${userId} won ${prize.value}% discount but it was NOT awarded`);
+    // Idempotency: check if coupon already created for this session
+    const existingCoupon = await UserCoupon.findOne({
+      user: new mongoose.Types.ObjectId(userId),
+      'metadata.idempotencyKey': idempotencyKey
+    });
+    if (existingCoupon) return;
+
+    const couponCode = `SC-${prize.value}OFF-${Date.now().toString(36).toUpperCase()}`;
+    const expiryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    const coupon = await Coupon.create({
+      couponCode,
+      title: `${prize.value}% Off - Scratch Card Prize`,
+      description: `Won ${prize.value}% discount from Scratch Card`,
+      discountType: 'PERCENTAGE',
+      discountValue: prize.value,
+      minOrderValue: 0,
+      maxDiscountCap: 500,
+      validFrom: new Date(),
+      validTo: expiryDate,
+      usageLimit: { totalUsage: 1, perUser: 1, usedCount: 0 },
+      applicableTo: { categories: [], products: [], stores: [], userTiers: ['all'] },
+      autoApply: false,
+      autoApplyPriority: 0,
+      status: 'active',
+      termsAndConditions: ['Won from Scratch Card game', 'Valid for 7 days', 'Single use only'],
+      createdBy: new mongoose.Types.ObjectId(userId),
+      tags: ['scratch_card', 'game_prize'],
+      isNewlyAdded: true,
+      isFeatured: false,
+      viewCount: 0,
+      claimCount: 1,
+      usageCount: 0,
+      metadata: { source: 'scratch_card', idempotencyKey, sessionId }
+    });
+
+    await UserCoupon.create({
+      user: new mongoose.Types.ObjectId(userId),
+      coupon: coupon._id,
+      claimedDate: new Date(),
+      expiryDate,
+      status: 'available',
+      metadata: { idempotencyKey, sessionId }
+    });
   } else if (prize.type === 'voucher') {
-    // TODO: Implement voucher awarding via voucherRedemptionService
-    console.warn(`[SCRATCH CARD] Voucher prize not implemented - user ${userId} won ₹${prize.value} voucher but it was NOT awarded`);
+    // Idempotency: check if voucher already created for this session
+    const existingVoucher = await UserCoupon.findOne({
+      user: new mongoose.Types.ObjectId(userId),
+      'metadata.idempotencyKey': idempotencyKey
+    });
+    if (existingVoucher) return;
+
+    const couponCode = `SC-V${prize.value}-${Date.now().toString(36).toUpperCase()}`;
+    const expiryDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+    const coupon = await Coupon.create({
+      couponCode,
+      title: `₹${prize.value} Voucher - Scratch Card Prize`,
+      description: `Won ₹${prize.value} voucher from Scratch Card`,
+      discountType: 'FIXED',
+      discountValue: prize.value,
+      minOrderValue: prize.value * 2,
+      maxDiscountCap: prize.value,
+      validFrom: new Date(),
+      validTo: expiryDate,
+      usageLimit: { totalUsage: 1, perUser: 1, usedCount: 0 },
+      applicableTo: { categories: [], products: [], stores: [], userTiers: ['all'] },
+      autoApply: false,
+      autoApplyPriority: 0,
+      status: 'active',
+      termsAndConditions: [
+        'Won from Scratch Card game',
+        'Valid for 14 days',
+        `Minimum order value: ₹${prize.value * 2}`,
+        'Single use only'
+      ],
+      createdBy: new mongoose.Types.ObjectId(userId),
+      tags: ['scratch_card', 'game_prize', 'voucher'],
+      isNewlyAdded: true,
+      isFeatured: false,
+      viewCount: 0,
+      claimCount: 1,
+      usageCount: 0,
+      metadata: { source: 'scratch_card', idempotencyKey, sessionId }
+    });
+
+    await UserCoupon.create({
+      user: new mongoose.Types.ObjectId(userId),
+      coupon: coupon._id,
+      claimedDate: new Date(),
+      expiryDate,
+      status: 'available',
+      metadata: { idempotencyKey, sessionId }
+    });
   }
 }
 

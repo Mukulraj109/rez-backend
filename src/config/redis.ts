@@ -85,6 +85,9 @@ export const CacheTTL = {
   FEATURE_FLAGS: 5 * 60, // 5 minutes
   AVAILABLE_GAMES: 10 * 60, // 10 minutes
   CHALLENGES_ACTIVE: 5 * 60, // 5 minutes
+
+  // Offers page aggregated data
+  OFFERS_PAGE_DATA: 5 * 60, // 5 minutes
 } as const;
 
 export default {

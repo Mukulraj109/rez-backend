@@ -617,4 +617,110 @@ router.post('/invalidate-cache', async (_req: Request, res: Response) => {
   }
 });
 
+// ======== SCRATCH CARD SPECIFIC ANALYTICS ========
+
+/**
+ * GET /api/admin/game-config/analytics/scratch-card
+ * Detailed scratch card analytics: breakage, prize distribution, reward cost, fraud flags
+ */
+router.get('/analytics/scratch-card', async (req: Request, res: Response) => {
+  try {
+    const { days = '30' } = req.query;
+    const daysNum = parseInt(days as string) || 30;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - daysNum);
+
+    const [
+      statusBreakdown,
+      prizeDistribution,
+      dailyActivity,
+      suspiciousActivity
+    ] = await Promise.all([
+      // Cards by status
+      GameSession.aggregate([
+        { $match: { gameType: 'scratch_card', createdAt: { $gte: startDate } } },
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]),
+
+      // Prize distribution (type + value breakdown)
+      GameSession.aggregate([
+        { $match: { gameType: 'scratch_card', status: 'completed', createdAt: { $gte: startDate } } },
+        {
+          $group: {
+            _id: { type: '$result.prize.type', value: '$result.prize.value' },
+            count: { $sum: 1 },
+            totalValue: { $sum: { $cond: [{ $eq: ['$result.prize.type', 'coins'] }, '$result.prize.value', 0] } }
+          }
+        },
+        { $sort: { count: -1 } }
+      ]),
+
+      // Daily activity (last 7 days)
+      GameSession.aggregate([
+        { $match: { gameType: 'scratch_card', createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+            created: { $sum: 1 },
+            completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+            expired: { $sum: { $cond: [{ $eq: ['$status', 'expired'] }, 1, 0] } },
+            totalCoins: { $sum: { $cond: [{ $eq: ['$result.prize.type', 'coins'] }, '$result.prize.value', 0] } }
+          }
+        },
+        { $sort: { _id: -1 } }
+      ]),
+
+      // Suspicious: users with > 5 sessions from same IP in the period
+      GameSession.aggregate([
+        { $match: { gameType: 'scratch_card', createdAt: { $gte: startDate }, 'metadata.ip': { $exists: true, $ne: null } } },
+        {
+          $group: {
+            _id: { ip: '$metadata.ip' },
+            userCount: { $addToSet: '$user' },
+            sessionCount: { $sum: 1 }
+          }
+        },
+        { $match: { sessionCount: { $gt: 10 } } },
+        { $project: { ip: '$_id.ip', uniqueUsers: { $size: '$userCount' }, sessions: '$sessionCount' } },
+        { $sort: { sessions: -1 } },
+        { $limit: 20 }
+      ])
+    ]);
+
+    // Compute summary
+    const statusMap: Record<string, number> = {};
+    statusBreakdown.forEach((s: any) => { statusMap[s._id] = s.count; });
+
+    const totalIssued = Object.values(statusMap).reduce((a, b) => a + b, 0);
+    const totalCompleted = statusMap['completed'] || 0;
+    const totalExpired = statusMap['expired'] || 0;
+    const totalPending = statusMap['pending'] || 0;
+    const breakageRate = totalIssued > 0 ? ((totalIssued - totalCompleted) / totalIssued * 100).toFixed(1) : '0';
+    const totalRewardCost = prizeDistribution.reduce((sum: number, p: any) => sum + (p.totalValue || 0), 0);
+
+    return sendSuccess(res, {
+      period: { days: daysNum, startDate: startDate.toISOString() },
+      summary: {
+        totalIssued,
+        totalCompleted,
+        totalExpired,
+        totalPending,
+        breakageRate: `${breakageRate}%`,
+        totalRewardCost,
+      },
+      prizeDistribution: prizeDistribution.map((p: any) => ({
+        type: p._id.type,
+        value: p._id.value,
+        count: p.count,
+        totalCoinsCost: p.totalValue,
+      })),
+      dailyActivity,
+      suspiciousActivity,
+    }, 'Scratch card analytics fetched');
+  } catch (error) {
+    console.error('[Admin] Error fetching scratch card analytics:', error);
+    return sendError(res, 'Failed to fetch scratch card analytics', 500);
+  }
+});
+
 export default router;

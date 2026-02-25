@@ -412,11 +412,8 @@ export async function deductCoins(
 /**
  * Transfer coins between users (e.g., for gifting)
  *
- * TODO (Phase 0.6): This function has a race condition — it reads the sender's balance,
- * checks sufficiency, then creates two separate transactions without atomicity.
- * A concurrent deduction could cause the sender's balance to go negative.
- * This needs to be wrapped in a MongoDB multi-document transaction (session) to ensure
- * the balance check + deduct + credit are all-or-nothing.
+ * Uses MongoDB session + atomic $inc with $gte guard to prevent race conditions.
+ * The balance check + debit + credit are all-or-nothing within a transaction.
  */
 export async function transferCoins(
   fromUserId: string,
@@ -432,42 +429,83 @@ export async function transferCoins(
     throw new Error('Cannot transfer coins to yourself');
   }
 
-  const fromBalance = await getCoinBalance(fromUserId);
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  if (fromBalance < amount) {
-    throw new Error(`Insufficient coin balance. Required: ${amount}, Available: ${fromBalance}`);
-  }
+  try {
+    // Atomic debit: $inc with $gte guard ensures balance can't go negative
+    const debitResult = await Wallet.findOneAndUpdate(
+      {
+        user: new mongoose.Types.ObjectId(fromUserId),
+        'balance.available': { $gte: amount },
+        isFrozen: false,
+      },
+      {
+        $inc: { 'balance.available': -amount },
+        $set: { lastTransactionAt: new Date() },
+      },
+      { new: true, session }
+    );
 
-  // Deduct from sender
-  const fromTransaction = await CoinTransaction.createTransaction(
-    fromUserId,
-    'spent',
-    amount,
-    'purchase',
-    description || `Transferred ${amount} coins`,
-    { recipientUserId: toUserId }
-  );
-
-  // Add to recipient
-  const toTransaction = await CoinTransaction.createTransaction(
-    toUserId,
-    'earned',
-    amount,
-    'admin',
-    description || `Received ${amount} coins`,
-    { senderUserId: fromUserId }
-  );
-
-  return {
-    fromTransaction: {
-      id: fromTransaction._id,
-      newBalance: fromTransaction.balance
-    },
-    toTransaction: {
-      id: toTransaction._id,
-      newBalance: toTransaction.balance
+    if (!debitResult) {
+      await session.abortTransaction();
+      throw new Error(`Insufficient coin balance or wallet is frozen`);
     }
-  };
+
+    // Credit recipient
+    const creditResult = await Wallet.findOneAndUpdate(
+      { user: new mongoose.Types.ObjectId(toUserId) },
+      {
+        $inc: { 'balance.available': amount },
+        $set: { lastTransactionAt: new Date() },
+      },
+      { new: true, session }
+    );
+
+    if (!creditResult) {
+      await session.abortTransaction();
+      throw new Error('Recipient wallet not found');
+    }
+
+    // Create CoinTransaction records within the session
+    const fromTransaction = await CoinTransaction.createTransaction(
+      fromUserId,
+      'spent',
+      amount,
+      'purchase',
+      description || `Transferred ${amount} coins`,
+      { recipientUserId: toUserId }
+    );
+
+    const toTransaction = await CoinTransaction.createTransaction(
+      toUserId,
+      'earned',
+      amount,
+      'admin',
+      description || `Received ${amount} coins`,
+      { senderUserId: fromUserId }
+    );
+
+    await session.commitTransaction();
+
+    return {
+      fromTransaction: {
+        id: fromTransaction._id,
+        newBalance: fromTransaction.balance
+      },
+      toTransaction: {
+        id: toTransaction._id,
+        newBalance: toTransaction.balance
+      }
+    };
+  } catch (error) {
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+    throw error;
+  } finally {
+    session.endSession();
+  }
 }
 
 /**

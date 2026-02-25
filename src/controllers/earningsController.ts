@@ -12,6 +12,7 @@ import earningsSocketService from '../services/earningsSocketService';
 import { CoinTransaction } from '../models/CoinTransaction';
 import { Wallet } from '../models/Wallet';
 import redisService from '../services/redisService';
+import Partner from '../models/Partner';
 
 /**
  * Source → UI category mapping for CoinTransaction aggregation
@@ -148,6 +149,8 @@ export const getConsolidatedEarningsSummary = asyncHandler(async (req: Request, 
       socialMedia: { amount: 0, count: 0 },
       games: { amount: 0, count: 0 },
       dailyCheckIn: { amount: 0, count: 0 },
+      socialImpact: { amount: 0, count: 0 },
+      programs: { amount: 0, count: 0 },
       events: { amount: 0, count: 0 },
       bonus: { amount: 0, count: 0 },
     };
@@ -155,6 +158,9 @@ export const getConsolidatedEarningsSummary = asyncHandler(async (req: Request, 
     let breakdownTotal = 0;
     breakdownAgg.forEach((item: { _id: string; total: number; count: number }) => {
       const category = SOURCE_TO_CATEGORY[item._id] || 'bonus';
+      if (!breakdown[category]) {
+        breakdown[category] = { amount: 0, count: 0 };
+      }
       breakdown[category].amount = Math.round((breakdown[category].amount + item.total) * 100) / 100;
       breakdown[category].count += item.count;
       breakdownTotal += item.total;
@@ -327,6 +333,188 @@ export const getConsolidatedEarningsSummary = asyncHandler(async (req: Request, 
   } catch (error) {
     console.error('[EARNINGS] Error getting consolidated summary:', error);
     throw new AppError('Failed to fetch earnings summary', 500);
+  }
+});
+
+/**
+ * Get user's partner-specific earnings summary
+ * GET /api/earnings/partner-summary
+ * @query period - 'all' | '7d' | '30d' | '90d' (default: 'all')
+ * @returns Partner earnings breakdown (cashback, milestones, referrals, tasks),
+ *          actual this-month total, partner-specific pending, and partner level info
+ */
+export const getPartnerEarningsSummary = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401);
+  }
+
+  const userId = (req.user._id as Types.ObjectId).toString();
+  const { period = 'all' } = req.query;
+
+  // Check Redis cache
+  const cacheKey = `partner-earnings:${userId}:${period}`;
+  try {
+    const cached = await redisService.get<any>(cacheKey);
+    if (cached) {
+      return sendSuccess(res, cached, 'Partner earnings retrieved (cached)');
+    }
+  } catch { /* Redis unavailable */ }
+
+  try {
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const earningTypes = ['earned', 'bonus', 'refunded'];
+
+    // Build date filter
+    let dateFilter: any = {};
+    if (period !== 'all') {
+      const days = period === '7d' ? 7 : period === '30d' ? 30 : period === '90d' ? 90 : 0;
+      if (days > 0) {
+        const fromDate = new Date();
+        fromDate.setDate(fromDate.getDate() - days);
+        dateFilter.createdAt = { $gte: fromDate };
+      }
+    }
+
+    // 1. Aggregate partner-tagged CoinTransactions by partnerEarningType
+    const breakdownAgg = await CoinTransaction.aggregate([
+      {
+        $match: {
+          user: userObjectId,
+          type: { $in: earningTypes },
+          'metadata.partnerEarning': true,
+          ...dateFilter,
+        },
+      },
+      {
+        $group: {
+          _id: '$metadata.partnerEarningType',
+          total: { $sum: '$amount' },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // Map to breakdown structure
+    const breakdown: Record<string, { amount: number; count: number }> = {
+      partnerCashback: { amount: 0, count: 0 },
+      milestoneRewards: { amount: 0, count: 0 },
+      referralBonus: { amount: 0, count: 0 },
+      taskRewards: { amount: 0, count: 0 },
+    };
+
+    const TYPE_TO_UI: Record<string, string> = {
+      cashback: 'partnerCashback',
+      milestone: 'milestoneRewards',
+      referral: 'referralBonus',
+      task: 'taskRewards',
+    };
+
+    let totalPartnerEarnings = 0;
+    breakdownAgg.forEach((item: { _id: string; total: number; count: number }) => {
+      const uiKey = TYPE_TO_UI[item._id] || 'partnerCashback';
+      breakdown[uiKey].amount = Math.round((breakdown[uiKey].amount + item.total) * 100) / 100;
+      breakdown[uiKey].count += item.count;
+      totalPartnerEarnings += item.total;
+    });
+
+    // Also include referral earnings (source='referral') even without partnerEarning metadata
+    // since referral rewards are always partner-relevant
+    const referralAgg = await CoinTransaction.aggregate([
+      {
+        $match: {
+          user: userObjectId,
+          type: { $in: earningTypes },
+          source: 'referral',
+          'metadata.partnerEarning': { $ne: true }, // avoid double-counting
+          ...dateFilter,
+        },
+      },
+      {
+        $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } },
+      },
+    ]);
+
+    if (referralAgg[0]) {
+      breakdown.referralBonus.amount = Math.round((breakdown.referralBonus.amount + referralAgg[0].total) * 100) / 100;
+      breakdown.referralBonus.count += referralAgg[0].count;
+      totalPartnerEarnings += referralAgg[0].total;
+    }
+    totalPartnerEarnings = Math.round(totalPartnerEarnings * 100) / 100;
+
+    // 2. Compute actual this-month total (not average)
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thisMonthAgg = await CoinTransaction.aggregate([
+      {
+        $match: {
+          user: userObjectId,
+          type: { $in: earningTypes },
+          $or: [
+            { 'metadata.partnerEarning': true },
+            { source: 'referral' },
+          ],
+          createdAt: { $gte: startOfMonth },
+        },
+      },
+      {
+        $group: { _id: null, total: { $sum: '$amount' } },
+      },
+    ]);
+    const thisMonth = Math.round((thisMonthAgg[0]?.total || 0) * 100) / 100;
+
+    // 3. Get partner-specific pending from Partner model
+    let pendingPartnerEarnings = 0;
+    try {
+      const partner = await Partner.findOne({ userId }).lean();
+      if (partner) {
+        pendingPartnerEarnings = (partner as any).earnings?.pending || 0;
+      }
+    } catch { /* Partner may not exist */ }
+
+    // 4. Get available balance from Wallet
+    let availableBalance = 0;
+    try {
+      const wallet = await Wallet.findOne({ user: userId }).lean();
+      if (wallet) {
+        availableBalance = (wallet as any).balance?.available || 0;
+      }
+    } catch { /* Wallet may not exist */ }
+
+    // 5. Get partner level info
+    let partnerLevel = { level: 0, name: 'None', daysRemaining: 0, ordersToNextLevel: 0 };
+    try {
+      const partner = await Partner.findOne({ userId });
+      if (partner) {
+        partnerLevel = {
+          level: (partner as any).currentLevel?.level || 0,
+          name: (partner as any).currentLevel?.name || 'None',
+          daysRemaining: typeof (partner as any).getDaysRemaining === 'function'
+            ? (partner as any).getDaysRemaining() : 0,
+          ordersToNextLevel: typeof (partner as any).getOrdersNeededForNextLevel === 'function'
+            ? (partner as any).getOrdersNeededForNextLevel() : 0,
+        };
+      }
+    } catch { /* Partner may not exist */ }
+
+    const result = {
+      totalPartnerEarnings,
+      availableBalance: Math.round(availableBalance * 100) / 100,
+      breakdown,
+      thisMonth,
+      pendingPartnerEarnings: Math.round(pendingPartnerEarnings * 100) / 100,
+      partnerLevel,
+      period: period as string,
+    };
+
+    // Cache for 2 minutes
+    try {
+      await redisService.set(cacheKey, result, 120);
+    } catch { /* Redis unavailable */ }
+
+    sendSuccess(res, result, 'Partner earnings summary retrieved successfully');
+  } catch (error) {
+    console.error('[EARNINGS] Error getting partner earnings summary:', error);
+    throw new AppError('Failed to fetch partner earnings summary', 500);
   }
 });
 

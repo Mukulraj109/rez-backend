@@ -8,6 +8,7 @@ import OfferRedemption from '../models/OfferRedemption';
 import Favorite from '../models/Favorite';
 import { User } from '../models/User';
 import { Wallet } from '../models/Wallet';
+import { CoinTransaction } from '../models/CoinTransaction';
 import { Store } from '../models/Store';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import { filterExclusiveOffers, getUserFollowedStores } from '../middleware/exclusiveOfferMiddleware';
@@ -773,14 +774,53 @@ export const trackOfferClick = async (req: Request, res: Response) => {
 export const getRecommendedOffers = async (req: Request, res: Response) => {
   try {
     const { limit = 10 } = req.query;
+    const userId = req.user?.id;
 
-    // For now, return trending offers as recommendations
-    // Can be enhanced with ML-based recommendations later
-    const offers = await Offer.find({
+    const now = new Date();
+    const baseFilter: any = {
       'validity.isActive': true,
-      'validity.startDate': { $lte: new Date() },
-      'validity.endDate': { $gte: new Date() },
-    })
+      'validity.startDate': { $lte: now },
+      'validity.endDate': { $gte: now },
+    };
+
+    // If authenticated, try to personalize based on transaction history
+    if (userId) {
+      try {
+        const { CoinTransaction } = await import('../models/CoinTransaction');
+        const recentTxns = await CoinTransaction.find({
+          userId,
+          type: 'credit',
+          createdAt: { $gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) },
+        })
+          .select('metadata.storeId')
+          .limit(50)
+          .lean();
+
+        const storeIds = [...new Set(recentTxns
+          .map((t: any) => t.metadata?.storeId?.toString())
+          .filter(Boolean)
+        )];
+
+        if (storeIds.length > 0) {
+          const personalizedOffers = await Offer.find({
+            ...baseFilter,
+            'store.id': { $in: storeIds },
+          })
+            .sort({ 'engagement.viewsCount': -1 })
+            .limit(Number(limit))
+            .lean();
+
+          if (personalizedOffers.length >= 3) {
+            return sendSuccess(res, personalizedOffers, 'Personalized offers fetched successfully');
+          }
+        }
+      } catch {
+        // Fall through to trending offers
+      }
+    }
+
+    // Fallback: trending offers
+    const offers = await Offer.find(baseFilter)
       .sort({ 'engagement.viewsCount': -1, 'engagement.likesCount': -1 })
       .limit(Number(limit))
       .populate('store.id', 'name logo rating')
@@ -1429,6 +1469,23 @@ export const markRedemptionAsUsed = async (req: Request, res: Response) => {
       });
 
       await transaction.save({ session });
+
+      // Create CoinTransaction record (source of truth for auto-sync)
+      await CoinTransaction.create([{
+        user: userId,
+        type: 'earned',
+        amount: cashbackAmount,
+        balance: wallet.balance.available,
+        source: 'cashback',
+        description: `Cashback from ${offer.title}`,
+        metadata: {
+          offerId: offer._id,
+          offerTitle: offer.title,
+          orderAmount,
+          cashbackPercentage: offer.cashbackPercentage,
+          redemptionId: redemption._id,
+        }
+      }], { session });
     }
 
     // Commit transaction

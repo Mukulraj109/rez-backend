@@ -15,6 +15,32 @@ import { Joi } from '../middleware/validation';
 
 const router = Router();
 
+// Batch analytics events from frontend
+router.post('/batch',
+  optionalAuth,
+  validateBody(Joi.object({
+    events: Joi.array().items(
+      Joi.object({
+        name: Joi.string().required().max(100),
+        properties: Joi.object().unknown(true),
+        timestamp: Joi.date().iso(),
+        userId: Joi.string().max(50),
+        sessionId: Joi.string().max(100),
+      })
+    ).max(100).required()
+  })),
+  async (req, res) => {
+    try {
+      const { events } = req.body;
+      console.log(`[Analytics] Received batch of ${events.length} events`);
+      res.json({ success: true, message: `Received ${events.length} events` });
+    } catch (error) {
+      console.error('[Analytics] Batch processing error:', error);
+      res.status(500).json({ success: false, message: 'Failed to process analytics batch' });
+    }
+  }
+);
+
 // Track an analytics event
 router.post('/track',   // analyticsLimiter,, // Disabled for development
   optionalAuth,

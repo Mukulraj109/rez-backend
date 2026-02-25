@@ -16,22 +16,19 @@ import { calculatePromoCoinsEarned, calculatePromoCoinsWithTierBonus } from '../
 import merchantWalletService from '../../services/merchantWalletService';
 import orderSocketService from '../../services/orderSocketService';
 import { Store } from '../../models/Store';
+import { LedgerEntry } from '../../models/LedgerEntry';
+import {
+  ORDER_STATUSES,
+  STATUS_TRANSITIONS,
+  isValidTransition,
+  SLA_THRESHOLDS,
+  ACTIVE_STATUSES,
+  DELIVERY_STATUS_MAP,
+  getOrderProgress
+} from '../../config/orderStateMachine';
+import { recordStatusTransition, recordStatusDuration } from '../../utils/orderMetrics';
 
 const router = Router();
-
-// Valid order statuses and allowed transitions
-const ORDER_STATUSES = ['placed', 'confirmed', 'preparing', 'ready', 'dispatched', 'delivered', 'cancelled', 'returned', 'refunded'] as const;
-const STATUS_TRANSITIONS: { [key: string]: string[] } = {
-  placed: ['confirmed', 'cancelled'],
-  confirmed: ['preparing', 'cancelled'],
-  preparing: ['ready', 'cancelled'],
-  ready: ['dispatched', 'cancelled'],
-  dispatched: ['delivered', 'returned'],
-  delivered: ['returned', 'refunded'],
-  cancelled: ['refunded'],
-  returned: ['refunded'],
-  refunded: []
-};
 
 // All routes require admin authentication
 router.use(requireAuth);
@@ -166,7 +163,7 @@ router.get('/stats', async (req: Request, res: Response) => {
     ]);
 
     // Transform results
-    const result = {
+    const result: any = {
       byStatus: stats[0].byStatus.reduce((acc: any, item: any) => {
         acc[item._id] = item.count;
         return acc;
@@ -179,6 +176,55 @@ router.get('/stats', async (req: Request, res: Response) => {
       overall: stats[0].overall[0] || { total: 0, totalRevenue: 0, totalPlatformFees: 0, avgOrderValue: 0 }
     };
 
+    // Add stuck orders count (orders exceeding SLA thresholds)
+    let stuckOrdersCount = 0;
+    const now = new Date();
+    for (const [status, thresholdMin] of Object.entries(SLA_THRESHOLDS)) {
+      const cutoff = new Date(now.getTime() - thresholdMin * 60 * 1000);
+      const count = await Order.countDocuments({ status, updatedAt: { $lt: cutoff } });
+      stuckOrdersCount += count;
+    }
+    result.stuckOrders = stuckOrdersCount;
+
+    // Average delivery time (placed -> delivered, last 30 days)
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const deliveryTimeAgg = await Order.aggregate([
+      {
+        $match: {
+          status: 'delivered',
+          'delivery.deliveredAt': { $gte: thirtyDaysAgo },
+          createdAt: { $gte: thirtyDaysAgo },
+        },
+      },
+      {
+        $project: {
+          deliveryMinutes: {
+            $divide: [
+              { $subtract: ['$delivery.deliveredAt', '$createdAt'] },
+              60000,
+            ],
+          },
+        },
+      },
+      { $match: { deliveryMinutes: { $gt: 0, $lt: 1440 } } }, // Filter outliers > 24h
+      { $group: { _id: null, avg: { $avg: '$deliveryMinutes' }, count: { $sum: 1 } } },
+    ]);
+    result.avgDeliveryTimeMinutes = Math.round(deliveryTimeAgg[0]?.avg || 0);
+    result.deliveredLast30Days = deliveryTimeAgg[0]?.count || 0;
+
+    // SLA breaches in last 24h
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    let slaBreaches24h = 0;
+    for (const [status, thresholdMin] of Object.entries(SLA_THRESHOLDS)) {
+      const cutoff = new Date(now.getTime() - thresholdMin * 60 * 1000);
+      const count = await Order.countDocuments({
+        status,
+        updatedAt: { $lt: cutoff, $gte: twentyFourHoursAgo },
+      });
+      slaBreaches24h += count;
+    }
+    result.slaBreaches24h = slaBreaches24h;
+
     res.json({
       success: true,
       data: result
@@ -189,6 +235,219 @@ router.get('/stats', async (req: Request, res: Response) => {
       success: false,
       message: error.message || 'Failed to fetch order stats'
     });
+  }
+});
+
+/**
+ * @route   GET /api/admin/orders/reconciliation
+ * @desc    Check for orders missing ledger entries (ledger drift detection)
+ * @access  Senior Admin
+ */
+router.get('/reconciliation', requireSeniorAdmin, async (req: Request, res: Response) => {
+  try {
+    const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : new Date();
+
+    const orders = await Order.find({
+      status: { $in: ['delivered', 'refunded'] },
+      createdAt: { $gte: dateFrom, $lte: dateTo },
+    }).select('_id orderNumber status totals payment createdAt').lean();
+
+    const missingLedgerEntries: any[] = [];
+    let driftAmount = 0;
+
+    for (const order of orders) {
+      const orderId = String(order._id);
+
+      // Check for coin deduction ledger entry (if coins were used)
+      const coinsUsed = order.payment?.coinsUsed;
+      const totalCoins = ((coinsUsed as any)?.rezCoins || 0) + ((coinsUsed as any)?.promoCoins || 0) + ((coinsUsed as any)?.storePromoCoins || 0);
+
+      if (totalCoins > 0) {
+        const coinLedger = await LedgerEntry.findOne({
+          referenceId: orderId,
+          referenceModel: 'Order',
+          operationType: 'order_coin_deduction',
+        });
+        if (!coinLedger) {
+          missingLedgerEntries.push({ orderId, orderNumber: order.orderNumber, type: 'order_coin_deduction', expectedAmount: totalCoins });
+          driftAmount += totalCoins;
+        }
+      }
+
+      // Check for merchant payout ledger entry (delivered orders)
+      if (order.status === 'delivered') {
+        const payoutLedger = await LedgerEntry.findOne({
+          referenceId: orderId, referenceModel: 'Order', operationType: 'merchant_payout',
+        });
+        if (!payoutLedger) {
+          const netPayout = (order.totals?.subtotal || 0) - (order.totals?.platformFee || 0);
+          if (netPayout > 0) {
+            missingLedgerEntries.push({ orderId, orderNumber: order.orderNumber, type: 'merchant_payout', expectedAmount: netPayout });
+            driftAmount += netPayout;
+          }
+        }
+      }
+
+      // Check for refund ledger entry (refunded orders)
+      if (order.status === 'refunded') {
+        const refundLedger = await LedgerEntry.findOne({
+          referenceId: orderId, referenceModel: 'Order', operationType: 'order_refund',
+        });
+        if (!refundLedger) {
+          const refundAmount = order.totals?.refundAmount || order.totals?.paidAmount || 0;
+          if (refundAmount > 0) {
+            missingLedgerEntries.push({ orderId, orderNumber: order.orderNumber, type: 'order_refund', expectedAmount: refundAmount });
+            driftAmount += refundAmount;
+          }
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        dateRange: { from: dateFrom, to: dateTo },
+        ordersChecked: orders.length,
+        missingLedgerEntries,
+        missingCount: missingLedgerEntries.length,
+        driftAmount,
+      },
+    });
+  } catch (error: any) {
+    console.error('❌ [ADMIN ORDERS] Reconciliation error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to run reconciliation' });
+  }
+});
+
+/**
+ * @route   GET /api/admin/orders/stuck
+ * @desc    Get orders exceeding SLA thresholds
+ * @access  Admin
+ */
+router.get('/stuck', async (req: Request, res: Response) => {
+  try {
+    const now = new Date();
+    const stuckOrders: any[] = [];
+
+    // Check each active status against its SLA threshold
+    for (const [status, thresholdMin] of Object.entries(SLA_THRESHOLDS)) {
+      const cutoff = new Date(now.getTime() - thresholdMin * 60 * 1000);
+      const orders = await Order.find({
+        status,
+        updatedAt: { $lt: cutoff },
+      })
+        .select('_id orderNumber status updatedAt createdAt totals user items.store')
+        .populate('items.store', 'name')
+        .sort({ updatedAt: 1 })
+        .limit(50)
+        .lean();
+
+      for (const order of orders) {
+        const stuckMinutes = Math.round((now.getTime() - new Date(order.updatedAt).getTime()) / 60000);
+        stuckOrders.push({
+          ...order,
+          stuckMinutes,
+          slaThresholdMin: thresholdMin,
+          slaBreached: true,
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        stuckOrders,
+        count: stuckOrders.length,
+        timestamp: now,
+      },
+    });
+  } catch (error: any) {
+    console.error('[ADMIN ORDERS] Error fetching stuck orders:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to fetch stuck orders' });
+  }
+});
+
+/**
+ * @route   GET /api/admin/orders/sla-summary
+ * @desc    Average time per status transition (last 7 days)
+ * @access  Admin
+ */
+router.get('/sla-summary', async (req: Request, res: Response) => {
+  try {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    // Get delivered orders from last 7 days with their timelines
+    const deliveredOrders = await Order.find({
+      status: 'delivered',
+      'delivery.deliveredAt': { $gte: sevenDaysAgo },
+    })
+      .select('timeline createdAt delivery.deliveredAt')
+      .lean();
+
+    // Calculate average time between key transitions
+    const transitionTimes: Record<string, number[]> = {};
+
+    for (const order of deliveredOrders) {
+      const timeline = order.timeline || [];
+      for (let i = 1; i < timeline.length; i++) {
+        const from = timeline[i - 1].status;
+        const to = timeline[i].status;
+        const key = `${from} -> ${to}`;
+        const duration = (new Date(timeline[i].timestamp).getTime() - new Date(timeline[i - 1].timestamp).getTime()) / 60000;
+        if (duration > 0 && duration < 24 * 60) { // Ignore outliers > 24h
+          if (!transitionTimes[key]) transitionTimes[key] = [];
+          transitionTimes[key].push(duration);
+        }
+      }
+
+      // Overall placed -> delivered
+      if (order.delivery?.deliveredAt && order.createdAt) {
+        const totalMin = (new Date(order.delivery.deliveredAt).getTime() - new Date(order.createdAt).getTime()) / 60000;
+        if (totalMin > 0 && totalMin < 24 * 60) {
+          if (!transitionTimes['placed -> delivered (total)']) transitionTimes['placed -> delivered (total)'] = [];
+          transitionTimes['placed -> delivered (total)'].push(totalMin);
+        }
+      }
+    }
+
+    // Calculate averages
+    const summary: Record<string, { avgMinutes: number; count: number; minMinutes: number; maxMinutes: number }> = {};
+    for (const [key, times] of Object.entries(transitionTimes)) {
+      if (times.length > 0) {
+        summary[key] = {
+          avgMinutes: Math.round(times.reduce((a, b) => a + b, 0) / times.length),
+          count: times.length,
+          minMinutes: Math.round(Math.min(...times)),
+          maxMinutes: Math.round(Math.max(...times)),
+        };
+      }
+    }
+
+    // Count SLA breaches in last 24h
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    let slaBreaches = 0;
+    for (const [status, thresholdMin] of Object.entries(SLA_THRESHOLDS)) {
+      const cutoff = new Date(Date.now() - thresholdMin * 60 * 1000);
+      const count = await Order.countDocuments({
+        status,
+        updatedAt: { $lt: cutoff, $gte: twentyFourHoursAgo },
+      });
+      slaBreaches += count;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        transitions: summary,
+        ordersAnalyzed: deliveredOrders.length,
+        period: '7 days',
+        slaBreaches24h: slaBreaches,
+      },
+    });
+  } catch (error: any) {
+    console.error('[ADMIN ORDERS] Error fetching SLA summary:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to fetch SLA summary' });
   }
 });
 
@@ -250,37 +509,76 @@ router.post('/:id/refund', requireSeniorAdmin, async (req: Request, res: Respons
       });
     }
 
-    // Check if order can be refunded
-    if (order.status === 'refunded') {
-      return res.status(400).json({
-        success: false,
-        message: 'Order has already been refunded'
-      });
-    }
+    // Idempotency guard: atomic claim to prevent double-refund from concurrent requests
+    const claimed = await Order.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        'payment.status': { $ne: 'refunded' },
+        status: { $ne: 'refunded' },
+      },
+      {
+        $set: {
+          status: 'refunded',
+          'payment.status': 'refunded',
+          'payment.refundedAt': new Date(),
+        },
+      },
+      { new: true }
+    );
 
-    if (order.payment.status === 'refunded') {
-      return res.status(400).json({
+    if (!claimed) {
+      return res.status(409).json({
         success: false,
-        message: 'Payment has already been refunded'
+        message: 'Order has already been refunded or refund is in progress'
       });
     }
 
     // Calculate refund amount
     const refundAmount = order.calculateRefund ? order.calculateRefund() : order.totals.paidAmount;
 
-    // If paid with wallet, credit back to user's wallet
+    // If paid with wallet, credit back to user's wallet (atomic to prevent race conditions)
     if (order.payment.method === 'wallet' && order.user) {
-      const user = await User.findById(order.user);
-      if (user) {
-        user.wallet.balance += refundAmount;
-        user.wallet.totalEarned += refundAmount;
-        user.walletBalance = user.wallet.balance;
-        await user.save();
-        console.log(`💰 [ADMIN ORDERS] Refunded ${refundAmount} to user ${user._id} wallet`);
+      const updatedUser = await User.findByIdAndUpdate(
+        order.user,
+        {
+          $inc: {
+            'wallet.balance': refundAmount,
+            'wallet.totalEarned': refundAmount,
+            'walletBalance': refundAmount
+          }
+        },
+        { new: true }
+      );
+      if (updatedUser) {
+        console.log(`💰 [ADMIN ORDERS] Refunded ${refundAmount} to user ${updatedUser._id} wallet`);
       }
     }
 
-    // Update order status and payment status
+    // Record ledger entry for refund (non-blocking)
+    try {
+      const ledgerService = require('../../services/ledgerService').default || require('../../services/ledgerService');
+      const { Types: MongoTypes } = require('mongoose');
+      const PLATFORM_FLOAT_ID = new MongoTypes.ObjectId('000000000000000000000002');
+      await ledgerService.recordEntry({
+        debitAccount: { type: 'platform_float', id: PLATFORM_FLOAT_ID },
+        creditAccount: { type: 'user_wallet', id: order.user as any },
+        amount: refundAmount,
+        coinType: 'nuqta',
+        operationType: 'order_refund',
+        referenceId: String(order._id),
+        referenceModel: 'Order',
+        metadata: {
+          description: `Admin refund for order ${order.orderNumber}. Reason: ${reason.trim()}`,
+          adminUserId: (req as any).userId,
+          idempotencyKey: `refund_${String(order._id)}`,
+        },
+      });
+      console.log(`✅ [ORDER:LEDGER] Refund ledger entry created: ${refundAmount}, order ${order.orderNumber}`);
+    } catch (ledgerErr) {
+      console.error('[ORDER:LEDGER] Failed to create refund ledger entry (non-blocking):', ledgerErr);
+    }
+
+    // Re-read order to add timeline (claimed already updated status/payment)
     order.status = 'refunded';
     order.payment.status = 'refunded';
     order.payment.refundedAt = new Date();
@@ -318,7 +616,7 @@ router.post('/:id/refund', requireSeniorAdmin, async (req: Request, res: Respons
       });
     }
 
-    console.log(`✅ [ADMIN ORDERS] Order ${order.orderNumber} refunded successfully`);
+    console.log(`[ORDER:REFUND] orderId=${order._id} orderNumber=${order.orderNumber} userId=${order.user} refundAmount=${refundAmount} paymentMethod=${order.payment.method} adminId=${(req as any).userId}`);
 
     res.json({
       success: true,
@@ -456,6 +754,70 @@ router.post('/:id/cancel', requireSeniorAdmin, async (req: Request, res: Respons
 });
 
 /**
+ * @route   POST /api/admin/orders/:id/escalate
+ * @desc    Manually escalate an order (adds timeline entry, notifies merchant)
+ * @access  Admin
+ */
+router.post('/:id/escalate', async (req: Request, res: Response) => {
+  try {
+    const { reason, priority } = req.body;
+
+    if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+      return res.status(400).json({ success: false, message: 'Escalation reason is required' });
+    }
+
+    const order = await Order.findById(req.params.id);
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    // Add escalation to timeline
+    order.timeline.push({
+      status: order.status,
+      message: `Order escalated by admin. Reason: ${reason.trim()}`,
+      timestamp: new Date(),
+      updatedBy: 'admin',
+      metadata: {
+        escalation: true,
+        priority: priority || 'high',
+        adminId: (req as any).userId,
+        reason: reason.trim(),
+      },
+    });
+
+    await order.save();
+
+    // Notify merchant via socket
+    const storeId = order.items?.[0]?.store;
+    if (storeId) {
+      orderSocketService.emitToMerchant(String(storeId), 'ORDER_ESCALATED', {
+        orderId: String(order._id),
+        orderNumber: order.orderNumber,
+        status: order.status,
+        reason: reason.trim(),
+        priority: priority || 'high',
+        timestamp: new Date(),
+      });
+    }
+
+    console.log(`[ADMIN ORDERS] Order ${order.orderNumber} escalated: ${reason.trim()}`);
+
+    res.json({
+      success: true,
+      message: 'Order escalated successfully',
+      data: {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+      },
+    });
+  } catch (error: any) {
+    console.error('[ADMIN ORDERS] Error escalating order:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to escalate order' });
+  }
+});
+
+/**
  * @route   PUT /api/admin/orders/:id/status
  * @desc    Update order status
  * @access  Admin
@@ -490,8 +852,8 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
     }
 
     // Validate status transition
-    const allowedTransitions = STATUS_TRANSITIONS[order.status] || [];
-    if (!allowedTransitions.includes(status) && order.status !== status) {
+    if (!isValidTransition(order.status, status) && order.status !== status) {
+      const allowedTransitions = STATUS_TRANSITIONS[order.status] || [];
       return res.status(400).json({
         success: false,
         message: `Invalid status transition from '${order.status}' to '${status}'. Allowed transitions: ${allowedTransitions.join(', ') || 'none'}`
@@ -518,7 +880,7 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
       await order.updateStatus(status, notes ? `Admin update: ${notes}` : undefined, 'admin');
     } else {
       // Direct update
-      order.status = status as typeof ORDER_STATUSES[number];
+      order.status = status as any;
 
       // Update delivery status based on order status
       const deliveryStatusMap: { [key: string]: string } = {
@@ -562,7 +924,16 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
       await order.save();
     }
 
-    console.log(`✅ [ADMIN ORDERS] Order ${order.orderNumber} status updated from '${previousStatus}' to '${status}'`);
+    console.log(`[ORDER:STATUS] orderId=${order._id} orderNumber=${order.orderNumber} from=${previousStatus} to=${status} adminId=${(req as any).userId}`);
+
+    // Record metrics
+    recordStatusTransition(previousStatus, status);
+    // Record duration in previous status
+    const lastTimelineEntry = order.timeline?.slice(-2, -1)?.[0];
+    if (lastTimelineEntry?.timestamp) {
+      const durationSec = (Date.now() - new Date(lastTimelineEntry.timestamp).getTime()) / 1000;
+      recordStatusDuration(previousStatus, durationSec);
+    }
 
     // If status changed to 'delivered', trigger all delivery rewards
     if (status === 'delivered') {
@@ -705,6 +1076,50 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
 
               console.log(`[ADMIN ORDERS] Merchant wallet credited: gross=${grossAmount}, fee=${platformFee}, net=${grossAmount - platformFee}`);
 
+              // Record ledger entry for merchant payout (non-blocking)
+              try {
+                const ledgerService = require('../../services/ledgerService').default || require('../../services/ledgerService');
+                const PLATFORM_FLOAT_ID_PAYOUT = new Types.ObjectId('000000000000000000000002');
+                const netPayout = grossAmount - platformFee;
+                if (netPayout > 0) {
+                  await ledgerService.recordEntry({
+                    debitAccount: { type: 'platform_float' as const, id: PLATFORM_FLOAT_ID_PAYOUT },
+                    creditAccount: { type: 'merchant_wallet' as const, id: new Types.ObjectId(store.merchantId.toString()) },
+                    amount: netPayout,
+                    coinType: 'nuqta',
+                    operationType: 'merchant_payout' as const,
+                    referenceId: String(populatedOrder._id),
+                    referenceModel: 'Order',
+                    metadata: {
+                      description: `Merchant payout for order ${populatedOrder.orderNumber}. Gross: ${grossAmount}, Fee: ${platformFee}, Net: ${netPayout}`,
+                      idempotencyKey: `merchant_payout_${String(populatedOrder._id)}`,
+                    },
+                  });
+                  console.log(`✅ [ORDER:LEDGER] Merchant payout ledger entry: ${netPayout}, order ${populatedOrder.orderNumber}`);
+                }
+
+                // Record platform fee ledger entry
+                if (platformFee > 0) {
+                  const PLATFORM_FEES_ID = new Types.ObjectId('000000000000000000000001');
+                  await ledgerService.recordEntry({
+                    debitAccount: { type: 'platform_float' as const, id: PLATFORM_FLOAT_ID_PAYOUT },
+                    creditAccount: { type: 'platform_fees' as const, id: PLATFORM_FEES_ID },
+                    amount: platformFee,
+                    coinType: 'nuqta',
+                    operationType: 'order_payment' as const,
+                    referenceId: String(populatedOrder._id),
+                    referenceModel: 'Order',
+                    metadata: {
+                      description: `Platform fee for order ${populatedOrder.orderNumber}`,
+                      idempotencyKey: `platform_fee_${String(populatedOrder._id)}`,
+                    },
+                  });
+                  console.log(`✅ [ORDER:LEDGER] Platform fee ledger entry: ${platformFee}, order ${populatedOrder.orderNumber}`);
+                }
+              } catch (ledgerErr) {
+                console.error('[ORDER:LEDGER] Failed to create merchant payout ledger entry (non-blocking):', ledgerErr);
+              }
+
               if (walletResult) {
                 orderSocketService.emitMerchantWalletUpdated({
                   merchantId: store.merchantId.toString(),
@@ -745,7 +1160,7 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
           console.error('[ADMIN ORDERS] Admin commission credit failed:', err);
         }
 
-        console.log(`✅ [ADMIN ORDERS] All delivery rewards processed for order ${order.orderNumber}`);
+        console.log(`[ORDER:DELIVERED] orderId=${order._id} orderNumber=${order.orderNumber} userId=${userIdObj} total=${populatedOrder.totals.total} subtotal=${populatedOrder.totals.subtotal} platformFee=${populatedOrder.totals.platformFee || 0}`);
       }
     }
 

@@ -46,6 +46,7 @@ import {
   getLoyaltyProgress,
   getFlashSaleOffers,
   getDiscountBuckets,
+  getAggregatedOffersPageData,
 } from '../controllers/offersPageController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, validate, commonSchemas } from '../middleware/validation';
@@ -699,6 +700,17 @@ router.get('/loyalty/milestones',
 router.get('/loyalty/progress',
   optionalAuth,
   getLoyaltyProgress
+);
+
+// Aggregated offers page data (replaces 21 parallel API calls)
+router.get('/page-data-v2',
+  optionalAuth,
+  validateQuery(Joi.object({
+    lat: Joi.number().min(-90).max(90),
+    lng: Joi.number().min(-180).max(180),
+    tab: Joi.string().valid('offers', 'cashback', 'exclusive', 'all').default('all'),
+  })),
+  getAggregatedOffersPageData
 );
 
 // Get single offer by ID (must be last to avoid conflicts with specific routes)

@@ -7,15 +7,20 @@ import { Types } from 'mongoose';
 import referralService from '../services/referralService';
 import Referral, { ReferralStatus } from '../models/Referral';
 import { User } from '../models/User';
+import { CoinTransaction } from '../models/CoinTransaction';
 import { Wallet } from '../models/Wallet';
-import { Transaction } from '../models/Transaction';
+import challengeService from '../services/challengeService';
+import activityService from '../services/activityService';
+import { ReferralTierService } from '../services/referralTierService';
 
 // Mock dependencies
 jest.mock('../models/Referral');
 jest.mock('../models/User');
+jest.mock('../models/CoinTransaction');
 jest.mock('../models/Wallet');
-jest.mock('../models/Transaction');
 jest.mock('../services/activityService');
+jest.mock('../services/challengeService');
+jest.mock('../services/referralTierService');
 
 describe('Referral Service', () => {
   const mockReferrerId = new Types.ObjectId();
@@ -23,6 +28,15 @@ describe('Referral Service', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Setup mocks that return Promises (called with .catch()/.then() in service)
+    (challengeService.updateProgress as jest.Mock).mockResolvedValue({});
+    (activityService as any).referral = {
+      onReferralSignup: jest.fn().mockResolvedValue({}),
+      onReferralCompleted: jest.fn().mockResolvedValue({}),
+    };
+    // ReferralTierService is a class mock — its prototype methods need setup
+    (ReferralTierService.prototype.checkTierUpgrade as jest.Mock).mockResolvedValue({ upgraded: false });
   });
 
   describe('createReferral', () => {
@@ -67,6 +81,20 @@ describe('Referral Service', () => {
           referralCode: 'REF12345678',
         })
       ).rejects.toThrow('User already has a referral relationship');
+    });
+
+    it('should not create referral if referee already referred', async () => {
+      (Referral.findOne as jest.Mock).mockResolvedValue({ _id: new Types.ObjectId() });
+
+      await expect(
+        referralService.createReferral({
+          referrerId: mockReferrerId,
+          refereeId: mockRefereeId,
+          referralCode: 'REF12345678',
+        })
+      ).rejects.toThrow();
+
+      expect(Referral.create).not.toHaveBeenCalled();
     });
   });
 
@@ -125,6 +153,24 @@ describe('Referral Service', () => {
         referralBonus: 50,
       });
     });
+
+    it('should not count expired referrals as pending earnings', async () => {
+      const mockReferrals = [
+        {
+          status: ReferralStatus.EXPIRED,
+          rewards: { referrerAmount: 50, milestoneBonus: 20 },
+          referrerRewarded: false,
+          milestoneRewarded: false,
+        },
+      ];
+
+      (Referral.find as jest.Mock).mockResolvedValue(mockReferrals);
+
+      const stats = await referralService.getReferralStats(mockReferrerId);
+
+      expect(stats.pendingEarnings).toBe(0);
+      expect(stats.totalEarnings).toBe(0);
+    });
   });
 
   describe('validateReferralCode', () => {
@@ -160,7 +206,7 @@ describe('Referral Service', () => {
   });
 
   describe('processFirstOrder', () => {
-    it('should credit referrer on referee first order', async () => {
+    it('should use CoinTransaction for referrer reward', async () => {
       const mockReferral = {
         _id: new Types.ObjectId(),
         referrer: mockReferrerId,
@@ -170,12 +216,7 @@ describe('Referral Service', () => {
         referrerRewarded: false,
         refereeRewarded: false,
         metadata: {},
-        save: jest.fn().mockResolvedValue(true),
-      };
-
-      const mockWallet = {
-        balance: { total: 100, available: 100 },
-        statistics: { totalEarned: 0 },
+        markModified: jest.fn(),
         save: jest.fn().mockResolvedValue(true),
       };
 
@@ -183,9 +224,9 @@ describe('Referral Service', () => {
         populate: jest.fn().mockResolvedValue(mockReferral),
       });
 
-      (Wallet.findOne as jest.Mock).mockResolvedValue(mockWallet);
-      (Transaction.create as jest.Mock).mockResolvedValue({});
+      (CoinTransaction.createTransaction as jest.Mock).mockResolvedValue({});
       (User.findByIdAndUpdate as jest.Mock).mockResolvedValue({});
+      (Referral.find as jest.Mock).mockResolvedValue([]);
 
       await referralService.processFirstOrder({
         refereeId: mockRefereeId,
@@ -193,14 +234,55 @@ describe('Referral Service', () => {
         orderAmount: 500,
       });
 
-      expect(mockReferral.status).toBe(ReferralStatus.ACTIVE);
-      expect(mockReferral.referrerRewarded).toBe(true);
-      expect(mockWallet.balance.total).toBe(150);
-      expect(mockReferral.save).toHaveBeenCalled();
-      expect(mockWallet.save).toHaveBeenCalled();
+      // Verify CoinTransaction was used (not Transaction)
+      expect(CoinTransaction.createTransaction).toHaveBeenCalledWith(
+        String(mockReferrerId),
+        'earned',
+        50,
+        'referral',
+        expect.stringContaining('Referral reward'),
+        expect.objectContaining({
+          referralId: mockReferral._id,
+          level: 'first_order',
+        })
+      );
     });
 
-    it('should mark referral as completed when both rewarded', async () => {
+    it('should mark referral as ACTIVE when no referrer reward amount', async () => {
+      const mockReferral = {
+        _id: new Types.ObjectId(),
+        referrer: mockReferrerId,
+        referee: mockRefereeId,
+        status: ReferralStatus.PENDING,
+        rewards: { referrerAmount: 0 },
+        referrerRewarded: false,
+        refereeRewarded: false,
+        metadata: {},
+        markModified: jest.fn(),
+        save: jest.fn().mockResolvedValue(true),
+      };
+
+      (Referral.findOne as jest.Mock).mockReturnValue({
+        populate: jest.fn().mockResolvedValue(mockReferral),
+      });
+
+      (User.findByIdAndUpdate as jest.Mock).mockResolvedValue({});
+      (Referral.find as jest.Mock).mockResolvedValue([]);
+
+      await referralService.processFirstOrder({
+        refereeId: mockRefereeId,
+        orderId: new Types.ObjectId(),
+        orderAmount: 500,
+      });
+
+      // With no referrer reward, status stays ACTIVE (not COMPLETED)
+      expect(mockReferral.status).toBe(ReferralStatus.ACTIVE);
+      expect(mockReferral.refereeRewarded).toBe(true);
+      expect(mockReferral.referrerRewarded).toBe(false);
+      expect(mockReferral.save).toHaveBeenCalled();
+    });
+
+    it('should mark referral as COMPLETED when both rewarded', async () => {
       const mockReferral = {
         _id: new Types.ObjectId(),
         referrer: mockReferrerId,
@@ -211,12 +293,7 @@ describe('Referral Service', () => {
         refereeRewarded: true, // Already rewarded
         metadata: {},
         completedAt: null,
-        save: jest.fn().mockResolvedValue(true),
-      };
-
-      const mockWallet = {
-        balance: { total: 100, available: 100 },
-        statistics: { totalEarned: 0 },
+        markModified: jest.fn(),
         save: jest.fn().mockResolvedValue(true),
       };
 
@@ -224,9 +301,9 @@ describe('Referral Service', () => {
         populate: jest.fn().mockResolvedValue(mockReferral),
       });
 
-      (Wallet.findOne as jest.Mock).mockResolvedValue(mockWallet);
-      (Transaction.create as jest.Mock).mockResolvedValue({});
+      (CoinTransaction.createTransaction as jest.Mock).mockResolvedValue({});
       (User.findByIdAndUpdate as jest.Mock).mockResolvedValue({});
+      (Referral.find as jest.Mock).mockResolvedValue([]);
 
       await referralService.processFirstOrder({
         refereeId: mockRefereeId,
@@ -236,6 +313,88 @@ describe('Referral Service', () => {
 
       expect(mockReferral.status).toBe(ReferralStatus.COMPLETED);
       expect(mockReferral.completedAt).toBeDefined();
+    });
+
+    it('should skip if no pending referral found', async () => {
+      (Referral.findOne as jest.Mock).mockReturnValue({
+        populate: jest.fn().mockResolvedValue(null),
+      });
+
+      await referralService.processFirstOrder({
+        refereeId: mockRefereeId,
+        orderId: new Types.ObjectId(),
+        orderAmount: 500,
+      });
+
+      expect(CoinTransaction.createTransaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('processMilestoneBonus', () => {
+    it('should only trigger on exactly 3rd order', async () => {
+      await referralService.processMilestoneBonus(mockRefereeId, 2);
+      expect(Referral.findOne).not.toHaveBeenCalled();
+
+      await referralService.processMilestoneBonus(mockRefereeId, 4);
+      expect(Referral.findOne).not.toHaveBeenCalled();
+    });
+
+    it('should use CoinTransaction for milestone bonus', async () => {
+      const mockReferral = {
+        _id: new Types.ObjectId(),
+        referrer: mockReferrerId,
+        referee: mockRefereeId,
+        rewards: { milestoneBonus: 20 },
+        milestoneRewarded: false,
+        metadata: {},
+        markModified: jest.fn(),
+        save: jest.fn().mockResolvedValue(true),
+      };
+
+      (Referral.findOne as jest.Mock).mockResolvedValue(mockReferral);
+      (CoinTransaction.createTransaction as jest.Mock).mockResolvedValue({});
+      (Referral.find as jest.Mock).mockResolvedValue([]);
+      (User.findByIdAndUpdate as jest.Mock).mockResolvedValue({});
+
+      await referralService.processMilestoneBonus(mockRefereeId, 3);
+
+      expect(CoinTransaction.createTransaction).toHaveBeenCalledWith(
+        String(mockReferrerId),
+        'earned',
+        20,
+        'referral',
+        expect.stringContaining('milestone'),
+        expect.objectContaining({
+          level: 'milestone_3',
+        })
+      );
+      expect(mockReferral.milestoneRewarded).toBe(true);
+    });
+  });
+
+  describe('markExpiredReferrals', () => {
+    it('should mark expired referrals', async () => {
+      (Referral.updateMany as jest.Mock).mockResolvedValue({ modifiedCount: 5 });
+
+      const count = await referralService.markExpiredReferrals();
+
+      expect(count).toBe(5);
+      expect(Referral.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: { $in: [ReferralStatus.PENDING, ReferralStatus.ACTIVE] },
+          expiresAt: { $lt: expect.any(Date) },
+        }),
+        expect.objectContaining({
+          $set: { status: ReferralStatus.EXPIRED },
+        })
+      );
+    });
+
+    it('should return 0 if no referrals expired', async () => {
+      (Referral.updateMany as jest.Mock).mockResolvedValue({ modifiedCount: 0 });
+
+      const count = await referralService.markExpiredReferrals();
+      expect(count).toBe(0);
     });
   });
 

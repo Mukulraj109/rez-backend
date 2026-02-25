@@ -326,6 +326,112 @@ class PushNotificationService {
 
     console.log(`🎉 [Notification] Visit completion sent for ${visitNumber}`);
   }
+
+  /**
+   * Send gift received notification
+   */
+  public async sendGiftReceived(
+    senderName: string,
+    amount: number,
+    themeEmoji: string,
+    phone: string
+  ): Promise<void> {
+    const message = `${themeEmoji} You received a gift!\n\n${senderName} sent you ${amount} NC on Nuqta! Open the app to claim your gift before it expires.\n\nOpen REZ app to claim now!`;
+
+    await this.sendSMS(phone, message);
+
+    console.log(`🎁 [Notification] Gift received sent to ***${phone.slice(-4)}`);
+  }
+
+  /**
+   * Send gift expired notification (to sender)
+   */
+  public async sendGiftExpiredRefund(
+    recipientName: string,
+    amount: number,
+    phone: string
+  ): Promise<void> {
+    const message = `💰 Gift Refund\n\nYour gift of ${amount} NC to ${recipientName} was not claimed and has expired. The coins have been returned to your wallet.`;
+
+    await this.sendSMS(phone, message);
+
+    console.log(`💰 [Notification] Gift expiry refund sent to ***${phone.slice(-4)}`);
+  }
+
+  /**
+   * Send transfer received notification to recipient
+   */
+  public async sendTransferReceived(
+    recipientPhone: string,
+    senderName: string,
+    amount: number
+  ): Promise<void> {
+    const message = `You received ${amount} NC from ${senderName}! Open REZ to view your balance.`;
+
+    await this.sendSMS(recipientPhone, message);
+
+    console.log(`💸 [Notification] Transfer received sent to ***${recipientPhone.slice(-4)}`);
+  }
+
+  /**
+   * Send achievement unlocked notification
+   */
+  public async sendAchievementUnlocked(
+    userPhone: string,
+    achievementName: string,
+    reward: number
+  ): Promise<void> {
+    const message = `Achievement unlocked: ${achievementName}! You earned ${reward} NC. Keep going!`;
+
+    await this.sendSMS(userPhone, message);
+
+    console.log(`🏅 [Notification] Achievement unlocked sent to ***${userPhone.slice(-4)}`);
+  }
+
+  /**
+   * Send challenge completed notification
+   */
+  public async sendChallengeCompleted(
+    userPhone: string,
+    challengeName: string,
+    reward: number
+  ): Promise<void> {
+    const message = `Challenge complete: ${challengeName}! Claim your ${reward} NC reward.`;
+
+    await this.sendSMS(userPhone, message);
+
+    console.log(`🎯 [Notification] Challenge completed sent to ***${userPhone.slice(-4)}`);
+  }
+
+  /**
+   * Send tournament ending soon notification
+   */
+  public async sendTournamentEndingSoon(
+    userPhone: string,
+    tournamentName: string,
+    hoursLeft: number
+  ): Promise<void> {
+    const message = `${tournamentName} tournament ends in ${hoursLeft}h! Check your rank now.`;
+
+    await this.sendSMS(userPhone, message);
+
+    console.log(`🏆 [Notification] Tournament ending soon sent to ***${userPhone.slice(-4)}`);
+  }
+
+  /**
+   * Send coins expiring soon notification
+   */
+  public async sendCoinsExpiringSoon(
+    userPhone: string,
+    amount: number,
+    expiryDate: string
+  ): Promise<void> {
+    const message = `${amount} NC expires on ${expiryDate}. Use them before they're gone!`;
+
+    await this.sendSMS(userPhone, message);
+
+    console.log(`⏰ [Notification] Coins expiring soon sent to ***${userPhone.slice(-4)}`);
+  }
 }
 
 // Export singleton instance
@@ -347,4 +453,9 @@ export const {
   sendVisitCancelled,
   sendVisitCheckedIn,
   sendVisitCompleted,
+  sendTransferReceived,
+  sendAchievementUnlocked,
+  sendChallengeCompleted,
+  sendTournamentEndingSoon,
+  sendCoinsExpiringSoon,
 } = pushNotificationService;

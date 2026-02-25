@@ -38,6 +38,14 @@ export interface ITransactionAuditLog extends Document {
     source?: string; // 'api' | 'webhook' | 'cron' | 'admin'
     adminUserId?: string;
   };
+  requestId?: string;
+  deviceFingerprint?: string;
+  ipAddress?: string;
+  geoLocation?: {
+    country?: string;
+    city?: string;
+  };
+  ledgerPairId?: string;
   status: 'success' | 'failed' | 'reversed';
   createdAt: Date;
 }
@@ -101,6 +109,14 @@ const TransactionAuditLogSchema = new Schema<ITransactionAuditLog>({
     source: String,
     adminUserId: String,
   },
+  requestId: { type: String, index: true },
+  deviceFingerprint: String,
+  ipAddress: String,
+  geoLocation: {
+    country: String,
+    city: String,
+  },
+  ledgerPairId: { type: String, index: true },
   status: {
     type: String,
     enum: ['success', 'failed', 'reversed'],

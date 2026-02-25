@@ -28,6 +28,7 @@ import {
   validateRequestPayout,
   sanitizeRequestBody
 } from '../middleware/partnerValidation';
+import { requireReAuth } from '../middleware/reAuth';
 
 const router = express.Router();
 
@@ -158,7 +159,7 @@ router.get('/levels', getPartnerLevels);
  * @body    amount, method
  * @access  Private
  */
-router.post('/payout/request', validateRequestPayout, requestPayout);
+router.post('/payout/request', requireReAuth(), validateRequestPayout, requestPayout);
 
 export default router;
 

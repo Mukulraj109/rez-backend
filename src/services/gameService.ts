@@ -7,6 +7,16 @@ import tournamentService from './tournamentService';
 import { v4 as uuidv4 } from 'uuid';
 import coinService from './coinService';
 import gamificationEventBus from '../events/gamificationEventBus';
+import { ledgerService } from './ledgerService';
+import { Types } from 'mongoose';
+import { CoinTransaction } from '../models/CoinTransaction';
+
+/** Metadata extracted from the HTTP request for audit/fraud logging */
+export interface RequestMeta {
+  ip?: string;
+  userAgent?: string;
+  deviceFingerprint?: string;
+}
 
 // In-memory cache for GameConfig (5-min TTL)
 const gameConfigCache: Map<string, { config: IGameConfig | null; cachedAt: number }> = new Map();
@@ -338,26 +348,66 @@ class GameService {
 
   // ======== SCRATCH CARD ========
 
-  // Create scratch card session
+  /**
+   * Create scratch card session with daily limit guard + cooldown enforcement.
+   * Returns a session in "pending" state with NO prize (prize generated on play).
+   */
   async createScratchCardSession(
     userId: string,
-    earnedFrom: string
+    earnedFrom: string,
+    requestMeta?: RequestMeta
   ): Promise<IGameSession> {
     await this.checkUserGameAccess(userId);
+
+    // Enforce cooldown: check last completed scratch card session
+    const config = await getCachedGameConfig('scratch_card');
+    const cooldownMinutes = config?.cooldownMinutes ?? 120;
+
+    if (cooldownMinutes > 0) {
+      const lastCompleted = await GameSession.findOne({
+        user: userId,
+        gameType: 'scratch_card',
+        status: 'completed'
+      }).sort({ completedAt: -1 }).select('completedAt').lean();
+
+      if (lastCompleted?.completedAt) {
+        const cooldownMs = cooldownMinutes * 60 * 1000;
+        const elapsed = Date.now() - new Date(lastCompleted.completedAt).getTime();
+        if (elapsed < cooldownMs) {
+          const remainingSec = Math.ceil((cooldownMs - elapsed) / 1000);
+          throw new Error(`Cooldown active. Please wait ${remainingSec} seconds before playing again.`);
+        }
+      }
+    }
+
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 day expiry
 
-    return GameSession.create({
-      user: userId,
-      gameType: 'scratch_card',
-      sessionId: uuidv4(),
+    const session = await this.createSessionWithDailyLimitGuard(userId, 'scratch_card', {
       status: 'pending',
       earnedFrom,
-      expiresAt
+      expiresAt,
+      metadata: requestMeta ? {
+        ip: requestMeta.ip,
+        userAgent: requestMeta.userAgent,
+        deviceFingerprint: requestMeta.deviceFingerprint,
+      } : undefined,
     });
+
+    console.log(`[SCRATCH_CARD:CREATE] userId=${userId} sessionId=${session.sessionId} ip=${requestMeta?.ip || 'unknown'}`);
+
+    return session;
   }
 
-  // Play scratch card
+  /**
+   * Play scratch card: atomic status transition → server-side prize generation → wallet credit → ledger entry.
+   *
+   * Security guarantees:
+   * - findOneAndUpdate ensures only one request can transition pending → completed (idempotent)
+   * - Idempotency key on coinService prevents double-award on retry
+   * - On coin award failure, session reverts to pending so user can retry
+   * - Ledger entry creates auditable debit/credit pair
+   */
   async playScratchCard(sessionId: string, userId?: string): Promise<IGameSession> {
     // Atomic status transition: only one request can play a scratch card
     const query: any = { sessionId, status: 'pending', expiresAt: { $gt: new Date() } };
@@ -371,7 +421,10 @@ class GameService {
     if (!session) {
       const existing = await GameSession.findOne({ sessionId });
       if (!existing) throw new Error('Game session not found');
-      if (existing.status === 'completed') throw new Error('Game already played');
+      if (existing.status === 'completed') {
+        // Already played — return existing result (idempotent read)
+        return existing;
+      }
       if (existing.status === 'expired' || new Date() > existing.expiresAt) throw new Error('Game session expired');
       throw new Error('Game already played');
     }
@@ -396,19 +449,51 @@ class GameService {
     await session.save();
 
     const scratchUserId = session.user.toString();
+    const idempotencyKey = `scratch_card:${sessionId}`;
+
+    console.log(`[SCRATCH_CARD:PLAY] userId=${scratchUserId} sessionId=${sessionId} prizeType=${result.prize.type} prizeValue=${result.prize.value}`);
 
     // Credit coins to user's wallet (if prize is coins)
     if (result.prize.type === 'coins' && typeof result.prize.value === 'number' && result.prize.value > 0) {
       try {
-        await coinService.awardCoins(
+        const awardResult = await coinService.awardCoins(
           scratchUserId,
           result.prize.value,
           'scratch_card',
           `Scratch & Win: ${result.prize.description}`,
-          { sessionId }
+          { idempotencyKey, sessionId }
         );
+
+        console.log(`[SCRATCH_CARD:AWARD] userId=${scratchUserId} sessionId=${sessionId} amount=${result.prize.value} newBalance=${awardResult?.newBalance}`);
+
+        // Record ledger entry (double-entry: debit platform_float → credit user_wallet)
+        try {
+          const pairId = await ledgerService.recordEntry({
+            debitAccount: { type: 'platform_float', id: new Types.ObjectId('000000000000000000000002') },
+            creditAccount: { type: 'user_wallet', id: new Types.ObjectId(scratchUserId) },
+            amount: result.prize.value,
+            coinType: 'nuqta',
+            operationType: 'scratch_card_prize',
+            referenceId: sessionId,
+            referenceModel: 'GameSession',
+            metadata: {
+              idempotencyKey,
+              description: `Scratch & Win: ${result.prize.description}`,
+            },
+          });
+          console.log(`[SCRATCH_CARD:LEDGER] userId=${scratchUserId} sessionId=${sessionId} pairId=${pairId} amount=${result.prize.value}`);
+        } catch (ledgerErr) {
+          // Ledger failure is non-blocking — coins already credited, reconciliation can fix
+          console.error(`[SCRATCH_CARD:LEDGER_FAIL] userId=${scratchUserId} sessionId=${sessionId}`, ledgerErr);
+        }
       } catch (err) {
-        console.error(`[GAME SERVICE] Scratch card coin award failed for user ${scratchUserId}:`, err);
+        // Coin award failed — revert session to pending so user can retry
+        console.error(`[SCRATCH_CARD:AWARD_FAIL] userId=${scratchUserId} sessionId=${sessionId}`, err);
+        await GameSession.findOneAndUpdate(
+          { sessionId, status: 'completed' },
+          { $set: { status: 'pending' }, $unset: { completedAt: 1 } }
+        );
+        throw new Error('Failed to credit reward. Please try again.');
       }
     }
 
@@ -416,6 +501,167 @@ class GameService {
     this.emitGameEvent(scratchUserId, 'scratch_card', true, result.prize.type === 'coins' ? (result.prize.value as number) : 0, { sessionId });
 
     return session;
+  }
+
+  /**
+   * Retry claiming a scratch card prize that failed to credit.
+   * Safe to call multiple times — idempotency key prevents double-award.
+   */
+  async retryScratchCardClaim(sessionId: string, userId: string): Promise<IGameSession> {
+    // Find the session — must be pending (reverted) with a result already set
+    const session = await GameSession.findOne({
+      sessionId,
+      user: userId,
+      'result.won': true,
+      expiresAt: { $gt: new Date() }
+    });
+
+    if (!session) {
+      throw new Error('Session not found or expired');
+    }
+
+    if (!session.result?.prize) {
+      throw new Error('No prize to claim');
+    }
+
+    // Check if coins were already awarded (idempotent check)
+    const idempotencyKey = `scratch_card:${sessionId}`;
+    const existingTx = await CoinTransaction.findOne({ 'metadata.idempotencyKey': idempotencyKey });
+    if (existingTx) {
+      // Already claimed successfully — ensure session is marked completed
+      if (session.status !== 'completed') {
+        session.status = 'completed';
+        session.completedAt = new Date();
+        await session.save();
+      }
+      return session;
+    }
+
+    // Re-attempt the award (same logic as playScratchCard)
+    const prize = session.result.prize;
+    const scratchUserId = session.user.toString();
+
+    if (prize.type === 'coins' && typeof prize.value === 'number' && prize.value > 0) {
+      const awardResult = await coinService.awardCoins(
+        scratchUserId,
+        prize.value,
+        'scratch_card',
+        `Scratch & Win: ${prize.description}`,
+        { idempotencyKey, sessionId }
+      );
+
+      console.log(`[SCRATCH_CARD:RETRY_AWARD] userId=${scratchUserId} sessionId=${sessionId} amount=${prize.value} newBalance=${awardResult?.newBalance}`);
+
+      // Record ledger entry
+      try {
+        const pairId = await ledgerService.recordEntry({
+          debitAccount: { type: 'platform_float', id: new Types.ObjectId('000000000000000000000002') },
+          creditAccount: { type: 'user_wallet', id: new Types.ObjectId(scratchUserId) },
+          amount: prize.value,
+          coinType: 'nuqta',
+          operationType: 'scratch_card_prize',
+          referenceId: sessionId,
+          referenceModel: 'GameSession',
+          metadata: { idempotencyKey, description: `Scratch & Win (retry): ${prize.description}` },
+        });
+        console.log(`[SCRATCH_CARD:RETRY_LEDGER] userId=${scratchUserId} sessionId=${sessionId} pairId=${pairId}`);
+      } catch (ledgerErr) {
+        console.error(`[SCRATCH_CARD:RETRY_LEDGER_FAIL] userId=${scratchUserId} sessionId=${sessionId}`, ledgerErr);
+      }
+    }
+
+    // Mark session as completed
+    session.status = 'completed';
+    session.completedAt = new Date();
+    await session.save();
+
+    return session;
+  }
+
+  /**
+   * Get scratch card eligibility for a user (server-driven, never trust client).
+   * Returns remaining plays, cooldown, and server time.
+   */
+  async getScratchCardEligibility(userId: string): Promise<{
+    canPlay: boolean;
+    remainingToday: number;
+    dailyLimit: number;
+    cooldownSeconds: number;
+    nextAvailableAt: string | null;
+    serverTime: string;
+  }> {
+    const config = await getCachedGameConfig('scratch_card');
+    const dailyLimit = config?.dailyLimit ?? DEFAULT_DAILY_GAME_LIMITS['scratch_card'] ?? 2;
+    const cooldownMinutes = config?.cooldownMinutes ?? 120;
+    const isEnabled = config?.isEnabled ?? true;
+
+    // Check schedule
+    if (config?.schedule?.availableDays && config.schedule.availableDays.length > 0) {
+      const todayDayOfWeek = new Date().getUTCDay();
+      if (!config.schedule.availableDays.includes(todayDayOfWeek)) {
+        return {
+          canPlay: false,
+          remainingToday: 0,
+          dailyLimit,
+          cooldownSeconds: 0,
+          nextAvailableAt: null,
+          serverTime: new Date().toISOString(),
+        };
+      }
+    }
+
+    // Count today's sessions (UTC boundary)
+    const todayUTC = new Date().toISOString().split('T')[0];
+    const todayStart = new Date(todayUTC + 'T00:00:00.000Z');
+
+    const todayCount = await GameSession.countDocuments({
+      user: userId,
+      gameType: 'scratch_card',
+      createdAt: { $gte: todayStart }
+    });
+
+    const remainingToday = Math.max(0, dailyLimit - todayCount);
+
+    // Check cooldown
+    let cooldownSeconds = 0;
+    let nextAvailableAt: string | null = null;
+
+    if (cooldownMinutes > 0) {
+      const lastCompleted = await GameSession.findOne({
+        user: userId,
+        gameType: 'scratch_card',
+        status: 'completed'
+      }).sort({ completedAt: -1 }).select('completedAt').lean();
+
+      if (lastCompleted?.completedAt) {
+        const cooldownMs = cooldownMinutes * 60 * 1000;
+        const elapsed = Date.now() - new Date(lastCompleted.completedAt).getTime();
+        if (elapsed < cooldownMs) {
+          cooldownSeconds = Math.ceil((cooldownMs - elapsed) / 1000);
+          nextAvailableAt = new Date(new Date(lastCompleted.completedAt).getTime() + cooldownMs).toISOString();
+        }
+      }
+    }
+
+    // Also check for pending (unclaimed) sessions
+    const pendingSession = await GameSession.findOne({
+      user: userId,
+      gameType: 'scratch_card',
+      status: 'pending',
+      expiresAt: { $gt: new Date() }
+    }).select('sessionId').lean();
+
+    const canPlay = isEnabled && remainingToday > 0 && cooldownSeconds === 0;
+
+    return {
+      canPlay,
+      remainingToday,
+      dailyLimit,
+      cooldownSeconds,
+      nextAvailableAt,
+      serverTime: new Date().toISOString(),
+      ...(pendingSession ? { pendingSessionId: (pendingSession as any).sessionId } : {}),
+    } as any;
   }
 
   // ======== QUIZ ========

@@ -13,6 +13,7 @@ export interface IPayment extends Document {
   currency: string;
   paymentMethod: string;
   paymentMethodId?: string;
+  purpose: 'wallet_topup' | 'order_payment' | 'event_booking' | 'financial_service' | 'other';
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled' | 'expired';
   userDetails: {
     name?: string;
@@ -31,6 +32,7 @@ export interface IPayment extends Document {
     [key: string]: any;
   };
   failureReason?: string;
+  walletCredited?: boolean;
   completedAt?: Date;
   expiresAt: Date;
   createdAt: Date;
@@ -75,6 +77,12 @@ const PaymentSchema = new Schema<IPayment>({
     type: String,
     sparse: true
   },
+  purpose: {
+    type: String,
+    enum: ['wallet_topup', 'order_payment', 'event_booking', 'financial_service', 'other'],
+    default: 'other',
+    index: true
+  },
   status: {
     type: String,
     required: true,
@@ -104,6 +112,10 @@ const PaymentSchema = new Schema<IPayment>({
     }
   },
   failureReason: String,
+  walletCredited: {
+    type: Boolean,
+    default: false
+  },
   completedAt: Date,
   expiresAt: {
     type: Date,

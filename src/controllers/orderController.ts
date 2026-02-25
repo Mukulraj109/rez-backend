@@ -33,7 +33,8 @@ import { SMSService } from '../services/SMSService';
 import EmailService from '../services/EmailService';
 import { Store } from '../models/Store';
 import { Category } from '../models/Category';
-import { MainCategorySlug } from '../models/CoinTransaction';
+import { MainCategorySlug, CoinTransaction } from '../models/CoinTransaction';
+import { LedgerEntry } from '../models/LedgerEntry';
 
 const VALID_CATEGORY_SLUGS: MainCategorySlug[] = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
 
@@ -72,6 +73,8 @@ import { Refund } from '../models/Refund';
 import merchantWalletService from '../services/merchantWalletService';
 import orderSocketService from '../services/orderSocketService';
 import merchantNotificationService from '../services/merchantNotificationService';
+import { isValidTransition, isValidMerchantTransition, STATUS_TRANSITIONS, MERCHANT_TRANSITIONS, ACTIVE_STATUSES, PAST_STATUSES, getOrderProgress } from '../config/orderStateMachine';
+import etaService from '../services/etaService';
 
 // Create new order from cart
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
@@ -881,7 +884,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
     await order.save({ session });
 
-    console.log('📦 [CREATE ORDER] Order saved successfully:', order.orderNumber);
+    console.log(`[ORDER:CREATE] orderId=${order._id} orderNumber=${order.orderNumber} userId=${userId} total=${order.totals.total} paymentMethod=${paymentMethod} items=${order.items.length}`);
 
     // Mark deal redemption as used if applied
     if (appliedRedemption) {
@@ -1174,6 +1177,29 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       // Save wallet with session (atomic)
       await wallet.save({ session });
       console.log('✅ [CREATE ORDER] All coins deducted atomically for COD order');
+
+      // Record ledger entry for coin deduction (non-blocking — don't fail order)
+      try {
+        const ledgerService = require('../services/ledgerService').default || require('../services/ledgerService');
+        const { Types: MongoTypes } = require('mongoose');
+        const PLATFORM_FLOAT_ID = new MongoTypes.ObjectId('000000000000000000000002');
+        await ledgerService.recordEntry({
+          debitAccount: { type: 'user_wallet', id: new MongoTypes.ObjectId(userId) },
+          creditAccount: { type: 'platform_float', id: PLATFORM_FLOAT_ID },
+          amount: coinDiscount,
+          coinType: 'nuqta',
+          operationType: 'order_coin_deduction',
+          referenceId: String(order._id),
+          referenceModel: 'Order',
+          metadata: {
+            description: `Coin payment for COD order ${orderNumber}`,
+            idempotencyKey: `order_coin_${String(order._id)}`,
+          },
+        });
+        console.log(`✅ [ORDER:LEDGER] Ledger entry created for coin deduction: ${coinDiscount} coins, order ${orderNumber}`);
+      } catch (ledgerErr) {
+        console.error('[ORDER:LEDGER] Failed to create ledger entry for coin deduction (non-blocking):', ledgerErr);
+      }
     }
 
     // Mark voucher as used if one was applied
@@ -1368,40 +1394,159 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 // Get user's orders
 export const getUserOrders = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
-  const { status, page = 1, limit = 20 } = req.query;
+  const { status, statusGroup, page = 1, limit = 20, cursor, search, dateFrom, dateTo, sort = 'newest' } = req.query;
 
   try {
     const query: any = { user: userId };
-    if (status) query.status = status;
 
-    const skip = (Number(page) - 1) * Number(limit);
+    // Status group filter (for tracking page tabs)
+    if (statusGroup === 'active') {
+      query.status = { $in: ACTIVE_STATUSES };
+    } else if (statusGroup === 'past') {
+      query.status = { $in: PAST_STATUSES };
+    } else if (status && status !== 'all') {
+      // Individual status filter (backwards compatible)
+      query.status = status;
+    }
 
-    const orders = await Order.find(query)
-      .populate('items.product', 'name images basePrice')
-      .populate('items.store', 'name logo')
-      .populate('store', 'name logo location') // Populate top-level store
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
+    // Cursor-based pagination: fetch orders older than cursor
+    if (cursor) {
+      query._id = { $lt: new Types.ObjectId(cursor as string) };
+    }
 
-    const total = await Order.countDocuments(query);
-    const totalPages = Math.ceil(total / Number(limit));
+    // Date range filter
+    if (dateFrom || dateTo) {
+      query.createdAt = {};
+      if (dateFrom) query.createdAt.$gte = new Date(dateFrom as string);
+      if (dateTo) query.createdAt.$lte = new Date(dateTo as string);
+    }
+
+    // Server-side search: order number, item name, store name
+    if (search && (search as string).trim()) {
+      const searchStr = (search as string).trim();
+      query.$or = [
+        { orderNumber: { $regex: searchStr, $options: 'i' } },
+        { 'items.name': { $regex: searchStr, $options: 'i' } },
+        { 'items.storeName': { $regex: searchStr, $options: 'i' } },
+      ];
+    }
+
+    // Sort options
+    const sortMap: Record<string, any> = {
+      newest: { createdAt: -1 },
+      oldest: { createdAt: 1 },
+      amount_high: { 'totals.total': -1 },
+      amount_low: { 'totals.total': 1 },
+    };
+    const sortOption = sortMap[sort as string] || { createdAt: -1 };
+
+    const safeLimit = Math.min(Number(limit) || 20, 50);
+
+    // If using cursor pagination, don't use skip
+    const useCursor = !!cursor;
+    const skip = useCursor ? 0 : (Number(page) - 1) * safeLimit;
+
+    // Fetch orders + counts in parallel
+    const [orders, total, counts] = await Promise.all([
+      Order.find(query)
+        .populate('items.product', 'name images basePrice')
+        .populate('items.store', 'name logo')
+        .populate('store', 'name logo location')
+        .sort(sortOption)
+        .skip(skip)
+        .limit(safeLimit + 1) // Fetch one extra to check hasMore
+        .lean(),
+      Order.countDocuments(query),
+      // Always return active/past counts for the user
+      Order.aggregate([
+        { $match: { user: new Types.ObjectId(userId) } },
+        {
+          $facet: {
+            active: [
+              { $match: { status: { $in: ACTIVE_STATUSES } } },
+              { $count: 'count' },
+            ],
+            past: [
+              { $match: { status: { $in: PAST_STATUSES } } },
+              { $count: 'count' },
+            ],
+          },
+        },
+      ]),
+    ]);
+
+    // Check if there are more results
+    const hasMore = orders.length > safeLimit;
+    if (hasMore) orders.pop(); // Remove the extra item
+
+    const nextCursor = hasMore && orders.length > 0 ? String(orders[orders.length - 1]._id) : null;
+    const totalPages = Math.ceil(total / safeLimit);
+
+    const activeCounts = counts[0]?.active?.[0]?.count || 0;
+    const pastCounts = counts[0]?.past?.[0]?.count || 0;
+
+    // Attach ETA and progress to each order (non-blocking, best-effort)
+    const enrichedOrders = await Promise.all(
+      orders.map(async (order: any) => {
+        try {
+          const calculatedETA = await etaService.getFormattedETA(order);
+          const progress = getOrderProgress(order.status);
+          return { ...order, calculatedETA, progress };
+        } catch {
+          return order;
+        }
+      })
+    );
 
     sendSuccess(res, {
-      orders,
+      orders: enrichedOrders,
+      nextCursor,
+      hasMore,
+      counts: { active: activeCounts, past: pastCounts },
       pagination: {
         page: Number(page),
-        limit: Number(limit),
+        limit: safeLimit,
         total,
         totalPages,
-        hasNext: Number(page) < totalPages,
-        hasPrev: Number(page) > 1
+        current: Number(page),
+        pages: totalPages,
+        hasNext: hasMore || Number(page) < totalPages,
+        hasPrev: Number(page) > 1,
       }
     }, 'Orders retrieved successfully');
 
   } catch (error) {
     throw new AppError('Failed to fetch orders', 500);
+  }
+});
+
+// Get order counts (lightweight endpoint for header display)
+export const getOrderCounts = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.userId!;
+
+  try {
+    const counts = await Order.aggregate([
+      { $match: { user: new Types.ObjectId(userId) } },
+      {
+        $facet: {
+          active: [
+            { $match: { status: { $in: ACTIVE_STATUSES } } },
+            { $count: 'count' },
+          ],
+          past: [
+            { $match: { status: { $in: PAST_STATUSES } } },
+            { $count: 'count' },
+          ],
+        },
+      },
+    ]);
+
+    sendSuccess(res, {
+      active: counts[0]?.active?.[0]?.count || 0,
+      past: counts[0]?.past?.[0]?.count || 0,
+    }, 'Order counts retrieved');
+  } catch (error) {
+    throw new AppError('Failed to fetch order counts', 500);
   }
 });
 
@@ -1438,7 +1583,18 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
     }
 
     console.log('✅ [GET ORDER BY ID] Order found:', { orderId, orderNumber: order.orderNumber });
-    sendSuccess(res, order, 'Order retrieved successfully');
+
+    // Enrich with ETA and progress
+    let enrichedOrder: any = order;
+    try {
+      const calculatedETA = await etaService.getFormattedETA(order);
+      const progress = getOrderProgress(order.status);
+      enrichedOrder = { ...order, calculatedETA, progress };
+    } catch {
+      // Non-critical, use order as-is
+    }
+
+    sendSuccess(res, enrichedOrder, 'Order retrieved successfully');
 
   } catch (error: any) {
     console.error('❌ [GET ORDER BY ID] Error:', error.message);
@@ -1844,6 +2000,27 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
 
     if (!order) {
       return sendNotFound(res, 'Order not found');
+    }
+
+    // Validate status transition using centralized state machine
+    if (order.status !== status && !isValidTransition(order.status, status)) {
+      const allowed = STATUS_TRANSITIONS[order.status] || [];
+      return sendBadRequest(
+        res,
+        `Invalid status transition from '${order.status}' to '${status}'. Allowed: ${allowed.join(', ') || 'none'}`
+      );
+    }
+
+    // For merchant-initiated updates, enforce stricter transitions
+    const userRole = (req as any).userRole;
+    if (userRole === 'merchant' || userRole === 'store_owner') {
+      if (order.status !== status && !isValidMerchantTransition(order.status, status)) {
+        const allowed = MERCHANT_TRANSITIONS[order.status] || [];
+        return sendBadRequest(
+          res,
+          `Merchants can only transition from '${order.status}' to: ${allowed.join(', ') || 'none'}. Cannot skip states.`
+        );
+      }
     }
 
     // Update status
@@ -2773,5 +2950,59 @@ export const getRefundDetails = asyncHandler(async (req: Request, res: Response)
   } catch (error: any) {
     console.error('❌ [GET REFUND DETAILS] Error:', error);
     throw new AppError('Failed to fetch refund details', 500);
+  }
+});
+
+// Get order financial details (ledger trail, coin transactions, refunds)
+export const getOrderFinancialDetails = asyncHandler(async (req: Request, res: Response) => {
+  const { orderId } = req.params;
+  const userId = req.userId!;
+
+  try {
+    const order = await Order.findOne({ _id: orderId, user: userId })
+      .select('orderNumber status totals payment timeline cancellation createdAt')
+      .lean();
+
+    if (!order) {
+      return sendNotFound(res, 'Order not found');
+    }
+
+    // Get coin transactions related to this order
+    const coinTransactions = await CoinTransaction.find({
+      $or: [
+        { 'metadata.orderId': orderId },
+        { 'metadata.orderId': String(order._id) },
+      ],
+    }).select('amount source type description createdAt metadata').lean();
+
+    // Get ledger entries for this order
+    const ledgerEntries = await LedgerEntry.find({
+      referenceId: String(order._id),
+      referenceModel: 'Order',
+    }).select('pairId accountType direction amount coinType operationType createdAt').lean();
+
+    // Get refunds for this order
+    const refunds = await Refund.find({
+      order: order._id,
+      user: userId,
+    }).select('amount status reason processedAt createdAt refundedItems').lean();
+
+    sendSuccess(res, {
+      order: {
+        orderNumber: order.orderNumber,
+        status: order.status,
+        totals: order.totals,
+        payment: order.payment,
+        cancellation: order.cancellation,
+        createdAt: order.createdAt,
+      },
+      coinTransactions,
+      ledgerEntries,
+      refunds,
+    }, 'Order financial details retrieved');
+
+  } catch (error: any) {
+    console.error('❌ [ORDER FINANCIAL] Error:', error);
+    throw new AppError('Failed to fetch order financial details', 500);
   }
 });

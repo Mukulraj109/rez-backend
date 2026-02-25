@@ -10,6 +10,7 @@ import { Product } from '../models/Product';
 import { User } from '../models/User';
 import { Notification } from '../models/Notification';
 import { Types } from 'mongoose';
+import { SMSService } from './SMSService';
 
 interface SubscribeParams {
   userId: string;
@@ -325,19 +326,12 @@ The REZ Team
 
     const message = `🎉 ${productName} is back in stock! ₹${productPrice.toLocaleString('en-IN')} - ${newStock} available. Order now on REZ!`;
 
-    // DEV MODE: Just log the SMS that would be sent
-    console.log(`
-📱 [DEV MODE] SMS Notification:
-───────────────────────────────────────
-To: ${phoneNumber}
-Message: ${message}
-───────────────────────────────────────
-    `);
-
-    // TODO: In production, use Twilio to send actual SMS
-    // const twilio = require('twilio');
-    // const client = twilio(accountSid, authToken);
-    // await client.messages.create({...});
+    try {
+      await SMSService.send({ to: phoneNumber, message });
+      console.log(`📱 [Stock] SMS sent to ***${phoneNumber.slice(-4)} for ${productName}`);
+    } catch (smsErr) {
+      console.error(`❌ [Stock] Failed to send SMS to ***${phoneNumber.slice(-4)}:`, smsErr);
+    }
   }
 
   /**

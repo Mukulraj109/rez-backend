@@ -1,6 +1,8 @@
 import axios from 'axios';
 import Referral from '../models/Referral';
 import { Types } from 'mongoose';
+import { User } from '../models/User';
+import { EmailService } from './EmailService';
 
 interface VoucherProvider {
   name: string;
@@ -169,27 +171,38 @@ export class VoucherRedemptionService {
    * Send voucher details via email
    */
   private async sendVoucherEmail(userId: string | Types.ObjectId, reward: any) {
-    // TODO: Integrate with email service
-    console.log(`Sending voucher email to user ${userId}:`, {
-      code: reward.voucherCode,
-      type: reward.voucherType,
-      amount: reward.amount
-    });
+    try {
+      const user = await User.findById(userId).select('email profile.firstName').lean();
 
-    // Placeholder for email integration
-    /*
-    await emailService.send({
-      to: user.email,
-      subject: `Your ${reward.voucherType} Voucher - ₹${reward.amount}`,
-      template: 'voucher-claimed',
-      data: {
-        voucherCode: reward.voucherCode,
-        voucherType: reward.voucherType,
-        amount: reward.amount,
-        expiresAt: reward.expiresAt
+      if (!user?.email) {
+        console.log(`⚠️ [Voucher] No email address for user ${userId}. Skipping voucher email.`);
+        return;
       }
-    });
-    */
+
+      const firstName = (user as any).profile?.firstName || 'Valued Customer';
+
+      await EmailService.send({
+        to: user.email,
+        subject: `Your ${reward.voucherType} Voucher - ₹${reward.amount}`,
+        html: `
+          <h2>Congratulations, ${firstName}!</h2>
+          <p>Your voucher is ready to use.</p>
+          <div style="background: #f5f5f5; padding: 16px; border-radius: 8px; margin: 16px 0;">
+            <p><strong>Voucher Code:</strong> ${reward.voucherCode}</p>
+            <p><strong>Type:</strong> ${reward.voucherType}</p>
+            <p><strong>Value:</strong> ₹${reward.amount}</p>
+            ${reward.expiresAt ? `<p><strong>Expires:</strong> ${new Date(reward.expiresAt).toLocaleDateString('en-IN')}</p>` : ''}
+          </div>
+          <p>Use this code at checkout to redeem your voucher. Thank you for using REZ!</p>
+        `,
+        text: `Your ${reward.voucherType} voucher code is ${reward.voucherCode} worth ₹${reward.amount}. Use it at checkout on REZ!`
+      });
+
+      console.log(`📧 [Voucher] Email sent to user ${userId} for voucher ${reward.voucherCode}`);
+    } catch (emailErr) {
+      console.error(`❌ [Voucher] Failed to send voucher email to user ${userId}:`, emailErr);
+      // Don't throw — email failure should not block the voucher claim flow
+    }
   }
 
   /**

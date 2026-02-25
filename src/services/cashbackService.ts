@@ -130,6 +130,11 @@ class CashbackService {
 
   /**
    * Create cashback from order
+   *
+   * Race-condition safe:
+   * - Uses the unique index on { order, user } as the duplicate guard instead of a racy findOne check.
+   * - Wallet balance update uses atomic $inc (via addFunds).
+   * - Coins array update uses atomic positional $inc instead of read-modify-write.
    */
   async createCashbackFromOrder(orderId: Types.ObjectId): Promise<IUserCashback | null> {
     try {
@@ -144,13 +149,6 @@ class CashbackService {
       if (order.status !== 'delivered') {
         console.log(`⚠️ [CASHBACK SERVICE] Order not delivered yet: ${orderId}`);
         return null;
-      }
-
-      // Check if cashback already exists for this order
-      const existingCashback = await UserCashback.findOne({ order: orderId });
-      if (existingCashback) {
-        console.log(`⚠️ [CASHBACK SERVICE] Cashback already exists for order: ${orderId}`);
-        return existingCashback;
       }
 
       // Get product categories
@@ -177,20 +175,32 @@ class CashbackService {
         );
       }
 
-      // Create cashback entry
-      const cashback = await this.createCashback({
-        userId: order.user as Types.ObjectId,
-        orderId: order._id as Types.ObjectId,
-        amount,
-        cashbackRate: rate,
-        source: 'order',
-        description,
-        metadata: {
-          orderAmount: order.totals.total,
-          productCategories,
-          storeId,
-        },
-      });
+      // Create cashback entry — relies on unique index { order, user } to prevent duplicates.
+      // If a duplicate key error (11000) occurs, another request already created the cashback.
+      let cashback: IUserCashback;
+      try {
+        cashback = await this.createCashback({
+          userId: order.user as Types.ObjectId,
+          orderId: order._id as Types.ObjectId,
+          amount,
+          cashbackRate: rate,
+          source: 'order',
+          description,
+          metadata: {
+            orderAmount: order.totals.total,
+            productCategories,
+            storeId,
+          },
+        });
+      } catch (createError: any) {
+        // MongoDB duplicate key error — cashback already exists for this order+user
+        if (createError?.code === 11000 || createError?.message?.includes('E11000')) {
+          console.log(`⚠️ [CASHBACK SERVICE] Cashback already exists for order: ${orderId} (caught duplicate key)`);
+          const existing = await UserCashback.findOne({ order: orderId, user: order.user });
+          return existing;
+        }
+        throw createError;
+      }
 
       // Credit cashback to wallet as ReZ coins immediately
       if (amount > 0) {
@@ -199,16 +209,17 @@ class CashbackService {
           const wallet = await Wallet.findOne({ user: order.user });
 
           if (wallet) {
-            // Add to wallet balance
+            // Atomic balance update via $inc (addFunds is already atomic)
             await wallet.addFunds(amount, 'cashback');
 
-            // Also update coins array (addFunds only updates balance)
-            const rezCoin = wallet.coins?.find((c: any) => c.type === 'rez');
-            if (rezCoin) {
-              rezCoin.amount += amount;
-              rezCoin.lastEarned = new Date();
-            }
-            await wallet.save();
+            // Atomic coins array update — use positional $inc instead of read-modify-write
+            await Wallet.findOneAndUpdate(
+              { user: order.user, 'coins.type': 'rez' },
+              {
+                $inc: { 'coins.$.amount': amount },
+                $set: { 'coins.$.lastEarned': new Date() },
+              }
+            );
 
             // Create CoinTransaction record for auto-sync consistency
             try {
@@ -225,9 +236,11 @@ class CashbackService {
               console.error('⚠️ [CASHBACK SERVICE] CoinTransaction creation failed (non-blocking):', coinTxError);
             }
 
-            // Update cashback status to credited
+            // Atomic status transition — use findOneAndUpdate to avoid stale-document overwrites
+            await UserCashback.findByIdAndUpdate(cashback._id, {
+              $set: { status: 'credited', creditedDate: new Date() },
+            });
             cashback.status = 'credited';
-            await cashback.save();
 
             console.log(`✅ [CASHBACK SERVICE] Credited ₹${amount} ReZ coins to wallet for user ${order.user}`);
           } else {

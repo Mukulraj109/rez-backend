@@ -51,6 +51,89 @@ interface UserExpiryData {
 }
 
 /**
+ * Send pre-expiry notifications for coins expiring within 48 hours.
+ * Runs before the actual expiry processing to give users a chance to use their coins.
+ */
+async function sendPreExpiryNotifications(): Promise<{ notified: number; failed: number }> {
+  const stats = { notified: 0, failed: 0 };
+
+  try {
+    const now = new Date();
+    const fortyEightHoursFromNow = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+    // Find earned transactions expiring within 48 hours that haven't been notified
+    const soonExpiringTransactions = await CoinTransaction.find({
+      type: 'earned',
+      expiresAt: { $gt: now, $lte: fortyEightHoursFromNow },
+      $or: [
+        { 'metadata.isExpired': { $ne: true } },
+        { metadata: { $exists: false } }
+      ],
+      'metadata.expiryWarningNotified': { $ne: true }
+    }).sort({ user: 1, expiresAt: 1 });
+
+    if (soonExpiringTransactions.length === 0) {
+      console.log('✨ [COIN EXPIRY] No coins expiring within 48h');
+      return stats;
+    }
+
+    // Group by user
+    const userExpiryMap = new Map<string, { totalAmount: number; earliestExpiry: Date; txIds: string[] }>();
+
+    for (const tx of soonExpiringTransactions) {
+      const userId = tx.user.toString();
+      if (!userExpiryMap.has(userId)) {
+        userExpiryMap.set(userId, { totalAmount: 0, earliestExpiry: tx.expiresAt!, txIds: [] });
+      }
+      const data = userExpiryMap.get(userId)!;
+      data.totalAmount += tx.amount;
+      data.txIds.push(String(tx._id));
+      if (tx.expiresAt! < data.earliestExpiry) {
+        data.earliestExpiry = tx.expiresAt!;
+      }
+    }
+
+    console.log(`⏰ [COIN EXPIRY] Sending pre-expiry notifications to ${userExpiryMap.size} users`);
+
+    for (const [userId, data] of userExpiryMap.entries()) {
+      try {
+        const user = await User.findById(userId).select('phoneNumber').lean();
+        if (!user?.phoneNumber) continue;
+
+        const expiryDateStr = data.earliestExpiry.toLocaleDateString('en-IN', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric'
+        });
+
+        await PushNotificationService.sendCoinsExpiringSoon(
+          user.phoneNumber,
+          data.totalAmount,
+          expiryDateStr
+        );
+
+        stats.notified++;
+
+        // Mark these transactions as warned so we don't notify again
+        await CoinTransaction.updateMany(
+          { _id: { $in: data.txIds } },
+          { $set: { 'metadata.expiryWarningNotified': true } }
+        );
+      } catch (notifErr) {
+        stats.failed++;
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[COIN EXPIRY] Failed to send pre-expiry notification for user ${userId}:`, notifErr);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('❌ [COIN EXPIRY] Error in pre-expiry notifications:', error);
+  }
+
+  return stats;
+}
+
+/**
  * Find and process expired coins for all users
  */
 async function processExpiredCoins(): Promise<ExpiryStats> {
@@ -258,6 +341,13 @@ export function startCoinExpiryJob(): void {
     try {
       console.log('💰 [COIN EXPIRY] Running coin expiry job...');
 
+      // Phase 1: Send pre-expiry notifications (48h warning)
+      const preExpiryStats = await sendPreExpiryNotifications();
+      if (preExpiryStats.notified > 0) {
+        console.log(`⏰ [COIN EXPIRY] Pre-expiry: ${preExpiryStats.notified} notified, ${preExpiryStats.failed} failed`);
+      }
+
+      // Phase 2: Process actual expired coins
       const stats = await processExpiredCoins();
 
       const duration = Date.now() - startTime;

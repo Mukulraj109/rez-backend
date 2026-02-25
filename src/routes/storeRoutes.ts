@@ -332,7 +332,8 @@ router.get('/search-by-category/:category',
     radius: Joi.number().min(0.1).max(50).default(10),
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20),
-    sortBy: Joi.string().valid('rating', 'distance', 'name', 'newest').default('rating')
+    sortBy: Joi.string().valid('rating', 'distance', 'name', 'newest').default('rating'),
+    nuqtaPay: Joi.boolean()
   })),
   searchStoresByCategory
 );

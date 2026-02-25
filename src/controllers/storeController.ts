@@ -12,6 +12,7 @@ import {
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+import StoreCollectionConfig from '../models/StoreCollectionConfig';
 import redisService from '../services/redisService';
 import { logStoreSearch } from '../services/searchHistoryService';
 import { regionService, isValidRegion, RegionId, getRegionConfig } from '../services/regionService';
@@ -821,7 +822,8 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
     radius = 10,
     page = 1,
     limit = 20,
-    sortBy = 'rating'
+    sortBy = 'rating',
+    nuqtaPay
   } = req.query;
 
   try {
@@ -834,6 +836,11 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
     // Only add delivery category filter if category is not 'all'
     if (category && category !== 'all') {
       query[`deliveryCategories.${category}`] = true;
+    }
+
+    // Nuqta Pay filter
+    if (nuqtaPay === 'true') {
+      query['paymentSettings.acceptRezCoins'] = true;
     }
 
     console.log('🔍 [SEARCH BY CATEGORY] Final query:', JSON.stringify(query));
@@ -874,7 +881,7 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
           select: 'name slug',
           options: { strictPopulate: false }
         })
-        .select('name slug description logo banner location ratings operationalInfo deliveryCategories isActive isFeatured offers tags createdAt contact serviceCapabilities bookingConfig bookingType hasStorePickup')
+        .select('name slug description logo banner location ratings operationalInfo deliveryCategories isActive isFeatured offers tags createdAt contact serviceCapabilities bookingConfig bookingType hasStorePickup paymentSettings.acceptRezCoins paymentSettings.acceptPromoCoins paymentSettings.maxCoinRedemptionPercent rewardRules.baseCashbackPercent')
         .sort(sortOptions)
         .skip(skip)
         .limit(Number(limit))
@@ -1137,12 +1144,13 @@ export const advancedStoreSearch = asyncHandler(async (req: Request, res: Respon
   try {
     const query: any = { isActive: true };
 
-    // Text search
+    // Text search (escape special regex characters to prevent ReDoS)
     if (search) {
+      const escapedSearch = search.toString().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { 'basicInfo.cuisine': { $regex: search, $options: 'i' } }
+        { name: { $regex: escapedSearch, $options: 'i' } },
+        { description: { $regex: escapedSearch, $options: 'i' } },
+        { 'basicInfo.cuisine': { $regex: escapedSearch, $options: 'i' } }
       ];
     }
 
@@ -1201,6 +1209,9 @@ export const advancedStoreSearch = asyncHandler(async (req: Request, res: Respon
           case 'featured':
             query.isFeatured = true;
             break;
+          case 'nuqtaPay':
+            query['paymentSettings.acceptRezCoins'] = true;
+            break;
         }
       });
     }
@@ -1253,7 +1264,7 @@ export const advancedStoreSearch = asyncHandler(async (req: Request, res: Respon
     const skip = (Number(page) - 1) * Number(limit);
 
     const stores = await Store.find(query)
-      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
+      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup paymentSettings.acceptRezCoins paymentSettings.acceptPromoCoins paymentSettings.maxCoinRedemptionPercent rewardRules.baseCashbackPercent')
       .sort(sort)
       .skip(skip)
       .limit(Number(limit))
@@ -1307,64 +1318,32 @@ export const advancedStoreSearch = asyncHandler(async (req: Request, res: Respon
 // Get available store categories
 export const getStoreCategories = asyncHandler(async (req: Request, res: Response) => {
   try {
-    const categories = [
-      {
-        id: 'fastDelivery',
-        name: '30 min delivery',
-        description: 'Fast food delivery in 30 minutes or less',
-        icon: '🚀',
-        color: '#7B61FF'
-      },
-      {
-        id: 'budgetFriendly',
-        name: '1 rupees store',
-        description: 'Ultra-budget items starting from 1 rupee',
-        icon: '💰',
-        color: '#6E56CF'
-      },
-      {
-        id: 'premium',
-        name: 'Luxury store',
-        description: 'Premium brands and luxury products',
-        icon: '👑',
-        color: '#A78BFA'
-      },
-      {
-        id: 'organic',
-        name: 'Organic Store',
-        description: '100% organic and natural products',
-        icon: '🌱',
-        color: '#34D399'
-      },
-      {
-        id: 'alliance',
-        name: 'Alliance Store',
-        description: 'Trusted neighborhood supermarkets',
-        icon: '🤝',
-        color: '#9F7AEA'
-      },
-      {
-        id: 'lowestPrice',
-        name: 'Lowest Price',
-        description: 'Guaranteed lowest prices with price match',
-        icon: '💸',
-        color: '#22D3EE'
-      },
-      {
-        id: 'mall',
-        name: 'Rez Mall',
-        description: 'One-stop shopping destination',
-        icon: '🏬',
-        color: '#60A5FA'
-      },
-      {
-        id: 'cashStore',
-        name: 'Cash Store',
-        description: 'Cash-only transactions with exclusive discounts',
-        icon: '💵',
-        color: '#8B5CF6'
-      }
-    ];
+    // Try to read from admin-configurable StoreCollectionConfig
+    const configs = await StoreCollectionConfig.find({ isEnabled: true })
+      .sort({ sortOrder: 1 })
+      .lean();
+
+    // Fallback to hardcoded if no configs exist
+    const categories = configs.length > 0
+      ? configs.map(c => ({
+          id: c.categoryKey,
+          name: c.displayName,
+          description: c.description,
+          icon: c.icon,
+          color: c.color,
+          badgeText: c.badgeText || '',
+          imageUrl: c.imageUrl || '',
+        }))
+      : [
+          { id: 'fastDelivery', name: '30 min delivery', description: 'Fast food delivery in 30 minutes or less', icon: '🚀', color: '#7B61FF', badgeText: '', imageUrl: '' },
+          { id: 'budgetFriendly', name: '1 rupees store', description: 'Ultra-budget items starting from 1 rupee', icon: '💰', color: '#6E56CF', badgeText: '', imageUrl: '' },
+          { id: 'premium', name: 'Luxury store', description: 'Premium brands and luxury products', icon: '👑', color: '#A78BFA', badgeText: '', imageUrl: '' },
+          { id: 'organic', name: 'Organic Store', description: '100% organic and natural products', icon: '🌱', color: '#34D399', badgeText: '', imageUrl: '' },
+          { id: 'alliance', name: 'Alliance Store', description: 'Trusted neighborhood supermarkets', icon: '🤝', color: '#9F7AEA', badgeText: '', imageUrl: '' },
+          { id: 'lowestPrice', name: 'Lowest Price', description: 'Guaranteed lowest prices with price match', icon: '💸', color: '#22D3EE', badgeText: '', imageUrl: '' },
+          { id: 'mall', name: 'Rez Mall', description: 'One-stop shopping destination', icon: '🏬', color: '#60A5FA', badgeText: '', imageUrl: '' },
+          { id: 'cashStore', name: 'Cash Store', description: 'Cash-only transactions with exclusive discounts', icon: '💵', color: '#8B5CF6', badgeText: '', imageUrl: '' },
+        ];
 
     // Get count for each category
     const categoryCounts = await Promise.all(

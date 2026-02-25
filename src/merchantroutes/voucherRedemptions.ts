@@ -4,6 +4,7 @@ import OfferRedemption from '../models/OfferRedemption';
 import { Store } from '../models/Store';
 import { Wallet } from '../models/Wallet';
 import { Transaction } from '../models/Transaction';
+import { CoinTransaction } from '../models/CoinTransaction';
 import mongoose from 'mongoose';
 import Joi from 'joi';
 
@@ -453,6 +454,22 @@ router.post('/:code/use', async (req: Request, res: Response) => {
       });
 
       await transaction.save({ session });
+
+      // Create CoinTransaction (source of truth for auto-sync)
+      await CoinTransaction.create([{
+        user: userId,
+        type: 'earned',
+        amount: cashbackAmount,
+        balance: wallet.balance.available,
+        source: 'cashback',
+        description: `In-store cashback from ${offer?.title || 'offer'} at ${store.name}`,
+        metadata: {
+          offerId: offer?._id,
+          storeId: store._id,
+          storeName: store.name,
+          redemptionId: redemption._id,
+        }
+      }], { session });
     }
 
     // Commit transaction

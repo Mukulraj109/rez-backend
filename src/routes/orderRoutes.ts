@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   createOrder,
   getUserOrders,
+  getOrderCounts,
   getOrderById,
   cancelOrder,
   updateOrderStatus,
@@ -15,7 +16,8 @@ import {
   getReorderSuggestions,
   requestRefund,
   getUserRefunds,
-  getRefundDetails
+  getRefundDetails,
+  getOrderFinancialDetails
 } from '../controllers/orderController';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { validate, validateParams, validateQuery, orderSchemas, commonSchemas } from '../middleware/validation';
@@ -48,14 +50,28 @@ router.get('/reorder/frequently-ordered',
   getFrequentlyOrdered
 );
 
-// Get user's orders
+// Get order counts (lightweight, for header display)
+router.get('/counts',
+  // generalLimiter,, // Disabled for development
+  getOrderCounts
+);
+
+// Get user's orders (supports server-side search, filter, sort)
 router.get('/',
   // generalLimiter,, // Disabled for development
   validateQuery(Joi.object({
-    status: Joi.string().valid('pending', 'confirmed', 'preparing', 'shipped', 'delivered', 'cancelled'),
+    status: Joi.string().valid(
+      'all', 'placed', 'confirmed', 'preparing', 'ready',
+      'dispatched', 'delivered', 'cancelled', 'returned', 'refunded'
+    ),
+    statusGroup: Joi.string().valid('active', 'past').optional(),
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20),
-    sort: Joi.string().allow('').optional()
+    cursor: Joi.string().optional(),
+    search: Joi.string().trim().max(100).allow('').optional(),
+    dateFrom: Joi.date().iso().optional(),
+    dateTo: Joi.date().iso().optional(),
+    sort: Joi.string().valid('newest', 'oldest', 'amount_high', 'amount_low').default('newest')
   })),
   getUserOrders
 );
@@ -93,6 +109,14 @@ router.get('/:orderId',
     orderId: commonSchemas.objectId().required()
   })),
   getOrderById
+);
+
+// Get order financial details (ledger trail, coin transactions, refunds)
+router.get('/:orderId/financial',
+  validateParams(Joi.object({
+    orderId: commonSchemas.objectId().required()
+  })),
+  getOrderFinancialDetails
 );
 
 // Cancel order
@@ -192,7 +216,7 @@ router.patch('/:orderId/status',
     orderId: commonSchemas.objectId().required()
   })),
   validate(Joi.object({
-    status: Joi.string().valid('pending', 'confirmed', 'preparing', 'shipped', 'delivered', 'cancelled').required(),
+    status: Joi.string().valid('placed', 'confirmed', 'preparing', 'ready', 'dispatched', 'delivered', 'cancelled', 'returned', 'refunded').required(),
     estimatedDeliveryTime: Joi.date().iso(),
     trackingInfo: Joi.object({
       trackingNumber: Joi.string().trim(),

@@ -5,9 +5,11 @@ import CHALLENGE_TEMPLATES from '../config/challengeTemplates';
 import { Wallet } from '../models/Wallet';
 import { Transaction } from '../models/Transaction';
 import { CoinTransaction } from '../models/CoinTransaction';
+import { User } from '../models/User';
 import mongoose from 'mongoose';
 import redisService from './redisService';
 import { CacheTTL } from '../config/redis';
+import pushNotificationService from './pushNotificationService';
 
 // Valid status transitions: maps current status -> allowed next statuses
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -361,6 +363,23 @@ class ChallengeService {
               action, totalProgress: progress!.progress, target: progress!.target,
             }).catch(() => {});
           });
+
+          // Send challenge completed SMS notification (fire-and-forget)
+          try {
+            const challengeUser = await User.findById(userId).select('phoneNumber').lean();
+            if (challengeUser?.phoneNumber) {
+              const reward = challenge.rewards?.coins || 0;
+              await pushNotificationService.sendChallengeCompleted(
+                challengeUser.phoneNumber,
+                challenge.title,
+                reward
+              );
+            }
+          } catch (notifErr) {
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[CHALLENGE SERVICE] Failed to send challenge completed notification:', notifErr);
+            }
+          }
         }
 
         updates.push(progress);

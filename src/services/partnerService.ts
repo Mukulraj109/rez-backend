@@ -3,6 +3,7 @@ import { User } from '../models/User';
 import { Order } from '../models/Order';
 import mongoose from 'mongoose';
 import { pct } from '../utils/currency';
+import { invalidatePartnerEarningsCache } from './walletCacheService';
 
 /**
  * Partner Service
@@ -134,22 +135,32 @@ class PartnerService {
         console.error('❌ [LEVEL UP] Error adding new offers:', error);
       }
       
-      // Add bonus to wallet (FIXED: Issue #3)
+      // Add bonus to wallet via CoinTransaction (single source of truth — no direct wallet mutation)
       try {
         const { Wallet } = require('../models/Wallet');
         const mongoose = require('mongoose');
+        // Ensure wallet exists before CoinTransaction
         let wallet = await Wallet.findOne({ user: userId });
-        
         if (!wallet) {
           console.log(`⚠️ [LEVEL UP] Wallet not found, creating for user ${userId}`);
           wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
         }
-        
+
         if (wallet) {
-          wallet.balance.total += levelBonus;
-          wallet.balance.available += levelBonus;
-          wallet.statistics.totalEarned += levelBonus;
-          await wallet.save();
+          const { CoinTransaction } = require('../models/CoinTransaction');
+          await CoinTransaction.createTransaction(
+            userId.toString(), 'earned', levelBonus, 'bonus',
+            `Partner level up bonus (Level ${oldLevel} → ${newLevel})`,
+            {
+              partnerEarning: true,
+              partnerEarningType: 'milestone',
+              partnerLevel: newLevel,
+              oldLevel,
+              idempotencyKey: `partner:levelup:${userId}:${oldLevel}:${newLevel}`,
+            }
+          );
+          // Invalidate partner earnings cache
+          invalidatePartnerEarningsCache(userId).catch(() => {});
           console.log(`✅ [LEVEL UP] Upgraded Level ${oldLevel} → ${newLevel}, Added ₹${levelBonus} to wallet`);
         } else {
           console.error('❌ [LEVEL UP] Failed to create wallet for bonus');
@@ -200,12 +211,10 @@ class PartnerService {
         partner.earnings.total += milestone.reward.value;
         partner.earnings.pending += milestone.reward.value;
         partner.earnings.thisMonth += milestone.reward.value;
-        
-        // Add cashback/points to user's wallet (in same transaction)
+
+        // Ensure wallet exists
         const { Wallet } = require('../models/Wallet');
         let wallet = await Wallet.findOne({ user: userId }).session(session);
-        
-        // Create wallet if it doesn't exist
         if (!wallet) {
           console.log(`⚠️ [MILESTONE] Wallet not found, creating new wallet for user ${userId}`);
           wallet = await (Wallet as any).createForUser(
@@ -213,21 +222,40 @@ class PartnerService {
             { session }
           );
         }
-        
         if (!wallet) {
           throw new Error('Failed to create wallet');
         }
-        
+
         if (milestone.reward.type === 'cashback') {
-          // Add cashback to wallet balance
-          wallet.balance.total += milestone.reward.value;
-          wallet.balance.available += milestone.reward.value;
-          wallet.statistics.totalEarned += milestone.reward.value;
-          wallet.statistics.totalCashback += milestone.reward.value;
-          await wallet.save({ session });
+          // Use CoinTransaction as single source of truth — it handles atomic wallet update
+          const { CoinTransaction } = require('../models/CoinTransaction');
+          await CoinTransaction.create([{
+            user: userId, type: 'earned', amount: milestone.reward.value,
+            balance: wallet.balance.available + milestone.reward.value, source: 'cashback',
+            description: `Partner milestone reward: ${milestone.name || 'Milestone'}`,
+            metadata: {
+              partnerEarning: true,
+              partnerEarningType: 'milestone',
+              milestoneId: milestone.id,
+              partnerLevel: partner.level,
+              idempotencyKey: `partner:milestone:${userId}:${orderCount}`,
+            }
+          }], { session });
+          // Atomic wallet update within session
+          await Wallet.findOneAndUpdate(
+            { user: userId },
+            {
+              $inc: {
+                'balance.available': milestone.reward.value,
+                'balance.total': milestone.reward.value,
+                'statistics.totalEarned': milestone.reward.value,
+                'statistics.totalCashback': milestone.reward.value,
+              },
+            },
+            { session }
+          );
           console.log(`✅ [MILESTONE] Added ₹${milestone.reward.value} cashback to wallet`);
         } else if (milestone.reward.type === 'points') {
-          // Add loyalty points
           wallet.loyaltyPoints = (wallet.loyaltyPoints || 0) + milestone.reward.value;
           await wallet.save({ session });
           console.log(`✅ [MILESTONE] Added ${milestone.reward.value} loyalty points`);
@@ -239,10 +267,12 @@ class PartnerService {
       
       // Commit transaction
       await session.commitTransaction();
+      // Invalidate partner earnings cache after successful commit
+      invalidatePartnerEarningsCache(userId).catch(() => {});
       console.log(`✅ [MILESTONE CLAIM] Successfully claimed milestone ${orderCount} for user ${userId}`);
-      
+
       return partner;
-      
+
     } catch (error) {
       // Rollback transaction on error
       await session.abortTransaction();
@@ -288,12 +318,10 @@ class PartnerService {
         partner.earnings.total += task.reward.value;
         partner.earnings.pending += task.reward.value;
         partner.earnings.thisMonth += task.reward.value;
-        
-        // Add cashback/points to user's wallet (in same transaction)
+
+        // Ensure wallet exists
         const { Wallet } = require('../models/Wallet');
         let wallet = await Wallet.findOne({ user: userId }).session(session);
-        
-        // Create wallet if it doesn't exist
         if (!wallet) {
           console.log(`⚠️ [TASK] Wallet not found, creating new wallet for user ${userId}`);
           wallet = await (Wallet as any).createForUser(
@@ -301,21 +329,40 @@ class PartnerService {
             { session }
           );
         }
-        
         if (!wallet) {
           throw new Error('Failed to create wallet');
         }
-        
+
         if (task.reward.type === 'cashback') {
-          // Add cashback to wallet balance
-          wallet.balance.total += task.reward.value;
-          wallet.balance.available += task.reward.value;
-          wallet.statistics.totalEarned += task.reward.value;
-          wallet.statistics.totalCashback += task.reward.value;
-          await wallet.save({ session });
+          // Use CoinTransaction as single source of truth — no direct wallet.balance mutation
+          const { CoinTransaction } = require('../models/CoinTransaction');
+          await CoinTransaction.create([{
+            user: userId, type: 'earned', amount: task.reward.value,
+            balance: wallet.balance.available + task.reward.value, source: 'cashback',
+            description: `Partner task reward: ${task.name || 'Task'}`,
+            metadata: {
+              partnerEarning: true,
+              partnerEarningType: 'task',
+              taskId: task.id,
+              partnerLevel: partner.level,
+              idempotencyKey: `partner:task:${userId}:${taskTitle}`,
+            }
+          }], { session });
+          // Atomic wallet update within session
+          await Wallet.findOneAndUpdate(
+            { user: userId },
+            {
+              $inc: {
+                'balance.available': task.reward.value,
+                'balance.total': task.reward.value,
+                'statistics.totalEarned': task.reward.value,
+                'statistics.totalCashback': task.reward.value,
+              },
+            },
+            { session }
+          );
           console.log(`✅ [TASK] Added ₹${task.reward.value} cashback to wallet`);
         } else if (task.reward.type === 'points') {
-          // Add loyalty points
           wallet.loyaltyPoints = (wallet.loyaltyPoints || 0) + task.reward.value;
           await wallet.save({ session });
           console.log(`✅ [TASK] Added ${task.reward.value} loyalty points`);
@@ -327,8 +374,10 @@ class PartnerService {
       
       // Commit transaction
       await session.commitTransaction();
+      // Invalidate partner earnings cache after successful commit
+      invalidatePartnerEarningsCache(userId).catch(() => {});
       console.log(`✅ [TASK CLAIM] Successfully claimed task ${taskTitle} for user ${userId}`);
-      
+
       return partner;
       
     } catch (error) {
@@ -375,12 +424,10 @@ class PartnerService {
         partner.earnings.total += jackpot.reward.value;
         partner.earnings.pending += jackpot.reward.value;
         partner.earnings.thisMonth += jackpot.reward.value;
-        
-        // Add reward to user's wallet (in same transaction)
+
+        // Ensure wallet exists
         const { Wallet } = require('../models/Wallet');
         let wallet = await Wallet.findOne({ user: userId }).session(session);
-        
-        // Create wallet if it doesn't exist
         if (!wallet) {
           console.log(`⚠️ [JACKPOT] Wallet not found, creating new wallet for user ${userId}`);
           wallet = await (Wallet as any).createForUser(
@@ -388,27 +435,69 @@ class PartnerService {
             { session }
           );
         }
-        
         if (!wallet) {
           throw new Error('Failed to create wallet');
         }
-        
+
+        const idempotencyKey = `partner:jackpot:${userId}:${spendAmount}`;
+
         if (jackpot.reward.type === 'cashback') {
-          wallet.balance.total += jackpot.reward.value;
-          wallet.balance.available += jackpot.reward.value;
-          wallet.statistics.totalEarned += jackpot.reward.value;
-          wallet.statistics.totalCashback += jackpot.reward.value;
-          await wallet.save({ session });
+          // CoinTransaction + atomic wallet update — no direct wallet.balance mutation
+          const { CoinTransaction } = require('../models/CoinTransaction');
+          await CoinTransaction.create([{
+            user: userId, type: 'earned', amount: jackpot.reward.value,
+            balance: wallet.balance.available + jackpot.reward.value, source: 'cashback',
+            description: `Partner jackpot cashback reward`,
+            metadata: {
+              partnerEarning: true,
+              partnerEarningType: 'cashback',
+              jackpotId: jackpot.id,
+              partnerLevel: partner.level,
+              idempotencyKey,
+            }
+          }], { session });
+          await Wallet.findOneAndUpdate(
+            { user: userId },
+            {
+              $inc: {
+                'balance.available': jackpot.reward.value,
+                'balance.total': jackpot.reward.value,
+                'statistics.totalEarned': jackpot.reward.value,
+                'statistics.totalCashback': jackpot.reward.value,
+              },
+            },
+            { session }
+          );
           console.log(`✅ [JACKPOT] Added ₹${jackpot.reward.value} cashback to wallet`);
         } else if (jackpot.reward.type === 'points') {
           wallet.loyaltyPoints = (wallet.loyaltyPoints || 0) + jackpot.reward.value;
           await wallet.save({ session });
           console.log(`✅ [JACKPOT] Added ${jackpot.reward.value} loyalty points`);
         } else if (jackpot.reward.type === 'voucher') {
-          wallet.balance.total += jackpot.reward.value;
-          wallet.balance.available += jackpot.reward.value;
-          wallet.statistics.totalEarned += jackpot.reward.value;
-          await wallet.save({ session });
+          const { CoinTransaction } = require('../models/CoinTransaction');
+          await CoinTransaction.create([{
+            user: userId, type: 'earned', amount: jackpot.reward.value,
+            balance: wallet.balance.available + jackpot.reward.value, source: 'bonus',
+            description: `Partner jackpot voucher reward`,
+            metadata: {
+              partnerEarning: true,
+              partnerEarningType: 'cashback',
+              jackpotId: jackpot.id,
+              partnerLevel: partner.level,
+              idempotencyKey,
+            }
+          }], { session });
+          await Wallet.findOneAndUpdate(
+            { user: userId },
+            {
+              $inc: {
+                'balance.available': jackpot.reward.value,
+                'balance.total': jackpot.reward.value,
+                'statistics.totalEarned': jackpot.reward.value,
+              },
+            },
+            { session }
+          );
           console.log(`✅ [JACKPOT] Added ₹${jackpot.reward.value} voucher to wallet`);
         }
       }
@@ -418,8 +507,10 @@ class PartnerService {
       
       // Commit transaction
       await session.commitTransaction();
+      // Invalidate partner earnings cache after successful commit
+      invalidatePartnerEarningsCache(userId).catch(() => {});
       console.log(`✅ [JACKPOT CLAIM] Successfully claimed jackpot ₹${spendAmount} for user ${userId}`);
-      
+
       return partner;
       
     } catch (error) {

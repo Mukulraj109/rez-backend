@@ -6,7 +6,10 @@ import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import { Payment } from '../models/Payment';
 import { EventBooking } from '../models';
+import { Wallet } from '../models/Wallet';
+import { CoinTransaction } from '../models/CoinTransaction';
 import { sendSuccess, sendError } from '../utils/response';
+import mongoose from 'mongoose';
 
 // Payment Gateway Types
 export interface PaymentGatewayConfig {
@@ -62,6 +65,7 @@ export interface PaymentResponseData {
 class PaymentGatewayService {
   private stripe?: Stripe;
   private razorpay?: Razorpay;
+  private razorpayVerified = false;
   private config: PaymentGatewayConfig;
 
   constructor() {
@@ -98,6 +102,26 @@ class PaymentGatewayService {
         key_id: this.config.razorpay.keyId,
         key_secret: this.config.razorpay.keySecret
       });
+      // Verify credentials async — if they fail, disable Razorpay
+      this.verifyRazorpayCredentials();
+    }
+  }
+
+  /**
+   * Verify Razorpay credentials by making a lightweight API call.
+   * If invalid, disable Razorpay so it won't be offered to users.
+   */
+  private async verifyRazorpayCredentials(): Promise<void> {
+    if (!this.razorpay) return;
+    try {
+      // Fetch payments with count=1 — lightweight call to verify auth
+      await (this.razorpay as any).payments.all({ count: 1 });
+      this.razorpayVerified = true;
+      console.log('✅ [PAYMENT GATEWAY] Razorpay credentials verified');
+    } catch (err: any) {
+      console.warn('⚠️ [PAYMENT GATEWAY] Razorpay credentials invalid — disabling Razorpay:', err?.error?.description || err?.message || 'Auth failed');
+      this.razorpay = undefined;
+      this.razorpayVerified = false;
     }
   }
 
@@ -529,7 +553,7 @@ class PaymentGatewayService {
   }
 
   /**
-   * Update payment record from webhook
+   * Update payment record from webhook and credit wallet if applicable
    */
   private async updatePaymentFromWebhook(
     paymentId: string,
@@ -538,16 +562,102 @@ class PaymentGatewayService {
   ): Promise<void> {
     try {
       const payment = await Payment.findOne({ paymentId });
-      if (payment) {
-        payment.status = status as any;
-        if (status === 'completed') {
-          payment.completedAt = new Date();
-        }
-        await payment.save();
-        console.log('✅ [PAYMENT GATEWAY] Payment updated from webhook:', paymentId);
+      if (!payment) {
+        console.warn('[PAYMENT GATEWAY] Payment not found for webhook:', paymentId);
+        return;
+      }
+
+      // Prevent double-processing
+      if (payment.status === 'completed' && status === 'completed') {
+        console.log('[PAYMENT GATEWAY] Payment already completed, skipping:', paymentId);
+        return;
+      }
+
+      payment.status = status as any;
+      if (status === 'completed') {
+        payment.completedAt = new Date();
+      }
+      await payment.save();
+      console.log('✅ [PAYMENT GATEWAY] Payment updated from webhook:', paymentId, status);
+
+      // Credit wallet if this is a wallet_topup and payment succeeded
+      if (status === 'completed' && payment.purpose === 'wallet_topup') {
+        await this.creditWalletFromPayment(payment);
       }
     } catch (error) {
       console.error('❌ [PAYMENT GATEWAY] Failed to update payment from webhook:', error);
+    }
+  }
+
+  /**
+   * Credit wallet with coins after successful topup payment
+   */
+  async creditWalletFromPayment(payment: any): Promise<void> {
+    const userId = payment.user.toString();
+    // Use creditAmount from metadata (full NC amount before discount), fallback to payment amount
+    const amount = payment.metadata?.creditAmount || payment.amount;
+
+    try {
+      // Check if already credited (idempotency via CoinTransaction)
+      const existing = await CoinTransaction.findOne({
+        user: new mongoose.Types.ObjectId(userId),
+        source: 'recharge',
+        idempotencyKey: `recharge_${payment.paymentId}`
+      });
+
+      if (existing) {
+        console.log('[PAYMENT GATEWAY] Wallet already credited for payment:', payment.paymentId);
+        return;
+      }
+
+      // Find or create wallet
+      let wallet = await Wallet.findOne({ user: userId });
+      if (!wallet) {
+        wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
+      }
+
+      if (!wallet) {
+        console.error('[PAYMENT GATEWAY] Failed to find/create wallet for user:', userId);
+        return;
+      }
+
+      // Credit rez coins atomically
+      await Wallet.findOneAndUpdate(
+        { user: userId },
+        {
+          $inc: {
+            'balance.available': amount,
+            'statistics.totalEarned': amount,
+            'statistics.totalTopups': amount
+          }
+        }
+      );
+
+      // Also update the coins array (rez type)
+      await Wallet.findOneAndUpdate(
+        { user: userId, 'coins.type': 'rez' },
+        { $inc: { 'coins.$.amount': amount } }
+      );
+
+      // Record CoinTransaction for audit using createTransaction (handles balance + locking)
+      await (CoinTransaction as any).createTransaction(
+        userId,
+        'earned',
+        amount,
+        'recharge',
+        `Wallet recharge via ${payment.paymentMethod}`,
+        {
+          paymentId: payment.paymentId,
+          gateway: payment.paymentMethod,
+          idempotencyKey: `recharge_${payment.paymentId}`
+        }
+      );
+
+      console.log('✅ [PAYMENT GATEWAY] Wallet credited:', { userId, amount, paymentId: payment.paymentId });
+    } catch (error) {
+      console.error('❌ [PAYMENT GATEWAY] Failed to credit wallet:', error);
+      // This is critical — log for manual resolution
+      console.error('MANUAL_RESOLUTION_NEEDED:', { userId, amount, paymentId: payment.paymentId });
     }
   }
 
@@ -616,6 +726,7 @@ class PaymentGatewayService {
         amount: response.amount,
         currency: response.currency,
         paymentMethod: response.gateway,
+        purpose: paymentData.metadata?.purpose || 'other',
         status: response.status,
         userDetails: paymentData.userDetails,
         metadata: paymentData.metadata || {},
@@ -715,10 +826,12 @@ class PaymentGatewayService {
   /**
    * Get available payment methods for a gateway
    */
-  getAvailablePaymentMethods(gateway: string): string[] {
+  getAvailablePaymentMethods(gateway: string, currency?: string): string[] {
     switch (gateway) {
       case 'stripe':
-        return ['card', 'upi', 'wallet'];
+        // UPI is only available in India (INR)
+        if (currency === 'INR') return ['card', 'upi', 'wallet'];
+        return ['card'];
       case 'razorpay':
         return ['card', 'upi', 'wallet', 'netbanking'];
       case 'paypal':
@@ -729,12 +842,31 @@ class PaymentGatewayService {
   }
 
   /**
+   * Check if a gateway has valid credentials configured
+   */
+  isGatewayConfigured(gateway: string): boolean {
+    switch (gateway) {
+      case 'stripe':
+        return !!this.stripe;
+      case 'razorpay':
+        // Only available after async credential verification succeeds
+        return !!this.razorpay && this.razorpayVerified;
+      case 'paypal':
+        return !!(this.config.paypal.clientId && this.config.paypal.clientSecret &&
+          !this.config.paypal.clientId.includes('your_') &&
+          !this.config.paypal.clientSecret.includes('your_'));
+      default:
+        return false;
+    }
+  }
+
+  /**
    * Get supported currencies for a gateway
    */
   getSupportedCurrencies(gateway: string): string[] {
     switch (gateway) {
       case 'stripe':
-        return ['USD', 'EUR', 'GBP', 'INR', 'CAD', 'AUD'];
+        return ['USD', 'EUR', 'GBP', 'INR', 'AED', 'CAD', 'AUD'];
       case 'razorpay':
         return ['INR'];
       case 'paypal':

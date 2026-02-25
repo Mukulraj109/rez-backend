@@ -75,6 +75,9 @@ export const CacheKeys = {
   wallet: (userId: string) => `wallet:user:${userId}`,
   walletTransactions: (userId: string, filters: string) => `wallet:user:${userId}:txns:${filters}`,
 
+  // Offers page aggregated data
+  offersPageData: (region: string, tab: string) => `offers:page-data:${region}:${tab}`,
+
   // Stock keys
   stock: (productId: string) => `stock:${productId}`,
   stockByVariant: (productId: string, variantType: string, variantValue: string) =>

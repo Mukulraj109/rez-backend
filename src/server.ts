@@ -47,6 +47,13 @@ import { initBonusCampaignJobs } from './jobs/bonusCampaignJob';
 import { initChallengeLifecycleJobs } from './jobs/challengeLifecycleJob';
 import { initializeTournamentLifecycleJobs } from './jobs/tournamentLifecycleJob';
 import { initializePrizeDistributionJob } from './jobs/leaderboardPrizeDistributionJob';
+import { runStuckTransactionRecovery } from './jobs/stuckTransactionRecoveryJob';
+import { runGiftDelivery } from './jobs/giftDeliveryJob';
+import { runGiftExpiry } from './jobs/giftExpiryJob';
+import { runSurpriseDropExpiry } from './jobs/surpriseDropExpiryJob';
+import { runPartnerEarningsSnapshot } from './jobs/partnerEarningsSnapshotJob';
+import { initializeReferralExpiryJob, runReferralExpiry } from './jobs/referralExpiryJob';
+import { seedWalletFeatureFlags } from './services/walletFeatureService';
 
 // Import Bull-based scheduled job service (replaces node-cron with Bull repeatable jobs)
 import { ScheduledJobService } from './services/ScheduledJobService';
@@ -87,6 +94,9 @@ import wishlistRoutes from './routes/wishlistRoutes';
 import syncRoutes from './routes/syncRoutes';
 import locationRoutes from './routes/locationRoutes';
 import walletRoutes from './routes/walletRoutes';
+import transferRoutes from './routes/transferRoutes';
+import giftRoutes from './routes/giftRoutes';
+import giftCardRoutes from './routes/giftCardRoutes';
 import offerRoutes from './routes/offerRoutes';
 import offerCommentRoutes from './routes/offerCommentRoutes';
 import offerCategoryRoutes from './routes/offerCategoryRoutes';
@@ -171,6 +181,7 @@ import statsRoutes from './routes/statsRoutes';  // Social proof stats routes
 import exploreRoutes from './routes/exploreRoutes';  // Explore page routes
 import testRoutes from './routes/testRoutes';  // Integration test routes (dev/test only)
 import adminExploreRoutes from './routes/adminExploreRoutes';  // Admin explore management routes
+import { adminAuditMiddleware } from './middleware/adminAuditMiddleware';  // Admin audit trail
 // Admin panel routes
 import {
   adminDashboardRoutes,
@@ -211,10 +222,26 @@ import {
   adminLeaderboardConfigRoutes,
   adminQuickActionRoutes,
   adminValueCardRoutes,
+  adminWalletConfigRoutes,
+  adminUserWalletsRoutes,
+  adminGiftCardsRoutes,
+  adminCoinGiftsRoutes,
+  adminSurpriseCoinDropsRoutes,
+  adminPartnerEarningsRoutes,
+  adminReferralsRoutes,
+  adminFlashSalesRoutes,
+  adminHotspotAreasRoutes,
+  adminBankOffersRoutes,
+  adminUploadBillStoresRoutes,
+  adminExclusiveZonesRoutes,
+  adminSpecialProfilesRoutes,
+  adminLoyaltyMilestonesRoutes,
 } from './routes/admin';
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
 import bonusZoneRoutes from './routes/bonusZoneRoutes';  // Bonus Zone campaign routes
 import adminBonusZoneRoutes from './routes/admin/bonusZone';  // Admin Bonus Zone management
+import adminOffersSectionRoutes from './routes/admin/offersSectionConfig';  // Admin Offers Section Config
+import adminStoreCollectionRoutes from './routes/admin/storeCollectionConfig';  // Admin Store Collection Config
 import lockDealRoutes from './routes/lockDealRoutes';  // Lock Price Deal routes
 import playEarnRoutes from './routes/playEarnRoutes';  // Play & Earn config routes
 import learningRoutes from './routes/learningRoutes';  // Learning content routes
@@ -734,6 +761,12 @@ app.use(`${API_PREFIX}/wishlist`, wishlistRoutes);
 app.use(`${API_PREFIX}/sync`, syncRoutes);
 app.use(`${API_PREFIX}/location`, locationRoutes);
 app.use(`${API_PREFIX}/wallet`, walletRoutes);
+app.use(`${API_PREFIX}/wallet/transfer`, transferRoutes);
+console.log('✅ Transfer routes registered at /api/wallet/transfer');
+app.use(`${API_PREFIX}/wallet/gift`, giftRoutes);
+console.log('✅ Gift routes registered at /api/wallet/gift');
+app.use(`${API_PREFIX}/wallet/gift-cards`, giftCardRoutes);
+console.log('✅ Gift card routes registered at /api/wallet/gift-cards');
 app.use(`${API_PREFIX}/offers`, offerCommentRoutes);
 console.log('✅ Offer comment routes registered at /api/offers');
 app.use(`${API_PREFIX}/offers`, offerRoutes);
@@ -918,6 +951,10 @@ app.use(`${API_PREFIX}/explore`, exploreRoutes);
 app.use(`${API_PREFIX}/test`, testRoutes);  // Integration test routes (dev/test only)
 console.log('✅ Explore routes registered at /api/explore');
 
+// Admin audit middleware — logs all POST/PUT/PATCH/DELETE on admin routes
+app.use(`${API_PREFIX}/admin`, adminAuditMiddleware);
+console.log('✅ Admin audit middleware registered for /api/admin/*');
+
 // Admin explore management routes
 app.use(`${API_PREFIX}/admin/explore`, adminExploreRoutes);
 console.log('✅ Admin explore routes registered at /api/admin/explore');
@@ -948,7 +985,10 @@ console.log('✅ Admin wallet routes registered at /api/admin/wallet');
 app.use(`${API_PREFIX}/admin/campaigns`, adminCampaignsRoutes);
 console.log('✅ Admin campaigns routes registered at /api/admin/campaigns');
 app.use(`${API_PREFIX}/admin/bonus-zone`, adminBonusZoneRoutes);
+app.use(`${API_PREFIX}/admin/offers-sections`, adminOffersSectionRoutes);
+app.use(`${API_PREFIX}/admin/store-collections`, adminStoreCollectionRoutes);
 console.log('✅ Admin bonus zone routes registered at /api/admin/bonus-zone');
+console.log('✅ Admin store-collections routes registered at /api/admin/store-collections');
 app.use(`${API_PREFIX}/admin/uploads`, adminUploadsRoutes);
 console.log('✅ Admin uploads routes registered at /api/admin/uploads');
 app.use(`${API_PREFIX}/admin/experiences`, adminExperiencesRoutes);
@@ -1007,6 +1047,37 @@ app.use(`${API_PREFIX}/admin/quick-actions`, adminQuickActionRoutes);
 console.log('✅ Admin quick action routes registered at /api/admin/quick-actions');
 app.use(`${API_PREFIX}/admin/value-cards`, adminValueCardRoutes);
 console.log('✅ Admin value card routes registered at /api/admin/value-cards');
+app.use(`${API_PREFIX}/admin/wallet-config`, adminWalletConfigRoutes);
+console.log('✅ Admin wallet config routes registered at /api/admin/wallet-config');
+app.use(`${API_PREFIX}/admin/user-wallets`, adminUserWalletsRoutes);
+console.log('✅ Admin user wallets routes registered at /api/admin/user-wallets');
+app.use(`${API_PREFIX}/admin/gift-cards`, adminGiftCardsRoutes);
+console.log('✅ Admin gift cards routes registered at /api/admin/gift-cards');
+app.use(`${API_PREFIX}/admin/coin-gifts`, adminCoinGiftsRoutes);
+console.log('✅ Admin coin gift routes registered at /api/admin/coin-gifts');
+app.use(`${API_PREFIX}/admin/surprise-coin-drops`, adminSurpriseCoinDropsRoutes);
+console.log('✅ Admin surprise coin drops routes registered at /api/admin/surprise-coin-drops');
+
+app.use(`${API_PREFIX}/admin/partner-earnings`, adminPartnerEarningsRoutes);
+console.log('✅ Admin partner earnings routes registered at /api/admin/partner-earnings');
+
+app.use(`${API_PREFIX}/admin/referrals`, adminReferralsRoutes);
+console.log('✅ Admin referrals routes registered at /api/admin/referrals');
+
+app.use(`${API_PREFIX}/admin/flash-sales`, adminFlashSalesRoutes);
+console.log('✅ Admin flash sales routes registered at /api/admin/flash-sales');
+app.use(`${API_PREFIX}/admin/hotspot-areas`, adminHotspotAreasRoutes);
+console.log('✅ Admin hotspot areas routes registered at /api/admin/hotspot-areas');
+app.use(`${API_PREFIX}/admin/bank-offers`, adminBankOffersRoutes);
+console.log('✅ Admin bank offers routes registered at /api/admin/bank-offers');
+app.use(`${API_PREFIX}/admin/upload-bill-stores`, adminUploadBillStoresRoutes);
+console.log('✅ Admin upload bill stores routes registered at /api/admin/upload-bill-stores');
+app.use(`${API_PREFIX}/admin/exclusive-zones`, adminExclusiveZonesRoutes);
+console.log('✅ Admin exclusive zones routes registered at /api/admin/exclusive-zones');
+app.use(`${API_PREFIX}/admin/special-profiles`, adminSpecialProfilesRoutes);
+console.log('✅ Admin special profiles routes registered at /api/admin/special-profiles');
+app.use(`${API_PREFIX}/admin/loyalty-milestones`, adminLoyaltyMilestonesRoutes);
+console.log('✅ Admin loyalty milestones routes registered at /api/admin/loyalty-milestones');
 
 // Admin Engagement Config Routes
 import { Router as EngagementConfigRouter } from 'express';
@@ -1405,6 +1476,32 @@ async function startServer() {
     initializeTournamentLifecycleJobs();
     console.log('✅ Tournament lifecycle jobs started (activation: 5m, completion: 5m)');
 
+    // Initialize wallet production-readiness jobs
+    console.log('🔄 Initializing wallet production jobs...');
+    const cron = require('node-cron');
+    // Stuck transaction recovery — every 15 minutes
+    cron.schedule('*/15 * * * *', () => { runStuckTransactionRecovery().catch(console.error); });
+    console.log('✅ Stuck transaction recovery job started (runs every 15 min)');
+    // Scheduled gift delivery — every 5 minutes
+    cron.schedule('*/5 * * * *', () => { runGiftDelivery().catch(console.error); });
+    console.log('✅ Gift delivery job started (runs every 5 min)');
+    // Gift expiry processing — daily at 2:30 AM (before reconciliation at 3 AM)
+    cron.schedule('30 2 * * *', () => { runGiftExpiry().catch(console.error); });
+    console.log('✅ Gift expiry job started (runs daily at 2:30 AM)');
+    // Surprise drop expiry — every hour
+    cron.schedule('0 * * * *', () => { runSurpriseDropExpiry().catch(console.error); });
+    console.log('✅ Surprise drop expiry job started (runs every hour)');
+    // Partner earnings snapshot — daily at 1 AM
+    cron.schedule('0 1 * * *', () => { runPartnerEarningsSnapshot().catch(console.error); });
+    console.log('✅ Partner earnings snapshot job started (runs daily at 1 AM)');
+    // Referral expiry — daily at 3 AM
+    initializeReferralExpiryJob();
+    console.log('✅ Referral expiry job started (runs daily at 3 AM)');
+
+    // Seed wallet feature flags
+    await seedWalletFeatureFlags();
+    console.log('✅ Wallet feature flags seeded');
+
     // Initialize Bull-based scheduled job service (preferred over node-cron above)
     // The node-cron jobs above serve as fallback if Redis/Bull is unavailable
     console.log('🔄 Initializing Bull scheduled job service...');
@@ -1420,6 +1517,14 @@ async function startServer() {
     console.log('🔄 Initializing leaderboard prize distribution job...');
     initializePrizeDistributionJob();
     console.log('✅ Leaderboard prize distribution job started (runs hourly)');
+
+    // Initialize order lifecycle background jobs
+    console.log('🔄 Initializing order lifecycle jobs...');
+    const { initializeOrderLifecycleJobs } = await import('./jobs/orderLifecycleJobs');
+    initializeOrderLifecycleJobs();
+    const { initializeOrderReconciliationJob } = await import('./jobs/orderReconciliationJob');
+    initializeOrderReconciliationJob();
+    console.log('✅ Order lifecycle + reconciliation jobs started');
 
     // Initialize gamification event bus
     console.log('🔄 Initializing gamification event bus...');

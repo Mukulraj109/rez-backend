@@ -237,14 +237,34 @@ async function handleRazorpayPaymentCaptured(event: any): Promise<void> {
       orderId,
       paymentId: payment.id,
     });
-    // Still save the order with a flag for manual review instead of silently proceeding
-    order.payment.status = 'review_required' as any;
+    // Keep order in current status, add flag for manual review
+    // Do NOT set an invalid payment status — preserve the state machine
+    if (!(order as any).flags) (order as any).flags = [];
+    (order as any).flags.push('amount_mismatch');
     order.timeline.push({
-      status: 'amount_mismatch',
-      message: `Captured ₹${capturedAmount} but order total is ₹${orderTotal}`,
+      status: order.status, // Keep current status, not an invalid one
+      message: `Payment amount mismatch: captured ₹${capturedAmount} but order total is ₹${orderTotal}. Flagged for manual review.`,
       timestamp: new Date(),
+      metadata: { capturedAmount, orderTotal, paymentId: payment.id },
     });
     await order.save();
+
+    // Emit admin alert for manual review
+    try {
+      const orderSocketService = require('../services/orderSocketService').default;
+      orderSocketService.emitToAdmin('PAYMENT_AMOUNT_MISMATCH', {
+        orderId: String(order._id),
+        orderNumber: order.orderNumber,
+        capturedAmount,
+        orderTotal,
+        paymentId: payment.id,
+        timestamp: new Date(),
+      });
+    } catch (alertErr) {
+      console.error('[RAZORPAY WEBHOOK] Failed to emit admin alert:', alertErr);
+    }
+
+    console.warn(`🚨 [RAZORPAY WEBHOOK] Order ${order.orderNumber} flagged for amount mismatch review`);
     return;
   }
 

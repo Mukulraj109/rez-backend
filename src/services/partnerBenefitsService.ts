@@ -4,8 +4,10 @@
 import Partner, { PARTNER_LEVELS, IPartnerBenefits } from '../models/Partner';
 import { User } from '../models/User';
 import { Wallet } from '../models/Wallet';
+import { CoinTransaction } from '../models/CoinTransaction';
 import mongoose from 'mongoose';
 import { pct } from '../utils/currency';
+import { invalidatePartnerEarningsCache } from './walletCacheService';
 
 interface OrderBenefitData {
   subtotal: number;
@@ -171,20 +173,31 @@ class PartnerBenefitsService {
       if (partner.totalOrders > 0 && partner.totalOrders % every === 0) {
         console.log(`🎁 [PARTNER BENEFITS] Transaction bonus triggered! ${partner.totalOrders} orders (every ${every})`);
         
-        // Add bonus to wallet
+        // Add bonus to wallet via CoinTransaction (single source of truth — no direct wallet mutation)
         try {
           let wallet = await Wallet.findOne({ user: userId });
-          
           if (!wallet) {
             console.log(`⚠️ [PARTNER BENEFITS] Wallet not found, creating for user ${userId}`);
             wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
           }
-          
+
           if (wallet) {
-            wallet.balance.total += reward;
-            wallet.balance.available += reward;
-            wallet.statistics.totalEarned += reward;
-            await wallet.save();
+            await CoinTransaction.createTransaction(
+              userId.toString(),
+              'earned',
+              reward,
+              'bonus',
+              `Partner transaction bonus (${partner.totalOrders} orders)`,
+              {
+                partnerEarning: true,
+                partnerEarningType: 'cashback',
+                partnerLevel: partner.currentLevel.level,
+                totalOrders: partner.totalOrders,
+                idempotencyKey: `partner:txbonus:${userId}:${partner.totalOrders}`,
+              }
+            );
+            // Invalidate partner earnings cache
+            invalidatePartnerEarningsCache(userId).catch(() => {});
             console.log(`✅ [PARTNER BENEFITS] Added ₹${reward} transaction bonus to wallet`);
           }
         } catch (walletError) {

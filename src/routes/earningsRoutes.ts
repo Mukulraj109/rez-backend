@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   getConsolidatedEarningsSummary,
+  getPartnerEarningsSummary,
   getEarningsSummary,
   getProjectStats,
   getNotifications,
@@ -12,6 +13,7 @@ import {
 import { authenticate } from '../middleware/auth';
 import { validate, validateParams, validateQuery, commonSchemas } from '../middleware/validation';
 import { Joi } from '../middleware/validation';
+import { requireWalletFeature, WALLET_FEATURES } from '../services/walletFeatureService';
 
 const router = Router();
 
@@ -26,6 +28,15 @@ router.get('/consolidated-summary',
     endDate: Joi.date().optional()
   })),
   getConsolidatedEarningsSummary
+);
+
+// Get partner-specific earnings summary (for wallet Partner Earnings card)
+router.get('/partner-summary',
+  requireWalletFeature(WALLET_FEATURES.PARTNER_EARNINGS),
+  validateQuery(Joi.object({
+    period: Joi.string().valid('7d', '30d', '90d', 'all').default('all'),
+  })),
+  getPartnerEarningsSummary
 );
 
 // Get user's earnings summary (legacy)
@@ -60,8 +71,9 @@ router.get('/history',
   getEarningsHistory
 );
 
-// Withdraw earnings
+// Withdraw earnings (gated behind feature flag — stub endpoint, not production-ready)
 router.post('/withdraw',
+  requireWalletFeature(WALLET_FEATURES.PARTNER_CLAIMS),
   validate(Joi.object({
     amount: Joi.number().positive().required(),
     method: Joi.string().valid('bank', 'upi', 'wallet').default('bank'),

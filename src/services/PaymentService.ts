@@ -496,6 +496,31 @@ class PaymentService {
             // Don't fail payment if coin deduction fails - coins already validated
           }
         }
+
+        // Record ledger entry for coin deduction on online payment (non-blocking)
+        const totalCoinsUsed = (rezCoins || 0) + (promoCoins || 0) + (storePromoCoins || 0);
+        if (totalCoinsUsed > 0) {
+          try {
+            const ledgerService = require('./ledgerService').default || require('./ledgerService');
+            const PLATFORM_FLOAT_ID = new Types.ObjectId('000000000000000000000002');
+            await ledgerService.recordEntry({
+              debitAccount: { type: 'user_wallet', id: new Types.ObjectId(userId.toString()) },
+              creditAccount: { type: 'platform_float', id: PLATFORM_FLOAT_ID },
+              amount: totalCoinsUsed,
+              coinType: 'nuqta',
+              operationType: 'order_coin_deduction',
+              referenceId: (order._id as Types.ObjectId).toString(),
+              referenceModel: 'Order',
+              metadata: {
+                description: `Coin payment for online order ${order.orderNumber}`,
+                idempotencyKey: `order_coin_${order._id}`,
+              },
+            });
+            console.log(`✅ [ORDER:LEDGER] Ledger entry for coin deduction: ${totalCoinsUsed} coins, order ${order.orderNumber}`);
+          } catch (ledgerErr) {
+            console.error('[ORDER:LEDGER] Failed to create ledger entry for coin deduction (non-blocking):', ledgerErr);
+          }
+        }
       }
 
       const cart = await Cart.findOne({ user: order.user }).session(session);

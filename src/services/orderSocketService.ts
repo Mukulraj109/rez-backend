@@ -42,6 +42,9 @@ export enum OrderSocketEvent {
   WALLET_UPDATED = 'wallet:updated',
   MERCHANT_WALLET_UPDATED = 'merchant:wallet:updated',
 
+  // Order list events (for tracking page)
+  ORDER_LIST_UPDATED = 'order:list_updated',
+
   // Admin events
   PENDING_REWARD_CREATED = 'admin:pending-reward:created',
   PENDING_REWARD_UPDATED = 'admin:pending-reward:updated',
@@ -271,6 +274,17 @@ class OrderSocketService {
     }
 
     console.log(`📦 Order status updated: ${payload.orderNumber} -> ${payload.status}`);
+
+    // Also emit to user's order list room (if userId is in metadata)
+    if (payload.metadata?.userId) {
+      this.emitToUserOrderList(payload.metadata.userId, {
+        orderId: payload.orderId,
+        orderNumber: payload.orderNumber,
+        newStatus: payload.status,
+        previousStatus: payload.previousStatus,
+        timestamp: payload.timestamp,
+      });
+    }
   }
 
   /**
@@ -458,6 +472,26 @@ class OrderSocketService {
   }
 
   /**
+   * Emit order list update to user's general room.
+   * Used by the tracking page to update orders without full re-fetch.
+   */
+  public emitToUserOrderList(userId: string, data: {
+    orderId: string;
+    orderNumber: string;
+    newStatus: string;
+    previousStatus?: string;
+    counts?: { active: number; past: number };
+    timestamp: Date;
+  }): void {
+    if (!this.io) {
+      console.warn('Socket.IO not initialized. Cannot emit order list update.');
+      return;
+    }
+
+    this.emitToUser(userId, OrderSocketEvent.ORDER_LIST_UPDATED, data);
+  }
+
+  /**
    * Emit pending reward created/updated event to admin
    */
   public emitPendingRewardUpdate(payload: PendingRewardPayload, isNew: boolean = false): void {
@@ -499,5 +533,6 @@ export const {
   emitCoinsAwarded,
   emitMerchantWalletUpdated,
   emitPendingRewardUpdate,
+  emitToUserOrderList,
   getIO,
 } = orderSocketService;

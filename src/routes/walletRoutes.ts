@@ -10,17 +10,34 @@ import {
   updateWalletSettings,
   getCategoriesBreakdown,
   initiatePayment,
+  confirmPayment,
   checkPaymentStatus,
   getPaymentMethods,
-  handlePaymentWebhook,
+
   creditLoyaltyPoints,
   devTopup,
   syncWalletBalance,
-  refundPayment
+  refundPayment,
+  getExpiringCoins,
+  previewRechargeCashback,
+  getScheduledDrops,
+  getCoinRules
 } from '../controllers/walletController';
 import { authenticate } from '../middleware/auth';
+import { createRateLimiter } from '../middleware/rateLimiter';
+import { requireReAuth } from '../middleware/reAuth';
+import { requireWalletFeature, WALLET_FEATURES } from '../services/walletFeatureService';
 
 const router = express.Router();
+
+// Rate limiters for sensitive wallet operations
+const walletWriteLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, message: 'Too many wallet operations. Please try again later.' });
+const walletWithdrawLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 5, message: 'Daily withdrawal limit reached.' });
+const walletRefundLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 3, message: 'Too many refund requests.' });
+const walletPaymentLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, message: 'Too many payment requests. Please try again later.' });
+const walletCreditLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, message: 'Too many credit requests.' });
+const walletSyncLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 5, message: 'Too many sync requests.' });
+
 
 // All wallet routes require authentication
 router.use(authenticate);
@@ -38,7 +55,7 @@ router.get('/balance', getWalletBalance);
  * @body    { amount, source }
  * @access  Private
  */
-router.post('/credit-loyalty-points', creditLoyaltyPoints);
+router.post('/credit-loyalty-points', walletCreditLimiter, creditLoyaltyPoints);
 
 /**
  * @route   GET /api/wallet/transactions
@@ -76,7 +93,7 @@ router.get('/categories', getCategoriesBreakdown);
  * @body    { amount, paymentMethod, paymentId }
  * @access  Private
  */
-router.post('/topup', topupWallet);
+router.post('/topup', walletWriteLimiter, topupWallet);
 
 /**
  * @route   POST /api/wallet/withdraw
@@ -84,7 +101,7 @@ router.post('/topup', topupWallet);
  * @body    { amount, method, accountDetails }
  * @access  Private
  */
-router.post('/withdraw', withdrawFunds);
+router.post('/withdraw', walletWithdrawLimiter, requireReAuth(), requireWalletFeature(WALLET_FEATURES.WITHDRAWALS), withdrawFunds);
 
 /**
  * @route   POST /api/wallet/payment
@@ -92,7 +109,7 @@ router.post('/withdraw', withdrawFunds);
  * @body    { amount, orderId, storeId, storeName, description, items }
  * @access  Private
  */
-router.post('/payment', processPayment);
+router.post('/payment', walletPaymentLimiter, processPayment);
 
 /**
  * @route   PUT /api/wallet/settings
@@ -111,6 +128,14 @@ router.put('/settings', updateWalletSettings);
 router.post('/initiate-payment', initiatePayment);
 
 /**
+ * @route   POST /api/wallet/confirm-payment
+ * @desc    Confirm payment after frontend Stripe confirmCardPayment succeeds
+ * @body    { paymentIntentId }
+ * @access  Private
+ */
+router.post('/confirm-payment', confirmPayment);
+
+/**
  * @route   GET /api/wallet/payment-status/:paymentId
  * @desc    Check payment status
  * @access  Private
@@ -124,27 +149,23 @@ router.get('/payment-status/:paymentId', checkPaymentStatus);
  */
 router.get('/payment-methods', getPaymentMethods);
 
-/**
- * @route   POST /api/wallet/webhook/:gateway
- * @desc    Handle payment gateway webhooks
- * @access  Public (webhook endpoints)
- */
-router.post('/webhook/:gateway', handlePaymentWebhook);
 
 /**
  * @route   POST /api/wallet/dev-topup
  * @desc    Add test funds to wallet (DEVELOPMENT ONLY)
  * @body    { amount, type: 'rez' | 'promo' | 'cashback' }
- * @access  Private
+ * @access  Private (dev only)
  */
-router.post('/dev-topup', devTopup);
+if (process.env.NODE_ENV !== 'production') {
+  router.post('/dev-topup', walletWriteLimiter, devTopup);
+}
 
 /**
  * @route   POST /api/wallet/sync-balance
  * @desc    Sync wallet balance from CoinTransaction (fixes discrepancies)
  * @access  Private
  */
-router.post('/sync-balance', syncWalletBalance);
+router.post('/sync-balance', walletSyncLimiter, syncWalletBalance);
 
 /**
  * @route   POST /api/wallet/refund
@@ -152,6 +173,35 @@ router.post('/sync-balance', syncWalletBalance);
  * @body    { transactionId, amount, reason }
  * @access  Private
  */
-router.post('/refund', refundPayment);
+router.post('/refund', walletRefundLimiter, refundPayment);
+
+/**
+ * @route   GET /api/wallet/expiring-coins
+ * @desc    Get coins grouped by expiry period (this_week, this_month, next_month)
+ * @access  Private
+ */
+router.get('/expiring-coins', getExpiringCoins);
+
+/**
+ * @route   GET /api/wallet/recharge/preview
+ * @desc    Preview recharge cashback calculation before purchase
+ * @query   amount
+ * @access  Private
+ */
+router.get('/recharge/preview', previewRechargeCashback);
+
+/**
+ * @route   GET /api/wallet/scheduled-drops
+ * @desc    Get upcoming coin drops and claimable rewards
+ * @access  Private
+ */
+router.get('/scheduled-drops', getScheduledDrops);
+
+/**
+ * @route   GET /api/wallet/coin-rules
+ * @desc    Get dynamic coin usage/earning rules
+ * @access  Private
+ */
+router.get('/coin-rules', getCoinRules);
 
 export default router;

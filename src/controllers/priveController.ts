@@ -1198,19 +1198,20 @@ export const redeemCoins = async (req: Request, res: Response) => {
 
     await wallet.save();
 
-    // Create transaction record
+    // Create CoinTransaction record (source of truth for auto-sync)
     await CoinTransaction.create({
-      userId: userObjectId,
-      type: 'redemption',
-      amount: -coinAmount,
-      coinType: 'rez',
+      user: userObjectId,
+      type: 'spent',
+      amount: coinAmount,
+      balance: wallet.balance.available,
+      source: 'redemption',
       description: `Redeemed ${coinAmount} coins for ${type.replace('_', ' ')}`,
-      source: {
-        type: 'voucher',
-        id: voucher._id,
+      metadata: {
+        voucherId: voucher._id,
+        voucherCode,
+        voucherType: type,
+        voucherValue,
       },
-      balanceAfter: wallet.balance.available,
-      status: 'completed',
     });
 
     return res.status(200).json({

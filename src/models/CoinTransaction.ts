@@ -112,7 +112,10 @@ const CoinTransactionSchema: Schema = new Schema(
         'tournament_refund',    // coins refunded from tournament entry fee
         'challenge_reward',     // coins from completing challenges
         'learning_reward',      // coins from completing learning content
-        'leaderboard_prize'     // coins awarded as leaderboard prize at cycle end
+        'leaderboard_prize',    // coins awarded as leaderboard prize at cycle end
+        'recharge',             // wallet recharge via payment gateway
+        'transfer',             // P2P coin transfer between users
+        'withdrawal'            // wallet withdrawal to bank/UPI/PayPal
       ],
       required: true,
       index: true
@@ -144,6 +147,15 @@ CoinTransactionSchema.index({ user: 1, type: 1, createdAt: -1 });
 CoinTransactionSchema.index({ user: 1, source: 1, createdAt: -1 });
 CoinTransactionSchema.index({ expiresAt: 1 });
 CoinTransactionSchema.index({ user: 1, category: 1, createdAt: -1 });
+
+// Partner earnings aggregation index: enables fast per-user partner earnings breakdown
+CoinTransactionSchema.index(
+  { user: 1, 'metadata.partnerEarning': 1, 'metadata.partnerEarningType': 1, createdAt: -1 },
+  {
+    partialFilterExpression: { 'metadata.partnerEarning': true },
+    name: 'partner_earnings_idx'
+  }
+);
 
 // Idempotency index: prevents duplicate achievement rewards for the same user+achievement
 CoinTransactionSchema.index(

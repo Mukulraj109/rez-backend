@@ -11,6 +11,8 @@ import Achievement, {
 } from '../models/Achievement';
 import coinService from './coinService';
 import { ACHIEVEMENT_METRICS, EVENT_TO_METRICS } from '../config/achievementMetrics';
+import pushNotificationService from './pushNotificationService';
+import { User } from '../models/User';
 
 /**
  * AchievementEngine — Rule-based achievement processing engine.
@@ -287,6 +289,22 @@ class AchievementEngine {
         }
       );
       console.log(`[ACHIEVEMENT ENGINE] Awarded ${coins} coins for "${achievementDef.title}" to user ${userId}`);
+
+      // Send achievement unlocked SMS notification (fire-and-forget)
+      try {
+        const user = await User.findById(userId).select('phoneNumber').lean();
+        if (user?.phoneNumber) {
+          await pushNotificationService.sendAchievementUnlocked(
+            user.phoneNumber,
+            achievementDef.title,
+            coins
+          );
+        }
+      } catch (notifErr) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[ACHIEVEMENT ENGINE] Failed to send achievement notification:`, notifErr);
+        }
+      }
     } catch (err: any) {
       if (err.code === 11000) {
         // Duplicate key — reward already granted (idempotent success)

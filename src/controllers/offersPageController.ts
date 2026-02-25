@@ -16,17 +16,7 @@ import LoyaltyMilestone from '../models/LoyaltyMilestone';
 import FriendRedemption from '../models/FriendRedemption';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
-
-// Helper: Common date filters for active items
-const getActiveFilter = () => ({
-  isActive: true,
-  $or: [
-    { endTime: { $exists: false } },
-    { endTime: { $gte: new Date() } },
-    { validUntil: { $exists: false } },
-    { validUntil: { $gte: new Date() } },
-  ],
-});
+import { getOffersPageData as getAggregatedData } from '../services/offersPageService';
 
 /**
  * GET /api/offers/hotspots
@@ -90,6 +80,7 @@ export const getHotspotOffers = async (req: Request, res: Response) => {
     const offers = await Offer.find({
       'validity.isActive': true,
       'validity.endDate': { $gte: new Date() },
+      adminApproved: { $ne: false },
       location: {
         $geoWithin: {
           $centerSphere: [
@@ -122,6 +113,7 @@ export const getBOGOOffers = async (req: Request, res: Response) => {
       'validity.isActive': true,
       'validity.endDate': { $gte: new Date() },
       bogoType: { $exists: true, $ne: null },
+      adminApproved: { $ne: false },
     };
 
     if (bogoType) {
@@ -152,6 +144,7 @@ export const getSaleOffers = async (req: Request, res: Response) => {
       'validity.isActive': true,
       'validity.endDate': { $gte: new Date() },
       saleTag: { $exists: true, $ne: null },
+      adminApproved: { $ne: false },
     };
 
     if (saleTag) {
@@ -182,6 +175,7 @@ export const getFreeDeliveryOffers = async (req: Request, res: Response) => {
       'validity.isActive': true,
       'validity.endDate': { $gte: new Date() },
       isFreeDelivery: true,
+      adminApproved: { $ne: false },
     })
       .sort({ 'metadata.priority': -1 })
       .limit(parseInt(limit as string))
@@ -310,6 +304,7 @@ export const getExclusiveZoneOffers = async (req: Request, res: Response) => {
       'validity.isActive': true,
       'validity.endDate': { $gte: new Date() },
       exclusiveZone: slug,
+      adminApproved: { $ne: false },
     })
       .sort({ 'metadata.priority': -1 })
       .limit(parseInt(limit as string))
@@ -402,6 +397,7 @@ export const getSpecialProfileOffers = async (req: Request, res: Response) => {
       'validity.isActive': true,
       'validity.endDate': { $gte: new Date() },
       'metadata.tags': { $in: [slug, profile.name.toLowerCase()] },
+      adminApproved: { $ne: false },
     })
       .sort({ 'metadata.priority': -1 })
       .limit(parseInt(limit as string))
@@ -423,11 +419,40 @@ export const getFriendsRedeemed = async (req: Request, res: Response) => {
     const { limit = 10 } = req.query;
     const userId = (req as any).user?._id;
 
-    // For now, get recent redemptions as social proof
-    // TODO: Filter by actual friends when friend system is implemented
+    // If authenticated, filter by user's followed accounts
+    if (userId) {
+      try {
+        const Follow = (await import('../models/Follow')).default;
+        const following = await Follow.find({ follower: userId })
+          .select('following')
+          .lean();
+
+        const followedIds = following.map((f: any) => f.following);
+
+        if (followedIds.length > 0) {
+          const redemptions = await FriendRedemption.find({
+            isVisible: true,
+            friendId: { $in: followedIds },
+          })
+            .populate('offerId')
+            .populate('friendId', 'fullName avatar')
+            .sort({ redeemedAt: -1 })
+            .limit(parseInt(limit as string))
+            .lean();
+
+          if (redemptions.length > 0) {
+            return sendSuccess(res, redemptions, 'Friends redemptions retrieved successfully');
+          }
+        }
+      } catch {
+        // Fall through to popular redemptions
+      }
+    }
+
+    // Fallback: show popular recent redemptions
     const redemptions = await FriendRedemption.find({ isVisible: true })
       .populate('offerId')
-      .populate('friendId', 'name avatar')
+      .populate('friendId', 'fullName avatar')
       .sort({ redeemedAt: -1 })
       .limit(parseInt(limit as string))
       .lean();
@@ -573,21 +598,72 @@ export const getLoyaltyProgress = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?._id;
 
-    // Get all active milestones
     const milestones = await LoyaltyMilestone.find({ isActive: true })
       .sort({ order: 1 })
       .lean();
 
-    // TODO: Calculate user's progress for each milestone
-    // For now, return milestones with dummy progress
-    const milestonesWithProgress = milestones.map((milestone) => ({
-      ...milestone,
-      currentProgress: 0, // Will be calculated based on user data
-      progressPercentage: 0,
-      isCompleted: false,
-    }));
+    if (!userId) {
+      // Unauthenticated: return milestones with zero progress
+      const milestonesWithProgress = milestones.map((milestone) => ({
+        ...milestone,
+        currentProgress: 0,
+        progressPercentage: 0,
+        isCompleted: false,
+      }));
+      return sendSuccess(res, milestonesWithProgress, 'Loyalty progress retrieved successfully');
+    }
 
-    sendSuccess(res, milestonesWithProgress, 'Loyalty progress retrieved successfully');
+    // Calculate real progress from CoinTransaction + OfferRedemption
+    try {
+      const { CoinTransaction } = await import('../models/CoinTransaction');
+      const OfferRedemption = (await import('../models/OfferRedemption')).default;
+
+      const [totalEarnings, totalRedemptions] = await Promise.all([
+        CoinTransaction.aggregate([
+          { $match: { userId, type: 'credit' } },
+          { $group: { _id: null, total: { $sum: '$amount' } } },
+        ]),
+        OfferRedemption.countDocuments({ userId }),
+      ]);
+
+      const userTotalEarned = totalEarnings[0]?.total || 0;
+      const userTotalRedeemed = totalRedemptions;
+
+      const milestonesWithProgress = milestones.map((milestone: any) => {
+        const targetValue = milestone.targetValue || 100;
+        let currentProgress = 0;
+
+        switch (milestone.progressType) {
+          case 'coins_earned':
+            currentProgress = userTotalEarned;
+            break;
+          case 'redemptions':
+            currentProgress = userTotalRedeemed;
+            break;
+          default:
+            currentProgress = userTotalEarned;
+        }
+
+        const progressPercentage = Math.min(100, Math.round((currentProgress / targetValue) * 100));
+        return {
+          ...milestone,
+          currentProgress,
+          progressPercentage,
+          isCompleted: currentProgress >= targetValue,
+        };
+      });
+
+      sendSuccess(res, milestonesWithProgress, 'Loyalty progress retrieved successfully');
+    } catch {
+      // Fallback to zero progress on error
+      const milestonesWithProgress = milestones.map((milestone) => ({
+        ...milestone,
+        currentProgress: 0,
+        progressPercentage: 0,
+        isCompleted: false,
+      }));
+      sendSuccess(res, milestonesWithProgress, 'Loyalty progress retrieved successfully');
+    }
   } catch (error) {
     console.error('Error fetching loyalty progress:', error);
     sendError(res, 'Failed to fetch loyalty progress', 500);
@@ -624,6 +700,7 @@ export const getDiscountBuckets = async (req: Request, res: Response) => {
     const baseFilter = {
       'validity.isActive': true,
       'validity.endDate': { $gte: now },
+      adminApproved: { $ne: false },
     };
 
     // Use MongoDB aggregation with $facet to get all counts in a single query
@@ -775,6 +852,7 @@ export const getFlashSaleOffers = async (req: Request, res: Response) => {
     const offers = await Offer.find({
       'metadata.flashSale.isActive': true,
       'metadata.flashSale.endTime': { $gte: new Date() },
+      adminApproved: { $ne: false },
     })
       .populate('store', 'name logo')
       .sort({ 'metadata.flashSale.endTime': 1, 'metadata.priority': -1 })
@@ -804,5 +882,30 @@ export const getFlashSaleOffers = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('❌ [FLASH SALES] Error fetching flash sale offers:', error);
     sendError(res, 'Failed to fetch flash sale offers', 500);
+  }
+};
+
+/**
+ * GET /api/offers/page-data-v2
+ * Aggregated offers page data - single endpoint replaces 21 parallel calls
+ */
+export const getAggregatedOffersPageData = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?._id?.toString();
+    const { lat, lng, tab = 'all' } = req.query;
+    const region = (req.headers['x-rez-region'] as string) || 'all';
+
+    const response = await getAggregatedData({
+      userId,
+      lat: lat ? parseFloat(lat as string) : undefined,
+      lng: lng ? parseFloat(lng as string) : undefined,
+      region,
+      tab: tab as 'offers' | 'cashback' | 'exclusive' | 'all',
+    });
+
+    sendSuccess(res, response, 'Offers page data retrieved successfully');
+  } catch (error) {
+    console.error('[OFFERS_PAGE] Error fetching aggregated data:', error);
+    sendError(res, 'Failed to fetch offers page data', 500);
   }
 };

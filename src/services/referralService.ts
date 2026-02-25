@@ -4,11 +4,14 @@
 import { Types } from 'mongoose';
 import Referral, { ReferralStatus, IReferral } from '../models/Referral';
 import { User } from '../models/User';
-import { Transaction } from '../models/Transaction';
+import { CoinTransaction } from '../models/CoinTransaction';
 import { Wallet } from '../models/Wallet';
 import activityService from './activityService';
 import { ActivityType } from '../models/Activity';
 import challengeService from './challengeService';
+import { ReferralTierService } from './referralTierService';
+
+const referralTierService = new ReferralTierService();
 
 interface CreateReferralParams {
   referrerId: Types.ObjectId;
@@ -129,37 +132,29 @@ class ReferralService {
 
     // Credit referrer's reward if not already done
     if (!referral.referrerRewarded) {
-      const referrerWallet = await Wallet.findOne({ user: referral.referrer });
       const rewards = referral.rewards as any;
+      const rewardAmount = rewards.referrerAmount || 0;
 
-      if (referrerWallet) {
-        // Add reward amount to wallet
-        referrerWallet.balance.total += rewards.referrerAmount || 0;
-        referrerWallet.balance.available += rewards.referrerAmount || 0;
-        referrerWallet.statistics.totalEarned += rewards.referrerAmount || 0;
-        await referrerWallet.save();
-
-        // Create transaction record
-        await Transaction.create({
-          user: referral.referrer,
-          type: 'credit',
-          amount: rewards.referrerAmount || 0,
-          description: 'Referral reward - Friend completed first order',
-          status: 'success',
-          source: {
-            type: 'referral',
-            referralInfo: {
-              referredUser: refereeId,
-              level: 'first_order',
-            },
-          },
-        });
+      if (rewardAmount > 0) {
+        // Use CoinTransaction (single source of truth for coin earnings)
+        await CoinTransaction.createTransaction(
+          String(referral.referrer),
+          'earned',
+          rewardAmount,
+          'referral',
+          'Referral reward - Friend completed first order',
+          {
+            referralId: referral._id,
+            referredUser: String(refereeId),
+            level: 'first_order',
+          }
+        );
 
         // Create activity for referrer
         await activityService.referral.onReferralCompleted(
           referral.referrer as Types.ObjectId,
           referral._id as Types.ObjectId,
-          `Friend completed first order! ₹${rewards.referrerAmount || 0} earned`
+          `Friend completed first order! ₹${rewardAmount} earned`
         );
 
         referral.referrerRewarded = true;
@@ -178,10 +173,20 @@ class ReferralService {
       ).catch(err => console.error('[REFERRAL] Challenge progress update failed:', err));
     }
 
+    referral.markModified('metadata');
     await referral.save();
 
     // Update user referral stats
     await this.updateUserReferralStats(referral.referrer as Types.ObjectId);
+
+    // Auto-check tier upgrade for the referrer (non-blocking)
+    referralTierService.checkTierUpgrade(String(referral.referrer))
+      .then(result => {
+        if (result.upgraded) {
+          console.log(`🏆 [REFERRAL] Referrer auto-upgraded to tier ${result.newTier}`);
+        }
+      })
+      .catch(err => console.error('[REFERRAL] Tier upgrade check failed:', err));
 
     // Log without PII - only sanitized referral ID
     console.log(`✅ [REFERRAL] Processed first order for referral ID: ${(referral._id as any).toString().slice(-6)}`);
@@ -210,30 +215,20 @@ class ReferralService {
     const rewards = referral.rewards as any;
     const bonusAmount = rewards.milestoneBonus || 20;
 
-    // Credit bonus to referrer's wallet
-    const referrerWallet = await Wallet.findOne({ user: referral.referrer });
-
-    if (referrerWallet) {
-      referrerWallet.balance.total += bonusAmount;
-      referrerWallet.balance.available += bonusAmount;
-      referrerWallet.statistics.totalEarned += bonusAmount;
-      await referrerWallet.save();
-
-      // Create transaction record
-      await Transaction.create({
-        user: referral.referrer,
-        type: 'credit',
-        amount: bonusAmount,
-        description: 'Referral milestone bonus - Friend completed 3 orders',
-        status: 'success',
-        source: {
-          type: 'referral',
-          referralInfo: {
-            referredUser: refereeId,
-            level: 'milestone_3',
-          },
-        },
-      });
+    if (bonusAmount > 0) {
+      // Use CoinTransaction (single source of truth for coin earnings)
+      await CoinTransaction.createTransaction(
+        String(referral.referrer),
+        'earned',
+        bonusAmount,
+        'referral',
+        'Referral milestone bonus - Friend completed 3 orders',
+        {
+          referralId: referral._id,
+          referredUser: String(refereeId),
+          level: 'milestone_3',
+        }
+      );
 
       // Create activity for milestone
       await activityService.referral.onReferralCompleted(
@@ -248,11 +243,21 @@ class ReferralService {
         totalAmount: referral.metadata.milestoneOrders?.totalAmount || 0,
         lastOrderAt: new Date(),
       };
+      referral.markModified('metadata');
 
       await referral.save();
 
       // Update user referral stats
       await this.updateUserReferralStats(referral.referrer as Types.ObjectId);
+
+      // Auto-check tier upgrade for the referrer (non-blocking)
+      referralTierService.checkTierUpgrade(String(referral.referrer))
+        .then(result => {
+          if (result.upgraded) {
+            console.log(`🏆 [REFERRAL] Referrer auto-upgraded to tier ${result.newTier} after milestone`);
+          }
+        })
+        .catch(err => console.error('[REFERRAL] Tier upgrade check failed after milestone:', err));
 
       // Log without PII - only sanitized referral ID
       console.log(`✅ [REFERRAL] Processed milestone bonus for referral ID: ${(referral._id as any).toString().slice(-6)}`);

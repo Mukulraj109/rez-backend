@@ -2,7 +2,7 @@
 // Handles user profile management API endpoints
 
 import { Request, Response } from 'express';
-import { sendSuccess, sendError, sendBadRequest, sendNotFound } from '../utils/response';
+import { sendSuccess, sendError, sendBadRequest, sendNotFound, sendValidationError } from '../utils/response';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { User } from '../models/User';
@@ -195,8 +195,18 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
     };
 
     sendSuccess(res, updatedProfile, 'Profile updated successfully');
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ [PROFILE_UPDATE] Error:', error);
+
+    // Handle Mongoose validation errors — return field-specific messages
+    if (error.name === 'ValidationError' && error.errors) {
+      const validationErrors = Object.values(error.errors).map((err: any) => ({
+        field: err.path?.replace('profile.', '') || 'unknown',
+        message: err.message,
+      }));
+      return sendValidationError(res, validationErrors);
+    }
+
     throw new AppError('Failed to update profile', 500);
   }
 });

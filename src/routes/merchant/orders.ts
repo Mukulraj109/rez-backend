@@ -69,8 +69,8 @@ router.put('/:id/status',
   })),
   validate(Joi.object({
     status: Joi.string().valid(
-      'placed', 'confirmed', 'preparing', 'ready',
-      'dispatched', 'delivered', 'cancelled', 'returned', 'refunded'
+      'confirmed', 'preparing', 'ready',
+      'dispatched', 'delivered', 'cancelled'
     ).required(),
     notes: Joi.string().trim().max(500).optional(),
     notifyCustomer: Joi.boolean().default(true)

@@ -40,6 +40,7 @@ export interface ITournament extends Document {
   totalPrizePool: number;
   image?: string;
   featured: boolean;
+  endingSoonNotified?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -154,6 +155,10 @@ const TournamentSchema: Schema = new Schema(
     },
     image: String,
     featured: {
+      type: Boolean,
+      default: false
+    },
+    endingSoonNotified: {
       type: Boolean,
       default: false
     }
