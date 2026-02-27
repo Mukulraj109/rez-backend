@@ -81,6 +81,7 @@ export interface ISubscription extends Document {
   previousTier?: SubscriptionTier;
   upgradeDate?: Date;
   downgradeScheduledFor?: Date;
+  downgradeTargetTier?: SubscriptionTier;
   proratedCredit?: number;
 
   // Metadata
@@ -327,6 +328,10 @@ const SubscriptionSchema = new Schema<ISubscription, ISubscriptionModel>({
   downgradeScheduledFor: {
     type: Date
   },
+  downgradeTargetTier: {
+    type: String,
+    enum: ['free', 'premium', 'vip']
+  },
   proratedCredit: {
     type: Number,
     default: 0,
@@ -364,14 +369,16 @@ SubscriptionSchema.virtual('daysRemaining').get(function (this: ISubscription) {
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
 });
 
-// Instance method to check if subscription is active
+// Instance method to check if subscription is active (includes trial and grace period)
 SubscriptionSchema.methods.isActive = function (this: ISubscription): boolean {
   const now = new Date();
-  return (
-    this.status === 'active' &&
-    this.endDate > now &&
-    (this.tier === 'premium' || this.tier === 'vip')
-  );
+  if (this.tier !== 'premium' && this.tier !== 'vip') return false;
+
+  if (this.status === 'active' && this.endDate > now) return true;
+  if (this.status === 'trial' && this.trialEndDate && this.trialEndDate > now) return true;
+  if (this.status === 'grace_period') return this.isInGracePeriod();
+
+  return false;
 };
 
 // Instance method to check if in trial period

@@ -3,40 +3,13 @@ import crypto from 'crypto';
 import { Subscription, ISubscription } from '../models/Subscription';
 import { SubscriptionTier, BillingCycle } from '../models/Subscription';
 import { User } from '../models/User';
+import tierConfigService from './tierConfigService';
 
 // Initialize Razorpay instance
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID || '',
   key_secret: process.env.RAZORPAY_KEY_SECRET || ''
 });
-
-// Razorpay subscription plan configuration
-const RAZORPAY_PLANS = {
-  premium_monthly: {
-    period: 'monthly',
-    interval: 1,
-    amount: 9900, // ₹99 in paise
-    currency: 'INR'
-  },
-  premium_yearly: {
-    period: 'yearly',
-    interval: 1,
-    amount: 99900, // ₹999 in paise
-    currency: 'INR'
-  },
-  vip_monthly: {
-    period: 'monthly',
-    interval: 1,
-    amount: 29900, // ₹299 in paise
-    currency: 'INR'
-  },
-  vip_yearly: {
-    period: 'yearly',
-    interval: 1,
-    amount: 299900, // ₹2999 in paise
-    currency: 'INR'
-  }
-};
 
 export interface IRazorpayPlan {
   id: string;
@@ -87,23 +60,20 @@ class RazorpaySubscriptionService {
         throw new Error('Cannot create Razorpay plan for free tier');
       }
 
-      const planKey = `${tier}_${billingCycle}`;
-      const planConfig = RAZORPAY_PLANS[planKey as keyof typeof RAZORPAY_PLANS];
+      // Get pricing from DB (single source of truth)
+      const price = await tierConfigService.getTierPrice(tier, billingCycle);
+      const amountInPaise = Math.round(price * 100);
 
-      if (!planConfig) {
-        throw new Error(`Invalid plan configuration: ${planKey}`);
-      }
+      const period = billingCycle === 'yearly' ? 'yearly' : 'monthly';
 
-      // In production, you would fetch existing plans and return if found
-      // For now, we'll create a new plan
       const planData: any = {
-        period: planConfig.period as 'daily' | 'weekly' | 'monthly' | 'yearly',
-        interval: planConfig.interval,
+        period: period as 'daily' | 'weekly' | 'monthly' | 'yearly',
+        interval: 1,
         item: {
           name: `${tier.toUpperCase()} ${billingCycle}`,
           description: `${tier.toUpperCase()} subscription - ${billingCycle} billing`,
-          amount: planConfig.amount,
-          currency: planConfig.currency
+          amount: amountInPaise,
+          currency: 'INR'
         },
         notes: {
           tier,
@@ -399,16 +369,26 @@ class RazorpaySubscriptionService {
 
     // Extend end date for next billing cycle
     const now = new Date();
-    const endDate = new Date(subscription.endDate);
+    const currentEndDate = new Date(subscription.endDate);
 
-    if (now >= endDate) {
+    if (now >= currentEndDate) {
       // Subscription has expired, extend from now
+      const newEndDate = new Date(now);
       if (subscription.billingCycle === 'monthly') {
-        endDate.setMonth(now.getMonth() + 1);
+        newEndDate.setMonth(newEndDate.getMonth() + 1);
       } else {
-        endDate.setFullYear(now.getFullYear() + 1);
+        newEndDate.setFullYear(newEndDate.getFullYear() + 1);
       }
-      subscription.endDate = endDate;
+      subscription.endDate = newEndDate;
+    } else {
+      // Pre-expiry charge (normal Razorpay behavior): extend from current endDate
+      const newEndDate = new Date(currentEndDate);
+      if (subscription.billingCycle === 'monthly') {
+        newEndDate.setMonth(newEndDate.getMonth() + 1);
+      } else {
+        newEndDate.setFullYear(newEndDate.getFullYear() + 1);
+      }
+      subscription.endDate = newEndDate;
     }
 
     await subscription.save();

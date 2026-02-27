@@ -24,8 +24,18 @@ import {
   getVouchers,
   getVoucherById,
   markVoucherUsed,
+  getRedeemConfig,
+  getCatalog,
 } from '../controllers/priveController';
+import {
+  getSmartSpendCatalog,
+  getSmartSpendItem,
+  trackSmartSpendClick,
+} from '../controllers/smartSpendController';
+import { getPriveReviewDashboard } from '../controllers/priveReviewController';
 import { authenticate } from '../middleware/auth';
+import { strictLimiter, generalLimiter } from '../middleware/rateLimiter';
+import { requireReAuthForRedemption } from '../middleware/reAuth';
 
 const router = Router();
 
@@ -55,7 +65,7 @@ router.get('/pillars', getPillarBreakdown);
  * @desc    Force recalculation of reputation score
  * @access  Private
  */
-router.post('/refresh', refreshEligibility);
+router.post('/refresh', strictLimiter, refreshEligibility);
 
 /**
  * @route   GET /api/prive/history
@@ -87,7 +97,7 @@ router.post('/check-in', dailyCheckIn);
  * @desc    Get daily habit loops with progress
  * @access  Private
  */
-router.get('/habit-loops', getHabitLoops);
+router.get('/habit-loops', generalLimiter, getHabitLoops);
 
 // ==========================================
 // Dashboard
@@ -98,7 +108,14 @@ router.get('/habit-loops', getHabitLoops);
  * @desc    Get combined dashboard data (eligibility, coins, offers, etc.)
  * @access  Private
  */
-router.get('/dashboard', getPriveDashboard);
+router.get('/dashboard', generalLimiter, getPriveDashboard);
+
+/**
+ * @route   GET /api/prive/review-dashboard
+ * @desc    Get aggregated review dashboard data for Privé Review & Earn
+ * @access  Private
+ */
+router.get('/review-dashboard', generalLimiter, getPriveReviewDashboard);
 
 // ==========================================
 // Offers
@@ -155,6 +172,24 @@ router.get('/earnings', getEarnings);
 router.get('/transactions', getTransactions);
 
 // ==========================================
+// Redemption Config & Catalog
+// ==========================================
+
+/**
+ * @route   GET /api/prive/redeem-config
+ * @desc    Get server-side redemption configuration
+ * @access  Private
+ */
+router.get('/redeem-config', getRedeemConfig);
+
+/**
+ * @route   GET /api/prive/catalog
+ * @desc    Get server-side redemption catalog
+ * @access  Private
+ */
+router.get('/catalog', getCatalog);
+
+// ==========================================
 // Redemption & Vouchers
 // ==========================================
 
@@ -163,7 +198,7 @@ router.get('/transactions', getTransactions);
  * @desc    Redeem coins for a voucher
  * @access  Private
  */
-router.post('/redeem', redeemCoins);
+router.post('/redeem', strictLimiter, requireReAuthForRedemption(), redeemCoins);
 
 /**
  * @route   GET /api/prive/vouchers
@@ -184,6 +219,31 @@ router.get('/vouchers/:id', getVoucherById);
  * @desc    Mark a voucher as used
  * @access  Private
  */
-router.post('/vouchers/:id/use', markVoucherUsed);
+router.post('/vouchers/:id/use', strictLimiter, markVoucherUsed);
+
+// ==========================================
+// Smart Spend Marketplace
+// ==========================================
+
+/**
+ * @route   GET /api/prive/smart-spend
+ * @desc    Get curated Smart Spend catalog
+ * @access  Private
+ */
+router.get('/smart-spend', generalLimiter, getSmartSpendCatalog);
+
+/**
+ * @route   GET /api/prive/smart-spend/:id
+ * @desc    Get single Smart Spend item detail
+ * @access  Private
+ */
+router.get('/smart-spend/:id', getSmartSpendItem);
+
+/**
+ * @route   POST /api/prive/smart-spend/:id/click
+ * @desc    Track Smart Spend item click for analytics
+ * @access  Private
+ */
+router.post('/smart-spend/:id/click', trackSmartSpendClick);
 
 export default router;

@@ -52,6 +52,8 @@ router.get('/value-proposition/:tier', subscriptionController.getValuePropositio
 router.post('/subscribe', subscriptionController.subscribeToPlan);
 router.post('/validate-promo', subscriptionController.validatePromoCode);
 router.post('/upgrade', subscriptionController.upgradeSubscription);
+router.post('/upgrade/initiate', subscriptionController.initiateUpgrade);
+router.post('/upgrade/confirm', subscriptionController.confirmUpgrade);
 router.post('/downgrade', subscriptionController.downgradeSubscription);
 router.post('/cancel', subscriptionController.cancelSubscription);
 router.post('/renew', subscriptionController.renewSubscription);

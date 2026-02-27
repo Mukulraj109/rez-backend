@@ -236,12 +236,20 @@ import {
   adminExclusiveZonesRoutes,
   adminSpecialProfilesRoutes,
   adminLoyaltyMilestonesRoutes,
+  adminSupportRoutes,
+  adminSupportConfigRoutes,
+  adminFaqRoutes,
+  adminNotificationMgmtRoutes,
+  adminFraudReportsRoutes,
+  adminMembershipRoutes,
+  adminAdminUsersRoutes,
 } from './routes/admin';
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
 import bonusZoneRoutes from './routes/bonusZoneRoutes';  // Bonus Zone campaign routes
 import adminBonusZoneRoutes from './routes/admin/bonusZone';  // Admin Bonus Zone management
 import adminOffersSectionRoutes from './routes/admin/offersSectionConfig';  // Admin Offers Section Config
 import adminStoreCollectionRoutes from './routes/admin/storeCollectionConfig';  // Admin Store Collection Config
+import adminPriveRoutes from './routes/admin/priveAdmin';  // Admin Privé management
 import lockDealRoutes from './routes/lockDealRoutes';  // Lock Price Deal routes
 import playEarnRoutes from './routes/playEarnRoutes';  // Play & Earn config routes
 import learningRoutes from './routes/learningRoutes';  // Learning content routes
@@ -626,6 +634,10 @@ const io = new SocketIOServer(server, {
   }
 });
 
+// Register Socket.IO instance so services (supportSocketService, etc.) can emit events
+import { initializeSocket } from './config/socket';
+initializeSocket(io);
+
 // API info endpoint (directly after health)
 app.get('/api-info', (req, res) => {
   res.json({
@@ -987,8 +999,10 @@ console.log('✅ Admin campaigns routes registered at /api/admin/campaigns');
 app.use(`${API_PREFIX}/admin/bonus-zone`, adminBonusZoneRoutes);
 app.use(`${API_PREFIX}/admin/offers-sections`, adminOffersSectionRoutes);
 app.use(`${API_PREFIX}/admin/store-collections`, adminStoreCollectionRoutes);
+app.use(`${API_PREFIX}/admin/prive`, adminPriveRoutes);
 console.log('✅ Admin bonus zone routes registered at /api/admin/bonus-zone');
 console.log('✅ Admin store-collections routes registered at /api/admin/store-collections');
+console.log('✅ Admin Privé routes registered at /api/admin/prive');
 app.use(`${API_PREFIX}/admin/uploads`, adminUploadsRoutes);
 console.log('✅ Admin uploads routes registered at /api/admin/uploads');
 app.use(`${API_PREFIX}/admin/experiences`, adminExperiencesRoutes);
@@ -1078,6 +1092,20 @@ app.use(`${API_PREFIX}/admin/special-profiles`, adminSpecialProfilesRoutes);
 console.log('✅ Admin special profiles routes registered at /api/admin/special-profiles');
 app.use(`${API_PREFIX}/admin/loyalty-milestones`, adminLoyaltyMilestonesRoutes);
 console.log('✅ Admin loyalty milestones routes registered at /api/admin/loyalty-milestones');
+app.use(`${API_PREFIX}/admin/support-config`, adminSupportConfigRoutes);
+console.log('✅ Admin support config routes registered at /api/admin/support-config');
+app.use(`${API_PREFIX}/admin/support`, adminSupportRoutes);
+console.log('✅ Admin support routes registered at /api/admin/support');
+app.use(`${API_PREFIX}/admin/support/faq`, adminFaqRoutes);
+console.log('✅ Admin FAQ routes registered at /api/admin/support/faq');
+app.use(`${API_PREFIX}/admin/notifications`, adminNotificationMgmtRoutes);
+console.log('✅ Admin notification management routes registered at /api/admin/notifications');
+app.use(`${API_PREFIX}/admin/fraud-reports`, adminFraudReportsRoutes);
+console.log('✅ Admin fraud reports routes registered at /api/admin/fraud-reports');
+app.use(`${API_PREFIX}/admin/membership`, adminMembershipRoutes);
+console.log('✅ Admin membership routes registered at /api/admin/membership');
+app.use(`${API_PREFIX}/admin/admin-users`, adminAdminUsersRoutes);
+console.log('✅ Admin user management routes registered at /api/admin/admin-users');
 
 // Admin Engagement Config Routes
 import { Router as EngagementConfigRouter } from 'express';
@@ -1315,12 +1343,67 @@ io.on('connection', (socket) => {
 
   // Auto-join user's personal room
   socket.join(`user-${userId}`);
+  console.log(`[Socket] Connected: userId=${userId}, role=${userRole}, socketId=${socket.id}, rooms=[${[...socket.rooms].join(', ')}]`);
+
+  // Auto-join support-agents room for admin users
+  if (userRole === 'admin' || userRole === 'super_admin' || userRole === 'superadmin') {
+    socket.join('support-agents');
+    console.log(`[Socket] Admin ${userId} joined support-agents room`);
+  }
 
   // Join merchant room (only if merchant/admin role)
   socket.on('join-merchant-room', (merchantId: string) => {
     if (userRole === 'merchant' || userRole === 'admin' || userRole === 'superadmin') {
       socket.join(`merchant-${merchantId}`);
     }
+  });
+
+  // Join a specific support ticket room (any authenticated user)
+  const handleJoinTicket = (ticketId: string) => {
+    if (ticketId) {
+      socket.join(`support-ticket-${ticketId}`);
+      console.log(`[Socket] User ${userId} (${userRole}) joined support-ticket-${ticketId}`);
+    }
+  };
+  socket.on('join-support-ticket', handleJoinTicket);
+  socket.on('join_ticket', (data: any) => {
+    // Frontend realTimeService sends { ticketId } as data
+    const tid = typeof data === 'string' ? data : data?.ticketId;
+    if (tid) handleJoinTicket(tid);
+  });
+
+  // Leave a specific support ticket room
+  socket.on('leave-support-ticket', (ticketId: string) => {
+    socket.leave(`support-ticket-${ticketId}`);
+  });
+  socket.on('leave_ticket', (data: any) => {
+    const tid = typeof data === 'string' ? data : data?.ticketId;
+    if (tid) socket.leave(`support-ticket-${tid}`);
+  });
+
+  // Admin typing indicator for support chat
+  socket.on('support-agent-typing', (data: { ticketId: string; isTyping: boolean }) => {
+    if (userRole === 'admin' || userRole === 'super_admin' || userRole === 'superadmin') {
+      const event = data.isTyping ? 'support_agent_typing_start' : 'support_agent_typing_stop';
+      socket.to(`support-ticket-${data.ticketId}`).emit(event, {
+        ticketId: data.ticketId,
+        agentId: userId,
+      });
+    }
+  });
+
+  // User typing indicator for support chat
+  socket.on('support-user-typing', (data: { ticketId: string; isTyping: boolean }) => {
+    const event = data.isTyping ? 'support_user_typing_start' : 'support_user_typing_stop';
+    socket.to(`support-ticket-${data.ticketId}`).emit(event, {
+      ticketId: data.ticketId,
+      userId: userId,
+    });
+    // Also notify support-agents room
+    socket.to('support-agents').emit(event, {
+      ticketId: data.ticketId,
+      userId: userId,
+    });
   });
 
   socket.on('disconnect', () => {

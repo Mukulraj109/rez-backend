@@ -15,7 +15,7 @@ import { uploadReviewImage as uploadReviewImageController } from '../controllers
 import { uploadReviewImage as uploadReviewImageMiddleware } from '../middleware/upload';
 import { requireAuth } from '../middleware/auth';
 import { validateQuery, validateParams, validateBody, commonSchemas } from '../middleware/validation';
-// // import { generalLimiter, reviewLimiter } from '../middleware/rateLimiter'; // Disabled for development // Disabled for development
+import { generalLimiter, reviewLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 
 const router = Router();
@@ -71,7 +71,7 @@ router.get('/store/:storeId/can-review',
 
 // Create a new review
 router.post('/store/:storeId',
-  // reviewLimiter,, // Disabled for development
+  reviewLimiter,
   requireAuth,
   validateParams(Joi.object({
     storeId: commonSchemas.objectId()
@@ -79,7 +79,7 @@ router.post('/store/:storeId',
   validateBody(Joi.object({
     rating: Joi.number().integer().min(1).max(5).required(),
     title: Joi.string().trim().max(100),
-    comment: Joi.string().trim().min(10).max(1000).required(),
+    comment: Joi.string().trim().min(50).max(1000).required(),
     images: Joi.array().items(Joi.string().uri()).max(5)
   })),
   createReview

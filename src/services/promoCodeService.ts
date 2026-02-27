@@ -1,18 +1,13 @@
 import { Types } from 'mongoose';
 import { PromoCode, IPromoCodeValidationResult } from '../models/PromoCode';
 import { SubscriptionTier, BillingCycle, Subscription } from '../models/Subscription';
+import tierConfigService from './tierConfigService';
 
 /**
- * Get subscription price based on tier and billing cycle
+ * Get subscription price based on tier and billing cycle (from DB via tierConfigService)
  */
-export const getSubscriptionPrice = (tier: SubscriptionTier, billingCycle: BillingCycle): number => {
-  const pricing: { [key: string]: { monthly: number; yearly: number } } = {
-    free: { monthly: 0, yearly: 0 },
-    premium: { monthly: 99, yearly: 999 },
-    vip: { monthly: 299, yearly: 2999 }
-  };
-
-  return billingCycle === 'monthly' ? pricing[tier].monthly : pricing[tier].yearly;
+export const getSubscriptionPrice = async (tier: SubscriptionTier, billingCycle: BillingCycle): Promise<number> => {
+  return tierConfigService.getTierPrice(tier, billingCycle);
 };
 
 /**
@@ -31,8 +26,8 @@ export const validatePromoCode = async (
   promoCode?: any;
 }> => {
   try {
-    // Get original price
-    const originalPrice = getSubscriptionPrice(tier, billingCycle);
+    // Get original price from DB
+    const originalPrice = await getSubscriptionPrice(tier, billingCycle);
 
     // Use the static method from PromoCode model
     const result: IPromoCodeValidationResult = await PromoCode.validateCode(
@@ -85,7 +80,7 @@ export const applyPromoCode = async (
 }> => {
   try {
     // First validate the code
-    const originalPrice = getSubscriptionPrice(tier, billingCycle);
+    const originalPrice = await getSubscriptionPrice(tier, billingCycle);
     const validation = await PromoCode.validateCode(
       code,
       tier,

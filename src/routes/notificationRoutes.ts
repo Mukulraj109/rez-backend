@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   getUserNotifications,
+  getUnreadCount,
   markAsRead,
   deleteNotification
 } from '../controllers/notificationController';
@@ -14,8 +15,11 @@ const router = Router();
 // All notification routes require authentication
 router.use(authenticate);
 
+// Get unread notification count
+router.get('/unread-count', getUnreadCount);
+
 // Get user notifications
-router.get('/', 
+router.get('/',
   // generalLimiter,, // Disabled for development
   validateQuery(Joi.object({
     type: Joi.string().valid('order', 'promotion', 'social', 'system'),

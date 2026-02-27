@@ -30,7 +30,7 @@ export interface IPriveOffer extends Document {
   };
 
   // Tier access
-  tierRequired: 'building' | 'entry' | 'signature' | 'elite';
+  tierRequired: 'none' | 'entry' | 'signature' | 'elite';
   isExclusive: boolean; // Featured as exclusive
 
   // Validity
@@ -150,7 +150,7 @@ const PriveOfferSchema = new Schema<IPriveOffer>(
 
     tierRequired: {
       type: String,
-      enum: ['building', 'entry', 'signature', 'elite'],
+      enum: ['none', 'entry', 'signature', 'elite'],
       required: [true, 'Tier requirement is required'],
       default: 'entry',
       index: true,
@@ -271,7 +271,7 @@ PriveOfferSchema.index({ category: 1, isActive: 1, tierRequired: 1 });
 
 // Tier hierarchy for access check
 const TIER_HIERARCHY: Record<string, number> = {
-  building: 0,
+  none: 0,
   entry: 1,
   signature: 2,
   elite: 3,

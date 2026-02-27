@@ -66,6 +66,49 @@ export interface ICoinRules {
   earningMethods: string[];
 }
 
+export interface IRedemptionConfig {
+  conversionRates: {
+    gift_card: number;
+    bill_pay: number;
+    experience: number;
+    charity: number;
+  };
+  minCoinsPerCategory: {
+    gift_card: number;
+    bill_pay: number;
+    experience: number;
+    charity: number;
+  };
+  maxCoinsPerRedemption: number;
+  dailyRedemptionLimit: number;
+  enabledCategories: string[];
+  expiryDays: {
+    gift_card: number;
+    bill_pay: number;
+    experience: number;
+    charity: number;
+  };
+  reAuthThreshold: number;
+}
+
+export interface IHabitLoopDef {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  targetCount: number;
+  deepLink: string;
+  enabled: boolean;
+  bonusCoins: number;
+}
+
+export interface IHabitLoopConfig {
+  enabled: boolean;
+  loops: IHabitLoopDef[];
+  completionBonusCoins: number;
+  streakMultiplier: number;
+}
+
 export interface IWalletConfig extends Document {
   singleton: boolean;
   transferLimits: ITransferLimits;
@@ -75,6 +118,8 @@ export interface IWalletConfig extends Document {
   commissionRate: number;
   coinConversion: ICoinConversion;
   fraudThresholds: IFraudThresholds;
+  redemptionConfig: IRedemptionConfig;
+  habitLoopConfig: IHabitLoopConfig;
   coinRules: Record<string, ICoinRules>;
   createdAt: Date;
   updatedAt: Date;
@@ -168,6 +213,56 @@ const WalletConfigSchema = new Schema<IWalletConfig>({
     maxGiftsPerDay: { type: Number, default: 20 },
     suspiciousAmountThreshold: { type: Number, default: 50000 },
     autoFreezeMultiplier: { type: Number, default: 5 }
+  },
+  redemptionConfig: {
+    conversionRates: {
+      gift_card: { type: Number, default: 0.10 },
+      bill_pay: { type: Number, default: 0.10 },
+      experience: { type: Number, default: 0.12 },
+      charity: { type: Number, default: 0.15 },
+    },
+    minCoinsPerCategory: {
+      gift_card: { type: Number, default: 500 },
+      bill_pay: { type: Number, default: 100 },
+      experience: { type: Number, default: 1000 },
+      charity: { type: Number, default: 100 },
+    },
+    maxCoinsPerRedemption: { type: Number, default: 50000 },
+    dailyRedemptionLimit: { type: Number, default: 5 },
+    enabledCategories: {
+      type: [String],
+      default: ['gift_card', 'bill_pay', 'experience', 'charity'],
+    },
+    expiryDays: {
+      gift_card: { type: Number, default: 365 },
+      bill_pay: { type: Number, default: 30 },
+      experience: { type: Number, default: 90 },
+      charity: { type: Number, default: 7 },
+    },
+    reAuthThreshold: { type: Number, default: 5000 },
+  },
+  habitLoopConfig: {
+    enabled: { type: Boolean, default: true },
+    loops: {
+      type: [{
+        id: { type: String, required: true },
+        name: { type: String, required: true },
+        icon: { type: String, required: true },
+        description: { type: String, default: '' },
+        targetCount: { type: Number, default: 1 },
+        deepLink: { type: String, default: '' },
+        enabled: { type: Boolean, default: true },
+        bonusCoins: { type: Number, default: 0 },
+      }],
+      default: [
+        { id: 'smart_spend', name: 'Smart Spend', icon: '💰', description: 'Place an order', targetCount: 1, deepLink: '/explore/stores', enabled: true, bonusCoins: 0 },
+        { id: 'influence', name: 'Influence', icon: '📢', description: 'Write a review', targetCount: 1, deepLink: '/earn/review', enabled: true, bonusCoins: 0 },
+        { id: 'redemption_pride', name: 'Redemption', icon: '🎁', description: 'Redeem your coins', targetCount: 1, deepLink: '/prive/redeem', enabled: true, bonusCoins: 0 },
+        { id: 'network', name: 'Network', icon: '🔗', description: 'Invite a friend', targetCount: 1, deepLink: '/referral', enabled: true, bonusCoins: 0 },
+      ],
+    },
+    completionBonusCoins: { type: Number, default: 25 },
+    streakMultiplier: { type: Number, default: 1 },
   },
   coinRules: {
     type: Schema.Types.Mixed,

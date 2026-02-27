@@ -10,6 +10,7 @@ import activityService from './activityService';
 import { ActivityType } from '../models/Activity';
 import challengeService from './challengeService';
 import { ReferralTierService } from './referralTierService';
+import { reputationService } from './reputationService';
 
 const referralTierService = new ReferralTierService();
 
@@ -171,6 +172,10 @@ class ReferralService {
         String(referral.referrer), 'refer_friends', 1,
         { referralId: String(referral._id) }
       ).catch(err => console.error('[REFERRAL] Challenge progress update failed:', err));
+
+      // Recalculate Privé reputation on referral completion (fire-and-forget)
+      reputationService.onReferralCompleted(referral.referrer as Types.ObjectId)
+        .catch(err => console.warn('[REFERRAL] Reputation recalculation failed:', err));
     }
 
     referral.markModified('metadata');

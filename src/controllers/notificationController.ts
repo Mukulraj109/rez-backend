@@ -4,6 +4,41 @@ import { sendSuccess, sendNotFound } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 
+// Get unread notification count
+export const getUnreadCount = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.userId!;
+
+  const baseQuery = {
+    user: userId,
+    isRead: false,
+    deletedAt: { $exists: false }
+  };
+
+  const [total, byTypeAgg, byPriorityAgg] = await Promise.all([
+    Notification.countDocuments(baseQuery),
+    Notification.aggregate([
+      { $match: baseQuery },
+      { $group: { _id: '$type', count: { $sum: 1 } } }
+    ]),
+    Notification.aggregate([
+      { $match: baseQuery },
+      { $group: { _id: '$priority', count: { $sum: 1 } } }
+    ])
+  ]);
+
+  const byType: Record<string, number> = {};
+  for (const item of byTypeAgg) {
+    byType[item._id] = item.count;
+  }
+
+  const byPriority: Record<string, number> = {};
+  for (const item of byPriorityAgg) {
+    byPriority[item._id] = item.count;
+  }
+
+  sendSuccess(res, { total, byType, byPriority });
+});
+
 // Get user notifications
 export const getUserNotifications = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;

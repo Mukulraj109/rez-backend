@@ -4,6 +4,7 @@ import {
   clearSearchCache,
   getAutocomplete,
   searchProductsGrouped,
+  aiSearch,
   saveSearchHistory,
   getSearchHistory,
   getPopularSearches,
@@ -14,6 +15,7 @@ import {
   getSearchAnalytics
 } from '../controllers/searchController';
 import { protect, optionalAuth } from '../middleware/auth';
+import { searchLimiter, aiSearchLimiter } from '../middleware/rateLimiter';
 
 const router = express.Router();
 
@@ -34,7 +36,7 @@ const router = express.Router();
  * GET /api/search/global?q=pizza&types=products,stores
  * GET /api/search/global?q=pizza&types=products&limit=20
  */
-router.get('/global', globalSearch);
+router.get('/global', searchLimiter, globalSearch);
 
 /**
  * @route   POST /api/search/cache/clear
@@ -63,7 +65,7 @@ router.post('/cache/clear', protect, clearSearchCache);
  *   }
  * }
  */
-router.get('/autocomplete', getAutocomplete);
+router.get('/autocomplete', searchLimiter, getAutocomplete);
 
 /**
  * @route   GET /api/search/products-grouped
@@ -78,7 +80,15 @@ router.get('/autocomplete', getAutocomplete);
  * GET /api/search/products-grouped?q=iphone%2014
  * GET /api/search/products-grouped?q=iphone%2014&limit=10&lat=12.9716&lon=77.5946
  */
-router.get('/products-grouped', searchProductsGrouped);
+router.get('/products-grouped', searchLimiter, searchProductsGrouped);
+
+/**
+ * @route   GET /api/search/ai-search
+ * @desc    AI-powered natural language search
+ * @access  Public
+ * @query   q - Natural language search query (required)
+ */
+router.get('/ai-search', aiSearchLimiter, aiSearch);
 
 // ============================================
 // SEARCH HISTORY ROUTES

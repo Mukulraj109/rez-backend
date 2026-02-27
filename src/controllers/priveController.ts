@@ -17,6 +17,124 @@ import { Order } from '../models/Order';
 import { Review } from '../models/Review';
 import Referral from '../models/Referral';
 import { CoinTransaction } from '../models/CoinTransaction';
+import { WalletConfig } from '../models/WalletConfig';
+import { getCachedWalletConfig } from '../services/walletCacheService';
+import { SOURCE_TO_CATEGORY } from '../config/earningsCategories';
+
+/**
+ * Aggregates weekly earnings from CoinTransaction (all sources, not just check-ins).
+ * Returns thisWeek total, lastWeek total, percentChange, and breakdown by category.
+ */
+const aggregateWeeklyEarnings = async (userObjectId: mongoose.Types.ObjectId) => {
+  const now = new Date();
+  const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+  const [result] = await CoinTransaction.aggregate([
+    {
+      $match: {
+        user: userObjectId,
+        type: { $in: ['earned', 'bonus'] },
+        createdAt: { $gte: twoWeeksAgo },
+      },
+    },
+    {
+      $facet: {
+        thisWeek: [
+          { $match: { createdAt: { $gte: oneWeekAgo } } },
+          { $group: { _id: null, total: { $sum: '$amount' } } },
+        ],
+        lastWeek: [
+          { $match: { createdAt: { $lt: oneWeekAgo, $gte: twoWeeksAgo } } },
+          { $group: { _id: null, total: { $sum: '$amount' } } },
+        ],
+        breakdown: [
+          { $match: { createdAt: { $gte: oneWeekAgo } } },
+          { $group: { _id: '$source', total: { $sum: '$amount' } } },
+        ],
+      },
+    },
+  ]);
+
+  const thisWeek = result?.thisWeek?.[0]?.total || 0;
+  const lastWeek = result?.lastWeek?.[0]?.total || 0;
+  const percentChange = lastWeek > 0
+    ? Math.round(((thisWeek - lastWeek) / lastWeek) * 100)
+    : (thisWeek > 0 ? 100 : 0);
+
+  // Map source-level breakdown to UI categories
+  const breakdown: Record<string, number> = {};
+  for (const item of result?.breakdown || []) {
+    const category = SOURCE_TO_CATEGORY[item._id] || 'other';
+    breakdown[category] = (breakdown[category] || 0) + item.total;
+  }
+
+  return { thisWeek, lastWeek, percentChange, breakdown };
+};
+
+/** Default habit loop definitions (used when WalletConfig has no habitLoopConfig) */
+const DEFAULT_LOOPS = [
+  { id: 'smart_spend', name: 'Smart Spend', icon: '💰', description: 'Place an order', targetCount: 1, deepLink: '/prive/smart-spend', enabled: true, bonusCoins: 0 },
+  { id: 'influence', name: 'Influence', icon: '📢', description: 'Write a review', targetCount: 1, deepLink: '/earn/review', enabled: true, bonusCoins: 0 },
+  { id: 'redemption_pride', name: 'Redemption', icon: '🎁', description: 'Redeem your coins', targetCount: 1, deepLink: '/prive/redeem', enabled: true, bonusCoins: 0 },
+  { id: 'network', name: 'Network', icon: '🔗', description: 'Invite a friend', targetCount: 1, deepLink: '/referral', enabled: true, bonusCoins: 0 },
+];
+
+/**
+ * Build habit loop progress from config and today's counts.
+ * Returns { loops, allCompleted } plus fires completion bonus if applicable.
+ */
+const buildHabitLoops = async (
+  userObjectId: mongoose.Types.ObjectId,
+  todayCounts: Record<string, number>,
+  config: any,
+) => {
+  const habitConfig = config?.habitLoopConfig;
+  const loopDefs = ((habitConfig?.loops as any[]) || DEFAULT_LOOPS).filter((l: any) => l.enabled !== false);
+  const completionBonusCoins = habitConfig?.completionBonusCoins ?? 25;
+
+  const loops = loopDefs.map((def: any) => {
+    const count = todayCounts[def.id] || 0;
+    const target = def.targetCount || 1;
+    return {
+      id: def.id,
+      name: def.name,
+      icon: def.icon,
+      completed: count >= target,
+      progress: Math.min(Math.round((count / target) * 100), 100),
+      description: def.description || '',
+      deepLink: def.deepLink || '',
+    };
+  });
+
+  const allCompleted = loops.length > 0 && loops.every((l: any) => l.completed);
+
+  // Fire-and-forget: award daily completion bonus (idempotent)
+  if (allCompleted && completionBonusCoins > 0) {
+    const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const idempotencyKey = `habit_completion_${userObjectId}_${todayStr}`;
+
+    setImmediate(async () => {
+      try {
+        const existing = await CoinTransaction.findOne({ 'metadata.idempotencyKey': idempotencyKey });
+        if (!existing) {
+          await (CoinTransaction as any).createTransaction({
+            user: userObjectId,
+            type: 'bonus',
+            amount: completionBonusCoins,
+            source: 'achievement',
+            description: `Daily habit loop completion bonus (${todayStr})`,
+            metadata: { idempotencyKey, trigger: 'habit_loop_completion' },
+          });
+        }
+      } catch (err) {
+        console.error('[PRIVE] Error awarding habit completion bonus:', err);
+      }
+    });
+  }
+
+  return { loops, allCompleted };
+};
 
 // Helper function to calculate expires in string from a date
 const calculateExpiresIn = (expiresAt: Date): string => {
@@ -218,7 +336,7 @@ export const getImprovementTips = async (req: Request, res: Response) => {
           if (pillar.score < 70) {
             tips.push({
               pillar: pillar.label,
-              tip: 'Verify your email and phone number to increase your trust score.',
+              tip: 'Complete orders without cancelling, verify your email, and avoid refund requests to boost trust.',
               priority,
             });
           }
@@ -332,8 +450,9 @@ export const getHabitLoops = async (req: Request, res: Response) => {
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
 
-    // Get today's data for each habit loop
-    const [ordersToday, reviewsToday, referralsThisWeek, weeklyEarnings] = await Promise.all([
+    // Fetch config + today's counts + weekly earnings in parallel
+    const [config, ordersToday, reviewsToday, referralsToday, vouchersToday, weeklyEarningsData] = await Promise.all([
+      getCachedWalletConfig(),
       Order.countDocuments({
         userId: userObjectId,
         createdAt: { $gte: today },
@@ -345,48 +464,31 @@ export const getHabitLoops = async (req: Request, res: Response) => {
       }).catch(() => 0),
       Referral.countDocuments({
         referrerId: userObjectId,
-        createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        createdAt: { $gte: today },
         status: 'COMPLETED',
       }).catch(() => 0),
-      DailyCheckIn.getWeeklyEarnings(userObjectId),
+      PriveVoucher.countDocuments({
+        userId: userObjectId,
+        createdAt: { $gte: today },
+      }).catch(() => 0),
+      aggregateWeeklyEarnings(userObjectId),
     ]);
 
-    const loops = [
-      {
-        id: 'smart_spend',
-        name: 'Smart Spend',
-        icon: '💰',
-        completed: ordersToday > 0,
-        progress: Math.min(ordersToday * 50, 100),
-      },
-      {
-        id: 'influence',
-        name: 'Influence',
-        icon: '📢',
-        completed: reviewsToday > 0,
-        progress: Math.min(reviewsToday * 50, 100),
-      },
-      {
-        id: 'redemption_pride',
-        name: 'Redemption',
-        icon: '🎁',
-        completed: false, // Would need coin spending tracking
-        progress: 30,
-      },
-      {
-        id: 'network',
-        name: 'Network',
-        icon: '🔗',
-        completed: referralsThisWeek > 0,
-        progress: Math.min(referralsThisWeek * 25, 100),
-      },
-    ];
+    const todayCounts: Record<string, number> = {
+      smart_spend: ordersToday,
+      influence: reviewsToday,
+      redemption_pride: vouchersToday,
+      network: referralsToday,
+    };
+
+    const { loops, allCompleted } = await buildHabitLoops(userObjectId, todayCounts, config);
 
     return res.status(200).json({
       success: true,
       data: {
         loops,
-        weeklyEarnings,
+        weeklyEarnings: weeklyEarningsData,
+        allCompleted,
       },
     });
   } catch (error: any) {
@@ -422,7 +524,7 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
 
     // First fetch eligibility to get user's tier
     const eligibility = await reputationService.checkPriveEligibility(userId);
-    const userTier = eligibility?.tier || 'building';
+    const userTier = eligibility?.tier || 'none';
 
     // Fetch all other data in parallel
     const [
@@ -430,16 +532,19 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
       wallet,
       checkInStatus,
       currentStreak,
-      weeklyEarnings,
+      weeklyEarningsData,
+      walletConfig,
       featuredOffers,
       activeCampaigns,
       completedCampaigns,
+      avgRatingResult,
     ] = await Promise.all([
       User.findById(userId).select('fullName profile createdAt').lean(),
       Wallet.findOne({ user: userObjectId }).lean(),
       DailyCheckIn.hasCheckedInToday(userObjectId),
       DailyCheckIn.getCurrentStreak(userObjectId),
-      DailyCheckIn.getWeeklyEarnings(userObjectId),
+      aggregateWeeklyEarnings(userObjectId),
+      getCachedWalletConfig(),
       PriveOffer.findFeaturedOffers(userTier, 3),
       Order.countDocuments({
         userId: userObjectId,
@@ -449,6 +554,10 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
         userId: userObjectId,
         status: 'delivered',
       }).catch(() => 0),
+      Review.aggregate([
+        { $match: { user: userObjectId } },
+        { $group: { _id: null, avgRating: { $avg: '$rating' } } },
+      ]).catch(() => []),
     ]);
 
     // Format offers for response
@@ -466,20 +575,27 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
 
     // Calculate tier progress
     const tierThresholds: Record<string, { min: number; max: number; next: string }> = {
-      building: { min: 0, max: 49, next: 'entry' },
+      none: { min: 0, max: 49, next: 'entry' },
       entry: { min: 50, max: 69, next: 'signature' },
       signature: { min: 70, max: 84, next: 'elite' },
       elite: { min: 85, max: 100, next: 'elite' },
     };
 
-    const currentTier = eligibility?.tier || 'building';
-    const tierInfo = tierThresholds[currentTier] || tierThresholds.building;
+    const currentTier = eligibility?.tier || 'none';
+    const tierInfo = tierThresholds[currentTier] || tierThresholds.none;
     const score = eligibility?.score || 0;
     const tierProgress = (score - tierInfo.min) / (tierInfo.max - tierInfo.min + 1);
     const pointsToNext = Math.max(0, (tierThresholds[tierInfo.next]?.min || 100) - score);
 
-    // Generate member ID from user ID
-    const memberId = `${userId.slice(-4).toUpperCase()} ${Math.floor(Math.random() * 9000 + 1000)} ${Math.floor(Math.random() * 9000 + 1000)} ${Math.floor(Math.random() * 9000 + 1000)}`;
+    // Generate deterministic member ID from user ID (hash-based, stable across requests)
+    const hashNum = (str: string, offset: number) => {
+      let hash = offset;
+      for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+      }
+      return Math.abs(hash % 9000) + 1000;
+    };
+    const memberId = `${userId.slice(-4).toUpperCase()} ${hashNum(userId, 1)} ${hashNum(userId, 2)} ${hashNum(userId, 3)}`;
 
     // Format dates
     const memberSince = user?.createdAt
@@ -495,10 +611,10 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
       eligibility: {
         isEligible: eligibility?.isEligible || false,
         score: eligibility?.score || 0,
-        tier: eligibility?.tier || 'building',
+        tier: eligibility?.tier || 'none',
         trustScore: eligibility?.trustScore || 0,
         pillars: eligibility?.pillars || [],
-        accessState: score >= 70 ? 'active' : score >= 50 ? 'building' : 'building',
+        accessState: score >= 70 ? 'active' : score >= 50 ? 'building' : 'none',
       },
       coins: (() => {
         // Extract coin balances from wallet
@@ -506,10 +622,14 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
         const priveCoin = wallet?.coins?.find((c: any) => c.type === 'prive');
         const brandedTotal = (wallet?.brandedCoins || []).reduce((sum: number, c: any) => sum + (c.amount || 0), 0);
 
+        const rezAmount = rezCoin?.amount || 0;
+        const priveAmount = priveCoin?.amount || 0;
+        const computedTotal = rezAmount + priveAmount + brandedTotal;
+
         return {
-          total: wallet?.balance?.total || 0,
-          rez: rezCoin?.amount || wallet?.balance?.available || 0,
-          prive: priveCoin?.amount || 0,
+          total: computedTotal,
+          rez: rezAmount,
+          prive: priveAmount,
           branded: brandedTotal,
           brandedBreakdown: (wallet?.brandedCoins || []).map((c: any) => ({
             brandId: c.merchantId?.toString(),
@@ -518,51 +638,62 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
           })),
         };
       })(),
-      dailyProgress: {
-        isCheckedIn: checkInStatus,
-        streak: currentStreak,
-        weeklyEarnings,
-        loops: [
-          { id: 'smart_spend', name: 'Smart Spend', icon: '💰', completed: true, progress: 100 },
-          { id: 'influence', name: 'Influence', icon: '📢', completed: false, progress: 60 },
-          { id: 'redemption_pride', name: 'Redemption', icon: '🎁', completed: false, progress: 30 },
-          { id: 'network', name: 'Network', icon: '🔗', completed: true, progress: 100 },
-        ],
-      },
-      highlights: {
-        curatedOffer: {
-          id: 'offer1',
-          type: 'offer',
-          icon: '🎁',
-          title: formattedOffers[0]?.title || 'Up to 40% at StyleHub',
-          subtitle: 'Privé members only',
-          badge: 'Limited',
-          badgeColor: '#E91E63',
-        },
-        nearbyStore: {
-          id: 'store1',
-          type: 'store',
-          icon: '📍',
-          title: 'Café Artisan - 0.5km',
-          subtitle: '25% Privé bonus today',
-          badge: 'Nearby',
-          badgeColor: '#4CAF50',
-        },
-        opportunity: {
-          id: 'campaign1',
-          type: 'campaign',
-          icon: '📢',
-          title: 'Brand Campaign',
-          subtitle: 'Earn 500 Privé Coins',
-          badge: 'New',
-          badgeColor: '#FF9800',
-        },
-      },
+      dailyProgress: await (async () => {
+        // Compute real habit loop progress for today
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        const [todayOrders, todayReviews, todayReferrals, todayVouchers] = await Promise.all([
+          Order.countDocuments({ user: userObjectId, createdAt: { $gte: todayStart } }).catch(() => 0),
+          Review.countDocuments({ user: userObjectId, createdAt: { $gte: todayStart } }).catch(() => 0),
+          Referral.countDocuments({ referrer: userObjectId, createdAt: { $gte: todayStart } }).catch(() => 0),
+          PriveVoucher.countDocuments({ userId: userObjectId, createdAt: { $gte: todayStart } }).catch(() => 0),
+        ]);
+
+        const todayCounts: Record<string, number> = {
+          smart_spend: todayOrders,
+          influence: todayReviews,
+          redemption_pride: todayVouchers,
+          network: todayReferrals,
+        };
+
+        const { loops, allCompleted } = await buildHabitLoops(userObjectId, todayCounts, walletConfig);
+
+        return {
+          isCheckedIn: checkInStatus,
+          streak: currentStreak,
+          weeklyEarnings: weeklyEarningsData,
+          loops,
+          allCompleted,
+        };
+      })(),
+      highlights: (() => {
+        // Use real featured offer for curatedOffer, null for others without real data
+        const curatedOffer = formattedOffers[0]
+          ? {
+              id: formattedOffers[0].id,
+              type: 'offer' as const,
+              icon: '🎁',
+              title: formattedOffers[0].title,
+              subtitle: formattedOffers[0].subtitle || 'Privé members only',
+              badge: 'Featured',
+              badgeColor: '#E91E63',
+            }
+          : null;
+
+        return {
+          curatedOffer,
+          nearbyStore: null,
+          opportunity: null,
+        };
+      })(),
       featuredOffers: formattedOffers,
       stats: {
         activeCampaigns,
         completedCampaigns,
-        avgRating: 4.9,
+        avgRating: avgRatingResult?.[0]?.avgRating
+          ? parseFloat(avgRatingResult[0].avgRating.toFixed(1))
+          : null,
       },
       user: {
         name: user?.fullName ||
@@ -617,7 +748,7 @@ export const getPriveOffers = async (req: Request, res: Response) => {
 
     // Get user's tier
     const eligibility = await reputationService.checkPriveEligibility(userId);
-    const userTier = eligibility?.tier || 'building';
+    const userTier = eligibility?.tier || 'none';
 
     // Build query
     const now = new Date();
@@ -629,7 +760,7 @@ export const getPriveOffers = async (req: Request, res: Response) => {
 
     // Filter by accessible tiers
     const tierHierarchy: Record<string, number> = {
-      building: 0,
+      none: 0,
       entry: 1,
       signature: 2,
       elite: 3,
@@ -672,6 +803,8 @@ export const getPriveOffers = async (req: Request, res: Response) => {
       tierRequired: offer.tierRequired,
       images: offer.images,
       terms: offer.terms,
+      redemptions: offer.redemptions,
+      totalLimit: offer.totalLimit,
     }));
 
     return res.status(200).json({
@@ -728,9 +861,8 @@ export const getPriveOfferById = async (req: Request, res: Response) => {
       });
     }
 
-    // Increment views
-    offer.views += 1;
-    await offer.save();
+    // Increment views atomically (fire-and-forget)
+    PriveOffer.updateOne({ _id: id }, { $inc: { views: 1 } }).exec().catch(() => {});
 
     return res.status(200).json({
       success: true,
@@ -829,7 +961,7 @@ export const getPriveHighlights = async (req: Request, res: Response) => {
 
     // Get user's tier for personalization
     const eligibility = await reputationService.checkPriveEligibility(userId);
-    const userTier = eligibility?.tier || 'building';
+    const userTier = eligibility?.tier || 'none';
 
     // Get a featured offer for the user
     const featuredOffers = await PriveOffer.findFeaturedOffers(userTier, 1);
@@ -846,33 +978,9 @@ export const getPriveHighlights = async (req: Request, res: Response) => {
             badge: curatedOffer.isExclusive ? 'Exclusive' : 'Featured',
             badgeColor: '#E91E63',
           }
-        : {
-            id: 'offer1',
-            type: 'offer' as const,
-            icon: '🎁',
-            title: 'Up to 40% at StyleHub',
-            subtitle: 'Privé members only',
-            badge: 'Limited',
-            badgeColor: '#E91E63',
-          },
-      nearbyStore: {
-        id: 'store1',
-        type: 'store' as const,
-        icon: '📍',
-        title: 'Café Artisan - 0.5km',
-        subtitle: '25% Privé bonus today',
-        badge: 'Nearby',
-        badgeColor: '#4CAF50',
-      },
-      opportunity: {
-        id: 'campaign1',
-        type: 'campaign' as const,
-        icon: '📢',
-        title: 'Brand Campaign',
-        subtitle: 'Earn 500 Privé Coins',
-        badge: 'New',
-        badgeColor: '#FF9800',
-      },
+        : null,
+      nearbyStore: null, // TODO: Implement real nearby store query with user geolocation
+      opportunity: null, // TODO: Implement real campaign/opportunity query
     };
 
     return res.status(200).json({
@@ -908,14 +1016,16 @@ export const getEarnings = async (req: Request, res: Response) => {
       });
     }
 
-    const { page = 1, limit = 20, type } = req.query;
+    const { page = 1, limit = 20, type, cursor, timeRange } = req.query;
     const pageNum = parseInt(page as string, 10);
     const limitNum = parseInt(limit as string, 10);
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
     // Build query for earnings (positive transactions)
     const query: any = {
-      userId: userObjectId,
+      user: userObjectId,
       amount: { $gt: 0 },
     };
 
@@ -924,38 +1034,80 @@ export const getEarnings = async (req: Request, res: Response) => {
       query.type = type;
     }
 
-    // Get total count
-    const total = await CoinTransaction.countDocuments(query);
+    // Time-range filter (7, 30, 90 days)
+    if (timeRange && ['7', '30', '90'].includes(timeRange as string)) {
+      const days = parseInt(timeRange as string, 10);
+      query.createdAt = { ...(query.createdAt || {}), $gte: new Date(Date.now() - days * DAY_MS) };
+    }
+
+    // Cursor-based pagination: filter by createdAt < cursor
+    if (cursor && typeof cursor === 'string') {
+      const cursorDate = new Date(cursor);
+      if (!isNaN(cursorDate.getTime())) {
+        query.createdAt = { ...(query.createdAt || {}), $lt: cursorDate };
+      }
+    }
+
+    // Get total count (without cursor filter for accurate total)
+    const countQuery: any = { user: userObjectId, amount: { $gt: 0 } };
+    if (type && type !== 'all') countQuery.type = type;
+    if (timeRange && ['7', '30', '90'].includes(timeRange as string)) {
+      const days = parseInt(timeRange as string, 10);
+      countQuery.createdAt = { $gte: new Date(Date.now() - days * DAY_MS) };
+    }
+    const total = await CoinTransaction.countDocuments(countQuery);
+
+    // Fetch limit+1 to determine hasMore for cursor pagination
+    const fetchLimit = cursor ? limitNum + 1 : limitNum;
 
     // Get earnings with pagination
     const earnings = await CoinTransaction.find(query)
       .sort({ createdAt: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
+      .skip(cursor ? 0 : (pageNum - 1) * limitNum)
+      .limit(fetchLimit)
       .lean();
+
+    // Determine if there are more results (cursor mode)
+    const hasMoreCursor = cursor ? earnings.length > limitNum : undefined;
+    const resultEarnings = cursor && earnings.length > limitNum
+      ? earnings.slice(0, limitNum)
+      : earnings;
 
     // Calculate summary stats
     const now = new Date();
-    const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const weekStart = new Date(now.getTime() - 7 * DAY_MS);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [weeklyTotal, monthlyTotal, totalEarned] = await Promise.all([
+    // Run time-based summaries and source-grouped summary in parallel
+    const [weeklyTotal, monthlyTotal, totalEarned, bySourceRaw] = await Promise.all([
       CoinTransaction.aggregate([
-        { $match: { userId: userObjectId, amount: { $gt: 0 }, createdAt: { $gte: weekStart } } },
+        { $match: { user: userObjectId, amount: { $gt: 0 }, createdAt: { $gte: weekStart } } },
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
       CoinTransaction.aggregate([
-        { $match: { userId: userObjectId, amount: { $gt: 0 }, createdAt: { $gte: monthStart } } },
+        { $match: { user: userObjectId, amount: { $gt: 0 }, createdAt: { $gte: monthStart } } },
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
       CoinTransaction.aggregate([
-        { $match: { userId: userObjectId, amount: { $gt: 0 } } },
+        { $match: { user: userObjectId, amount: { $gt: 0 } } },
         { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      // Source-grouped summary using SOURCE_TO_CATEGORY mapping
+      CoinTransaction.aggregate([
+        { $match: { user: userObjectId, amount: { $gt: 0 } } },
+        { $group: { _id: '$source', total: { $sum: '$amount' } } },
       ]),
     ]);
 
+    // Map raw source groups into UI categories
+    const bySource: Record<string, number> = {};
+    for (const item of bySourceRaw) {
+      const category = SOURCE_TO_CATEGORY[item._id] || 'other';
+      bySource[category] = (bySource[category] || 0) + item.total;
+    }
+
     // Format earnings
-    const formattedEarnings = earnings.map((txn: any) => ({
+    const formattedEarnings = resultEarnings.map((txn: any) => ({
       id: txn._id.toString(),
       type: txn.type,
       amount: txn.amount,
@@ -970,6 +1122,10 @@ export const getEarnings = async (req: Request, res: Response) => {
       }),
     }));
 
+    // Build next cursor from last item
+    const lastEarning = formattedEarnings[formattedEarnings.length - 1];
+    const nextCursor = cursor && hasMoreCursor && lastEarning ? lastEarning.createdAt : undefined;
+
     return res.status(200).json({
       success: true,
       data: {
@@ -979,11 +1135,13 @@ export const getEarnings = async (req: Request, res: Response) => {
           thisMonth: monthlyTotal[0]?.total || 0,
           allTime: totalEarned[0]?.total || 0,
         },
+        bySource,
         pagination: {
           page: pageNum,
           limit: limitNum,
           total,
           pages: Math.ceil(total / limitNum),
+          ...(cursor !== undefined && { hasMore: hasMoreCursor, nextCursor }),
         },
       },
     });
@@ -1012,13 +1170,13 @@ export const getTransactions = async (req: Request, res: Response) => {
       });
     }
 
-    const { page = 1, limit = 20, type, coinType } = req.query;
+    const { page = 1, limit = 20, type, coinType, cursor } = req.query;
     const pageNum = parseInt(page as string, 10);
     const limitNum = parseInt(limit as string, 10);
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
     // Build query
-    const query: any = { userId: userObjectId };
+    const query: any = { user: userObjectId };
 
     if (type && type !== 'all') {
       query.type = type;
@@ -1028,18 +1186,38 @@ export const getTransactions = async (req: Request, res: Response) => {
       query.coinType = coinType;
     }
 
-    // Get total count
-    const total = await CoinTransaction.countDocuments(query);
+    // Cursor-based pagination: filter by createdAt < cursor
+    if (cursor && typeof cursor === 'string') {
+      const cursorDate = new Date(cursor);
+      if (!isNaN(cursorDate.getTime())) {
+        query.createdAt = { ...(query.createdAt || {}), $lt: cursorDate };
+      }
+    }
+
+    // Get total count (without cursor filter for accurate total)
+    const countQuery: any = { user: userObjectId };
+    if (type && type !== 'all') countQuery.type = type;
+    if (coinType && coinType !== 'all') countQuery.coinType = coinType;
+    const total = await CoinTransaction.countDocuments(countQuery);
+
+    // Fetch limit+1 to determine hasMore for cursor pagination
+    const fetchLimit = cursor ? limitNum + 1 : limitNum;
 
     // Get transactions with pagination
     const transactions = await CoinTransaction.find(query)
       .sort({ createdAt: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
+      .skip(cursor ? 0 : (pageNum - 1) * limitNum)
+      .limit(fetchLimit)
       .lean();
 
+    // Determine if there are more results (cursor mode)
+    const hasMoreCursor = cursor ? transactions.length > limitNum : undefined;
+    const resultTransactions = cursor && transactions.length > limitNum
+      ? transactions.slice(0, limitNum)
+      : transactions;
+
     // Format transactions
-    const formattedTransactions = transactions.map((txn: any) => ({
+    const formattedTransactions = resultTransactions.map((txn: any) => ({
       id: txn._id.toString(),
       type: txn.type,
       amount: txn.amount,
@@ -1059,6 +1237,10 @@ export const getTransactions = async (req: Request, res: Response) => {
       }),
     }));
 
+    // Build next cursor from last item
+    const lastTxn = formattedTransactions[formattedTransactions.length - 1];
+    const nextCursor = cursor && hasMoreCursor && lastTxn ? lastTxn.createdAt : undefined;
+
     return res.status(200).json({
       success: true,
       data: {
@@ -1068,6 +1250,7 @@ export const getTransactions = async (req: Request, res: Response) => {
           limit: limitNum,
           total,
           pages: Math.ceil(total / limitNum),
+          ...(cursor !== undefined && { hasMore: hasMoreCursor, nextCursor }),
         },
       },
     });
@@ -1105,6 +1288,7 @@ const getTransactionDescription = (type: string): string => {
 /**
  * POST /api/prive/redeem
  * Redeem coins for a voucher
+ * Uses MongoDB transaction for atomicity — all DB ops succeed or all roll back.
  */
 export const redeemCoins = async (req: Request, res: Response) => {
   try {
@@ -1117,13 +1301,20 @@ export const redeemCoins = async (req: Request, res: Response) => {
       });
     }
 
-    const { coinAmount, type, category, partnerId, partnerName, partnerLogo } = req.body;
+    const { coinAmount, type, category, partnerId, partnerName, partnerLogo, idempotencyKey, coinType = 'prive', offerId } = req.body;
 
     // Validate inputs
-    if (!coinAmount || coinAmount < 100) {
+    if (!idempotencyKey) {
       return res.status(400).json({
         success: false,
-        error: 'Minimum 100 coins required for redemption',
+        error: 'idempotencyKey is required',
+      });
+    }
+
+    if (!coinAmount || coinAmount < 1) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid coin amount',
       });
     }
 
@@ -1134,85 +1325,256 @@ export const redeemCoins = async (req: Request, res: Response) => {
       });
     }
 
-    const userObjectId = new mongoose.Types.ObjectId(userId);
-
-    // Get user's wallet
-    const wallet = await Wallet.findOne({ user: userObjectId });
-
-    if (!wallet) {
-      return res.status(404).json({
-        success: false,
-        error: 'Wallet not found',
-      });
-    }
-
-    // Check sufficient balance
-    const availableCoins = wallet.balance?.available || 0;
-    if (availableCoins < coinAmount) {
+    // Only Privé coins can be redeemed from this module
+    if (coinType !== 'prive') {
       return res.status(400).json({
         success: false,
-        error: 'Insufficient coin balance',
-        available: availableCoins,
-        required: coinAmount,
+        error: 'Only Privé coins can be redeemed from this module',
       });
     }
 
-    // Calculate voucher value
-    const voucherValue = calculateVoucherValue(coinAmount, type as VoucherType);
-    const expiresAt = getDefaultExpiry(type as VoucherType);
+    const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    // Generate unique voucher code
-    const voucherCode = await PriveVoucher.generateUniqueCode();
+    // --- Load WalletConfig for dynamic rates, limits, and catalog validation ---
+    const walletConfig = await WalletConfig.getOrCreate();
+    const rc = walletConfig.redemptionConfig;
 
-    // Create voucher
-    const voucher = await PriveVoucher.create({
-      userId: userObjectId,
-      code: voucherCode,
-      type,
-      coinAmount,
-      coinType: 'rez',
-      value: voucherValue,
-      currency: 'INR',
-      status: 'active',
-      expiresAt,
-      category,
-      partnerId: partnerId ? new mongoose.Types.ObjectId(partnerId) : undefined,
-      partnerName,
-      partnerLogo,
-      terms: getVoucherTerms(type as VoucherType),
-      howToUse: getVoucherInstructions(type as VoucherType),
-    });
-
-    // Debit coins from wallet
-    wallet.balance.total -= coinAmount;
-    wallet.balance.available -= coinAmount;
-    wallet.statistics.totalSpent = (wallet.statistics.totalSpent || 0) + coinAmount;
-    wallet.lastTransactionAt = new Date();
-
-    // Update ReZ coin balance
-    const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-    if (rezCoin) {
-      rezCoin.amount = Math.max(0, rezCoin.amount - coinAmount);
-      rezCoin.lastUsed = new Date();
+    // Validate against enabled categories
+    const enabledCategories = rc?.enabledCategories || ['gift_card', 'bill_pay', 'experience', 'charity'];
+    if (!enabledCategories.includes(type)) {
+      return res.status(400).json({
+        success: false,
+        error: `Category "${type}" is currently disabled`,
+      });
     }
 
-    await wallet.save();
+    // Validate min coins per category from config
+    const minCoinsMap: Record<string, number> = rc?.minCoinsPerCategory || { gift_card: 500, bill_pay: 100, experience: 1000, charity: 100 };
+    const minCoins = (minCoinsMap as any)[type] || 100;
+    if (coinAmount < minCoins) {
+      return res.status(400).json({
+        success: false,
+        error: `Minimum ${minCoins} coins required for ${type.replace('_', ' ')} redemption`,
+      });
+    }
 
-    // Create CoinTransaction record (source of truth for auto-sync)
-    await CoinTransaction.create({
+    // Validate max coins from config
+    const maxCoins = rc?.maxCoinsPerRedemption || 50000;
+    if (coinAmount > maxCoins) {
+      return res.status(400).json({
+        success: false,
+        error: `Maximum ${maxCoins} coins per redemption`,
+      });
+    }
+
+    // 5B: Server-side catalog validation — reject unknown partners
+    const VALID_PARTNERS: Record<string, string[]> = {
+      gift_card: ['amazon', 'flipkart', 'swiggy', 'zomato', 'myntra', 'bookmyshow'],
+      experience: ['spa', 'dining', 'staycation', 'adventure', 'concert', 'workshop'],
+      charity: ['education', 'hunger', 'health', 'environment', 'animals', 'disaster'],
+      bill_pay: [], // bill_pay doesn't require a specific partner
+    };
+    if (type !== 'bill_pay' && category) {
+      const validIds = VALID_PARTNERS[type] || [];
+      if (validIds.length > 0 && !validIds.includes(category)) {
+        return res.status(400).json({
+          success: false,
+          error: `Unknown partner/category "${category}" for ${type}`,
+        });
+      }
+    }
+
+    // Daily redemption limit check
+    const dailyLimit = rc?.dailyRedemptionLimit || 5;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayRedemptions = await CoinTransaction.countDocuments({
       user: userObjectId,
-      type: 'spent',
-      amount: coinAmount,
-      balance: wallet.balance.available,
       source: 'redemption',
-      description: `Redeemed ${coinAmount} coins for ${type.replace('_', ' ')}`,
-      metadata: {
-        voucherId: voucher._id,
-        voucherCode,
-        voucherType: type,
-        voucherValue,
-      },
+      createdAt: { $gte: todayStart },
     });
+    if (todayRedemptions >= dailyLimit) {
+      return res.status(400).json({
+        success: false,
+        error: `Daily redemption limit (${dailyLimit}) reached. Try again tomorrow.`,
+      });
+    }
+
+    // Idempotency check — if same key was used before, return existing voucher
+    const existingTx = await CoinTransaction.findOne({
+      user: userObjectId,
+      'metadata.idempotencyKey': idempotencyKey,
+    }).lean();
+
+    if (existingTx) {
+      const existingVoucher = await PriveVoucher.findById(existingTx.metadata?.voucherId).lean();
+      if (existingVoucher) {
+        return res.status(200).json({
+          success: true,
+          data: {
+            voucher: {
+              id: (existingVoucher as any)._id.toString(),
+              code: (existingVoucher as any).code,
+              type: (existingVoucher as any).type,
+              value: (existingVoucher as any).value,
+              currency: (existingVoucher as any).currency,
+              coinAmount: (existingVoucher as any).coinAmount,
+              expiresAt: (existingVoucher as any).expiresAt,
+              expiresIn: calculateExpiresIn((existingVoucher as any).expiresAt),
+              status: (existingVoucher as any).status,
+              partnerName: (existingVoucher as any).partnerName,
+              partnerLogo: (existingVoucher as any).partnerLogo,
+              category: (existingVoucher as any).category,
+              terms: (existingVoucher as any).terms,
+              howToUse: (existingVoucher as any).howToUse,
+            },
+            wallet: {
+              available: 0, // Will be re-fetched by frontend
+              total: 0,
+            },
+            duplicate: true,
+          },
+        });
+      }
+    }
+
+    // Offer validation if linked to a specific offer (pre-transaction checks)
+    if (offerId) {
+      const offer = await PriveOffer.findById(offerId);
+      if (offer) {
+        // Fix 1C: Query CoinTransaction instead of PriveVoucher for per-user limit
+        if (offer.limitPerUser) {
+          const userRedemptions = await CoinTransaction.countDocuments({
+            user: userObjectId,
+            source: 'redemption',
+            'metadata.offerId': offerId,
+          });
+          if (userRedemptions >= offer.limitPerUser) {
+            return res.status(400).json({
+              success: false,
+              error: 'You have reached the redemption limit for this offer',
+            });
+          }
+        }
+        // Check total limit
+        if (offer.totalLimit && offer.redemptions >= offer.totalLimit) {
+          return res.status(400).json({
+            success: false,
+            error: 'This offer has reached its redemption limit',
+          });
+        }
+      }
+    }
+
+    // Generate unique voucher code before transaction (doesn't need session)
+    const voucherCode = await PriveVoucher.generateUniqueCode();
+
+    // Calculate voucher value from WalletConfig (not hardcoded helper)
+    const conversionRates: Record<string, number> = rc?.conversionRates || { gift_card: 0.10, bill_pay: 0.10, experience: 0.12, charity: 0.15 };
+    const rate = (conversionRates as any)[type] || 0.10;
+    const voucherValue = Math.round(coinAmount * rate * 100) / 100;
+
+    // Calculate expiry from WalletConfig (not hardcoded helper)
+    const expiryDaysMap: Record<string, number> = rc?.expiryDays || { gift_card: 365, bill_pay: 30, experience: 90, charity: 7 };
+    const expiryDays = (expiryDaysMap as any)[type] || 30;
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + expiryDays);
+
+    // Currency from environment (not hardcoded)
+    const currency = process.env.PLATFORM_CURRENCY || 'INR';
+
+    // --- MongoDB Transaction: atomic wallet deduction + voucher creation + CoinTransaction ---
+    const session = await mongoose.startSession();
+    let voucher: any;
+    let walletUpdate: any;
+
+    try {
+      await session.startTransaction();
+
+      // Fix 1D: Single atomic wallet update for both balance and coin-type deduction
+      walletUpdate = await Wallet.findOneAndUpdate(
+        {
+          user: userObjectId,
+          'balance.available': { $gte: coinAmount },
+          'coins': { $elemMatch: { type: coinType, amount: { $gte: coinAmount } } },
+        },
+        {
+          $inc: {
+            'balance.available': -coinAmount,
+            'balance.total': -coinAmount,
+            'statistics.totalSpent': coinAmount,
+            'coins.$.amount': -coinAmount,
+          },
+          $set: {
+            lastTransactionAt: new Date(),
+            'coins.$.lastUsed': new Date(),
+          },
+        },
+        { new: true, session }
+      );
+
+      if (!walletUpdate) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          error: 'Insufficient coin balance',
+        });
+      }
+
+      // Create voucher within transaction
+      const [createdVoucher] = await PriveVoucher.create([{
+        userId: userObjectId,
+        code: voucherCode,
+        type,
+        coinAmount,
+        coinType,
+        value: voucherValue,
+        currency,
+        status: 'active',
+        expiresAt,
+        category,
+        partnerId: partnerId ? new mongoose.Types.ObjectId(partnerId) : undefined,
+        partnerName,
+        partnerLogo,
+        terms: getVoucherTerms(type as VoucherType),
+        howToUse: getVoucherInstructions(type as VoucherType),
+      }], { session });
+      voucher = createdVoucher;
+
+      // Create CoinTransaction record within transaction
+      await CoinTransaction.create([{
+        user: userObjectId,
+        type: 'spent',
+        amount: coinAmount,
+        balance: walletUpdate.balance?.available || 0,
+        source: 'redemption',
+        description: `Redeemed ${coinAmount} coins for ${type.replace('_', ' ')}`,
+        metadata: {
+          voucherId: voucher._id,
+          voucherCode,
+          voucherType: type,
+          voucherValue,
+          coinType,
+          idempotencyKey,
+          ...(offerId && { offerId }),
+        },
+      }], { session });
+
+      await session.commitTransaction();
+    } catch (txError) {
+      await session.abortTransaction();
+      throw txError;
+    } finally {
+      session.endSession();
+    }
+
+    // Atomically increment offer redemptions if linked (fire-and-forget, outside transaction)
+    if (offerId) {
+      PriveOffer.updateOne(
+        { _id: offerId },
+        { $inc: { redemptions: 1 } }
+      ).exec().catch(err => console.warn('[PRIVE] Failed to increment offer redemptions:', err));
+    }
 
     return res.status(200).json({
       success: true,
@@ -1234,8 +1596,8 @@ export const redeemCoins = async (req: Request, res: Response) => {
           howToUse: voucher.howToUse,
         },
         wallet: {
-          available: wallet.balance.available,
-          total: wallet.balance.total,
+          available: walletUpdate.balance?.available || 0,
+          total: walletUpdate.balance?.total || 0,
         },
       },
     });
@@ -1523,6 +1885,95 @@ export const markVoucherUsed = async (req: Request, res: Response) => {
       success: false,
       error: 'Failed to mark voucher as used',
       message: error.message,
+    });
+  }
+};
+
+// ==========================================
+// Redemption Config & Catalog
+// ==========================================
+
+/**
+ * GET /api/prive/redeem-config
+ * Returns server-side redemption configuration (conversion rates, min coins, etc.)
+ */
+export const getRedeemConfig = async (req: Request, res: Response) => {
+  try {
+    // 6B: Use cached WalletConfig (5min Redis TTL) instead of direct DB read
+    const config = await getCachedWalletConfig();
+    const rc = config?.redemptionConfig;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        conversionRates: rc?.conversionRates || { gift_card: 0.10, bill_pay: 0.10, experience: 0.12, charity: 0.15 },
+        minCoinsPerCategory: rc?.minCoinsPerCategory || { gift_card: 500, bill_pay: 100, experience: 1000, charity: 100 },
+        maxCoinsPerRedemption: rc?.maxCoinsPerRedemption || 50000,
+        dailyRedemptionLimit: rc?.dailyRedemptionLimit || 5,
+        enabledCategories: rc?.enabledCategories || ['gift_card', 'bill_pay', 'experience', 'charity'],
+        expiryDays: rc?.expiryDays || { gift_card: 365, bill_pay: 30, experience: 90, charity: 7 },
+        currency: process.env.PLATFORM_CURRENCY || 'INR',
+      },
+    });
+  } catch (error: any) {
+    console.error('[PRIVE] Error getting redeem config:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get redemption configuration',
+    });
+  }
+};
+
+/**
+ * GET /api/prive/catalog
+ * Returns server-side redemption catalog (gift cards, experiences, charities)
+ * Currently returns static catalog; can be extended to read from DB collection.
+ */
+export const getCatalog = async (_req: Request, res: Response) => {
+  try {
+    // Use cached WalletConfig (5min Redis TTL) instead of direct DB read
+    const config = await getCachedWalletConfig();
+    const enabledCategories = config?.redemptionConfig?.enabledCategories || ['gift_card', 'bill_pay', 'experience', 'charity'];
+
+    // Static catalog served from backend (single source of truth)
+    const catalog = {
+      giftCards: [
+        { id: 'amazon', name: 'Amazon', logo: '🛒', minCoins: 500, denominations: [500, 1000, 2000, 5000] },
+        { id: 'flipkart', name: 'Flipkart', logo: '📦', minCoins: 500, denominations: [500, 1000, 2000, 5000] },
+        { id: 'swiggy', name: 'Swiggy', logo: '🍔', minCoins: 300, denominations: [300, 500, 1000, 2000] },
+        { id: 'zomato', name: 'Zomato', logo: '🍕', minCoins: 300, denominations: [300, 500, 1000, 2000] },
+        { id: 'myntra', name: 'Myntra', logo: '👗', minCoins: 500, denominations: [500, 1000, 2000] },
+        { id: 'bookmyshow', name: 'BookMyShow', logo: '🎬', minCoins: 200, denominations: [200, 500, 1000] },
+      ],
+      experiences: [
+        { id: 'spa', name: 'Luxury Spa Day', description: 'Full day spa experience at premium wellness centers', icon: '🧖', coinCost: 5000, value: 600, highlights: ['Full body massage', 'Facial treatment', 'Sauna access'] },
+        { id: 'dining', name: 'Fine Dining Experience', description: '5-course meal at top-rated restaurants', icon: '🍽️', coinCost: 3000, value: 360, highlights: ['5-course tasting menu', 'Wine pairing', "Chef's table"] },
+        { id: 'staycation', name: 'Weekend Staycation', description: 'One night at premium hotels', icon: '🏨', coinCost: 8000, value: 960, highlights: ['Luxury room', 'Breakfast included', 'Late checkout'] },
+        { id: 'adventure', name: 'Adventure Activity', description: 'Thrilling outdoor adventures', icon: '🎢', coinCost: 2000, value: 240, highlights: ['Choice of activity', 'Professional guide', 'Safety gear'] },
+        { id: 'concert', name: 'Premium Event Tickets', description: 'VIP access to concerts & shows', icon: '🎵', coinCost: 4000, value: 480, highlights: ['VIP seating', 'Backstage access', 'Meet & greet'] },
+        { id: 'workshop', name: 'Exclusive Workshop', description: 'Learn from industry experts', icon: '🎨', coinCost: 1500, value: 180, highlights: ['Expert instruction', 'Materials included', 'Certificate'] },
+      ],
+      charities: [
+        { id: 'education', name: 'Education for All', description: "Support underprivileged children's education", icon: '📚', category: 'Education' },
+        { id: 'hunger', name: 'Feeding India', description: 'Provide meals to those in need', icon: '🍚', category: 'Food' },
+        { id: 'health', name: 'Health Foundation', description: 'Medical care for underserved communities', icon: '🏥', category: 'Healthcare' },
+        { id: 'environment', name: 'Green Earth Initiative', description: 'Plant trees and protect wildlife', icon: '🌱', category: 'Environment' },
+        { id: 'animals', name: 'Animal Welfare', description: 'Shelter and care for stray animals', icon: '🐕', category: 'Animals' },
+        { id: 'disaster', name: 'Disaster Relief', description: 'Emergency aid for disaster victims', icon: '🆘', category: 'Emergency' },
+      ],
+      donationAmounts: [100, 250, 500, 1000, 2500],
+      enabledCategories,
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: catalog,
+    });
+  } catch (error: any) {
+    console.error('[PRIVE] Error getting catalog:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get redemption catalog',
     });
   }
 };

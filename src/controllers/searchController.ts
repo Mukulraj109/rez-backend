@@ -12,6 +12,11 @@ import { modeService, ModeId } from '../services/modeService';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
 
 /**
+ * Escape special regex characters in user input to prevent regex injection / ReDoS
+ */
+const escapeRegex = (str: string): string => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
  * Calculate relevance score for search results
  * Scoring: exact match > starts with > contains
  */
@@ -85,10 +90,10 @@ const searchProducts = async (query: string, limit: number, mode?: ModeId, regio
     const searchQuery: any = {
       isActive: true,
       $or: [
-        { name: { $regex: query, $options: 'i' } },
-        { description: { $regex: query, $options: 'i' } },
-        { brand: { $regex: query, $options: 'i' } },
-        { tags: { $regex: query, $options: 'i' } }
+        { name: { $regex: escapeRegex(query), $options: 'i' } },
+        { description: { $regex: escapeRegex(query), $options: 'i' } },
+        { brand: { $regex: escapeRegex(query), $options: 'i' } },
+        { tags: { $regex: escapeRegex(query), $options: 'i' } }
       ]
     };
 
@@ -158,7 +163,15 @@ const searchProductsGroupedInternal = async (
   query: string,
   limit: number,
   userLocation?: { latitude: number; longitude: number },
-  region?: RegionId
+  region?: RegionId,
+  filters?: {
+    minPrice?: number;
+    maxPrice?: number;
+    rating?: number;
+    categories?: string[];
+    cashbackMin?: number;
+    inStock?: boolean;
+  }
 ): Promise<any> => {
   try {
     // Build base store query with region filter
@@ -173,10 +186,10 @@ const searchProductsGroupedInternal = async (
     const matchingStores = await Store.find({
       ...baseStoreQuery,
       $or: [
-        { name: { $regex: query, $options: 'i' } },
-        { tags: { $regex: query, $options: 'i' } },
-        { description: { $regex: query, $options: 'i' } },
-        { 'location.city': { $regex: query, $options: 'i' } }
+        { name: { $regex: escapeRegex(query), $options: 'i' } },
+        { tags: { $regex: escapeRegex(query), $options: 'i' } },
+        { description: { $regex: escapeRegex(query), $options: 'i' } },
+        { 'location.city': { $regex: escapeRegex(query), $options: 'i' } }
       ]
     }).select('_id name slug logo description tags location ratings isVerified category')
       .populate('category', 'name slug')
@@ -196,12 +209,38 @@ const searchProductsGroupedInternal = async (
       isActive: true,
       'inventory.isAvailable': true,
       $or: [
-        { name: { $regex: query, $options: 'i' } },
-        { description: { $regex: query, $options: 'i' } },
-        { brand: { $regex: query, $options: 'i' } },
-        { tags: { $regex: query, $options: 'i' } }
+        { name: { $regex: escapeRegex(query), $options: 'i' } },
+        { description: { $regex: escapeRegex(query), $options: 'i' } },
+        { brand: { $regex: escapeRegex(query), $options: 'i' } },
+        { tags: { $regex: escapeRegex(query), $options: 'i' } }
       ]
     };
+
+    // Apply filter params
+    if (filters) {
+      if (filters.minPrice !== undefined) {
+        searchQuery['pricing.selling'] = { ...searchQuery['pricing.selling'], $gte: filters.minPrice };
+      }
+      if (filters.maxPrice !== undefined) {
+        searchQuery['pricing.selling'] = { ...searchQuery['pricing.selling'], $lte: filters.maxPrice };
+      }
+      if (filters.rating !== undefined) {
+        searchQuery['ratings.average'] = { $gte: filters.rating };
+      }
+      if (filters.categories && filters.categories.length > 0) {
+        // Accept category ids or slugs
+        const categoryIds = filters.categories.filter(c => mongoose.Types.ObjectId.isValid(c));
+        const categorySlugs = filters.categories.filter(c => !mongoose.Types.ObjectId.isValid(c));
+        if (categoryIds.length > 0 && categorySlugs.length === 0) {
+          searchQuery.category = { $in: categoryIds.map(id => new mongoose.Types.ObjectId(id)) };
+        } else if (categorySlugs.length > 0) {
+          // Will resolve after category lookup below
+        }
+      }
+      if (filters.inStock) {
+        searchQuery['inventory.stock'] = { $gt: 0 };
+      }
+    }
 
     // Apply region filter to products
     if (region && regionStoreIds.length > 0) {
@@ -261,10 +300,16 @@ const searchProductsGroupedInternal = async (
 
       const firstProduct = productList[0];
       const sellers: any[] = [];
+      const seenStoreProducts = new Set<string>(); // Dedup by storeId+productId
 
       for (const product of productList) {
         const store = product.store;
         if (!store) continue;
+
+        // Deduplicate: skip if same store already has a product in this group
+        const dedupKey = `${store._id?.toString()}-${normalizeProductName(product.name, product.brand)}`;
+        if (seenStoreProducts.has(dedupKey)) continue;
+        seenStoreProducts.add(dedupKey);
 
         const currentPrice = product.pricing?.selling || product.pricing?.original || product.pricing?.mrp || 0;
         const originalPrice = product.pricing?.original || product.pricing?.mrp || currentPrice;
@@ -295,6 +340,11 @@ const searchProductsGroupedInternal = async (
         // Default to 5% if still no cashback (matching Product model's calculateCashback method)
         if (cashbackPercentage === 0) {
           cashbackPercentage = 5;
+        }
+
+        // Apply cashbackMin filter (post-processing since cashback is computed)
+        if (filters?.cashbackMin && cashbackPercentage < filters.cashbackMin) {
+          continue;
         }
 
         // Calculate cashback amount
@@ -535,11 +585,11 @@ const searchStores = async (query: string, limit: number, mode?: ModeId, region?
     const searchQuery: any = {
       isActive: true,
       $or: [
-        { name: { $regex: query, $options: 'i' } },
-        { description: { $regex: query, $options: 'i' } },
-        { tags: { $regex: query, $options: 'i' } },
-        { 'location.address': { $regex: query, $options: 'i' } },
-        { 'location.city': { $regex: query, $options: 'i' } }
+        { name: { $regex: escapeRegex(query), $options: 'i' } },
+        { description: { $regex: escapeRegex(query), $options: 'i' } },
+        { tags: { $regex: escapeRegex(query), $options: 'i' } },
+        { 'location.address': { $regex: escapeRegex(query), $options: 'i' } },
+        { 'location.city': { $regex: escapeRegex(query), $options: 'i' } }
       ]
     };
 
@@ -594,10 +644,10 @@ const searchArticles = async (query: string, limit: number): Promise<any> => {
       isPublished: true,
       isApproved: true,
       $or: [
-        { title: { $regex: query, $options: 'i' } },
-        { excerpt: { $regex: query, $options: 'i' } },
-        { content: { $regex: query, $options: 'i' } },
-        { tags: { $in: [new RegExp(query, 'i')] } }
+        { title: { $regex: escapeRegex(query), $options: 'i' } },
+        { excerpt: { $regex: escapeRegex(query), $options: 'i' } },
+        { content: { $regex: escapeRegex(query), $options: 'i' } },
+        { tags: { $in: [new RegExp(escapeRegex(query), 'i')] } }
       ]
     };
 
@@ -819,7 +869,13 @@ export const searchProductsGrouped = asyncHandler(async (req: Request, res: Resp
     q: query,
     limit: limitParam = 20,
     lat,
-    lon
+    lon,
+    minPrice: minPriceParam,
+    maxPrice: maxPriceParam,
+    rating: ratingParam,
+    categories: categoriesParam,
+    cashbackMin: cashbackMinParam,
+    inStock: inStockParam,
   } = req.query;
 
   // Get region from X-Rez-Region header
@@ -846,8 +902,29 @@ export const searchProductsGrouped = asyncHandler(async (req: Request, res: Resp
     }
   }
 
-  // Generate cache key (include region)
-  const cacheKey = `search:grouped:${query}:${limit}:${userLocation ? `${userLocation.latitude},${userLocation.longitude}` : 'noloc'}:${region || 'all'}`;
+  // Parse filter params
+  const filters: {
+    minPrice?: number;
+    maxPrice?: number;
+    rating?: number;
+    categories?: string[];
+    cashbackMin?: number;
+    inStock?: boolean;
+  } = {};
+  if (minPriceParam) filters.minPrice = Number(minPriceParam);
+  if (maxPriceParam) filters.maxPrice = Number(maxPriceParam);
+  if (ratingParam) filters.rating = Number(ratingParam);
+  if (categoriesParam && typeof categoriesParam === 'string') {
+    filters.categories = categoriesParam.split(',').map(c => c.trim());
+  }
+  if (cashbackMinParam) filters.cashbackMin = Number(cashbackMinParam);
+  if (inStockParam === 'true') filters.inStock = true;
+
+  const hasFilters = Object.keys(filters).length > 0;
+
+  // Generate cache key (include region and filters)
+  const filterKey = hasFilters ? JSON.stringify(filters) : 'nofilter';
+  const cacheKey = `search:grouped:${query}:${limit}:${userLocation ? `${userLocation.latitude},${userLocation.longitude}` : 'noloc'}:${region || 'all'}:${filterKey}`;
 
   try {
     // Check cache first
@@ -864,8 +941,8 @@ export const searchProductsGrouped = asyncHandler(async (req: Request, res: Resp
 
     console.log(`🔍 [GROUPED SEARCH] Searching for: "${query}" with limit: ${limit}, region: ${region || 'all'}`);
 
-    // Perform grouped search with region filtering
-    const result = await searchProductsGroupedInternal(query, limit, userLocation, region);
+    // Perform grouped search with region and filter support
+    const result = await searchProductsGroupedInternal(query, limit, userLocation, region, hasFilters ? filters : undefined);
 
     // Cache the results for 10 minutes (600 seconds)
     const CACHE_TTL = 600;
@@ -901,6 +978,110 @@ export const searchProductsGrouped = asyncHandler(async (req: Request, res: Resp
     console.error(`❌ [GROUPED SEARCH] Error after ${executionTime}ms:`, error);
     return sendError(res, 'Failed to perform grouped product search', 500);
   }
+});
+
+// ============================================
+// AI SEARCH ENDPOINT
+// ============================================
+
+/**
+ * AI Search - Smart search that parses natural language queries
+ * GET /api/search/ai-search
+ *
+ * Extracts keywords, price constraints, and category hints from natural language,
+ * then uses existing search infrastructure to find results.
+ */
+export const aiSearch = asyncHandler(async (req: Request, res: Response) => {
+  const { q: rawQuery } = req.query;
+
+  if (!rawQuery || typeof rawQuery !== 'string') {
+    return sendBadRequest(res, 'Search query (q) is required');
+  }
+
+  const regionHeader = req.headers['x-rez-region'] as string;
+  const region: RegionId | undefined = regionHeader && isValidRegion(regionHeader)
+    ? regionHeader as RegionId
+    : undefined;
+
+  // Parse natural language query
+  const queryLower = rawQuery.toLowerCase();
+
+  // Extract price constraints
+  let maxPrice: number | undefined;
+  let minPrice: number | undefined;
+  const underMatch = queryLower.match(/(?:under|below|less than|max|upto|up to|within)\s*(?:₹|aed|rs\.?|inr|dhs?)?\s*(\d+[\d,]*)/i);
+  if (underMatch) {
+    maxPrice = parseInt(underMatch[1].replace(/,/g, ''));
+  }
+  const aboveMatch = queryLower.match(/(?:above|over|more than|min|at least)\s*(?:₹|aed|rs\.?|inr|dhs?)?\s*(\d+[\d,]*)/i);
+  if (aboveMatch) {
+    minPrice = parseInt(aboveMatch[1].replace(/,/g, ''));
+  }
+
+  // Remove price phrases from keywords
+  let keywords = rawQuery
+    .replace(/(?:under|below|less than|max|upto|up to|within|above|over|more than|min|at least)\s*(?:₹|aed|rs\.?|inr|dhs?)?\s*\d+[\d,]*/gi, '')
+    .replace(/(?:near me|nearby|around me|close by)/gi, '')
+    .replace(/(?:find me|get me|show me|i need|i want|looking for|search for)/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // If keywords are empty after parsing, use original query
+  if (!keywords) keywords = rawQuery;
+
+  // Build filters
+  const filters: any = {};
+  if (minPrice) filters.minPrice = minPrice;
+  if (maxPrice) filters.maxPrice = maxPrice;
+
+  // Search products using existing internal function
+  const productResult = await searchProductsGroupedInternal(keywords, 10, undefined, region, Object.keys(filters).length > 0 ? filters : undefined);
+
+  // Also search stores
+  const storeResult = await searchStores(keywords, 5, undefined, region);
+
+  // Build unified results with relevance scoring
+  const results: any[] = [];
+
+  // Add product results
+  if (productResult.groupedProducts) {
+    for (const group of productResult.groupedProducts) {
+      const bestSeller = group.sellers?.[0];
+      results.push({
+        id: group.productId,
+        type: 'product',
+        title: group.productName,
+        subtitle: bestSeller ? `From ${bestSeller.storeName}` : group.category || '',
+        price: bestSeller?.price?.current,
+        image: group.productImage || '',
+        relevance: 90 - results.length * 2,
+        storeId: bestSeller?.storeId,
+      });
+    }
+  }
+
+  // Add store results
+  if (storeResult.items) {
+    for (const store of storeResult.items) {
+      results.push({
+        id: store._id?.toString() || store.id,
+        type: 'store',
+        title: store.name,
+        subtitle: store.description || store.location?.city || '',
+        image: store.logo || '',
+        relevance: 85 - results.length,
+        storeId: store._id?.toString() || store.id,
+      });
+    }
+  }
+
+  return sendSuccess(res, {
+    query: rawQuery,
+    parsedKeywords: keywords,
+    filters,
+    results,
+    total: results.length,
+  }, 'AI search completed');
 });
 
 // ============================================
@@ -1374,7 +1555,7 @@ export const getAutocomplete = asyncHandler(async (req: Request, res: Response) 
       return sendSuccess(res, cachedResults, 'Autocomplete suggestions retrieved successfully');
     }
 
-    const searchRegex = new RegExp(normalizedQuery, 'i');
+    const searchRegex = new RegExp(escapeRegex(normalizedQuery), 'i');
 
     // Get stores in region for filtering products
     let regionStoreIds: any[] = [];

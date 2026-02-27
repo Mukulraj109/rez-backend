@@ -8,7 +8,7 @@ export interface ICoinTransaction extends Document {
   type: 'earned' | 'spent' | 'expired' | 'refunded' | 'bonus';
   amount: number;
   balance: number; // Balance after transaction
-  source: 'spin_wheel' | 'scratch_card' | 'quiz_game' | 'challenge' | 'achievement' | 'referral' | 'order' | 'review' | 'bill_upload' | 'daily_login' | 'admin' | 'purchase' | 'redemption' | 'expiry' | 'survey' | 'memory_match' | 'coin_hunt' | 'guess_price' | 'purchase_reward' | 'social_share_reward' | 'merchant_award' | 'cashback' | 'creator_pick_reward' | 'poll_vote' | 'photo_upload' | 'offer_comment' | 'event_rating' | 'ugc_reel' | 'social_impact_reward' | 'program_task_reward' | 'program_multiplier_bonus' | 'event_booking' | 'event_checkin' | 'event_participation' | 'event_sharing' | 'event_entry' | 'bonus_campaign' | 'tournament_prize' | 'tournament_entry' | 'tournament_refund' | 'challenge_reward' | 'learning_reward' | 'leaderboard_prize';
+  source: 'spin_wheel' | 'scratch_card' | 'quiz_game' | 'challenge' | 'achievement' | 'referral' | 'order' | 'review' | 'bill_upload' | 'daily_login' | 'admin' | 'purchase' | 'redemption' | 'expiry' | 'survey' | 'memory_match' | 'coin_hunt' | 'guess_price' | 'purchase_reward' | 'social_share_reward' | 'merchant_award' | 'cashback' | 'creator_pick_reward' | 'poll_vote' | 'photo_upload' | 'offer_comment' | 'event_rating' | 'ugc_reel' | 'social_impact_reward' | 'program_task_reward' | 'program_multiplier_bonus' | 'event_booking' | 'event_checkin' | 'event_participation' | 'event_sharing' | 'event_entry' | 'bonus_campaign' | 'tournament_prize' | 'tournament_entry' | 'tournament_refund' | 'challenge_reward' | 'learning_reward' | 'leaderboard_prize' | 'smart_spend_reward';
   description: string;
   category?: MainCategorySlug | null; // MainCategory this transaction belongs to
   metadata?: {
@@ -113,6 +113,7 @@ const CoinTransactionSchema: Schema = new Schema(
         'challenge_reward',     // coins from completing challenges
         'learning_reward',      // coins from completing learning content
         'leaderboard_prize',    // coins awarded as leaderboard prize at cycle end
+        'smart_spend_reward',   // enhanced coin reward from Smart Spend purchases
         'recharge',             // wallet recharge via payment gateway
         'transfer',             // P2P coin transfer between users
         'withdrawal'            // wallet withdrawal to bank/UPI/PayPal

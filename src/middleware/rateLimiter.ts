@@ -162,6 +162,17 @@ export const searchLimiter = isRateLimitDisabled
       legacyHeaders: false
     });
 
+// AI search rate limiter (stricter — expensive LLM calls)
+export const aiSearchLimiter = isRateLimitDisabled
+  ? passthroughMiddleware
+  : rateLimit({
+      windowMs: 60 * 1000, // 1 minute
+      max: 10, // 10 AI searches per minute
+      message: rateLimitErrorResponse,
+      standardHeaders: true,
+      legacyHeaders: false
+    });
+
 // Strict rate limiter for sensitive operations
 export const strictLimiter = isRateLimitDisabled
   ? passthroughMiddleware

@@ -83,8 +83,8 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
-    // Generate JWT token
-    const token = generateToken((user._id as string).toString());
+    // Generate JWT token with admin role (critical for socket.io auth)
+    const token = generateToken((user._id as string).toString(), 'admin');
 
     // Update last login
     user.auth.lastLogin = new Date();

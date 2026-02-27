@@ -1,60 +1,15 @@
 import { Request, Response } from 'express';
 import { Subscription, SubscriptionTier, BillingCycle, ISubscriptionBenefits } from '../models/Subscription';
+import { SubscriptionUpgrade } from '../models/SubscriptionUpgrade';
 import { User } from '../models/User';
 import razorpaySubscriptionService from '../services/razorpaySubscriptionService';
 import subscriptionBenefitsService from '../services/subscriptionBenefitsService';
 import promoCodeService from '../services/promoCodeService';
+import tierConfigService from '../services/tierConfigService';
+import subscriptionAuditService from '../services/subscriptionAuditService';
 import { ProcessedWebhookEvent } from '../models/ProcessedWebhookEvent';
 import { Types } from 'mongoose';
 import * as alertService from '../services/webhookSecurityAlertService';
-
-// Use the global Express.Request type which has user property from express.d.ts
-
-// Helper function to get tier benefits
-const getTierBenefits = (tier: SubscriptionTier): ISubscriptionBenefits => {
-  const benefits = {
-    free: {
-      cashbackMultiplier: 1,
-      freeDelivery: false,
-      prioritySupport: false,
-      exclusiveDeals: false,
-      unlimitedWishlists: false,
-      earlyFlashSaleAccess: false,
-      personalShopper: false,
-      premiumEvents: false,
-      conciergeService: false,
-      birthdayOffer: false,
-      anniversaryOffer: false
-    },
-    premium: {
-      cashbackMultiplier: 2,
-      freeDelivery: true,
-      prioritySupport: true,
-      exclusiveDeals: true,
-      unlimitedWishlists: true,
-      earlyFlashSaleAccess: true,
-      personalShopper: false,
-      premiumEvents: false,
-      conciergeService: false,
-      birthdayOffer: true,
-      anniversaryOffer: false
-    },
-    vip: {
-      cashbackMultiplier: 3,
-      freeDelivery: true,
-      prioritySupport: true,
-      exclusiveDeals: true,
-      unlimitedWishlists: true,
-      earlyFlashSaleAccess: true,
-      personalShopper: true,
-      premiumEvents: true,
-      conciergeService: true,
-      birthdayOffer: true,
-      anniversaryOffer: true
-    }
-  };
-  return benefits[tier];
-};
 
 /**
  * Get all available subscription tiers
@@ -114,12 +69,13 @@ export const getCurrentSubscription = async (req: Request, res: Response) => {
 
     if (!subscription) {
       // Return free tier by default
+      const freeBenefits = await tierConfigService.getTierBenefits('free');
       return res.status(200).json({
         success: true,
         data: {
           tier: 'free',
           status: 'active',
-          benefits: getTierBenefits('free'),
+          benefits: freeBenefits,
           usage: {
             totalSavings: 0,
             ordersThisMonth: 0,
@@ -231,15 +187,11 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
     }
     console.log('✅ [SUBSCRIBE] No existing active subscription');
 
-    // Get tier pricing
-    const tierPricing: { [key: string]: { monthly: number; yearly: number } } = {
-      premium: { monthly: 99, yearly: 999 },
-      vip: { monthly: 299, yearly: 2999 }
-    };
-    let price = billingCycle === 'monthly' ? tierPricing[tier].monthly : tierPricing[tier].yearly;
+    // Get tier pricing from single source of truth (DB)
+    let price = await tierConfigService.getTierPrice(tier, billingCycle);
     let appliedDiscount = 0;
 
-    console.log('🔷 [SUBSCRIBE] Base price:', price, 'INR');
+    console.log('🔷 [SUBSCRIBE] Base price:', price, '(from DB)');
 
     // Apply promo code if provided
     if (promoCode) {
@@ -311,7 +263,7 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
       trialEndDate,
       autoRenew: true,
       paymentMethod: useStripe ? 'stripe' : 'razorpay',
-      benefits: getTierBenefits(tier),
+      benefits: await tierConfigService.getTierBenefits(tier),
       metadata: {
         source: source || 'app',
         promoCode
@@ -324,7 +276,9 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
       subscriptionData.razorpayPlanId = paymentGatewaySubscription.plan_id;
       subscriptionData.razorpayCustomerId = paymentGatewaySubscription.customer_id;
     } else if (useStripe && paymentGatewaySubscription) {
-      subscriptionData.stripeSubscriptionId = paymentGatewaySubscription.id;
+      // Store Stripe subscription ID in paymentMethod context
+      // TODO: Add stripeSubscriptionId field to Subscription model for proper tracking
+      subscriptionData.paymentMethod = `stripe:${paymentGatewaySubscription.id}`;
     }
 
     const subscription = new Subscription(subscriptionData);
@@ -332,6 +286,19 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
     console.log('🔷 [SUBSCRIBE] Saving subscription to database...');
     await subscription.save();
     console.log('✅ [SUBSCRIBE] Subscription saved successfully:', subscription._id);
+
+    // Audit log
+    subscriptionAuditService.logChange({
+      subscriptionId: (subscription._id as any)?.toString(),
+      userId,
+      action: 'created',
+      newState: { tier, status: 'trial', price, billingCycle },
+      metadata: {
+        promoCode: promoCode || undefined,
+        ipAddress: req.ip,
+        description: `New ${tier} subscription created (${billingCycle})`,
+      },
+    });
 
     // Increment promo code usage if promo code was applied
     if (promoCode && appliedDiscount > 0) {
@@ -390,10 +357,19 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
 };
 
 /**
- * Upgrade subscription tier
+ * Legacy upgrade endpoint - redirects to two-phase flow
  * POST /api/subscriptions/upgrade
  */
 export const upgradeSubscription = async (req: Request, res: Response) => {
+  // Redirect to new two-phase flow
+  return initiateUpgrade(req, res);
+};
+
+/**
+ * Phase 1: Initiate upgrade - validate eligibility, calculate price, create pending upgrade
+ * POST /api/subscriptions/upgrade/initiate
+ */
+export const initiateUpgrade = async (req: Request, res: Response) => {
   try {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
@@ -403,78 +379,312 @@ export const upgradeSubscription = async (req: Request, res: Response) => {
       });
     }
 
-    const { newTier } = req.body;
+    const { newTier, billingCycle: requestedBillingCycle, paymentGateway } = req.body;
 
-    // Get current subscription
+    // Validate new tier
+    if (!['premium', 'vip'].includes(newTier)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid upgrade tier. Must be premium or vip.'
+      });
+    }
+
+    // Validate billing cycle if provided
+    if (requestedBillingCycle && !['monthly', 'yearly'].includes(requestedBillingCycle)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid billing cycle. Must be monthly or yearly.'
+      });
+    }
+
+    // Get current subscription (may be null for free users)
     const currentSubscription = await subscriptionBenefitsService.getUserSubscription(userId);
-    if (!currentSubscription) {
+    const currentTier = currentSubscription?.tier || 'free';
+    const billingCycle = requestedBillingCycle || currentSubscription?.billingCycle || 'monthly';
+
+    // Validate upgrade path
+    if (!tierConfigService.isValidUpgrade(currentTier, newTier)) {
       return res.status(400).json({
         success: false,
-        message: 'No active subscription found'
+        message: `Cannot upgrade from ${currentTier} to ${newTier}`
       });
     }
 
-    // Validate upgrade
-    if (!currentSubscription.canUpgrade()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Cannot upgrade from current tier'
-      });
+    // Get pricing from DB
+    const newTierPrice = await tierConfigService.getTierPrice(newTier, billingCycle);
+    const currentTierPrice = await tierConfigService.getTierPrice(currentTier, billingCycle);
+
+    // Calculate prorated amount for mid-cycle upgrade
+    let proratedAmount = newTierPrice;
+    let creditFromCurrentPlan = 0;
+
+    if (currentSubscription && currentTier !== 'free') {
+      const daysRemaining = currentSubscription.getRemainingDays
+        ? currentSubscription.getRemainingDays()
+        : Math.max(0, Math.ceil((new Date(currentSubscription.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+      const totalDays = billingCycle === 'yearly' ? 365 : 30;
+
+      creditFromCurrentPlan = Math.round((currentTierPrice * daysRemaining) / totalDays);
+      proratedAmount = Math.max(0, Math.round((newTierPrice * daysRemaining) / totalDays) - creditFromCurrentPlan);
     }
 
-    if (newTier === 'free' || newTier === currentSubscription.tier) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid upgrade tier'
-      });
-    }
+    // Generate idempotency key
+    const subscriptionRef = currentSubscription?._id?.toString() || 'new';
+    const idempotencyKey = `upgrade_${userId}_${currentTier}_${newTier}_${billingCycle}_${subscriptionRef}`;
 
-    // Calculate prorated amount
-    const proratedAmount = (Subscription as any).calculateProratedAmount(
-      currentSubscription.tier,
-      newTier,
-      currentSubscription.endDate,
-      currentSubscription.billingCycle
-    );
+    // Check for existing pending or processing upgrade (prevent double-tap)
+    const existingPending = await SubscriptionUpgrade.findOne({
+      userId,
+      status: { $in: ['pending_payment', 'processing'] },
+      toTier: newTier,
+      expiresAt: { $gt: new Date() },
+    });
 
-    // Update subscription
-    currentSubscription.previousTier = currentSubscription.tier;
-    currentSubscription.tier = newTier;
-    currentSubscription.benefits = getTierBenefits(newTier);
-    currentSubscription.upgradeDate = new Date();
-    currentSubscription.proratedCredit = -proratedAmount; // Negative because user needs to pay
-
-    await currentSubscription.save();
-
-    // Update Razorpay subscription if exists
-    if (currentSubscription.razorpaySubscriptionId) {
-      const newPlanId = await razorpaySubscriptionService.createOrGetPlan(
-        newTier,
-        currentSubscription.billingCycle
-      );
-
-      await razorpaySubscriptionService.updateSubscription(
-        currentSubscription.razorpaySubscriptionId,
-        {
-          plan_id: newPlanId,
-          schedule_change_at: 'now'
+    if (existingPending) {
+      return res.status(200).json({
+        success: true,
+        message: 'Existing upgrade intent found',
+        data: {
+          upgradeId: existingPending._id,
+          fromTier: existingPending.fromTier,
+          toTier: existingPending.toTier,
+          proratedAmount: existingPending.proratedAmount,
+          newTierPrice: existingPending.newTierPrice,
+          creditFromCurrentPlan: existingPending.creditFromCurrentPlan,
+          billingCycle: existingPending.billingCycle,
+          expiresAt: existingPending.expiresAt,
         }
-      );
+      });
     }
+
+    // Create pending upgrade record
+    const upgradeRecord = await SubscriptionUpgrade.create({
+      userId,
+      subscriptionId: (currentSubscription?._id as any)?.toString(),
+      fromTier: currentTier,
+      toTier: newTier,
+      billingCycle,
+      proratedAmount,
+      newTierPrice,
+      creditFromCurrentPlan,
+      paymentGateway: paymentGateway || 'stripe',
+      status: 'pending_payment',
+      idempotencyKey,
+      expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 min expiry
+      metadata: {
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        source: 'app',
+      },
+    });
+
+    // Audit log
+    subscriptionAuditService.logChange({
+      subscriptionId: (currentSubscription?._id as any)?.toString(),
+      userId,
+      action: 'upgrade_initiated',
+      previousState: { tier: currentTier, status: currentSubscription?.status || 'active' },
+      newState: { tier: newTier, price: proratedAmount, billingCycle },
+      metadata: {
+        upgradeId: (upgradeRecord._id as any).toString(),
+        proratedAmount,
+        ipAddress: req.ip,
+      },
+    });
 
     res.status(200).json({
       success: true,
-      message: 'Subscription upgraded successfully',
+      message: 'Upgrade initiated. Complete payment to activate.',
       data: {
-        subscription: currentSubscription,
-        proratedAmount
+        upgradeId: (upgradeRecord._id as any)?.toString(),
+        fromTier: currentTier,
+        toTier: newTier,
+        proratedAmount,
+        newTierPrice,
+        creditFromCurrentPlan,
+        billingCycle,
+        expiresAt: upgradeRecord.expiresAt,
       }
     });
   } catch (error: any) {
-    console.error('Error upgrading subscription:', error);
+    console.error('[UPGRADE] Error initiating upgrade:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to upgrade subscription',
+      message: 'Failed to initiate upgrade',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Phase 2: Confirm upgrade - verify payment, update tier, activate benefits
+ * POST /api/subscriptions/upgrade/confirm
+ */
+export const confirmUpgrade = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?._id || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+    }
+
+    const { upgradeId, paymentId, paymentIntentId } = req.body;
+
+    if (!upgradeId) {
+      return res.status(400).json({
+        success: false,
+        message: 'upgradeId is required'
+      });
+    }
+
+    // Atomically claim the upgrade record (prevent double-processing)
+    const upgradeRecord = await SubscriptionUpgrade.findOneAndUpdate(
+      {
+        _id: upgradeId,
+        userId,
+        status: 'pending_payment',
+        expiresAt: { $gt: new Date() },
+      },
+      { status: 'processing', paymentId, paymentIntentId },
+      { new: true }
+    );
+
+    if (!upgradeRecord) {
+      // Check if already completed (idempotent success)
+      const existing = await SubscriptionUpgrade.findOne({ _id: upgradeId, userId, status: 'completed' });
+      if (existing) {
+        return res.status(200).json({ success: true, message: 'Upgrade already completed' });
+      }
+      return res.status(400).json({
+        success: false,
+        message: 'Upgrade not found, already completed, or expired'
+      });
+    }
+
+    // Now update the actual subscription
+    let subscription = upgradeRecord.subscriptionId
+      ? await Subscription.findById(upgradeRecord.subscriptionId)
+      : await subscriptionBenefitsService.getUserSubscription(userId);
+
+    const newBenefits = await tierConfigService.getTierBenefits(upgradeRecord.toTier);
+
+    if (subscription) {
+      // Existing subscription - upgrade tier
+      const previousTier = subscription.tier;
+      subscription.previousTier = previousTier;
+      subscription.tier = upgradeRecord.toTier as any;
+      subscription.benefits = newBenefits;
+      subscription.upgradeDate = new Date();
+      subscription.proratedCredit = upgradeRecord.creditFromCurrentPlan;
+      subscription.price = upgradeRecord.newTierPrice;
+      if (!subscription.billingCycle) {
+        subscription.billingCycle = upgradeRecord.billingCycle as any;
+      }
+      await subscription.save();
+
+      // Update Razorpay if applicable
+      if (subscription.razorpaySubscriptionId) {
+        try {
+          const newPlanId = await razorpaySubscriptionService.createOrGetPlan(
+            upgradeRecord.toTier as any,
+            subscription.billingCycle
+          );
+          await razorpaySubscriptionService.updateSubscription(
+            subscription.razorpaySubscriptionId,
+            { plan_id: newPlanId, schedule_change_at: 'now' }
+          );
+        } catch (rpError) {
+          console.error('[UPGRADE] Razorpay plan update failed (non-blocking):', rpError);
+        }
+      }
+    } else {
+      // Free user - create new subscription
+      const startDate = new Date();
+      const endDate = new Date(startDate);
+      if (upgradeRecord.billingCycle === 'yearly') {
+        endDate.setFullYear(endDate.getFullYear() + 1);
+      } else {
+        endDate.setMonth(endDate.getMonth() + 1);
+      }
+
+      const tierConfig = await tierConfigService.getTierConfig(upgradeRecord.toTier);
+      const trialEndDate = new Date(startDate);
+      trialEndDate.setDate(trialEndDate.getDate() + (tierConfig.trialDays || 0));
+
+      subscription = await Subscription.create({
+        user: userId,
+        tier: upgradeRecord.toTier,
+        status: 'active',
+        billingCycle: upgradeRecord.billingCycle,
+        price: upgradeRecord.newTierPrice,
+        startDate,
+        endDate,
+        trialEndDate,
+        autoRenew: true,
+        paymentMethod: upgradeRecord.paymentGateway,
+        benefits: newBenefits,
+      });
+    }
+
+    // Mark upgrade as completed NOW (after subscription was successfully updated)
+    await SubscriptionUpgrade.updateOne(
+      { _id: upgradeRecord._id },
+      { status: 'completed', completedAt: new Date() }
+    );
+
+    // Audit log
+    subscriptionAuditService.logChange({
+      subscriptionId: (subscription._id as any)?.toString(),
+      userId,
+      action: 'upgrade_confirmed',
+      previousState: { tier: upgradeRecord.fromTier },
+      newState: {
+        tier: upgradeRecord.toTier,
+        status: subscription.status,
+        price: upgradeRecord.newTierPrice,
+        billingCycle: upgradeRecord.billingCycle,
+      },
+      metadata: {
+        upgradeId: (upgradeRecord._id as any).toString(),
+        paymentId,
+        proratedAmount: upgradeRecord.proratedAmount,
+        ipAddress: req.ip,
+        description: `Upgraded from ${upgradeRecord.fromTier} to ${upgradeRecord.toTier}`,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully upgraded to ${upgradeRecord.toTier}`,
+      data: {
+        subscription,
+        upgrade: {
+          fromTier: upgradeRecord.fromTier,
+          toTier: upgradeRecord.toTier,
+          proratedAmount: upgradeRecord.proratedAmount,
+        },
+      }
+    });
+  } catch (error: any) {
+    console.error('[UPGRADE] Error confirming upgrade:', error);
+
+    // Rollback: revert processing → pending_payment so user can retry
+    if (req.body.upgradeId) {
+      try {
+        await SubscriptionUpgrade.updateOne(
+          { _id: req.body.upgradeId, status: 'processing' },
+          { status: 'pending_payment' }
+        );
+      } catch (rollbackErr) {
+        console.error('[UPGRADE] Rollback failed:', rollbackErr);
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to confirm upgrade',
       error: error.message
     });
   }
@@ -496,12 +706,33 @@ export const downgradeSubscription = async (req: Request, res: Response) => {
 
     const { newTier } = req.body;
 
+    // Validate newTier
+    if (!newTier || !['free', 'premium'].includes(newTier)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid downgrade tier. Must be free or premium.'
+      });
+    }
+
     // Get current subscription
     const currentSubscription = await subscriptionBenefitsService.getUserSubscription(userId);
     if (!currentSubscription) {
       return res.status(400).json({
         success: false,
         message: 'No active subscription found'
+      });
+    }
+
+    // Check for in-progress upgrade (prevent conflicting state changes)
+    const pendingUpgrade = await SubscriptionUpgrade.findOne({
+      userId,
+      status: { $in: ['pending_payment', 'processing'] },
+      expiresAt: { $gt: new Date() },
+    });
+    if (pendingUpgrade) {
+      return res.status(409).json({
+        success: false,
+        message: 'Cannot downgrade while an upgrade is in progress. Please cancel or complete the pending upgrade first.'
       });
     }
 
@@ -513,27 +744,47 @@ export const downgradeSubscription = async (req: Request, res: Response) => {
       });
     }
 
-    if (newTier === currentSubscription.tier) {
+    // Validate downgrade path using tier hierarchy
+    if (!tierConfigService.isValidDowngrade(currentSubscription.tier, newTier)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid downgrade tier'
+        message: `Cannot downgrade from ${currentSubscription.tier} to ${newTier}`
       });
     }
 
-    // Calculate prorated credit
-    const proratedCredit = (Subscription as any).calculateProratedAmount(
-      newTier,
-      currentSubscription.tier,
-      currentSubscription.endDate,
-      currentSubscription.billingCycle
-    );
+    // Calculate prorated credit using DB prices
+    const currentTierPrice = await tierConfigService.getTierPrice(currentSubscription.tier, currentSubscription.billingCycle);
+    const newTierPrice = newTier === 'free' ? 0 : await tierConfigService.getTierPrice(newTier, currentSubscription.billingCycle);
+
+    const daysRemaining = currentSubscription.getRemainingDays
+      ? currentSubscription.getRemainingDays()
+      : Math.max(0, Math.ceil((new Date(currentSubscription.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+    const totalDays = currentSubscription.billingCycle === 'yearly' ? 365 : 30;
+
+    const proratedCredit = Math.max(0, Math.round(((currentTierPrice - newTierPrice) * daysRemaining) / totalDays));
 
     // Schedule downgrade for end of billing cycle
-    currentSubscription.previousTier = currentSubscription.tier;
+    const previousTier = currentSubscription.tier;
+    currentSubscription.previousTier = previousTier;
     currentSubscription.downgradeScheduledFor = currentSubscription.endDate;
+    currentSubscription.downgradeTargetTier = newTier;
     currentSubscription.proratedCredit = proratedCredit;
 
     await currentSubscription.save();
+
+    // Audit log
+    subscriptionAuditService.logChange({
+      subscriptionId: (currentSubscription._id as any)?.toString(),
+      userId,
+      action: 'downgrade_scheduled',
+      previousState: { tier: previousTier, status: currentSubscription.status },
+      newState: { tier: newTier },
+      metadata: {
+        proratedAmount: proratedCredit,
+        ipAddress: req.ip,
+        description: `Downgrade from ${previousTier} to ${newTier} scheduled for ${currentSubscription.endDate}`,
+      },
+    });
 
     res.status(200).json({
       success: true,
@@ -587,6 +838,10 @@ export const cancelSubscription = async (req: Request, res: Response) => {
       );
     }
 
+    // Capture previous state before changes
+    const previousTier = subscription.tier;
+    const previousStatus = subscription.status;
+
     // Update subscription
     subscription.status = 'cancelled';
     subscription.cancellationDate = new Date();
@@ -600,6 +855,20 @@ export const cancelSubscription = async (req: Request, res: Response) => {
     subscription.reactivationEligibleUntil = reactivationDate;
 
     await subscription.save();
+
+    // Audit log
+    subscriptionAuditService.logChange({
+      subscriptionId: (subscription._id as any)?.toString(),
+      userId,
+      action: 'cancelled',
+      previousState: { tier: previousTier, status: previousStatus },
+      newState: { tier: previousTier, status: 'cancelled' },
+      metadata: {
+        reason,
+        ipAddress: req.ip,
+        description: cancelImmediately ? 'Cancelled immediately' : 'Cancelled at cycle end',
+      },
+    });
 
     res.status(200).json({
       success: true,
@@ -636,14 +905,16 @@ export const renewSubscription = async (req: Request, res: Response) => {
       });
     }
 
-    // Get most recent subscription
-    const subscription = await Subscription.findOne({ user: userId })
-      .sort({ endDate: -1 });
+    // Get most recent cancelled/expired subscription (not already active ones)
+    const subscription = await Subscription.findOne({
+      user: userId,
+      status: { $in: ['cancelled', 'expired', 'grace_period'] },
+    }).sort({ endDate: -1 });
 
     if (!subscription) {
       return res.status(400).json({
         success: false,
-        message: 'No subscription found to renew'
+        message: 'No cancelled or expired subscription found to renew'
       });
     }
 
@@ -654,6 +925,9 @@ export const renewSubscription = async (req: Request, res: Response) => {
         message: 'Reactivation period has expired. Please create a new subscription.'
       });
     }
+
+    // Capture previous state
+    const previousStatus = subscription.status;
 
     // Reactivate in Razorpay
     if (subscription.razorpaySubscriptionId) {
@@ -666,6 +940,10 @@ export const renewSubscription = async (req: Request, res: Response) => {
     subscription.cancellationDate = undefined;
     subscription.cancellationReason = undefined;
 
+    // Restore tier benefits from DB (expiry job may have cleared them)
+    const restoredBenefits = await tierConfigService.getTierBenefits(subscription.tier);
+    subscription.benefits = restoredBenefits;
+
     // Extend end date
     const newEndDate = new Date();
     if (subscription.billingCycle === 'monthly') {
@@ -676,6 +954,19 @@ export const renewSubscription = async (req: Request, res: Response) => {
     subscription.endDate = newEndDate;
 
     await subscription.save();
+
+    // Audit log
+    subscriptionAuditService.logChange({
+      subscriptionId: (subscription._id as any)?.toString(),
+      userId,
+      action: 'renewed',
+      previousState: { tier: subscription.tier, status: previousStatus },
+      newState: { tier: subscription.tier, status: 'active' },
+      metadata: {
+        ipAddress: req.ip,
+        description: `Subscription renewed until ${newEndDate.toISOString()}`,
+      },
+    });
 
     res.status(200).json({
       success: true,
@@ -1084,6 +1375,14 @@ export const toggleAutoRenew = async (req: Request, res: Response) => {
 
     const { autoRenew } = req.body;
 
+    // Validate autoRenew is a boolean
+    if (typeof autoRenew !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'autoRenew must be a boolean'
+      });
+    }
+
     const subscription = await subscriptionBenefitsService.getUserSubscription(userId);
     if (!subscription) {
       return res.status(400).json({
@@ -1092,8 +1391,22 @@ export const toggleAutoRenew = async (req: Request, res: Response) => {
       });
     }
 
+    const previousAutoRenew = subscription.autoRenew;
     subscription.autoRenew = autoRenew;
     await subscription.save();
+
+    // Audit log
+    subscriptionAuditService.logChange({
+      subscriptionId: (subscription._id as any)?.toString(),
+      userId,
+      action: 'auto_renewed',
+      previousState: { tier: subscription.tier, status: subscription.status },
+      newState: { tier: subscription.tier, status: subscription.status },
+      metadata: {
+        ipAddress: req.ip,
+        description: `Auto-renewal ${previousAutoRenew ? 'enabled' : 'disabled'} → ${autoRenew ? 'enabled' : 'disabled'}`,
+      },
+    });
 
     res.status(200).json({
       success: true,
@@ -1171,7 +1484,7 @@ export const validatePromoCode = async (req: Request, res: Response) => {
       data: {
         discount: result.discount,
         finalPrice: result.finalPrice,
-        originalPrice: promoCodeService.getSubscriptionPrice(tier as SubscriptionTier, billingCycle as BillingCycle),
+        originalPrice: await promoCodeService.getSubscriptionPrice(tier as SubscriptionTier, billingCycle as BillingCycle),
         message: result.message || 'Promo code applied successfully'
       },
       message: result.message || 'Promo code is valid'

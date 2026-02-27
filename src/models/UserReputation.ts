@@ -12,7 +12,8 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
  * - Network (10%): Referral network, quality of referrals
  *
  * Thresholds:
- * - Entry Tier: Score >= 70
+ * - Entry Tier: Score >= 50
+ * - Signature Tier: Score >= 70
  * - Elite Tier: Score >= 85
  * - Hard Block: Trust < 60
  */
@@ -27,16 +28,17 @@ export const PILLAR_WEIGHTS = {
   network: 0.10,
 } as const;
 
-// Eligibility thresholds
+// Eligibility thresholds (4-tier system)
 export const ELIGIBILITY_THRESHOLDS = {
-  ENTRY_TIER: 70,
+  ENTRY_TIER: 50,
+  SIGNATURE_TIER: 70,
   ELITE_TIER: 85,
   TRUST_MINIMUM: 60,
 } as const;
 
 // Pillar types
 export type PillarId = 'engagement' | 'trust' | 'influence' | 'economicValue' | 'brandAffinity' | 'network';
-export type PriveTier = 'none' | 'entry' | 'elite';
+export type PriveTier = 'none' | 'entry' | 'signature' | 'elite';
 
 // Engagement factors
 export interface IEngagementFactors {
@@ -274,7 +276,7 @@ const UserReputationSchema = new Schema<IUserReputation>({
 
   tier: {
     type: String,
-    enum: ['none', 'entry', 'elite'],
+    enum: ['none', 'entry', 'signature', 'elite'],
     default: 'none',
     index: true,
   },
@@ -298,7 +300,7 @@ const UserReputationSchema = new Schema<IUserReputation>({
   history: [{
     date: { type: Date, required: true },
     totalScore: { type: Number, required: true },
-    tier: { type: String, enum: ['none', 'entry', 'elite'], required: true },
+    tier: { type: String, enum: ['none', 'entry', 'signature', 'elite'], required: true },
     pillars: {
       engagement: { type: Number },
       trust: { type: Number },
@@ -319,6 +321,7 @@ UserReputationSchema.index({ totalScore: -1 });
 UserReputationSchema.index({ tier: 1 });
 UserReputationSchema.index({ isEligible: 1 });
 UserReputationSchema.index({ 'pillars.trust.score': 1 });
+UserReputationSchema.index({ userId: 1, lastCalculated: -1 });
 
 // Virtual for calculating weighted score
 UserReputationSchema.virtual('weightedScores').get(function() {
@@ -347,12 +350,15 @@ UserReputationSchema.methods.calculateTotalScore = function() {
 
   this.totalScore = Math.round(total * 100) / 100;
 
-  // Determine tier (with trust hard block check)
+  // Determine tier (4-tier system with trust hard block)
   if (scores.trust.score < ELIGIBILITY_THRESHOLDS.TRUST_MINIMUM) {
     this.tier = 'none';
     this.isEligible = false;
   } else if (this.totalScore >= ELIGIBILITY_THRESHOLDS.ELITE_TIER) {
     this.tier = 'elite';
+    this.isEligible = true;
+  } else if (this.totalScore >= ELIGIBILITY_THRESHOLDS.SIGNATURE_TIER) {
+    this.tier = 'signature';
     this.isEligible = true;
   } else if (this.totalScore >= ELIGIBILITY_THRESHOLDS.ENTRY_TIER) {
     this.tier = 'entry';

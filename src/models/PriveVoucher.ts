@@ -5,6 +5,7 @@
  */
 
 import mongoose, { Document, Schema, Types, Model } from 'mongoose';
+import crypto from 'crypto';
 
 export type VoucherType = 'gift_card' | 'bill_pay' | 'experience' | 'charity';
 export type VoucherStatus = 'active' | 'used' | 'expired' | 'cancelled';
@@ -138,6 +139,7 @@ PriveVoucherSchema.index({ userId: 1, createdAt: -1 });
 PriveVoucherSchema.index({ code: 1 }, { unique: true });
 PriveVoucherSchema.index({ expiresAt: 1 });
 PriveVoucherSchema.index({ type: 1 });
+PriveVoucherSchema.index({ _id: 1, userId: 1 });
 
 // Generate a unique 12-character alphanumeric code
 PriveVoucherSchema.statics.generateUniqueCode = async function (): Promise<string> {
@@ -148,7 +150,7 @@ PriveVoucherSchema.statics.generateUniqueCode = async function (): Promise<strin
   while (exists) {
     code = '';
     for (let i = 0; i < 12; i++) {
-      code += characters.charAt(Math.floor(Math.random() * characters.length));
+      code += characters.charAt(crypto.randomInt(characters.length));
       // Add dashes for readability: XXXX-XXXX-XXXX
       if (i === 3 || i === 7) code += '-';
     }

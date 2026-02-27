@@ -42,8 +42,14 @@ export interface ISupportTicket extends Document {
   attachments: string[];
   tags: string[];
   internalNotes: string[];
+  metadata: Map<string, any> | Record<string, any>;
+  firstResponseAt?: Date;
   responseTime?: number; // in minutes
   resolutionTime?: number; // in minutes
+
+  // Instance methods
+  addMessage(senderId: Types.ObjectId, senderType: 'user' | 'agent' | 'system', message: string, attachments?: string[]): Promise<void>;
+  markMessagesAsRead(userType: 'user' | 'agent'): Promise<void>;
 }
 
 const TicketMessageSchema = new Schema<ITicketMessage>(
@@ -170,6 +176,14 @@ const SupportTicketSchema = new Schema<ISupportTicket>(
     internalNotes: [{
       type: String, // Agent-only notes
     }],
+    metadata: {
+      type: Map,
+      of: Schema.Types.Mixed,
+      default: new Map(),
+    },
+    firstResponseAt: {
+      type: Date,
+    },
     responseTime: {
       type: Number, // Minutes from creation to first agent response
     },

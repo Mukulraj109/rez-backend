@@ -19,7 +19,15 @@ const subscriptionTiers = [
       maxWishlists: 5,
       prioritySupport: false,
       exclusiveDeals: false,
-      earlyAccess: false
+      earlyAccess: false,
+      freeDelivery: false,
+      unlimitedWishlists: false,
+      earlyFlashSaleAccess: false,
+      personalShopper: false,
+      premiumEvents: false,
+      conciergeService: false,
+      birthdayOffer: false,
+      anniversaryOffer: false,
     },
     description: 'Basic features with standard cashback',
     features: [
@@ -30,7 +38,8 @@ const subscriptionTiers = [
       'Regular delivery'
     ],
     isActive: true,
-    sortOrder: 1
+    sortOrder: 1,
+    trialDays: 0,
   },
   {
     tier: 'premium',
@@ -46,7 +55,15 @@ const subscriptionTiers = [
       maxWishlists: -1, // unlimited
       prioritySupport: true,
       exclusiveDeals: true,
-      earlyAccess: true
+      earlyAccess: true,
+      freeDelivery: true,
+      unlimitedWishlists: true,
+      earlyFlashSaleAccess: true,
+      personalShopper: false,
+      premiumEvents: false,
+      conciergeService: false,
+      birthdayOffer: true,
+      anniversaryOffer: false,
     },
     description: 'Enhanced benefits with 2x cashback',
     features: [
@@ -60,7 +77,8 @@ const subscriptionTiers = [
       'Save up to ₹3000/month'
     ],
     isActive: true,
-    sortOrder: 2
+    sortOrder: 2,
+    trialDays: 7,
   },
   {
     tier: 'vip',
@@ -76,7 +94,15 @@ const subscriptionTiers = [
       maxWishlists: -1, // unlimited
       prioritySupport: true,
       exclusiveDeals: true,
-      earlyAccess: true
+      earlyAccess: true,
+      freeDelivery: true,
+      unlimitedWishlists: true,
+      earlyFlashSaleAccess: true,
+      personalShopper: true,
+      premiumEvents: true,
+      conciergeService: true,
+      birthdayOffer: true,
+      anniversaryOffer: true,
     },
     description: 'Ultimate experience with 3x cashback',
     features: [
@@ -91,7 +117,8 @@ const subscriptionTiers = [
       'Save up to ₹10000/month'
     ],
     isActive: true,
-    sortOrder: 3
+    sortOrder: 3,
+    trialDays: 7,
   }
 ];
 

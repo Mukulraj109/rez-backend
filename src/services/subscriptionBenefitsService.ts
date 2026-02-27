@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import { Subscription, ISubscription, SubscriptionTier } from '../models/Subscription';
 import { User, IUser } from '../models/User';
 import { Order } from '../models/Order';
+import tierConfigService from './tierConfigService';
 
 class SubscriptionBenefitsService {
   /**
@@ -281,10 +282,11 @@ class SubscriptionBenefitsService {
       const subscription = await this.getUserSubscription(userId);
 
       if (!subscription) {
+        const freeBenefits = await tierConfigService.getTierBenefits('free');
         return {
           tier: 'free',
           isActive: false,
-          benefits: (Subscription as any).getTierConfig('free').benefits,
+          benefits: freeBenefits,
           usage: {
             totalSavings: 0,
             ordersThisMonth: 0,
@@ -476,13 +478,16 @@ class SubscriptionBenefitsService {
         createdAt: { $gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) } // Last 90 days
       });
 
+      // Get tier config from DB (single source of truth)
+      const tierConfig = await tierConfigService.getTierConfig(targetTier);
+
       if (recentOrders.length === 0) {
         // Default estimates for new users
         return {
           estimatedMonthlySavings: targetTier === 'premium' ? 300 : 1000,
           estimatedYearlySavings: targetTier === 'premium' ? 3600 : 12000,
           paybackPeriod: targetTier === 'premium' ? 10 : 9,
-          benefits: (Subscription as any).getTierConfig(targetTier).features
+          benefits: tierConfig.features
         };
       }
 
@@ -491,19 +496,17 @@ class SubscriptionBenefitsService {
       const avgOrderValue = totalSpent / recentOrders.length;
       const ordersPerMonth = recentOrders.length / 3; // 90 days = 3 months
 
-      // Get tier config
-      const tierConfig = (Subscription as any).getTierConfig(targetTier);
       const multiplier = tierConfig.benefits.cashbackMultiplier;
 
       // Calculate savings
       const avgCashbackRate = 0.05; // 5% average
       const extraCashbackPerOrder = avgOrderValue * avgCashbackRate * (multiplier - 1);
-      const deliverySavingsPerOrder = tierConfig.benefits.freeDelivery ? 30 : 0; // Avg ₹30 delivery
+      const deliverySavingsPerOrder = tierConfig.benefits.freeDelivery ? 30 : 0; // Avg delivery fee
 
       const monthlySavings = (extraCashbackPerOrder + deliverySavingsPerOrder) * ordersPerMonth;
       const yearlySavings = monthlySavings * 12;
 
-      // Calculate payback period
+      // Calculate payback period using DB price
       const subscriptionCost = tierConfig.pricing.monthly;
       const paybackPeriod = Math.ceil((subscriptionCost / monthlySavings) * 30); // in days
 

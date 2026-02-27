@@ -104,6 +104,54 @@ export function requireReAuthAbove(operationType: 'transfer' | 'gift') {
 }
 
 /**
+ * Middleware that requires re-auth for coin redemptions above the configured threshold.
+ * Reads coinAmount from req.body and threshold from WalletConfig.redemptionConfig.reAuthThreshold.
+ */
+export function requireReAuthForRedemption() {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const userId = (req as any).userId;
+    if (!userId) return sendError(res, 'User not authenticated', 401);
+
+    const coinAmount = req.body.coinAmount || 0;
+    const config = await WalletConfig.getOrCreate();
+    const threshold = config.redemptionConfig?.reAuthThreshold || 5000;
+
+    if (coinAmount <= threshold) {
+      return next();
+    }
+
+    // Amount exceeds threshold — check re-auth
+    try {
+      const redis = redisService;
+      const verified = await redis.get(`reauth:${userId}:verified`);
+
+      if (!verified) {
+        logger.info('Re-auth required for high-value redemption', {
+          userId,
+          coinAmount,
+          threshold,
+        });
+        return res.status(403).json({
+          success: false,
+          message: `Re-authentication required for redemptions above ${threshold} coins`,
+          requiresReAuth: true,
+          threshold,
+        });
+      }
+
+      next();
+    } catch (error) {
+      logger.error('Re-auth check failed for redemption', error, { userId });
+      return res.status(403).json({
+        success: false,
+        message: 'Re-authentication required for this operation',
+        requiresReAuth: true,
+      });
+    }
+  };
+}
+
+/**
  * Mark a user as re-authenticated (call after successful OTP verification).
  * Sets a Redis key with 5-minute TTL.
  */

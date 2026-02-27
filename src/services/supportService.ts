@@ -5,6 +5,7 @@ import { Types } from 'mongoose';
 import { SupportTicket, ISupportTicket } from '../models/SupportTicket';
 import { FAQ, IFAQ } from '../models/FAQ';
 import { User } from '../models/User';
+import supportSocketService from './supportSocketService';
 
 interface CreateTicketData {
   userId: Types.ObjectId;
@@ -17,6 +18,8 @@ interface CreateTicketData {
   };
   attachments?: string[];
   priority?: 'low' | 'medium' | 'high' | 'urgent';
+  idempotencyKey?: string;
+  tags?: string[];
 }
 
 interface TicketFilters {
@@ -40,6 +43,20 @@ class SupportService {
    */
   async createTicket(data: CreateTicketData): Promise<ISupportTicket> {
     try {
+      // Idempotency check: if same user created a ticket with same key in last 5 minutes, return it
+      if (data.idempotencyKey) {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        const existing = await SupportTicket.findOne({
+          user: data.userId,
+          'metadata.idempotencyKey': data.idempotencyKey,
+          createdAt: { $gte: fiveMinutesAgo },
+        });
+        if (existing) {
+          console.log(`🔁 [SUPPORT SERVICE] Returning existing ticket for idempotency key: ${data.idempotencyKey}`);
+          return existing;
+        }
+      }
+
       const ticketNumber = await this.generateTicketNumber();
 
       const ticket = await SupportTicket.create({
@@ -61,7 +78,8 @@ class SupportService {
           },
         ],
         attachments: data.attachments || [],
-        tags: [data.category],
+        tags: [...new Set([data.category, ...(data.tags || [])])],
+        ...(data.idempotencyKey ? { metadata: { idempotencyKey: data.idempotencyKey } } : {}),
       });
 
       console.log(`✅ [SUPPORT SERVICE] Ticket created: ${ticketNumber}`);
@@ -361,43 +379,110 @@ class SupportService {
   }
 
   /**
-   * Auto-assign ticket (placeholder for assignment logic)
+   * Auto-assign ticket to the admin with fewest open tickets
    */
   private async autoAssignTicket(ticketId: Types.ObjectId): Promise<void> {
-    // Implement round-robin or load-based assignment
-    // For now, leave unassigned
-    console.log(`📋 [SUPPORT SERVICE] Auto-assign logic for ticket ${ticketId}`);
+    try {
+      // Find all active admins
+      const admins = await User.find({ role: 'admin', isActive: true })
+        .select('_id profile.firstName profile.lastName')
+        .lean();
+
+      if (admins.length === 0) {
+        console.log(`📋 [SUPPORT SERVICE] No active admins for auto-assignment of ticket ${ticketId}`);
+        return;
+      }
+
+      // Count open tickets for each admin
+      const adminLoads = await Promise.all(
+        admins.map(async (admin: any) => {
+          const count = await SupportTicket.countDocuments({
+            assignedTo: admin._id,
+            status: { $in: ['open', 'in_progress', 'waiting_customer'] },
+          });
+          return { admin, count };
+        })
+      );
+
+      // Pick admin with fewest open tickets
+      adminLoads.sort((a, b) => a.count - b.count);
+      const selectedAdmin = adminLoads[0].admin;
+      const agentId = (selectedAdmin as any)._id;
+
+      // Atomically assign (only if not already assigned)
+      const updated = await SupportTicket.findOneAndUpdate(
+        { _id: ticketId, assignedTo: null },
+        { assignedTo: agentId, status: 'in_progress' },
+        { new: true }
+      );
+
+      if (updated) {
+        const agentName = `${(selectedAdmin as any).profile?.firstName || ''} ${(selectedAdmin as any).profile?.lastName || ''}`.trim() || 'Support Agent';
+        const userId = updated.user?.toString();
+
+        if (userId) {
+          supportSocketService.emitAgentAssigned(userId, ticketId.toString(), {
+            id: agentId.toString(),
+            name: agentName,
+            status: 'online',
+          });
+        }
+
+        console.log(`✅ [SUPPORT SERVICE] Auto-assigned ticket ${ticketId} to ${agentName}`);
+      }
+    } catch (error) {
+      console.error(`❌ [SUPPORT SERVICE] Auto-assign failed for ticket ${ticketId}:`, error);
+    }
   }
 
   /**
-   * Notify agents about new ticket (placeholder)
+   * Notify agents room about new ticket via WebSocket
    */
   private async notifyAgents(ticket: ISupportTicket): Promise<void> {
-    // Implement notification to support team
-    console.log(`📧 [SUPPORT SERVICE] Notifying agents about ticket ${ticket.ticketNumber}`);
+    try {
+      supportSocketService.emitNewTicket(ticket);
+      console.log(`📧 [SUPPORT SERVICE] Notified agents about ticket ${ticket.ticketNumber}`);
+    } catch (error) {
+      console.error(`❌ [SUPPORT SERVICE] Failed to notify agents:`, error);
+    }
   }
 
   /**
-   * Notify specific agent about update (placeholder)
+   * Notify specific agent about update via WebSocket
    */
   private async notifyAgent(
     agentId: Types.ObjectId,
     ticket: ISupportTicket
   ): Promise<void> {
-    // Implement notification to specific agent
-    console.log(`📧 [SUPPORT SERVICE] Notifying agent ${agentId} about ticket ${ticket.ticketNumber}`);
+    try {
+      supportSocketService.emitToUser(agentId.toString(), 'support_ticket_updated', {
+        ticketId: (ticket._id as Types.ObjectId).toString(),
+        ticketNumber: ticket.ticketNumber,
+      });
+      console.log(`📧 [SUPPORT SERVICE] Notifying agent ${agentId} about ticket ${ticket.ticketNumber}`);
+    } catch (error) {
+      console.error(`❌ [SUPPORT SERVICE] Failed to notify agent:`, error);
+    }
   }
 
   /**
-   * Notify agent about rating (placeholder)
+   * Notify agent about rating
    */
   private async notifyAgentRating(
     agentId: Types.ObjectId,
     ticket: ISupportTicket,
     score: number
   ): Promise<void> {
-    // Implement rating notification
-    console.log(`⭐ [SUPPORT SERVICE] Agent ${agentId} received ${score}/5 rating for ticket ${ticket.ticketNumber}`);
+    try {
+      supportSocketService.emitToUser(agentId.toString(), 'support_ticket_rated', {
+        ticketId: (ticket._id as Types.ObjectId).toString(),
+        ticketNumber: ticket.ticketNumber,
+        score,
+      });
+      console.log(`⭐ [SUPPORT SERVICE] Agent ${agentId} received ${score}/5 rating for ticket ${ticket.ticketNumber}`);
+    } catch (error) {
+      console.error(`❌ [SUPPORT SERVICE] Failed to notify agent about rating:`, error);
+    }
   }
 
   /**

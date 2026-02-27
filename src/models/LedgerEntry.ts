@@ -6,7 +6,8 @@ export type LedgerOperationType =
   | 'transfer' | 'gift' | 'topup' | 'withdrawal' | 'payment'
   | 'refund' | 'cashback' | 'loyalty_credit' | 'admin_adjustment'
   | 'expiry' | 'gift_card_purchase' | 'scratch_card_prize' | 'correction'
-  | 'order_payment' | 'order_coin_deduction' | 'merchant_payout' | 'order_refund';
+  | 'order_payment' | 'order_coin_deduction' | 'merchant_payout' | 'order_refund'
+  | 'subscription_payment' | 'subscription_refund';
 export type LedgerCoinType = 'nuqta' | 'promo' | 'branded';
 
 export interface ILedgerEntry extends Document {
@@ -42,7 +43,7 @@ const LedgerEntrySchema = new Schema<ILedgerEntry>({
   runningBalance: { type: Number, required: true },
   operationType: {
     type: String, required: true,
-    enum: ['transfer', 'gift', 'topup', 'withdrawal', 'payment', 'refund', 'cashback', 'loyalty_credit', 'admin_adjustment', 'expiry', 'gift_card_purchase', 'scratch_card_prize', 'correction', 'order_payment', 'order_coin_deduction', 'merchant_payout', 'order_refund']
+    enum: ['transfer', 'gift', 'topup', 'withdrawal', 'payment', 'refund', 'cashback', 'loyalty_credit', 'admin_adjustment', 'expiry', 'gift_card_purchase', 'scratch_card_prize', 'correction', 'order_payment', 'order_coin_deduction', 'merchant_payout', 'order_refund', 'subscription_payment', 'subscription_refund']
   },
   referenceId: { type: String, required: true },
   referenceModel: { type: String, required: true },

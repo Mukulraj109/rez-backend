@@ -36,6 +36,11 @@ export interface IOrderItem {
   // Service booking specific fields
   serviceBookingId?: Types.ObjectId; // Reference to created ServiceBooking
   serviceBookingDetails?: IOrderServiceBookingDetails;
+  // Smart Spend source tracking (for enhanced Privé coin earning)
+  smartSpendSource?: {
+    smartSpendItemId: string;
+    coinRewardRate: number; // snapshotted at order time
+  };
 }
 
 // Order totals interface
@@ -369,6 +374,11 @@ const OrderSchema = new Schema<IOrder>({
       customerName: { type: String, trim: true },
       customerPhone: { type: String, trim: true },
       customerEmail: { type: String, trim: true, lowercase: true }
+    },
+    // Smart Spend source tracking
+    smartSpendSource: {
+      smartSpendItemId: { type: String },
+      coinRewardRate: { type: Number },
     }
   }],
   totals: {

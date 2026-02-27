@@ -1918,8 +1918,8 @@ export const getReviewableItems = asyncHandler(async (req: Request, res: Respons
     user: userId,
     status: { $in: ['completed', 'delivered'] }
   })
-    .populate('store', 'name logo category images')
-    .populate('items.product', 'name images category pricing')
+    .populate('store', 'name logo category images rewardRules')
+    .populate('items.product', 'name images category pricing priveReviewRewardCoins')
     .sort({ createdAt: -1 })
     .limit(50)
     .lean();
@@ -1947,7 +1947,7 @@ export const getReviewableItems = asyncHandler(async (req: Request, res: Respons
         image: store.logo || store.images?.[0]?.url || null,
         category: store.category || 'General',
         visitDate: `${daysAgo} days ago`,
-        coins: 50, // Base coins for store review
+        coins: store.rewardRules?.reviewBonusCoins || 20,
         hasReceipt: true,
       });
     }
@@ -1965,7 +1965,7 @@ export const getReviewableItems = asyncHandler(async (req: Request, res: Respons
             image: product.images?.[0]?.url || null,
             category: product.category || 'General',
             purchaseDate: `${daysAgo} days ago`,
-            coins: 75, // Higher coins for product review
+            coins: product.priveReviewRewardCoins || store?.rewardRules?.reviewBonusCoins || 20,
             brand: product.brand || null,
           });
         }

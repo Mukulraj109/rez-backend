@@ -203,6 +203,10 @@ export interface IProduct {
   isSuspended?: boolean;
   suspensionReason?: string;
 
+  // Privé Review Eligibility
+  isPriveReviewEligible?: boolean;
+  priveReviewRewardCoins?: number;
+
   // Methods
   isInStock(): boolean;
   getVariantByType(type: string, value: string): IProductVariant | null;
@@ -728,6 +732,17 @@ const ProductSchema = new Schema<IProduct>({
     type: String,
     trim: true,
     maxlength: 500
+  },
+  isPriveReviewEligible: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  priveReviewRewardCoins: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 500
   }
 }, {
   timestamps: true,

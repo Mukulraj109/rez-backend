@@ -146,13 +146,12 @@ router.post('/coins/deduct', requireAdmin, deductCoins);
 // ========================================
 // DAILY STREAK
 // ========================================
-// Moved to standalone route file: streakRoutes.ts (registered at /api/streak)
-// router.get('/streak/bonuses', getStreakBonuses);
-// router.get('/streak/:userId', getDailyStreak);
-// router.post('/streak/increment', incrementStreak);
-// router.get('/streaks', streakController.getCurrentUserStreak.bind(streakController));
-// router.post('/streak/milestone/:day/claim', claimStreakMilestone);
-// router.get('/streaks/:type/milestones', getStreakMilestones);
+// Also available via standalone streakRoutes.ts (registered at /api/streak)
+router.get('/streaks', streakController.getCurrentUserStreak.bind(streakController));
+router.get('/streak/bonuses', getStreakBonuses);
+router.post('/streak/checkin', checkInLimiter, streakCheckin);
+router.post('/streak/claim-milestone', streakController.claimMilestone.bind(streakController));
+router.post('/streak/freeze', streakController.freezeStreak.bind(streakController));
 
 // ========================================
 // MINI-GAMES
@@ -199,8 +198,7 @@ router.post('/surprise-drop/claim', claimSurpriseDrop);
 // Daily Check-in Config (day rewards, pro tips, etc.)
 router.get('/checkin-config', getCheckinConfigEndpoint);
 
-// Daily Streak Check-in — Moved to standalone route file: streakRoutes.ts (registered at /api/streak)
-// router.post('/streak/checkin', checkInLimiter, streakCheckin);
+// Daily Streak Check-in also available via streakRoutes.ts (registered at /api/streak)
 
 // ========================================
 // AFFILIATE / SHARE

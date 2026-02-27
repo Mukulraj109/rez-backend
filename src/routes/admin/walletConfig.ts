@@ -31,7 +31,8 @@ router.put('/', async (req: Request, res: Response) => {
     const config = await WalletConfig.getOrCreate();
     const allowedFields = [
       'transferLimits', 'giftLimits', 'rechargeConfig',
-      'expiryConfig', 'commissionRate', 'coinConversion', 'fraudThresholds'
+      'expiryConfig', 'commissionRate', 'coinConversion', 'fraudThresholds',
+      'redemptionConfig', 'habitLoopConfig'
     ];
 
     for (const field of allowedFields) {

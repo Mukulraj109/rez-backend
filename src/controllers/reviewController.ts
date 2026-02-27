@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Review } from '../models/Review';
 import { Store } from '../models/Store';
+import { Order } from '../models/Order';
 import {
   sendSuccess,
   sendNotFound,
@@ -12,6 +13,7 @@ import { AppError } from '../middleware/errorHandler';
 import activityService from '../services/activityService';
 import achievementService from '../services/achievementService';
 import gamificationEventBus from '../events/gamificationEventBus';
+import { reputationService } from '../services/reputationService';
 import coinService from '../services/coinService';
 import challengeService from '../services/challengeService';
 import { Types } from 'mongoose';
@@ -298,6 +300,16 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
       throw new AppError('Store not found', 404);
     }
 
+    // Verify the user has a delivered/completed order at this store
+    const hasDeliveredOrder = await Order.exists({
+      user: userId,
+      store: storeId,
+      status: { $in: ['delivered', 'completed'] }
+    });
+    if (!hasDeliveredOrder) {
+      throw new AppError('You can only review stores where you have a completed order', 400);
+    }
+
     // Check if user has already reviewed this store
     const existingReview = await Review.findOne({
       store: storeId,
@@ -335,6 +347,10 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
       new Types.ObjectId(review._id as any),
       store.name
     );
+
+    // Recalculate Privé reputation on review submission (fire-and-forget)
+    reputationService.onReviewSubmitted(userId)
+      .catch(err => console.warn('[REVIEW] Reputation recalculation failed:', err));
 
     // Emit gamification event for review submission
     gamificationEventBus.emit('review_submitted', {
@@ -417,10 +433,22 @@ export const moderateReview = asyncHandler(async (req: Request, res: Response) =
             {
               storeId: store._id,
               storeName: store.name,
-              reviewId: review._id
+              reviewId: review._id,
+              idempotencyKey: `review-reward:${(review.user as any)._id}:${review._id}`
             }
           );
           console.log(`💰 [MODERATION] Awarded ${reviewBonusCoins} coins to user ${(review.user as any)._id} for approved review`);
+
+          // Audit log for review reward issuance
+          console.log(JSON.stringify({
+            event: 'REVIEW_REWARD_ISSUED',
+            userId: String((review.user as any)._id),
+            reviewId: String(review._id),
+            storeId: String(store._id),
+            amount: reviewBonusCoins,
+            moderatorId: userId,
+            timestamp: new Date().toISOString()
+          }));
         }
       } catch (coinError) {
         console.error('❌ [MODERATION] Error awarding review coins:', coinError);

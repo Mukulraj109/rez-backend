@@ -4,6 +4,9 @@
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import supportService from '../services/supportService';
+import { SupportConfig } from '../models/SupportConfig';
+import { SupportTicket } from '../models/SupportTicket';
+import supportSocketService from '../services/supportSocketService';
 
 /**
  * Create new support ticket
@@ -12,7 +15,7 @@ import supportService from '../services/supportService';
 export const createTicket = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).userId;
-    const { subject, category, message, relatedEntity, attachments, priority } = req.body;
+    const { subject, category, message, relatedEntity, attachments, priority, idempotencyKey, tags } = req.body;
 
     if (!userId) {
       res.status(401).json({
@@ -38,15 +41,23 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
       relatedEntity,
       attachments,
       priority,
+      idempotencyKey,
+      tags,
     });
+
+    // Re-fetch with populated assignedTo so frontend gets agent info
+    // (auto-assignment updates the DB document but the original ticket object is stale)
+    const populatedTicket = await SupportTicket.findById(ticket._id)
+      .populate('assignedTo', 'profile.firstName profile.lastName')
+      .lean();
 
     res.status(201).json({
       success: true,
       message: 'Support ticket created successfully',
-      data: { ticket },
+      data: { ticket: populatedTicket || ticket },
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error creating ticket:', error);
+    console.error('❌ [SUPPORT CONTROLLER] Error creating ticket for user:', (req as any).userId, 'error:', error.message);
     res.status(500).json({
       success: false,
       message: 'Failed to create support ticket',
@@ -189,6 +200,31 @@ export const addMessageToTicket = async (req: Request, res: Response): Promise<v
         message: 'Ticket not found',
       });
       return;
+    }
+
+    // Emit real-time event so admin sees the message instantly
+    const lastMsg = (ticket as any).messages?.[(ticket as any).messages.length - 1];
+    if (lastMsg) {
+      const messagePayload = {
+        ticketId: id,
+        message: {
+          id: lastMsg._id?.toString(),
+          ticketId: id,
+          content: lastMsg.message || message,
+          sender: 'user',
+          senderType: 'user',
+          type: 'text',
+          timestamp: lastMsg.timestamp,
+          read: false,
+          delivered: true,
+        },
+      };
+
+      // Emit to support-agents room only (all admins are in this room)
+      // Do NOT also emit to ticket room or personal agent room to avoid duplicate delivery
+      supportSocketService.emitToSupportAgents('support_message_received', messagePayload);
+
+      console.log(`[SupportController] Emitted user message to support-agents room for ticket ${id}`);
     }
 
     res.status(200).json({
@@ -665,6 +701,208 @@ export const reportProductIssue = async (req: Request, res: Response): Promise<v
       success: false,
       message: 'Failed to report product issue',
       error: error.message,
+    });
+  }
+};
+
+// ==================== SUPPORT CONFIG & CALLBACK ====================
+
+/**
+ * Get public support config (hours, phones, categories)
+ * GET /api/support/config/public
+ */
+export const getPublicSupportConfig = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const config = await SupportConfig.getOrCreate();
+
+    const activePhones = config.phoneNumbers
+      .filter(p => p.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+
+    const activeCategories = config.categories
+      .filter(c => c.isActive)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+
+    const isOpen = config.isCurrentlyOpen();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        supportHours: config.supportHours,
+        phoneNumbers: activePhones,
+        categories: activeCategories,
+        callbackEnabled: config.callbackSettings.enabled,
+        estimatedWaitMinutes: config.callbackSettings.estimatedWaitMinutes,
+        queueStatus: config.queueStatus,
+        isCurrentlyOpen: isOpen,
+      },
+    });
+  } catch (error: any) {
+    console.error('❌ [SUPPORT CONTROLLER] Error getting public config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get support config',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Request a callback
+ * POST /api/support/callback
+ */
+export const requestCallback = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).userId;
+    const { category, phoneNumber, countryCode, notes, idempotencyKey } = req.body;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: 'Unauthorized',
+      });
+      return;
+    }
+
+    // Load config
+    const config = await SupportConfig.getOrCreate();
+
+    // Check if callbacks are enabled
+    if (!config.callbackSettings.enabled) {
+      res.status(503).json({
+        success: false,
+        message: 'Callback requests are currently disabled',
+      });
+      return;
+    }
+
+    // Per-user daily limit
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const todayCallbacks = await SupportTicket.countDocuments({
+      user: new Types.ObjectId(userId),
+      tags: 'callback',
+      createdAt: { $gte: todayStart, $lte: todayEnd },
+    });
+
+    if (todayCallbacks >= config.callbackSettings.maxPerUserPerDay) {
+      res.status(429).json({
+        success: false,
+        message: `You can request up to ${config.callbackSettings.maxPerUserPerDay} callbacks per day`,
+      });
+      return;
+    }
+
+    // Idempotency check
+    if (idempotencyKey) {
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const existing = await SupportTicket.findOne({
+        user: new Types.ObjectId(userId),
+        tags: 'callback',
+        'metadata.idempotencyKey': idempotencyKey,
+        createdAt: { $gte: fiveMinAgo },
+      });
+
+      if (existing) {
+        res.status(201).json({
+          success: true,
+          message: 'Callback already requested',
+          data: {
+            ticketId: existing._id,
+            ticketNumber: existing.ticketNumber,
+            estimatedWaitMinutes: config.callbackSettings.estimatedWaitMinutes,
+            category,
+          },
+        });
+        return;
+      }
+    }
+
+    // Resolve category name and priority
+    const configCategory = config.categories.find(c => c.id === category);
+    const categoryName = configCategory?.name || category;
+    const priority = configCategory?.priority || 'medium';
+
+    // Create the callback ticket
+    const ticket = await supportService.createTicket({
+      userId: new Types.ObjectId(userId),
+      subject: `Callback Request: ${categoryName}`,
+      category: 'other',
+      priority,
+      initialMessage: `[Callback Request]\nCategory: ${categoryName}\nPhone: ${countryCode}${phoneNumber}${notes ? `\n\nNotes: ${notes}` : ''}`,
+      tags: ['callback', category],
+      idempotencyKey,
+    });
+
+    // Store callback metadata
+    if (ticket.metadata instanceof Map) {
+      ticket.metadata.set('callbackPhone', `${countryCode}${phoneNumber}`);
+      ticket.metadata.set('callbackCategory', category);
+      if (idempotencyKey) {
+        ticket.metadata.set('idempotencyKey', idempotencyKey);
+      }
+      ticket.markModified('metadata');
+      await ticket.save();
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Callback requested successfully',
+      data: {
+        ticketId: ticket._id,
+        ticketNumber: ticket.ticketNumber,
+        estimatedWaitMinutes: config.callbackSettings.estimatedWaitMinutes,
+        category: categoryName,
+      },
+    });
+  } catch (error: any) {
+    console.error('❌ [SUPPORT CONTROLLER] Error requesting callback:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to request callback',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Mark ticket messages as read
+ * POST /api/support/tickets/:id/read
+ */
+export const markTicketAsRead = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).userId;
+    const { id } = req.params;
+
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const ticket = await SupportTicket.findOne({
+      _id: id,
+      user: userId,
+    });
+
+    if (!ticket) {
+      res.status(404).json({ success: false, message: 'Ticket not found' });
+      return;
+    }
+
+    await ticket.markMessagesAsRead('user');
+
+    // Notify agents that user read their messages
+    supportSocketService.emitMessagesRead(userId, id, 'user');
+
+    res.json({ success: true, message: 'Messages marked as read' });
+  } catch (error: any) {
+    console.error('❌ [SUPPORT CONTROLLER] Error marking as read:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark messages as read',
     });
   }
 };

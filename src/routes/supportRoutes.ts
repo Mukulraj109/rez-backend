@@ -16,12 +16,47 @@ import {
   trackFAQView,
   createOrderIssueTicket,
   reportProductIssue,
+  getPublicSupportConfig,
+  requestCallback,
+  markTicketAsRead,
 } from '../controllers/supportController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, validate, commonSchemas } from '../middleware/validation';
 import { Joi } from '../middleware/validation';
+import { createRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
+
+// ==================== CONFIG & CALLBACK ROUTES ====================
+
+// Get public support config (hours, phones, categories)
+router.get('/config/public',
+  optionalAuth,
+  getPublicSupportConfig
+);
+
+// Rate limiter for callback requests (5 per hour per IP)
+const callbackLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: 'Too many callback requests. Please try again later.',
+});
+
+// Request a callback
+router.post('/callback',
+  authenticate,
+  callbackLimiter,
+  validate(Joi.object({
+    category: Joi.string().trim().min(2).max(50).required(),
+    phoneNumber: Joi.string().trim().pattern(/^\d{7,15}$/).required()
+      .messages({ 'string.pattern.base': 'Phone number must be 7-15 digits' }),
+    countryCode: Joi.string().trim().pattern(/^\+[1-9]\d{0,3}$/).required()
+      .messages({ 'string.pattern.base': 'Country code must start with + followed by 1-4 digits' }),
+    notes: Joi.string().trim().max(500).allow('').optional(),
+    idempotencyKey: Joi.string().max(100).optional(),
+  })),
+  requestCallback
+);
 
 // ==================== TICKET ROUTES ====================
 
@@ -44,6 +79,8 @@ router.post('/tickets',
     }),
     attachments: Joi.array().items(Joi.string().uri()),
     priority: Joi.string().valid('low', 'medium', 'high', 'urgent'),
+    idempotencyKey: Joi.string().max(100).optional(),
+    tags: Joi.array().items(Joi.string().trim().max(50)).max(10).optional(),
   })),
   createTicket
 );
@@ -117,6 +154,15 @@ router.post('/tickets/:id/rate',
     comment: Joi.string().trim().max(1000),
   })),
   rateTicket
+);
+
+// Mark messages as read
+router.post('/tickets/:id/read',
+  authenticate,
+  validateParams(Joi.object({
+    id: commonSchemas.objectId().required(),
+  })),
+  markTicketAsRead
 );
 
 // ==================== FAQ ROUTES ====================

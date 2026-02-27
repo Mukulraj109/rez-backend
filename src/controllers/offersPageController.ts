@@ -28,32 +28,38 @@ export const getHotspots = async (req: Request, res: Response) => {
 
     let query: any = { isActive: true };
 
-    // If coordinates provided, sort by distance
-    if (lat && lng) {
-      const hotspots = await HotspotArea.aggregate([
-        { $match: { isActive: true } },
-        {
-          $geoNear: {
-            near: {
-              type: 'Point',
-              coordinates: [parseFloat(lng as string), parseFloat(lat as string)],
-            },
-            distanceField: 'distance',
-            maxDistance: 50000, // 50km
-            spherical: true,
-          },
-        },
-        { $sort: { priority: -1, distance: 1 } },
-        { $limit: parseInt(limit as string) },
-      ]);
+    const allHotspots = await HotspotArea.find(query)
+      .sort({ priority: -1 })
+      .lean();
 
-      return sendSuccess(res, hotspots, 'Hotspots retrieved successfully');
+    // If coordinates provided, compute distance and sort by it
+    if (lat && lng) {
+      const userLat = parseFloat(lat as string);
+      const userLng = parseFloat(lng as string);
+      const maxDistKm = 50;
+
+      const withDistance = allHotspots
+        .map((h: any) => {
+          const dLat = (h.coordinates.lat - userLat) * (Math.PI / 180);
+          const dLng = (h.coordinates.lng - userLng) * (Math.PI / 180);
+          const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(userLat * (Math.PI / 180)) *
+              Math.cos(h.coordinates.lat * (Math.PI / 180)) *
+              Math.sin(dLng / 2) *
+              Math.sin(dLng / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          const distanceKm = 6371 * c;
+          return { ...h, distance: Math.round(distanceKm * 1000) }; // distance in meters
+        })
+        .filter((h: any) => h.distance <= maxDistKm * 1000)
+        .sort((a: any, b: any) => b.priority - a.priority || a.distance - b.distance)
+        .slice(0, parseInt(limit as string));
+
+      return sendSuccess(res, withDistance, 'Hotspots retrieved successfully');
     }
 
-    const hotspots = await HotspotArea.find(query)
-      .sort({ priority: -1 })
-      .limit(parseInt(limit as string))
-      .lean();
+    const hotspots = allHotspots.slice(0, parseInt(limit as string));
 
     sendSuccess(res, hotspots, 'Hotspots retrieved successfully');
   } catch (error) {

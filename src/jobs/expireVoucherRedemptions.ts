@@ -1,6 +1,7 @@
 import * as cron from 'node-cron';
 import OfferRedemption from '../models/OfferRedemption';
 import { UserVoucher } from '../models/Voucher';
+import PriveVoucher from '../models/PriveVoucher';
 
 /**
  * Voucher & Offer Redemption Expiry Job
@@ -28,6 +29,9 @@ interface ExpiryStats {
     pendingExpired: number;
   };
   userVouchers: {
+    totalExpired: number;
+  };
+  priveVouchers: {
     totalExpired: number;
   };
   errors: Array<{ type: string; error: string }>;
@@ -100,12 +104,37 @@ async function processExpiredUserVouchers(): Promise<ExpiryStats['userVouchers']
 }
 
 /**
+ * Process expired Privé vouchers
+ */
+async function processExpiredPriveVouchers(): Promise<ExpiryStats['priveVouchers']> {
+  const stats = {
+    totalExpired: 0
+  };
+
+  const now = new Date();
+
+  const result = await PriveVoucher.updateMany(
+    {
+      status: 'active',
+      expiresAt: { $lt: now }
+    },
+    {
+      $set: { status: 'expired' }
+    }
+  );
+  stats.totalExpired = result.modifiedCount;
+
+  return stats;
+}
+
+/**
  * Run all expiry processes
  */
 async function runExpiryProcesses(): Promise<ExpiryStats> {
   const stats: ExpiryStats = {
     offerRedemptions: { totalExpired: 0, activeExpired: 0, pendingExpired: 0 },
     userVouchers: { totalExpired: 0 },
+    priveVouchers: { totalExpired: 0 },
     errors: []
   };
 
@@ -125,12 +154,21 @@ async function runExpiryProcesses(): Promise<ExpiryStats> {
     stats.errors.push({ type: 'userVouchers', error: error.message || 'Unknown error' });
   }
 
-  const totalExpired = stats.offerRedemptions.totalExpired + stats.userVouchers.totalExpired;
+  // Process Privé vouchers
+  try {
+    stats.priveVouchers = await processExpiredPriveVouchers();
+  } catch (error: any) {
+    console.error('❌ [VOUCHER EXPIRY] Error expiring Privé vouchers:', error);
+    stats.errors.push({ type: 'priveVouchers', error: error.message || 'Unknown error' });
+  }
+
+  const totalExpired = stats.offerRedemptions.totalExpired + stats.userVouchers.totalExpired + stats.priveVouchers.totalExpired;
 
   if (totalExpired > 0) {
     console.log(`🎟️ [VOUCHER EXPIRY] Expired ${totalExpired} items:`, {
       offerRedemptions: stats.offerRedemptions.totalExpired,
-      userVouchers: stats.userVouchers.totalExpired
+      userVouchers: stats.userVouchers.totalExpired,
+      priveVouchers: stats.priveVouchers.totalExpired
     });
   }
 
@@ -162,13 +200,14 @@ export function startVoucherExpiryJob(): void {
       const stats = await runExpiryProcesses();
       const duration = Date.now() - startTime;
 
-      const totalExpired = stats.offerRedemptions.totalExpired + stats.userVouchers.totalExpired;
+      const totalExpired = stats.offerRedemptions.totalExpired + stats.userVouchers.totalExpired + stats.priveVouchers.totalExpired;
 
       if (totalExpired > 0 || stats.errors.length > 0) {
         console.log('✅ [VOUCHER EXPIRY] Job completed:', {
           duration: `${duration}ms`,
           offerRedemptions: stats.offerRedemptions,
           userVouchers: stats.userVouchers,
+          priveVouchers: stats.priveVouchers,
           errorCount: stats.errors.length,
           timestamp: new Date().toISOString()
         });
@@ -242,7 +281,7 @@ export async function triggerManualVoucherExpiry(): Promise<ExpiryStats> {
     const stats = await runExpiryProcesses();
     const duration = Date.now() - startTime;
 
-    const totalExpired = stats.offerRedemptions.totalExpired + stats.userVouchers.totalExpired;
+    const totalExpired = stats.offerRedemptions.totalExpired + stats.userVouchers.totalExpired + stats.priveVouchers.totalExpired;
 
     console.log('✅ [VOUCHER EXPIRY] Manual expiry completed:', {
       duration: `${duration}ms`,

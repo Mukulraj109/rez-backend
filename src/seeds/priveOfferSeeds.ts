@@ -361,7 +361,7 @@ const priveOffers = [
       coinType: 'rez',
       displayText: '50 ReZ Coins',
     },
-    tierRequired: 'building',
+    tierRequired: 'none',
     isExclusive: false,
     startsAt: new Date(),
     expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
@@ -400,7 +400,7 @@ const priveOffers = [
       value: 10,
       displayText: '10% Off',
     },
-    tierRequired: 'building',
+    tierRequired: 'none',
     isExclusive: false,
     startsAt: new Date(),
     expiresAt: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // 60 days
@@ -438,7 +438,7 @@ const priveOffers = [
       value: 5,
       displayText: '5% Cashback',
     },
-    tierRequired: 'building',
+    tierRequired: 'none',
     isExclusive: false,
     startsAt: new Date(),
     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
@@ -479,7 +479,7 @@ const priveOffers = [
       coinType: 'rez',
       displayText: '3x ReZ Coins',
     },
-    tierRequired: 'building',
+    tierRequired: 'none',
     isExclusive: false,
     startsAt: new Date(),
     expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), // 5 days

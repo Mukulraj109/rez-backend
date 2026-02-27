@@ -23,10 +23,12 @@ import userProductService from '../services/userProductService';
 import couponService from '../services/couponService';
 import achievementService from '../services/achievementService';
 import gamificationEventBus from '../events/gamificationEventBus';
+import { reputationService } from '../services/reputationService';
 import { processConversion } from '../services/creatorService';
 // Note: StorePromoCoin removed - using wallet.brandedCoins instead
 import { Wallet } from '../models/Wallet';
 import { calculatePromoCoinsEarned, calculatePromoCoinsWithTierBonus, getCoinsExpiryDate } from '../config/promoCoins.config';
+import SmartSpendItem from '../models/SmartSpendItem';
 import { CHECKOUT_CONFIG } from '../config/checkoutConfig';
 import { Subscription } from '../models/Subscription';
 import { SMSService } from '../services/SMSService';
@@ -433,7 +435,8 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       // Get product image - provide default if missing
       const productImage = product.image || product.images?.[0] || 'https://via.placeholder.com/150';
 
-      orderItems.push({
+      // Build order item
+      const orderItem: any = {
         product: product._id,
         store: store._id,
         storeName: store.name, // Store name for display without populate
@@ -445,7 +448,24 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         originalPrice: cartItem.originalPrice || cartItem.price || 0,
         discount: cartItem.discount || 0,
         subtotal: (cartItem.price || 0) * cartItem.quantity
-      });
+      };
+
+      // Propagate Smart Spend source for enhanced Privé coin earning
+      if (cartItem.metadata?.source === 'smart_spend' && cartItem.metadata?.smartSpendItemId) {
+        try {
+          const ssItem = await SmartSpendItem.findById(cartItem.metadata.smartSpendItemId).select('coinRewardRate').lean();
+          if (ssItem) {
+            orderItem.smartSpendSource = {
+              smartSpendItemId: cartItem.metadata.smartSpendItemId,
+              coinRewardRate: ssItem.coinRewardRate, // snapshot rate at order time
+            };
+          }
+        } catch (ssErr) {
+          console.warn('[ORDER] Could not look up SmartSpendItem:', ssErr);
+        }
+      }
+
+      orderItems.push(orderItem);
     }
 
     console.log('📦 [CREATE ORDER] All stock checks passed. Stock will be deducted after payment confirmation.');
@@ -2100,30 +2120,77 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         // Don't fail the order update if referral processing fails
       }
 
-      // Award 5% purchase reward coins on delivery (5% of subtotal, NOT total)
-      // Coins go to the store's MainCategory balance
+      // Award purchase reward coins on delivery
+      // Smart Spend items get enhanced rate; regular items get default 5%
       try {
         const coinService = require('../services/coinService');
-        const purchaseRewardRate = 0.05;
-        const coinsToAward = Math.floor(populatedOrder.totals.subtotal * purchaseRewardRate);
-        if (coinsToAward > 0) {
-          // Determine the store's root category for category-specific coins
-          const firstItem = populatedOrder.items[0];
+        const defaultRate = 0.05;
+
+        // Check if any order items came from Smart Spend
+        const smartSpendItems = populatedOrder.items.filter((item: any) => item.smartSpendSource?.coinRewardRate);
+        const regularItems = populatedOrder.items.filter((item: any) => !item.smartSpendSource?.coinRewardRate);
+
+        // Award enhanced coins for Smart Spend items
+        if (smartSpendItems.length > 0) {
+          const smartSpendSubtotal = smartSpendItems.reduce((sum: number, item: any) => sum + (item.subtotal || 0), 0);
+          const smartSpendRate = smartSpendItems[0]!.smartSpendSource!.coinRewardRate;
+          let smartSpendCoins = smartSpendRate > 1
+            ? Math.floor(smartSpendRate) // fixed amount
+            : Math.floor(smartSpendSubtotal * smartSpendRate); // percentage
+
+          // Apply max cap if stored
+          if (smartSpendCoins > 0) {
+            const firstItem = smartSpendItems[0];
+            const rewardStoreId = firstItem?.store
+              ? (typeof firstItem.store === 'object' ? (firstItem.store as any)._id : firstItem.store)
+              : null;
+            const rewardCategory = rewardStoreId ? await getStoreCategorySlug(rewardStoreId.toString()) : null;
+            const ratePercent = Math.round(smartSpendRate * 100);
+
+            console.log(`🪙 [ORDER] Awarding ${ratePercent}% Smart Spend reward on delivery:`, smartSpendCoins, 'coins');
+            await coinService.awardCoins(
+              userIdObj.toString(),
+              smartSpendCoins,
+              'smart_spend_reward',
+              `${ratePercent}% Smart Spend reward for order ${populatedOrder.orderNumber}`,
+              { orderId: populatedOrder._id, smartSpendItemId: smartSpendItems[0]!.smartSpendSource!.smartSpendItemId },
+              rewardCategory
+            );
+            console.log('✅ [ORDER] Smart Spend reward coins awarded:', smartSpendCoins);
+
+            // Increment purchases count on SmartSpendItem
+            try {
+              await SmartSpendItem.findByIdAndUpdate(
+                smartSpendItems[0]!.smartSpendSource!.smartSpendItemId,
+                { $inc: { purchases: 1 } }
+              );
+            } catch (_) { /* non-critical */ }
+          }
+        }
+
+        // Award default 5% for regular (non-Smart Spend) items
+        const regularSubtotal = regularItems.length > 0
+          ? regularItems.reduce((sum: number, item: any) => sum + (item.subtotal || 0), 0)
+          : (smartSpendItems.length === 0 ? populatedOrder.totals.subtotal : 0);
+        const regularCoins = Math.floor(regularSubtotal * defaultRate);
+
+        if (regularCoins > 0) {
+          const firstItem = regularItems[0] || populatedOrder.items[0];
           const rewardStoreId = firstItem?.store
             ? (typeof firstItem.store === 'object' ? (firstItem.store as any)._id : firstItem.store)
             : null;
           const rewardCategory = rewardStoreId ? await getStoreCategorySlug(rewardStoreId.toString()) : null;
 
-          console.log('🪙 [ORDER] Awarding 5% purchase reward on delivery:', coinsToAward, 'coins', rewardCategory ? `(${rewardCategory})` : '(global)');
+          console.log('🪙 [ORDER] Awarding 5% purchase reward on delivery:', regularCoins, 'coins', rewardCategory ? `(${rewardCategory})` : '(global)');
           await coinService.awardCoins(
             userIdObj.toString(),
-            coinsToAward,
+            regularCoins,
             'purchase_reward',
             `5% purchase reward for order ${populatedOrder.orderNumber}`,
             { orderId: populatedOrder._id },
             rewardCategory
           );
-          console.log('✅ [ORDER] Purchase reward coins awarded:', coinsToAward, rewardCategory ? `to ${rewardCategory}` : 'globally');
+          console.log('✅ [ORDER] Purchase reward coins awarded:', regularCoins, rewardCategory ? `to ${rewardCategory}` : 'globally');
         }
       } catch (coinError) {
         console.error('[ORDER] Failed to award purchase reward coins:', coinError);
@@ -2366,6 +2433,10 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         amount: populatedOrder.totals?.total,
         source: { controller: 'orderController', action: 'updateOrderStatus' }
       });
+
+      // Recalculate Privé reputation on order delivery (fire-and-forget)
+      reputationService.onOrderCompleted(userIdObj as Types.ObjectId)
+        .catch(err => console.warn('[ORDER] Reputation recalculation failed:', err));
 
       // Update partner progress for order delivery
       try {

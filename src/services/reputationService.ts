@@ -39,6 +39,7 @@ export interface PillarScoreResponse {
   score: number;
   weight: number;
   weightedScore: number;
+  trend: 'up' | 'down' | 'stable';
 }
 
 // Pillar labels for API responses
@@ -73,22 +74,39 @@ class ReputationService {
     const userObjectId = typeof userId === 'string' ? new Types.ObjectId(userId) : userId;
     const reputation = await this.getOrCreateReputation(userObjectId);
 
+    // Get most recent history snapshot for trend comparison
+    const previousSnapshot = reputation.history.length > 0
+      ? reputation.history[reputation.history.length - 1]
+      : null;
+
     // Format pillars for response
     const pillars: PillarScoreResponse[] = Object.entries(PILLAR_WEIGHTS).map(([id, weight]) => {
       const pillarId = id as PillarId;
       const score = reputation.pillars[pillarId].score;
+
+      // Calculate trend
+      let trend: 'up' | 'down' | 'stable' = 'stable';
+      if (previousSnapshot?.pillars) {
+        const prevScore = (previousSnapshot.pillars as any)[pillarId] ?? score;
+        if (score - prevScore > 2) trend = 'up';
+        else if (prevScore - score > 2) trend = 'down';
+      }
+
       return {
         id: pillarId,
         label: PILLAR_LABELS[pillarId],
         score,
         weight,
         weightedScore: Math.round(score * weight * 100) / 100,
+        trend,
       };
     });
 
-    // Calculate next tier threshold
+    // Calculate next tier threshold (4-tier system)
     let nextTierThreshold: number = ELIGIBILITY_THRESHOLDS.ENTRY_TIER;
     if (reputation.tier === 'entry') {
+      nextTierThreshold = ELIGIBILITY_THRESHOLDS.SIGNATURE_TIER;
+    } else if (reputation.tier === 'signature') {
       nextTierThreshold = ELIGIBILITY_THRESHOLDS.ELITE_TIER;
     } else if (reputation.tier === 'elite') {
       nextTierThreshold = 100; // Already at max
@@ -118,15 +136,30 @@ class ReputationService {
     const userObjectId = typeof userId === 'string' ? new Types.ObjectId(userId) : userId;
     const reputation = await this.getOrCreateReputation(userObjectId);
 
+    // Get most recent history snapshot for trend comparison
+    const previousSnapshot = reputation.history.length > 0
+      ? reputation.history[reputation.history.length - 1]
+      : null;
+
     const pillars: PillarScoreResponse[] = Object.entries(PILLAR_WEIGHTS).map(([id, weight]) => {
       const pillarId = id as PillarId;
       const score = reputation.pillars[pillarId].score;
+
+      // Calculate trend by comparing current score vs last snapshot
+      let trend: 'up' | 'down' | 'stable' = 'stable';
+      if (previousSnapshot?.pillars) {
+        const prevScore = (previousSnapshot.pillars as any)[pillarId] ?? score;
+        if (score - prevScore > 2) trend = 'up';
+        else if (prevScore - score > 2) trend = 'down';
+      }
+
       return {
         id: pillarId,
         label: PILLAR_LABELS[pillarId],
         score,
         weight,
         weightedScore: Math.round(score * weight * 100) / 100,
+        trend,
       };
     });
 
@@ -152,6 +185,10 @@ class ReputationService {
     const userObjectId = typeof userId === 'string' ? new Types.ObjectId(userId) : userId;
     const reputation = await this.getOrCreateReputation(userObjectId);
 
+    // Capture previous state for idempotency check
+    const prevTotalScore = reputation.totalScore;
+    const prevTier = reputation.tier;
+
     // Calculate each pillar
     await Promise.all([
       this.calculateEngagementScore(userObjectId, reputation),
@@ -162,10 +199,15 @@ class ReputationService {
       this.calculateNetworkScore(userObjectId, reputation),
     ]);
 
-    // Add snapshot before saving
-    reputation.addSnapshot(trigger);
+    // Pre-calculate to check if scores changed meaningfully
+    const result = reputation.calculateTotalScore();
 
-    // Save (pre-save hook will recalculate total)
+    // Only add snapshot if score changed meaningfully or tier changed
+    if (Math.abs(result.totalScore - prevTotalScore) > 0.01 || result.tier !== prevTier) {
+      reputation.addSnapshot(trigger);
+    }
+
+    // Save (pre-save hook will recalculate total again)
     await reputation.save();
 
     console.log(`📊 [REPUTATION] Recalculated for user ${userId.toString().slice(-6)}: Score=${reputation.totalScore}, Tier=${reputation.tier}`);
@@ -236,7 +278,8 @@ class ReputationService {
 
   /**
    * Calculate Trust score (20%)
-   * Based on: order completion, payment success, verification, account age
+   * Based on: order completion, payment success, refunds/chargebacks,
+   * verification status, identity verification, account age, security
    */
   private async calculateTrustScore(
     userId: Types.ObjectId,
@@ -244,60 +287,111 @@ class ReputationService {
   ): Promise<void> {
     const now = new Date();
 
-    // Get user data
-    const user = await User.findById(userId);
+    // Get user data (include password field to check security)
+    const user = await User.findById(userId).select('+password');
     if (!user) {
       reputation.pillars.trust.score = 50; // Neutral if no user found
       return;
     }
 
-    // Get order completion stats
-    const [totalOrders, completedOrders, cancelledOrders] = await Promise.all([
+    // Get order stats — completion, cancellation, payment failures, refunds
+    const [
+      totalOrders,
+      completedOrders,
+      cancelledOrders,
+      paymentFailedOrders,
+      refundedOrders,
+    ] = await Promise.all([
       Order.countDocuments({ user: userId }),
       Order.countDocuments({ user: userId, status: 'delivered' }),
       Order.countDocuments({ user: userId, status: 'cancelled' }),
+      Order.countDocuments({ user: userId, 'payment.status': 'failed' }),
+      Order.countDocuments({
+        user: userId,
+        $or: [
+          { status: 'refunded' },
+          { 'cancellation.refundStatus': 'completed' },
+        ],
+      }),
     ]);
 
     const orderCompletionRate = totalOrders > 0 ? (completedOrders / totalOrders) * 100 : 100;
-    const cancellationRate = totalOrders > 0 ? (cancelledOrders / totalOrders) * 100 : 0;
+
+    // Payment success rate: orders that were paid successfully vs total non-COD orders
+    const paidOrders = totalOrders - paymentFailedOrders;
+    const paymentSuccessRate = totalOrders > 0 ? (paidOrders / totalOrders) * 100 : 100;
+
+    // Chargebacks/refunds count (proxy: refunded orders are the closest to chargebacks)
+    const chargebackCount = refundedOrders;
 
     // Account age in days
     const accountAge = Math.floor((now.getTime() - user.createdAt.getTime()) / (1000 * 60 * 60 * 24));
 
-    // Check verification status (User model uses auth.isVerified for general verification)
+    // Verification status
     const isVerified = user.auth?.isVerified || false;
     const hasEmail = !!user.email;
+
+    // Identity verification: check User.verifications for any verified identity
+    const verifications = (user as any).verifications;
+    const isIdentityVerified = verifications ? Object.values(verifications).some(
+      (v: any) => v && typeof v === 'object' && v.verified === true
+    ) : false;
+
+    // Security: user has a password set (beyond OTP-only auth)
+    const hasSecurityEnabled = !!(user as any).password;
 
     // Update factors
     reputation.pillars.trust.factors = {
       orderCompletionRate: Math.round(orderCompletionRate),
-      paymentSuccessRate: 100 - cancellationRate, // Simplified
-      chargebackCount: 0, // Would need payment integration
-      isEmailVerified: isVerified && hasEmail, // Consider email verified if user is verified and has email
-      isPhoneVerified: isVerified, // Consider phone verified if user is verified (phone is primary auth)
-      isIdentityVerified: false, // Would need KYC integration
+      paymentSuccessRate: Math.round(paymentSuccessRate),
+      chargebackCount,
+      isEmailVerified: isVerified && hasEmail,
+      isPhoneVerified: isVerified,
+      isIdentityVerified,
       accountAge,
-      hasSecurityEnabled: false, // Would check 2FA settings
+      hasSecurityEnabled,
     };
 
     // Calculate score (0-100)
     let score = 50; // Start neutral
 
-    // Order completion rate (+/-30 points)
+    // Order completion rate (+/-30 points) — biggest lever
     if (orderCompletionRate >= 95) score += 30;
     else if (orderCompletionRate >= 80) score += 20;
     else if (orderCompletionRate >= 60) score += 10;
     else if (orderCompletionRate < 50) score -= 20;
 
-    // Verification bonuses
-    if (isVerified && hasEmail) score += 5;
+    // Payment success rate (up to +5 / -10 points)
+    if (paymentSuccessRate >= 98) score += 5;
+    else if (paymentSuccessRate < 80) score -= 10;
+
+    // Chargeback/refund penalty (-5 per refund, capped at -15)
+    if (chargebackCount > 0) {
+      score -= Math.min(15, chargebackCount * 5);
+    }
+
+    // Phone verified bonus (+5)
     if (isVerified) score += 5;
 
-    // Account age bonus (up to 10 points)
+    // Email verified bonus (+5)
+    if (isVerified && hasEmail) score += 5;
+
+    // Identity verification bonus (+5)
+    if (isIdentityVerified) score += 5;
+
+    // Security enabled bonus (+3)
+    if (hasSecurityEnabled) score += 3;
+
+    // Account age bonus (up to +10 points)
     if (accountAge >= 365) score += 10;
     else if (accountAge >= 180) score += 7;
     else if (accountAge >= 90) score += 5;
     else if (accountAge >= 30) score += 2;
+
+    // No orders penalty: brand new users with 0 orders shouldn't get high trust
+    if (totalOrders === 0 && accountAge < 30) {
+      score = Math.min(score, 55); // Cap at 55 for users with no order history
+    }
 
     reputation.pillars.trust.score = Math.max(0, Math.min(100, score));
     reputation.pillars.trust.lastCalculated = now;
