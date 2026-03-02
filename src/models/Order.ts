@@ -323,7 +323,8 @@ const OrderSchema = new Schema<IOrder>({
     quantity: {
       type: Number,
       required: true,
-      min: 1
+      min: 1,
+      max: 999
     },
     variant: {
       type: {
@@ -572,7 +573,7 @@ const OrderSchema = new Schema<IOrder>({
   status: {
     type: String,
     required: true,
-    enum: ['placed', 'confirmed', 'preparing', 'ready', 'dispatched', 'delivered', 'cancelled', 'returned', 'refunded'],
+    enum: ['placed', 'confirmed', 'preparing', 'ready', 'dispatched', 'out_for_delivery', 'delivered', 'cancelling', 'cancelled', 'returned', 'refunded'],
     default: 'placed',
     index: true
   },

@@ -19,6 +19,7 @@ import { generalLimiter, reviewLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+router.use(generalLimiter);
 
 // Get featured reviews (public, for UGC sections and food-stories)
 router.get('/featured',

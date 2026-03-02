@@ -17,6 +17,69 @@ import merchantWalletService from '../../services/merchantWalletService';
 import orderSocketService from '../../services/orderSocketService';
 
 /**
+ * Transform a raw MongoDB order document into the shape the merchant frontend expects.
+ * Maps: _id→id, user→customer, totals→pricing, items fields, delivery.address fields.
+ */
+function transformOrderForMerchant(order: any): any {
+  const user = order.user;
+  const customerName = user
+    ? [user.profile?.firstName, user.profile?.lastName].filter(Boolean).join(' ') || 'Customer'
+    : 'Customer';
+
+  return {
+    ...order,
+    id: order._id?.toString(),
+    // Map populated user → customer
+    customer: {
+      id: user?._id?.toString() || '',
+      name: customerName,
+      email: user?.profile?.email || user?.email || '',
+      phone: user?.phoneNumber || user?.profile?.phoneNumber || '',
+    },
+    // Map totals → pricing
+    pricing: {
+      subtotal: order.totals?.subtotal || 0,
+      tax: order.totals?.tax || 0,
+      taxAmount: order.totals?.tax || 0,
+      delivery: order.totals?.delivery || 0,
+      shippingAmount: order.totals?.delivery || 0,
+      discount: order.totals?.discount || 0,
+      discountAmount: order.totals?.discount || 0,
+      totalAmount: order.totals?.total || 0,
+    },
+    // Map payment status to top-level
+    paymentStatus: order.payment?.status || 'pending',
+    // Map cashback (may be in totals or as separate field)
+    cashback: order.cashback || { amount: order.totals?.cashback || 0, status: 'pending' },
+    // Default priority
+    priority: order.priority || 'normal',
+    // Transform items
+    items: (order.items || []).map((item: any) => ({
+      ...item,
+      id: item._id?.toString(),
+      productName: item.name || item.productName || (item.product as any)?.name || 'Unknown Item',
+      sku: item.sku || '',
+      price: item.price || 0,
+      totalPrice: item.subtotal || item.totalPrice || (item.price || 0) * (item.quantity || 1),
+      notes: item.specialInstructions || item.notes || '',
+    })),
+    // Transform delivery address fields for frontend
+    delivery: order.delivery ? {
+      ...order.delivery,
+      address: order.delivery.address ? {
+        ...order.delivery.address,
+        street: order.delivery.address.addressLine1 || order.delivery.address.street || '',
+        zipCode: order.delivery.address.pincode || order.delivery.address.zipCode || '',
+      } : undefined,
+      instructions: order.delivery.instructions || order.specialInstructions || '',
+    } : { method: 'delivery' },
+    // Timeline timestamps
+    confirmedAt: order.timeline?.find((t: any) => t.status === 'confirmed')?.timestamp || null,
+    deliveredAt: order.delivery?.deliveredAt || order.timeline?.find((t: any) => t.status === 'delivered')?.timestamp || null,
+  };
+}
+
+/**
  * Helper function to send order status notifications to customers
  */
 async function sendOrderStatusNotification(order: any, action: string): Promise<void> {
@@ -186,13 +249,16 @@ export const getMerchantOrderById = asyncHandler(async (req: Request, res: Respo
       store: storeInfo
     };
 
+    // Transform to merchant frontend's expected shape
+    const transformed = transformOrderForMerchant(orderWithStore);
+
     console.log('✅ [ORDER DETAIL] Order retrieved:', {
       orderId: id,
       orderNumber: order.orderNumber,
       status: order.status
     });
 
-    sendSuccess(res, orderWithStore, 'Order retrieved successfully');
+    sendSuccess(res, transformed, 'Order retrieved successfully');
 
   } catch (error: any) {
     console.error('❌ [ORDER DETAIL] Error:', error);
@@ -340,11 +406,16 @@ export const getMerchantOrders = asyncHandler(async (req: Request, res: Response
       limit
     });
 
+    // Transform all orders to merchant frontend's expected shape
+    const transformedOrders = orders.map(transformOrderForMerchant);
+
     sendSuccess(res, {
-      orders,
+      orders: transformedOrders,
+      totalCount: total,
       total,
       page: Number(page),
       limit: Number(limit),
+      totalPages: Math.ceil(total / Number(limit)),
       hasMore: skip + orders.length < total
     }, 'Orders retrieved successfully');
 
@@ -1409,12 +1480,21 @@ export const updateMerchantOrderStatus = asyncHandler(async (req: Request, res: 
       }
     }
 
-    sendSuccess(res, {
+    // Re-fetch the full order with populations so the frontend can update its state
+    const updatedOrder = await Order.findById(order._id)
+      .populate({ path: 'user', select: 'profile.firstName profile.lastName profile.email phoneNumber' })
+      .populate({ path: 'items.product', select: 'name image images' })
+      .populate({ path: 'items.store', select: 'name logo location' })
+      .lean();
+
+    const transformed = updatedOrder ? transformOrderForMerchant(updatedOrder) : {
       orderId: order._id,
       orderNumber: order.orderNumber,
       previousStatus: currentStatus,
       status: order.status,
-    }, `Order status updated to ${status}`);
+    };
+
+    sendSuccess(res, transformed, `Order status updated to ${status}`);
 
   } catch (error: any) {
     await session.abortTransaction();

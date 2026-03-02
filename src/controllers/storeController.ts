@@ -17,6 +17,9 @@ import redisService from '../services/redisService';
 import { logStoreSearch } from '../services/searchHistoryService';
 import { regionService, isValidRegion, RegionId, getRegionConfig } from '../services/regionService';
 
+// Escape user input for safe use in RegExp (prevents ReDoS / NoSQL injection)
+const escapeRegex = (str: string): string => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // Get all stores with filtering and pagination
 export const getStores = asyncHandler(async (req: Request, res: Response) => {
   const {
@@ -38,7 +41,7 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
   const sortBy = sort || sortByParam || 'rating';
 
   try {
-    const query: any = { isActive: true };
+    const query: any = { isActive: true, isSuspended: { $ne: true }, adminApproved: { $ne: false } };
 
     // Apply region filter if provided
     const regionHeader = req.headers['x-rez-region'] as string;
@@ -74,7 +77,7 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
     if (tags) {
       // tags can be a string or array - handle both
       const tagArray = Array.isArray(tags) ? tags : [tags];
-      query.tags = { $in: tagArray.map(tag => new RegExp(tag as string, 'i')) };
+      query.tags = { $in: tagArray.map(tag => new RegExp(escapeRegex(String(tag)), 'i')) };
     }
 
     // Filter by featured status
@@ -96,12 +99,13 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
     }
 
     if (search) {
+      const safeSearch = escapeRegex(String(search));
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { 'location.address': { $regex: search, $options: 'i' } },
-        { 'location.city': { $regex: search, $options: 'i' } },
-        { tags: { $regex: search, $options: 'i' } }
+        { name: { $regex: safeSearch, $options: 'i' } },
+        { description: { $regex: safeSearch, $options: 'i' } },
+        { 'location.address': { $regex: safeSearch, $options: 'i' } },
+        { 'location.city': { $regex: safeSearch, $options: 'i' } },
+        { tags: { $regex: safeSearch, $options: 'i' } }
       ];
     }
 
@@ -353,9 +357,10 @@ export const getStoreProducts = asyncHandler(async (req: Request, res: Response)
 
     if (category) query.category = category;
     if (search) {
+      const safeSearch = escapeRegex(String(search));
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { name: { $regex: safeSearch, $options: 'i' } },
+        { description: { $regex: safeSearch, $options: 'i' } }
       ];
     }
 
@@ -522,7 +527,7 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
   try {
     // Get region from header for filtering
     const regionHeader = req.headers['x-rez-region'] as string;
-    const baseQuery: Record<string, any> = { isActive: true };
+    const baseQuery: Record<string, any> = { isActive: true, isSuspended: { $ne: true }, adminApproved: { $ne: false } };
 
     if (regionHeader && isValidRegion(regionHeader)) {
       const regionFilter = regionService.getStoreFilter(regionHeader as RegionId);
@@ -595,14 +600,17 @@ export const searchStores = asyncHandler(async (req: Request, res: Response) => 
     // Get region from header for filtering
     const regionHeader = req.headers['x-rez-region'] as string;
 
+    const safeSearchText = escapeRegex(String(searchText));
     const query: any = {
       isActive: true,
+      isSuspended: { $ne: true },
+      adminApproved: { $ne: false },
       $or: [
-        { name: { $regex: searchText, $options: 'i' } },
-        { description: { $regex: searchText, $options: 'i' } },
-        { 'location.address': { $regex: searchText, $options: 'i' } },
-        { 'location.city': { $regex: searchText, $options: 'i' } },
-        { tags: { $regex: searchText, $options: 'i' } }
+        { name: { $regex: safeSearchText, $options: 'i' } },
+        { description: { $regex: safeSearchText, $options: 'i' } },
+        { 'location.address': { $regex: safeSearchText, $options: 'i' } },
+        { 'location.city': { $regex: safeSearchText, $options: 'i' } },
+        { tags: { $regex: safeSearchText, $options: 'i' } }
       ]
     };
 
@@ -1446,7 +1454,7 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
         // Category is a string name/slug, need to find the ObjectId
         const categoryDoc = await Category.findOne({
           $or: [
-            { name: { $regex: new RegExp(`^${category}$`, 'i') } },
+            { name: { $regex: new RegExp(`^${escapeRegex(String(category))}$`, 'i') } },
             { slug: category.toLowerCase() }
           ],
           isActive: true
@@ -1804,106 +1812,26 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
     }).lean();
 
     if (!category) {
-      // Category slug not in DB — fallback to keyword-based search instead of 404
-      console.log(`⚠️ [GET STORES BY SLUG] Category not found in DB, falling back to keyword search: ${slug}`);
-
-      const searchKeywords = slug.replace(/-/g, ' ');
-      const fallbackQuery: any = {
-        isActive: true,
-        $or: [
-          { name: { $regex: searchKeywords, $options: 'i' } },
-          { description: { $regex: searchKeywords, $options: 'i' } },
-          { tags: { $regex: searchKeywords, $options: 'i' } }
-        ]
-      };
-
-      const regionHeader = req.headers['x-rez-region'] as string;
-      if (regionHeader && isValidRegion(regionHeader)) {
-        const regionFilter = regionService.getStoreFilter(regionHeader as RegionId);
-        Object.assign(fallbackQuery, regionFilter);
-      }
-
-      const fallbackSort: any = {};
-      switch (sortBy) {
-        case 'rating': fallbackSort['ratings.average'] = -1; break;
-        case 'name': fallbackSort.name = 1; break;
-        case 'newest': fallbackSort.createdAt = -1; break;
-        default: fallbackSort['ratings.average'] = -1;
-      }
-
-      const fallbackSkip = (Number(page) - 1) * Number(limit);
-
-      const [fallbackStores, fallbackTotal] = await Promise.all([
-        Store.find(fallbackQuery)
-          .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
-          .populate('category', 'name slug icon')
-          .sort(fallbackSort)
-          .skip(fallbackSkip)
-          .limit(Number(limit))
-          .lean(),
-        Store.countDocuments(fallbackQuery)
-      ]);
-
-      // Batch fetch products for all fallback stores at once (avoids N+1)
-      const fallbackStoreIds = fallbackStores.map((s: any) => s._id);
-      const allFallbackProducts = await Product.find({
-        store: { $in: fallbackStoreIds },
-        isActive: true
-      })
-        .select('name pricing images slug ratings inventory subSubCategory store')
-        .lean();
-
-      // Group products by store ID (limit 4 per store)
-      const fallbackProductsByStore = new Map<string, any[]>();
-      for (const product of allFallbackProducts) {
-        const sid = product.store.toString();
-        if (!fallbackProductsByStore.has(sid)) {
-          fallbackProductsByStore.set(sid, []);
-        }
-        const arr = fallbackProductsByStore.get(sid)!;
-        if (arr.length < 4) {
-          arr.push(product);
-        }
-      }
-
-      const fallbackStoresWithProducts = fallbackStores.map((store: any) => {
-        const products = fallbackProductsByStore.get(store._id.toString()) || [];
-        const transformedProducts = products.map((product: any) => ({
-          _id: product._id,
-          productId: product._id,
-          name: product.name,
-          price: product.pricing?.selling || product.pricing?.current || product.price?.current || 0,
-          originalPrice: product.pricing?.original || product.price?.original || null,
-          discountPercentage: product.pricing?.discount || product.price?.discount || null,
-          imageUrl: product.images?.[0] || 'https://via.placeholder.com/150',
-          rating: product.ratings?.average || product.rating?.value || 0,
-          reviewCount: product.ratings?.count || product.rating?.count || 0,
-          inStock: product.inventory?.isAvailable !== false,
-          subSubCategory: product.subSubCategory || null
-        }));
-
-        return { ...store, products: transformedProducts };
-      });
-
-      const fallbackTotalPages = Math.ceil(fallbackTotal / Number(limit));
+      // Category slug not in DB — return empty results instead of unfiltered cross-category search
+      console.log(`⚠️ [GET STORES BY SLUG] Category not found in DB: ${slug}`);
 
       return sendSuccess(res, {
-        stores: fallbackStoresWithProducts,
+        stores: [],
         category: {
           _id: null,
-          name: searchKeywords,
+          name: slug.replace(/-/g, ' '),
           slug: slug,
           icon: null
         },
         pagination: {
           page: Number(page),
           limit: Number(limit),
-          total: fallbackTotal,
-          totalPages: fallbackTotalPages,
-          hasNext: Number(page) < fallbackTotalPages,
-          hasPrev: Number(page) > 1
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false
         }
-      }, `Found ${fallbackTotal} stores matching: ${searchKeywords}`);
+      }, `No category found for: ${slug}`);
     }
 
     console.log(`✅ [GET STORES BY SLUG] Found category: ${category.name} (${category._id})`);
@@ -1919,6 +1847,8 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
       console.log(`🔍 [GET STORES BY SLUG] Searching as SUBCATEGORY: ${slug}`);
       query = {
         isActive: true,
+        isSuspended: { $ne: true },
+        adminApproved: { $ne: false },
         $or: [
           { subcategory: category._id },
           { subCategories: category._id },
@@ -1934,6 +1864,8 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
       console.log(`🔍 [GET STORES BY SLUG] Searching as MAIN CATEGORY: ${slug}, including ${categoryIds.length} category IDs`);
       query = {
         isActive: true,
+        isSuspended: { $ne: true },
+        adminApproved: { $ne: false },
         $or: [
           { category: { $in: categoryIds } },
           { categories: { $in: categoryIds } },
@@ -2623,8 +2555,8 @@ export const getStoresByTag = asyncHandler(async (req: Request, res: Response) =
     const query: any = {
       isActive: true,
       $or: [
-        { tags: { $elemMatch: { $regex: new RegExp(tagLower, 'i') } } },
-        { name: { $regex: new RegExp(tagLower, 'i') } }
+        { tags: { $elemMatch: { $regex: new RegExp(escapeRegex(tagLower), 'i') } } },
+        { name: { $regex: new RegExp(escapeRegex(tagLower), 'i') } }
       ]
     };
 

@@ -715,6 +715,15 @@ export const updatePostStatus = asyncHandler(async (req: Request, res: Response)
         amount: post.cashbackAmount,
         source: { controller: 'socialMediaController', action: 'creditPost' }
       });
+
+      // Also emit social_share for mission progress tracking
+      gamificationEventBus.emit('social_share', {
+        userId: String(post.user),
+        entityId: String(post._id),
+        entityType: 'social_media_post',
+        amount: post.cashbackAmount,
+        source: { controller: 'socialMediaController', action: 'creditPost' }
+      });
     }
 
     sendSuccess(res, {

@@ -8,6 +8,7 @@ import { billVerificationService } from '../services/billVerificationService';
 import { uploadToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryUtils';
 import { fraudDetectionService } from '../services/fraudDetectionService';
 import crypto from 'crypto';
+import gamificationEventBus from '../events/gamificationEventBus';
 
 // Upload bill with image
 export const uploadBill = asyncHandler(async (req: Request, res: Response) => {
@@ -99,6 +100,16 @@ export const uploadBill = asyncHandler(async (req: Request, res: Response) => {
       .catch((error) => {
         console.error(`❌ [VERIFICATION] Error processing bill ${bill._id}:`, error);
       });
+
+    // Emit bill_uploaded event for mission progress tracking
+    gamificationEventBus.emit('bill_uploaded', {
+      userId: String(req.user._id),
+      entityId: String(bill._id),
+      entityType: 'bill',
+      amount: parseFloat(amount),
+      storeId: merchantId,
+      source: { controller: 'billController', action: 'uploadBill' },
+    });
 
     // Populate merchant details before sending response
     await bill.populate('merchant', 'name logo cashbackPercentage');

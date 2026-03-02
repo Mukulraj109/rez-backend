@@ -16,6 +16,9 @@ import { swaggerSpec } from './config/swagger';
 // Import database connection
 import { connectDatabase, database } from './config/database';
 
+// Import Redis service
+import redisService from './services/redisService';
+
 // Import environment validation
 import { validateEnvironment } from './config/validateEnv';
 
@@ -53,6 +56,7 @@ import { runGiftExpiry } from './jobs/giftExpiryJob';
 import { runSurpriseDropExpiry } from './jobs/surpriseDropExpiryJob';
 import { runPartnerEarningsSnapshot } from './jobs/partnerEarningsSnapshotJob';
 import { initializeReferralExpiryJob, runReferralExpiry } from './jobs/referralExpiryJob';
+import { initializePriveInviteExpiryJob } from './jobs/priveInviteExpiryJob';
 import { seedWalletFeatureFlags } from './services/walletFeatureService';
 
 // Import Bull-based scheduled job service (replaces node-cron with Bull repeatable jobs)
@@ -171,6 +175,7 @@ import mallAffiliateRoutes from './routes/mallAffiliateRoutes';  // Mall Affilia
 import cashStoreAffiliateRoutes from './routes/cashStoreAffiliateRoutes';  // Cash Store affiliate tracking routes
 import cashStoreRoutes from './routes/cashStoreRoutes';  // Cash Store browsing routes (categories, brands, homepage)
 import priveRoutes from './routes/priveRoutes';  // Privé eligibility and reputation routes
+import priveInviteRoutes from './routes/priveInviteRoutes';  // Privé invite system routes
 import webhookRoutes from './routes/webhookRoutes';
 import storeGalleryRoutes from './routes/storeGallery';  // Public store gallery routes
 import productGalleryRoutes from './routes/productGallery';  // Public product gallery routes
@@ -1168,7 +1173,8 @@ console.log('✅ Cash Store Affiliate routes registered at /api/cashstore/affili
 
 // Privé Routes - Eligibility, reputation, and exclusive access
 app.use(`${API_PREFIX}/prive`, priveRoutes);
-console.log('✅ Privé routes registered at /api/prive');
+app.use(`${API_PREFIX}/prive`, priveInviteRoutes);
+console.log('✅ Privé routes registered at /api/prive (including invite system)');
 
 // Store Gallery Routes - Public gallery viewing
 app.use(`${API_PREFIX}/stores`, storeGalleryRoutes);
@@ -1457,6 +1463,11 @@ async function startServer() {
     console.log('🔄 Connecting to database...');
     await connectDatabase();
 
+    // Connect to Redis (required for token blacklist, caching, distributed locks)
+    console.log('🔄 Connecting to Redis...');
+    await redisService.connect();
+    console.log(redisService.isReady() ? '✅ Redis connected' : '⚠️ Redis unavailable — app will continue without caching');
+
     // Validate Cloudinary configuration
     const cloudinaryConfigured = validateCloudinaryConfig();
     if (!cloudinaryConfigured) {
@@ -1580,6 +1591,8 @@ async function startServer() {
     // Referral expiry — daily at 3 AM
     initializeReferralExpiryJob();
     console.log('✅ Referral expiry job started (runs daily at 3 AM)');
+    // Privé invite code expiry — daily at 3:30 AM
+    initializePriveInviteExpiryJob();
 
     // Seed wallet feature flags
     await seedWalletFeatureFlags();

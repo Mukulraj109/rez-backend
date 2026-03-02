@@ -2,6 +2,7 @@ import * as cron from 'node-cron';
 import { CoinTransaction, ICoinTransaction } from '../models/CoinTransaction';
 import { User } from '../models/User';
 import PushNotificationService from '../services/pushNotificationService';
+import redisService from '../services/redisService';
 
 /**
  * Coin Expiry Job
@@ -329,9 +330,21 @@ export function startCoinExpiryJob(): void {
   console.log(`💰 [COIN EXPIRY] Starting coin expiry job (runs daily at 1:00 AM)`);
 
   expiryJob = cron.schedule(CRON_SCHEDULE, async () => {
-    // Prevent concurrent executions
+    // Prevent concurrent executions (local flag)
     if (isRunning) {
       console.log('⏭️ [COIN EXPIRY] Previous expiry job still running, skipping this execution');
+      return;
+    }
+
+    // Distributed lock: prevents multiple server instances from running simultaneously
+    let lockToken: string | null = null;
+    try {
+      lockToken = await redisService.acquireLock('job:coin-expiry', 300); // 5 min TTL
+    } catch {
+      // Redis unavailable — fall through to local-only guard
+    }
+    if (!lockToken) {
+      console.log('⏭️ [COIN EXPIRY] Another instance holds the lock, skipping');
       return;
     }
 
@@ -389,6 +402,10 @@ export function startCoinExpiryJob(): void {
       });
     } finally {
       isRunning = false;
+      // Release distributed lock
+      if (lockToken) {
+        try { await redisService.releaseLock('job:coin-expiry', lockToken); } catch { /* lock auto-expires */ }
+      }
     }
   });
 

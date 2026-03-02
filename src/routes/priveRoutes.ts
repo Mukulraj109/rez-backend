@@ -26,7 +26,26 @@ import {
   markVoucherUsed,
   getRedeemConfig,
   getCatalog,
+  getPublicProgramConfig,
+  getTierComparison,
 } from '../controllers/priveController';
+import {
+  getMissions,
+  getActiveMissions,
+  claimMission,
+  completeMission,
+  getCompletedMissions,
+} from '../controllers/priveMissionController';
+import {
+  createTicket as createConciergeTicket,
+  getTickets as getConciergeTickets,
+  getTicketById as getConciergeTicketById,
+  addMessage as addConciergeMessage,
+} from '../controllers/priveConciergeController';
+import { priveNextBestActionService } from '../services/priveNextBestActionService';
+import { priveNotificationService } from '../services/priveNotificationService';
+import { priveAnalyticsService } from '../services/priveAnalyticsService';
+import priveAccessService from '../services/priveAccessService';
 import {
   getSmartSpendCatalog,
   getSmartSpendItem,
@@ -36,11 +55,69 @@ import { getPriveReviewDashboard } from '../controllers/priveReviewController';
 import { authenticate } from '../middleware/auth';
 import { strictLimiter, generalLimiter } from '../middleware/rateLimiter';
 import { requireReAuthForRedemption } from '../middleware/reAuth';
+import { getCachedWalletConfig } from '../services/walletCacheService';
+
+/**
+ * Middleware factory: checks that a feature flag is enabled in WalletConfig
+ */
+const requireFeatureFlag = (flagName: string) => async (req: any, res: any, next: any) => {
+  try {
+    const config = await getCachedWalletConfig();
+    const flags = config?.priveProgramConfig?.featureFlags as Record<string, boolean> | undefined;
+    if (flags && flags[flagName] === false) {
+      return res.status(403).json({ success: false, error: 'This feature is currently disabled' });
+    }
+    next();
+  } catch {
+    next(); // fail open on config fetch error
+  }
+};
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+
+// ==========================================
+// Program Config (Public)
+// ==========================================
+router.get('/program-config/public', generalLimiter, getPublicProgramConfig);
+router.get('/tier-comparison', generalLimiter, getTierComparison);
+
+// ==========================================
+// Next Best Actions
+// ==========================================
+
+router.get('/next-actions', generalLimiter, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const result = await priveNextBestActionService.getNextActions(userId);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('[PRIVE] Error fetching next actions:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch next actions' });
+  }
+});
+
+// ==========================================
+// Missions
+// ==========================================
+
+router.get('/missions', generalLimiter, requireFeatureFlag('missionsEnabled'), getMissions);
+router.get('/missions/active', generalLimiter, requireFeatureFlag('missionsEnabled'), getActiveMissions);
+router.get('/missions/completed', generalLimiter, requireFeatureFlag('missionsEnabled'), getCompletedMissions);
+router.post('/missions/:id/claim', strictLimiter, requireFeatureFlag('missionsEnabled'), claimMission);
+router.post('/missions/:id/complete', strictLimiter, requireFeatureFlag('missionsEnabled'), completeMission);
+
+// ==========================================
+// Concierge Support
+// ==========================================
+
+router.post('/concierge/tickets', strictLimiter, requireFeatureFlag('conciergeEnabled'), createConciergeTicket);
+router.get('/concierge/tickets', generalLimiter, requireFeatureFlag('conciergeEnabled'), getConciergeTickets);
+router.get('/concierge/tickets/:id', generalLimiter, requireFeatureFlag('conciergeEnabled'), getConciergeTicketById);
+router.post('/concierge/tickets/:id/message', strictLimiter, requireFeatureFlag('conciergeEnabled'), addConciergeMessage);
 
 // ==========================================
 // Eligibility & Reputation
@@ -51,14 +128,14 @@ router.use(authenticate);
  * @desc    Get user's Privé eligibility status
  * @access  Private
  */
-router.get('/eligibility', getPriveEligibility);
+router.get('/eligibility', generalLimiter, getPriveEligibility);
 
 /**
  * @route   GET /api/prive/pillars
  * @desc    Get detailed pillar breakdown with factors
  * @access  Private
  */
-router.get('/pillars', getPillarBreakdown);
+router.get('/pillars', generalLimiter, getPillarBreakdown);
 
 /**
  * @route   POST /api/prive/refresh
@@ -72,14 +149,14 @@ router.post('/refresh', strictLimiter, refreshEligibility);
  * @desc    Get reputation score history
  * @access  Private
  */
-router.get('/history', getReputationHistory);
+router.get('/history', generalLimiter, getReputationHistory);
 
 /**
  * @route   GET /api/prive/tips
  * @desc    Get personalized tips to improve eligibility
  * @access  Private
  */
-router.get('/tips', getImprovementTips);
+router.get('/tips', generalLimiter, getImprovementTips);
 
 // ==========================================
 // Daily Check-in & Habits
@@ -90,7 +167,7 @@ router.get('/tips', getImprovementTips);
  * @desc    Daily check-in with streak tracking
  * @access  Private
  */
-router.post('/check-in', dailyCheckIn);
+router.post('/check-in', strictLimiter, dailyCheckIn);
 
 /**
  * @route   GET /api/prive/habit-loops
@@ -230,20 +307,51 @@ router.post('/vouchers/:id/use', strictLimiter, markVoucherUsed);
  * @desc    Get curated Smart Spend catalog
  * @access  Private
  */
-router.get('/smart-spend', generalLimiter, getSmartSpendCatalog);
+router.get('/smart-spend', generalLimiter, requireFeatureFlag('smartSpendEnabled'), getSmartSpendCatalog);
 
 /**
  * @route   GET /api/prive/smart-spend/:id
  * @desc    Get single Smart Spend item detail
  * @access  Private
  */
-router.get('/smart-spend/:id', getSmartSpendItem);
+router.get('/smart-spend/:id', requireFeatureFlag('smartSpendEnabled'), getSmartSpendItem);
 
 /**
  * @route   POST /api/prive/smart-spend/:id/click
  * @desc    Track Smart Spend item click for analytics
  * @access  Private
  */
-router.post('/smart-spend/:id/click', trackSmartSpendClick);
+router.post('/smart-spend/:id/click', requireFeatureFlag('smartSpendEnabled'), trackSmartSpendClick);
+
+// ==========================================
+// Notifications & Analytics
+// ==========================================
+
+router.get('/notifications', generalLimiter, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const accessCheck = await priveAccessService.checkAccess(userId);
+    const tier = accessCheck.effectiveTier || 'none';
+    const result = await priveNotificationService.getNotifications(userId, tier);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('[PRIVE] Error fetching notifications:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch notifications' });
+  }
+});
+
+router.get('/analytics', generalLimiter, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+    const period = Math.min(90, Math.max(7, Number(req.query.period) || 30));
+    const result = await priveAnalyticsService.getAnalytics(userId, period);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('[PRIVE] Error fetching analytics:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch analytics' });
+  }
+});
 
 export default router;

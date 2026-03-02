@@ -8,7 +8,8 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { reputationService } from '../services/reputationService';
 import { UserReputation } from '../models/UserReputation';
-import DailyCheckIn, { calculateStreakBonus, getStreakMessage } from '../models/DailyCheckIn';
+import priveAccessService from '../services/priveAccessService';
+import DailyCheckIn from '../models/DailyCheckIn';
 import PriveOffer, { IPriveOffer } from '../models/PriveOffer';
 import PriveVoucher, { calculateVoucherValue, getDefaultExpiry, VoucherType } from '../models/PriveVoucher';
 import { User } from '../models/User';
@@ -20,6 +21,8 @@ import { CoinTransaction } from '../models/CoinTransaction';
 import { WalletConfig } from '../models/WalletConfig';
 import { getCachedWalletConfig } from '../services/walletCacheService';
 import { SOURCE_TO_CATEGORY } from '../config/earningsCategories';
+import gamificationEventBus from '../events/gamificationEventBus';
+import { invalidateWalletCache } from '../services/walletCacheService';
 
 /**
  * Aggregates weekly earnings from CoinTransaction (all sources, not just check-ins).
@@ -166,18 +169,27 @@ export const getPriveEligibility = async (req: Request, res: Response) => {
       });
     }
 
-    const eligibility = await reputationService.checkPriveEligibility(userId);
+    // Use priveAccessService for the unified check
+    const accessCheck = await priveAccessService.checkAccess(userId);
 
     return res.status(200).json({
       success: true,
-      data: eligibility,
+      data: {
+        // Existing reputation fields
+        ...accessCheck.reputation,
+        // New access fields
+        hasAccess: accessCheck.hasAccess,
+        accessSource: accessCheck.accessSource,
+        effectiveTier: accessCheck.effectiveTier,
+        isWhitelisted: accessCheck.isWhitelisted,
+      },
     });
   } catch (error: any) {
     console.error('[PRIVE] Error getting eligibility:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get eligibility status',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -208,7 +220,7 @@ export const getPillarBreakdown = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to get pillar breakdown',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -244,7 +256,7 @@ export const refreshEligibility = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to refresh eligibility',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -290,7 +302,7 @@ export const getReputationHistory = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to get reputation history',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -397,7 +409,7 @@ export const getImprovementTips = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to get improvement tips',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -426,7 +438,7 @@ export const dailyCheckIn = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to check in',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -454,7 +466,7 @@ export const getHabitLoops = async (req: Request, res: Response) => {
     const [config, ordersToday, reviewsToday, referralsToday, vouchersToday, weeklyEarningsData] = await Promise.all([
       getCachedWalletConfig(),
       Order.countDocuments({
-        userId: userObjectId,
+        user: userObjectId,
         createdAt: { $gte: today },
         status: { $in: ['completed', 'delivered'] },
       }).catch(() => 0),
@@ -463,7 +475,7 @@ export const getHabitLoops = async (req: Request, res: Response) => {
         createdAt: { $gte: today },
       }).catch(() => 0),
       Referral.countDocuments({
-        referrerId: userObjectId,
+        referrer: userObjectId,
         createdAt: { $gte: today },
         status: 'COMPLETED',
       }).catch(() => 0),
@@ -496,7 +508,7 @@ export const getHabitLoops = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to get habit loops',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -522,9 +534,10 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
 
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    // First fetch eligibility to get user's tier
-    const eligibility = await reputationService.checkPriveEligibility(userId);
-    const userTier = eligibility?.tier || 'none';
+    // First fetch eligibility + access status
+    const accessCheck = await priveAccessService.checkAccess(userId);
+    const eligibility = accessCheck.reputation;
+    const userTier = accessCheck.effectiveTier || eligibility?.tier || 'none';
 
     // Fetch all other data in parallel
     const [
@@ -538,6 +551,8 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
       activeCampaigns,
       completedCampaigns,
       avgRatingResult,
+      notificationSummary,
+      activeMissionsSummary,
     ] = await Promise.all([
       User.findById(userId).select('fullName profile createdAt').lean(),
       Wallet.findOne({ user: userObjectId }).lean(),
@@ -547,17 +562,44 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
       getCachedWalletConfig(),
       PriveOffer.findFeaturedOffers(userTier, 3),
       Order.countDocuments({
-        userId: userObjectId,
+        user: userObjectId,
         status: { $in: ['pending', 'processing', 'shipped'] },
       }).catch(() => 0),
       Order.countDocuments({
-        userId: userObjectId,
+        user: userObjectId,
         status: 'delivered',
       }).catch(() => 0),
       Review.aggregate([
         { $match: { user: userObjectId } },
         { $group: { _id: null, avgRating: { $avg: '$rating' } } },
       ]).catch(() => []),
+      // Notification summary (lightweight — counts only)
+      (async () => {
+        try {
+          const { priveNotificationService } = await import('../services/priveNotificationService');
+          const result = await priveNotificationService.getNotifications(userId, userTier);
+          return { counts: result.counts, topUrgent: result.notifications.slice(0, 3) };
+        } catch { return { counts: { critical: 0, warning: 0, info: 0 }, topUrgent: [] }; }
+      })(),
+      // Active missions (top 3)
+      (async () => {
+        try {
+          const { UserMission } = await import('../models/UserMission');
+          const missions = await UserMission.find({ userId: userObjectId, status: 'active' })
+            .populate('missionId', 'title targetPillar reward endDate')
+            .sort({ createdAt: -1 })
+            .limit(3)
+            .lean();
+          return missions.map((m: any) => ({
+            id: m._id.toString(),
+            title: m.missionId?.title || 'Mission',
+            progress: m.progress,
+            target: m.targetCount,
+            pillar: m.missionId?.targetPillar,
+            reward: m.missionId?.reward,
+          }));
+        } catch { return []; }
+      })(),
     ]);
 
     // Format offers for response
@@ -615,6 +657,11 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
         trustScore: eligibility?.trustScore || 0,
         pillars: eligibility?.pillars || [],
         accessState: score >= 70 ? 'active' : score >= 50 ? 'building' : 'none',
+        // Invite-based access fields
+        hasAccess: accessCheck.hasAccess,
+        accessSource: accessCheck.accessSource,
+        effectiveTier: accessCheck.effectiveTier,
+        isWhitelisted: accessCheck.isWhitelisted,
       },
       coins: (() => {
         // Extract coin balances from wallet
@@ -707,6 +754,8 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
         pointsToNext,
         nextTier: tierInfo.next,
       },
+      notifications: notificationSummary,
+      activeMissions: activeMissionsSummary,
     };
 
     return res.status(200).json({
@@ -718,7 +767,7 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to get dashboard',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -743,8 +792,8 @@ export const getPriveOffers = async (req: Request, res: Response) => {
     }
 
     const { page = 1, limit = 10, category, tier: tierFilter } = req.query;
-    const pageNum = parseInt(page as string, 10);
-    const limitNum = parseInt(limit as string, 10);
+    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 10));
 
     // Get user's tier
     const eligibility = await reputationService.checkPriveEligibility(userId);
@@ -824,7 +873,7 @@ export const getPriveOffers = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to get offers',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -894,7 +943,7 @@ export const getPriveOfferById = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to get offer',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -922,9 +971,23 @@ export const trackOfferClick = async (req: Request, res: Response) => {
       });
     }
 
-    await PriveOffer.findByIdAndUpdate(id, {
-      $inc: { clicks: 1 },
-    });
+    // Dedup: only count one click per user per offer per day
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+
+    const alreadyTracked = await PriveOffer.findOne({
+      _id: id,
+      'clickLog.userId': userObjectId,
+      'clickLog.date': { $gte: today },
+    }).lean();
+
+    if (!alreadyTracked) {
+      await PriveOffer.findByIdAndUpdate(id, {
+        $inc: { clicks: 1 },
+        $push: { clickLog: { userId: userObjectId, date: new Date() } },
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -935,7 +998,7 @@ export const trackOfferClick = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to track click',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -992,7 +1055,7 @@ export const getPriveHighlights = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to get highlights',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -1017,8 +1080,8 @@ export const getEarnings = async (req: Request, res: Response) => {
     }
 
     const { page = 1, limit = 20, type, cursor, timeRange } = req.query;
-    const pageNum = parseInt(page as string, 10);
-    const limitNum = parseInt(limit as string, 10);
+    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 20));
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
     const DAY_MS = 24 * 60 * 60 * 1000;
@@ -1150,7 +1213,7 @@ export const getEarnings = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to get earnings',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -1171,8 +1234,8 @@ export const getTransactions = async (req: Request, res: Response) => {
     }
 
     const { page = 1, limit = 20, type, coinType, cursor } = req.query;
-    const pageNum = parseInt(page as string, 10);
-    const limitNum = parseInt(limit as string, 10);
+    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 20));
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
     // Build query
@@ -1259,7 +1322,7 @@ export const getTransactions = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to get transactions',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -1298,6 +1361,15 @@ export const redeemCoins = async (req: Request, res: Response) => {
       return res.status(401).json({
         success: false,
         error: 'Authentication required',
+      });
+    }
+
+    // Verify Privé access
+    const accessCheck = await priveAccessService.checkAccess(userId);
+    if (!accessCheck.hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: 'Privé access required to redeem coins',
       });
     }
 
@@ -1576,6 +1648,19 @@ export const redeemCoins = async (req: Request, res: Response) => {
       ).exec().catch(err => console.warn('[PRIVE] Failed to increment offer redemptions:', err));
     }
 
+    // Emit offer_redeemed event for mission progress tracking
+    gamificationEventBus.emit('offer_redeemed', {
+      userId,
+      entityId: voucher._id.toString(),
+      entityType: 'voucher',
+      amount: coinAmount,
+      metadata: { type, partnerId, voucherCode: voucher.code },
+      source: { controller: 'priveController', action: 'redeemCoins' },
+    });
+
+    // Invalidate wallet cache after mutation
+    invalidateWalletCache(userId).catch(() => {});
+
     return res.status(200).json({
       success: true,
       data: {
@@ -1606,7 +1691,7 @@ export const redeemCoins = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to redeem coins',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -1669,8 +1754,8 @@ export const getVouchers = async (req: Request, res: Response) => {
     }
 
     const { status, type, page = 1, limit = 20 } = req.query;
-    const pageNum = parseInt(page as string, 10);
-    const limitNum = parseInt(limit as string, 10);
+    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10) || 20));
     const userObjectId = new mongoose.Types.ObjectId(userId);
 
     // Build query
@@ -1742,7 +1827,7 @@ export const getVouchers = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to get vouchers',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -1808,7 +1893,7 @@ export const getVoucherById = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to get voucher',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -1884,7 +1969,7 @@ export const markVoucherUsed = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to mark voucher as used',
-      message: error.message,
+      // error.message logged above — not exposed to client
     });
   }
 };
@@ -1975,5 +2060,96 @@ export const getCatalog = async (_req: Request, res: Response) => {
       success: false,
       error: 'Failed to get redemption catalog',
     });
+  }
+};
+
+/**
+ * GET /api/prive/program-config/public
+ * Returns public-facing program config (feature flags + tier comparison data)
+ */
+export const getPublicProgramConfig = async (req: Request, res: Response) => {
+  try {
+    const config = await getCachedWalletConfig();
+    const pc = config?.priveProgramConfig;
+
+    if (!pc) {
+      return res.status(200).json({
+        success: true,
+        data: { featureFlags: {}, tiers: [] },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        featureFlags: pc.featureFlags,
+        tiers: pc.tiers.map((t: any) => ({
+          tier: t.tier,
+          displayName: t.displayName,
+          color: t.color,
+          coinMultiplier: t.coinMultiplier,
+          conciergeAccess: t.conciergeAccess,
+          conciergeResponseSLA: t.conciergeResponseSLA,
+          inviteCodesLimit: t.inviteCodesLimit,
+          benefits: t.benefits,
+        })),
+        tierThresholds: {
+          entry: pc.tierThresholds.entryTier,
+          signature: pc.tierThresholds.signatureTier,
+          elite: pc.tierThresholds.eliteTier,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('[PRIVE] Error fetching public config:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch program config' });
+  }
+};
+
+/**
+ * GET /api/prive/tier-comparison
+ * Returns all tier data with user's current tier highlighted
+ */
+export const getTierComparison = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const [config, accessCheck] = await Promise.all([
+      getCachedWalletConfig(),
+      priveAccessService.checkAccess(userId),
+    ]);
+
+    const pc = config?.priveProgramConfig;
+    const currentTier = accessCheck.effectiveTier || accessCheck.reputation?.tier || 'none';
+
+    const tiers = (pc?.tiers || []).map((t: any) => ({
+      tier: t.tier,
+      displayName: t.displayName,
+      color: t.color,
+      coinMultiplier: t.coinMultiplier,
+      conciergeAccess: t.conciergeAccess,
+      conciergeResponseSLA: t.conciergeResponseSLA,
+      inviteCodesLimit: t.inviteCodesLimit,
+      benefits: t.benefits,
+      isCurrent: t.tier === currentTier,
+      threshold: t.tier === 'entry' ? pc?.tierThresholds.entryTier
+        : t.tier === 'signature' ? pc?.tierThresholds.signatureTier
+        : pc?.tierThresholds.eliteTier,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        currentTier,
+        score: accessCheck.reputation?.score || 0,
+        tiers,
+      },
+    });
+  } catch (error) {
+    console.error('[PRIVE] Error fetching tier comparison:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch tier comparison' });
   }
 };

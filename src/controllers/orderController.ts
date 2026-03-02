@@ -37,35 +37,88 @@ import { Store } from '../models/Store';
 import { Category } from '../models/Category';
 import { MainCategorySlug, CoinTransaction } from '../models/CoinTransaction';
 import { LedgerEntry } from '../models/LedgerEntry';
+import redisService from '../services/redisService';
 
 const VALID_CATEGORY_SLUGS: MainCategorySlug[] = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
 
+// In-memory cache for category→root slug mapping (avoids N DB calls per order)
+const CATEGORY_ROOT_CACHE_KEY = 'cache:category-root-map';
+const CATEGORY_ROOT_CACHE_TTL = 300; // 5 minutes
+let localCategoryCache: Map<string, string | null> | null = null;
+let localCacheTTL = 0;
+
+/**
+ * Build or retrieve a map of categoryId → root MainCategory slug.
+ * Cached in Redis (5min) with in-memory fallback.
+ */
+async function getCategoryRootMap(): Promise<Map<string, string | null>> {
+  // Check local memory cache first
+  if (localCategoryCache && Date.now() < localCacheTTL) {
+    return localCategoryCache;
+  }
+
+  // Try Redis cache
+  try {
+    const cached = await redisService.get<[string, string | null][]>(CATEGORY_ROOT_CACHE_KEY);
+    if (cached) {
+      localCategoryCache = new Map<string, string | null>(cached);
+      localCacheTTL = Date.now() + CATEGORY_ROOT_CACHE_TTL * 1000;
+      return localCategoryCache;
+    }
+  } catch { /* Redis unavailable — build from DB */ }
+
+  // Build from DB: load all categories in one query
+  const allCategories = await Category.find({}).select('slug parentCategory').lean();
+  const catMap = new Map<string, { slug: string; parentId: string | null }>();
+  for (const cat of allCategories) {
+    catMap.set(cat._id.toString(), {
+      slug: cat.slug,
+      parentId: cat.parentCategory ? cat.parentCategory.toString() : null,
+    });
+  }
+
+  // Resolve each category to its root slug
+  const rootMap = new Map<string, string | null>();
+  for (const [catId] of catMap) {
+    let currentId: string | null = catId;
+    let depth = 5;
+    let rootSlug: string | null = null;
+
+    while (currentId && depth-- > 0) {
+      const entry = catMap.get(currentId);
+      if (!entry) break;
+      if (!entry.parentId) {
+        // Root category found
+        rootSlug = VALID_CATEGORY_SLUGS.includes(entry.slug as MainCategorySlug) ? entry.slug : null;
+        break;
+      }
+      currentId = entry.parentId;
+    }
+    rootMap.set(catId, rootSlug);
+  }
+
+  // Cache in Redis + memory
+  try {
+    await redisService.set(CATEGORY_ROOT_CACHE_KEY, [...rootMap], CATEGORY_ROOT_CACHE_TTL);
+  } catch { /* Redis unavailable */ }
+  localCategoryCache = rootMap;
+  localCacheTTL = Date.now() + CATEGORY_ROOT_CACHE_TTL * 1000;
+
+  return rootMap;
+}
+
 /**
  * Get the root MainCategory slug for a store.
- * Traverses the category hierarchy up to the root (parentCategory === null).
+ * Uses cached category hierarchy (1 DB query for all categories, cached 5min).
  */
 async function getStoreCategorySlug(storeId: string): Promise<MainCategorySlug | null> {
   try {
     const store = await Store.findById(storeId).select('category').lean();
     if (!store?.category) return null;
 
-    let categoryId = store.category.toString();
-    let maxDepth = 5; // Safety limit
-
-    while (maxDepth-- > 0) {
-      const cat = await Category.findById(categoryId).select('slug parentCategory').lean();
-      if (!cat) return null;
-
-      if (!cat.parentCategory) {
-        // This is the root category
-        const slug = cat.slug as MainCategorySlug;
-        return VALID_CATEGORY_SLUGS.includes(slug) ? slug : null;
-      }
-
-      categoryId = cat.parentCategory.toString();
-    }
-
-    return null;
+    const rootMap = await getCategoryRootMap();
+    const rootSlug = rootMap.get(store.category.toString());
+    return (rootSlug as MainCategorySlug) || null;
   } catch (err) {
     console.error('[ORDER] Error getting store category slug:', err);
     return null;
@@ -1630,15 +1683,18 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
 
   // ATOMIC IDEMPOTENCY GUARD — claim the order for cancellation
   // Only one concurrent caller can transition from cancellable status to 'cancelling'
-  const claimedOrder = await Order.findOneAndUpdate(
+  // Use { new: false } to get the original status for rollback
+  const preClaimOrder = await Order.findOneAndUpdate(
     {
       _id: orderId,
       user: userId,
       status: { $in: ['placed', 'confirmed', 'preparing'] }
     },
     { $set: { status: 'cancelling' } },
-    { new: true }
+    { new: false }
   );
+  const claimedOrder = preClaimOrder;
+  const originalStatus = preClaimOrder?.status || 'placed';
 
   if (!claimedOrder) {
     const existing = await Order.findOne({ _id: orderId, user: userId });
@@ -1762,24 +1818,9 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
       const promoCoins = (order.payment.coinsUsed as any).promoCoins || 0;
       const storePromoCoins = (order.payment.coinsUsed as any).storePromoCoins || 0;
 
-      // Refund REZ coins
+      // Refund REZ coins via coinService (single path — avoids double-crediting wallet)
       if (rezCoins > 0) {
         try {
-          const wallet = await Wallet.findOne({ user: userId }).session(session);
-          if (wallet) {
-            const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-            if (rezCoin) {
-              rezCoin.amount += rezCoins;
-              wallet.balance.available += rezCoins;
-              wallet.balance.total += rezCoins;
-              wallet.markModified('coins');
-              wallet.lastTransactionAt = new Date();
-              await wallet.save({ session });
-              console.log('✅ [CANCEL ORDER] REZ coins refunded:', rezCoins);
-            }
-          }
-
-          // Create refund transaction record
           const coinService = require('../services/coinService').default;
           await coinService.awardCoins(
             userId.toString(),
@@ -1787,6 +1828,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
             'refund',
             `Refund for cancelled order: ${order.orderNumber}`
           );
+          console.log('✅ [CANCEL ORDER] REZ coins refunded via coinService:', rezCoins);
         } catch (coinError) {
           console.error('❌ [CANCEL ORDER] Failed to refund REZ coins:', coinError);
         }
@@ -2000,7 +2042,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
 
     // Reset status from 'cancelling' back to previous state so it can be retried
     try {
-      await Order.findByIdAndUpdate(orderId, { $set: { status: 'placed' } });
+      await Order.findByIdAndUpdate(orderId, { $set: { status: originalStatus } });
     } catch (resetError) {
       console.error('❌ [CANCEL ORDER] Failed to reset status:', resetError);
     }

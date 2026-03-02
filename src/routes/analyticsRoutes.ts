@@ -10,10 +10,11 @@ import {
 } from '../controllers/analyticsController';
 import { optionalAuth, requireAuth } from '../middleware/auth';
 import { validateQuery, validateParams, validateBody, commonSchemas } from '../middleware/validation';
-// // import { generalLimiter, analyticsLimiter } from '../middleware/rateLimiter'; // Disabled for development // Disabled for development
+import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+router.use(generalLimiter);
 
 // Batch analytics events from frontend
 router.post('/batch',

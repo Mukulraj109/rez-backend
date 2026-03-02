@@ -27,7 +27,7 @@ export interface ISupportTicket extends Document {
   ticketNumber: string;
   user: Types.ObjectId;
   subject: string;
-  category: 'order' | 'payment' | 'product' | 'account' | 'technical' | 'delivery' | 'refund' | 'other';
+  category: 'order' | 'payment' | 'product' | 'account' | 'technical' | 'delivery' | 'refund' | 'prive_concierge' | 'other';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   status: 'open' | 'in_progress' | 'waiting_customer' | 'resolved' | 'closed';
   relatedEntity: IRelatedEntity;
@@ -42,6 +42,11 @@ export interface ISupportTicket extends Document {
   attachments: string[];
   tags: string[];
   internalNotes: string[];
+  isPriveTicket: boolean;
+  priveTier?: 'entry' | 'signature' | 'elite';
+  slaHours?: number;
+  slaDeadline?: Date;
+  slaBreached: boolean;
   metadata: Map<string, any> | Record<string, any>;
   firstResponseAt?: Date;
   responseTime?: number; // in minutes
@@ -108,7 +113,7 @@ const SupportTicketSchema = new Schema<ISupportTicket>(
     },
     category: {
       type: String,
-      enum: ['order', 'payment', 'product', 'account', 'technical', 'delivery', 'refund', 'other'],
+      enum: ['order', 'payment', 'product', 'account', 'technical', 'delivery', 'refund', 'prive_concierge', 'other'],
       required: true,
       index: true,
     },
@@ -176,6 +181,25 @@ const SupportTicketSchema = new Schema<ISupportTicket>(
     internalNotes: [{
       type: String, // Agent-only notes
     }],
+    isPriveTicket: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    priveTier: {
+      type: String,
+      enum: ['entry', 'signature', 'elite'],
+    },
+    slaHours: {
+      type: Number,
+    },
+    slaDeadline: {
+      type: Date,
+    },
+    slaBreached: {
+      type: Boolean,
+      default: false,
+    },
     metadata: {
       type: Map,
       of: Schema.Types.Mixed,
@@ -201,6 +225,7 @@ SupportTicketSchema.index({ user: 1, status: 1 });
 SupportTicketSchema.index({ ticketNumber: 1, user: 1 });
 SupportTicketSchema.index({ createdAt: -1 });
 SupportTicketSchema.index({ status: 1, priority: -1 });
+SupportTicketSchema.index({ isPriveTicket: 1, slaBreached: 1, status: 1 });
 
 // Virtual for unread message count (for user)
 SupportTicketSchema.virtual('unreadCount').get(function(this: ISupportTicket) {
@@ -399,6 +424,22 @@ SupportTicketSchema.pre('save', function(next) {
     if (this.category === 'payment' || this.category === 'refund') {
       this.priority = 'high';
     }
+  }
+  next();
+});
+
+// Pre-save hook: auto-set priority and SLA for Prive concierge tickets
+SupportTicketSchema.pre('save', function(next) {
+  if (this.isPriveTicket && this.isNew) {
+    const slaMap: Record<string, { priority: string; hours: number }> = {
+      elite: { priority: 'urgent', hours: 1 },
+      signature: { priority: 'high', hours: 24 },
+      entry: { priority: 'medium', hours: 48 },
+    };
+    const config = slaMap[this.priveTier || 'entry'] || slaMap.entry;
+    this.priority = config.priority as any;
+    this.slaHours = config.hours;
+    this.slaDeadline = new Date(Date.now() + config.hours * 60 * 60 * 1000);
   }
   next();
 });

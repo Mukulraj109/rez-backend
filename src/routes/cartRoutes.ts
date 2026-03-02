@@ -18,10 +18,11 @@ import {
 } from '../controllers/cartController';
 import { authenticate } from '../middleware/auth';
 import { validate, validateParams, cartSchemas, commonSchemas } from '../middleware/validation';
-// import { generalLimiter } from '../middleware/rateLimiter'; // Disabled for development
+import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+router.use(generalLimiter);
 
 // All cart routes require authentication
 router.use(authenticate);

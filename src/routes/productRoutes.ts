@@ -26,10 +26,11 @@ import {
 } from '../controllers/productController';
 import { optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, productSchemas, commonSchemas } from '../middleware/validation';
-// // import { searchLimiter, generalLimiter } from '../middleware/rateLimiter'; // Disabled for development // Disabled for development
+import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+router.use(generalLimiter);
 
 // Get all products with filtering
 router.get('/',

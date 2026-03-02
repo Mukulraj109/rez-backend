@@ -109,6 +109,60 @@ export interface IHabitLoopConfig {
   streakMultiplier: number;
 }
 
+export interface IPriveInviteConfig {
+  enabled: boolean;
+  inviterRewardCoins: number;
+  inviteeRewardCoins: number;
+  maxCodesPerUser: number;
+  codeExpiryDays: number;
+  maxUsesPerCode: number;
+  minTierToInvite: 'entry' | 'signature' | 'elite';
+  cooldownHours: number;
+  fraudBlockThreshold: number;
+}
+
+export interface IPriveTierConfig {
+  tier: 'entry' | 'signature' | 'elite';
+  displayName: string;
+  color: string;
+  coinMultiplier: number;
+  conciergeAccess: boolean;
+  conciergeResponseSLA: number; // hours
+  inviteCodesLimit: number;
+  benefits: string[];
+}
+
+export interface IPriveProgramConfig {
+  tierThresholds: {
+    entryTier: number;
+    signatureTier: number;
+    eliteTier: number;
+    trustMinimum: number;
+  };
+  pillarWeights: {
+    engagement: number;
+    trust: number;
+    influence: number;
+    economicValue: number;
+    brandAffinity: number;
+    network: number;
+  };
+  tiers: IPriveTierConfig[];
+  featureFlags: {
+    offersEnabled: boolean;
+    missionsEnabled: boolean;
+    conciergeEnabled: boolean;
+    smartSpendEnabled: boolean;
+    redemptionEnabled: boolean;
+    analyticsEnabled: boolean;
+    invitesEnabled: boolean;
+  };
+  dashboardCacheTtlSeconds: number;
+  notificationConfig: {
+    expiryWarningDays: number;
+  };
+}
+
 export interface IWalletConfig extends Document {
   singleton: boolean;
   transferLimits: ITransferLimits;
@@ -120,6 +174,8 @@ export interface IWalletConfig extends Document {
   fraudThresholds: IFraudThresholds;
   redemptionConfig: IRedemptionConfig;
   habitLoopConfig: IHabitLoopConfig;
+  priveInviteConfig: IPriveInviteConfig;
+  priveProgramConfig: IPriveProgramConfig;
   coinRules: Record<string, ICoinRules>;
   createdAt: Date;
   updatedAt: Date;
@@ -263,6 +319,90 @@ const WalletConfigSchema = new Schema<IWalletConfig>({
     },
     completionBonusCoins: { type: Number, default: 25 },
     streakMultiplier: { type: Number, default: 1 },
+  },
+  priveInviteConfig: {
+    enabled: { type: Boolean, default: true },
+    inviterRewardCoins: { type: Number, default: 100 },
+    inviteeRewardCoins: { type: Number, default: 50 },
+    maxCodesPerUser: { type: Number, default: 5 },
+    codeExpiryDays: { type: Number, default: 30 },
+    maxUsesPerCode: { type: Number, default: 5 },
+    minTierToInvite: { type: String, enum: ['entry', 'signature', 'elite'], default: 'entry' },
+    cooldownHours: { type: Number, default: 24 },
+    fraudBlockThreshold: { type: Number, default: 80 },
+  },
+  priveProgramConfig: {
+    tierThresholds: {
+      entryTier: { type: Number, default: 50 },
+      signatureTier: { type: Number, default: 70 },
+      eliteTier: { type: Number, default: 85 },
+      trustMinimum: { type: Number, default: 60 },
+    },
+    pillarWeights: {
+      engagement: { type: Number, default: 0.25 },
+      trust: { type: Number, default: 0.20 },
+      influence: { type: Number, default: 0.20 },
+      economicValue: { type: Number, default: 0.15 },
+      brandAffinity: { type: Number, default: 0.10 },
+      network: { type: Number, default: 0.10 },
+    },
+    tiers: {
+      type: [{
+        tier: { type: String, enum: ['entry', 'signature', 'elite'], required: true },
+        displayName: { type: String, required: true },
+        color: { type: String, required: true },
+        coinMultiplier: { type: Number, required: true },
+        conciergeAccess: { type: Boolean, default: false },
+        conciergeResponseSLA: { type: Number, default: 48 },
+        inviteCodesLimit: { type: Number, default: 5 },
+        benefits: { type: [String], default: [] },
+      }],
+      default: [
+        {
+          tier: 'entry',
+          displayName: 'Entry',
+          color: '#C9A962',
+          coinMultiplier: 1.0,
+          conciergeAccess: false,
+          conciergeResponseSLA: 48,
+          inviteCodesLimit: 5,
+          benefits: ['Exclusive offers access', 'Daily check-in bonuses', 'Habit loop rewards', 'Smart Spend access'],
+        },
+        {
+          tier: 'signature',
+          displayName: 'Signature',
+          color: '#E5C878',
+          coinMultiplier: 1.5,
+          conciergeAccess: true,
+          conciergeResponseSLA: 24,
+          inviteCodesLimit: 10,
+          benefits: ['All Entry benefits', '1.5x coin multiplier', 'Priority concierge (24h SLA)', 'Exclusive Signature offers', 'Advanced analytics'],
+        },
+        {
+          tier: 'elite',
+          displayName: 'Elite',
+          color: '#FFD700',
+          coinMultiplier: 2.0,
+          conciergeAccess: true,
+          conciergeResponseSLA: 1,
+          inviteCodesLimit: 20,
+          benefits: ['All Signature benefits', '2x coin multiplier', 'VIP concierge (1h SLA)', 'Exclusive Elite experiences', 'Early access to features', 'Personal account manager'],
+        },
+      ],
+    },
+    featureFlags: {
+      offersEnabled: { type: Boolean, default: true },
+      missionsEnabled: { type: Boolean, default: true },
+      conciergeEnabled: { type: Boolean, default: true },
+      smartSpendEnabled: { type: Boolean, default: true },
+      redemptionEnabled: { type: Boolean, default: true },
+      analyticsEnabled: { type: Boolean, default: true },
+      invitesEnabled: { type: Boolean, default: true },
+    },
+    dashboardCacheTtlSeconds: { type: Number, default: 30 },
+    notificationConfig: {
+      expiryWarningDays: { type: Number, default: 7 },
+    },
   },
   coinRules: {
     type: Schema.Types.Mixed,

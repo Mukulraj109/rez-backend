@@ -14,10 +14,11 @@ import { uploadProjectFile, uploadMultipleProjectFiles } from '../controllers/up
 import { uploadProjectFile as uploadMiddleware } from '../middleware/upload';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validate, validateParams, validateQuery, commonSchemas } from '../middleware/validation';
-// import { generalLimiter } from '../middleware/rateLimiter'; // Disabled for development
+import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+router.use(generalLimiter);
 
 // Upload project file (image or video) to Cloudinary
 router.post('/upload',

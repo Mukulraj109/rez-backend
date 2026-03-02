@@ -7,10 +7,11 @@ import {
 } from '../controllers/notificationController';
 import { authenticate } from '../middleware/auth';
 import { validate, validateParams, validateQuery, notificationSchemas, commonSchemas } from '../middleware/validation';
-// import { generalLimiter } from '../middleware/rateLimiter'; // Disabled for development
+import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+router.use(generalLimiter);
 
 // All notification routes require authentication
 router.use(authenticate);

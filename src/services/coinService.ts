@@ -143,50 +143,60 @@ export async function awardCoins(
     category || null
   );
 
-  // Also update the Wallet model to keep balances in sync
-  try {
-    let wallet = await Wallet.findOne({ user: userId });
+  // Also update the Wallet model to keep balances in sync (with retry)
+  const updateWallet = async (retryCount = 0): Promise<void> => {
+    try {
+      let wallet = await Wallet.findOne({ user: userId });
 
-    if (!wallet) {
-      // Create wallet if it doesn't exist
-      wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
-    }
-
-    if (wallet) {
-      if (category) {
-        // Category-specific: atomic $inc on categoryBalances
-        await Wallet.findByIdAndUpdate(wallet._id, {
-          $inc: {
-            [`categoryBalances.${category}.available`]: amount,
-            [`categoryBalances.${category}.earned`]: amount,
-            'statistics.totalEarned': amount,
-            'balance.total': amount
-          },
-          $set: { lastTransactionAt: new Date() }
-        });
-      } else {
-        // Global ReZ coins: atomic $inc on balance + coins array
-        await Wallet.findOneAndUpdate(
-          { _id: wallet._id, 'coins.type': 'rez' },
-          {
-            $inc: {
-              'balance.available': amount,
-              'balance.total': amount,
-              'statistics.totalEarned': amount,
-              'coins.$.amount': amount
-            },
-            $set: {
-              'coins.$.lastUsed': new Date(),
-              lastTransactionAt: new Date()
-            }
-          }
-        );
+      if (!wallet) {
+        wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
       }
-      console.log(`✅ [COIN SERVICE] Wallet updated atomically: +${adjustedAmount} coins${category ? ` (${category})` : ''}`);
+
+      if (wallet) {
+        if (category) {
+          await Wallet.findByIdAndUpdate(wallet._id, {
+            $inc: {
+              [`categoryBalances.${category}.available`]: adjustedAmount,
+              [`categoryBalances.${category}.earned`]: adjustedAmount,
+              'statistics.totalEarned': adjustedAmount,
+              'balance.total': adjustedAmount
+            },
+            $set: { lastTransactionAt: new Date() }
+          });
+        } else {
+          await Wallet.findOneAndUpdate(
+            { _id: wallet._id, 'coins.type': 'rez' },
+            {
+              $inc: {
+                'balance.available': adjustedAmount,
+                'balance.total': adjustedAmount,
+                'statistics.totalEarned': adjustedAmount,
+                'coins.$.amount': adjustedAmount
+              },
+              $set: {
+                'coins.$.lastUsed': new Date(),
+                lastTransactionAt: new Date()
+              }
+            }
+          );
+        }
+        console.log(`✅ [COIN SERVICE] Wallet updated atomically: +${adjustedAmount} coins${category ? ` (${category})` : ''}`);
+      }
+    } catch (walletError) {
+      if (retryCount < 1) {
+        console.warn(`⚠️ [COIN SERVICE] Wallet update failed, retrying (attempt ${retryCount + 1}):`, walletError);
+        await updateWallet(retryCount + 1);
+      } else {
+        // Log structured data for reconciliation service to pick up
+        console.error('❌ [COIN SERVICE] Wallet update failed after retry — reconciliation needed:', {
+          userId, amount: adjustedAmount, source, category,
+          transactionId: transaction._id?.toString(),
+          error: (walletError as Error).message,
+        });
+      }
     }
-  } catch (walletError) {
-    console.error('❌ [COIN SERVICE] Failed to update wallet:', walletError);
-  }
+  };
+  await updateWallet();
 
   // Also update UserLoyalty categoryCoins if category is provided
   if (category) {
@@ -512,42 +522,62 @@ export async function transferCoins(
  * Get coin statistics for user
  */
 export async function getCoinStats(userId: string): Promise<any> {
-  const transactions = await CoinTransaction.find({ user: userId });
+  const userObjId = new mongoose.Types.ObjectId(userId);
 
-  const stats = {
-    totalEarned: 0,
-    totalSpent: 0,
-    totalExpired: 0,
-    totalRefunded: 0,
-    totalBonus: 0,
-    currentBalance: 0,
-    transactionCount: transactions.length,
+  // Use aggregation pipeline instead of loading all transactions into memory
+  const [totalsResult, sourceBreakdown, monthlyEarnings, txCount] = await Promise.all([
+    // 1. Totals by type
+    CoinTransaction.aggregate([
+      { $match: { user: userObjId } },
+      { $group: {
+        _id: '$type',
+        total: { $sum: '$amount' },
+      }},
+    ]),
+    // 2. Source breakdown (earned/bonus/refunded only)
+    CoinTransaction.aggregate([
+      { $match: { user: userObjId, type: { $in: ['earned', 'bonus', 'refunded'] } } },
+      { $group: { _id: '$source', total: { $sum: '$amount' } } },
+    ]),
+    // 3. Monthly earnings (last 12 months)
+    CoinTransaction.aggregate([
+      { $match: {
+        user: userObjId,
+        type: { $in: ['earned', 'bonus'] },
+        createdAt: { $gte: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000) },
+      }},
+      { $group: {
+        _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
+        total: { $sum: '$amount' },
+      }},
+      { $sort: { _id: 1 } },
+    ]),
+    // 4. Transaction count
+    CoinTransaction.countDocuments({ user: userObjId }),
+  ]);
+
+  const stats: any = {
+    totalEarned: 0, totalSpent: 0, totalExpired: 0, totalRefunded: 0, totalBonus: 0,
+    currentBalance: 0, transactionCount: txCount,
     sourceBreakdown: {} as Record<string, number>,
-    monthlyEarnings: {} as Record<string, number>
+    monthlyEarnings: {} as Record<string, number>,
   };
 
-  transactions.forEach(t => {
-    // Update totals
-    if (t.type === 'earned') stats.totalEarned += t.amount;
-    if (t.type === 'spent') stats.totalSpent += t.amount;
-    if (t.type === 'expired') stats.totalExpired += t.amount;
-    if (t.type === 'refunded') stats.totalRefunded += t.amount;
-    if (t.type === 'bonus') stats.totalBonus += t.amount;
-
-    // Source breakdown
-    if (t.type === 'earned' || t.type === 'bonus' || t.type === 'refunded') {
-      stats.sourceBreakdown[t.source] = (stats.sourceBreakdown[t.source] || 0) + t.amount;
-    }
-
-    // Monthly earnings
-    if (t.type === 'earned' || t.type === 'bonus') {
-      const month = t.createdAt.toISOString().substring(0, 7); // YYYY-MM
-      stats.monthlyEarnings[month] = (stats.monthlyEarnings[month] || 0) + t.amount;
-    }
-  });
+  for (const row of totalsResult) {
+    if (row._id === 'earned') stats.totalEarned = row.total;
+    else if (row._id === 'spent') stats.totalSpent = row.total;
+    else if (row._id === 'expired') stats.totalExpired = row.total;
+    else if (row._id === 'refunded') stats.totalRefunded = row.total;
+    else if (row._id === 'bonus') stats.totalBonus = row.total;
+  }
+  for (const row of sourceBreakdown) {
+    stats.sourceBreakdown[row._id] = row.total;
+  }
+  for (const row of monthlyEarnings) {
+    stats.monthlyEarnings[row._id] = row.total;
+  }
 
   stats.currentBalance = await getCoinBalance(userId);
-
   return stats;
 }
 

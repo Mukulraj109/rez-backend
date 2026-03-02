@@ -36,7 +36,8 @@ export type ActivityEventType =
   | 'game_won' | 'quiz_correct'
   | 'social_share' | 'social_media_submitted' | 'social_media_approved' | 'social_media_credited'
   | 'favorite_added' | 'wishlist_added'
-  | 'challenge_completed';
+  | 'challenge_completed'
+  | 'invite_applied';
 
 export type EventCategory =
   | 'order' | 'review' | 'referral' | 'video' | 'bill'
@@ -141,11 +142,13 @@ class GamificationEventBus {
       const { registerChallengeHandler } = await import('./handlers/challengeProgressHandler');
       const { registerStreakHandler } = await import('./handlers/streakHandler');
       const { registerLeaderboardHandler } = await import('./handlers/leaderboardHandler');
+      const { registerMissionProgressHandler } = await import('./handlers/missionProgressHandler');
 
       registerAchievementHandler(this);
       registerChallengeHandler(this);
       registerStreakHandler(this);
       registerLeaderboardHandler(this);
+      registerMissionProgressHandler(this);
 
       this.initialized = true;
       console.log('[EVENT BUS] Gamification event bus initialized with all handlers');
@@ -166,6 +169,7 @@ class GamificationEventBus {
     if (type.startsWith('project')) return 'project';
     if (type.startsWith('offer')) return 'offer';
     if (type.startsWith('challenge')) return 'event';
+    if (type.startsWith('invite')) return 'referral';
     return 'event';
   }
 }

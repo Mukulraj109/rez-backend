@@ -681,6 +681,11 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
       productData.productType = 'product';
     }
 
+    // Map merchant status → isActive boolean for Product model
+    if (productData.status) {
+      productData.isActive = productData.status === 'active';
+    }
+
     // Ensure inventory structure is correct
     if (productData.inventory) {
       if (productData.inventory.stock === undefined || productData.inventory.stock === null) {
@@ -951,13 +956,18 @@ router.put('/:id',
         productData.images = imageUrls;
       }
 
+      // Map merchant status → isActive boolean for Product model
+      if (productData.status) {
+        productData.isActive = productData.status === 'active';
+      }
+
       // Update product - only assign valid fields
       // Remove any fields that shouldn't be directly assigned
       const fieldsToUpdate: any = {
         ...productData,
         updatedAt: new Date(),
       };
-      
+
       // Remove fields that shouldn't be updated directly
       delete fieldsToUpdate._id;
       delete fieldsToUpdate.__v;

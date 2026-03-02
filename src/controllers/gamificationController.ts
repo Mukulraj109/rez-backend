@@ -9,6 +9,7 @@ import challengeService from '../services/challengeService';
 import { UserAchievement, ACHIEVEMENT_DEFINITIONS } from '../models/Achievement';
 import leaderboardService from '../services/leaderboardService';
 import coinService from '../services/coinService';
+import gamificationEventBus from '../events/gamificationEventBus';
 import streakService from '../services/streakService';
 import spinWheelService from '../services/spinWheelService';
 import quizService from '../services/quizService';
@@ -1353,6 +1354,13 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
       console.error('[STREAK CHECKIN] Error creating DailyCheckIn record:', checkInError);
     }
 
+    // Emit daily_checkin event for mission progress tracking
+    gamificationEventBus.emit('daily_checkin', {
+      userId,
+      metadata: { streakDay: 1, coinsEarned: day1Reward },
+      source: { controller: 'gamificationController', action: 'streakCheckin' },
+    });
+
     return sendSuccess(res, {
       streakUpdated: true,
       currentStreak: 1,
@@ -1469,6 +1477,13 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
   } catch (checkInError) {
     console.error('[STREAK CHECKIN] Error creating DailyCheckIn record:', checkInError);
   }
+
+  // Emit daily_checkin event for mission progress tracking
+  gamificationEventBus.emit('daily_checkin', {
+    userId,
+    metadata: { streakDay: newCurrentStreak, coinsEarned },
+    source: { controller: 'gamificationController', action: 'streakCheckin' },
+  });
 
   sendSuccess(res, {
     streakUpdated: true,

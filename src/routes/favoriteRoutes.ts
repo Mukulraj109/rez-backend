@@ -10,10 +10,11 @@ import {
 } from '../controllers/favoriteController';
 import { requireAuth } from '../middleware/auth';
 import { validateQuery, validateParams, validateBody, commonSchemas } from '../middleware/validation';
-// // import { generalLimiter, favoriteLimiter } from '../middleware/rateLimiter'; // Disabled for development // Disabled for development
+import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+router.use(generalLimiter);
 
 // Add store to favorites
 router.post('/store/:storeId',   // favoriteLimiter,, // Disabled for development

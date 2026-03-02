@@ -12,13 +12,14 @@ import {
 } from '../controllers/locationController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validateQuery, validate, validateParams, commonSchemas } from '../middleware/validation';
-// // import { generalLimiter, searchLimiter } from '../middleware/rateLimiter'; // Disabled for development // Disabled for development
+import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 import { sendSuccess } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { regionService, getRegionConfig, getActiveRegions, isValidRegion, RegionId } from '../services/regionService';
 
 const router = Router();
+router.use(generalLimiter);
 
 // Update user location
 router.post('/update',  // generalLimiter,, // Disabled for development

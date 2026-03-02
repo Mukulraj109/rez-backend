@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import UserLoyalty from '../models/UserLoyalty';
 import { Store } from '../models/Store';
 import { Product } from '../models/Product';
@@ -16,6 +17,21 @@ import { AppError } from '../middleware/errorHandler';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
 
 const VALID_CATEGORIES: MainCategorySlug[] = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
+
+// Helper: get YYYY-MM-DD string for a date in a given timezone
+function getDateStringInTZ(date: Date, tz: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  } catch {
+    // Invalid timezone — fallback to UTC
+    return date.toISOString().split('T')[0];
+  }
+}
 
 // Default food-dining missions to seed for new users
 const FOOD_DINING_MISSIONS = [
@@ -209,183 +225,267 @@ function getTierFromPurchaseCount(count: number): { tier: 'Bronze' | 'Silver' | 
 // Auto-populate brand loyalty from order history
 async function populateBrandLoyaltyFromOrders(userId: string): Promise<any[]> {
   try {
-    const orders = await Order.find({
-      user: userId,
-      status: 'delivered',
-    }).select('items store').lean();
-
-    // Group by store using items[].store + items[].storeName
-    const storeMap = new Map<string, { name: string; count: number }>();
-
-    for (const order of orders) {
-      // Use top-level store if available
-      if (order.store) {
-        const storeId = order.store.toString();
-        const existing = storeMap.get(storeId);
-        if (existing) {
-          existing.count += 1;
-        } else {
-          // Try to get store name from items
-          const storeName = order.items?.[0]?.storeName || 'Venue';
-          storeMap.set(storeId, { name: storeName, count: 1 });
+    // Use aggregation pipeline to group orders by store in the DB (avoids loading all orders into memory)
+    const brandStats = await Order.aggregate([
+      { $match: { user: new mongoose.Types.ObjectId(userId), status: 'delivered' } },
+      // Use top-level store; fall back to first item's store
+      {
+        $project: {
+          storeId: {
+            $ifNull: ['$store', { $arrayElemAt: ['$items.store', 0] }]
+          },
+          storeName: { $arrayElemAt: ['$items.storeName', 0] },
         }
-        continue;
-      }
-
-      // Fallback: group by each item's store
-      for (const item of (order.items || [])) {
-        if (!item.store) continue;
-        const storeId = item.store.toString();
-        const existing = storeMap.get(storeId);
-        if (existing) {
-          existing.count += 1;
-        } else {
-          storeMap.set(storeId, { name: item.storeName || 'Venue', count: 1 });
+      },
+      { $match: { storeId: { $ne: null } } },
+      {
+        $group: {
+          _id: '$storeId',
+          name: { $first: '$storeName' },
+          count: { $sum: 1 },
         }
+      },
+      { $sort: { count: -1 } },
+      { $limit: 200 }, // Safety limit
+    ]);
+
+    // Look up real store names for entries with generic/fallback names
+    const genericNames = ['Venue', 'Restaurant', 'Store', 'Salon', 'Gym', 'Clinic', 'Brand', 'Institute', 'Service', 'Provider'];
+    const storeIdsNeedingNames = brandStats
+      .filter(b => !b.name || genericNames.includes(b.name))
+      .map(b => b._id);
+
+    if (storeIdsNeedingNames.length > 0) {
+      try {
+        const storesWithNames = await Store.find({
+          _id: { $in: storeIdsNeedingNames },
+        }).select('name').lean();
+
+        const nameMap = new Map(storesWithNames.map(s => [s._id.toString(), s.name]));
+        for (const b of brandStats) {
+          const realName = nameMap.get(b._id.toString());
+          if (realName) b.name = realName;
+        }
+      } catch (nameError) {
+        console.error('[Loyalty] Error looking up store names:', nameError);
       }
     }
 
     // Convert to brandLoyalty entries
-    const brandLoyalty: any[] = [];
-    for (const [storeId, data] of storeMap) {
-      const tierInfo = getTierFromPurchaseCount(data.count);
-      brandLoyalty.push({
-        brandId: storeId,
-        brandName: data.name,
-        purchaseCount: data.count,
+    return brandStats.map(b => {
+      const tierInfo = getTierFromPurchaseCount(b.count);
+      return {
+        brandId: b._id.toString(),
+        brandName: b.name || 'Venue',
+        purchaseCount: b.count,
         tier: tierInfo.tier,
         progress: tierInfo.progress,
         nextTierAt: tierInfo.nextTierAt,
-      });
-    }
-
-    // Sort by purchase count descending
-    brandLoyalty.sort((a, b) => b.purchaseCount - a.purchaseCount);
-    return brandLoyalty;
+      };
+    });
   } catch (error) {
     console.error('[Loyalty] Error populating brand loyalty:', error);
     return [];
   }
 }
 
-// Compute mission progress from real data (orders, reviews, streak)
-// Returns a map of missionId -> computed progress
+// Map mission ID prefixes to their MainCategory slugs
+const MISSION_PREFIX_TO_CATEGORY: Record<string, string> = {
+  'food': 'food-dining',
+  'fitness': 'fitness-sports',
+  'beauty': 'beauty-wellness',
+  'grocery': 'grocery-essentials',
+  'health': 'healthcare',
+  'fashion': 'fashion',
+  'edu': 'education-learning',
+  'home': 'home-services',
+  'travel': 'travel-experiences',
+  'ent': 'entertainment',
+  'fin': 'financial-lifestyle',
+  'elec': 'electronics',
+};
+
+// Compute mission progress from real data, filtered by category
+// Each category's missions only count orders/reviews from stores in that category
 async function computeMissionProgress(userId: string, streakCurrent: number): Promise<Map<string, number>> {
   const progressMap = new Map<string, number>();
 
   try {
-    // Fetch orders and reviews in parallel
-    const [deliveredOrders, reviewCount] = await Promise.all([
-      Order.find({
-        user: userId,
-        status: 'delivered',
-      }).select('items store').lean(),
-      Review.countDocuments({
-        user: userId,
-        isActive: true,
-      }),
+    const { Category } = require('../models/Category');
+
+    // Fetch orders, reviews (with store ref), and full category tree in parallel
+    const [deliveredOrders, reviews, allCategories] = await Promise.all([
+      Order.find({ user: userId, status: 'delivered' }).select('items store').lean(),
+      Review.find({ user: userId, isActive: true }).select('store').lean(),
+      Category.find({ isActive: true }).select('_id slug parentCategory').lean(),
     ]);
 
-    // Count unique stores ordered from
-    const uniqueStoreIds = new Set<string>();
+    // Build category hierarchy: id → parentId, id → slug
+    const idToParent = new Map<string, string>();
+    const idToSlug = new Map<string, string>();
+    for (const cat of allCategories) {
+      idToSlug.set(cat._id.toString(), cat.slug);
+      if (cat.parentCategory) {
+        idToParent.set(cat._id.toString(), cat.parentCategory.toString());
+      }
+    }
+
+    // Resolve any category ID to its root MainCategory slug
+    function getRootSlug(catId: string): string | null {
+      let current = catId;
+      let depth = 0;
+      while (idToParent.has(current) && depth < 5) {
+        current = idToParent.get(current)!;
+        depth++;
+      }
+      return idToSlug.get(current) || null;
+    }
+
+    // Collect all unique store IDs from orders
+    const allStoreIds = new Set<string>();
     for (const order of deliveredOrders) {
-      if (order.store) uniqueStoreIds.add(order.store.toString());
+      if (order.store) allStoreIds.add(order.store.toString());
       for (const item of (order.items || [])) {
-        if (item.store) uniqueStoreIds.add(item.store.toString());
+        if (item.store) allStoreIds.add(item.store.toString());
+      }
+    }
+    // Also include stores from reviews
+    for (const review of reviews) {
+      if (review.store) allStoreIds.add(review.store.toString());
+    }
+
+    // Fetch store categories in one batch
+    const storesWithCategory = allStoreIds.size > 0
+      ? await Store.find({ _id: { $in: Array.from(allStoreIds) } }).select('_id category').lean()
+      : [];
+
+    // Build store → rootCategorySlug mapping
+    const storeToRoot = new Map<string, string>();
+    for (const store of storesWithCategory) {
+      const catId = store.category?.toString();
+      if (catId) {
+        const root = getRootSlug(catId);
+        if (root) storeToRoot.set(store._id.toString(), root);
       }
     }
 
-    // Count unique cuisine categories from stores
-    let uniqueCuisineCount = 0;
-    if (uniqueStoreIds.size > 0) {
-      try {
-        const storeCategories = await Store.find({
-          _id: { $in: Array.from(uniqueStoreIds) },
-        }).select('category').lean();
-        const uniqueCategories = new Set(
-          storeCategories.map(s => s.category?.toString()).filter(Boolean)
-        );
-        uniqueCuisineCount = uniqueCategories.size;
-      } catch {
-        // If store query fails, keep at 0
-      }
+    // Count orders, unique stores, and unique subcategories PER root category
+    const orderCountByCat = new Map<string, number>();
+    const uniqueStoresByCat = new Map<string, Set<string>>();
+    const uniqueSubcatsByCat = new Map<string, Set<string>>();
+
+    for (const order of deliveredOrders) {
+      const storeId = order.store?.toString();
+      if (!storeId) continue;
+      const rootSlug = storeToRoot.get(storeId);
+      if (!rootSlug) continue;
+
+      orderCountByCat.set(rootSlug, (orderCountByCat.get(rootSlug) || 0) + 1);
+      if (!uniqueStoresByCat.has(rootSlug)) uniqueStoresByCat.set(rootSlug, new Set());
+      uniqueStoresByCat.get(rootSlug)!.add(storeId);
     }
 
-    // Set progress for ALL category missions (generalized)
-    // Each category has 5 mission types following the same pattern
+    // Build unique subcategories per root
+    for (const store of storesWithCategory) {
+      const sid = store._id.toString();
+      const rootSlug = storeToRoot.get(sid);
+      const catId = store.category?.toString();
+      if (!rootSlug || !catId) continue;
+      if (!uniqueSubcatsByCat.has(rootSlug)) uniqueSubcatsByCat.set(rootSlug, new Set());
+      uniqueSubcatsByCat.get(rootSlug)!.add(catId);
+    }
+
+    // Count reviews per root category
+    const reviewCountByCat = new Map<string, number>();
+    for (const review of reviews) {
+      const storeId = review.store?.toString();
+      if (!storeId) continue;
+      const rootSlug = storeToRoot.get(storeId);
+      if (!rootSlug) continue;
+      reviewCountByCat.set(rootSlug, (reviewCountByCat.get(rootSlug) || 0) + 1);
+    }
+
+    // Helper to get per-category counts
+    const getOrders = (slug: string) => orderCountByCat.get(slug) || 0;
+    const getStores = (slug: string) => uniqueStoresByCat.get(slug)?.size || 0;
+    const getSubcats = (slug: string) => uniqueSubcatsByCat.get(slug)?.size || 0;
+    const getReviews = (slug: string) => reviewCountByCat.get(slug) || 0;
+
+    // Set progress using ONLY category-filtered data
+    // Streak missions use global streak (check-in is not category-specific)
     const MISSION_PROGRESS_MAP: Record<string, number> = {
       // food-dining
-      'food-try-3-restaurants': uniqueStoreIds.size,
-      'food-leave-2-reviews': reviewCount,
-      'food-place-10-orders': deliveredOrders.length,
+      'food-try-3-restaurants': getStores('food-dining'),
+      'food-leave-2-reviews': getReviews('food-dining'),
+      'food-place-10-orders': getOrders('food-dining'),
       'food-7-day-streak': streakCurrent,
-      'food-try-5-cuisines': uniqueCuisineCount,
+      'food-try-5-cuisines': getSubcats('food-dining'),
       // fitness-sports
-      'fitness-visit-3-gyms': uniqueStoreIds.size,
-      'fitness-book-5-classes': deliveredOrders.length,
+      'fitness-visit-3-gyms': getStores('fitness-sports'),
+      'fitness-book-5-classes': getOrders('fitness-sports'),
       'fitness-7-day-streak': streakCurrent,
-      'fitness-leave-2-reviews': reviewCount,
-      'fitness-try-3-workouts': uniqueCuisineCount,
+      'fitness-leave-2-reviews': getReviews('fitness-sports'),
+      'fitness-try-3-workouts': getSubcats('fitness-sports'),
       // beauty-wellness
-      'beauty-visit-3-salons': uniqueStoreIds.size,
-      'beauty-book-5-services': deliveredOrders.length,
+      'beauty-visit-3-salons': getStores('beauty-wellness'),
+      'beauty-book-5-services': getOrders('beauty-wellness'),
       'beauty-7-day-streak': streakCurrent,
-      'beauty-leave-2-reviews': reviewCount,
-      'beauty-try-3-services': uniqueCuisineCount,
+      'beauty-leave-2-reviews': getReviews('beauty-wellness'),
+      'beauty-try-3-services': getSubcats('beauty-wellness'),
       // grocery-essentials
-      'grocery-shop-3-stores': uniqueStoreIds.size,
-      'grocery-place-10-orders': deliveredOrders.length,
+      'grocery-shop-3-stores': getStores('grocery-essentials'),
+      'grocery-place-10-orders': getOrders('grocery-essentials'),
       'grocery-7-day-streak': streakCurrent,
-      'grocery-leave-2-reviews': reviewCount,
-      'grocery-try-5-categories': uniqueCuisineCount,
+      'grocery-leave-2-reviews': getReviews('grocery-essentials'),
+      'grocery-try-5-categories': getSubcats('grocery-essentials'),
       // healthcare
-      'health-visit-3-clinics': uniqueStoreIds.size,
-      'health-book-5-appointments': deliveredOrders.length,
+      'health-visit-3-clinics': getStores('healthcare'),
+      'health-book-5-appointments': getOrders('healthcare'),
       'health-checkup-streak': streakCurrent,
-      'health-rate-2-doctors': reviewCount,
-      'health-try-3-specialties': uniqueCuisineCount,
+      'health-rate-2-doctors': getReviews('healthcare'),
+      'health-try-3-specialties': getSubcats('healthcare'),
       // fashion
-      'fashion-visit-3-stores': uniqueStoreIds.size,
-      'fashion-buy-5-brands': deliveredOrders.length,
+      'fashion-visit-3-stores': getStores('fashion'),
+      'fashion-buy-5-brands': getOrders('fashion'),
       'fashion-7-day-streak': streakCurrent,
-      'fashion-rate-2-boutiques': reviewCount,
-      'fashion-try-3-categories': uniqueCuisineCount,
+      'fashion-rate-2-boutiques': getReviews('fashion'),
+      'fashion-try-3-categories': getSubcats('fashion'),
       // education-learning
-      'edu-enroll-3-courses': uniqueStoreIds.size,
-      'edu-complete-5-classes': deliveredOrders.length,
+      'edu-enroll-3-courses': getStores('education-learning'),
+      'edu-complete-5-classes': getOrders('education-learning'),
       'edu-7-day-streak': streakCurrent,
-      'edu-rate-2-institutes': reviewCount,
-      'edu-try-3-subjects': uniqueCuisineCount,
+      'edu-rate-2-institutes': getReviews('education-learning'),
+      'edu-try-3-subjects': getSubcats('education-learning'),
       // home-services
-      'home-book-3-services': uniqueStoreIds.size,
-      'home-complete-5-jobs': deliveredOrders.length,
+      'home-book-3-services': getStores('home-services'),
+      'home-complete-5-jobs': getOrders('home-services'),
       'home-monthly-maintenance': streakCurrent,
-      'home-rate-2-providers': reviewCount,
-      'home-try-3-services': uniqueCuisineCount,
+      'home-rate-2-providers': getReviews('home-services'),
+      'home-try-3-services': getSubcats('home-services'),
       // travel-experiences
-      'travel-book-3-trips': uniqueStoreIds.size,
-      'travel-visit-5-destinations': deliveredOrders.length,
+      'travel-book-3-trips': getStores('travel-experiences'),
+      'travel-visit-5-destinations': getOrders('travel-experiences'),
       'travel-weekend-streak': streakCurrent,
-      'travel-rate-2-hotels': reviewCount,
-      'travel-try-3-modes': uniqueCuisineCount,
+      'travel-rate-2-hotels': getReviews('travel-experiences'),
+      'travel-try-3-modes': getSubcats('travel-experiences'),
       // entertainment
-      'ent-attend-3-events': uniqueStoreIds.size,
-      'ent-book-5-tickets': deliveredOrders.length,
+      'ent-attend-3-events': getStores('entertainment'),
+      'ent-book-5-tickets': getOrders('entertainment'),
       'ent-weekend-streak': streakCurrent,
-      'ent-rate-2-venues': reviewCount,
-      'ent-try-3-types': uniqueCuisineCount,
+      'ent-rate-2-venues': getReviews('entertainment'),
+      'ent-try-3-types': getSubcats('entertainment'),
       // financial-lifestyle
-      'fin-pay-3-bills': uniqueStoreIds.size,
-      'fin-use-5-services': deliveredOrders.length,
+      'fin-pay-3-bills': getStores('financial-lifestyle'),
+      'fin-use-5-services': getOrders('financial-lifestyle'),
       'fin-savings-streak': streakCurrent,
-      'fin-rate-2-providers': reviewCount,
-      'fin-try-3-products': uniqueCuisineCount,
+      'fin-rate-2-providers': getReviews('financial-lifestyle'),
+      'fin-try-3-products': getSubcats('financial-lifestyle'),
       // electronics
-      'elec-buy-3-stores': uniqueStoreIds.size,
-      'elec-purchase-5-items': deliveredOrders.length,
+      'elec-buy-3-stores': getStores('electronics'),
+      'elec-purchase-5-items': getOrders('electronics'),
       'elec-review-streak': streakCurrent,
-      'elec-rate-2-brands': reviewCount,
-      'elec-try-3-categories': uniqueCuisineCount,
+      'elec-rate-2-brands': getReviews('electronics'),
+      'elec-try-3-categories': getSubcats('electronics'),
     };
 
     for (const [missionId, progress] of Object.entries(MISSION_PROGRESS_MAP)) {
@@ -545,7 +645,7 @@ export const getUserLoyalty = asyncHandler(async (req: Request, res: Response) =
   }
 });
 
-// Daily check-in
+// Daily check-in (timezone-aware, idempotent)
 export const checkIn = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).user?.id;
 
@@ -554,6 +654,11 @@ export const checkIn = asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
+    // Accept timezone from request for accurate day boundary
+    const timezone = req.body?.timezone || 'UTC';
+    const now = new Date();
+    const todayStr = getDateStringInTZ(now, timezone);
+
     let loyalty = await UserLoyalty.findOne({ userId });
 
     if (!loyalty) {
@@ -574,40 +679,27 @@ export const checkIn = asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const lastCheckin = loyalty.streak.lastCheckin 
+    // Timezone-aware "already checked in today" check
+    const lastCheckin = loyalty.streak.lastCheckin
       ? new Date(loyalty.streak.lastCheckin)
       : null;
-    
-    if (lastCheckin) {
-      lastCheckin.setHours(0, 0, 0, 0);
-    }
+    const lastCheckinStr = lastCheckin ? getDateStringInTZ(lastCheckin, timezone) : null;
 
-    const daysDiff = lastCheckin 
-      ? Math.floor((today.getTime() - lastCheckin.getTime()) / (1000 * 60 * 60 * 24))
-      : 999;
-
-    if (daysDiff === 0) {
+    if (lastCheckinStr === todayStr) {
       throw new AppError('Already checked in today', 400);
     }
 
-    if (daysDiff === 1) {
-      // Continue streak
-      loyalty.streak.current += 1;
-    } else {
-      // Reset streak
-      loyalty.streak.current = 1;
-    }
+    // Determine if streak continues (was yesterday in user's timezone)
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const yesterdayStr = getDateStringInTZ(yesterday, timezone);
+    const isConsecutive = lastCheckinStr === yesterdayStr;
 
-    loyalty.streak.lastCheckin = new Date();
-    loyalty.streak.history.push(new Date());
+    const newStreak = isConsecutive ? loyalty.streak.current + 1 : 1;
 
     // Award coins for check-in (bonus for streaks)
     let coinsEarned = 10;
-    if (loyalty.streak.current >= 7) coinsEarned = 20; // Bonus for 7+ day streak
-    else if (loyalty.streak.current >= 3) coinsEarned = 15; // Bonus for 3+ day streak
+    if (newStreak >= 7) coinsEarned = 20;
+    else if (newStreak >= 3) coinsEarned = 15;
 
     const category = (req.query.category as string || req.body?.category) as MainCategorySlug | undefined;
     const validCategory = category && VALID_CATEGORIES.includes(category) ? category : null;
@@ -615,46 +707,54 @@ export const checkIn = asyncHandler(async (req: Request, res: Response) => {
       ? `Daily ${validCategory.replace(/-/g, ' ')} check-in reward`
       : 'Daily check-in reward';
 
-    // Update global coins (legacy)
+    // Award coins FIRST via coinService (idempotent via key)
+    // If this fails, we don't save the streak — preventing inflated streak without coins
+    const idempotencyKey = `checkin_${userId}_${todayStr}`;
+    await coinService.awardCoins(
+      userId,
+      coinsEarned,
+      'daily_login',
+      description,
+      { streakDay: newStreak, idempotencyKey },
+      validCategory || null
+    );
+
+    // Coins awarded successfully — now update loyalty state
+    loyalty.streak.current = newStreak;
+    loyalty.streak.lastCheckin = now;
+    loyalty.streak.history.push(now);
+
+    // Update global coins (legacy field)
     loyalty.coins.available += coinsEarned;
     loyalty.coins.history.push({
       amount: coinsEarned,
       type: 'earned',
       description,
-      date: new Date()
+      date: now
     });
 
-    // Update 7-day streak mission progress
+    // Update streak mission progress
     const streakMission = loyalty.missions.find(m =>
       (m.missionId.includes('streak') || m.missionId.includes('maintenance')) && !m.completedAt
     );
     if (streakMission) {
-      streakMission.progress = Math.min(loyalty.streak.current, streakMission.target);
+      streakMission.progress = Math.min(newStreak, streakMission.target);
     }
 
     await loyalty.save();
 
-    // Sync wallet + category balance via coinService AFTER saving loyalty
-    // This avoids race conditions (coinService does its own fresh DB read)
-    try {
-      await coinService.awardCoins(
-        userId,
-        coinsEarned,
-        'daily_login',
-        description,
-        { streakDay: loyalty.streak.current },
-        validCategory || null
-      );
-    } catch (coinErr) {
-      console.error('[Loyalty] Failed to sync coins via coinService:', coinErr);
-    }
+    // Structured log for monitoring
+    console.log('[Loyalty] CheckIn success:', {
+      userId, streak: newStreak, coinsEarned, timezone, category: validCategory || 'global',
+      idempotencyKey, isConsecutive,
+    });
 
     sendSuccess(res, {
       loyalty,
       coinsEarned,
-      streakContinued: daysDiff === 1,
+      streakContinued: isConsecutive,
       streakBonus: coinsEarned > 10,
-      message: `+${coinsEarned} coins earned! ${loyalty.streak.current} day streak${coinsEarned > 10 ? ' (streak bonus!)' : ''}`,
+      message: `+${coinsEarned} coins earned! ${newStreak} day streak${coinsEarned > 10 ? ' (streak bonus!)' : ''}`,
     }, 'Check-in successful');
   } catch (error) {
     if (error instanceof AppError) {

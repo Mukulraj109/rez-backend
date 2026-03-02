@@ -14,10 +14,11 @@ import {
 } from '../controllers/wishlistController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validate, validateParams, validateQuery, wishlistSchemas, commonSchemas } from '../middleware/validation';
-// import { generalLimiter } from '../middleware/rateLimiter'; // Disabled for development
+import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+router.use(generalLimiter);
 
 // Get public wishlists
 router.get('/public',

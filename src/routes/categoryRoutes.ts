@@ -18,10 +18,11 @@ import {
 } from '../controllers/categoryController';
 import { optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams } from '../middleware/validation';
-// import { generalLimiter } from '../middleware/rateLimiter'; // Disabled for development
+import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+router.use(generalLimiter);
 
 // Get all categories
 router.get('/',

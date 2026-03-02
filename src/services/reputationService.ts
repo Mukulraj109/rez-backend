@@ -16,6 +16,7 @@ import {
   PriveTier,
 } from '../models/UserReputation';
 import { User } from '../models/User';
+import { getCachedWalletConfig } from './walletCacheService';
 import { Order } from '../models/Order';
 import Referral, { ReferralStatus } from '../models/Referral';
 import { Review } from '../models/Review';
@@ -68,11 +69,39 @@ class ReputationService {
   }
 
   /**
+   * Get config from WalletConfig's priveProgramConfig (falls back to hardcoded defaults)
+   */
+  private async getConfig() {
+    try {
+      const config = await getCachedWalletConfig();
+      const pc = config?.priveProgramConfig;
+      if (pc) {
+        return {
+          weights: pc.pillarWeights as Record<string, number>,
+          thresholds: pc.tierThresholds as { entryTier: number; signatureTier: number; eliteTier: number; trustMinimum: number },
+        };
+      }
+    } catch (e) {
+      // Fallback to hardcoded defaults
+    }
+    return {
+      weights: PILLAR_WEIGHTS as Record<string, number>,
+      thresholds: {
+        entryTier: ELIGIBILITY_THRESHOLDS.ENTRY_TIER,
+        signatureTier: ELIGIBILITY_THRESHOLDS.SIGNATURE_TIER,
+        eliteTier: ELIGIBILITY_THRESHOLDS.ELITE_TIER,
+        trustMinimum: ELIGIBILITY_THRESHOLDS.TRUST_MINIMUM,
+      },
+    };
+  }
+
+  /**
    * Check Privé eligibility for a user
    */
   async checkPriveEligibility(userId: string | Types.ObjectId): Promise<PriveEligibilityResponse> {
     const userObjectId = typeof userId === 'string' ? new Types.ObjectId(userId) : userId;
     const reputation = await this.getOrCreateReputation(userObjectId);
+    const config = await this.getConfig();
 
     // Get most recent history snapshot for trend comparison
     const previousSnapshot = reputation.history.length > 0
@@ -80,7 +109,7 @@ class ReputationService {
       : null;
 
     // Format pillars for response
-    const pillars: PillarScoreResponse[] = Object.entries(PILLAR_WEIGHTS).map(([id, weight]) => {
+    const pillars: PillarScoreResponse[] = Object.entries(config.weights).map(([id, weight]) => {
       const pillarId = id as PillarId;
       const score = reputation.pillars[pillarId].score;
 
@@ -103,11 +132,11 @@ class ReputationService {
     });
 
     // Calculate next tier threshold (4-tier system)
-    let nextTierThreshold: number = ELIGIBILITY_THRESHOLDS.ENTRY_TIER;
+    let nextTierThreshold: number = config.thresholds.entryTier;
     if (reputation.tier === 'entry') {
-      nextTierThreshold = ELIGIBILITY_THRESHOLDS.SIGNATURE_TIER;
+      nextTierThreshold = config.thresholds.signatureTier;
     } else if (reputation.tier === 'signature') {
-      nextTierThreshold = ELIGIBILITY_THRESHOLDS.ELITE_TIER;
+      nextTierThreshold = config.thresholds.eliteTier;
     } else if (reputation.tier === 'elite') {
       nextTierThreshold = 100; // Already at max
     }
@@ -184,6 +213,7 @@ class ReputationService {
   ): Promise<IUserReputation> {
     const userObjectId = typeof userId === 'string' ? new Types.ObjectId(userId) : userId;
     const reputation = await this.getOrCreateReputation(userObjectId);
+    const config = await this.getConfig();
 
     // Capture previous state for idempotency check
     const prevTotalScore = reputation.totalScore;
@@ -200,7 +230,7 @@ class ReputationService {
     ]);
 
     // Pre-calculate to check if scores changed meaningfully
-    const result = reputation.calculateTotalScore();
+    const result = reputation.calculateTotalScore({ weights: config.weights, thresholds: config.thresholds });
 
     // Only add snapshot if score changed meaningfully or tier changed
     if (Math.abs(result.totalScore - prevTotalScore) > 0.01 || result.tier !== prevTier) {

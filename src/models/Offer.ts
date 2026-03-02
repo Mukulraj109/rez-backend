@@ -555,23 +555,23 @@ OfferSchema.methods.incrementEngagement = async function(action: 'view' | 'like'
 };
 
 // Static methods
-OfferSchema.statics.findActiveOffers = function(): Promise<IOffer[]> {
+OfferSchema.statics.findActiveOffers = function(maxResults: number = 50): Promise<IOffer[]> {
   const now = new Date();
   return this.find({
     'validity.isActive': true,
     'validity.startDate': { $lte: now },
     'validity.endDate': { $gte: now }
-  }).sort({ 'metadata.priority': -1, createdAt: -1 });
+  }).sort({ 'metadata.priority': -1, createdAt: -1 }).limit(maxResults);
 };
 
-OfferSchema.statics.findOffersByCategory = function(category: string): Promise<IOffer[]> {
+OfferSchema.statics.findOffersByCategory = function(category: string, maxResults: number = 50): Promise<IOffer[]> {
   const now = new Date();
   return this.find({
     category,
     'validity.isActive': true,
     'validity.startDate': { $lte: now },
     'validity.endDate': { $gte: now }
-  }).sort({ 'metadata.priority': -1, createdAt: -1 });
+  }).sort({ 'metadata.priority': -1, createdAt: -1 }).limit(maxResults);
 };
 
 OfferSchema.statics.findNearbyOffers = function(userLocation: [number, number], maxDistance: number = 10): Promise<IOffer[]> {
@@ -674,7 +674,7 @@ OfferSchema.statics.searchOffers = function(query: string, filters: any = {}): P
     searchQuery.cashbackPercentage = { ...searchQuery.cashbackPercentage, $lte: filters.maxCashback };
   }
 
-  return this.find(searchQuery).sort({ 'metadata.priority': -1, createdAt: -1 });
+  return this.find(searchQuery).sort({ 'metadata.priority': -1, createdAt: -1 }).limit(50);
 };
 
 // Pre-save middleware

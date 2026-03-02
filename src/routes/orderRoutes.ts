@@ -21,10 +21,11 @@ import {
 } from '../controllers/orderController';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { validate, validateParams, validateQuery, orderSchemas, commonSchemas } from '../middleware/validation';
-// import { generalLimiter } from '../middleware/rateLimiter'; // Disabled for development
+import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+router.use(generalLimiter);
 
 // All order routes require authentication
 router.use(authenticate);

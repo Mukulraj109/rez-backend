@@ -12,10 +12,11 @@ import {
 } from '../controllers/comparisonController';
 import { requireAuth } from '../middleware/auth';
 import { validateQuery, validateParams, validateBody, commonSchemas } from '../middleware/validation';
-// // import { generalLimiter, comparisonLimiter } from '../middleware/rateLimiter'; // Disabled for development // Disabled for development
+import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+router.use(generalLimiter);
 
 // Create a new store comparison
 router.post('/',   // comparisonLimiter,, // Disabled for development

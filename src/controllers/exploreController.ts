@@ -11,65 +11,61 @@ import {
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { MallOffer } from '../models/MallOffer';
+import redisService from '../services/redisService';
 
-// Get live stats for explore page
+// Get live stats for explore page (cached 30s — approximate stats don't need real-time accuracy)
+const EXPLORE_STATS_CACHE_KEY = 'cache:explore-stats';
+const EXPLORE_STATS_TTL = 30;
+
 export const getExploreStats = asyncHandler(async (req: Request, res: Response) => {
   try {
+    // Check Redis cache first
+    try {
+      const cached = await redisService.get<any>(EXPLORE_STATS_CACHE_KEY);
+      if (cached) {
+        return sendSuccess(res, cached, 'Explore stats retrieved successfully');
+      }
+    } catch { /* Redis down — compute fresh */ }
+
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     // Get active users (activities in last 30 minutes)
     const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
-    const activeUsersCount = await Activity.countDocuments({
-      createdAt: { $gte: thirtyMinutesAgo }
-    });
-
-    // Get total earned today (from activities with amount)
-    const todayEarnings = await Activity.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: todayStart },
-          amount: { $gt: 0 }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: '$amount' }
-        }
-      }
-    ]);
-
-    // Get active deals count
-    const activeDealsCount = await MallOffer.countDocuments({
-      isActive: true,
-      startDate: { $lte: now },
-      endDate: { $gte: now }
-    });
-
-    // Get nearby people count (unique users active in last hour) using $group + count
     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-    const [nearbyPeopleResult, peopleEarnedTodayResult] = await Promise.all([
+
+    // Run all queries in parallel
+    const [activeUsersCount, todayEarnings, activeDealsCount, nearbyPeopleResult, peopleEarnedTodayResult] = await Promise.all([
+      Activity.countDocuments({ createdAt: { $gte: thirtyMinutesAgo } }),
+      Activity.aggregate([
+        { $match: { createdAt: { $gte: todayStart }, amount: { $gt: 0 } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      MallOffer.countDocuments({ isActive: true, startDate: { $lte: now }, endDate: { $gte: now } }),
       Activity.aggregate([
         { $match: { createdAt: { $gte: oneHourAgo } } },
         { $group: { _id: '$user' } },
-        { $count: 'total' }
+        { $count: 'total' },
       ]),
       Activity.aggregate([
         { $match: { createdAt: { $gte: todayStart }, amount: { $gt: 0 } } },
         { $group: { _id: '$user' } },
-        { $count: 'total' }
-      ])
+        { $count: 'total' },
+      ]),
     ]);
 
-    // Return real values without hardcoded fallbacks
-    sendSuccess(res, {
+    const statsData = {
       activeUsers: activeUsersCount,
       earnedToday: todayEarnings[0]?.total || 0,
       dealsLive: activeDealsCount,
       peopleNearby: nearbyPeopleResult[0]?.total || 0,
       peopleEarnedToday: peopleEarnedTodayResult[0]?.total || 0
-    }, 'Explore stats retrieved successfully');
+    };
+
+    // Cache for 30 seconds
+    try { await redisService.set(EXPLORE_STATS_CACHE_KEY, statsData, EXPLORE_STATS_TTL); } catch { }
+
+    sendSuccess(res, statsData, 'Explore stats retrieved successfully');
   } catch (error) {
     console.error('Get explore stats error:', error);
     throw new AppError('Failed to fetch explore stats', 500);

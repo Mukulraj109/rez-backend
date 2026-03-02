@@ -23,7 +23,7 @@ import {
   getScheduledDrops,
   getCoinRules
 } from '../controllers/walletController';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireSeniorAdmin } from '../middleware/auth';
 import { createRateLimiter } from '../middleware/rateLimiter';
 import { requireReAuth } from '../middleware/reAuth';
 import { requireWalletFeature, WALLET_FEATURES } from '../services/walletFeatureService';
@@ -53,9 +53,9 @@ router.get('/balance', getWalletBalance);
  * @route   POST /api/wallet/credit-loyalty-points
  * @desc    Credit loyalty points to wallet as spendable coins
  * @body    { amount, source }
- * @access  Private
+ * @access  Admin only (senior admin+)
  */
-router.post('/credit-loyalty-points', walletCreditLimiter, creditLoyaltyPoints);
+router.post('/credit-loyalty-points', walletCreditLimiter, requireSeniorAdmin, creditLoyaltyPoints);
 
 /**
  * @route   GET /api/wallet/transactions
@@ -89,11 +89,11 @@ router.get('/categories', getCategoriesBreakdown);
 
 /**
  * @route   POST /api/wallet/topup
- * @desc    Add funds to wallet
+ * @desc    Add funds to wallet (admin only — users must use initiate-payment → confirm-payment)
  * @body    { amount, paymentMethod, paymentId }
- * @access  Private
+ * @access  Admin only (senior admin+)
  */
-router.post('/topup', walletWriteLimiter, topupWallet);
+router.post('/topup', walletWriteLimiter, requireSeniorAdmin, topupWallet);
 
 /**
  * @route   POST /api/wallet/withdraw
@@ -169,11 +169,11 @@ router.post('/sync-balance', walletSyncLimiter, syncWalletBalance);
 
 /**
  * @route   POST /api/wallet/refund
- * @desc    Refund a wallet payment (used when order creation fails after payment)
+ * @desc    Refund a wallet payment (admin only — automatic refunds happen in order cancellation flow)
  * @body    { transactionId, amount, reason }
- * @access  Private
+ * @access  Admin only (senior admin+)
  */
-router.post('/refund', walletRefundLimiter, refundPayment);
+router.post('/refund', walletRefundLimiter, requireSeniorAdmin, refundPayment);
 
 /**
  * @route   GET /api/wallet/expiring-coins

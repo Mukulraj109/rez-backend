@@ -178,7 +178,10 @@ export interface IUserReputation extends Document {
   updatedAt: Date;
 
   // Methods
-  calculateTotalScore(): { totalScore: number; tier: PriveTier; isEligible: boolean };
+  calculateTotalScore(overrides?: {
+    weights?: Record<string, number>;
+    thresholds?: { entryTier?: number; signatureTier?: number; eliteTier?: number; trustMinimum?: number };
+  }): { totalScore: number; tier: PriveTier; isEligible: boolean };
   addSnapshot(trigger: string): void;
 }
 
@@ -336,31 +339,41 @@ UserReputationSchema.virtual('weightedScores').get(function() {
 });
 
 // Method to calculate total score and eligibility
-UserReputationSchema.methods.calculateTotalScore = function() {
+UserReputationSchema.methods.calculateTotalScore = function(overrides?: {
+  weights?: Record<string, number>;
+  thresholds?: { entryTier?: number; signatureTier?: number; eliteTier?: number; trustMinimum?: number };
+}) {
   const scores = this.pillars;
+  const weights = overrides?.weights || PILLAR_WEIGHTS;
+  const thresholds = {
+    ENTRY_TIER: overrides?.thresholds?.entryTier ?? ELIGIBILITY_THRESHOLDS.ENTRY_TIER,
+    SIGNATURE_TIER: overrides?.thresholds?.signatureTier ?? ELIGIBILITY_THRESHOLDS.SIGNATURE_TIER,
+    ELITE_TIER: overrides?.thresholds?.eliteTier ?? ELIGIBILITY_THRESHOLDS.ELITE_TIER,
+    TRUST_MINIMUM: overrides?.thresholds?.trustMinimum ?? ELIGIBILITY_THRESHOLDS.TRUST_MINIMUM,
+  };
 
   // Calculate weighted total
   const total =
-    scores.engagement.score * PILLAR_WEIGHTS.engagement +
-    scores.trust.score * PILLAR_WEIGHTS.trust +
-    scores.influence.score * PILLAR_WEIGHTS.influence +
-    scores.economicValue.score * PILLAR_WEIGHTS.economicValue +
-    scores.brandAffinity.score * PILLAR_WEIGHTS.brandAffinity +
-    scores.network.score * PILLAR_WEIGHTS.network;
+    scores.engagement.score * (weights.engagement ?? PILLAR_WEIGHTS.engagement) +
+    scores.trust.score * (weights.trust ?? PILLAR_WEIGHTS.trust) +
+    scores.influence.score * (weights.influence ?? PILLAR_WEIGHTS.influence) +
+    scores.economicValue.score * (weights.economicValue ?? PILLAR_WEIGHTS.economicValue) +
+    scores.brandAffinity.score * (weights.brandAffinity ?? PILLAR_WEIGHTS.brandAffinity) +
+    scores.network.score * (weights.network ?? PILLAR_WEIGHTS.network);
 
   this.totalScore = Math.round(total * 100) / 100;
 
   // Determine tier (4-tier system with trust hard block)
-  if (scores.trust.score < ELIGIBILITY_THRESHOLDS.TRUST_MINIMUM) {
+  if (scores.trust.score < thresholds.TRUST_MINIMUM) {
     this.tier = 'none';
     this.isEligible = false;
-  } else if (this.totalScore >= ELIGIBILITY_THRESHOLDS.ELITE_TIER) {
+  } else if (this.totalScore >= thresholds.ELITE_TIER) {
     this.tier = 'elite';
     this.isEligible = true;
-  } else if (this.totalScore >= ELIGIBILITY_THRESHOLDS.SIGNATURE_TIER) {
+  } else if (this.totalScore >= thresholds.SIGNATURE_TIER) {
     this.tier = 'signature';
     this.isEligible = true;
-  } else if (this.totalScore >= ELIGIBILITY_THRESHOLDS.ENTRY_TIER) {
+  } else if (this.totalScore >= thresholds.ENTRY_TIER) {
     this.tier = 'entry';
     this.isEligible = true;
   } else {

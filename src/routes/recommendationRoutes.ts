@@ -16,10 +16,11 @@ import {
 import { getDiverseRecommendations } from '../controllers/diverseRecommendationController';
 import { optionalAuth, requireAuth } from '../middleware/auth';
 import { validateQuery, validateParams, validateBody } from '../middleware/validation';
-// // import { generalLimiter, recommendationLimiter } from '../middleware/rateLimiter'; // Disabled for development // Disabled for development
+import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+router.use(generalLimiter);
 
 // Get personalized store recommendations
 router.get('/personalized',   // recommendationLimiter,, // Disabled for development

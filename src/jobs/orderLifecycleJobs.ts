@@ -34,16 +34,9 @@ async function runStuckOrderDetection(): Promise<void> {
 
     for (const order of unpaidOrders) {
       try {
-        // Restore stock
-        for (const item of order.items || []) {
-          try {
-            await Product.findByIdAndUpdate(item.product, {
-              $inc: { 'inventory.stock': item.quantity },
-            });
-          } catch {
-            // Non-critical
-          }
-        }
+        // NOTE: Do NOT restore stock for unpaid online orders.
+        // Stock is only deducted AFTER payment confirmation (in paymentService.handlePaymentSuccess).
+        // Since these orders were never paid, stock was never deducted. Restoring would inflate inventory.
 
         // Cancel the order
         await Order.findByIdAndUpdate(order._id, {

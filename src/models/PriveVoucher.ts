@@ -186,8 +186,8 @@ PriveVoucherSchema.statics.getVoucherHistory = async function (
 PriveVoucherSchema.statics.markAsUsed = async function (
   voucherId: Types.ObjectId
 ): Promise<IPriveVoucher | null> {
-  return this.findByIdAndUpdate(
-    voucherId,
+  return this.findOneAndUpdate(
+    { _id: voucherId, status: 'active' },
     {
       status: 'used',
       usedAt: new Date(),

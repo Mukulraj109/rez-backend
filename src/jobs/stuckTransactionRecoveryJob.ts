@@ -56,69 +56,17 @@ export async function runStuckTransactionRecovery(): Promise<void> {
           continue;
         }
 
-        // Reverse sender debit — restore balance atomically
-        const senderWallet = await Wallet.findOneAndUpdate(
-          { user: transfer.sender },
-          {
-            $inc: {
-              'balance.available': transfer.amount,
-              'balance.total': transfer.amount,
-            },
-            $set: { lastTransactionAt: new Date() },
-          },
-          { new: true }
-        );
-
-        // Create reversing ledger entry
-        const platformFloatId = ledgerService.getPlatformAccountId('platform_float');
-        await ledgerService.recordEntry({
-          debitAccount: { type: 'platform_float', id: platformFloatId },
-          creditAccount: { type: 'user_wallet', id: transfer.sender },
-          amount: transfer.amount,
-          coinType: (transfer.coinType as any) || 'nuqta',
-          operationType: 'transfer',
-          referenceId: String(transfer._id),
-          referenceModel: 'Transfer',
-          metadata: {
-            description: `Reversal: stuck transfer timeout after 10 minutes`,
-          },
-        });
-
-        // Audit log
-        if (senderWallet) {
-          logTransaction({
-            userId: transfer.sender,
-            walletId: senderWallet._id as mongoose.Types.ObjectId,
-            walletType: 'user',
-            operation: 'credit',
-            amount: transfer.amount,
-            balanceBefore: {
-              total: senderWallet.balance.total - transfer.amount,
-              available: senderWallet.balance.available - transfer.amount,
-              pending: 0,
-              cashback: 0,
-            },
-            balanceAfter: {
-              total: senderWallet.balance.total,
-              available: senderWallet.balance.available,
-              pending: 0,
-              cashback: 0,
-            },
-            reference: {
-              type: 'refund',
-              id: String(transfer._id),
-              description: 'Stuck transfer recovery — timeout reversal',
-            },
-            metadata: { source: 'cron' },
-          });
-        }
-
-        recovered++;
-        logger.info('Recovered stuck transfer', {
+        // IMPORTANT: For 'initiated' and 'otp_pending' transfers, the sender's wallet
+        // was NEVER debited (debit only happens in executeTransfer after OTP confirmation).
+        // Do NOT reverse a debit that never occurred — just mark as failed.
+        logger.info('Marked stuck transfer as failed (no debit to reverse)', {
           transferId: String(transfer._id),
           sender: String(transfer.sender),
           amount: transfer.amount,
+          previousStatus: transfer.status,
         });
+
+        recovered++;
       } catch (error) {
         errors++;
         logger.error('Failed to recover stuck transfer', error, {

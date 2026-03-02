@@ -559,28 +559,23 @@ VideoSchema.pre('save', function(next) {
   next();
 });
 
-// Method to increment views
+// Method to increment views — uses atomic $inc to avoid race conditions
 VideoSchema.methods.incrementViews = async function(userId?: string): Promise<void> {
-  this.engagement.views += 1;
-  
-  // Update analytics
   const now = new Date();
   const hour = now.getHours().toString();
   const date = now.toISOString().split('T')[0];
-  
-  if (!this.analytics.viewsByHour) this.analytics.viewsByHour = new Map();
-  if (!this.analytics.viewsByDate) this.analytics.viewsByDate = new Map();
-  
-  this.analytics.totalViews += 1;
-  this.analytics.viewsByHour.set(hour, (this.analytics.viewsByHour.get(hour) || 0) + 1);
-  this.analytics.viewsByDate.set(date, (this.analytics.viewsByDate.get(date) || 0) + 1);
-  
-  if (userId) {
-    // Track unique views (simplified - in production, use a separate collection)
-    this.analytics.uniqueViews += 1;
-  }
-  
-  await this.save();
+
+  const updateOps: any = {
+    $inc: {
+      'engagement.views': 1,
+      'analytics.totalViews': 1,
+      [`analytics.viewsByHour.${hour}`]: 1,
+      [`analytics.viewsByDate.${date}`]: 1,
+      ...(userId ? { 'analytics.uniqueViews': 1 } : {}),
+    },
+  };
+
+  await (this.constructor as any).findByIdAndUpdate(this._id, updateOps);
 };
 
 // Method to toggle like

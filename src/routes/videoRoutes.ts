@@ -19,10 +19,11 @@ import {
 } from '../controllers/videoController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validate, validateParams, validateQuery, videoSchemas, commonSchemas } from '../middleware/validation';
-// // import { generalLimiter, searchLimiter } from '../middleware/rateLimiter'; // Disabled for development // Disabled for development
+import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+router.use(generalLimiter);
 
 // Create a new video (requires authentication)
 router.post('/',

@@ -16,9 +16,20 @@ export async function blacklistToken(token: string, ttlSeconds: number): Promise
 
 export async function isTokenBlacklisted(token: string): Promise<boolean> {
   try {
+    // If Redis is not available, fail open — allow the request through.
+    // The JWT signature is still verified as the primary security check.
+    // Blacklist is a secondary defense for explicitly revoked tokens.
+    // Failing closed here would lock out ALL users when Redis is down.
+    if (!redisService.isReady()) {
+      console.warn('[AUTH] Redis unavailable for blacklist check — failing open (JWT signature still verified)');
+      return false;
+    }
     return await redisService.exists(`${TOKEN_BLACKLIST_PREFIX}${token}`);
   } catch {
-    return false; // Fail open if Redis is down — token still validated by JWT + DB
+    // Fail open on Redis errors — JWT signature verification is still the primary guard.
+    // Logging the error for monitoring; failing closed would deny service to all users.
+    console.warn('[AUTH] Redis error during blacklist check — failing open (JWT signature still verified)');
+    return false;
   }
 }
 
@@ -186,7 +197,8 @@ export const optionalAuth = async (req: Request, res: Response, next: NextFuncti
           req.userId = String(user._id);
         }
       } catch (tokenError) {
-        // Ignore token errors for optional auth
+        // Log invalid tokens for monitoring (don't fail the request)
+        console.warn(`[AUTH] optionalAuth invalid token on ${req.method} ${req.path}:`, (tokenError as Error).message);
       }
     }
     

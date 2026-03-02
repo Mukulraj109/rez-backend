@@ -38,10 +38,11 @@ import {
 } from '../controllers/storeVisitController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, commonSchemas } from '../middleware/validation';
-// import { generalLimiter, searchLimiter } from '../middleware/rateLimiter'; // Disabled for development
+import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 
 const router = Router();
+router.use(generalLimiter);
 
 // Get all stores with filtering
 router.get('/',

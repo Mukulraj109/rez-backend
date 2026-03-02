@@ -56,6 +56,7 @@ export interface IPriveOffer extends Document {
   // Tracking
   views: number;
   clicks: number;
+  clickLog: Array<{ userId: mongoose.Types.ObjectId; date: Date }>;
 
   // Priority for sorting
   priority: number;
@@ -246,6 +247,12 @@ const PriveOfferSchema = new Schema<IPriveOffer>(
       default: 0,
       min: [0, 'Clicks cannot be negative'],
     },
+
+    // Per-user click deduplication (capped to prevent unbounded growth)
+    clickLog: [{
+      userId: { type: Schema.Types.ObjectId, ref: 'User' },
+      date: { type: Date, default: Date.now },
+    }],
 
     priority: {
       type: Number,

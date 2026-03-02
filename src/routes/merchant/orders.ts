@@ -70,7 +70,7 @@ router.put('/:id/status',
   validate(Joi.object({
     status: Joi.string().valid(
       'confirmed', 'preparing', 'ready',
-      'dispatched', 'delivered', 'cancelled'
+      'dispatched', 'out_for_delivery', 'delivered', 'cancelled'
     ).required(),
     notes: Joi.string().trim().max(500).optional(),
     notifyCustomer: Joi.boolean().default(true)
@@ -81,7 +81,7 @@ router.put('/:id/status',
 // POST /api/merchant/orders/bulk-action - Bulk order operations
 router.post('/bulk-action',
   validate(Joi.object({
-    action: Joi.string().valid('confirm', 'cancel', 'mark-shipped').required(),
+    action: Joi.string().valid('confirm', 'prepare', 'ready', 'deliver', 'cancel', 'mark-shipped').required(),
     orderIds: Joi.array().items(commonSchemas.objectId()).min(1).max(50).required(),
     reason: Joi.string().trim().max(500).when('action', {
       is: 'cancel',
