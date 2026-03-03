@@ -10,6 +10,7 @@ import cron from 'node-cron';
 import PriveAccess from '../models/PriveAccess';
 import { reputationService } from '../services/reputationService';
 import { PriveAuditLog } from '../models/PriveAuditLog';
+import redisService from '../services/redisService';
 
 let isRunning = false;
 
@@ -18,6 +19,13 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export const runPriveReputationRefresh = async (): Promise<{ processed: number; tierChanges: number }> => {
   if (isRunning) {
     console.log('[PriveReputationRefresh] Job already running, skipping');
+    return { processed: 0, tierChanges: 0 };
+  }
+
+  const lockKey = 'job:prive-reputation-refresh';
+  const lockToken = await redisService.acquireLock(lockKey, 300);
+  if (!lockToken) {
+    console.log('prive-reputation-refresh skipped — lock held by another instance');
     return { processed: 0, tierChanges: 0 };
   }
 
@@ -92,6 +100,7 @@ export const runPriveReputationRefresh = async (): Promise<{ processed: number; 
     return { processed, tierChanges };
   } finally {
     isRunning = false;
+    await redisService.releaseLock(lockKey, lockToken);
   }
 };
 

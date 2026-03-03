@@ -230,6 +230,44 @@ describe('Order Routes', () => {
       expect(response.status).toBe(400);
     });
 
+    it('should not require full delivery address for dine_in fulfillment', async () => {
+      const response = await request(app)
+        .post('/api/orders')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          fulfillmentType: 'dine_in',
+          paymentMethod: 'cod',
+          deliveryAddress: {
+            name: 'Store Pickup',
+            phone: '+919876543210'
+          }
+        });
+
+      expect(response.status).toBeGreaterThanOrEqual(400);
+      const responseText = JSON.stringify(response.body || {});
+      expect(responseText).not.toContain('Delivery address is required');
+      expect(responseText).not.toContain('Missing required address fields: addressLine1, city, state, pincode');
+    });
+
+    it('should not require full delivery address for pickup fulfillment', async () => {
+      const response = await request(app)
+        .post('/api/orders')
+        .set('Authorization', `Bearer ${authToken}`)
+        .send({
+          fulfillmentType: 'pickup',
+          paymentMethod: 'cod',
+          deliveryAddress: {
+            name: 'Store Pickup',
+            phone: '+919876543210'
+          }
+        });
+
+      expect(response.status).toBeGreaterThanOrEqual(400);
+      const responseText = JSON.stringify(response.body || {});
+      expect(responseText).not.toContain('Delivery address is required');
+      expect(responseText).not.toContain('Missing required address fields: addressLine1, city, state, pincode');
+    });
+
     it('should reject order without authentication', async () => {
       const response = await request(app)
         .post('/api/orders')

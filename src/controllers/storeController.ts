@@ -1904,7 +1904,7 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
     // Fetch stores
     const [stores, total] = await Promise.all([
       Store.find(query)
-        .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
+        .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup deliveryCategories type isOpen rewardRules priceForTwo storeVisitConfig')
         .populate('category', 'name slug icon')
         .sort(sortOptions)
         .skip(skip)

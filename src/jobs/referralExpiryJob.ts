@@ -1,5 +1,6 @@
 import * as cron from 'node-cron';
 import referralService from '../services/referralService';
+import redisService from '../services/redisService';
 
 /**
  * Referral Expiry Job
@@ -21,9 +22,18 @@ export async function runReferralExpiry(): Promise<void> {
   }
 
   isRunning = true;
-  const startTime = Date.now();
+  const lockKey = 'job:referral-expiry';
+  let lockToken: string | null = null;
 
   try {
+    lockToken = await redisService.acquireLock(lockKey, 300);
+    if (!lockToken) {
+      console.log('referral-expiry skipped — lock held by another instance');
+      return;
+    }
+
+    const startTime = Date.now();
+
     console.log('⏰ [REFERRAL_EXPIRY] Starting referral expiry check...');
 
     const expiredCount = await referralService.markExpiredReferrals();
@@ -33,6 +43,9 @@ export async function runReferralExpiry(): Promise<void> {
   } catch (error) {
     console.error('❌ [REFERRAL_EXPIRY] Job failed:', error);
   } finally {
+    if (lockToken) {
+      await redisService.releaseLock(lockKey, lockToken);
+    }
     isRunning = false;
   }
 }

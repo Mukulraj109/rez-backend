@@ -6,6 +6,7 @@ import { logTransaction } from '../models/TransactionAuditLog';
 import { ledgerService } from '../services/ledgerService';
 import { createServiceLogger } from '../config/logger';
 import redisService from '../services/redisService';
+import { invalidateWalletCache } from '../services/walletCacheService';
 import pushNotificationService from '../services/pushNotificationService';
 import mongoose from 'mongoose';
 
@@ -70,6 +71,9 @@ export async function runGiftExpiry(): Promise<void> {
           },
           { new: true }
         );
+
+        // Invalidate sender's wallet cache so they see the refund immediately
+        await invalidateWalletCache(String(gift.sender));
 
         // Create reversing ledger entry (platform_float → sender wallet)
         const platformFloatId = ledgerService.getPlatformAccountId('platform_float');

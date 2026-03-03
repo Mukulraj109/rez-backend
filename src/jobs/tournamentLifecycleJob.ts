@@ -3,6 +3,7 @@ import tournamentService from '../services/tournamentService';
 import Tournament from '../models/Tournament';
 import { User } from '../models/User';
 import pushNotificationService from '../services/pushNotificationService';
+import redisService from '../services/redisService';
 
 /**
  * Tournament Lifecycle Jobs
@@ -45,18 +46,32 @@ export function initializeTournamentLifecycleJobs(): void {
     }
 
     isActivationRunning = true;
-    const startTime = Date.now();
+    const activationLockKey = 'job:tournament-lifecycle';
+    let activationLockToken: string | null = null;
 
     try {
-      const activated = await tournamentService.activateUpcomingTournaments();
-      const duration = Date.now() - startTime;
-      if (activated > 0) {
-        console.log(`✅ [TOURNAMENT] Activated ${activated} tournaments in ${duration}ms`);
+      activationLockToken = await redisService.acquireLock(activationLockKey, 300);
+      if (!activationLockToken) {
+        console.log('tournament-lifecycle skipped — lock held by another instance');
+        return;
       }
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      console.error(`❌ [TOURNAMENT] Activation job failed after ${duration}ms:`, error);
+
+      const startTime = Date.now();
+
+      try {
+        const activated = await tournamentService.activateUpcomingTournaments();
+        const duration = Date.now() - startTime;
+        if (activated > 0) {
+          console.log(`✅ [TOURNAMENT] Activated ${activated} tournaments in ${duration}ms`);
+        }
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        console.error(`❌ [TOURNAMENT] Activation job failed after ${duration}ms:`, error);
+      }
     } finally {
+      if (activationLockToken) {
+        await redisService.releaseLock(activationLockKey, activationLockToken);
+      }
       isActivationRunning = false;
     }
   });
@@ -69,18 +84,32 @@ export function initializeTournamentLifecycleJobs(): void {
     }
 
     isCompletionRunning = true;
-    const startTime = Date.now();
+    const completionLockKey = 'job:tournament-lifecycle-completion';
+    let completionLockToken: string | null = null;
 
     try {
-      const completed = await tournamentService.completeEndedTournaments();
-      const duration = Date.now() - startTime;
-      if (completed > 0) {
-        console.log(`✅ [TOURNAMENT] Completed ${completed} tournaments (with prize distribution) in ${duration}ms`);
+      completionLockToken = await redisService.acquireLock(completionLockKey, 300);
+      if (!completionLockToken) {
+        console.log('tournament-lifecycle-completion skipped — lock held by another instance');
+        return;
       }
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      console.error(`❌ [TOURNAMENT] Completion job failed after ${duration}ms:`, error);
+
+      const startTime = Date.now();
+
+      try {
+        const completed = await tournamentService.completeEndedTournaments();
+        const duration = Date.now() - startTime;
+        if (completed > 0) {
+          console.log(`✅ [TOURNAMENT] Completed ${completed} tournaments (with prize distribution) in ${duration}ms`);
+        }
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        console.error(`❌ [TOURNAMENT] Completion job failed after ${duration}ms:`, error);
+      }
     } finally {
+      if (completionLockToken) {
+        await redisService.releaseLock(completionLockKey, completionLockToken);
+      }
       isCompletionRunning = false;
     }
   });
@@ -93,18 +122,32 @@ export function initializeTournamentLifecycleJobs(): void {
     }
 
     isEndingSoonRunning = true;
-    const startTime = Date.now();
+    const endingSoonLockKey = 'job:tournament-lifecycle-ending-soon';
+    let endingSoonLockToken: string | null = null;
 
     try {
-      const notified = await notifyTournamentsEndingSoon();
-      const duration = Date.now() - startTime;
-      if (notified > 0) {
-        console.log(`✅ [TOURNAMENT] Sent ending-soon notifications to ${notified} participants in ${duration}ms`);
+      endingSoonLockToken = await redisService.acquireLock(endingSoonLockKey, 300);
+      if (!endingSoonLockToken) {
+        console.log('tournament-lifecycle-ending-soon skipped — lock held by another instance');
+        return;
       }
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      console.error(`❌ [TOURNAMENT] Ending-soon job failed after ${duration}ms:`, error);
+
+      const startTime = Date.now();
+
+      try {
+        const notified = await notifyTournamentsEndingSoon();
+        const duration = Date.now() - startTime;
+        if (notified > 0) {
+          console.log(`✅ [TOURNAMENT] Sent ending-soon notifications to ${notified} participants in ${duration}ms`);
+        }
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        console.error(`❌ [TOURNAMENT] Ending-soon job failed after ${duration}ms:`, error);
+      }
     } finally {
+      if (endingSoonLockToken) {
+        await redisService.releaseLock(endingSoonLockKey, endingSoonLockToken);
+      }
       isEndingSoonRunning = false;
     }
   });

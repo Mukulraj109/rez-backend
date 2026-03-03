@@ -61,5 +61,6 @@ const AdminActionSchema = new Schema<IAdminAction>({
 
 AdminActionSchema.index({ status: 1, createdAt: -1 });
 AdminActionSchema.index({ initiatorId: 1, createdAt: -1 });
+AdminActionSchema.index({ approverId: 1, status: 1, createdAt: -1 }); // Pending approvals queue
 
 export const AdminAction = mongoose.model<IAdminAction>('AdminAction', AdminActionSchema);

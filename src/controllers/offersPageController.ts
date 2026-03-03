@@ -849,17 +849,26 @@ export const getSuperCashbackStores = async (req: Request, res: Response) => {
  */
 export const getFlashSaleOffers = async (req: Request, res: Response) => {
   try {
-    const { limit = 10 } = req.query;
-
-    console.log('⚡ [FLASH SALES] Fetching flash sale offers');
+    const { limit = 10, category } = req.query;
 
     // Find offers with active flash sale metadata
     // Filter by endTime to only show non-expired sales
-    const offers = await Offer.find({
+    const flashQuery: any = {
       'metadata.flashSale.isActive': true,
       'metadata.flashSale.endTime': { $gte: new Date() },
       adminApproved: { $ne: false },
-    })
+    };
+
+    // Filter by category if provided
+    if (category && typeof category === 'string') {
+      flashQuery.$or = [
+        { 'metadata.category': category },
+        { 'metadata.categorySlug': category },
+        { 'metadata.category': { $exists: false } }, // Include global flash sales
+      ];
+    }
+
+    const offers = await Offer.find(flashQuery)
       .populate('store', 'name logo')
       .sort({ 'metadata.flashSale.endTime': 1, 'metadata.priority': -1 })
       .limit(parseInt(limit as string))

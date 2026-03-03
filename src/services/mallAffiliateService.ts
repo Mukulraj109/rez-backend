@@ -777,6 +777,14 @@ class MallAffiliateService {
         console.warn(`⚠️ [AFFILIATE] User wallet sync failed (non-blocking):`, syncError);
       }
 
+      // Invalidate wallet cache so user sees updated balance
+      try {
+        const { invalidateWalletCache } = require('./walletCacheService');
+        await invalidateWalletCache(String(purchase.user));
+      } catch (cacheError) {
+        console.warn(`⚠️ [AFFILIATE] Wallet cache invalidation failed (non-blocking):`, cacheError);
+      }
+
       console.log(`💰 [AFFILIATE] Credited ₹${purchase.actualCashback} to user ${purchase.user} (balance: ${balanceBefore} → ${balanceBefore + purchase.actualCashback})`);
     } catch (error) {
       await session.abortTransaction();

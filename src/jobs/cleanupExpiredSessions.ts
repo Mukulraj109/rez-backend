@@ -1,5 +1,6 @@
 import * as cron from 'node-cron';
 import GameSession from '../models/GameSession';
+import redisService from '../services/redisService';
 
 /**
  * Session Cleanup Job
@@ -165,6 +166,14 @@ export function startSessionCleanup(): void {
       return;
     }
 
+    // Acquire Redis distributed lock to prevent cross-instance overlap
+    const lockKey = 'job:session-cleanup';
+    const lockToken = await redisService.acquireLock(lockKey, 300);
+    if (!lockToken) {
+      console.log('session-cleanup skipped — lock held by another instance');
+      return;
+    }
+
     isRunning = true;
     const startTime = Date.now();
 
@@ -206,6 +215,7 @@ export function startSessionCleanup(): void {
         timestamp: new Date().toISOString()
       });
     } finally {
+      await redisService.releaseLock(lockKey, lockToken);
       isRunning = false;
     }
   });

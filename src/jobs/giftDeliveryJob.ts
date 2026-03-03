@@ -46,6 +46,17 @@ export async function runGiftDelivery(): Promise<void> {
 
     logger.info(`Found ${dueGifts.length} scheduled gifts due for delivery`);
 
+    // Batch fetch all involved users to avoid N+1 queries
+    const userIds = new Set<string>();
+    for (const gift of dueGifts) {
+      userIds.add(String(gift.sender));
+      userIds.add(String(gift.recipient));
+    }
+    const users = await User.find({ _id: { $in: Array.from(userIds) } })
+      .select('_id fullName phoneNumber')
+      .lean();
+    const userMap = new Map(users.map(u => [String(u._id), u]));
+
     let delivered = 0;
     for (const gift of dueGifts) {
       try {
@@ -59,12 +70,10 @@ export async function runGiftDelivery(): Promise<void> {
         if (updated) {
           delivered++;
 
-          // Send push notification to recipient
+          // Send push notification to recipient (users already batch-fetched)
           try {
-            const [sender, recipient] = await Promise.all([
-              User.findById(gift.sender).select('fullName phoneNumber').lean(),
-              User.findById(gift.recipient).select('phoneNumber').lean(),
-            ]);
+            const sender = userMap.get(String(gift.sender));
+            const recipient = userMap.get(String(gift.recipient));
             if (recipient?.phoneNumber) {
               const senderName = sender?.fullName || 'Someone';
               const themeEmoji = gift.theme === 'birthday' ? '🎂'

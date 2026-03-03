@@ -3,6 +3,7 @@ import { Store } from '../models/Store';
 import { Category } from '../models/Category';
 import { MProduct } from '../models/MerchantProduct';
 import { Product } from '../models/Product';
+import { CacheInvalidator } from '../utils/cacheHelper';
 
 // Map merchant businessType to category slug for auto-assignment
 const BUSINESS_TYPE_TO_CATEGORY_SLUG: Record<string, string> = {
@@ -95,6 +96,13 @@ export class MerchantUserSyncService {
       }
 
       console.log(`✅ Product sync complete: ${syncedCount} products created, ${skippedCount} skipped (already exist)`);
+
+      // Invalidate product caches after bulk sync
+      if (syncedCount > 0) {
+        await CacheInvalidator.invalidateProductLists().catch((err) => {
+          console.warn('[CACHE-INVALIDATION-WARN] Product sync cache invalidation failed:', err);
+        });
+      }
     } catch (error) {
       console.error('❌ Error syncing merchant products to user products:', error);
     }

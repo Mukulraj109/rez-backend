@@ -1508,6 +1508,12 @@ export const redeemCoins = async (req: Request, res: Response) => {
           },
         });
       }
+      // Transaction exists but voucher is missing (invalidated/deleted) — do NOT retry
+      // This prevents double-spend when voucher was admin-invalidated
+      return res.status(409).json({
+        success: false,
+        error: 'This redemption has already been processed. The voucher may have been invalidated by an admin.',
+      });
     }
 
     // Offer validation if linked to a specific offer (pre-transaction checks)

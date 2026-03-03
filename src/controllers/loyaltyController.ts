@@ -15,6 +15,7 @@ import {
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
+import redisService from '../services/redisService';
 
 const VALID_CATEGORIES: MainCategorySlug[] = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
 
@@ -653,6 +654,13 @@ export const checkIn = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('User not authenticated', 401);
   }
 
+  // Redis lock to prevent double check-in from concurrent requests
+  const lockKey = `lock:checkin:${userId}`;
+  const lockToken = await redisService.acquireLock(lockKey, 10);
+  if (!lockToken) {
+    throw new AppError('Check-in is being processed, please try again', 429);
+  }
+
   try {
     // Accept timezone from request for accurate day boundary
     const timezone = req.body?.timezone || 'UTC';
@@ -743,12 +751,6 @@ export const checkIn = asyncHandler(async (req: Request, res: Response) => {
 
     await loyalty.save();
 
-    // Structured log for monitoring
-    console.log('[Loyalty] CheckIn success:', {
-      userId, streak: newStreak, coinsEarned, timezone, category: validCategory || 'global',
-      idempotencyKey, isConsecutive,
-    });
-
     sendSuccess(res, {
       loyalty,
       coinsEarned,
@@ -761,6 +763,8 @@ export const checkIn = asyncHandler(async (req: Request, res: Response) => {
       throw error;
     }
     throw new AppError('Failed to check in', 500);
+  } finally {
+    await redisService.releaseLock(lockKey, lockToken);
   }
 });
 

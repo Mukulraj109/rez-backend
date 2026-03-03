@@ -408,6 +408,7 @@ router.get('/sales-clearance',
 router.get('/flash-sales',
   optionalAuth,
   validateQuery(Joi.object({
+    category: Joi.string().trim().max(100),
     limit: Joi.number().integer().min(1).max(50).default(10)
   })),
   getFlashSaleOffers
@@ -426,6 +427,7 @@ router.get('/free-delivery',
 router.get('/bank-offers',
   optionalAuth,
   validateQuery(Joi.object({
+    category: Joi.string().trim().max(100),
     cardType: Joi.string().valid('credit', 'debit', 'wallet', 'upi', 'bnpl'),
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),

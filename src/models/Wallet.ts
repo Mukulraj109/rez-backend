@@ -123,7 +123,7 @@ export interface IWallet extends Document {
   // Methods
   canSpend(amount: number): boolean;
   addFunds(amount: number, type: string): Promise<void>;
-  deductFunds(amount: number): Promise<void>;
+  deductFunds(amount: number, options?: { trackWithdrawal?: boolean }): Promise<void>;
   addBrandedCoins(merchantId: Types.ObjectId, merchantName: string, amount: number, merchantLogo?: string, merchantColor?: string): Promise<void>;
   useBrandedCoins(merchantId: Types.ObjectId, amount: number): Promise<void>;
   freeze(reason: string): Promise<void>;
@@ -133,8 +133,8 @@ export interface IWallet extends Document {
   getCoinUsageOrder(): { type: string; amount: number }[]; // Promo > Branded > ReZ
   syncWithUser(): Promise<void>;
   getCategoryBalance(category: string): number;
-  addCategoryCoins(category: string, amount: number): void;
-  deductCategoryCoins(category: string, amount: number): void;
+  addCategoryCoins(category: string, amount: number, session?: any): Promise<void>;
+  deductCategoryCoins(category: string, amount: number, session?: any): Promise<void>;
 }
 
 const WalletSchema = new Schema<IWallet>({
@@ -552,7 +552,7 @@ WalletSchema.methods.addFunds = async function(
 };
 
 // Method to deduct funds (atomic $inc to prevent race conditions)
-WalletSchema.methods.deductFunds = async function(amount: number): Promise<void> {
+WalletSchema.methods.deductFunds = async function(amount: number, options?: { trackWithdrawal?: boolean }): Promise<void> {
   if (!this.isActive) {
     throw new Error('Wallet is not active');
   }
@@ -574,18 +574,23 @@ WalletSchema.methods.deductFunds = async function(amount: number): Promise<void>
   };
 
   // Atomic deduction with balance guard — prevents going negative
+  const incFields: Record<string, number> = {
+    'balance.available': -amount,
+    'balance.total': -amount,
+    'statistics.totalSpent': amount,
+    'limits.dailySpent': amount,
+  };
+  if (options?.trackWithdrawal) {
+    incFields['statistics.totalWithdrawals'] = amount;
+  }
+
   const updated = await (this.constructor as any).findOneAndUpdate(
     {
       _id: this._id,
       'balance.available': { $gte: amount } // Guard: only deduct if sufficient
     },
     {
-      $inc: {
-        'balance.available': -amount,
-        'balance.total': -amount,
-        'statistics.totalSpent': amount,
-        'limits.dailySpent': amount,
-      },
+      $inc: incFields,
       $set: { lastTransactionAt: new Date() }
     },
     { new: true }
@@ -634,7 +639,7 @@ WalletSchema.methods.deductFunds = async function(amount: number): Promise<void>
   }
 };
 
-// Method to add Branded Coins (merchant-specific)
+// Method to add Branded Coins (merchant-specific) — atomic $inc or $push
 WalletSchema.methods.addBrandedCoins = async function(
   merchantId: Types.ObjectId,
   merchantName: string,
@@ -650,36 +655,60 @@ WalletSchema.methods.addBrandedCoins = async function(
     throw new Error('Wallet is frozen');
   }
 
-  // Check if merchant already has coins
-  const existingCoin = this.brandedCoins.find(
-    (coin: any) => coin.merchantId.toString() === merchantId.toString()
-  );
-
-  if (existingCoin) {
-    existingCoin.amount += amount;
-    existingCoin.lastUsed = new Date();
-  } else {
-    this.brandedCoins.push({
-      merchantId,
-      merchantName,
-      merchantLogo,
-      merchantColor: merchantColor || '#6366F1',
-      amount,
-      earnedDate: new Date()
-    });
-  }
-
   // Branded coins are tracked separately - do NOT add to balance.total or statistics.totalEarned
   // balance.total only tracks ReZ coins, cashback, and promo coins
 
-  this.markModified('brandedCoins');
-  this.lastTransactionAt = new Date();
-  await this.save();
+  // Try atomic $inc on existing branded coin entry
+  const updated = await (this.constructor as any).findOneAndUpdate(
+    {
+      _id: this._id,
+      'brandedCoins.merchantId': merchantId,
+    },
+    {
+      $inc: { 'brandedCoins.$.amount': amount },
+      $set: {
+        'brandedCoins.$.lastUsed': new Date(),
+        lastTransactionAt: new Date(),
+      },
+    },
+    { new: true }
+  );
+
+  if (!updated) {
+    // No existing entry for this merchant — atomic $push a new one
+    const pushed = await (this.constructor as any).findOneAndUpdate(
+      { _id: this._id },
+      {
+        $push: {
+          brandedCoins: {
+            merchantId,
+            merchantName,
+            merchantLogo,
+            merchantColor: merchantColor || '#6366F1',
+            amount,
+            earnedDate: new Date(),
+          },
+        },
+        $set: { lastTransactionAt: new Date() },
+      },
+      { new: true }
+    );
+
+    if (!pushed) {
+      throw new Error('Failed to add branded coins — wallet not found');
+    }
+
+    // Refresh local document
+    this.brandedCoins = pushed.brandedCoins;
+    this.lastTransactionAt = pushed.lastTransactionAt;
+  } else {
+    // Refresh local document from atomic update result
+    this.brandedCoins = updated.brandedCoins;
+    this.lastTransactionAt = updated.lastTransactionAt;
+  }
 
   // Sync with User model
   await this.syncWithUser();
-
-  console.log(`✅ Branded Coins added: ${amount} ${merchantName} coins`);
 };
 
 // Method to use Branded Coins (at specific merchant)
@@ -782,31 +811,49 @@ WalletSchema.methods.getCategoryBalance = function(category: string): number {
   return catBalance?.available || 0;
 };
 
-// Method to add coins to a specific category balance
-WalletSchema.methods.addCategoryCoins = function(category: string, amount: number): void {
-  if (!this.categoryBalances) {
-    this.categoryBalances = new Map();
+// Method to add coins to a specific category balance — atomic $inc
+WalletSchema.methods.addCategoryCoins = async function(category: string, amount: number, session?: any): Promise<void> {
+  const updated = await (this.constructor as any).findOneAndUpdate(
+    { _id: this._id },
+    {
+      $inc: {
+        [`categoryBalances.${category}.available`]: amount,
+        [`categoryBalances.${category}.earned`]: amount,
+      },
+    },
+    { new: true, ...(session ? { session } : {}) }
+  );
+
+  if (!updated) {
+    throw new Error('Failed to add category coins — wallet not found');
   }
-  const existing = this.categoryBalances.get(category) || { available: 0, earned: 0, spent: 0 };
-  existing.available += amount;
-  existing.earned += amount;
-  this.categoryBalances.set(category, existing);
-  this.markModified('categoryBalances');
+
+  // Refresh local document
+  this.categoryBalances = updated.categoryBalances;
 };
 
-// Method to deduct coins from a specific category balance
-WalletSchema.methods.deductCategoryCoins = function(category: string, amount: number): void {
-  if (!this.categoryBalances) {
+// Method to deduct coins from a specific category balance — atomic $inc with $gte guard
+WalletSchema.methods.deductCategoryCoins = async function(category: string, amount: number, session?: any): Promise<void> {
+  const updated = await (this.constructor as any).findOneAndUpdate(
+    {
+      _id: this._id,
+      [`categoryBalances.${category}.available`]: { $gte: amount },
+    },
+    {
+      $inc: {
+        [`categoryBalances.${category}.available`]: -amount,
+        [`categoryBalances.${category}.spent`]: amount,
+      },
+    },
+    { new: true, ...(session ? { session } : {}) }
+  );
+
+  if (!updated) {
     throw new Error(`Insufficient ${category} category coin balance`);
   }
-  const existing = this.categoryBalances.get(category);
-  if (!existing || existing.available < amount) {
-    throw new Error(`Insufficient ${category} category coin balance`);
-  }
-  existing.available -= amount;
-  existing.spent += amount;
-  this.categoryBalances.set(category, existing);
-  this.markModified('categoryBalances');
+
+  // Refresh local document
+  this.categoryBalances = updated.categoryBalances;
 };
 
 // Method to freeze wallet

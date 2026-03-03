@@ -1,6 +1,7 @@
 import * as cron from 'node-cron';
 import reservationService from '../services/reservationService';
 import { CLEANUP_INTERVAL_MINUTES } from '../types/reservation';
+import redisService from '../services/redisService';
 
 /**
  * Reservation Cleanup Job
@@ -37,6 +38,14 @@ export function startReservationCleanup(): void {
     // Prevent concurrent executions
     if (isRunning) {
       console.log('⏭️ [CLEANUP JOB] Previous cleanup still running, skipping this execution');
+      return;
+    }
+
+    // Acquire Redis distributed lock to prevent cross-instance overlap
+    const lockKey = 'job:reservation-cleanup';
+    const lockToken = await redisService.acquireLock(lockKey, 300);
+    if (!lockToken) {
+      console.log('reservation-cleanup skipped — lock held by another instance');
       return;
     }
 
@@ -84,6 +93,7 @@ export function startReservationCleanup(): void {
         timestamp: new Date().toISOString()
       });
     } finally {
+      await redisService.releaseLock(lockKey, lockToken);
       isRunning = false;
     }
   });

@@ -447,10 +447,13 @@ class RedisService {
    * Acquire a distributed lock with owner verification (SET NX EX pattern).
    * Returns the lock owner token if acquired, or null if already held.
    * The token MUST be passed to releaseLock() to prevent releasing another instance's lock.
-   * Falls back to a dummy token if Redis is unavailable (single-instance fallback).
+   *
+   * @param strict - If true, returns null when Redis is unavailable instead of falling back.
+   *   Use strict=true for financial/wallet operations where concurrent execution is dangerous.
    */
-  public async acquireLock(key: string, ttlSeconds: number): Promise<string | null> {
+  public async acquireLock(key: string, ttlSeconds: number, strict = false): Promise<string | null> {
     if (!this.isReady()) {
+      if (strict) return null; // Fail-safe: do not allow concurrent execution
       return 'fallback'; // Allow execution if Redis is down (single-instance fallback)
     }
 
@@ -464,6 +467,7 @@ class RedisService {
       return result === 'OK' ? ownerToken : null;
     } catch (error) {
       console.error(`❌ Redis LOCK acquire error for ${key}:`, error);
+      if (strict) return null; // Fail-safe for financial operations
       return 'fallback'; // Fail open for single-instance
     }
   }

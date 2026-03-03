@@ -79,6 +79,7 @@ TransferSchema.index({ sender: 1, createdAt: -1 });
 TransferSchema.index({ recipient: 1, createdAt: -1 });
 TransferSchema.index({ status: 1, createdAt: -1 });
 TransferSchema.index({ sender: 1, status: 1, createdAt: -1 });
+TransferSchema.index({ recipient: 1, status: 1, createdAt: -1 }); // Recipient history with status filter
 
 // TTL: Auto-expire initiated/otp_pending transfers after 10 minutes
 TransferSchema.index(

@@ -88,7 +88,7 @@ const CoinGiftSchema = new Schema<ICoinGift>({
 // Indexes
 CoinGiftSchema.index({ sender: 1, idempotencyKey: 1 }, { unique: true, sparse: true });
 CoinGiftSchema.index({ sender: 1, createdAt: -1 });
-CoinGiftSchema.index({ recipient: 1, status: 1 });
+CoinGiftSchema.index({ recipient: 1, status: 1, createdAt: -1 }); // Gift history with pagination
 CoinGiftSchema.index({ status: 1, scheduledAt: 1 }); // For scheduled delivery job
 CoinGiftSchema.index({ status: 1, expiresAt: 1 });    // For expiry job
 

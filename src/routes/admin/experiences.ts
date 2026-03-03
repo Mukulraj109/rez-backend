@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth } from '../../middleware/auth';
+import { requireAuth, requireAdmin } from '../../middleware/auth';
 import StoreExperience from '../../models/StoreExperience';
 import { Store } from '../../models/Store';
 import { Category } from '../../models/Category';
@@ -10,6 +10,7 @@ const router = Router();
 
 // All routes require admin authentication
 router.use(requireAuth);
+router.use(requireAdmin);
 
 // ============================================
 // VALIDATION SCHEMAS
@@ -125,7 +126,7 @@ router.get('/stats', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch statistics',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -186,7 +187,7 @@ router.get('/stores/search', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to search stores',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -230,7 +231,7 @@ router.get('/stores/suggested', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch suggested stores',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -276,10 +277,11 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     if (search) {
+      const escapedSearch = (search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { subtitle: { $regex: search, $options: 'i' } },
-        { slug: { $regex: search, $options: 'i' } },
+        { title: { $regex: escapedSearch, $options: 'i' } },
+        { subtitle: { $regex: escapedSearch, $options: 'i' } },
+        { slug: { $regex: escapedSearch, $options: 'i' } },
       ];
     }
 
@@ -313,7 +315,7 @@ router.get('/', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch experiences',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -343,7 +345,7 @@ router.get('/categories/list', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch categories',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -377,7 +379,7 @@ router.get('/tags/list', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch tags',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -468,7 +470,7 @@ router.post('/preview-stores', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to preview stores',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -543,7 +545,6 @@ router.post('/refresh-all-counts', async (req: Request, res: Response) => {
       }
     }
 
-    console.log(`🔄 [ADMIN EXPERIENCES] Refreshed counts for ${updated}/${experiences.length} experiences`);
 
     return res.json({
       success: true,
@@ -555,7 +556,7 @@ router.post('/refresh-all-counts', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to refresh store counts',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -590,7 +591,6 @@ router.patch('/reorder', async (req: Request, res: Response) => {
 
     await StoreExperience.bulkWrite(bulkOps);
 
-    console.log(`📋 [ADMIN EXPERIENCES] Reordered ${items.length} experiences`);
 
     return res.json({
       success: true,
@@ -601,7 +601,7 @@ router.patch('/reorder', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to reorder experiences',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -644,7 +644,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch experience',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -686,7 +686,6 @@ router.post('/', async (req: Request, res: Response) => {
     const experience = new StoreExperience(value);
     await experience.save();
 
-    console.log(`✅ [ADMIN EXPERIENCES] Created: ${experience.title} (${experience.slug})`);
 
     return res.status(201).json({
       success: true,
@@ -698,7 +697,7 @@ router.post('/', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to create experience',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -758,7 +757,6 @@ router.put('/:id', async (req: Request, res: Response) => {
       });
     }
 
-    console.log(`✅ [ADMIN EXPERIENCES] Updated: ${experience.title} (${experience.slug})`);
 
     return res.json({
       success: true,
@@ -770,7 +768,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to update experience',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -804,7 +802,6 @@ router.delete('/:id', async (req: Request, res: Response) => {
       });
     }
 
-    console.log(`🗑️ [ADMIN EXPERIENCES] Deleted: ${experience.title} (${experience.slug})`);
 
     return res.json({
       success: true,
@@ -815,7 +812,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to delete experience',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -852,7 +849,6 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
     experience.isActive = !experience.isActive;
     await experience.save();
 
-    console.log(`🔄 [ADMIN EXPERIENCES] Toggled: ${experience.title} - isActive: ${experience.isActive}`);
 
     return res.json({
       success: true,
@@ -864,7 +860,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to toggle experience',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -901,7 +897,6 @@ router.patch('/:id/feature', async (req: Request, res: Response) => {
     experience.isFeatured = !experience.isFeatured;
     await experience.save();
 
-    console.log(`⭐ [ADMIN EXPERIENCES] Feature toggled: ${experience.title} - isFeatured: ${experience.isFeatured}`);
 
     return res.json({
       success: true,
@@ -913,7 +908,7 @@ router.patch('/:id/feature', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to toggle featured status',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -997,7 +992,6 @@ router.patch('/:id/refresh-count', async (req: Request, res: Response) => {
     experience.storeCount = storeCount;
     await experience.save();
 
-    console.log(`🔄 [ADMIN EXPERIENCES] Refreshed count for ${experience.title}: ${storeCount} stores (${filterMatchCount} from filters + ${assignedCount} assigned)`);
 
     return res.json({
       success: true,
@@ -1009,7 +1003,7 @@ router.patch('/:id/refresh-count', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to refresh store count',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -1077,7 +1071,7 @@ router.get('/:id/assigned-stores', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch assigned stores',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -1153,7 +1147,6 @@ router.post('/:id/assign-store', async (req: Request, res: Response) => {
 
     await experience.save();
 
-    console.log(`➕ [ADMIN EXPERIENCES] Assigned store ${store.name} to ${experience.title}. Total: ${experience.storeCount} stores`);
 
     return res.json({
       success: true,
@@ -1165,7 +1158,7 @@ router.post('/:id/assign-store', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to assign store',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });
@@ -1227,7 +1220,6 @@ router.delete('/:id/remove-store/:storeId', async (req: Request, res: Response) 
 
     await experience.save();
 
-    console.log(`➖ [ADMIN EXPERIENCES] Removed store ${storeId} from ${experience.title}. Total: ${experience.storeCount} stores`);
 
     return res.json({
       success: true,
@@ -1239,7 +1231,7 @@ router.delete('/:id/remove-store/:storeId', async (req: Request, res: Response) 
     return res.status(500).json({
       success: false,
       message: 'Failed to remove store',
-      error: error.message,
+      error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
     });
   }
 });

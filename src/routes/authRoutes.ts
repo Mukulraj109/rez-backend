@@ -17,26 +17,26 @@ import { authenticate, optionalAuth } from '../middleware/auth';
 import { validate } from '../middleware/validation';
 import { authSchemas } from '../middleware/validation';
 import { uploadProfileImage } from '../middleware/upload';
-// import { authLimiter, otpLimiter, securityLimiter } from '../middleware/rateLimiter'; // Disabled for development
+import { authLimiter, otpLimiter, securityLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
 // Public routes
-router.post('/send-otp', 
-  // otpLimiter, // Disabled for development 
-  validate(authSchemas.sendOTP), 
+router.post('/send-otp',
+  otpLimiter,
+  validate(authSchemas.sendOTP),
   sendOTP
 );
 
-router.post('/verify-otp', 
-  // authLimiter, // Disabled for development 
-  validate(authSchemas.verifyOTP), 
+router.post('/verify-otp',
+  authLimiter,
+  validate(authSchemas.verifyOTP),
   verifyOTP
 );
 
-router.post('/refresh-token', 
-  // authLimiter, // Disabled for development 
-  validate(authSchemas.refreshToken), 
+router.post('/refresh-token',
+  authLimiter,
+  validate(authSchemas.refreshToken),
   refreshToken
 );
 
@@ -69,7 +69,7 @@ router.post('/complete-onboarding',
 
 router.delete('/account',
   authenticate,
-  // securityLimiter, // Disabled for development
+  securityLimiter,
   deleteAccount
 );
 

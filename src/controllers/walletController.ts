@@ -40,70 +40,75 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
   // AUTO-SYNC: Ensure wallet balance matches CoinTransaction (source of truth)
   // Uses aggregation (sum earned - spent) instead of running balance to avoid
   // data corruption from stale/wrong balance fields on individual transactions.
-  try {
-    const { CoinTransaction } = require('../models/CoinTransaction');
-    const userObjId = new mongoose.Types.ObjectId(userId);
+  // Distributed lock prevents concurrent syncs from causing drift.
+  const syncLockKey = `lock:wallet:sync:${userId}`;
+  const syncLockToken = await redisService.acquireLock(syncLockKey, 10);
+  if (syncLockToken) {
+    try {
+      const { CoinTransaction } = require('../models/CoinTransaction');
+      const userObjId = new mongoose.Types.ObjectId(userId);
 
-    // Cache the computed balance for 2 minutes to avoid heavy aggregation on every request
-    const balanceCacheKey = `wallet:computed_balance:${userId}`;
-    let actualRezBalance: number | null = null;
-    const cachedBalance = await redisService.get<number>(balanceCacheKey);
+      // Cache the computed balance for 2 minutes to avoid heavy aggregation on every request
+      const balanceCacheKey = `wallet:computed_balance:${userId}`;
+      let actualRezBalance: number | null = null;
+      const cachedBalance = await redisService.get<number>(balanceCacheKey);
 
-    if (cachedBalance !== null && cachedBalance !== undefined) {
-      actualRezBalance = cachedBalance;
-    } else {
-      // Aggregate: sum all earned/bonus/refunded minus spent/expired, excluding branded awards
-      const result = await CoinTransaction.aggregate([
-        { $match: { user: userObjId } },
-        {
-          $group: {
-            _id: null,
-            earned: {
-              $sum: {
-                $cond: [
-                  { $and: [
-                    { $in: ['$type', ['earned', 'refunded', 'bonus']] },
-                    { $ne: ['$source', 'merchant_award'] }
-                  ]},
-                  '$amount',
-                  0
-                ]
-              }
-            },
-            spent: {
-              $sum: {
-                $cond: [{ $in: ['$type', ['spent', 'expired']] }, '$amount', 0]
+      if (cachedBalance !== null && cachedBalance !== undefined) {
+        actualRezBalance = cachedBalance;
+      } else {
+        // Aggregate: sum all earned/bonus/refunded minus spent/expired, excluding branded awards
+        const result = await CoinTransaction.aggregate([
+          { $match: { user: userObjId } },
+          {
+            $group: {
+              _id: null,
+              earned: {
+                $sum: {
+                  $cond: [
+                    { $and: [
+                      { $in: ['$type', ['earned', 'refunded', 'bonus']] },
+                      { $ne: ['$source', 'merchant_award'] }
+                    ]},
+                    '$amount',
+                    0
+                  ]
+                }
+              },
+              spent: {
+                $sum: {
+                  $cond: [{ $in: ['$type', ['spent', 'expired']] }, '$amount', 0]
+                }
               }
             }
           }
-        }
-      ]);
-      actualRezBalance = Math.max(0, (result[0]?.earned || 0) - (result[0]?.spent || 0));
-      await redisService.set(balanceCacheKey, actualRezBalance, 120);
-    }
-
-    const currentBalance = wallet.balance.available || 0;
-    if (Math.abs(actualRezBalance - currentBalance) > 0.01) {
-      console.log(`🔄 [WALLET] Auto-syncing balance: ${currentBalance} → ${actualRezBalance}`);
-
-      // Update wallet balance (ReZ coins only, branded tracked separately)
-      // balance.total is recalculated by the pre-save hook
-      wallet.balance.available = actualRezBalance;
-
-      // Update ReZ coin amount
-      const rezCoinToUpdate = wallet.coins.find((c: any) => c.type === 'rez');
-      if (rezCoinToUpdate) {
-        rezCoinToUpdate.amount = actualRezBalance;
-        rezCoinToUpdate.lastUsed = new Date();
+        ]);
+        actualRezBalance = Math.max(0, (result[0]?.earned || 0) - (result[0]?.spent || 0));
+        await redisService.set(balanceCacheKey, actualRezBalance, 120);
       }
 
-      await wallet.save();
-      // Also sync to User model so profile page shows correct balance
-      await wallet.syncWithUser();
+      const currentBalance = wallet.balance.available || 0;
+      if (Math.abs(actualRezBalance - currentBalance) > 0.01) {
+        // Update wallet balance (ReZ coins only, branded tracked separately)
+        // balance.total is recalculated by the pre-save hook
+        wallet.balance.available = actualRezBalance;
+
+        // Update ReZ coin amount
+        const rezCoinToUpdate = wallet.coins.find((c: any) => c.type === 'rez');
+        if (rezCoinToUpdate) {
+          rezCoinToUpdate.amount = actualRezBalance;
+          rezCoinToUpdate.lastUsed = new Date();
+        }
+
+        await wallet.save();
+        // Also sync to User model so profile page shows correct balance
+        await wallet.syncWithUser();
+      }
+    } catch (syncError) {
+      console.error('⚠️ [WALLET] Auto-sync failed:', syncError);
+      // Continue with existing wallet data if sync fails
+    } finally {
+      await redisService.releaseLock(syncLockKey, syncLockToken);
     }
-  } catch (syncError) {
-    console.error('⚠️ [WALLET] Auto-sync failed:', syncError);
-    // Continue with existing wallet data if sync fails
   }
 
 
@@ -233,7 +238,7 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
  */
 export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
-  const { amount, source } = req.body;
+  const { amount, source, idempotencyKey } = req.body;
 
   if (!userId) {
     return sendError(res, 'User not authenticated', 401);
@@ -243,7 +248,20 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
   if (!amountCheck.valid) return sendBadRequest(res, amountCheck.error);
   const validatedAmount = amountCheck.amount;
 
-  console.log('💰 [WALLET] Crediting loyalty points:', { userId, amount: validatedAmount, source });
+  // Idempotency check — prevent duplicate credits on admin retry
+  if (idempotencyKey) {
+    const existingTx = await CoinTransaction.findOne({
+      user: userId,
+      'metadata.idempotencyKey': idempotencyKey,
+    }).lean();
+    if (existingTx) {
+      const wallet = await Wallet.findOne({ user: userId }).lean();
+      return sendSuccess(res, {
+        wallet: wallet ? { balance: wallet.balance, coins: wallet.coins } : null,
+        duplicate: true,
+      }, 'Loyalty points already credited (duplicate request)');
+    }
+  }
 
   // Get or create wallet
   let wallet = await Wallet.findOne({ user: userId });
@@ -684,12 +702,8 @@ export const withdrawFunds = asyncHandler(async (req: Request, res: Response) =>
 
   await transaction.save();
 
-  // Deduct from wallet
-  await wallet.deductFunds(amount);
-
-  // Update statistics
-  wallet.statistics.totalWithdrawals += amount;
-  await wallet.save();
+  // Deduct from wallet (atomic $inc handles balance + statistics in one operation)
+  await wallet.deductFunds(amount, { trackWithdrawal: true });
 
   // Create CoinTransaction (source of truth for auto-sync)
   try {
@@ -896,6 +910,34 @@ export const getTransactionSummary = asyncHandler(async (req: Request, res: Resp
       statistics: wallet.statistics
     } : null
   }, 'Transaction summary retrieved successfully');
+});
+
+/**
+ * @desc    Get transaction counts grouped by category (lightweight, no data transfer)
+ * @route   GET /api/wallet/transaction-counts
+ * @access  Private
+ */
+export const getTransactionCounts = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+
+  if (!userId) {
+    return sendError(res, 'User not authenticated', 401);
+  }
+
+  const userObjId = new mongoose.Types.ObjectId(userId);
+
+  const counts = await Transaction.aggregate([
+    { $match: { user: userObjId } },
+    { $group: { _id: '$category', count: { $sum: 1 } } }
+  ]);
+
+  const total = counts.reduce((sum: number, c: any) => sum + c.count, 0);
+  const byCategory: Record<string, number> = { ALL: total };
+  for (const c of counts) {
+    if (c._id) byCategory[c._id] = c.count;
+  }
+
+  sendSuccess(res, { counts: byCategory, total }, 'Transaction counts retrieved');
 });
 
 /**

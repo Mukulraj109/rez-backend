@@ -1,5 +1,6 @@
 import * as cron from 'node-cron';
 import DealRedemption from '../models/DealRedemption';
+import redisService from '../services/redisService';
 
 /**
  * Deal Redemption Expiry Job
@@ -97,6 +98,14 @@ export function startDealExpiryJob(): void {
       return;
     }
 
+    // Acquire Redis distributed lock to prevent cross-instance overlap
+    const lockKey = 'job:deal-expiry';
+    const lockToken = await redisService.acquireLock(lockKey, 300);
+    if (!lockToken) {
+      console.log('deal-expiry skipped — lock held by another instance');
+      return;
+    }
+
     isRunning = true;
     const startTime = Date.now();
 
@@ -131,6 +140,7 @@ export function startDealExpiryJob(): void {
         timestamp: new Date().toISOString()
       });
     } finally {
+      await redisService.releaseLock(lockKey, lockToken);
       isRunning = false;
     }
   });

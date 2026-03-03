@@ -14,6 +14,8 @@ import { validateAmount } from '../utils/walletValidation';
 import { checkVelocity, checkUniqueRecipients } from '../services/walletVelocityService';
 import { SMSService } from '../services/SMSService';
 import pushNotificationService from '../services/pushNotificationService';
+import { ledgerService } from '../services/ledgerService';
+import { invalidateWalletCache } from '../services/walletCacheService';
 
 /**
  * @desc    Initiate a coin transfer
@@ -254,31 +256,46 @@ export const confirmTransfer = asyncHandler(async (req: Request, res: Response) 
 
   // Check OTP expiry
   if (transfer.otpExpiresAt && transfer.otpExpiresAt < new Date()) {
-    transfer.status = 'failed';
-    transfer.failureReason = 'OTP expired';
-    await transfer.save();
+    await Transfer.findByIdAndUpdate(transferId, {
+      $set: { status: 'failed', failureReason: 'OTP expired' }
+    });
     return sendBadRequest(res, 'OTP has expired. Please initiate a new transfer.');
   }
 
-  // Check OTP attempts
+  // Check OTP attempts (already exceeded)
   if (transfer.otpAttempts >= 3) {
-    transfer.status = 'failed';
-    transfer.failureReason = 'Too many OTP attempts';
-    await transfer.save();
+    await Transfer.findByIdAndUpdate(transferId, {
+      $set: { status: 'failed', failureReason: 'Too many OTP attempts' }
+    });
     return sendBadRequest(res, 'Too many incorrect attempts. Transfer cancelled.');
   }
 
   // Verify OTP
   const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
   if (otpHash !== transfer.otpHash) {
-    transfer.otpAttempts += 1;
-    await transfer.save();
-    return sendBadRequest(res, `Incorrect OTP. ${3 - transfer.otpAttempts} attempts remaining.`);
+    // Atomic increment of OTP attempts — prevents concurrent bypass
+    const updated = await Transfer.findOneAndUpdate(
+      { _id: transferId, status: 'otp_pending' },
+      { $inc: { otpAttempts: 1 } },
+      { new: true }
+    );
+    const remaining = updated ? 3 - updated.otpAttempts : 0;
+    if (updated && updated.otpAttempts >= 3) {
+      await Transfer.findByIdAndUpdate(transferId, {
+        $set: { status: 'failed', failureReason: 'Too many OTP attempts' }
+      });
+      return sendBadRequest(res, 'Too many incorrect attempts. Transfer cancelled.');
+    }
+    return sendBadRequest(res, `Incorrect OTP. ${remaining} attempts remaining.`);
   }
 
-  // OTP verified — execute transfer
-  transfer.status = 'confirmed';
-  await transfer.save();
+  // OTP verified — execute transfer (atomic status transition)
+  const confirmed = await Transfer.findOneAndUpdate(
+    { _id: transferId, status: 'otp_pending' },
+    { $set: { status: 'confirmed' } },
+    { new: true }
+  );
+  if (!confirmed) return sendBadRequest(res, 'Transfer already processed');
 
   const result = await executeTransfer(String(transfer._id));
 
@@ -372,30 +389,51 @@ async function executeTransfer(transferId: string): Promise<{ success: boolean; 
           amount
         );
       } else if (transfer.coinType === 'promo') {
-        // Promo coin transfer: debit sender promo, credit recipient promo
-        const senderPromo = senderWallet.coins.find((c: any) => c.type === 'promo');
-        if (!senderPromo || senderPromo.amount < amount) {
+        // Promo coin transfer: atomic debit sender promo with $gte guard
+        const senderDebit = await Wallet.findOneAndUpdate(
+          {
+            _id: senderWallet._id,
+            coins: { $elemMatch: { type: 'promo', amount: { $gte: amount } } }
+          },
+          {
+            $inc: { 'coins.$.amount': -amount },
+            $set: { lastTransactionAt: new Date() }
+          },
+          { new: true, session }
+        );
+        if (!senderDebit) {
           throw new Error('Insufficient promo coin balance');
         }
-        senderPromo.amount -= amount;
-        senderWallet.markModified('coins');
-        await senderWallet.save({ session });
 
-        const recipientPromo = recipientWallet.coins.find((c: any) => c.type === 'promo');
-        if (recipientPromo) {
-          recipientPromo.amount += amount;
-        } else {
-          recipientWallet.coins.push({
-            type: 'promo',
-            amount,
-            isActive: true,
-            color: '#FFC857',
-            earnedDate: new Date(),
-            promoDetails: { maxRedemptionPercentage: 20 }
-          } as any);
+        // Atomic credit recipient promo — try $inc on existing, else $push new
+        const recipientCredit = await Wallet.findOneAndUpdate(
+          { _id: recipientWallet._id, 'coins.type': 'promo' },
+          {
+            $inc: { 'coins.$.amount': amount },
+            $set: { lastTransactionAt: new Date() }
+          },
+          { new: true, session }
+        );
+        if (!recipientCredit) {
+          // No existing promo coin entry — push a new one
+          await Wallet.findOneAndUpdate(
+            { _id: recipientWallet._id },
+            {
+              $push: {
+                coins: {
+                  type: 'promo',
+                  amount,
+                  isActive: true,
+                  color: '#FFC857',
+                  earnedDate: new Date(),
+                  promoDetails: { maxRedemptionPercentage: 20 }
+                }
+              },
+              $set: { lastTransactionAt: new Date() }
+            },
+            { session }
+          );
         }
-        recipientWallet.markModified('coins');
-        await recipientWallet.save({ session });
       }
 
       // Get sender/recipient names for descriptions
@@ -438,11 +476,34 @@ async function executeTransfer(transferId: string): Promise<{ success: boolean; 
       transfer.senderTxId = senderTx[0]._id as mongoose.Types.ObjectId;
       transfer.recipientTxId = recipientTx[0]._id as mongoose.Types.ObjectId;
 
+      // Double-entry ledger: sender → recipient (all coin types)
+      try {
+        await ledgerService.recordEntry({
+          debitAccount: { type: 'user_wallet', id: transfer.sender },
+          creditAccount: { type: 'user_wallet', id: transfer.recipient },
+          amount,
+          coinType: (transfer.coinType as any) || 'nuqta',
+          operationType: 'transfer',
+          referenceId: String(transfer._id),
+          referenceModel: 'Transfer',
+          metadata: { description: `Transfer from ${senderName} to ${recipientName}` },
+        });
+      } catch (ledgerErr) {
+        // Ledger failure should not abort the transfer — log and continue
+        console.error('[Transfer] Ledger entry failed (non-blocking):', ledgerErr);
+      }
+
       // Update transfer status
       transfer.status = 'completed';
       await transfer.save({ session });
 
       await session.commitTransaction();
+
+      // Invalidate wallet cache for both parties
+      await Promise.all([
+        invalidateWalletCache(String(transfer.sender)),
+        invalidateWalletCache(String(transfer.recipient)),
+      ]).catch(() => {});
 
       // Audit logs (fire-and-forget)
       logTransaction({

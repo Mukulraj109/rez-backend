@@ -11,6 +11,7 @@ import { Order } from '../models/Order';
 import { Product } from '../models/Product';
 import orderSocketService from '../services/orderSocketService';
 import { runOrderAlertChecks } from '../utils/orderAlerts';
+import redisService from '../services/redisService';
 
 /**
  * Stuck Order Detection
@@ -20,6 +21,13 @@ import { runOrderAlertChecks } from '../utils/orderAlerts';
  * - dispatched > 3 hours → merchant + admin alert
  */
 async function runStuckOrderDetection(): Promise<void> {
+  const lockKey = 'job:order-lifecycle';
+  const lockToken = await redisService.acquireLock(lockKey, 300);
+  if (!lockToken) {
+    console.log('order-lifecycle skipped — lock held by another instance');
+    return;
+  }
+
   const now = new Date();
 
   try {
@@ -131,6 +139,8 @@ async function runStuckOrderDetection(): Promise<void> {
     }
   } catch (error) {
     console.error('[ORDER LIFECYCLE] Stuck order detection failed:', error);
+  } finally {
+    await redisService.releaseLock(lockKey, lockToken);
   }
 }
 
@@ -141,6 +151,13 @@ async function runStuckOrderDetection(): Promise<void> {
  * checks with Razorpay for actual payment status, and recovers if paid.
  */
 async function runPaymentVerificationRecovery(): Promise<void> {
+  const lockKey = 'job:order-lifecycle';
+  const lockToken = await redisService.acquireLock(lockKey, 300);
+  if (!lockToken) {
+    console.log('order-lifecycle skipped — lock held by another instance');
+    return;
+  }
+
   const now = new Date();
 
   try {
@@ -246,6 +263,8 @@ async function runPaymentVerificationRecovery(): Promise<void> {
     }
   } catch (error) {
     console.error('[ORDER LIFECYCLE] Payment verification recovery failed:', error);
+  } finally {
+    await redisService.releaseLock(lockKey, lockToken);
   }
 }
 
@@ -256,6 +275,13 @@ async function runPaymentVerificationRecovery(): Promise<void> {
  * No action needed since the model method already checks timestamp.
  */
 async function runReturnWindowCheck(): Promise<void> {
+  const lockKey = 'job:order-lifecycle';
+  const lockToken = await redisService.acquireLock(lockKey, 300);
+  if (!lockToken) {
+    console.log('order-lifecycle skipped — lock held by another instance');
+    return;
+  }
+
   try {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
@@ -273,6 +299,8 @@ async function runReturnWindowCheck(): Promise<void> {
     }
   } catch (error) {
     console.error('[ORDER LIFECYCLE] Return window check failed:', error);
+  } finally {
+    await redisService.releaseLock(lockKey, lockToken);
   }
 }
 

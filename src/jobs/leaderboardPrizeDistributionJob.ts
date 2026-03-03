@@ -7,6 +7,7 @@ import LeaderboardConfig, { ILeaderboardConfig, LeaderboardPeriod } from '../mod
 import LeaderboardPrizeDistribution, { ILeaderboardPrizeDistribution, IPrizeEntry } from '../models/LeaderboardPrizeDistribution';
 import { CoinTransaction } from '../models/CoinTransaction';
 import { awardCoins } from '../services/coinService';
+import { invalidateWalletCache } from '../services/walletCacheService';
 
 /**
  * Leaderboard Prize Distribution Job
@@ -188,36 +189,50 @@ async function distributeForConfig(config: ILeaderboardConfig): Promise<{
           continue;
         }
 
-        // Award coins via coinService
-        try {
-          const idempotencyKey = `leaderboard_prize:${config._id}:${cycleStartDate.toISOString()}:${userId}`;
+        // Award coins via coinService (with retry for transient failures)
+        const MAX_RETRIES = 2;
+        let awarded = false;
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            const idempotencyKey = `leaderboard_prize:${config._id}:${cycleStartDate.toISOString()}:${userId}`;
 
-          const result = await awardCoins(
-            userId,
-            prizeSlot.prizeAmount,
-            'leaderboard_prize',
-            `${config.title} - Rank #${entry.rank} prize (${prizeSlot.prizeLabel})`,
-            {
-              leaderboardConfigId: (config._id as any).toString(),
-              cycleStartDate: cycleStartDate.toISOString(),
-              cycleEndDate: cycleEndDate.toISOString(),
-              rank: entry.rank,
-              score: entry.value,
-              prizeLabel: prizeSlot.prizeLabel,
-              idempotencyKey
+            const result = await awardCoins(
+              userId,
+              prizeSlot.prizeAmount,
+              'leaderboard_prize',
+              `${config.title} - Rank #${entry.rank} prize (${prizeSlot.prizeLabel})`,
+              {
+                leaderboardConfigId: (config._id as any).toString(),
+                cycleStartDate: cycleStartDate.toISOString(),
+                cycleEndDate: cycleEndDate.toISOString(),
+                rank: entry.rank,
+                score: entry.value,
+                prizeLabel: prizeSlot.prizeLabel,
+                idempotencyKey
+              }
+            );
+
+            prizeEntry.coinTransactionId = result.transactionId
+              ? new mongoose.Types.ObjectId(result.transactionId)
+              : undefined;
+            prizeEntry.status = 'distributed';
+            totalDistributed++;
+            awarded = true;
+
+            // Invalidate winner's wallet cache
+            await invalidateWalletCache(userId);
+            break;
+          } catch (awardError: any) {
+            if (attempt < MAX_RETRIES) {
+              console.warn(`[PRIZE DIST] ${slug}: Retry ${attempt + 1}/${MAX_RETRIES} for user ${userId}: ${awardError.message}`);
+              await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+            } else {
+              console.error(`[PRIZE DIST] ${slug}: Failed to award prize to user ${userId} after ${MAX_RETRIES + 1} attempts:`, awardError.message);
+              prizeEntry.status = 'failed';
+              prizeEntry.flagReason = `Award failed after ${MAX_RETRIES + 1} attempts: ${awardError.message}`;
+              totalFlagged++;
             }
-          );
-
-          prizeEntry.coinTransactionId = result.transactionId
-            ? new mongoose.Types.ObjectId(result.transactionId)
-            : undefined;
-          prizeEntry.status = 'distributed';
-          totalDistributed++;
-        } catch (awardError: any) {
-          console.error(`[PRIZE DIST] ${slug}: Failed to award prize to user ${userId}:`, awardError.message);
-          prizeEntry.status = 'failed';
-          prizeEntry.flagReason = `Award failed: ${awardError.message}`;
-          totalFlagged++;
+          }
         }
 
         prizeEntries.push(prizeEntry);

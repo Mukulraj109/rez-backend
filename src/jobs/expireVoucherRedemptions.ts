@@ -2,6 +2,7 @@ import * as cron from 'node-cron';
 import OfferRedemption from '../models/OfferRedemption';
 import { UserVoucher } from '../models/Voucher';
 import PriveVoucher from '../models/PriveVoucher';
+import redisService from '../services/redisService';
 
 /**
  * Voucher & Offer Redemption Expiry Job
@@ -193,6 +194,13 @@ export function startVoucherExpiryJob(): void {
       return;
     }
 
+    const lockKey = 'job:voucher-expiry';
+    const lockToken = await redisService.acquireLock(lockKey, 300);
+    if (!lockToken) {
+      console.log('voucher-expiry skipped — lock held by another instance');
+      return;
+    }
+
     isRunning = true;
     const startTime = Date.now();
 
@@ -229,6 +237,7 @@ export function startVoucherExpiryJob(): void {
       });
     } finally {
       isRunning = false;
+      await redisService.releaseLock(lockKey, lockToken);
     }
   });
 

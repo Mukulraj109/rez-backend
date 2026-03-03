@@ -7,12 +7,20 @@
 
 import cron from 'node-cron';
 import { priveConciergeService } from '../services/priveConciergeService';
+import redisService from '../services/redisService';
 
 let isRunning = false;
 
 export const runPriveSlaBreachCheck = async (): Promise<number> => {
   if (isRunning) {
     console.log('[PriveSlaBreachJob] Job already running, skipping');
+    return 0;
+  }
+
+  const lockKey = 'job:prive-sla-breach';
+  const lockToken = await redisService.acquireLock(lockKey, 300);
+  if (!lockToken) {
+    console.log('prive-sla-breach skipped — lock held by another instance');
     return 0;
   }
 
@@ -28,6 +36,7 @@ export const runPriveSlaBreachCheck = async (): Promise<number> => {
     return 0;
   } finally {
     isRunning = false;
+    await redisService.releaseLock(lockKey, lockToken);
   }
 };
 

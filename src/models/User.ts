@@ -750,9 +750,15 @@ UserSchema.methods.generateOTP = function (): string {
 
 // Instance method to verify OTP
 UserSchema.methods.verifyOTP = function (otp: string): boolean {
-  // CRITICAL SECURITY WARNING: OTP verification is DISABLED (dev mode).
-  // For production deployment, uncomment the block below and remove the dev mode bypass.
-  /*
+  if (process.env.NODE_ENV !== 'production') {
+    // DEV MODE: Accept any 6-digit OTP and mark as verified
+    this.auth.otpCode = undefined;
+    this.auth.otpExpiry = undefined;
+    this.auth.isVerified = true;
+    return true;
+  }
+
+  // Production: Real OTP verification
   if (!this.auth.otpCode || !this.auth.otpExpiry) return false;
 
   const isValid = this.auth.otpCode === otp && this.auth.otpExpiry > new Date();
@@ -765,17 +771,6 @@ UserSchema.methods.verifyOTP = function (otp: string): boolean {
   }
 
   return isValid;
-  */
-
-  // DEV MODE: Accept any 6-digit OTP and mark as verified
-  console.log(`🔧 [DEV MODE] User.verifyOTP - accepting any OTP: ${otp}`);
-
-  // Clear OTP and mark as verified (simulate successful verification)
-  this.auth.otpCode = undefined;
-  this.auth.otpExpiry = undefined;
-  this.auth.isVerified = true;
-
-  return true; // Always return true in dev mode
 };
 
 // Instance method to check if account is locked

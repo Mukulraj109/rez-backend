@@ -27,14 +27,6 @@ export const createTableBooking = async (req: Request, res: Response) => {
       specialRequests
     } = req.body;
 
-    console.log('📅 [TABLE BOOKING] Creating new booking:', {
-      userId,
-      storeId,
-      bookingDate,
-      bookingTime,
-      partySize
-    });
-
     // Validate required fields
     if (!storeId || !bookingDate || !bookingTime || !partySize || !customerName || !customerPhone) {
       console.error('❌ [TABLE BOOKING] Missing required fields');
@@ -147,7 +139,6 @@ export const createTableBooking = async (req: Request, res: Response) => {
 
     await booking.save();
 
-    console.log('✅ [TABLE BOOKING] Booking created:', booking.bookingNumber);
 
     // Populate booking for response
     const populatedBooking = await TableBooking.findById(booking._id)
@@ -194,7 +185,7 @@ export const createTableBooking = async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error('❌ [TABLE BOOKING] Error creating booking:', error);
-    return sendError(res, `Failed to create booking: ${error.message}`, 500);
+    return sendError(res, 'Failed to create booking', 500);
   }
 };
 
@@ -210,13 +201,6 @@ export const getUserTableBookings = async (req: Request, res: Response) => {
     } catch (err: any) {
       console.error('❌ [TABLE BOOKING] Auto-expiry error:', err.message);
     }
-
-    console.log('📅 [TABLE BOOKING] Getting user bookings:', {
-      userId,
-      status,
-      page,
-      limit
-    });
 
     const query: any = { userId: new Types.ObjectId(userId) };
     if (status) {
@@ -237,7 +221,6 @@ export const getUserTableBookings = async (req: Request, res: Response) => {
 
     const totalPages = Math.ceil(total / Number(limit));
 
-    console.log('✅ [TABLE BOOKING] Found bookings:', bookings.length);
 
     return sendSuccess(res, {
       bookings,
@@ -253,7 +236,7 @@ export const getUserTableBookings = async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error('❌ [TABLE BOOKING] Error getting user bookings:', error);
-    return sendError(res, `Failed to retrieve bookings: ${error.message}`, 500);
+    return sendError(res, 'Failed to retrieve bookings', 500);
   }
 };
 
@@ -263,7 +246,6 @@ export const getTableBooking = async (req: Request, res: Response) => {
     const { bookingId } = req.params;
     const userId = req.userId!;
 
-    console.log('📅 [TABLE BOOKING] Getting booking:', bookingId);
 
     const booking = await TableBooking.findOne({
       _id: bookingId,
@@ -278,13 +260,12 @@ export const getTableBooking = async (req: Request, res: Response) => {
       return sendNotFound(res, 'Booking not found');
     }
 
-    console.log('✅ [TABLE BOOKING] Booking found:', booking.bookingNumber);
 
     return sendSuccess(res, booking, 'Booking retrieved successfully');
 
   } catch (error: any) {
     console.error('❌ [TABLE BOOKING] Error getting booking:', error);
-    return sendError(res, `Failed to retrieve booking: ${error.message}`, 500);
+    return sendError(res, 'Failed to retrieve booking', 500);
   }
 };
 
@@ -292,28 +273,32 @@ export const getTableBooking = async (req: Request, res: Response) => {
 export const getStoreTableBookings = async (req: Request, res: Response) => {
   try {
     const { storeId } = req.params;
+    const userId = req.userId!;
     const { date, status, page = 1, limit = 50 } = req.query;
+
+    // Validate storeId
+    if (!Types.ObjectId.isValid(storeId)) {
+      return sendBadRequest(res, 'Invalid store ID');
+    }
+
+    // Check if store exists and verify ownership
+    const store = await Store.findById(storeId);
+    if (!store) {
+      return sendNotFound(res, 'Store not found');
+    }
+
+    // Verify the requesting user is the store owner (merchant) or admin
+    const isOwner = (store as any).merchantId && (store as any).merchantId.toString() === userId;
+    const isAdmin = (req as any).user?.role === 'admin';
+    if (!isOwner && !isAdmin) {
+      return sendBadRequest(res, 'You do not have permission to view this store\'s bookings');
+    }
 
     // Auto-expire past bookings for this store (non-blocking)
     try {
       await TableBooking.markNoShows({ storeId: new Types.ObjectId(storeId) });
     } catch (err: any) {
       console.error('❌ [TABLE BOOKING] Auto-expiry error:', err.message);
-    }
-
-    console.log('📅 [TABLE BOOKING] Getting store bookings:', {
-      storeId,
-      date,
-      status,
-      page,
-      limit
-    });
-
-    // Check if store exists
-    const store = await Store.findById(storeId);
-    if (!store) {
-      console.error('❌ [TABLE BOOKING] Store not found:', storeId);
-      return sendNotFound(res, 'Store not found');
     }
 
     const query: any = { storeId: new Types.ObjectId(storeId) };
@@ -352,7 +337,6 @@ export const getStoreTableBookings = async (req: Request, res: Response) => {
 
     const totalPages = Math.ceil(total / Number(limit));
 
-    console.log('✅ [TABLE BOOKING] Found store bookings:', bookings.length);
 
     return sendSuccess(res, {
       bookings,
@@ -368,7 +352,7 @@ export const getStoreTableBookings = async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error('❌ [TABLE BOOKING] Error getting store bookings:', error);
-    return sendError(res, `Failed to retrieve store bookings: ${error.message}`, 500);
+    return sendError(res, 'Failed to retrieve store bookings', 500);
   }
 };
 
@@ -378,7 +362,6 @@ export const getMerchantTableBookings = async (req: Request, res: Response) => {
     const userId = req.userId!;
     const { date, status, page = 1, limit = 50 } = req.query;
 
-    console.log('📅 [TABLE BOOKING] Getting merchant bookings for user:', userId);
 
     // Find all stores owned by this merchant
     const merchantStores = await Store.find({ merchantId: new Types.ObjectId(userId) }).select('_id name').lean();
@@ -430,7 +413,6 @@ export const getMerchantTableBookings = async (req: Request, res: Response) => {
 
     const totalPages = Math.ceil(total / Number(limit));
 
-    console.log('✅ [TABLE BOOKING] Found merchant bookings:', bookings.length, 'across', merchantStores.length, 'stores');
 
     return sendSuccess(res, {
       bookings,
@@ -447,7 +429,7 @@ export const getMerchantTableBookings = async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error('❌ [TABLE BOOKING] Error getting merchant bookings:', error);
-    return sendError(res, `Failed to retrieve merchant bookings: ${error.message}`, 500);
+    return sendError(res, 'Failed to retrieve merchant bookings', 500);
   }
 };
 
@@ -458,7 +440,6 @@ export const updateTableBookingStatus = async (req: Request, res: Response) => {
     const userId = req.userId!;
     const { status } = req.body;
 
-    console.log('📅 [TABLE BOOKING] Updating booking status:', { bookingId, status });
 
     // Validate status
     const validStatuses = ['confirmed', 'completed', 'cancelled', 'no_show'];
@@ -500,7 +481,6 @@ export const updateTableBookingStatus = async (req: Request, res: Response) => {
     booking.status = status;
     await booking.save();
 
-    console.log('✅ [TABLE BOOKING] Booking status updated:', booking.bookingNumber, previousStatus, '->', status);
 
     const populatedBooking = await TableBooking.findById(booking._id)
       .populate('storeId', 'name logo location contact')
@@ -557,7 +537,7 @@ export const updateTableBookingStatus = async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error('❌ [TABLE BOOKING] Error updating booking status:', error);
-    return sendError(res, `Failed to update booking status: ${error.message}`, 500);
+    return sendError(res, 'Failed to update booking status', 500);
   }
 };
 
@@ -568,7 +548,6 @@ export const cancelTableBooking = async (req: Request, res: Response) => {
     const userId = req.userId!;
     const { reason } = req.body;
 
-    console.log('📅 [TABLE BOOKING] Cancelling booking:', bookingId);
 
     const booking = await TableBooking.findOne({
       _id: bookingId,
@@ -602,7 +581,6 @@ export const cancelTableBooking = async (req: Request, res: Response) => {
     }
     await booking.save();
 
-    console.log('✅ [TABLE BOOKING] Booking cancelled:', booking.bookingNumber);
 
     // Populate booking for response
     const populatedBooking = await TableBooking.findById(booking._id)
@@ -625,7 +603,7 @@ export const cancelTableBooking = async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error('❌ [TABLE BOOKING] Error cancelling booking:', error);
-    return sendError(res, `Failed to cancel booking: ${error.message}`, 500);
+    return sendError(res, 'Failed to cancel booking', 500);
   }
 };
 
@@ -634,11 +612,6 @@ export const checkAvailability = async (req: Request, res: Response) => {
   try {
     const { storeId } = req.params;
     const { date } = req.query;
-
-    console.log('📅 [TABLE BOOKING] Checking availability:', {
-      storeId,
-      date
-    });
 
     if (!date) {
       return sendBadRequest(res, 'Date is required');
@@ -668,7 +641,6 @@ export const checkAvailability = async (req: Request, res: Response) => {
       status: { $in: ['pending', 'confirmed'] }
     }).select('bookingTime partySize status').lean();
 
-    console.log('✅ [TABLE BOOKING] Found bookings for date:', bookings.length);
 
     // Use store's configured capacity or default
     const maxCapacity = (store as any).bookingConfig?.maxTableCapacity || 50;
@@ -712,6 +684,6 @@ export const checkAvailability = async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error('❌ [TABLE BOOKING] Error checking availability:', error);
-    return sendError(res, `Failed to check availability: ${error.message}`, 500);
+    return sendError(res, 'Failed to check availability', 500);
   }
 };

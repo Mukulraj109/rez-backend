@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { User } from '../../models/User';
 import { generateToken } from '../../middleware/auth';
+import { authLimiter } from '../../middleware/rateLimiter';
 
 const router = Router();
 
@@ -22,7 +23,7 @@ const ROLE_HIERARCHY: Record<string, number> = {
  * POST /api/auth/login
  * Admin login with email and password
  */
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
@@ -33,13 +34,10 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
-    console.log('🔐 [Admin Auth] Login attempt for:', email);
-
     // Find user by email with password field
     const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password');
 
     if (!user) {
-      console.log('❌ [Admin Auth] User not found:', email);
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
@@ -48,7 +46,6 @@ router.post('/login', async (req: Request, res: Response) => {
 
     // Check if user has admin role
     if (user.role !== 'admin') {
-      console.log('❌ [Admin Auth] User does not have admin role:', email, 'role:', user.role);
       return res.status(403).json({
         success: false,
         message: 'Access denied. Admin privileges required.'
@@ -57,7 +54,6 @@ router.post('/login', async (req: Request, res: Response) => {
 
     // Check if account is active
     if (!user.isActive) {
-      console.log('❌ [Admin Auth] Account is inactive:', email);
       return res.status(403).json({
         success: false,
         message: 'Account is deactivated'
@@ -66,7 +62,6 @@ router.post('/login', async (req: Request, res: Response) => {
 
     // Verify password
     if (!user.password) {
-      console.log('❌ [Admin Auth] No password set for user:', email);
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials. Password not set.'
@@ -76,7 +71,6 @@ router.post('/login', async (req: Request, res: Response) => {
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
-      console.log('❌ [Admin Auth] Invalid password for:', email);
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
@@ -89,8 +83,6 @@ router.post('/login', async (req: Request, res: Response) => {
     // Update last login
     user.auth.lastLogin = new Date();
     await user.save();
-
-    console.log('✅ [Admin Auth] Login successful for:', email);
 
     // Return user data (map to admin format expected by frontend)
     res.json({
@@ -127,7 +119,6 @@ router.post('/login', async (req: Request, res: Response) => {
 router.post('/logout', async (req: Request, res: Response) => {
   try {
     // Clear any server-side session if needed
-    console.log('🚪 [Admin Auth] Logout');
     res.json({
       success: true,
       message: 'Logged out successfully'

@@ -71,7 +71,7 @@ import { logger, requestLogger, correlationIdMiddleware } from './config/logger'
 import { initSentry, sentryRequestHandler, sentryTracingHandler, sentryErrorHandler } from './config/sentry';
 import { setCsrfToken, validateCsrfToken } from './middleware/csrf';
 import { metricsMiddleware, metricsEndpoint } from './config/prometheus';
-// DEV: import { generalLimiter } from './middleware/rateLimiter';
+import { generalLimiter } from './middleware/rateLimiter';
 // Import routes
 import authRoutes from './routes/authRoutes';
 import productRoutes from './routes/productRoutes';
@@ -183,6 +183,7 @@ import offersRoutes from './routes/offersRoutes';  // Bank and exclusive offers 
 import zoneVerificationRoutes from './routes/zoneVerificationRoutes';  // Zone verification routes
 import loyaltyRoutes from './routes/loyaltyRoutes';  // User loyalty routes
 import statsRoutes from './routes/statsRoutes';  // Social proof stats routes
+import platformRoutes from './routes/platformRoutes';  // Platform stats (public)
 import exploreRoutes from './routes/exploreRoutes';  // Explore page routes
 import testRoutes from './routes/testRoutes';  // Integration test routes (dev/test only)
 import adminExploreRoutes from './routes/adminExploreRoutes';  // Admin explore management routes
@@ -489,7 +490,7 @@ if (process.env.NODE_ENV === 'development' && process.env.ENABLE_MORGAN === 'tru
 }
 
 // Rate limiting - Production security
-// DEV: app.use(generalLimiter);
+app.use(generalLimiter);
 
 // Swagger UI Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
@@ -962,6 +963,9 @@ console.log('✅ Loyalty routes registered at /api/users/loyalty');
 
 // Stats Routes - Social proof stats
 app.use(`${API_PREFIX}/stats`, statsRoutes);
+
+// Platform Routes - Public platform stats (rating, store count)
+app.use(`${API_PREFIX}/platform`, platformRoutes);
 
 // Explore page routes
 app.use(`${API_PREFIX}/explore`, exploreRoutes);
@@ -1755,6 +1759,21 @@ async function startServer() {
 
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('SIGINT', () => shutdown('SIGINT'));
+
+    process.on('unhandledRejection', (reason: unknown, promise: Promise<unknown>) => {
+      logger.error('Unhandled Promise Rejection', {
+        reason: reason instanceof Error ? reason.message : String(reason),
+        stack: reason instanceof Error ? reason.stack : undefined,
+      });
+    });
+
+    process.on('uncaughtException', (error: Error) => {
+      logger.error('Uncaught Exception — shutting down', {
+        message: error.message,
+        stack: error.stack,
+      });
+      shutdown('uncaughtException');
+    });
 
     return server;
     

@@ -6,7 +6,7 @@ import redisService from './redisService';
 
 const logger = createServiceLogger('wallet-cache');
 
-const BALANCE_CACHE_TTL = 30; // 30 seconds
+const BALANCE_CACHE_TTL = 300; // 5 minutes (invalidated on every mutation via invalidateWalletCache)
 const CONFIG_CACHE_TTL = 300; // 5 minutes
 
 /**

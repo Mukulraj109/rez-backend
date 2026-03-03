@@ -96,9 +96,16 @@ async function sendPreExpiryNotifications(): Promise<{ notified: number; failed:
 
     console.log(`⏰ [COIN EXPIRY] Sending pre-expiry notifications to ${userExpiryMap.size} users`);
 
+    // Batch fetch all users to avoid N+1 queries
+    const expiryUserIds = Array.from(userExpiryMap.keys());
+    const expiryUsers = await User.find({ _id: { $in: expiryUserIds } })
+      .select('_id phoneNumber')
+      .lean();
+    const expiryUserMap = new Map(expiryUsers.map(u => [String(u._id), u]));
+
     for (const [userId, data] of userExpiryMap.entries()) {
       try {
-        const user = await User.findById(userId).select('phoneNumber').lean();
+        const user = expiryUserMap.get(userId);
         if (!user?.phoneNumber) continue;
 
         const expiryDateStr = data.earliestExpiry.toLocaleDateString('en-IN', {
@@ -280,10 +287,17 @@ async function sendExpiryNotifications(
 ): Promise<void> {
   const notificationService = PushNotificationService;
 
+  // Batch fetch all users to avoid N+1 queries
+  const notifUserIds = userExpiryData.map(d => d.userId);
+  const notifUsers = await User.find({ _id: { $in: notifUserIds } })
+    .select('_id phoneNumber profile.firstName email')
+    .lean();
+  const notifUserMap = new Map(notifUsers.map(u => [String(u._id), u]));
+
   for (const userData of userExpiryData) {
     try {
-      // Get user details for notification
-      const user = await User.findById(userData.userId).select('phoneNumber profile.firstName email');
+      // Get user details for notification (batch-fetched)
+      const user = notifUserMap.get(String(userData.userId));
 
       if (!user) {
         console.warn(`⚠️ [COIN EXPIRY] User ${userData.userId} not found for notification`);

@@ -2,6 +2,7 @@ import * as cron from 'node-cron';
 import { Product } from '../models/Product';
 import { Store } from '../models/Store';
 import merchantNotificationService from '../services/merchantNotificationService';
+import redisService from '../services/redisService';
 
 /**
  * Inventory Alerts Background Job
@@ -159,6 +160,14 @@ export function startInventoryAlertJob(): void {
       return;
     }
 
+    // Acquire Redis distributed lock to prevent cross-instance overlap
+    const lockKey = 'job:inventory-alerts';
+    const lockToken = await redisService.acquireLock(lockKey, 300);
+    if (!lockToken) {
+      console.log('inventory-alerts skipped — lock held by another instance');
+      return;
+    }
+
     isJobRunning = true;
 
     try {
@@ -166,6 +175,7 @@ export function startInventoryAlertJob(): void {
     } catch (error) {
       // Error already logged in runInventoryAlerts
     } finally {
+      await redisService.releaseLock(lockKey, lockToken);
       isJobRunning = false;
     }
   });

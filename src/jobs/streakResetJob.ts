@@ -1,5 +1,6 @@
 import * as cron from 'node-cron';
 import streakService from '../services/streakService';
+import redisService from '../services/redisService';
 
 /**
  * Streak Reset Job
@@ -37,17 +38,31 @@ export function initializeStreakResetJob(): void {
     }
 
     isRunning = true;
-    const startTime = Date.now();
+    const lockKey = 'job:streak-reset';
+    let lockToken: string | null = null;
 
     try {
-      console.log('🔥 [STREAK RESET] Running streak reset check...');
-      await streakService.checkBrokenStreaks();
-      const duration = Date.now() - startTime;
-      console.log(`✅ [STREAK RESET] Completed in ${duration}ms`);
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      console.error(`❌ [STREAK RESET] Failed after ${duration}ms:`, error);
+      lockToken = await redisService.acquireLock(lockKey, 300);
+      if (!lockToken) {
+        console.log('streak-reset skipped — lock held by another instance');
+        return;
+      }
+
+      const startTime = Date.now();
+
+      try {
+        console.log('🔥 [STREAK RESET] Running streak reset check...');
+        await streakService.checkBrokenStreaks();
+        const duration = Date.now() - startTime;
+        console.log(`✅ [STREAK RESET] Completed in ${duration}ms`);
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        console.error(`❌ [STREAK RESET] Failed after ${duration}ms:`, error);
+      }
     } finally {
+      if (lockToken) {
+        await redisService.releaseLock(lockKey, lockToken);
+      }
       isRunning = false;
     }
   });

@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
+import crypto from 'crypto';
 import redisService from '../services/redisService';
 
 export type MainCategorySlug = 'food-dining' | 'beauty-wellness' | 'grocery-essentials' | 'fitness-sports' | 'healthcare' | 'fashion' | 'education-learning' | 'home-services' | 'travel-experiences' | 'entertainment' | 'financial-lifestyle' | 'electronics';
@@ -37,7 +38,8 @@ export interface ICoinTransactionModel extends Model<ICoinTransaction> {
     source: string,
     description: string,
     metadata?: any,
-    category?: MainCategorySlug | null
+    category?: MainCategorySlug | null,
+    session?: any
   ): Promise<ICoinTransaction>;
   expireOldCoins(userId: string, daysToExpire?: number): Promise<number>;
 }
@@ -257,20 +259,32 @@ CoinTransactionSchema.statics.createTransaction = async function(
   source: string,
   description: string,
   metadata?: any,
-  category?: string | null
+  category?: string | null,
+  session?: any
 ) {
   const lockKey = `coin-tx:${userId}`;
   let lockToken: string | null = null;
 
+  // Auto-generate idempotencyKey if not provided — prevents duplicate transactions on retries
+  if (!metadata?.idempotencyKey) {
+    metadata = {
+      ...metadata,
+      idempotencyKey: `${source}:${userId}:${Date.now()}:${crypto.randomUUID()}`,
+    };
+  }
+
   try {
-    // Acquire per-user lock (5s TTL) to prevent concurrent balance modifications
-    lockToken = await redisService.acquireLock(lockKey, 5);
-    if (!lockToken) {
-      // Retry once after a short delay
-      await new Promise(resolve => setTimeout(resolve, 200));
+    // Skip Redis lock when inside a MongoDB transaction (session provides atomicity)
+    if (!session) {
+      // Acquire per-user lock (5s TTL) to prevent concurrent balance modifications
       lockToken = await redisService.acquireLock(lockKey, 5);
       if (!lockToken) {
-        throw new Error('Transaction temporarily unavailable. Please try again.');
+        // Retry once after a short delay
+        await new Promise(resolve => setTimeout(resolve, 200));
+        lockToken = await redisService.acquireLock(lockKey, 5);
+        if (!lockToken) {
+          throw new Error('Transaction temporarily unavailable. Please try again.');
+        }
       }
     }
 
@@ -288,8 +302,8 @@ CoinTransactionSchema.statics.createTransaction = async function(
       newBalance -= amount;
     }
 
-    // Create transaction
-    const transaction = await this.create({
+    // Create transaction — use array form with options when session is provided
+    const txData = {
       user: userId,
       type,
       amount,
@@ -298,7 +312,10 @@ CoinTransactionSchema.statics.createTransaction = async function(
       description,
       metadata,
       category: category || null
-    });
+    };
+    const transaction = session
+      ? (await this.create([txData], { session }))[0]
+      : await this.create(txData);
 
     // Invalidate consolidated earnings cache for this user
     try {
@@ -309,7 +326,7 @@ CoinTransactionSchema.statics.createTransaction = async function(
 
     return transaction;
   } finally {
-    // Always release lock
+    // Always release lock (only if we acquired one)
     if (lockToken) {
       try {
         await redisService.releaseLock(lockKey, lockToken);
@@ -367,12 +384,12 @@ CoinTransactionSchema.statics.expireOldCoins = async function(userId: string, da
       if (wallet) {
         for (const [cat, amount] of Object.entries(categoryExpired)) {
           try {
-            (wallet as any).deductCategoryCoins(cat, amount);
+            await (wallet as any).deductCategoryCoins(cat, amount);
           } catch {
             // Category balance might already be 0
           }
         }
-        await wallet.save();
+        // No .save() needed — deductCategoryCoins is now atomic
       }
     } catch (err) {
       console.error('[CoinTransaction] Failed to update wallet category balances on expiry:', err);

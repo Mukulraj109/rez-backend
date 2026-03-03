@@ -3,6 +3,7 @@ import {
   getWalletBalance,
   getTransactions,
   getTransactionById,
+  getTransactionCounts,
   topupWallet,
   withdrawFunds,
   processPayment,
@@ -79,6 +80,13 @@ router.get('/transaction/:id', getTransactionById);
  * @access  Private
  */
 router.get('/summary', getTransactionSummary);
+
+/**
+ * @route   GET /api/wallet/transaction-counts
+ * @desc    Get transaction counts grouped by category (lightweight)
+ * @access  Private
+ */
+router.get('/transaction-counts', getTransactionCounts);
 
 /**
  * @route   GET /api/wallet/categories

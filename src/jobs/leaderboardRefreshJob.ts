@@ -22,8 +22,8 @@ import LeaderboardConfig, { ILeaderboardConfig } from '../models/LeaderboardConf
 let leaderboardRefreshJob: ReturnType<typeof cron.schedule> | null = null;
 
 // Configuration
-const LEADERBOARD_REFRESH_SCHEDULE = '*/5 * * * *'; // Every 5 minutes
-const LEADERBOARD_CACHE_TTL = 300; // 5 minutes
+const LEADERBOARD_REFRESH_SCHEDULE = '*/15 * * * *'; // Every 15 minutes
+const LEADERBOARD_CACHE_TTL = 900; // 15 minutes (matches refresh interval)
 const LEADERBOARD_LOCK_TTL = 120; // 2 minutes (should finish well within this)
 
 interface RefreshStats {
@@ -146,7 +146,7 @@ export function startLeaderboardRefreshJob(): void {
     return;
   }
 
-  console.log('[LEADERBOARD JOB] Starting config-driven leaderboard refresh job (runs every 5 minutes)');
+  console.log('[LEADERBOARD JOB] Starting config-driven leaderboard refresh job (runs every 15 minutes)');
 
   leaderboardRefreshJob = cron.schedule(LEADERBOARD_REFRESH_SCHEDULE, async () => {
     // Acquire distributed lock with owner token -- only one instance runs the job

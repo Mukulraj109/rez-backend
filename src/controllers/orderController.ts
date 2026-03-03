@@ -38,6 +38,7 @@ import { Category } from '../models/Category';
 import { MainCategorySlug, CoinTransaction } from '../models/CoinTransaction';
 import { LedgerEntry } from '../models/LedgerEntry';
 import redisService from '../services/redisService';
+import { CacheInvalidator } from '../utils/cacheHelper';
 
 const VALID_CATEGORY_SLUGS: MainCategorySlug[] = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
 
@@ -142,8 +143,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   session.startTransaction();
 
   try {
-    console.log('📦 [CREATE ORDER] Starting order creation for user:', userId, 'items:', requestItems?.length || 0, 'payment:', paymentMethod);
-
     // Idempotency check: prevent duplicate orders from network retries
     if (idempotencyKey) {
       const existingOrder = await Order.findOne({ user: userId, idempotencyKey }).session(session);
@@ -166,9 +165,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       })
       .session(session);
 
-    console.log('📦 [CREATE ORDER] Cart found:', cart ? 'Yes' : 'No');
-    console.log('📦 [CREATE ORDER] Cart items:', cart?.items.length || 0);
-
     if (!cart || cart.items.length === 0) {
       await session.abortTransaction();
       session.endSession();
@@ -178,13 +174,10 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     // Filter cart items by storeId if provided (for multi-store order splitting)
     let itemsToProcess = cart.items;
     if (storeId) {
-      console.log('🏪 [CREATE ORDER] Filtering items for store:', storeId);
       itemsToProcess = cart.items.filter((item: any) => {
         const itemStoreId = typeof item.store === 'object' ? item.store._id?.toString() : item.store?.toString();
         return itemStoreId === storeId;
       });
-      console.log('🏪 [CREATE ORDER] Items after store filter:', itemsToProcess.length);
-
       if (itemsToProcess.length === 0) {
         await session.abortTransaction();
         session.endSession();
@@ -196,12 +189,10 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     if (requestItems && Array.isArray(requestItems) && requestItems.length > 0) {
       const productIds = requestItems.map((item: any) => item.product?.toString() || item.id?.toString()).filter(Boolean);
       if (productIds.length > 0) {
-        console.log('📦 [CREATE ORDER] Filtering by product IDs:', productIds);
         itemsToProcess = itemsToProcess.filter((item: any) => {
           const itemProductId = typeof item.product === 'object' ? item.product._id?.toString() : item.product?.toString();
           return productIds.includes(itemProductId);
         });
-        console.log('📦 [CREATE ORDER] Items after product filter:', itemsToProcess.length);
       }
     }
 
@@ -219,36 +210,60 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       return sendBadRequest(res, `Invalid payment method. Allowed: ${validPaymentMethods.join(', ')}`);
     }
 
-    // Validate delivery address
-    if (!deliveryAddress) {
-      await session.abortTransaction();
-      session.endSession();
-      return sendBadRequest(res, 'Delivery address is required');
-    }
-
-    const requiredAddressFields = ['name', 'phone', 'addressLine1', 'city', 'state', 'pincode'];
-    const missingFields = requiredAddressFields.filter(field => !deliveryAddress[field]);
-    if (missingFields.length > 0) {
-      await session.abortTransaction();
-      session.endSession();
-      return sendBadRequest(res, `Missing required address fields: ${missingFields.join(', ')}`);
-    }
-
-    // Validate phone number format (Indian format)
+    // Validate address fields based on fulfillment type.
+    // Delivery requires full address; non-delivery accepts minimal address.
+    const isDeliveryOrder = fulfillmentType === 'delivery';
     const phoneRegex = /^(\+91|91)?[6-9]\d{9}$/;
-    const cleanPhone = deliveryAddress.phone.replace(/[\s-]/g, '');
-    if (!phoneRegex.test(cleanPhone)) {
-      await session.abortTransaction();
-      session.endSession();
-      return sendBadRequest(res, 'Invalid phone number format');
-    }
-
-    // Validate pincode format (6 digits for India)
     const pincodeRegex = /^\d{6}$/;
-    if (!pincodeRegex.test(deliveryAddress.pincode)) {
-      await session.abortTransaction();
-      session.endSession();
-      return sendBadRequest(res, 'Invalid pincode format (must be 6 digits)');
+
+    if (isDeliveryOrder) {
+      if (!deliveryAddress) {
+        await session.abortTransaction();
+        session.endSession();
+        return sendBadRequest(res, 'Delivery address is required');
+      }
+
+      const requiredAddressFields = ['name', 'phone', 'addressLine1', 'city', 'state', 'pincode'];
+      const missingFields = requiredAddressFields.filter(field => !deliveryAddress[field]);
+      if (missingFields.length > 0) {
+        await session.abortTransaction();
+        session.endSession();
+        return sendBadRequest(res, `Missing required address fields: ${missingFields.join(', ')}`);
+      }
+
+      const cleanPhone = String(deliveryAddress.phone || '').replace(/[\s-]/g, '');
+      if (!phoneRegex.test(cleanPhone)) {
+        await session.abortTransaction();
+        session.endSession();
+        return sendBadRequest(res, 'Invalid phone number format');
+      }
+
+      if (!pincodeRegex.test(String(deliveryAddress.pincode || ''))) {
+        await session.abortTransaction();
+        session.endSession();
+        return sendBadRequest(res, 'Invalid pincode format (must be 6 digits)');
+      }
+    } else if (deliveryAddress) {
+      const requiredNonDeliveryFields = ['name', 'phone'];
+      const missingNonDeliveryFields = requiredNonDeliveryFields.filter(field => !deliveryAddress[field]);
+      if (missingNonDeliveryFields.length > 0) {
+        await session.abortTransaction();
+        session.endSession();
+        return sendBadRequest(res, `Missing required address fields: ${missingNonDeliveryFields.join(', ')}`);
+      }
+
+      const cleanPhone = String(deliveryAddress.phone || '').replace(/[\s-]/g, '');
+      if (!phoneRegex.test(cleanPhone)) {
+        await session.abortTransaction();
+        session.endSession();
+        return sendBadRequest(res, 'Invalid phone number format');
+      }
+
+      if (deliveryAddress.pincode && !pincodeRegex.test(String(deliveryAddress.pincode))) {
+        await session.abortTransaction();
+        session.endSession();
+        return sendBadRequest(res, 'Invalid pincode format (must be 6 digits)');
+      }
     }
 
     // Validate all items belong to the same store (using filtered orderCart)
@@ -263,12 +278,8 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       return sendBadRequest(res, 'All items must be from the same store. Please create separate orders for different stores.');
     }
 
-    console.log('✅ [CREATE ORDER] Validation passed: payment method, address, and store check');
-
     // Validate coin balances if coins are being used
     if (coinsUsed && (coinsUsed.rezCoins > 0 || coinsUsed.storePromoCoins > 0 || coinsUsed.promoCoins > 0)) {
-      console.log('💰 [CREATE ORDER] Validating coin balances:', coinsUsed);
-
       // Validate REZ coins
       if (coinsUsed.rezCoins > 0) {
         const coinService = require('../services/coinService').default;
@@ -282,7 +293,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
           });
           return sendBadRequest(res, `Insufficient REZ coin balance. Required: ${coinsUsed.rezCoins}, Available: ${userCoinBalance}`);
         }
-        console.log('✅ [CREATE ORDER] REZ coin balance validated:', { required: coinsUsed.rezCoins, available: userCoinBalance });
       }
 
       // Validate promo coins
@@ -299,7 +309,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
           });
           return sendBadRequest(res, `Insufficient promo coin balance. Required: ${coinsUsed.promoCoins}, Available: ${promoBalance}`);
         }
-        console.log('✅ [CREATE ORDER] Promo coin balance validated:', { required: coinsUsed.promoCoins, available: promoBalance });
       }
 
       // Validate store promo coins
@@ -327,7 +336,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
             });
             return sendBadRequest(res, `Insufficient store coin balance. Required: ${coinsUsed.storePromoCoins}, Available: ${brandedBalance}`);
           }
-          console.log('✅ [CREATE ORDER] Branded coin balance validated:', { required: coinsUsed.storePromoCoins, available: brandedBalance });
         }
       }
     }
@@ -339,16 +347,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     for (const cartItem of orderCart.items) {
       const product = cartItem.product as any;
       const store = cartItem.store as any;
-
-      console.log('📦 [CREATE ORDER] Processing cart item:', {
-        productId: product?._id,
-        productName: product?.name,
-        storeId: store?._id,
-        storeName: store?.name,
-        quantity: cartItem.quantity,
-        price: cartItem.price,
-        variant: cartItem.variant
-      });
 
       if (!product) {
         await session.abortTransaction();
@@ -378,7 +376,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
       // Skip stock deduction for unlimited products (digital goods, etc.)
       if (product.inventory?.unlimited) {
-        console.log('📦 [CREATE ORDER] Skipping stock check for unlimited product:', product.name);
         // No stock update needed for unlimited products
       } else if (cartItem.variant && product.inventory?.variants?.length > 0) {
         // Handle variant stock
@@ -393,13 +390,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         }
 
         availableStock = variant.stock;
-        console.log('📦 [CREATE ORDER] Variant stock check:', {
-          product: product.name,
-          variant: `${variant.type}: ${variant.value}`,
-          availableStock,
-          requestedQuantity
-        });
-
         // Check if sufficient stock
         if (availableStock < requestedQuantity) {
           await session.abortTransaction();
@@ -446,12 +436,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       } else {
         // Handle main product stock
         availableStock = product.inventory?.stock || 0;
-        console.log('📦 [CREATE ORDER] Product stock check:', {
-          product: product.name,
-          availableStock,
-          requestedQuantity
-        });
-
         // Check if sufficient stock
         if (availableStock < requestedQuantity) {
           await session.abortTransaction();
@@ -514,14 +498,12 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
             };
           }
         } catch (ssErr) {
-          console.warn('[ORDER] Could not look up SmartSpendItem:', ssErr);
+          // SmartSpendItem lookup failed - non-critical
         }
       }
 
       orderItems.push(orderItem);
     }
-
-    console.log('📦 [CREATE ORDER] All stock checks passed. Stock will be deducted after payment confirmation.');
 
     // Note: Stock deduction is now deferred until payment is confirmed
     // This prevents stock being locked for failed payments
@@ -545,15 +527,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     const discountRatio = fullCartSubtotal > 0 ? subtotal / fullCartSubtotal : 1;
     const baseDiscount = Math.round((cart.totals.discount || 0) * discountRatio * 100) / 100;
 
-    console.log('💰 [CREATE ORDER] Calculated filtered totals:', {
-      filteredSubtotal: subtotal,
-      fullCartSubtotal,
-      discountRatio,
-      tax,
-      baseDiscount,
-      itemCount: itemsToProcess.length
-    });
-
     // Calculate 15% platform fee on SUBTOTAL ONLY (excludes tax and delivery)
     const platformFeeRate = CHECKOUT_CONFIG.merchantFee?.percentage || 0.15;
     const minFee = CHECKOUT_CONFIG.merchantFee?.minFee || 2;
@@ -563,15 +536,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     platformFee = Math.max(minFee, Math.min(maxFee, platformFee));
     const merchantPayout = Math.round((subtotal - platformFee) * 100) / 100;
 
-    console.log('💰 [PLATFORM FEE] Calculated merchant fees:', {
-      subtotal,
-      platformFeeRate: `${platformFeeRate * 100}%`,
-      platformFee,
-      merchantPayout
-    });
-
     // Apply partner benefits to order
-    console.log('👥 [PARTNER BENEFITS] Applying partner benefits to order...');
     const partnerBenefitsService = require('../services/partnerBenefitsService').default;
 
     // Calculate base delivery fee for THIS order's subtotal
@@ -587,16 +552,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       userId: userId.toString()
     });
     
-    console.log('👥 [PARTNER BENEFITS] Benefits applied:', {
-      cashbackRate: partnerBenefits.cashbackRate,
-      cashbackAmount: partnerBenefits.cashbackAmount,
-      deliveryFee: partnerBenefits.deliveryFee,
-      deliverySavings: partnerBenefits.deliverySavings,
-      birthdayDiscount: partnerBenefits.birthdayDiscount,
-      totalSavings: partnerBenefits.totalSavings,
-      appliedBenefits: partnerBenefits.appliedBenefits
-    });
-    
     // Use partner-adjusted values
     const deliveryFee = partnerBenefits.deliveryFee;
     let discount = baseDiscount + partnerBenefits.birthdayDiscount;
@@ -606,7 +561,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     let voucherDiscount = 0;
     let voucherApplied = '';
     if (voucherCode) {
-      console.log('🎫 [VOUCHER] Attempting to apply voucher:', voucherCode);
       const partnerService = require('../services/partnerService').default;
       const voucherResult = await partnerService.applyVoucher(
         userId.toString(), 
@@ -618,9 +572,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         voucherDiscount = voucherResult.discount;
         voucherApplied = voucherCode;
         discount += voucherDiscount;
-        console.log(`✅ [VOUCHER] Applied ${voucherResult.offerTitle}: ₹${voucherDiscount} discount`);
       } else {
-        console.warn(`⚠️ [VOUCHER] Invalid voucher: ${voucherResult.error}`);
         // Don't fail order creation, just don't apply the voucher
       }
     }
@@ -629,7 +581,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     let redemptionDiscount = 0;
     let appliedRedemption: any = null;
     if (redemptionCode) {
-      console.log('🎁 [REDEMPTION] Attempting to apply deal redemption code:', redemptionCode);
       const DealRedemption = require('../models/DealRedemption').default;
 
       const redemption = await DealRedemption.findOne({
@@ -640,7 +591,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       if (redemption) {
         // Check if redemption is active - return error if not
         if (redemption.status !== 'active') {
-          console.warn(`⚠️ [REDEMPTION] Code already ${redemption.status}:`, redemptionCode);
           await session.abortTransaction();
           session.endSession();
           const statusMessages: Record<string, string> = {
@@ -651,7 +601,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
           };
           return sendBadRequest(res, statusMessages[redemption.status] || `Deal code is ${redemption.status}`);
         } else if (new Date(redemption.expiresAt) < new Date()) {
-          console.warn('⚠️ [REDEMPTION] Code has expired:', redemptionCode);
           await session.abortTransaction();
           session.endSession();
           return sendBadRequest(res, 'This deal code has expired');
@@ -683,10 +632,8 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
           appliedRedemption = redemption;
           discount += redemptionDiscount;
-          console.log(`✅ [REDEMPTION] Applied deal code ${redemptionCode}: ${redemptionDiscount} discount`);
         }
       } else {
-        console.warn('⚠️ [REDEMPTION] Code not found or does not belong to user:', redemptionCode);
         await session.abortTransaction();
         session.endSession();
         return sendBadRequest(res, 'Invalid deal code. Please check the code and try again.');
@@ -697,7 +644,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     let offerRedemptionCashback = 0;
     let appliedOfferRedemption: any = null;
     if (offerRedemptionCode) {
-      console.log('🎟️ [OFFER REDEMPTION] Attempting to apply offer code:', offerRedemptionCode);
       const OfferRedemption = require('../models/OfferRedemption').default;
       const Offer = require('../models/Offer').default;
 
@@ -712,7 +658,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       if (offerRedemption) {
         // Check if redemption is active
         if (offerRedemption.status !== 'active') {
-          console.warn(`⚠️ [OFFER REDEMPTION] Code already ${offerRedemption.status}:`, offerRedemptionCode);
           await session.abortTransaction();
           session.endSession();
           const statusMessages: Record<string, string> = {
@@ -726,7 +671,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
         // Check expiry
         if (new Date(offerRedemption.expiryDate) < new Date()) {
-          console.warn('⚠️ [OFFER REDEMPTION] Code has expired:', offerRedemptionCode);
           await session.abortTransaction();
           session.endSession();
           return sendBadRequest(res, 'This voucher has expired');
@@ -736,10 +680,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
         // Check minimum order value
         if (offer?.restrictions?.minOrderValue && subtotal < offer.restrictions.minOrderValue) {
-          console.warn('⚠️ [OFFER REDEMPTION] Min order value not met:', {
-            required: offer.restrictions.minOrderValue,
-            current: subtotal
-          });
           await session.abortTransaction();
           session.endSession();
           return sendBadRequest(res, `Minimum order value of ₹${offer.restrictions.minOrderValue} required for this voucher`);
@@ -755,9 +695,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         }
 
         appliedOfferRedemption = offerRedemption;
-        console.log(`✅ [OFFER REDEMPTION] Applied offer code ${offerRedemptionCode}: ₹${offerRedemptionCashback} cashback (${cashbackPercentage}%)`);
       } else {
-        console.warn('⚠️ [OFFER REDEMPTION] Code not found or does not belong to user:', offerRedemptionCode);
         await session.abortTransaction();
         session.endSession();
         return sendBadRequest(res, 'Invalid voucher code. Please check the code and try again.');
@@ -772,7 +710,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     // Lock fee discount (amount already paid by customer when locking item)
     const lockFeeDiscount = Number(clientLockFeeDiscount) || 0;
     if (lockFeeDiscount > 0) {
-      console.log('🔒 [LOCK FEE] Lock fee discount applied:', lockFeeDiscount);
     }
 
     // Validate coin discount doesn't exceed order total (prevent negative payment)
@@ -791,34 +728,12 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     let total = subtotal + tax + deliveryFee - discount - lockFeeDiscount - coinDiscount;
     if (total < 0) total = 0;
 
-    console.log('📦 [CREATE ORDER] Order totals (with partner benefits, voucher & coins):', {
-      subtotal,
-      tax,
-      deliveryFee,
-      discount,
-      voucherDiscount,
-      redemptionDiscount,
-      offerRedemptionCashback,
-      lockFeeDiscount,
-      coinDiscount,
-      cashback,
-      total,
-      partnerBenefitsApplied: partnerBenefits.appliedBenefits,
-      voucherApplied,
-      redemptionCodeApplied: appliedRedemption?.redemptionCode,
-      offerRedemptionCodeApplied: appliedOfferRedemption?.redemptionCode,
-      coinsUsed
-    });
-
     // Generate order number
     const orderCount = await Order.countDocuments().session(session);
     const orderNumber = `ORD${Date.now()}${String(orderCount + 1).padStart(4, '0')}`;
 
-    console.log('📦 [CREATE ORDER] Generated order number:', orderNumber);
-
     // Get primary store - use storeId from request (for multi-store orders) or extract from first item
     const primaryStoreId = storeId || orderItems[0]?.store;
-    console.log('🏪 [CREATE ORDER] Primary store for order:', primaryStoreId);
 
     // Validate fulfillment type against store serviceCapabilities
     const FULFILLMENT_TO_CAPABILITY: Record<string, string> = {
@@ -828,12 +743,15 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       dine_in: 'dineIn'
     };
 
+    // Fetch store once for fulfillment validation, address lookup, and details
+    const primaryStoreDoc = (fulfillmentType !== 'delivery' && primaryStoreId)
+      ? await Store.findById(primaryStoreId).select('serviceCapabilities name location').session(session)
+      : null;
+
     if (fulfillmentType !== 'delivery' && primaryStoreId) {
-      const storeDoc = await Store.findById(primaryStoreId).select('serviceCapabilities name location').session(session);
       const capKey = FULFILLMENT_TO_CAPABILITY[fulfillmentType];
-      const capEnabled = (storeDoc?.serviceCapabilities as any)?.[capKey]?.enabled;
+      const capEnabled = (primaryStoreDoc?.serviceCapabilities as any)?.[capKey]?.enabled;
       if (!capEnabled) {
-        console.warn(`⚠️ [FULFILLMENT_REJECTED] storeId=${primaryStoreId} userId=${userId} requestedType=${fulfillmentType} capKey=${capKey} storeCaps=${JSON.stringify(storeDoc?.serviceCapabilities || {})}`);
         await session.abortTransaction();
         session.endSession();
         return sendBadRequest(res, `This store does not support ${fulfillmentType.replace('_', ' ')} orders`);
@@ -862,14 +780,13 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     // Build delivery address: for non-delivery types, use minimal address or store address
     let orderDeliveryAddress = deliveryAddress;
     if (fulfillmentType !== 'delivery' && (!deliveryAddress || !deliveryAddress.addressLine1)) {
-      const storeForAddr = await Store.findById(primaryStoreId).select('name location').session(session);
       orderDeliveryAddress = {
         name: deliveryAddress?.name || 'Store Pickup',
         phone: deliveryAddress?.phone || '',
-        addressLine1: storeForAddr?.location?.address || 'Store Address',
-        city: storeForAddr?.location?.city || '',
-        state: storeForAddr?.location?.state || '',
-        pincode: storeForAddr?.location?.pincode || '',
+        addressLine1: primaryStoreDoc?.location?.address || 'Store Address',
+        city: primaryStoreDoc?.location?.city || '',
+        state: primaryStoreDoc?.location?.state || '',
+        pincode: primaryStoreDoc?.location?.pincode || '',
         country: 'India'
       };
     }
@@ -877,10 +794,9 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     // Build fulfillment details
     let fulfillmentDetailsData: any = undefined;
     if (fulfillmentType !== 'delivery') {
-      const storeForDetails = await Store.findById(primaryStoreId).select('name location serviceCapabilities').session(session);
       fulfillmentDetailsData = {
-        storeAddress: storeForDetails?.location?.address,
-        storeCoordinates: storeForDetails?.location?.coordinates,
+        storeAddress: primaryStoreDoc?.location?.address,
+        storeCoordinates: primaryStoreDoc?.location?.coordinates,
         ...(reqFulfillmentDetails || {}),
       };
       if (fulfillmentType === 'pickup') {
@@ -957,23 +873,17 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
     await order.save({ session });
 
-    console.log(`[ORDER:CREATE] orderId=${order._id} orderNumber=${order.orderNumber} userId=${userId} total=${order.totals.total} paymentMethod=${paymentMethod} items=${order.items.length}`);
-
     // Mark deal redemption as used if applied
     if (appliedRedemption) {
-      console.log('🎁 [REDEMPTION] Marking redemption as used:', appliedRedemption.redemptionCode);
       appliedRedemption.status = 'used';
       appliedRedemption.usedAt = new Date();
       appliedRedemption.orderId = order._id;
       appliedRedemption.benefitApplied = redemptionDiscount;
       await appliedRedemption.save({ session });
-      console.log('✅ [REDEMPTION] Redemption marked as used');
     }
 
     // Mark offer redemption as used and credit cashback if applied
     if (appliedOfferRedemption && offerRedemptionCashback > 0) {
-      console.log('🎟️ [OFFER REDEMPTION] Marking offer redemption as used:', appliedOfferRedemption.redemptionCode);
-
       // Mark as used
       appliedOfferRedemption.status = 'used';
       appliedOfferRedemption.usedDate = new Date();
@@ -984,7 +894,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       // Credit cashback to user's wallet (create wallet if doesn't exist)
       let userWallet = await Wallet.findOne({ user: userId }).session(session);
       if (!userWallet) {
-        console.log('🏦 [OFFER REDEMPTION] Creating wallet for user:', userId);
         userWallet = new Wallet({
           user: userId,
           balance: { total: 0, available: 0, pending: 0 },
@@ -1047,8 +956,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       });
 
       await cashbackTransaction.save({ session });
-      console.log(`✅ [OFFER REDEMPTION] Cashback of ₹${offerRedemptionCashback} credited to wallet`);
-
       // Send push notification (async, don't wait)
       try {
         const NotificationService = require('../services/notificationService').default;
@@ -1066,13 +973,10 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         console.error('Failed to send cashback notification:', notifError);
       }
 
-      console.log('✅ [OFFER REDEMPTION] Offer redemption processed successfully');
     }
 
     // For COD orders, deduct stock immediately since payment confirmation never happens
     if (paymentMethod === 'cod') {
-      console.log('📦 [CREATE ORDER] Deducting stock for COD order...');
-
       for (const stockUpdate of stockUpdates) {
         try {
           const updateResult = await Product.findOneAndUpdate(
@@ -1111,14 +1015,15 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         }
       }
 
-      console.log('✅ [CREATE ORDER] Stock deducted successfully for COD order');
+      // Invalidate product cache for items whose stock changed
+      for (const stockUpdate of stockUpdates) {
+        CacheInvalidator.invalidateProduct(stockUpdate.productId.toString()).catch(() => {});
+      }
     }
 
     // Deduct coins for COD orders immediately (INSIDE TRANSACTION - ATOMIC)
     // Online payments deduct coins in PaymentService after payment confirmation
     if (paymentMethod === 'cod' && coinsUsed && coinDiscount > 0) {
-      console.log('💰 [CREATE ORDER] Deducting coins for COD order (atomic):', coinsUsed);
-
       // Get wallet with session for atomic operation
       const wallet = await Wallet.findOne({ user: userId }).session(session);
 
@@ -1143,9 +1048,8 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         if (codCategory) {
           const catBal = wallet.getCategoryBalance(codCategory);
           if (catBal >= coinsUsed.rezCoins) {
-            wallet.deductCategoryCoins(codCategory, coinsUsed.rezCoins);
+            await wallet.deductCategoryCoins(codCategory, coinsUsed.rezCoins);
             deductedFromCategory = true;
-            console.log(`✅ [CREATE ORDER] REZ coins deducted from ${codCategory} category balance:`, coinsUsed.rezCoins);
           }
         }
 
@@ -1179,8 +1083,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
                { orderId: order._id, orderNumber, paymentMethod: 'cod' },
                deductedFromCategory ? codCategory : null
             );
-        console.log('✅ [CREATE ORDER] REZ coins deducted from wallet for COD:', coinsUsed.rezCoins, deductedFromCategory ? `(${codCategory})` : '(global)');
-
         // Also update UserLoyalty.categoryCoins if deducted from category
         if (deductedFromCategory && codCategory) {
           try {
@@ -1215,7 +1117,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         promoCoin.lastUsed = new Date();
         wallet.lastTransactionAt = new Date();
 
-        console.log('✅ [CREATE ORDER] Promo coins deducted for COD:', coinsUsed.promoCoins);
       }
 
       // Deduct branded coins (store-specific coins)
@@ -1243,14 +1144,11 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
           wallet.statistics.totalSpent += coinsUsed.storePromoCoins;
           wallet.lastTransactionAt = new Date();
 
-          console.log('✅ [CREATE ORDER] Branded coins deducted for COD:', coinsUsed.storePromoCoins);
         }
       }
 
       // Save wallet with session (atomic)
       await wallet.save({ session });
-      console.log('✅ [CREATE ORDER] All coins deducted atomically for COD order');
-
       // Record ledger entry for coin deduction (non-blocking — don't fail order)
       try {
         const ledgerService = require('../services/ledgerService').default || require('../services/ledgerService');
@@ -1269,7 +1167,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
             idempotencyKey: `order_coin_${String(order._id)}`,
           },
         });
-        console.log(`✅ [ORDER:LEDGER] Ledger entry created for coin deduction: ${coinDiscount} coins, order ${orderNumber}`);
       } catch (ledgerErr) {
         console.error('[ORDER:LEDGER] Failed to create ledger entry for coin deduction (non-blocking):', ledgerErr);
       }
@@ -1278,10 +1175,8 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     // Mark voucher as used if one was applied
     if (voucherApplied) {
       try {
-        console.log('🎫 [VOUCHER] Marking voucher as used:', voucherApplied);
         const partnerService = require('../services/partnerService').default;
         await partnerService.markVoucherUsed(userId.toString(), voucherApplied);
-        console.log('✅ [VOUCHER] Voucher marked as used successfully');
       } catch (error) {
         console.error('❌ [VOUCHER] Error marking voucher as used:', error);
         // Don't fail order creation if voucher marking fails
@@ -1291,11 +1186,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     // Check for transaction bonus (every 11 orders)
     // Note: This is checked after order placement, but bonus is only awarded after delivery
     try {
-      console.log('🎁 [PARTNER BENEFITS] Checking transaction bonus eligibility...');
-      const bonusAmount = await partnerBenefitsService.checkTransactionBonus(userId.toString());
-      if (bonusAmount > 0) {
-        console.log(`✅ [PARTNER BENEFITS] Transaction bonus will be awarded: ₹${bonusAmount}`);
-      }
+      await partnerBenefitsService.checkTransactionBonus(userId.toString());
     } catch (error) {
       console.error('❌ [PARTNER BENEFITS] Error checking transaction bonus:', error);
       // Don't fail order creation if bonus check fails
@@ -1308,10 +1199,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     await session.commitTransaction();
     session.endSession();
 
-    console.log('✅ [CREATE ORDER] Transaction committed successfully');
-    console.log('💳 [CREATE ORDER] Order created with status "pending_payment"');
-    console.log('📌 [CREATE ORDER] Stock will be deducted after payment confirmation');
-
     // NOTE: Merchant wallet credit moved to delivery (see updateOrderStatus).
     // Both COD and online payment orders only credit merchant wallet when status = 'delivered'.
 
@@ -1321,21 +1208,17 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       .populate('items.store', 'name logo')
       .populate('user', 'profile.firstName profile.lastName profile.phoneNumber');
 
-    console.log('📦 [CREATE ORDER] Order creation complete');
-
     // Mark coupon as used if one was applied
     // Check both cart.coupon (from DB) and couponCode (from request body)
     // Frontend passes couponCode in request but doesn't save it to cart DB
     const appliedCouponCode = cart.coupon?.code || couponCode;
     if (appliedCouponCode) {
-      console.log('🎟️ [CREATE ORDER] Marking coupon as used:', appliedCouponCode);
       const couponResult = await couponService.markCouponAsUsed(
         new Types.ObjectId(userId),
         appliedCouponCode,
         order._id as Types.ObjectId
       );
       if (!couponResult.success) {
-        console.warn(`⚠️ [CREATE ORDER] Failed to mark coupon as used: ${couponResult.error}`);
         // Note: Order is already created, so we don't fail the request
         // The discount was already applied to the order total
       }
@@ -1374,13 +1257,11 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
       // Send SMS to customer
       if (userPhone) {
-        console.log('📱 [ORDER] Sending order confirmation SMS to customer...');
         await SMSService.sendOrderConfirmation(userPhone, orderNumber, storeName);
       }
 
       // Send email to customer
       if (userEmail && userName) {
-        console.log('📧 [ORDER] Sending order confirmation email to customer...');
         const orderItems = populatedOrder?.items.map((item: any) => ({
           name: item.product?.name || 'Product',
           quantity: item.quantity,
@@ -1402,7 +1283,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
       // Send new order alert to merchant
       if (storeData?._id) {
-        console.log('📱 [ORDER] Sending new order alert to merchant...');
         const store = await Store.findById(storeData._id).select('contact merchant');
         const merchantPhone = store?.contact?.phone;
         const merchantId = (store as any)?.merchant?.toString();
@@ -1417,14 +1297,12 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
           // Send high-value order alert if total > ₹10,000
           if (total > 10000) {
-            console.log('💰 [ORDER] Sending high-value order alert to merchant...');
             await SMSService.sendHighValueOrderAlert(merchantPhone, orderNumber, total);
           }
         }
 
         // Send in-app notification to merchant
         if (merchantId) {
-          console.log('📬 [ORDER] Sending in-app notification to merchant...');
           await merchantNotificationService.notifyNewOrder({
             merchantId,
             orderId: (order._id as any).toString(),
@@ -1437,7 +1315,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         }
       }
 
-      console.log('✅ [ORDER] All notifications sent successfully');
     } catch (error) {
       console.error('❌ [ORDER] Error sending notifications:', error);
       // Don't fail order creation if notifications fail
@@ -1628,8 +1505,6 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
   const { orderId } = req.params;
   const userId = req.userId!;
 
-  console.log('📦 [GET ORDER BY ID] Request:', { orderId, userId });
-
   try {
     const order = await Order.findOne({
       _id: orderId,
@@ -1644,18 +1519,8 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
     if (!order) {
       // Debug: Check if order exists but belongs to different user
       const orderExists = await Order.findById(orderId).select('_id user orderNumber').lean();
-      console.log('⚠️ [GET ORDER BY ID] Order not found for user:', {
-        orderId,
-        userId,
-        orderExists: !!orderExists,
-        orderOwner: orderExists?.user?.toString(),
-        orderNumber: orderExists?.orderNumber,
-        userMismatch: orderExists ? orderExists.user?.toString() !== userId : 'N/A'
-      });
       return sendNotFound(res, 'Order not found');
     }
-
-    console.log('✅ [GET ORDER BY ID] Order found:', { orderId, orderNumber: order.orderNumber });
 
     // Enrich with ETA and progress
     let enrichedOrder: any = order;
@@ -1720,19 +1585,12 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
     }
 
     // Restore stock for cancelled order items
-    console.log('🚫 [CANCEL ORDER] Restoring stock for order items...');
     const stockRestorations: Array<{ productId: string; storeId: string; newStock: number; productName: string }> = [];
 
     for (const orderItem of order.items) {
       const productId = orderItem.product;
       const quantity = orderItem.quantity;
       const variant = orderItem.variant;
-
-      console.log('🚫 [CANCEL ORDER] Restoring stock for:', {
-        productId,
-        quantity,
-        variant
-      });
 
       if (variant) {
         // Restore variant stock
@@ -1762,7 +1620,6 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
         );
 
         if (updateResult) {
-          console.log('✅ [CANCEL ORDER] Variant stock restored for product:', productId);
           const newStock = updateResult.inventory?.stock ?? 0;
           const storeId = updateResult.store?.toString() || '';
           stockRestorations.push({
@@ -1772,7 +1629,6 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
             productName: updateResult.name || 'Unknown Product'
           });
         } else {
-          console.warn('⚠️ [CANCEL ORDER] Could not restore variant stock for product:', productId);
         }
       } else {
         // Restore main product stock
@@ -1793,7 +1649,6 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
         );
 
         if (updateResult) {
-          console.log('✅ [CANCEL ORDER] Product stock restored for product:', productId);
           const newStock = updateResult.inventory?.stock ?? 0;
           const storeId = updateResult.store?.toString() || '';
           stockRestorations.push({
@@ -1803,14 +1658,12 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
             productName: updateResult.name || 'Unknown Product'
           });
         } else {
-          console.warn('⚠️ [CANCEL ORDER] Could not restore stock for product:', productId);
         }
       }
     }
 
     // Refund coins if they were used in this order
     if (order.payment?.coinsUsed) {
-      console.log('💰 [CANCEL ORDER] Refunding coins used in order:', order.payment.coinsUsed);
       const userId = order.user;
 
       // Support both rezCoins (new) and wasilCoins (legacy) field names
@@ -1828,7 +1681,6 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
             'refund',
             `Refund for cancelled order: ${order.orderNumber}`
           );
-          console.log('✅ [CANCEL ORDER] REZ coins refunded via coinService:', rezCoins);
         } catch (coinError) {
           console.error('❌ [CANCEL ORDER] Failed to refund REZ coins:', coinError);
         }
@@ -1845,7 +1697,6 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
               wallet.markModified('coins');
               wallet.lastTransactionAt = new Date();
               await wallet.save({ session });
-              console.log('✅ [CANCEL ORDER] Promo coins refunded:', promoCoins);
             }
           }
         } catch (coinError) {
@@ -1872,7 +1723,6 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
                 storeName,
                 storePromoCoins
               );
-              console.log('✅ [CANCEL ORDER] Store promo coins refunded:', storePromoCoins);
             }
           }
         } catch (coinError) {
@@ -1883,7 +1733,6 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
 
     // Reverse offer redemption cashback if applied
     if ((order as any).offerRedemption?.code) {
-      console.log('🎟️ [CANCEL ORDER] Reversing offer redemption cashback...');
       const OfferRedemption = require('../models/OfferRedemption').default;
       const { Transaction } = require('../models/Transaction');
 
@@ -1910,8 +1759,6 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
         );
 
         if (offerRedemption) {
-          console.log('✅ [CANCEL ORDER] Offer redemption restored to active:', redemptionCode);
-
           // Deduct cashback from user's wallet if it was credited
           if (cashbackAmount > 0) {
             const wallet = await Wallet.findOne({ user: userId }).session(session);
@@ -1962,8 +1809,6 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
               });
 
               await reversalTransaction.save({ session });
-              console.log(`✅ [CANCEL ORDER] Cashback of ₹${cashbackAmount} reversed from wallet`);
-
               // Send notification about reversal
               try {
                 const NotificationService = require('../services/notificationService').default;
@@ -1983,7 +1828,6 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
             }
           }
         } else {
-          console.warn('⚠️ [CANCEL ORDER] Offer redemption not found or already reverted:', redemptionCode);
         }
       } catch (redemptionError) {
         console.error('❌ [CANCEL ORDER] Failed to reverse offer redemption:', redemptionError);
@@ -1996,20 +1840,15 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
     order.cancelledAt = new Date();
     order.cancelReason = reason || 'Customer request';
 
-    console.log('🚫 [CANCEL ORDER] Saving order...');
-
     await order.save({ session });
 
     // Commit transaction
     await session.commitTransaction();
     session.endSession();
 
-    console.log('✅ [CANCEL ORDER] Order cancelled and stock restored successfully');
-
-    // Emit Socket.IO events for stock restorations after transaction success
+    // Emit Socket.IO events for stock restorations and invalidate cache after transaction success
     for (const restoration of stockRestorations) {
       try {
-        console.log('🔌 [CANCEL ORDER] Emitting stock update via Socket.IO:', restoration);
         stockSocketService.emitStockUpdate(
           restoration.productId,
           restoration.newStock,
@@ -2022,6 +1861,8 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
         // Log but don't fail the cancellation if socket emission fails
         console.error('❌ [CANCEL ORDER] Socket emission failed:', socketError);
       }
+      // Invalidate product cache after stock restoration
+      CacheInvalidator.invalidateProduct(restoration.productId).catch(() => {});
     }
 
     // Create activity for order cancellation
@@ -2189,7 +2030,6 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
             const rewardCategory = rewardStoreId ? await getStoreCategorySlug(rewardStoreId.toString()) : null;
             const ratePercent = Math.round(smartSpendRate * 100);
 
-            console.log(`🪙 [ORDER] Awarding ${ratePercent}% Smart Spend reward on delivery:`, smartSpendCoins, 'coins');
             await coinService.awardCoins(
               userIdObj.toString(),
               smartSpendCoins,
@@ -2198,8 +2038,6 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
               { orderId: populatedOrder._id, smartSpendItemId: smartSpendItems[0]!.smartSpendSource!.smartSpendItemId },
               rewardCategory
             );
-            console.log('✅ [ORDER] Smart Spend reward coins awarded:', smartSpendCoins);
-
             // Increment purchases count on SmartSpendItem
             try {
               await SmartSpendItem.findByIdAndUpdate(
@@ -2223,7 +2061,6 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
             : null;
           const rewardCategory = rewardStoreId ? await getStoreCategorySlug(rewardStoreId.toString()) : null;
 
-          console.log('🪙 [ORDER] Awarding 5% purchase reward on delivery:', regularCoins, 'coins', rewardCategory ? `(${rewardCategory})` : '(global)');
           await coinService.awardCoins(
             userIdObj.toString(),
             regularCoins,
@@ -2232,7 +2069,6 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
             { orderId: populatedOrder._id },
             rewardCategory
           );
-          console.log('✅ [ORDER] Purchase reward coins awarded:', regularCoins, rewardCategory ? `to ${rewardCategory}` : 'globally');
         }
       } catch (coinError) {
         console.error('[ORDER] Failed to award purchase reward coins:', coinError);
@@ -2303,8 +2139,6 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
           const store = await Store.findById(storeId);
 
           if (store && store.merchantId) {
-            console.log('💰 [ORDER] Crediting merchant wallet on delivery...');
-
             const grossAmount = populatedOrder.totals.subtotal || 0;
             const platformFee = populatedOrder.totals.platformFee || 0;
 
@@ -2316,12 +2150,6 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
               platformFee,
               storeId
             );
-
-            console.log('✅ [ORDER] Merchant wallet credited:', {
-              gross: grossAmount,
-              fee: platformFee,
-              net: grossAmount - platformFee
-            });
 
             // Emit real-time notification to merchant
             if (walletResult) {
@@ -2367,7 +2195,6 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
             populatedOrder.orderNumber,
             subtotal
           );
-          console.log('✅ [ORDER] Admin wallet credited:', adminCommission);
         }
       } catch (adminError) {
         console.error('❌ [ORDER] Failed to credit admin wallet:', adminError);
@@ -2375,9 +2202,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
 
       // Create cashback for delivered order
       try {
-        console.log('💰 [ORDER] Creating cashback for delivered order:', populatedOrder._id);
         await cashbackService.createCashbackFromOrder(populatedOrder._id as Types.ObjectId);
-        console.log('✅ [ORDER] Cashback created successfully');
       } catch (error) {
         console.error('❌ [ORDER] Error creating cashback:', error);
         // Don't fail the order update if cashback creation fails
@@ -2385,9 +2210,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
 
       // Create user products for delivered order
       try {
-        console.log('📦 [ORDER] Creating user products for delivered order:', populatedOrder._id);
         await userProductService.createUserProductsFromOrder(populatedOrder._id as Types.ObjectId);
-        console.log('✅ [ORDER] User products created successfully');
       } catch (error) {
         console.error('❌ [ORDER] Error creating user products:', error);
         // Don't fail the order update if user product creation fails
@@ -2397,7 +2220,6 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
       try {
         const attributionPickId = populatedOrder.analytics?.attributionPickId;
         if (attributionPickId) {
-          console.log('🎯 [ORDER] Processing creator pick conversion for pickId:', attributionPickId);
           await processConversion(
             attributionPickId.toString(),
             (populatedOrder._id as Types.ObjectId).toString(),
@@ -2405,7 +2227,6 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
             populatedOrder.totals.subtotal,
             req.ip
           );
-          console.log('✅ [ORDER] Creator conversion processed');
         }
       } catch (conversionError) {
         console.error('❌ [ORDER] Error processing creator conversion:', conversionError);
@@ -2414,8 +2235,6 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
 
       // Award store promo coins for delivered order
       try {
-        console.log('💎 [ORDER] Awarding store promo coins for delivered order:', populatedOrder._id);
-
         // Get user's subscription tier for bonus calculation
         let userTier = 'free';
         try {
@@ -2427,7 +2246,6 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
             userTier = subscription.tier;
           }
         } catch (tierError) {
-          console.warn('⚠️ [ORDER] Could not fetch user tier, using free tier:', tierError);
         }
 
         // Calculate promo coins with tier bonus
@@ -2454,13 +2272,10 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
                 coinsToEarn,
                 storeLogo
               );
-              console.log(`✅ [ORDER] Awarded ${coinsToEarn} branded coins (base: ${baseCoins}, tier bonus: ${bonusCoins}, tier: ${userTier}) for store ${storeName}`);
             }
           } else {
-            console.warn('⚠️ [ORDER] Could not determine store ID for branded coins');
           }
         } else {
-          console.log('ℹ️ [ORDER] Order value too low for coins or coins disabled');
         }
       } catch (error) {
         console.error('❌ [ORDER] Error awarding promo coins:', error);
@@ -2478,7 +2293,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
 
       // Recalculate Privé reputation on order delivery (fire-and-forget)
       reputationService.onOrderCompleted(userIdObj as Types.ObjectId)
-        .catch(err => console.warn('[ORDER] Reputation recalculation failed:', err));
+        .catch(err => console.error('[ORDER] Reputation recalculation failed:', err));
 
       // Update partner progress for order delivery
       try {
@@ -2488,7 +2303,6 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
           userIdObj.toString(),
           orderId.toString()
         );
-        console.log('✅ [ORDER] Partner progress updated successfully');
       } catch (error) {
         console.error('❌ [ORDER] Error updating partner progress:', error);
         // Don't fail the order update if partner progress update fails
@@ -2623,7 +2437,6 @@ export const rateOrder = asyncHandler(async (req: Request, res: Response) => {
           }
           
           await partner.save();
-          console.log('✅ [REVIEW] Partner review task updated:', reviewTask.progress.current, '/', reviewTask.progress.target);
         }
       }
     } catch (error) {
@@ -2696,15 +2509,8 @@ export const reorderFullOrder = asyncHandler(async (req: Request, res: Response)
   const userId = req.userId!;
 
   try {
-    console.log('🔄 [REORDER] Starting full order reorder:', { userId, orderId });
-
     // Validate and add to cart
     const result = await reorderService.addToCart(userId, orderId);
-
-    console.log('✅ [REORDER] Full order reorder complete:', {
-      addedItems: result.addedItems.length,
-      skippedItems: result.skippedItems.length
-    });
 
     sendSuccess(res, result, 'Items added to cart successfully');
 
@@ -2721,19 +2527,12 @@ export const reorderItems = asyncHandler(async (req: Request, res: Response) => 
   const userId = req.userId!;
 
   try {
-    console.log('🔄 [REORDER] Starting selective reorder:', { userId, orderId, itemIds });
-
     if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
       return sendBadRequest(res, 'Item IDs are required');
     }
 
     // Validate and add to cart
     const result = await reorderService.addToCart(userId, orderId, itemIds);
-
-    console.log('✅ [REORDER] Selective reorder complete:', {
-      addedItems: result.addedItems.length,
-      skippedItems: result.skippedItems.length
-    });
 
     sendSuccess(res, result, 'Selected items added to cart successfully');
 
@@ -2750,19 +2549,12 @@ export const validateReorder = asyncHandler(async (req: Request, res: Response) 
   const userId = req.userId!;
 
   try {
-    console.log('🔍 [REORDER] Validating reorder:', { userId, orderId, itemIds });
-
     let selectedItemIds: string[] | undefined;
     if (itemIds) {
       selectedItemIds = Array.isArray(itemIds) ? itemIds as string[] : [itemIds as string];
     }
 
     const validation = await reorderService.validateReorder(userId, orderId, selectedItemIds);
-
-    console.log('✅ [REORDER] Validation complete:', {
-      canReorder: validation.canReorder,
-      itemCount: validation.items.length
-    });
 
     sendSuccess(res, validation, 'Reorder validation complete');
 
@@ -2778,11 +2570,7 @@ export const getFrequentlyOrdered = asyncHandler(async (req: Request, res: Respo
   const { limit = 10 } = req.query;
 
   try {
-    console.log('📊 [REORDER] Getting frequently ordered items:', { userId, limit });
-
     const items = await reorderService.getFrequentlyOrdered(userId, Number(limit));
-
-    console.log('✅ [REORDER] Frequently ordered items retrieved:', items.length);
 
     sendSuccess(res, items, 'Frequently ordered items retrieved successfully');
 
@@ -2797,11 +2585,7 @@ export const getReorderSuggestions = asyncHandler(async (req: Request, res: Resp
   const userId = req.userId!;
 
   try {
-    console.log('💡 [REORDER] Getting reorder suggestions:', { userId });
-
     const suggestions = await reorderService.getReorderSuggestions(userId);
-
-    console.log('✅ [REORDER] Reorder suggestions retrieved:', suggestions.length);
 
     sendSuccess(res, suggestions, 'Reorder suggestions retrieved successfully');
 
@@ -2821,8 +2605,6 @@ export const requestRefund = asyncHandler(async (req: Request, res: Response) =>
   const { reason, refundItems } = req.body;
 
   try {
-    console.log('💰 [REFUND REQUEST] User requesting refund:', { orderId, userId, reason });
-
     // Verify order belongs to user
     const order = await Order.findOne({ _id: orderId, user: userId });
     if (!order) {
@@ -2896,12 +2678,8 @@ export const requestRefund = asyncHandler(async (req: Request, res: Response) =>
 
     await refund.save();
 
-    console.log('✅ [REFUND REQUEST] Refund request created:', refund._id);
-
     // Notify admin/merchant for approval
     try {
-      console.log('📧 [REFUND REQUEST] Sending notification to merchant/admin...');
-      
       // Get user information
       const user = await User.findById(userId);
       const customerName = user?.profile?.firstName || user?.phoneNumber || 'Customer';
@@ -2929,7 +2707,6 @@ export const requestRefund = asyncHandler(async (req: Request, res: Response) =>
                 refundAmount,
                 refundType
               );
-              console.log(`✅ [REFUND REQUEST] SMS sent to merchant: ${merchantPhone}`);
             } catch (smsError) {
               console.error(`❌ [REFUND REQUEST] Failed to send SMS to merchant:`, smsError);
             }
@@ -2950,7 +2727,6 @@ export const requestRefund = asyncHandler(async (req: Request, res: Response) =>
                   refundId
                 }
               );
-              console.log(`✅ [REFUND REQUEST] Email sent to merchant: ${merchantEmail}`);
             } catch (emailError) {
               console.error(`❌ [REFUND REQUEST] Failed to send email to merchant:`, emailError);
             }
@@ -2973,7 +2749,6 @@ export const requestRefund = asyncHandler(async (req: Request, res: Response) =>
               refundId
             }
           );
-          console.log(`✅ [REFUND REQUEST] Admin notification sent`);
         } catch (adminError) {
           console.error(`❌ [REFUND REQUEST] Failed to send admin notification:`, adminError);
         }

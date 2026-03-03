@@ -87,32 +87,45 @@ class ReconciliationService {
   /**
    * Detect drift across all wallets (or a subset).
    * Returns only wallets with drift above the minor threshold.
+   * Uses cursor-based pagination to avoid skip() overhead on large collections.
    */
   async detectDrift(threshold?: number): Promise<ReconciliationResult[]> {
     const effectiveThreshold = threshold ?? this.MINOR_DRIFT_THRESHOLD;
     const drifts: ReconciliationResult[] = [];
+    const batchSize = 200;
+    let lastId: Types.ObjectId | null = null;
 
-    // Get all wallet user IDs
-    const wallets = await Wallet.find({}, { user: 1 }).lean();
+    while (true) {
+      const query: Record<string, any> = lastId ? { _id: { $gt: lastId } } : {};
+      const wallets = await Wallet.find(query, { user: 1 })
+        .sort({ _id: 1 })
+        .limit(batchSize)
+        .lean();
 
-    for (const wallet of wallets) {
-      try {
-        const result = await this.recomputeWalletBalance(String(wallet.user));
-        if (result.drift > effectiveThreshold) {
-          drifts.push(result);
+      if (wallets.length === 0) break;
+
+      for (const wallet of wallets) {
+        try {
+          const result = await this.recomputeWalletBalance(String(wallet.user));
+          if (result.drift > effectiveThreshold) {
+            drifts.push(result);
+          }
+        } catch (error) {
+          logger.error('Failed to reconcile wallet', error, {
+            userId: String(wallet.user),
+          });
         }
-      } catch (error) {
-        logger.error('Failed to reconcile wallet', error, {
-          userId: String(wallet.user),
-        });
       }
+
+      lastId = wallets[wallets.length - 1]._id as Types.ObjectId;
+      if (wallets.length < batchSize) break;
     }
 
     return drifts;
   }
 
   /**
-   * Run paginated bulk reconciliation across all wallets.
+   * Run cursor-based bulk reconciliation across all wallets.
    */
   async bulkReconciliation(batchSize: number = 100): Promise<BulkReconciliationReport> {
     const startedAt = new Date();
@@ -123,13 +136,16 @@ class ReconciliationService {
 
     const totalWallets = await Wallet.countDocuments();
     let processed = 0;
-    let skip = 0;
+    let lastId: Types.ObjectId | null = null;
 
-    while (skip < totalWallets) {
-      const wallets = await Wallet.find({}, { user: 1 })
-        .skip(skip)
+    while (true) {
+      const query: Record<string, any> = lastId ? { _id: { $gt: lastId } } : {};
+      const wallets = await Wallet.find(query, { user: 1 })
+        .sort({ _id: 1 })
         .limit(batchSize)
         .lean();
+
+      if (wallets.length === 0) break;
 
       for (const wallet of wallets) {
         try {
@@ -171,12 +187,14 @@ class ReconciliationService {
         }
       }
 
-      skip += batchSize;
+      lastId = wallets[wallets.length - 1]._id as Types.ObjectId;
       logger.info('Reconciliation batch complete', {
         processed,
         total: totalWallets,
         driftsFound: allDrifts.length,
       });
+
+      if (wallets.length < batchSize) break;
     }
 
     const completedAt = new Date();

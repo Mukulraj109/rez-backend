@@ -214,29 +214,7 @@ export const sendGift = asyncHandler(async (req: Request, res: Response) => {
     return sendBadRequest(res, `Daily gift limit of ${config.giftLimits.maxGiftsPerDay} gifts reached`);
   }
 
-  // Debit sender wallet atomically
-  const debitResult = await Wallet.findOneAndUpdate(
-    {
-      _id: senderWallet._id,
-      isFrozen: false,
-      'balance.available': { $gte: validatedAmount }
-    },
-    {
-      $inc: {
-        'balance.available': -validatedAmount,
-        'balance.total': -validatedAmount,
-        'statistics.totalSpent': validatedAmount
-      },
-      $set: { lastTransactionAt: new Date() }
-    },
-    { new: true }
-  );
-
-  if (!debitResult) {
-    return sendBadRequest(res, 'Insufficient balance or wallet is frozen');
-  }
-
-  // Determine delivery timing
+  // Determine delivery timing (validate before transaction)
   const isScheduled = deliveryType === 'scheduled' && scheduledAt;
   if (isScheduled) {
     const scheduledDate = new Date(scheduledAt);
@@ -250,37 +228,53 @@ export const sendGift = asyncHandler(async (req: Request, res: Response) => {
   }
   const initialStatus = isScheduled ? 'pending' : 'delivered';
 
-  // Create gift
-  const gift = await CoinGift.create({
-    sender: senderId,
-    recipient: recipient._id,
-    amount: validatedAmount,
-    coinType: effectiveCoinType,
-    theme,
-    message: message?.trim(),
-    deliveryType: isScheduled ? 'scheduled' : 'instant',
-    scheduledAt: isScheduled ? new Date(scheduledAt) : undefined,
-    status: initialStatus,
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days to claim
-    idempotencyKey: idempotencyKey || undefined,
-  });
+  // === MongoDB Transaction: wallet debit + gift + CoinTransaction + ledger ===
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  // Coins are held in platform_float until claimed or expired
+  let gift: any;
+  let debitResult: any;
 
-  // Audit log
-  logTransaction({
-    userId: new mongoose.Types.ObjectId(senderId),
-    walletId: senderWallet._id as mongoose.Types.ObjectId,
-    walletType: 'user',
-    operation: 'debit',
-    amount: validatedAmount,
-    balanceBefore: { total: senderWallet.balance.total, available: senderWallet.balance.available, pending: 0, cashback: 0 },
-    balanceAfter: { total: debitResult.balance.total, available: debitResult.balance.available, pending: 0, cashback: 0 },
-    reference: { type: 'other', id: String(gift._id), description: `Gift to ${recipient.fullName || recipient.phoneNumber}` }
-  });
-
-  // Create CoinTransaction (source of truth for auto-sync) + capture ID
   try {
+    // Debit sender wallet atomically
+    debitResult = await Wallet.findOneAndUpdate(
+      {
+        _id: senderWallet._id,
+        isFrozen: false,
+        'balance.available': { $gte: validatedAmount }
+      },
+      {
+        $inc: {
+          'balance.available': -validatedAmount,
+          'balance.total': -validatedAmount,
+          'statistics.totalSpent': validatedAmount
+        },
+        $set: { lastTransactionAt: new Date() }
+      },
+      { new: true, session }
+    );
+
+    if (!debitResult) {
+      throw new Error('Insufficient balance or wallet is frozen');
+    }
+
+    // Create gift
+    const [createdGift] = await CoinGift.create([{
+      sender: senderId,
+      recipient: recipient._id,
+      amount: validatedAmount,
+      coinType: effectiveCoinType,
+      theme,
+      message: message?.trim(),
+      deliveryType: isScheduled ? 'scheduled' : 'instant',
+      scheduledAt: isScheduled ? new Date(scheduledAt) : undefined,
+      status: initialStatus,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days to claim
+      idempotencyKey: idempotencyKey || undefined,
+    }], { session });
+    gift = createdGift;
+
+    // Create CoinTransaction (source of truth for auto-sync)
     const senderTx = await CoinTransaction.createTransaction(
       senderId,
       'spent',
@@ -291,13 +285,9 @@ export const sendGift = asyncHandler(async (req: Request, res: Response) => {
     );
     // Populate senderTxId on gift record
     gift.senderTxId = senderTx._id as mongoose.Types.ObjectId;
-    await gift.save();
-  } catch (ctxError) {
-    logger.error('Failed to create sender CoinTransaction', ctxError, { giftId: String(gift._id) });
-  }
+    await gift.save({ session });
 
-  // Double-entry ledger: debit sender wallet → credit platform_float
-  try {
+    // Double-entry ledger: debit sender wallet → credit platform_float
     const platformFloatId = ledgerService.getPlatformAccountId('platform_float');
     await ledgerService.recordEntry({
       debitAccount: { type: 'user_wallet', id: new mongoose.Types.ObjectId(senderId) },
@@ -312,9 +302,30 @@ export const sendGift = asyncHandler(async (req: Request, res: Response) => {
         idempotencyKey: idempotencyKey || undefined,
       },
     });
-  } catch (ledgerError) {
-    logger.error('Failed to create send ledger entry', ledgerError, { giftId: String(gift._id) });
+
+    await session.commitTransaction();
+  } catch (txError: any) {
+    await session.abortTransaction();
+    if (txError.message === 'Insufficient balance or wallet is frozen') {
+      return sendBadRequest(res, txError.message);
+    }
+    logger.error('Gift transaction failed — rolled back', txError);
+    return sendError(res, 'Gift sending failed. No coins were deducted.', 500);
+  } finally {
+    session.endSession();
   }
+
+  // Audit log (fire-and-forget, outside transaction)
+  logTransaction({
+    userId: new mongoose.Types.ObjectId(senderId),
+    walletId: senderWallet._id as mongoose.Types.ObjectId,
+    walletType: 'user',
+    operation: 'debit',
+    amount: validatedAmount,
+    balanceBefore: { total: senderWallet.balance.total, available: senderWallet.balance.available, pending: 0, cashback: 0 },
+    balanceAfter: { total: debitResult.balance.total, available: debitResult.balance.available, pending: 0, cashback: 0 },
+    reference: { type: 'other', id: String(gift._id), description: `Gift to ${recipient.fullName || recipient.phoneNumber}` }
+  });
 
   // Send push notification for instant delivery (scheduled gifts notified by giftDeliveryJob)
   if (!isScheduled && recipient.phoneNumber) {
@@ -396,6 +407,15 @@ export const claimGift = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
 
   if (!userId) return sendError(res, 'User not authenticated', 401);
+
+  // Velocity check — prevent rapid-fire claim abuse
+  const velocityCheck = await checkVelocity(userId, 'gift');
+  if (!velocityCheck.allowed) {
+    return res.status(429).json({
+      success: false,
+      message: 'Gift claim rate limit exceeded. Try again later.',
+    });
+  }
 
   // Atomic claim — prevents double-claim race condition
   // Single findOneAndUpdate transitions status 'delivered' → 'claimed' atomically

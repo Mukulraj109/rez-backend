@@ -7,12 +7,20 @@
 
 import cron from 'node-cron';
 import priveInviteService from '../services/priveInviteService';
+import redisService from '../services/redisService';
 
 let isRunning = false;
 
 export const runPriveInviteExpiry = async (): Promise<number> => {
   if (isRunning) {
     console.log('[PriveInviteExpiry] Job already running, skipping');
+    return 0;
+  }
+
+  const lockKey = 'job:prive-invite-expiry';
+  const lockToken = await redisService.acquireLock(lockKey, 300);
+  if (!lockToken) {
+    console.log('prive-invite-expiry skipped — lock held by another instance');
     return 0;
   }
 
@@ -28,6 +36,7 @@ export const runPriveInviteExpiry = async (): Promise<number> => {
     return 0;
   } finally {
     isRunning = false;
+    await redisService.releaseLock(lockKey, lockToken);
   }
 };
 

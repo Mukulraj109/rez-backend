@@ -14,7 +14,7 @@ import { regionService, isValidRegion, RegionId } from '../services/regionServic
  * GET /api/experiences
  */
 export const getExperiences = asyncHandler(async (req: Request, res: Response) => {
-  const { featured, limit = 10 } = req.query;
+  const { featured, limit = 10, category } = req.query;
 
   try {
     // Get region from X-Rez-Region header
@@ -29,23 +29,36 @@ export const getExperiences = asyncHandler(async (req: Request, res: Response) =
       query.isFeatured = true;
     }
 
+    // Filter by category slug if provided
+    if (category && typeof category === 'string') {
+      const categoryDoc = await Category.findOne({ slug: category });
+      if (categoryDoc) {
+        query.$or = query.$or || [];
+        // Show experiences linked to this category or with no category set (global)
+        query.category = { $in: [categoryDoc._id, category] };
+      }
+    }
+
     // Filter by region - show experiences that have no regions set (global) or include user's region
     if (region) {
-      query.$or = [
+      const regionFilter = [
         { regions: { $exists: false } },
         { regions: { $size: 0 } },
         { regions: region }
       ];
+      if (query.$or) {
+        // Combine with existing $or using $and
+        query.$and = [{ $or: query.$or }, { $or: regionFilter }];
+        delete query.$or;
+      } else {
+        query.$or = regionFilter;
+      }
     }
-
-    console.log('🔍 [EXPERIENCES] Fetching store experiences...', { region });
 
     const experiences = await StoreExperience.find(query)
       .sort({ sortOrder: 1 })
       .limit(Number(limit))
       .lean();
-
-    console.log(`✅ [EXPERIENCES] Found ${experiences.length} experiences`);
 
     sendSuccess(res, {
       experiences,
@@ -243,7 +256,8 @@ export const getStoresByExperience = asyncHandler(async (req: Request, res: Resp
     // Handle keyword search
     const { q } = req.query;
     if (q) {
-      const searchRegex = new RegExp(q as string, 'i');
+      const escapedQ = (q as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(escapedQ, 'i');
       storeQuery.$or = [
         { name: searchRegex },
         { description: searchRegex },
@@ -453,7 +467,8 @@ export const getUniqueFinds = asyncHandler(async (req: Request, res: Response) =
     // Handle keyword search
     const { q } = req.query;
     if (q) {
-      const searchRegex = new RegExp(q as string, 'i');
+      const escapedQ = (q as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(escapedQ, 'i');
       query.$or = [
         { name: searchRegex },
         { description: searchRegex },

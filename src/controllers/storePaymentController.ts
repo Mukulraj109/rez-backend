@@ -930,6 +930,12 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
       console.log('📱 [STORE PAYMENT] UPI payment confirmation - Transaction ID:', transactionId);
     }
 
+    // Retry loop for transient transaction errors (WriteConflict code 112)
+    const MAX_RETRIES = 3;
+    let attempt = 0;
+
+    while (attempt < MAX_RETRIES) {
+    attempt++;
     // Start the atomic transaction
     session.startTransaction();
 
@@ -986,21 +992,21 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
             if (paymentCategorySlug) {
               const catBal = wallet.getCategoryBalance(paymentCategorySlug);
               if (catBal >= rezCoinsToDeduct) {
-                wallet.deductCategoryCoins(paymentCategorySlug, rezCoinsToDeduct);
+                await wallet.deductCategoryCoins(paymentCategorySlug, rezCoinsToDeduct, session);
                 deductedFromCategory = true;
                 console.log(`✅ Deducted ReZ coins from ${paymentCategorySlug} category balance:`, rezCoinsToDeduct);
 
                 // Also update UserLoyalty.categoryCoins to keep in sync
                 try {
                   const UserLoyalty = require('../models/UserLoyalty').default || require('../models/UserLoyalty').UserLoyalty;
-                  const loyalty = await UserLoyalty.findOne({ userId: userId.toString() });
+                  const loyalty = await UserLoyalty.findOne({ userId: userId.toString() }).session(session);
                   if (loyalty && loyalty.categoryCoins) {
                     const catCoins = loyalty.categoryCoins.get(paymentCategorySlug);
                     if (catCoins) {
                       catCoins.available = Math.max(0, catCoins.available - rezCoinsToDeduct);
                       loyalty.categoryCoins.set(paymentCategorySlug, catCoins);
                       loyalty.markModified('categoryCoins');
-                      await loyalty.save();
+                      await loyalty.save({ session });
                     }
                   }
                 } catch (loyaltyErr) {
@@ -1136,7 +1142,8 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
               rezCoins: rezCoinsToDeduct,
               promoCoins: promoCoinsToDeduct,
             },
-            paymentCategorySlug
+            paymentCategorySlug,
+            session
           );
           console.log('✅ [STORE PAYMENT] CoinTransaction record created for universal coins:', universalCoinsToDeduct, 'category:', paymentCategorySlug);
         }
@@ -1145,7 +1152,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
         if (brandedCoinsToDeduct > 0) {
           // Note: Branded coins are tracked separately in wallet.brandedCoins
           // This CoinTransaction is for audit purposes only, not for balance sync
-          await CoinTransaction.create({
+          await CoinTransaction.create([{
             user: storePayment.userId,
             type: 'spent',
             amount: brandedCoinsToDeduct,
@@ -1158,7 +1165,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
               storeId: storePayment.storeId,
               storeName: storePayment.storeName,
             }
-          });
+          }], { session });
           console.log('✅ [STORE PAYMENT] CoinTransaction record created for branded coins:', brandedCoinsToDeduct);
         }
       }
@@ -1246,7 +1253,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
         if (wallet) {
           if (paymentCategorySlug) {
             // Add to category-specific balance (pre-save hook includes in total)
-            wallet.addCategoryCoins(paymentCategorySlug, totalRewardCoins);
+            await wallet.addCategoryCoins(paymentCategorySlug, totalRewardCoins, session);
             console.log(`✅ [STORE PAYMENT] Credited reward coins to ${paymentCategorySlug} category:`, totalRewardCoins);
           } else {
             // No category — add to global balance
@@ -1310,7 +1317,8 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
               coinsEarned: rewards.coinsEarned,
               bonusCoins: rewards.bonusCoins,
             },
-            paymentCategorySlug
+            paymentCategorySlug,
+            session
           );
           console.log('✅ [STORE PAYMENT] CoinTransaction record created for earned rewards:', totalRewardCoins, 'category:', paymentCategorySlug);
         }
@@ -1355,6 +1363,16 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
     } catch (atomicError: any) {
       // Abort the transaction on any error
       await session.abortTransaction();
+
+      // Retry on TransientTransactionError (WriteConflict code 112)
+      const isTransient = atomicError.errorLabelSet?.has('TransientTransactionError') || atomicError.code === 112;
+      if (isTransient && attempt < MAX_RETRIES) {
+        console.warn(`⚠️ [STORE PAYMENT] Transient transaction error (attempt ${attempt}/${MAX_RETRIES}), retrying...`);
+        // Brief backoff before retry
+        await new Promise(resolve => setTimeout(resolve, 100 * attempt));
+        continue;
+      }
+
       console.error('❌ [STORE PAYMENT] Atomic transaction failed:', atomicError.message);
 
       // Revert payment status if it was changed
@@ -1365,6 +1383,9 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
 
       throw atomicError;
     }
+    // If we reach here, transaction committed successfully — break out of retry loop
+    break;
+    } // end retry while loop
   } catch (error: any) {
     console.error('Error confirming store payment:', error);
     res.status(500).json({

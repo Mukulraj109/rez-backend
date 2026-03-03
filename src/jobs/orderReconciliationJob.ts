@@ -10,6 +10,7 @@ import { Order } from '../models/Order';
 import { CoinTransaction } from '../models/CoinTransaction';
 import { LedgerEntry } from '../models/LedgerEntry';
 import orderSocketService from '../services/orderSocketService';
+import redisService from '../services/redisService';
 
 interface Discrepancy {
   orderId: string;
@@ -23,10 +24,19 @@ interface Discrepancy {
  * Run order reconciliation for delivered orders in the last 24 hours.
  */
 async function runOrderReconciliation(): Promise<void> {
-  const now = new Date();
-  const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const lockKey = 'job:order-reconciliation';
+  let lockToken: string | null = null;
 
   try {
+    lockToken = await redisService.acquireLock(lockKey, 600);
+    if (!lockToken) {
+      console.log('order-reconciliation skipped — lock held by another instance');
+      return;
+    }
+
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
     const deliveredOrders = await Order.find({
       status: 'delivered',
       'delivery.deliveredAt': { $gte: twentyFourHoursAgo, $lte: now },
@@ -151,6 +161,10 @@ async function runOrderReconciliation(): Promise<void> {
     }
   } catch (error) {
     console.error('[ORDER RECONCILIATION] Job failed:', error);
+  } finally {
+    if (lockToken) {
+      await redisService.releaseLock(lockKey, lockToken);
+    }
   }
 }
 

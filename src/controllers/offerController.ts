@@ -1037,23 +1037,10 @@ export const getOffersPageData = async (req: Request, res: Response) => {
       
       if (wallet) {
         userWalletBalance = wallet.balance.available || wallet.balance.total || 0;
-        console.log('💰 [OFFERS] Using Wallet model balance:', {
-          userId,
-          available: wallet.balance.available,
-          total: wallet.balance.total,
-          final: userWalletBalance
-        });
       } else {
         // Fallback to User.wallet
         const user = await User.findById(userId).select('wallet walletBalance phoneNumber');
         userWalletBalance = user?.wallet?.balance || user?.walletBalance || req.user?.wallet?.balance || 0;
-        console.log('💰 [OFFERS] Using User.wallet balance:', {
-          userId,
-          phoneNumber: user?.phoneNumber,
-          walletBalance: user?.walletBalance,
-          userWalletBalance: user?.wallet?.balance,
-          final: userWalletBalance
-        });
       }
     }
 
@@ -1116,12 +1103,14 @@ export const toggleOfferLike = async (req: Request, res: Response) => {
     });
 
     let isLiked = false;
-    let likesCount = offer.engagement.likesCount;
 
     if (existingInteraction) {
       // Unlike the offer
       await UserOfferInteraction.findByIdAndDelete(existingInteraction._id);
-      likesCount = Math.max(0, likesCount - 1);
+      // Atomic decrement (floor at 0 handled by Math.max on read)
+      await Offer.findByIdAndUpdate(id, {
+        $inc: { 'engagement.likesCount': -1 }
+      });
     } else {
       // Like the offer
       await UserOfferInteraction.trackInteraction(
@@ -1134,14 +1123,16 @@ export const toggleOfferLike = async (req: Request, res: Response) => {
           ipAddress: req.ip
         }
       );
-      likesCount += 1;
+      // Atomic increment
+      await Offer.findByIdAndUpdate(id, {
+        $inc: { 'engagement.likesCount': 1 }
+      });
       isLiked = true;
     }
 
-    // Update offer engagement count
-    await Offer.findByIdAndUpdate(id, {
-      'engagement.likesCount': likesCount
-    });
+    // Re-read the updated count
+    const updatedOffer = await Offer.findById(id).select('engagement.likesCount').lean();
+    const likesCount = Math.max(0, updatedOffer?.engagement?.likesCount || 0);
 
     sendSuccess(res, {
       isLiked,
@@ -1399,7 +1390,6 @@ export const markRedemptionAsUsed = async (req: Request, res: Response) => {
 
     // Create wallet if it doesn't exist
     if (!wallet) {
-      console.log('🎟️ [OFFER REDEMPTION] Creating wallet for user:', userId);
       wallet = new Wallet({
         user: userId,
         balance: { total: 0, available: 0, pending: 0 },
@@ -1413,8 +1403,7 @@ export const markRedemptionAsUsed = async (req: Request, res: Response) => {
     if (wallet) {
       const balanceBefore = wallet.balance.total;
 
-      // Update wallet balance
-      wallet.balance.total += cashbackAmount;
+      // Update wallet balance (only update available — pre-save hook recalculates total)
       wallet.balance.available += cashbackAmount;
 
       // Add to rez coins

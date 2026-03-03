@@ -3,6 +3,7 @@ import { Subscription } from '../models/Subscription';
 import { User } from '../models/User';
 import { Notification } from '../models/Notification';
 import mongoose from 'mongoose';
+import redisService from '../services/redisService';
 
 /**
  * Trial Expiry Notification Job
@@ -243,8 +244,20 @@ export const initializeTrialExpiryJob = () => {
   try {
     // Run at 9:00 AM every day
     cron.schedule('0 9 * * *', async () => {
-      console.log('[TRIAL EXPIRY JOB] Scheduled job triggered');
-      await checkExpiringTrials();
+      // Acquire Redis distributed lock to prevent cross-instance overlap
+      const lockKey = 'job:trial-expiry';
+      const lockToken = await redisService.acquireLock(lockKey, 300);
+      if (!lockToken) {
+        console.log('trial-expiry skipped — lock held by another instance');
+        return;
+      }
+
+      try {
+        console.log('[TRIAL EXPIRY JOB] Scheduled job triggered');
+        await checkExpiringTrials();
+      } finally {
+        await redisService.releaseLock(lockKey, lockToken);
+      }
     });
 
     console.log('[TRIAL EXPIRY JOB] Initialized successfully (runs daily at 9:00 AM)');

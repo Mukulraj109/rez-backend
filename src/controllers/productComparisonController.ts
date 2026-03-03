@@ -50,7 +50,7 @@ export const createProductComparison = asyncHandler(async (req: Request, res: Re
     await comparison.save();
     await comparison.populate({
       path: 'products',
-      select: 'name description images pricing ratings inventory cashback store category',
+      select: 'name description images pricing ratings inventory cashback store category brand weight specifications deliveryInfo',
       populate: [
         {
           path: 'store',
@@ -114,7 +114,7 @@ export const getProductComparisonById = asyncHandler(async (req: Request, res: R
       user: userId
     }).populate({
       path: 'products',
-      select: 'name description images pricing ratings inventory cashback store category',
+      select: 'name description images pricing ratings inventory cashback store category brand weight specifications deliveryInfo',
       populate: [
         {
           path: 'store',
@@ -186,7 +186,7 @@ export const updateProductComparison = asyncHandler(async (req: Request, res: Re
     await comparison.save();
     await comparison.populate({
       path: 'products',
-      select: 'name description images pricing ratings inventory cashback store category',
+      select: 'name description images pricing ratings inventory cashback store category brand weight specifications deliveryInfo',
       populate: [
         {
           path: 'store',
@@ -285,7 +285,7 @@ export const addProductToComparison = asyncHandler(async (req: Request, res: Res
     await comparison.save();
     await comparison.populate({
       path: 'products',
-      select: 'name description images pricing ratings inventory cashback store category',
+      select: 'name description images pricing ratings inventory cashback store category brand weight specifications deliveryInfo',
       populate: [
         {
           path: 'store',
@@ -341,7 +341,7 @@ export const removeProductFromComparison = asyncHandler(async (req: Request, res
     await comparison.save();
     await comparison.populate({
       path: 'products',
-      select: 'name description images pricing ratings inventory cashback store category',
+      select: 'name description images pricing ratings inventory cashback store category brand weight specifications deliveryInfo',
       populate: [
         {
           path: 'store',

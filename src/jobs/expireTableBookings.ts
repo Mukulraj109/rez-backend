@@ -1,5 +1,6 @@
 import * as cron from 'node-cron';
 import { TableBooking } from '../models/TableBooking';
+import redisService from '../services/redisService';
 
 /**
  * Table Booking Expiry Job
@@ -44,6 +45,14 @@ export function startTableBookingExpiryJob(): void {
       return;
     }
 
+    // Acquire Redis distributed lock to prevent cross-instance overlap
+    const lockKey = 'job:table-booking-expiry';
+    const lockToken = await redisService.acquireLock(lockKey, 300);
+    if (!lockToken) {
+      console.log('table-booking-expiry skipped — lock held by another instance');
+      return;
+    }
+
     isRunning = true;
     const startTime = Date.now();
 
@@ -66,6 +75,7 @@ export function startTableBookingExpiryJob(): void {
         timestamp: new Date().toISOString()
       });
     } finally {
+      await redisService.releaseLock(lockKey, lockToken);
       isRunning = false;
     }
   });

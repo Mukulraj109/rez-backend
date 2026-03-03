@@ -64,18 +64,18 @@ ProductComparisonSchema.virtual('productInfo', {
   localField: 'products',
   foreignField: '_id',
   options: { 
-    select: 'name description images pricing ratings inventory cashback store category' 
+    select: 'name description images pricing ratings inventory cashback store category brand weight specifications deliveryInfo'
   }
 });
 
 // Static method to get user's comparisons
 ProductComparisonSchema.statics.getUserComparisons = async function(userId: string, page: number = 1, limit: number = 20) {
   const skip = (page - 1) * limit;
-  
+
   const comparisons = await this.find({ user: new mongoose.Types.ObjectId(userId) })
     .populate({
       path: 'products',
-      select: 'name description images pricing ratings inventory cashback store category',
+      select: 'name description images pricing ratings inventory cashback store category brand weight specifications deliveryInfo',
       populate: [
         {
           path: 'store',
@@ -113,7 +113,7 @@ ProductComparisonSchema.statics.findComparisonByProducts = async function(userId
     products: { $all: productIds.map(id => new mongoose.Types.ObjectId(id)) }
   }).populate({
     path: 'products',
-    select: 'name description images pricing ratings inventory cashback store category',
+    select: 'name description images pricing ratings inventory cashback store category brand weight specifications deliveryInfo',
     populate: [
       {
         path: 'store',

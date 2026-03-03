@@ -1,5 +1,6 @@
 import * as cron from 'node-cron';
 import { transitionCampaignStatuses, expirePendingClaims } from '../services/bonusCampaignService';
+import redisService from '../services/redisService';
 
 /**
  * Bonus Campaign Jobs
@@ -38,17 +39,31 @@ export function initBonusCampaignJobs(): void {
     }
 
     isTransitionRunning = true;
-    const startTime = Date.now();
+    const lockKey = 'job:bonus-campaign';
+    let lockToken: string | null = null;
 
     try {
-      console.log('🎯 [BONUS CAMPAIGN] Running campaign status transitions...');
-      await transitionCampaignStatuses();
-      const duration = Date.now() - startTime;
-      console.log(`✅ [BONUS CAMPAIGN] Status transitions completed in ${duration}ms`);
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      console.error(`❌ [BONUS CAMPAIGN] Status transition failed after ${duration}ms:`, error);
+      lockToken = await redisService.acquireLock(lockKey, 300);
+      if (!lockToken) {
+        console.log('bonus-campaign skipped — lock held by another instance');
+        return;
+      }
+
+      const startTime = Date.now();
+
+      try {
+        console.log('🎯 [BONUS CAMPAIGN] Running campaign status transitions...');
+        await transitionCampaignStatuses();
+        const duration = Date.now() - startTime;
+        console.log(`✅ [BONUS CAMPAIGN] Status transitions completed in ${duration}ms`);
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        console.error(`❌ [BONUS CAMPAIGN] Status transition failed after ${duration}ms:`, error);
+      }
     } finally {
+      if (lockToken) {
+        await redisService.releaseLock(lockKey, lockToken);
+      }
       isTransitionRunning = false;
     }
   });
@@ -61,17 +76,31 @@ export function initBonusCampaignJobs(): void {
     }
 
     isExpireRunning = true;
-    const startTime = Date.now();
+    const expireLockKey = 'job:bonus-campaign-expire';
+    let expireLockToken: string | null = null;
 
     try {
-      console.log('🎯 [BONUS CAMPAIGN] Running expire pending claims...');
-      await expirePendingClaims();
-      const duration = Date.now() - startTime;
-      console.log(`✅ [BONUS CAMPAIGN] Expire pending claims completed in ${duration}ms`);
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      console.error(`❌ [BONUS CAMPAIGN] Expire pending claims failed after ${duration}ms:`, error);
+      expireLockToken = await redisService.acquireLock(expireLockKey, 300);
+      if (!expireLockToken) {
+        console.log('bonus-campaign-expire skipped — lock held by another instance');
+        return;
+      }
+
+      const startTime = Date.now();
+
+      try {
+        console.log('🎯 [BONUS CAMPAIGN] Running expire pending claims...');
+        await expirePendingClaims();
+        const duration = Date.now() - startTime;
+        console.log(`✅ [BONUS CAMPAIGN] Expire pending claims completed in ${duration}ms`);
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        console.error(`❌ [BONUS CAMPAIGN] Expire pending claims failed after ${duration}ms:`, error);
+      }
     } finally {
+      if (expireLockToken) {
+        await redisService.releaseLock(expireLockKey, expireLockToken);
+      }
       isExpireRunning = false;
     }
   });
