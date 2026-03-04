@@ -401,7 +401,27 @@ class ProgramController {
   // POST /api/programs/social-impact (admin only - create event)
   async createSocialImpactEvent(req: Request, res: Response) {
     try {
-      const event = await socialImpactService.createEvent(req.body);
+      const {
+        name, description, status, startDate, endDate,
+        requirements, benefits, tasks, maxParticipants, totalBudget,
+        image, featured,
+        eventType, sponsor, merchant, organizer, location,
+        eventDate, eventTime, rewards, capacity, impact,
+        eventRequirements, schedule, contact, eventStatus,
+        isCsrActivity, distance, verificationConfig, sponsorBudget,
+      } = req.body;
+
+      const eventData = {
+        name, description, status, startDate, endDate,
+        requirements, benefits, tasks, maxParticipants, totalBudget,
+        image, featured,
+        eventType, sponsor, merchant, organizer, location,
+        eventDate, eventTime, rewards, capacity, impact,
+        eventRequirements, schedule, contact, eventStatus,
+        isCsrActivity, distance, verificationConfig, sponsorBudget,
+      };
+
+      const event = await socialImpactService.createEvent(eventData);
 
       res.status(201).json({
         success: true,
@@ -420,7 +440,36 @@ class ProgramController {
   async updateSocialImpactEvent(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const event = await socialImpactService.updateEvent(id, req.body);
+
+      const {
+        name, description, status, startDate, endDate,
+        requirements, benefits, tasks, maxParticipants, totalBudget,
+        image, featured,
+        eventType, sponsor, merchant, organizer, location,
+        eventDate, eventTime, rewards, capacity, impact,
+        eventRequirements, schedule, contact, eventStatus,
+        isCsrActivity, distance, verificationConfig, sponsorBudget,
+      } = req.body;
+
+      // Only include defined fields in the update
+      const updateData: Record<string, any> = {};
+      const allowedFields = {
+        name, description, status, startDate, endDate,
+        requirements, benefits, tasks, maxParticipants, totalBudget,
+        image, featured,
+        eventType, sponsor, merchant, organizer, location,
+        eventDate, eventTime, rewards, capacity, impact,
+        eventRequirements, schedule, contact, eventStatus,
+        isCsrActivity, distance, verificationConfig, sponsorBudget,
+      };
+
+      for (const [key, value] of Object.entries(allowedFields)) {
+        if (value !== undefined) {
+          updateData[key] = value;
+        }
+      }
+
+      const event = await socialImpactService.updateEvent(id, updateData);
 
       if (!event) {
         return res.status(404).json({

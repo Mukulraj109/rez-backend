@@ -6,7 +6,7 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { User } from '../../models/User';
-import { generateToken } from '../../middleware/auth';
+import { generateToken, verifyToken } from '../../middleware/auth';
 import { authLimiter } from '../../middleware/rateLimiter';
 
 const router = Router();
@@ -44,8 +44,9 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
       });
     }
 
-    // Check if user has admin role
-    if (user.role !== 'admin') {
+    // Check if user has an admin-level role
+    const adminRoles = ['admin', 'support', 'operator', 'super_admin'];
+    if (!adminRoles.includes(user.role)) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Admin privileges required.'
@@ -77,8 +78,8 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
       });
     }
 
-    // Generate JWT token with admin role (critical for socket.io auth)
-    const token = generateToken((user._id as string).toString(), 'admin');
+    // Generate JWT token with actual role (critical for RBAC + socket.io auth)
+    const token = generateToken((user._id as string).toString(), user.role);
 
     // Update last login
     user.auth.lastLogin = new Date();
@@ -92,9 +93,9 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
           _id: user._id,
           email: user.email,
           name: user.fullName || `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`.trim() || 'Admin',
-          role: 'super_admin', // Map 'admin' to 'super_admin' for frontend compatibility
-          level: ROLE_HIERARCHY['super_admin'],
-          permissions: ['*'], // Full access for admin
+          role: user.role,
+          level: ROLE_HIERARCHY[user.role] || ROLE_HIERARCHY['admin'],
+          permissions: user.role === 'super_admin' ? ['*'] : [],
           lastLogin: user.auth.lastLogin,
           createdAt: user.createdAt
         },
@@ -149,13 +150,13 @@ router.get('/me', async (req: Request, res: Response) => {
 
     const token = authHeader.split(' ')[1];
 
-    // Verify token and get user
-    const jwt = require('jsonwebtoken');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    // Verify token using shared auth utility (pinned HS256, no fallback secret)
+    const decoded = verifyToken(token);
 
     const user = await User.findById(decoded.userId);
 
-    if (!user || user.role !== 'admin') {
+    const adminRoles = ['admin', 'support', 'operator', 'super_admin'];
+    if (!user || !adminRoles.includes(user.role)) {
       return res.status(401).json({
         success: false,
         message: 'Invalid token or not an admin'
@@ -169,9 +170,9 @@ router.get('/me', async (req: Request, res: Response) => {
           _id: user._id,
           email: user.email,
           name: user.fullName || `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`.trim() || 'Admin',
-          role: 'super_admin',
-          level: ROLE_HIERARCHY['super_admin'],
-          permissions: ['*'],
+          role: user.role,
+          level: ROLE_HIERARCHY[user.role] || ROLE_HIERARCHY['admin'],
+          permissions: user.role === 'super_admin' ? ['*'] : [],
           lastLogin: user.auth.lastLogin,
           createdAt: user.createdAt
         }

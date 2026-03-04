@@ -12,6 +12,7 @@ import { UserReputation, PILLAR_WEIGHTS, ELIGIBILITY_THRESHOLDS } from '../../mo
 import { Wallet } from '../../models/Wallet';
 import { CoinTransaction } from '../../models/CoinTransaction';
 import { sendSuccess, sendError, sendPaginated } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 import { reputationService } from '../../services/reputationService';
 
 // ─── Offers ──────────────────────────────────────────────────────────────────
@@ -41,9 +42,10 @@ export const getOffers = async (req: Request, res: Response) => {
       filter.type = req.query.type;
     }
     if (req.query.search) {
+      const escaped = escapeRegex(String(req.query.search).substring(0, 200));
       filter.$or = [
-        { title: { $regex: req.query.search, $options: 'i' } },
-        { 'brand.name': { $regex: req.query.search, $options: 'i' } },
+        { title: { $regex: escaped, $options: 'i' } },
+        { 'brand.name': { $regex: escaped, $options: 'i' } },
       ];
     }
     if (req.query.category) {
@@ -241,9 +243,10 @@ export const getVouchers = async (req: Request, res: Response) => {
       filter.type = req.query.type;
     }
     if (req.query.search) {
+      const escaped = escapeRegex(String(req.query.search).substring(0, 200));
       filter.$or = [
-        { code: { $regex: req.query.search, $options: 'i' } },
-        { partnerName: { $regex: req.query.search, $options: 'i' } },
+        { code: { $regex: escaped, $options: 'i' } },
+        { partnerName: { $regex: escaped, $options: 'i' } },
       ];
     }
 

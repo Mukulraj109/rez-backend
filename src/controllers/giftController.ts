@@ -6,6 +6,7 @@ import { CoinTransaction } from '../models/CoinTransaction';
 import { User } from '../models/User';
 import { sendSuccess, sendError, sendBadRequest } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
+import { escapeRegex } from '../utils/sanitize';
 import { logTransaction } from '../models/TransactionAuditLog';
 import { ledgerService } from '../services/ledgerService';
 import mongoose from 'mongoose';
@@ -70,7 +71,7 @@ export const validateRecipient = asyncHandler(async (req: Request, res: Response
     return sendBadRequest(res, 'Invalid phone number format');
   }
 
-  const recipient = await User.findOne({ phoneNumber: { $regex: digitsOnly.slice(-10) + '$' } })
+  const recipient = await User.findOne({ phoneNumber: { $regex: escapeRegex(digitsOnly.slice(-10)) + '$' } })
     .select('_id fullName phoneNumber')
     .lean();
 

@@ -6,6 +6,7 @@ import { Store } from '../models/Store';
 import { logger } from '../config/logger';
 import { sendSuccess, sendError, sendNotFound } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
+import { escapeRegex } from '../utils/sanitize';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
 
 // Financial service category slugs
@@ -370,16 +371,17 @@ export const searchFinancialServices = asyncHandler(async (req: Request, res: Re
     }
 
     // Build search query
+    const escaped = escapeRegex(String(q).substring(0, 200));
     const searchQuery: any = {
       productType: 'service',
       isActive: true,
       isDeleted: { $ne: true },
       serviceCategory: { $in: categoryIds },
       $or: [
-        { name: { $regex: q, $options: 'i' } },
-        { description: { $regex: q, $options: 'i' } },
-        { shortDescription: { $regex: q, $options: 'i' } },
-        { tags: { $in: [new RegExp(q as string, 'i')] } }
+        { name: { $regex: escaped, $options: 'i' } },
+        { description: { $regex: escaped, $options: 'i' } },
+        { shortDescription: { $regex: escaped, $options: 'i' } },
+        { tags: { $in: [new RegExp(escaped, 'i')] } }
       ]
     };
 

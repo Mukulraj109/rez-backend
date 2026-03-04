@@ -265,8 +265,13 @@ CoinTransactionSchema.statics.createTransaction = async function(
   const lockKey = `coin-tx:${userId}`;
   let lockToken: string | null = null;
 
-  // Auto-generate idempotencyKey if not provided — prevents duplicate transactions on retries
+  // Require explicit idempotencyKey for high-value sources to ensure true deduplication on retries
+  const HIGH_VALUE_SOURCES = ['spin_wheel', 'scratch_card', 'quiz_game', 'memory_match', 'achievement', 'admin', 'bonus_campaign'];
   if (!metadata?.idempotencyKey) {
+    if (HIGH_VALUE_SOURCES.includes(source)) {
+      throw new Error(`idempotencyKey is required for source: ${source}. Generate a deterministic key from the event context.`);
+    }
+    // For low-risk auto-tracked sources, auto-generate (retries are unlikely)
     metadata = {
       ...metadata,
       idempotencyKey: `${source}:${userId}:${Date.now()}:${crypto.randomUUID()}`,

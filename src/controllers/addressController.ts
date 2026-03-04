@@ -38,9 +38,17 @@ export const createAddress = asyncHandler(async (req: Request, res: Response) =>
     throw new AppError('Authentication required', 401);
   }
 
+  const {
+    type, title, phone, addressLine1, addressLine2,
+    city, state, postalCode, country, coordinates,
+    isDefault, instructions,
+  } = req.body;
+
   const addressData = {
-    ...req.body,
-    user: req.user._id
+    type, title, phone, addressLine1, addressLine2,
+    city, state, postalCode, country, coordinates,
+    isDefault, instructions,
+    user: req.user._id,
   };
 
   const address = await Address.create(addressData);
@@ -63,8 +71,25 @@ export const updateAddress = asyncHandler(async (req: Request, res: Response) =>
     return sendNotFound(res, 'Address not found');
   }
 
-  // Update address fields
-  Object.assign(address, req.body);
+  // Update only allowed address fields
+  const {
+    type, title, phone, addressLine1, addressLine2,
+    city, state, postalCode, country, coordinates,
+    isDefault, instructions,
+  } = req.body;
+
+  const allowedUpdates = {
+    type, title, phone, addressLine1, addressLine2,
+    city, state, postalCode, country, coordinates,
+    isDefault, instructions,
+  };
+
+  // Only assign defined fields
+  for (const [key, value] of Object.entries(allowedUpdates)) {
+    if (value !== undefined) {
+      (address as any)[key] = value;
+    }
+  }
   await address.save();
 
   sendSuccess(res, address, 'Address updated successfully');

@@ -839,7 +839,12 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
       isActive: true
     };
 
-    console.log('🔍 [SEARCH BY CATEGORY] Requested category:', category);
+    // Apply region filter if provided
+    const regionHeader = req.headers['x-rez-region'] as string;
+    if (regionHeader && isValidRegion(regionHeader)) {
+      const regionFilter = regionService.getStoreFilter(regionHeader as RegionId);
+      Object.assign(query, regionFilter);
+    }
 
     // Only add delivery category filter if category is not 'all'
     if (category && category !== 'all') {
@@ -850,8 +855,6 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
     if (nuqtaPay === 'true') {
       query['paymentSettings.acceptRezCoins'] = true;
     }
-
-    console.log('🔍 [SEARCH BY CATEGORY] Final query:', JSON.stringify(query));
 
     // Add location filtering - use a simpler approach for now
     // Note: We'll calculate distances after fetching stores to avoid $nearSphere pagination issues
@@ -879,7 +882,6 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
 
     // First check if there are any stores matching the query
     const total = await Store.countDocuments(query);
-    console.log(`✅ [SEARCH BY CATEGORY] Found ${total} stores matching query`);
 
     let stores: any[] = [];
     if (total > 0) {

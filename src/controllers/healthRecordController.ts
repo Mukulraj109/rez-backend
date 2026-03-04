@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import HealthRecord from '../models/HealthRecord';
 import { sendSuccess, sendError, sendCreated, sendNotFound } from '../utils/response';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { escapeRegex } from '../utils/sanitize';
 
 // @desc    Upload new health record
 // @route   POST /api/health-records
@@ -129,10 +130,11 @@ export const getUserHealthRecords = asyncHandler(async (req: Request, res: Respo
     }
 
     if (search) {
+      const escaped = escapeRegex(String(search).substring(0, 200));
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { 'issuedBy.name': { $regex: search, $options: 'i' } }
+        { title: { $regex: escaped, $options: 'i' } },
+        { description: { $regex: escaped, $options: 'i' } },
+        { 'issuedBy.name': { $regex: escaped, $options: 'i' } }
       ];
     }
 

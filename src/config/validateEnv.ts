@@ -177,11 +177,10 @@ export function checkForExposedSecrets(): void {
     'MONGODB_URI'
   ];
 
-  // In production, ensure secrets are not logged
-  if (process.env.NODE_ENV === 'production') {
-    if (process.env.DEBUG_MODE === 'true') {
-      console.warn('⚠️  WARNING: DEBUG_MODE is enabled in production - secrets may be logged!');
-    }
+  // In production, block DEBUG_MODE — it exposes stack traces and secrets
+  if (process.env.NODE_ENV === 'production' && process.env.DEBUG_MODE === 'true') {
+    console.error('FATAL: DEBUG_MODE cannot be enabled in production. Shutting down.');
+    process.exit(1);
   }
 
   // Check .env file is in .gitignore (runtime check not possible, rely on deployment checklist)

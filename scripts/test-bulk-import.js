@@ -16,7 +16,7 @@ const API_PREFIX = '/api';
 
 // Test credentials (replace with actual values)
 const TEST_MERCHANT_EMAIL = process.env.TEST_MERCHANT_EMAIL || 'test@merchant.com';
-const TEST_MERCHANT_PASSWORD = process.env.TEST_MERCHANT_PASSWORD || 'Test@123';
+const TEST_MERCHANT_PASSWORD = process.env.TEST_MERCHANT_PASSWORD || require('crypto').randomBytes(16).toString('hex');
 const TEST_STORE_ID = process.env.TEST_STORE_ID || null;
 
 let authToken = null;

@@ -1,13 +1,20 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const dotenv = require('dotenv');
 const path = require('path');
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
+// Prevent running in production
+if (process.env.NODE_ENV === 'production') {
+  console.error('ERROR: Seed scripts cannot run in production!');
+  process.exit(1);
+}
+
 // MongoDB connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://mukulraj756:O71qVcqwpJQvXzWi@cluster0.aulqar3.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+const MONGODB_URI = process.env.MONGODB_URI;
 const DB_NAME = process.env.DB_NAME || 'test';
 
 // Connect to MongoDB
@@ -35,7 +42,7 @@ const seedData = {
       name: 'Demo User',
       email: 'demo@rezapp.com',
       phone: '+919876543210',
-      password: 'Demo@123',
+      password: crypto.randomBytes(16).toString('hex'),
       isVerified: true,
       loyaltyPoints: 500,
       tier: 'silver',
@@ -52,7 +59,7 @@ const seedData = {
       name: 'Test User',
       email: 'test@rezapp.com',
       phone: '+919876543211',
-      password: 'Test@123',
+      password: require('crypto').randomBytes(16).toString('hex'),
       isVerified: true,
       loyaltyPoints: 1200,
       tier: 'gold',
@@ -595,7 +602,7 @@ async function main() {
 
     console.log('\n📱 TEST CREDENTIALS:');
     console.log('   Email: demo@rezapp.com');
-    console.log('   Password: Demo@123');
+    console.log('   Password: (randomly generated at seed time)');
     console.log('   Phone: +919876543210');
 
   } catch (error) {

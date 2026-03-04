@@ -67,6 +67,9 @@ router.post('/ip-info',
   getIpInfo
 );
 
+// GET variant for frontend compatibility
+router.get('/ip-info', getIpInfo);
+
 // Check for multi-account patterns
 router.post('/check-multi-account',
   validateBody(Joi.object({

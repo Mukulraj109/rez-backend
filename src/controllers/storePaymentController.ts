@@ -1336,6 +1336,24 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
       await session.commitTransaction();
       console.log('✅ [STORE PAYMENT] Payment completed (atomic):', paymentId);
 
+      // Notify merchant of in-store payment (non-blocking)
+      if (store?.merchantId) {
+        try {
+          const merchantNotificationService = require('../services/merchantNotificationService').default;
+          await merchantNotificationService.notifyStorePaymentReceived({
+            merchantId: store.merchantId.toString(),
+            paymentId: storePayment.paymentId,
+            storeName: storePayment.storeName,
+            amount: storePayment.billAmount,
+            paymentMethod: storePayment.paymentMethod,
+            coinsUsed: storePayment.coinRedemption?.totalAmount || 0,
+            cashbackAwarded: rewards.cashbackEarned || 0,
+          });
+        } catch (notifyErr) {
+          console.error('[STORE PAYMENT] Merchant notification failed (non-blocking):', notifyErr);
+        }
+      }
+
       // Auto-trigger bank_offer bonus campaign on successful store payment
       try {
         const bonusCampaignService = require('../services/bonusCampaignService');
@@ -2227,13 +2245,14 @@ export const getStorePaymentHistory = async (req: Request, res: Response) => {
       });
     }
 
-    // Fetch transactions
+    // Fetch transactions (populate storeId to get logo)
     const [transactions, total] = await Promise.all([
       StorePayment.find(query)
         .sort({ completedAt: -1 })
         .skip(skip)
         .limit(limitNum)
         .select('paymentId storeId storeName billAmount coinRedemption remainingAmount paymentMethod status rewards completedAt')
+        .populate('storeId', 'logo')
         .lean(),
       StorePayment.countDocuments(query),
     ]);
@@ -2243,19 +2262,23 @@ export const getStorePaymentHistory = async (req: Request, res: Response) => {
     res.status(200).json({
       success: true,
       data: {
-        transactions: transactions.map((t) => ({
-          id: t._id,
-          paymentId: t.paymentId,
-          storeId: t.storeId,
-          storeName: t.storeName,
-          amount: t.billAmount,
-          coinsUsed: t.coinRedemption?.totalAmount || 0,
-          paymentMethod: t.paymentMethod,
-          status: t.status,
-          rewards: t.rewards,
-          createdAt: t.completedAt,
-          completedAt: t.completedAt,
-        })),
+        transactions: transactions.map((t) => {
+          const storeRef = t.storeId && typeof t.storeId === 'object' ? (t.storeId as any) : null;
+          return {
+            id: t._id,
+            paymentId: t.paymentId,
+            storeId: storeRef?._id || t.storeId,
+            storeName: t.storeName,
+            storeLogo: storeRef?.logo || undefined,
+            amount: t.billAmount,
+            coinsUsed: t.coinRedemption?.totalAmount || 0,
+            paymentMethod: t.paymentMethod,
+            status: t.status,
+            rewards: t.rewards,
+            createdAt: t.completedAt,
+            completedAt: t.completedAt,
+          };
+        }),
         pagination: {
           page: pageNum,
           limit: limitNum,
@@ -2272,6 +2295,76 @@ export const getStorePaymentHistory = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to get payment history',
+    });
+  }
+};
+
+// ==================== MERCHANT PAYMENT STATS ====================
+
+/**
+ * Get payment statistics for a store (merchant only)
+ * GET /api/store-payment/stats/:storeId
+ */
+export const getStorePaymentStats = async (req: Request, res: Response) => {
+  try {
+    const { storeId } = req.params;
+
+    if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
+      return res.status(400).json({ success: false, message: 'Invalid store ID' });
+    }
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const storeObjectId = new mongoose.Types.ObjectId(storeId);
+
+    const [todayStats, monthStats, paymentMethodBreakdown] = await Promise.all([
+      // Today's stats
+      StorePayment.aggregate([
+        { $match: { storeId: storeObjectId, status: 'completed', completedAt: { $gte: todayStart } } },
+        { $group: { _id: null, count: { $sum: 1 }, revenue: { $sum: '$billAmount' } } },
+      ]),
+      // This month's stats
+      StorePayment.aggregate([
+        { $match: { storeId: storeObjectId, status: 'completed', completedAt: { $gte: monthStart } } },
+        { $group: { _id: null, count: { $sum: 1 }, revenue: { $sum: '$billAmount' }, avgValue: { $avg: '$billAmount' } } },
+      ]),
+      // Payment method breakdown (this month)
+      StorePayment.aggregate([
+        { $match: { storeId: storeObjectId, status: 'completed', completedAt: { $gte: monthStart } } },
+        { $group: { _id: '$paymentMethod', count: { $sum: 1 }, total: { $sum: '$billAmount' } } },
+        { $sort: { count: -1 } },
+      ]),
+    ]);
+
+    const today = todayStats[0] || { count: 0, revenue: 0 };
+    const month = monthStats[0] || { count: 0, revenue: 0, avgValue: 0 };
+
+    res.json({
+      success: true,
+      data: {
+        today: {
+          paymentCount: today.count,
+          revenue: today.revenue,
+        },
+        thisMonth: {
+          paymentCount: month.count,
+          revenue: month.revenue,
+          averageTransactionValue: Math.round(month.avgValue || 0),
+        },
+        paymentMethods: paymentMethodBreakdown.map((pm: any) => ({
+          method: pm._id,
+          count: pm.count,
+          total: pm.total,
+        })),
+      },
+    });
+  } catch (error: any) {
+    console.error('Error getting payment stats:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get payment statistics',
     });
   }
 };

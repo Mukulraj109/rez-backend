@@ -2,12 +2,10 @@ import express from 'express';
 import {
   createPaymentOrder,
   verifyPayment,
-  handleWebhook,
   getPaymentStatus,
   createCheckoutSession,
   verifyStripeSession,
   verifyStripePayment,
-  handleStripeWebhook
 } from '../controllers/paymentController';
 import { authenticate } from '../middleware/auth';
 
@@ -26,8 +24,7 @@ router.post('/create-order', authenticate, createPaymentOrder);
 // Verify Razorpay payment signature (requires authentication)
 router.post('/verify', authenticate, verifyPayment);
 
-// Handle Razorpay webhooks (no authentication - verified via signature)
-router.post('/webhook', handleWebhook);
+// Razorpay webhook: mounted in server.ts with express.raw() BEFORE JSON parser
 
 // ==================== STRIPE ROUTES ====================
 
@@ -40,9 +37,7 @@ router.post('/verify-stripe-session', authenticate, verifyStripeSession);
 // Verify Stripe payment intent (requires authentication)
 router.post('/verify-stripe-payment', authenticate, verifyStripePayment);
 
-// Handle Stripe webhooks (no authentication - verified via signature)
-// IMPORTANT: This route needs raw body parser (not JSON parser)
-router.post('/stripe-webhook', handleStripeWebhook);
+// Stripe webhook: mounted in server.ts with express.raw() BEFORE JSON parser
 
 // ==================== COMMON ROUTES ====================
 

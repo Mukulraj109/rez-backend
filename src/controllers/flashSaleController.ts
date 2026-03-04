@@ -154,9 +154,27 @@ class FlashSaleController {
    */
   async createFlashSale(req: Request, res: Response): Promise<void> {
     try {
+      const {
+        title, description, image, banner,
+        discountPercentage, discountAmount, priority,
+        startTime, endTime,
+        maxQuantity, limitPerUser, lowStockThreshold,
+        products, stores, category,
+        originalPrice, flashSalePrice,
+        termsAndConditions, minimumPurchase, maximumDiscount, promoCode,
+        notifyOnStart, notifyOnEndingSoon, notifyOnLowStock,
+      } = req.body;
+
       const flashSaleData = {
-        ...req.body,
-        createdBy: (req as any).user.userId, // Assumes auth middleware sets user
+        title, description, image, banner,
+        discountPercentage, discountAmount, priority,
+        startTime, endTime,
+        maxQuantity, limitPerUser, lowStockThreshold,
+        products, stores, category,
+        originalPrice, flashSalePrice,
+        termsAndConditions, minimumPurchase, maximumDiscount, promoCode,
+        notifyOnStart, notifyOnEndingSoon, notifyOnLowStock,
+        createdBy: (req as any).user.userId,
       };
 
       const flashSale = await flashSaleService.createFlashSale(flashSaleData);
@@ -182,7 +200,40 @@ class FlashSaleController {
   async updateFlashSale(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const flashSale = await flashSaleService.updateFlashSale(id, req.body);
+
+      const {
+        title, description, image, banner,
+        discountPercentage, discountAmount, priority,
+        startTime, endTime,
+        maxQuantity, limitPerUser, lowStockThreshold,
+        products, stores, category,
+        originalPrice, flashSalePrice,
+        termsAndConditions, minimumPurchase, maximumDiscount, promoCode,
+        notifyOnStart, notifyOnEndingSoon, notifyOnLowStock,
+        enabled,
+      } = req.body;
+
+      // Only include defined fields in the update
+      const updateData: Record<string, any> = {};
+      const allowedFields = {
+        title, description, image, banner,
+        discountPercentage, discountAmount, priority,
+        startTime, endTime,
+        maxQuantity, limitPerUser, lowStockThreshold,
+        products, stores, category,
+        originalPrice, flashSalePrice,
+        termsAndConditions, minimumPurchase, maximumDiscount, promoCode,
+        notifyOnStart, notifyOnEndingSoon, notifyOnLowStock,
+        enabled,
+      };
+
+      for (const [key, value] of Object.entries(allowedFields)) {
+        if (value !== undefined) {
+          updateData[key] = value;
+        }
+      }
+
+      const flashSale = await flashSaleService.updateFlashSale(id, updateData);
 
       if (!flashSale) {
         res.status(404).json({

@@ -11,11 +11,18 @@
  */
 
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import path from 'path';
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../.env') });
+
+// Prevent running in production
+if (process.env.NODE_ENV === 'production') {
+  console.error('ERROR: Seed scripts cannot run in production!');
+  process.exit(1);
+}
 
 // Import Discount model
 import Discount from '../src/models/Discount';
@@ -185,7 +192,7 @@ async function seedDiscounts() {
         name: 'Admin',
         email: 'admin@rez-app.com',
         phoneNumber: '9999999999',
-        password: 'admin123', // Will be hashed by pre-save hook
+        password: crypto.randomBytes(16).toString('hex'), // Randomly generated
         role: 'admin'
       });
       console.log('✅ Admin user created');

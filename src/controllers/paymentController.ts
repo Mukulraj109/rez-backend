@@ -260,14 +260,17 @@ export const verifyPayment = asyncHandler(async (req: Request, res: Response) =>
  */
 export const handleWebhook = asyncHandler(async (req: Request, res: Response) => {
   const webhookSignature = req.headers['x-razorpay-signature'] as string;
-  const webhookBody = JSON.stringify(req.body);
+
+  // Use the raw Buffer from express.raw() (mounted before JSON parser in server.ts)
+  // Convert to string for HMAC verification — preserves original byte order
+  const rawBody: string = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : JSON.stringify(req.body);
 
   console.log('🔔 [PAYMENT CONTROLLER] Received webhook event');
 
   try {
-    // Verify webhook signature
+    // Verify webhook signature using the original raw body
     const isValidSignature = paymentService.verifyWebhookSignature(
-      webhookBody,
+      rawBody,
       webhookSignature
     );
 
@@ -276,7 +279,8 @@ export const handleWebhook = asyncHandler(async (req: Request, res: Response) =>
       return sendUnauthorized(res, 'Invalid webhook signature');
     }
 
-    const event: IRazorpayWebhookEvent = req.body;
+    // Parse the verified raw body into a typed event object
+    const event: IRazorpayWebhookEvent = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString('utf8')) : req.body;
 
     console.log('🔔 [PAYMENT CONTROLLER] Webhook event type:', event.event);
 
@@ -689,9 +693,13 @@ export const handleStripeWebhook = asyncHandler(async (req: Request, res: Respon
       return res.status(500).json({ error: 'Stripe not configured' });
     }
 
-    // Verify webhook signature - req.body should be raw buffer
-    const payload = JSON.stringify(req.body);
-    const event = stripeService.verifyWebhookSignature(payload, signature);
+    // Verify webhook signature using the raw Buffer from express.raw()
+    // req.body MUST be a Buffer (express.raw() is mounted before JSON parser in server.ts)
+    if (!Buffer.isBuffer(req.body)) {
+      console.error('❌ [PAYMENT CONTROLLER] Stripe webhook req.body is not a Buffer — express.raw() middleware may not be configured correctly');
+      return res.status(400).json({ error: 'Invalid request body format for webhook verification' });
+    }
+    const event = stripeService.verifyWebhookSignature(req.body, signature);
 
     console.log('🔔 [PAYMENT CONTROLLER] Stripe webhook event type:', event.type);
     console.log('🔔 [PAYMENT CONTROLLER] Event ID:', event.id);

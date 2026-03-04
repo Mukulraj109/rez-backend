@@ -1034,10 +1034,8 @@ class PaymentService {
 
       // Check if webhook secret is configured
       if (!secret || secret === 'your_webhook_secret_here') {
-        console.warn('⚠️ [PAYMENT SERVICE] Webhook secret not configured. Webhook verification disabled.');
-        // In development, you might want to allow webhooks without verification
-        // In production, this should return false for security
-        return process.env.NODE_ENV === 'development';
+        console.error('❌ [PAYMENT SERVICE] Razorpay webhook secret not configured. Rejecting webhook.');
+        return false;
       }
 
       // Use utility function for webhook validation

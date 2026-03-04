@@ -6,6 +6,7 @@ import { Coupon, ICoupon } from '../models/Coupon';
 import { UserCoupon, IUserCoupon } from '../models/UserCoupon';
 import { User } from '../models/User';
 import { pct, round2 } from '../utils/currency';
+import { escapeRegex } from '../utils/sanitize';
 
 interface CartItem {
   product: Types.ObjectId;
@@ -521,7 +522,7 @@ class CouponService {
     filters: any = {}
   ): Promise<ICoupon[]> {
     try {
-      const searchRegex = new RegExp(query, 'i');
+      const searchRegex = new RegExp(escapeRegex(query), 'i');
 
       return await Coupon.find({
         status: 'active',

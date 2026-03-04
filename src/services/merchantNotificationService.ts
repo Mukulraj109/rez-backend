@@ -322,6 +322,38 @@ class MerchantNotificationService {
   }
 
   /**
+   * Notify merchant when an in-store payment is completed
+   */
+  async notifyStorePaymentReceived(params: {
+    merchantId: string;
+    paymentId: string;
+    storeName: string;
+    amount: number;
+    paymentMethod: string;
+    coinsUsed: number;
+    cashbackAwarded: number;
+  }): Promise<void> {
+    await this.createNotification({
+      merchantId: params.merchantId,
+      title: 'In-Store Payment Received',
+      message: `Payment of ₹${params.amount.toLocaleString()} at ${params.storeName} via ${params.paymentMethod}`,
+      type: 'success',
+      category: 'earning',
+      priority: 'medium',
+      data: {
+        amount: params.amount,
+        deepLink: '/(dashboard)/payments',
+        metadata: {
+          paymentId: params.paymentId,
+          paymentMethod: params.paymentMethod,
+          coinsUsed: params.coinsUsed,
+          cashbackAwarded: params.cashbackAwarded,
+        },
+      },
+    });
+  }
+
+  /**
    * Notify merchant when customer requests cancellation
    */
   async notifyOrderCancellationRequest(params: {

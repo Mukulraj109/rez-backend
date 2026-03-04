@@ -136,8 +136,15 @@ export const getUnseenCount = async (req: Request, res: Response): Promise<void>
 export const createStory = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?._id || (req as any).user?.id;
+
+    const {
+      title, subtitle, icon, slides, ctaButton,
+      validity, targeting, priority,
+    } = req.body;
+
     const storyData = {
-      ...req.body,
+      title, subtitle, icon, slides, ctaButton,
+      validity, targeting, priority,
       createdBy: userId,
     };
 
@@ -158,7 +165,25 @@ export const updateStory = async (req: Request, res: Response): Promise<void> =>
   try {
     const { id } = req.params;
 
-    const story = await whatsNewService.updateStory(id, req.body);
+    const {
+      title, subtitle, icon, slides, ctaButton,
+      validity, targeting, priority,
+    } = req.body;
+
+    // Only include defined fields in the update
+    const updateData: Record<string, any> = {};
+    const allowedFields = {
+      title, subtitle, icon, slides, ctaButton,
+      validity, targeting, priority,
+    };
+
+    for (const [key, value] of Object.entries(allowedFields)) {
+      if (value !== undefined) {
+        updateData[key] = value;
+      }
+    }
+
+    const story = await whatsNewService.updateStory(id, updateData);
 
     if (!story) {
       sendNotFound(res, 'Story not found');

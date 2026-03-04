@@ -14,22 +14,16 @@ export async function blacklistToken(token: string, ttlSeconds: number): Promise
   }
 }
 
-export async function isTokenBlacklisted(token: string): Promise<boolean> {
+export async function isTokenBlacklisted(token: string, failClosed = false): Promise<boolean> {
   try {
-    // If Redis is not available, fail open — allow the request through.
-    // The JWT signature is still verified as the primary security check.
-    // Blacklist is a secondary defense for explicitly revoked tokens.
-    // Failing closed here would lock out ALL users when Redis is down.
     if (!redisService.isReady()) {
-      console.warn('[AUTH] Redis unavailable for blacklist check — failing open (JWT signature still verified)');
-      return false;
+      console.warn(`[AUTH] Redis unavailable for blacklist check — failing ${failClosed ? 'closed' : 'open'}`);
+      return failClosed;
     }
     return await redisService.exists(`${TOKEN_BLACKLIST_PREFIX}${token}`);
   } catch {
-    // Fail open on Redis errors — JWT signature verification is still the primary guard.
-    // Logging the error for monitoring; failing closed would deny service to all users.
-    console.warn('[AUTH] Redis error during blacklist check — failing open (JWT signature still verified)');
-    return false;
+    console.warn(`[AUTH] Redis error during blacklist check — failing ${failClosed ? 'closed' : 'open'}`);
+    return failClosed;
   }
 }
 
@@ -83,7 +77,7 @@ export const verifyToken = (token: string): JWTPayload => {
     throw new Error('JWT_SECRET environment variable is required');
   }
   const secret = process.env.JWT_SECRET;
-  return jwt.verify(token, secret) as JWTPayload;
+  return jwt.verify(token, secret, { algorithms: ['HS256'] }) as JWTPayload;
 };
 
 // Verify refresh token
@@ -92,7 +86,7 @@ export const verifyRefreshToken = (token: string): JWTPayload => {
     throw new Error('JWT_REFRESH_SECRET environment variable is required');
   }
   const secret = process.env.JWT_REFRESH_SECRET;
-  return jwt.verify(token, secret) as JWTPayload;
+  return jwt.verify(token, secret, { algorithms: ['HS256'] }) as JWTPayload;
 };
 
 // Extract token from request
@@ -124,7 +118,9 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 
     try {
       // Check if token is blacklisted (e.g. after logout or refresh)
-      if (await isTokenBlacklisted(token)) {
+      // Fail closed for sensitive routes (admin, wallet, transfer) — reject if Redis is down
+      const sensitiveRoute = /\/(admin|wallet|transfer|prive)(\/|$)/.test(req.originalUrl);
+      if (await isTokenBlacklisted(token, sensitiveRoute)) {
         return res.status(401).json({ success: false, message: 'Token has been revoked' });
       }
 

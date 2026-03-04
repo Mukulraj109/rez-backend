@@ -13,6 +13,7 @@ import {
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { uploadToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryUtils';
+import { escapeRegex } from '../utils/sanitize';
 
 // Get admin explore dashboard stats
 export const getExploreDashboardStats = asyncHandler(async (req: Request, res: Response) => {
@@ -326,10 +327,11 @@ export const getAdminVideos = asyncHandler(async (req: Request, res: Response) =
     if (trending === 'true') query.isTrending = true;
 
     if (search) {
+      const escaped = escapeRegex(String(search).substring(0, 200));
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $regex: search, $options: 'i' } }
+        { title: { $regex: escaped, $options: 'i' } },
+        { description: { $regex: escaped, $options: 'i' } },
+        { tags: { $regex: escaped, $options: 'i' } }
       ];
     }
 

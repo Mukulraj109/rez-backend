@@ -628,108 +628,146 @@ export const withdrawFunds = asyncHandler(async (req: Request, res: Response) =>
     return sendError(res, 'User not authenticated', 401);
   }
 
-  // Validate amount
-  if (!amount || amount <= 0) {
-    return sendBadRequest(res, 'Invalid withdrawal amount');
+  // Validate amount using utility (prevents Infinity, NaN, excessive precision, etc.)
+  const amtCheck = validateAmount(amount, { fieldName: 'Withdrawal amount' });
+  if (!amtCheck.valid) {
+    return sendBadRequest(res, amtCheck.error);
   }
+  const validatedAmount = amtCheck.amount;
 
   // Validate method
   if (!method || !['bank', 'upi', 'paypal'].includes(method)) {
     return sendBadRequest(res, 'Invalid withdrawal method');
   }
 
-  // Get wallet
-  const wallet = await Wallet.findOne({ user: userId });
-
-  if (!wallet) {
-    return sendNotFound(res, 'Wallet not found');
+  // Acquire per-user distributed lock to prevent double-spend race conditions
+  const lockKey = `wallet:deduct:${userId}`;
+  const lockToken = await redisService.acquireLock(lockKey, 10);
+  if (!lockToken) {
+    return sendError(res, 'Another transaction is in progress. Please try again.', 429);
   }
 
-  // Check if wallet is frozen
-  if (wallet.isFrozen) {
-    return sendError(res, `Wallet is frozen: ${wallet.frozenReason}`, 403);
-  }
-
-  // Check minimum withdrawal
-  if (amount < wallet.limits.minWithdrawal) {
-    return sendBadRequest(res, `Minimum withdrawal amount is ${wallet.limits.minWithdrawal} RC`);
-  }
-
-  // Check if sufficient balance
-  if (wallet.balance.available < amount) {
-    return sendBadRequest(res, 'Insufficient wallet balance');
-  }
-
-  // Calculate fees (2% withdrawal fee)
-  const fees = Math.round(amount * 0.02);
-  const netAmount = amount - fees;
-
-  const balanceBefore = wallet.balance.total;
-
-  // Create withdrawal transaction
-  const withdrawalId = `WD${Date.now()}`;
-  const transaction = new Transaction({
-    user: userId,
-    type: 'debit',
-    category: 'withdrawal',
-    amount,
-    currency: wallet.currency,
-    description: `Wallet withdrawal via ${method}`,
-    source: {
-      type: 'withdrawal',
-      reference: wallet._id,
-      description: `Withdrawal to ${method}`,
-      metadata: {
-        withdrawalInfo: {
-          method,
-          accountDetails: accountDetails || 'Not provided',
-          withdrawalId
-        }
-      }
-    },
-    balanceBefore,
-    balanceAfter: balanceBefore - amount,
-    fees,
-    netAmount,
-    status: {
-      current: 'processing',
-      history: [{
-        status: 'processing',
-        timestamp: new Date()
-      }]
-    }
-  });
-
-  await transaction.save();
-
-  // Deduct from wallet (atomic $inc handles balance + statistics in one operation)
-  await wallet.deductFunds(amount, { trackWithdrawal: true });
-
-  // Create CoinTransaction (source of truth for auto-sync)
   try {
-    await CoinTransaction.createTransaction(
-      userId,
-      'spent',
-      amount,
-      'withdrawal',
-      `Withdrawal via ${method}`,
-      { withdrawalId, method, fees, netAmount }
-    );
-  } catch (ctxError) {
-    console.error('❌ [WITHDRAW] Failed to create CoinTransaction:', ctxError);
-  }
+    // Get wallet
+    const wallet = await Wallet.findOne({ user: userId });
 
-  sendSuccess(res, {
-    transaction,
-    withdrawalId,
-    netAmount,
-    fees,
-    wallet: {
-      balance: wallet.balance,
-      currency: wallet.currency
-    },
-    estimatedProcessingTime: '2-3 business days'
-  }, 'Withdrawal request submitted successfully', 201);
+    if (!wallet) {
+      return sendNotFound(res, 'Wallet not found');
+    }
+
+    // Check if wallet is frozen
+    if (wallet.isFrozen) {
+      return sendError(res, `Wallet is frozen: ${wallet.frozenReason}`, 403);
+    }
+
+    // Check minimum withdrawal
+    if (validatedAmount < wallet.limits.minWithdrawal) {
+      return sendBadRequest(res, `Minimum withdrawal amount is ${wallet.limits.minWithdrawal} RC`);
+    }
+
+    // Check if sufficient balance
+    if (wallet.balance.available < validatedAmount) {
+      return sendBadRequest(res, 'Insufficient wallet balance');
+    }
+
+    // Calculate fees (2% withdrawal fee)
+    const fees = Math.round(validatedAmount * 0.02);
+    const netAmount = validatedAmount - fees;
+
+    const balanceBefore = wallet.balance.total;
+
+    // Wrap transaction save + wallet deduction in a MongoDB session for atomicity
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // Create withdrawal transaction
+      const withdrawalId = `WD${Date.now()}`;
+      const transaction = new Transaction({
+        user: userId,
+        type: 'debit',
+        category: 'withdrawal',
+        amount: validatedAmount,
+        currency: wallet.currency,
+        description: `Wallet withdrawal via ${method}`,
+        source: {
+          type: 'withdrawal',
+          reference: wallet._id,
+          description: `Withdrawal to ${method}`,
+          metadata: {
+            withdrawalInfo: {
+              method,
+              accountDetails: accountDetails || 'Not provided',
+              withdrawalId
+            }
+          }
+        },
+        balanceBefore,
+        balanceAfter: balanceBefore - validatedAmount,
+        fees,
+        netAmount,
+        status: {
+          current: 'processing',
+          history: [{
+            status: 'processing',
+            timestamp: new Date()
+          }]
+        }
+      });
+
+      await transaction.save({ session });
+
+      // Deduct from wallet atomically within the same session
+      await Wallet.findOneAndUpdate(
+        { _id: wallet._id, 'balance.available': { $gte: validatedAmount } },
+        {
+          $inc: {
+            'balance.available': -validatedAmount,
+            'balance.total': -validatedAmount,
+            'statistics.totalWithdrawn': validatedAmount,
+            'statistics.totalSpent': validatedAmount
+          },
+          $set: { lastTransactionAt: new Date() }
+        },
+        { session }
+      );
+
+      await session.commitTransaction();
+      session.endSession();
+
+      // Create CoinTransaction (source of truth for auto-sync) — outside session (fire-and-forget)
+      try {
+        await CoinTransaction.createTransaction(
+          userId,
+          'spent',
+          validatedAmount,
+          'withdrawal',
+          `Withdrawal via ${method}`,
+          { withdrawalId, method, fees, netAmount }
+        );
+      } catch (ctxError) {
+        console.error('❌ [WITHDRAW] Failed to create CoinTransaction:', ctxError);
+      }
+
+      sendSuccess(res, {
+        transaction,
+        withdrawalId,
+        netAmount,
+        fees,
+        wallet: {
+          balance: { ...wallet.balance, available: wallet.balance.available - validatedAmount, total: wallet.balance.total - validatedAmount },
+          currency: wallet.currency
+        },
+        estimatedProcessingTime: '2-3 business days'
+      }, 'Withdrawal request submitted successfully', 201);
+    } catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      throw err;
+    }
+  } finally {
+    await redisService.releaseLock(lockKey, lockToken);
+  }
 });
 
 /**
@@ -749,131 +787,154 @@ export const processPayment = asyncHandler(async (req: Request, res: Response) =
   } = req.body;
 
   console.log('💳 [PAYMENT] Starting payment processing');
-  console.log('💳 [PAYMENT] User ID:', userId);
-  console.log('💳 [PAYMENT] Amount:', amount);
-  console.log('💳 [PAYMENT] Store:', storeName);
 
   if (!userId) {
-    console.error('❌ [PAYMENT] No user ID found');
     return sendError(res, 'User not authenticated', 401);
   }
 
   // Validate amount
   const payAmountCheck = validateAmount(amount, { fieldName: 'Payment amount' });
   if (!payAmountCheck.valid) {
-    console.error('❌ [PAYMENT] Invalid amount:', amount);
     return sendBadRequest(res, payAmountCheck.error);
   }
   const payAmount = payAmountCheck.amount;
 
-  // Get wallet
-  console.log('🔍 [PAYMENT] Finding wallet for user:', userId);
-  const wallet = await Wallet.findOne({ user: userId });
-
-  if (!wallet) {
-    console.error('❌ [PAYMENT] Wallet not found');
-    return sendNotFound(res, 'Wallet not found');
-  }
-
-  console.log('✅ [PAYMENT] Wallet found:', wallet._id);
-  console.log('💵 [PAYMENT] Available balance:', wallet.balance.available);
-
-  // Check if wallet is frozen
-  if (wallet.isFrozen) {
-    console.error('❌ [PAYMENT] Wallet is frozen:', wallet.frozenReason);
-    return sendError(res, `Wallet is frozen: ${wallet.frozenReason}`, 403);
-  }
-
-  // Check if can spend
-  if (!wallet.canSpend(payAmount)) {
-    if (wallet.balance.available < payAmount) {
-      console.error('❌ [PAYMENT] Insufficient balance');
-      return sendBadRequest(res, 'Insufficient wallet balance');
-    } else {
-      console.error('❌ [PAYMENT] Daily limit exceeded');
-      return sendBadRequest(res, 'Daily spending limit exceeded');
+  // Validate orderId ownership — prevent paying for someone else's order
+  if (orderId) {
+    const { Order } = await import('../models/Order');
+    const order = await Order.findOne({ _id: orderId, user: userId });
+    if (!order) {
+      return sendBadRequest(res, 'Order not found or does not belong to you');
     }
   }
 
-  const balanceBefore = wallet.balance.total;
-
-  console.log('📝 [PAYMENT] Creating transaction record');
+  // Acquire per-user distributed lock to prevent double-spend race conditions
+  const lockKey = `wallet:deduct:${userId}`;
+  const lockToken = await redisService.acquireLock(lockKey, 10);
+  if (!lockToken) {
+    return sendError(res, 'Another transaction is in progress. Please try again.', 429);
+  }
 
   try {
-    // Create payment transaction
-    const transaction = new Transaction({
-      user: new mongoose.Types.ObjectId(userId),
-      type: 'debit',
-      category: 'spending',
-      amount: payAmount,
-      currency: wallet.currency,
-      description: description || `Payment for order ${orderId || 'N/A'}`,
-      source: {
-        type: 'order',
-        reference: orderId ? new mongoose.Types.ObjectId(orderId) : new mongoose.Types.ObjectId(String(wallet._id)),
-        description: `Purchase from ${storeName || 'Store'}`,
-        metadata: {
-          orderNumber: orderId || `ORD_${Date.now()}`,
-          storeInfo: {
-            name: storeName || 'Unknown Store',
-            id: storeId ? new mongoose.Types.ObjectId(storeId) : undefined
-          },
-          items: items || []
-        }
-      },
-      balanceBefore: Number(balanceBefore),
-      balanceAfter: Number(balanceBefore) - payAmount,
-      status: {
-        current: 'completed',
-        history: [{
-          status: 'completed',
-          timestamp: new Date()
-        }]
-      }
-    });
+    // Get wallet
+    const wallet = await Wallet.findOne({ user: userId });
 
-    console.log('💾 [PAYMENT] Saving transaction');
-    await transaction.save();
-    console.log('✅ [PAYMENT] Transaction saved:', transaction._id);
-
-    // Deduct funds
-    console.log('💰 [PAYMENT] Deducting funds from wallet');
-    await wallet.deductFunds(payAmount);
-    console.log('✅ [PAYMENT] Funds deducted, new balance:', wallet.balance.total);
-
-    // Create CoinTransaction (source of truth for auto-sync)
-    try {
-      await CoinTransaction.createTransaction(
-        userId,
-        'spent',
-        payAmount,
-        'order',
-        description || `Payment for order ${orderId || 'N/A'}`,
-        { orderId, storeId, storeName }
-      );
-    } catch (ctxError) {
-      console.error('❌ [PAYMENT] Failed to create CoinTransaction:', ctxError);
+    if (!wallet) {
+      return sendNotFound(res, 'Wallet not found');
     }
 
-    // Create activity for wallet spending
-    await activityService.wallet.onMoneySpent(
-      new mongoose.Types.ObjectId(userId),
-      payAmount,
-      storeName || 'order'
-    );
+    // Check if wallet is frozen
+    if (wallet.isFrozen) {
+      return sendError(res, `Wallet is frozen: ${wallet.frozenReason}`, 403);
+    }
 
-    sendSuccess(res, {
-      transaction,
-      wallet: {
-        balance: wallet.balance,
-        currency: wallet.currency
-      },
-      paymentStatus: 'success'
-    }, 'Payment processed successfully', 201);
-  } catch (error) {
-    console.error('❌ [PAYMENT] Error processing payment:', error);
-    console.error('❌ [PAYMENT] Error details:', JSON.stringify(error, null, 2));
-    throw error;
+    // Check if can spend
+    if (!wallet.canSpend(payAmount)) {
+      if (wallet.balance.available < payAmount) {
+        return sendBadRequest(res, 'Insufficient wallet balance');
+      } else {
+        return sendBadRequest(res, 'Daily spending limit exceeded');
+      }
+    }
+
+    const balanceBefore = wallet.balance.total;
+
+    // Wrap transaction save + wallet deduction in a MongoDB session for atomicity
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // Create payment transaction
+      const transaction = new Transaction({
+        user: new mongoose.Types.ObjectId(userId),
+        type: 'debit',
+        category: 'spending',
+        amount: payAmount,
+        currency: wallet.currency,
+        description: description || `Payment for order ${orderId || 'N/A'}`,
+        source: {
+          type: 'order',
+          reference: orderId ? new mongoose.Types.ObjectId(orderId) : new mongoose.Types.ObjectId(String(wallet._id)),
+          description: `Purchase from ${storeName || 'Store'}`,
+          metadata: {
+            orderNumber: orderId || `ORD_${Date.now()}`,
+            storeInfo: {
+              name: storeName || 'Unknown Store',
+              id: storeId ? new mongoose.Types.ObjectId(storeId) : undefined
+            },
+            items: items || []
+          }
+        },
+        balanceBefore: Number(balanceBefore),
+        balanceAfter: Number(balanceBefore) - payAmount,
+        status: {
+          current: 'completed',
+          history: [{
+            status: 'completed',
+            timestamp: new Date()
+          }]
+        }
+      });
+
+      await transaction.save({ session });
+
+      // Deduct funds atomically within the same session (with balance guard)
+      const deductResult = await Wallet.findOneAndUpdate(
+        { _id: wallet._id, 'balance.available': { $gte: payAmount } },
+        {
+          $inc: {
+            'balance.available': -payAmount,
+            'balance.total': -payAmount,
+            'statistics.totalSpent': payAmount
+          },
+          $set: { lastTransactionAt: new Date() }
+        },
+        { new: true, session }
+      );
+
+      if (!deductResult) {
+        throw new Error('Insufficient balance (concurrent deduction detected)');
+      }
+
+      await session.commitTransaction();
+      session.endSession();
+
+      // Create CoinTransaction (source of truth for auto-sync) — outside session
+      try {
+        await CoinTransaction.createTransaction(
+          userId,
+          'spent',
+          payAmount,
+          'order',
+          description || `Payment for order ${orderId || 'N/A'}`,
+          { orderId, storeId, storeName }
+        );
+      } catch (ctxError) {
+        console.error('❌ [PAYMENT] Failed to create CoinTransaction:', ctxError);
+      }
+
+      // Create activity for wallet spending
+      await activityService.wallet.onMoneySpent(
+        new mongoose.Types.ObjectId(userId),
+        payAmount,
+        storeName || 'order'
+      );
+
+      sendSuccess(res, {
+        transaction,
+        wallet: {
+          balance: deductResult.balance,
+          currency: deductResult.currency
+        },
+        paymentStatus: 'success'
+      }, 'Payment processed successfully', 201);
+    } catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      throw err;
+    }
+  } finally {
+    await redisService.releaseLock(lockKey, lockToken);
   }
 });
 
@@ -1044,9 +1105,10 @@ export const initiatePayment = asyncHandler(async (req: Request, res: Response) 
     paymentMethodType
   });
 
-  // Validate required fields
-  if (!amount || amount <= 0) {
-    return sendBadRequest(res, 'Valid amount is required');
+  // Validate amount using utility (prevents Infinity, NaN, excessive precision, etc.)
+  const amtCheck = validateAmount(amount, { fieldName: 'Payment amount', min: 1 });
+  if (!amtCheck.valid) {
+    return sendBadRequest(res, amtCheck.error);
   }
 
   if (!paymentMethod) {
@@ -1080,8 +1142,8 @@ export const initiatePayment = asyncHandler(async (req: Request, res: Response) 
     }
 
     // For wallet topup, apply recharge discount (pay less, get full NC)
-    let chargeAmount = Number(amount);
-    let creditAmount = Number(amount); // NC to credit to wallet
+    let chargeAmount = amtCheck.amount;
+    let creditAmount = amtCheck.amount; // NC to credit to wallet
     if (purpose === 'wallet_topup') {
       try {
         const { WalletConfig } = require('../models/WalletConfig');
@@ -1142,12 +1204,13 @@ export const confirmPayment = asyncHandler(async (req: Request, res: Response) =
 
   try {
     // Find the Payment record FIRST (before status check updates it)
-    const { Payment } = require('../models/Payment');
+    // Include user ownership filter to prevent cross-user payment crediting
     const payment = await Payment.findOne({
       $or: [
         { paymentId: paymentIntentId },
         { 'gatewayResponse.paymentIntentId': paymentIntentId }
-      ]
+      ],
+      user: new mongoose.Types.ObjectId(userId)
     });
 
     if (!payment) {
@@ -1173,6 +1236,9 @@ export const confirmPayment = asyncHandler(async (req: Request, res: Response) =
 
     // Re-fetch payment (checkPaymentStatus may have updated it)
     const freshPayment = await Payment.findById(payment._id);
+    if (!freshPayment) {
+      return sendError(res, 'Payment record not found after status check', 404);
+    }
 
     // Credit wallet if this is a wallet topup
     const purpose = freshPayment.purpose || freshPayment.metadata?.purpose;

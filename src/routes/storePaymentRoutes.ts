@@ -18,6 +18,8 @@ import {
   getEnhancedPaymentMethods,
   autoOptimizeCoins,
   getStoreMembership,
+  // Merchant stats
+  getStorePaymentStats,
 } from '../controllers/storePaymentController';
 import { authenticate } from '../middleware/auth';
 import { authMiddleware as merchantAuth } from '../middleware/merchantauth';
@@ -108,6 +110,9 @@ router.get('/history', authenticate, getStorePaymentHistory);
 
 // Get payment history for a specific store (merchant)
 router.get('/history/:storeId', merchantAuth, getStorePaymentHistory);
+
+// Get payment statistics for a store (merchant)
+router.get('/stats/:storeId', merchantAuth, getStorePaymentStats);
 
 // Get single payment details by paymentId
 router.get('/details/:paymentId', authenticate, getStorePaymentById);

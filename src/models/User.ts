@@ -154,7 +154,7 @@ export interface IUser extends Document {
     facebookId?: string;
     provider?: 'google' | 'facebook';
   };
-  role: 'user' | 'admin' | 'merchant';
+  role: 'user' | 'admin' | 'merchant' | 'support' | 'operator' | 'super_admin';
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -508,7 +508,7 @@ const UserSchema = new Schema<IUser>({
   },
   role: {
     type: String,
-    enum: ['user', 'admin', 'merchant'],
+    enum: ['user', 'admin', 'merchant', 'support', 'operator', 'super_admin'],
     default: 'user'
   },
   isActive: {
@@ -606,6 +606,28 @@ UserSchema.index({ createdAt: -1 });
 UserSchema.index({ 'auth.isVerified': 1 });
 UserSchema.index({ role: 1 });
 UserSchema.index({ referralTier: 1 });
+
+// Cascade cleanup when a user is deleted
+UserSchema.pre('deleteOne', { document: true, query: false }, async function () {
+  const userId = this._id;
+  const db = mongoose.connection;
+
+  // Delete owned single-document records
+  await db.collection('wallets').deleteOne({ user: userId });
+  await db.collection('carts').deleteOne({ user: userId });
+
+  // Delete owned multi-document records
+  await db.collection('addresses').deleteMany({ user: userId });
+  await db.collection('wishlists').deleteMany({ user: userId });
+  await db.collection('searchhistories').deleteMany({ user: userId });
+  await db.collection('cointransactions').deleteMany({ user: userId });
+
+  // Soft-delete orders (preserve financial audit trail)
+  await db.collection('orders').updateMany(
+    { user: userId },
+    { $set: { user: null, deletedAt: new Date() } }
+  );
+});
 
 // Virtual for account lock status
 UserSchema.virtual('isLocked').get(function () {
@@ -761,7 +783,14 @@ UserSchema.methods.verifyOTP = function (otp: string): boolean {
   // Production: Real OTP verification
   if (!this.auth.otpCode || !this.auth.otpExpiry) return false;
 
-  const isValid = this.auth.otpCode === otp && this.auth.otpExpiry > new Date();
+  // Timing-safe comparison to prevent timing oracle attacks
+  const storedOtp = String(this.auth.otpCode);
+  const inputOtp = String(otp);
+  let otpMatch = false;
+  if (storedOtp.length === inputOtp.length) {
+    otpMatch = require('crypto').timingSafeEqual(Buffer.from(storedOtp), Buffer.from(inputOtp));
+  }
+  const isValid = otpMatch && this.auth.otpExpiry > new Date();
 
   if (isValid) {
     // Clear OTP after successful verification

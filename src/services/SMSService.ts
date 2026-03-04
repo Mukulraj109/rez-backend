@@ -24,11 +24,11 @@ export class SMSService {
     try {
       // Check if Twilio is configured
       if (!twilioClient) {
-        console.log('\n📱 SMS (Twilio not configured - logging to console):');
-        console.log('═══════════════════════════════════════════════════════');
-        console.log(`To: ${options.to}`);
-        console.log(`Message: ${options.message}`);
-        console.log('═══════════════════════════════════════════════════════\n');
+        if (process.env.NODE_ENV === 'production') {
+          throw new Error('SMS service not configured (TWILIO_* env vars required). Cannot send OTP in production.');
+        }
+        // Dev only: log destination but NEVER the OTP/message body
+        console.log(`[DEV] SMS would be sent to ***${options.to.slice(-4)} (Twilio not configured)`);
         return;
       }
 

@@ -236,8 +236,20 @@ export const adminUpdateProgram = async (req: Request, res: Response) => {
  */
 export const adminCreateProgram = async (req: Request, res: Response) => {
   try {
+    const {
+      slug, name, description, badge, icon,
+      eligibility, benefits, earningConfig,
+      linkedCampaigns, gradientColors, isActive, priority,
+    } = req.body;
+
+    const programData = {
+      slug, name, description, badge, icon,
+      eligibility, benefits, earningConfig,
+      linkedCampaigns, gradientColors, isActive, priority,
+    };
+
     const SpecialProgramConfig = (await import('../models/SpecialProgramConfig')).default;
-    const config = await SpecialProgramConfig.create(req.body);
+    const config = await SpecialProgramConfig.create(programData);
 
     // Invalidate cache
     await specialProgramService.invalidateConfigCache();

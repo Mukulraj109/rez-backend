@@ -10,6 +10,7 @@ import {
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+import { escapeRegex } from '../utils/sanitize';
 
 // Helper function to format view count for frontend
 const formatViewCount = (views: number): string => {
@@ -551,11 +552,12 @@ export const searchArticles = asyncHandler(async (req: Request, res: Response) =
 
     // Text search
     if (q) {
+      const escaped = escapeRegex(String(q).substring(0, 200));
       query.$or = [
-        { title: { $regex: q, $options: 'i' } },
-        { excerpt: { $regex: q, $options: 'i' } },
-        { content: { $regex: q, $options: 'i' } },
-        { tags: { $in: [new RegExp(q as string, 'i')] } }
+        { title: { $regex: escaped, $options: 'i' } },
+        { excerpt: { $regex: escaped, $options: 'i' } },
+        { content: { $regex: escaped, $options: 'i' } },
+        { tags: { $in: [new RegExp(escaped, 'i')] } }
       ];
     }
 

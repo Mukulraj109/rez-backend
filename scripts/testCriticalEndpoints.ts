@@ -3,8 +3,14 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const BASE_URL = 'http://localhost:5001';
-const TEST_TOKEN = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGVmNGQ0MTA2MWZhYWYwNDUyMjI1MDYiLCJyb2xlIjoidXNlciIsImlhdCI6MTc2MTI4NDA4NiwiZXhwIjoxNzYxMzcwNDg2fQ.Egd9J4T-i-mOrH2qPqUWpJew4MjKOFCQluepqnhuSm4';
+const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:5001';
+const TEST_TOKEN = process.env.TEST_AUTH_TOKEN || '';
+
+if (!TEST_TOKEN) {
+  console.error('ERROR: TEST_AUTH_TOKEN environment variable is required.');
+  console.error('Generate a token and set it: export TEST_AUTH_TOKEN="Bearer eyJ..."');
+  process.exit(1);
+}
 
 interface TestResult {
   endpoint: string;

@@ -88,150 +88,162 @@ export const initiateTransfer = asyncHandler(async (req: Request, res: Response)
     return sendBadRequest(res, 'Promo coins cannot be transferred');
   }
 
-  // Get wallet config for limits
-  const config = await WalletConfig.getOrCreate();
-
-  // Validate amount against limits
-  if (validatedAmount < config.transferLimits.minAmount) {
-    return sendBadRequest(res, `Minimum transfer amount is ${config.transferLimits.minAmount} NC`);
-  }
-  if (validatedAmount > config.transferLimits.perTransactionMax) {
-    return sendBadRequest(res, `Maximum transfer amount is ${config.transferLimits.perTransactionMax} NC per transaction`);
+  // Acquire per-user distributed lock around daily limit check + transfer creation
+  // Prevents race condition where two concurrent requests both pass the daily limit check
+  const lockKey = `transfer:initiate:${senderId}`;
+  const lockToken = await redisService.acquireLock(lockKey, 10);
+  if (!lockToken) {
+    return sendError(res, 'Another transfer is being processed. Please try again.', 429);
   }
 
-  // Find recipient
-  let recipient;
-  if (recipientId) {
-    recipient = await User.findById(recipientId);
-  } else if (recipientPhone) {
-    recipient = await User.findOne({ phoneNumber: recipientPhone });
-  }
+  try {
+    // Get wallet config for limits
+    const config = await WalletConfig.getOrCreate();
 
-  if (!recipient) return sendBadRequest(res, 'Recipient not found');
-  if (String(recipient._id) === senderId) return sendBadRequest(res, 'Cannot transfer to yourself');
-
-  // Unique recipients check — fraud signal
-  const recipientCheck = await checkUniqueRecipients(senderId, String(recipient._id));
-  if (!recipientCheck.allowed) {
-    return res.status(429).json({
-      success: false,
-      message: 'Too many unique recipients today. Try again tomorrow.',
-    });
-  }
-
-  // Check sender wallet
-  const senderWallet = await Wallet.findOne({ user: senderId });
-  if (!senderWallet) return sendError(res, 'Sender wallet not found', 404);
-  if (senderWallet.isFrozen) return sendBadRequest(res, 'Your wallet is frozen');
-
-  // Velocity check — prevent rapid-fire abuse
-  const velocityCheck = await checkVelocity(senderId, 'transfer');
-  if (!velocityCheck.allowed) {
-    return res.status(429).json({
-      success: false,
-      message: `Transfer rate limit exceeded. Try again in ${Math.ceil(velocityCheck.resetInSeconds / 60)} minutes.`,
-    });
-  }
-
-  // Check recipient wallet
-  const recipientWallet = await Wallet.findOne({ user: recipient._id });
-  if (!recipientWallet) return sendBadRequest(res, 'Recipient wallet not active');
-  if (recipientWallet.isFrozen) return sendBadRequest(res, 'Recipient wallet is frozen');
-
-  // Check balance based on coin type
-  if (coinType === 'nuqta') {
-    if (senderWallet.balance.available < validatedAmount) {
-      return sendBadRequest(res, 'Insufficient Nuqta Coin balance');
+    // Validate amount against limits
+    if (validatedAmount < config.transferLimits.minAmount) {
+      return sendBadRequest(res, `Minimum transfer amount is ${config.transferLimits.minAmount} NC`);
     }
-  } else if (coinType === 'branded' && merchantId) {
-    const brandedCoin = senderWallet.brandedCoins.find(
-      (bc: any) => bc.merchantId.toString() === merchantId
-    );
-    if (!brandedCoin || brandedCoin.amount < validatedAmount) {
-      return sendBadRequest(res, 'Insufficient Branded Coin balance for this merchant');
+    if (validatedAmount > config.transferLimits.perTransactionMax) {
+      return sendBadRequest(res, `Maximum transfer amount is ${config.transferLimits.perTransactionMax} NC per transaction`);
     }
-  } else if (coinType === 'promo') {
-    const promoCoin = senderWallet.coins.find((c: any) => c.type === 'promo');
-    if (!promoCoin || promoCoin.amount < validatedAmount) {
-      return sendBadRequest(res, 'Insufficient Promo Coin balance');
-    }
-  }
 
-  // Check daily transfer limit
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayTransfers = await Transfer.aggregate([
-    {
-      $match: {
-        sender: new mongoose.Types.ObjectId(senderId),
-        status: { $in: ['completed', 'initiated', 'otp_pending', 'confirmed'] },
-        createdAt: { $gte: todayStart }
+    // Find recipient
+    let recipient;
+    if (recipientId) {
+      recipient = await User.findById(recipientId);
+    } else if (recipientPhone) {
+      recipient = await User.findOne({ phoneNumber: recipientPhone });
+    }
+
+    if (!recipient) return sendBadRequest(res, 'Recipient not found');
+    if (String(recipient._id) === senderId) return sendBadRequest(res, 'Cannot transfer to yourself');
+
+    // Unique recipients check — fraud signal
+    const recipientCheck = await checkUniqueRecipients(senderId, String(recipient._id));
+    if (!recipientCheck.allowed) {
+      return res.status(429).json({
+        success: false,
+        message: 'Too many unique recipients today. Try again tomorrow.',
+      });
+    }
+
+    // Check sender wallet
+    const senderWallet = await Wallet.findOne({ user: senderId });
+    if (!senderWallet) return sendError(res, 'Sender wallet not found', 404);
+    if (senderWallet.isFrozen) return sendBadRequest(res, 'Your wallet is frozen');
+
+    // Velocity check — prevent rapid-fire abuse
+    const velocityCheck = await checkVelocity(senderId, 'transfer');
+    if (!velocityCheck.allowed) {
+      return res.status(429).json({
+        success: false,
+        message: `Transfer rate limit exceeded. Try again in ${Math.ceil(velocityCheck.resetInSeconds / 60)} minutes.`,
+      });
+    }
+
+    // Check recipient wallet
+    const recipientWallet = await Wallet.findOne({ user: recipient._id });
+    if (!recipientWallet) return sendBadRequest(res, 'Recipient wallet not active');
+    if (recipientWallet.isFrozen) return sendBadRequest(res, 'Recipient wallet is frozen');
+
+    // Check balance based on coin type
+    if (coinType === 'nuqta') {
+      if (senderWallet.balance.available < validatedAmount) {
+        return sendBadRequest(res, 'Insufficient Nuqta Coin balance');
       }
-    },
-    { $group: { _id: null, total: { $sum: '$amount' } } }
-  ]);
-
-  const dailyTotal = (todayTransfers[0]?.total || 0) + validatedAmount;
-  if (dailyTotal > config.transferLimits.dailyMax) {
-    return sendBadRequest(res, `Daily transfer limit of ${config.transferLimits.dailyMax} NC exceeded`);
-  }
-
-  // Determine if OTP is required
-  const requiresOtp = validatedAmount >= config.transferLimits.requireOtpAbove;
-
-  // Create transfer record
-  const transfer = await Transfer.create({
-    sender: senderId,
-    recipient: recipient._id,
-    amount: validatedAmount,
-    coinType,
-    merchantId: coinType === 'branded' ? merchantId : undefined,
-    status: requiresOtp ? 'otp_pending' : 'confirmed',
-    note: note?.trim(),
-    idempotencyKey: idempotencyKey || undefined,
-  });
-
-  if (requiresOtp) {
-    // Generate OTP
-    const otp = crypto.randomInt(100000, 999999).toString();
-    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
-
-    transfer.otpHash = otpHash;
-    transfer.otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min
-    await transfer.save();
-
-    // Send OTP via SMS
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[Transfer] OTP for transfer ${transfer._id}: ${otp}`);
-    }
-    const senderUser = await User.findById(senderId).select('phoneNumber').lean();
-    if (senderUser?.phoneNumber) {
-      await SMSService.sendOTP(senderUser.phoneNumber, otp);
+    } else if (coinType === 'branded' && merchantId) {
+      const brandedCoin = senderWallet.brandedCoins.find(
+        (bc: any) => bc.merchantId.toString() === merchantId
+      );
+      if (!brandedCoin || brandedCoin.amount < validatedAmount) {
+        return sendBadRequest(res, 'Insufficient Branded Coin balance for this merchant');
+      }
+    } else if (coinType === 'promo') {
+      const promoCoin = senderWallet.coins.find((c: any) => c.type === 'promo');
+      if (!promoCoin || promoCoin.amount < validatedAmount) {
+        return sendBadRequest(res, 'Insufficient Promo Coin balance');
+      }
     }
 
-    return sendSuccess(res, {
+    // Check daily transfer limit (inside lock to prevent race condition)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayTransfers = await Transfer.aggregate([
+      {
+        $match: {
+          sender: new mongoose.Types.ObjectId(senderId),
+          status: { $in: ['completed', 'initiated', 'otp_pending', 'confirmed'] },
+          createdAt: { $gte: todayStart }
+        }
+      },
+      { $group: { _id: null, total: { $sum: '$amount' } } }
+    ]);
+
+    const dailyTotal = (todayTransfers[0]?.total || 0) + validatedAmount;
+    if (dailyTotal > config.transferLimits.dailyMax) {
+      return sendBadRequest(res, `Daily transfer limit of ${config.transferLimits.dailyMax} NC exceeded`);
+    }
+
+    // Determine if OTP is required
+    const requiresOtp = validatedAmount >= config.transferLimits.requireOtpAbove;
+
+    // Create transfer record
+    const transfer = await Transfer.create({
+      sender: senderId,
+      recipient: recipient._id,
+      amount: validatedAmount,
+      coinType,
+      merchantId: coinType === 'branded' ? merchantId : undefined,
+      status: requiresOtp ? 'otp_pending' : 'confirmed',
+      note: note?.trim(),
+      idempotencyKey: idempotencyKey || undefined,
+    });
+
+    if (requiresOtp) {
+      // Generate OTP
+      const otp = crypto.randomInt(100000, 999999).toString();
+      const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+
+      transfer.otpHash = otpHash;
+      transfer.otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min
+      await transfer.save();
+
+      // Send OTP via SMS
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Transfer] OTP for transfer ${transfer._id}: ${otp}`);
+      }
+      const senderUser = await User.findById(senderId).select('phoneNumber').lean();
+      if (senderUser?.phoneNumber) {
+        await SMSService.sendOTP(senderUser.phoneNumber, otp);
+      }
+
+      return sendSuccess(res, {
+        transferId: String(transfer._id),
+        requiresOtp: true,
+        recipientName: recipient.fullName || recipient.phoneNumber,
+        amount: validatedAmount,
+        coinType,
+      }, 'OTP sent. Please verify to complete transfer.');
+    }
+
+    // No OTP required — execute immediately
+    const result = await executeTransfer(String(transfer._id));
+
+    if (!result.success) {
+      return sendError(res, result.error || 'Transfer failed', 500);
+    }
+
+    sendSuccess(res, {
       transferId: String(transfer._id),
-      requiresOtp: true,
+      status: 'completed',
       recipientName: recipient.fullName || recipient.phoneNumber,
       amount: validatedAmount,
       coinType,
-    }, 'OTP sent. Please verify to complete transfer.');
+    }, 'Transfer completed successfully');
+  } finally {
+    await redisService.releaseLock(lockKey, lockToken);
   }
-
-  // No OTP required — execute immediately
-  const result = await executeTransfer(String(transfer._id));
-
-  if (!result.success) {
-    return sendError(res, result.error || 'Transfer failed', 500);
-  }
-
-  sendSuccess(res, {
-    transferId: String(transfer._id),
-    status: 'completed',
-    recipientName: recipient.fullName || recipient.phoneNumber,
-    amount,
-    coinType,
-  }, 'Transfer completed successfully');
 });
 
 /**
@@ -286,7 +298,7 @@ export const confirmTransfer = asyncHandler(async (req: Request, res: Response) 
       });
       return sendBadRequest(res, 'Too many incorrect attempts. Transfer cancelled.');
     }
-    return sendBadRequest(res, `Incorrect OTP. ${remaining} attempts remaining.`);
+    return sendBadRequest(res, 'Incorrect OTP. Please try again.');
   }
 
   // OTP verified — execute transfer (atomic status transition)

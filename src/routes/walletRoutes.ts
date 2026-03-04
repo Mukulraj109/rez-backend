@@ -37,7 +37,8 @@ const walletWithdrawLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000,
 const walletRefundLimiter = createRateLimiter({ windowMs: 24 * 60 * 60 * 1000, max: 3, message: 'Too many refund requests.' });
 const walletPaymentLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 30, message: 'Too many payment requests. Please try again later.' });
 const walletCreditLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 20, message: 'Too many credit requests.' });
-const walletSyncLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 5, message: 'Too many sync requests.' });
+const walletSyncLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 1, message: 'Balance sync is limited to once per hour.' });
+const walletReadLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 100, message: 'Too many wallet read requests. Please try again later.' });
 
 
 // All wallet routes require authentication
@@ -48,7 +49,7 @@ router.use(authenticate);
  * @desc    Get user wallet balance and status
  * @access  Private
  */
-router.get('/balance', getWalletBalance);
+router.get('/balance', walletReadLimiter, getWalletBalance);
 
 /**
  * @route   POST /api/wallet/credit-loyalty-points
@@ -64,14 +65,14 @@ router.post('/credit-loyalty-points', walletCreditLimiter, requireSeniorAdmin, c
  * @query   page, limit, type, category, status, dateFrom, dateTo, minAmount, maxAmount
  * @access  Private
  */
-router.get('/transactions', getTransactions);
+router.get('/transactions', walletReadLimiter, getTransactions);
 
 /**
  * @route   GET /api/wallet/transaction/:id
  * @desc    Get single transaction details
  * @access  Private
  */
-router.get('/transaction/:id', getTransactionById);
+router.get('/transaction/:id', walletReadLimiter, getTransactionById);
 
 /**
  * @route   GET /api/wallet/summary
@@ -79,21 +80,21 @@ router.get('/transaction/:id', getTransactionById);
  * @query   period (day, week, month, year)
  * @access  Private
  */
-router.get('/summary', getTransactionSummary);
+router.get('/summary', walletReadLimiter, getTransactionSummary);
 
 /**
  * @route   GET /api/wallet/transaction-counts
  * @desc    Get transaction counts grouped by category (lightweight)
  * @access  Private
  */
-router.get('/transaction-counts', getTransactionCounts);
+router.get('/transaction-counts', walletReadLimiter, getTransactionCounts);
 
 /**
  * @route   GET /api/wallet/categories
  * @desc    Get spending breakdown by categories
  * @access  Private
  */
-router.get('/categories', getCategoriesBreakdown);
+router.get('/categories', walletReadLimiter, getCategoriesBreakdown);
 
 /**
  * @route   POST /api/wallet/topup

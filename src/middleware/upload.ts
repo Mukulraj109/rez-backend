@@ -2,9 +2,30 @@
 // Handles file uploads with multer and cloudinary
 
 import multer from 'multer';
+import path from 'path';
 const cloudinary = require('cloudinary').v2;
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import dotenv from 'dotenv';
+
+// Allowed file extensions for security validation (checks actual extension, not just mimetype header)
+const ALLOWED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.heic', '.heif'];
+const ALLOWED_VIDEO_EXTENSIONS = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+const ALLOWED_DOC_EXTENSIONS = ['.pdf'];
+
+function isAllowedImageFile(file: Express.Multer.File): boolean {
+  const ext = path.extname(file.originalname).toLowerCase();
+  return file.mimetype.startsWith('image/') && ALLOWED_IMAGE_EXTENSIONS.includes(ext);
+}
+
+function isAllowedVideoFile(file: Express.Multer.File): boolean {
+  const ext = path.extname(file.originalname).toLowerCase();
+  return file.mimetype.startsWith('video/') && ALLOWED_VIDEO_EXTENSIONS.includes(ext);
+}
+
+function isAllowedDocFile(file: Express.Multer.File): boolean {
+  const ext = path.extname(file.originalname).toLowerCase();
+  return file.mimetype === 'application/pdf' && ALLOWED_DOC_EXTENSIONS.includes(ext);
+}
 
 dotenv.config();
 
@@ -45,7 +66,7 @@ const profileStorage = new CloudinaryStorage({
     console.log(`📤 [CLOUDINARY] Uploading avatar for user: ${req.user?._id}`);
     return {
       folder: 'rez-app/profiles',
-      resource_type: 'auto',
+      resource_type: 'image',
       public_id: `user_${req.user?._id}_${Date.now()}`,
       // No transformations during upload for maximum speed
       timeout: 120000,
@@ -75,9 +96,8 @@ export const uploadProfileImage = multer({
     fileSize: 5 * 1024 * 1024, // 5MB limit
   },
   fileFilter: (req, file, cb) => {
-    // Accept images only
-    if (!file.mimetype.startsWith('image/')) {
-      return cb(new Error('Only image files are allowed!') as any, false);
+    if (!isAllowedImageFile(file)) {
+      return cb(new Error('Only image files are allowed (jpg, png, webp, gif)!') as any, false);
     }
     cb(null, true);
   },
@@ -104,8 +124,7 @@ export const uploadProjectFile = multer({
     fileSize: 50 * 1024 * 1024, // 50MB limit for videos
   },
   fileFilter: (req, file, cb) => {
-    // Accept images and videos
-    if (!file.mimetype.startsWith('image/') && !file.mimetype.startsWith('video/')) {
+    if (!isAllowedImageFile(file) && !isAllowedVideoFile(file)) {
       return cb(new Error('Only image and video files are allowed!') as any, false);
     }
     cb(null, true);
@@ -134,8 +153,7 @@ export const uploadSocialMediaProof = multer({
     fileSize: 50 * 1024 * 1024, // 50MB limit for videos
   },
   fileFilter: (req, file, cb) => {
-    // Accept images and videos only
-    if (!file.mimetype.startsWith('image/') && !file.mimetype.startsWith('video/')) {
+    if (!isAllowedImageFile(file) && !isAllowedVideoFile(file)) {
       return cb(new Error('Only image and video files are allowed!') as any, false);
     }
     cb(null, true);
@@ -149,9 +167,8 @@ export const uploadReviewImage = multer({
     fileSize: 5 * 1024 * 1024, // 5MB limit for review images
   },
   fileFilter: (req, file, cb) => {
-    // Accept images only
-    if (!file.mimetype.startsWith('image/')) {
-      return cb(new Error('Only image files are allowed!') as any, false);
+    if (!isAllowedImageFile(file)) {
+      return cb(new Error('Only image files are allowed (jpg, png, webp, gif)!') as any, false);
     }
     cb(null, true);
   },
@@ -179,8 +196,7 @@ export const uploadVerificationDocument = multer({
     fileSize: 10 * 1024 * 1024, // 10MB limit for verification documents
   },
   fileFilter: (req, file, cb) => {
-    // Accept images and PDFs
-    if (!file.mimetype.startsWith('image/') && file.mimetype !== 'application/pdf') {
+    if (!isAllowedImageFile(file) && !isAllowedDocFile(file)) {
       return cb(new Error('Only image and PDF files are allowed for verification!') as any, false);
     }
     cb(null, true);

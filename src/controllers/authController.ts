@@ -1,5 +1,10 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { User } from '../models/User';
+
+/** Hash a refresh token for secure storage — never store raw tokens in DB */
+const hashRefreshToken = (token: string): string =>
+  crypto.createHash('sha256').update(token).digest('hex');
 import {
   generateToken,
   generateRefreshToken,
@@ -420,8 +425,8 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
   const accessToken = generateToken(String(user._id), user.role);
   const refreshToken = generateRefreshToken(String(user._id));
 
-  // Save refresh token
-  user.auth.refreshToken = refreshToken;
+  // Save hashed refresh token (never store raw tokens in DB)
+  user.auth.refreshToken = hashRefreshToken(refreshToken);
   await user.save();
 
   // Prepare user data for response (exclude sensitive fields)
@@ -462,7 +467,7 @@ export const refreshToken = asyncHandler(async (req: Request, res: Response) => 
     // Find user and check if refresh token matches
     const user = await User.findById(decoded.userId).select('+auth.refreshToken');
     
-    if (!user || user.auth.refreshToken !== refreshToken) {
+    if (!user || user.auth.refreshToken !== hashRefreshToken(refreshToken)) {
       return sendUnauthorized(res, 'Invalid refresh token');
     }
 
@@ -477,8 +482,8 @@ export const refreshToken = asyncHandler(async (req: Request, res: Response) => 
     const newAccessToken = generateToken(String(user._id), user.role);
     const newRefreshToken = generateRefreshToken(String(user._id));
 
-    // Update refresh token in database
-    user.auth.refreshToken = newRefreshToken;
+    // Update hashed refresh token in database
+    user.auth.refreshToken = hashRefreshToken(newRefreshToken);
     await user.save();
 
     sendSuccess(res, {

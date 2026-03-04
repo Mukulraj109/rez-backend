@@ -13,7 +13,9 @@ import {
   getPlatformStats,
   verifyInstagramPost,
   verifyInstagramAccount,
-  extractInstagramPostData
+  extractInstagramPostData,
+  checkDuplicate,
+  checkSharedStatus
 } from '../controllers/socialMediaController';
 import { requireAuth, requireAdmin } from '../middleware/auth';
 import { validateBody, validateParams, validateQuery, commonSchemas } from '../middleware/validation';
@@ -25,12 +27,18 @@ const router = Router();
 // All routes require authentication
 router.use(requireAuth);
 
+// orderId can be a MongoDB ObjectId (24 hex chars) or a StorePayment ID (e.g. SP-MMBVUUPF-SYFZKX)
+const orderIdSchema = Joi.alternatives().try(
+  commonSchemas.objectId(),
+  Joi.string().pattern(/^SP-[A-Z0-9]+-[A-Z0-9]+$/).message('Invalid StorePayment ID format')
+);
+
 // Submit a new social media post
 router.post('/submit',
   validateBody(Joi.object({
     platform: Joi.string().valid('instagram', 'facebook', 'twitter', 'tiktok').required(),
     postUrl: Joi.string().uri().required(),
-    orderId: commonSchemas.objectId(),
+    orderId: orderIdSchema,
     // Optional fraud detection metadata from frontend
     fraudMetadata: Joi.object({
       deviceId: Joi.string().optional(),
@@ -50,7 +58,7 @@ router.post('/submit-media',
   uploadSocialMediaProof.array('files', 5),
   validateBody(Joi.object({
     platform: Joi.string().valid('instagram', 'facebook', 'twitter', 'tiktok').required(),
-    orderId: commonSchemas.objectId(),
+    orderId: orderIdSchema,
     fraudMetadata: Joi.alternatives().try(
       Joi.object({
         deviceId: Joi.string().optional(),
@@ -80,6 +88,23 @@ router.get('/posts',
 // Get user's earnings summary
 router.get('/earnings',
   getUserEarnings
+);
+
+// Check for duplicate post URL
+router.post('/check-duplicate',
+  validateBody(Joi.object({
+    url: Joi.string().uri().optional(),
+    postId: Joi.string().optional(),
+  })),
+  checkDuplicate
+);
+
+// Check if user has shared a specific order/payment
+router.get('/shared-status',
+  validateQuery(Joi.object({
+    orderId: Joi.string().required(),
+  })),
+  checkSharedStatus
 );
 
 // Get platform statistics

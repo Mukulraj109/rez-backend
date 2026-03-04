@@ -13,6 +13,7 @@ import { WalletConfig } from '../../models/WalletConfig';
 import { CoinTransaction } from '../../models/CoinTransaction';
 import priveAccessService from '../../services/priveAccessService';
 import { sendSuccess, sendError, sendBadRequest, sendNotFound, sendPaginated } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 
 /**
  * GET /api/admin/prive/access
@@ -33,12 +34,13 @@ export const getAccessList = async (req: Request, res: Response) => {
 
     // Search by user phone/email
     if (search) {
+      const escaped = escapeRegex(String(search).substring(0, 200));
       const users = await User.find({
         $or: [
-          { phoneNumber: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } },
-          { 'profile.firstName': { $regex: search, $options: 'i' } },
-          { 'profile.lastName': { $regex: search, $options: 'i' } },
+          { phoneNumber: { $regex: escaped, $options: 'i' } },
+          { email: { $regex: escaped, $options: 'i' } },
+          { 'profile.firstName': { $regex: escaped, $options: 'i' } },
+          { 'profile.lastName': { $regex: escaped, $options: 'i' } },
         ],
       }).select('_id').limit(50).lean();
       query.userId = { $in: users.map(u => u._id) };

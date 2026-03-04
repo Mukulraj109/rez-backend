@@ -436,6 +436,22 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+// ==================== WEBHOOK RAW BODY ROUTES ====================
+// Mount webhook routes BEFORE the JSON body parser so they receive the raw Buffer.
+// Stripe signature verification requires the original raw body (not re-stringified JSON).
+// Razorpay HMAC verification also needs the original body bytes.
+import { handleStripeWebhook, handleWebhook as handleRazorpayWebhook } from './controllers/paymentController';
+
+app.post('/api/payment/stripe-webhook',
+  express.raw({ type: 'application/json' }),
+  handleStripeWebhook as any
+);
+
+app.post('/api/payment/webhook',
+  express.raw({ type: 'application/json' }),
+  handleRazorpayWebhook as any
+);
+
 // Body parsing middleware
 // Use custom JSON parser that handles null/empty bodies gracefully
 app.use((req: any, res: any, next: any) => {
@@ -985,8 +1001,8 @@ app.use(`${API_PREFIX}/admin/creators`, adminCreatorRoutes);
 console.log('✅ Admin creator routes registered at /api/admin/creators');
 
 // Admin authentication routes (for rez-admin portal)
-app.use(`${API_PREFIX}/auth`, adminAuthRoutes);
-console.log('✅ Admin auth routes registered at /api/auth');
+app.use(`${API_PREFIX}/admin/auth`, adminAuthRoutes);
+console.log('✅ Admin auth routes registered at /api/admin/auth');
 
 // Admin panel routes
 app.use(`${API_PREFIX}/admin/dashboard`, adminDashboardRoutes);

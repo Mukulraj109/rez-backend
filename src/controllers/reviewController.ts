@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Review } from '../models/Review';
 import { Store } from '../models/Store';
 import { Order } from '../models/Order';
+import { StorePayment } from '../models/StorePayment';
 import {
   sendSuccess,
   sendNotFound,
@@ -300,14 +301,30 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
       throw new AppError('Store not found', 404);
     }
 
-    // Verify the user has a delivered/completed order at this store
-    const hasDeliveredOrder = await Order.exists({
-      user: userId,
-      store: storeId,
-      status: { $in: ['delivered', 'completed'] }
-    });
-    if (!hasDeliveredOrder) {
-      throw new AppError('You can only review stores where you have a completed order', 400);
+    // Verify the user has a qualifying order or store payment at this store
+    // - Delivery orders: must be 'delivered'
+    // - In-store orders (dine_in, pickup, drive_thru): 'ready' or 'delivered' (user is at the store)
+    // - Store payments (QR pay-in-store): must be 'completed'
+    const [hasDeliveredOrder, hasInStoreOrder, hasStorePayment] = await Promise.all([
+      Order.exists({
+        user: userId,
+        store: storeId,
+        status: { $in: ['delivered', 'completed'] }
+      }),
+      Order.exists({
+        user: userId,
+        store: storeId,
+        fulfillmentType: { $in: ['dine_in', 'pickup', 'drive_thru'] },
+        status: { $in: ['ready', 'delivered', 'completed'] }
+      }),
+      StorePayment.exists({
+        userId: userId,
+        storeId: storeId,
+        status: 'completed'
+      }),
+    ]);
+    if (!hasDeliveredOrder && !hasInStoreOrder && !hasStorePayment) {
+      throw new AppError('You can only review stores where you have a completed order or payment', 400);
     }
 
     // Check if user has already reviewed this store
@@ -636,8 +653,8 @@ export const getUserReviews = asyncHandler(async (req: Request, res: Response) =
     const reviews = await Review.find({
       user: userId,
       isActive: true,
-      moderationStatus: 'approved' // Only show approved reviews to users
     })
+      .select('+moderationStatus +moderationReason +moderatedAt')
       .populate('store', 'name logo location.address')
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -647,7 +664,6 @@ export const getUserReviews = asyncHandler(async (req: Request, res: Response) =
     const total = await Review.countDocuments({
       user: userId,
       isActive: true,
-      moderationStatus: 'approved'
     });
 
     sendSuccess(res, {

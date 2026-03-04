@@ -10,6 +10,7 @@ import SmartSpendItem from '../../models/SmartSpendItem';
 import { Store } from '../../models/Store';
 import { Product } from '../../models/Product';
 import { sendSuccess, sendError } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 
 // ─── List Items ────────────────────────────────────────────────────────────────
 
@@ -48,10 +49,11 @@ export const getSmartSpendItems = async (req: Request, res: Response) => {
     }
 
     if (req.query.search) {
+      const escaped = escapeRegex(String(req.query.search).substring(0, 200));
       filter.$or = [
-        { displayTitle: { $regex: req.query.search, $options: 'i' } },
-        { sectionLabel: { $regex: req.query.search, $options: 'i' } },
-        { badgeText: { $regex: req.query.search, $options: 'i' } },
+        { displayTitle: { $regex: escaped, $options: 'i' } },
+        { sectionLabel: { $regex: escaped, $options: 'i' } },
+        { badgeText: { $regex: escaped, $options: 'i' } },
       ];
     }
 

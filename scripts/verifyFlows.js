@@ -1,16 +1,21 @@
 const axios = require('axios');
+const crypto = require('crypto');
 const mongoose = require('mongoose');
 
 const BASE_URL = 'http://localhost:5000/api';
+
+// Prevent running in production
+if (process.env.NODE_ENV === 'production') {
+  console.error('ERROR: Seed/verify scripts cannot run in production!');
+  process.exit(1);
+}
+
+const GENERATED_PASSWORD = crypto.randomBytes(16).toString('hex');
 
 async function verifyFlows() {
     try {
         // 1. Login to get token (assuming test user exists, otherwise create one)
         console.log('🔑 Logging in...');
-        // Use a known seed user or newly created one. 
-        // For this script, I'll attempt to login as a user I suspect exists or create one.
-        // Let's assume seeded user: john.doe@example.com / password123 (common seed)
-        // If not, I'll register one.
 
         let token;
         let userId;
@@ -19,7 +24,7 @@ async function verifyFlows() {
         try {
             const loginRes = await axios.post(`${BASE_URL}/auth/login`, {
                 email: 'john.doe@example.com',
-                password: 'password123'
+                password: GENERATED_PASSWORD
             });
             token = loginRes.data.token;
             userId = loginRes.data.user.id;
@@ -30,7 +35,7 @@ async function verifyFlows() {
                 firstName: 'Test',
                 lastName: 'User',
                 email: `test${Date.now()}@example.com`,
-                password: 'password123',
+                password: GENERATED_PASSWORD,
                 phone: '1234567890'
             });
             token = regRes.data.token;

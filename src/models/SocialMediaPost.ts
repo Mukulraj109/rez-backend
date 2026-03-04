@@ -31,6 +31,7 @@ export interface ISocialMediaPost extends Document {
     postId?: string;
     thumbnailUrl?: string;
     orderNumber?: string;
+    storePaymentId?: string;
     extractedData?: any;
   };
   createdAt: Date;
@@ -199,6 +200,11 @@ const SocialMediaPostSchema = new Schema<ISocialMediaPost>({
     orderNumber: {
       type: String,
       trim: true
+    },
+    storePaymentId: {
+      type: String,
+      trim: true,
+      index: true
     },
     extractedData: {
       type: Schema.Types.Mixed

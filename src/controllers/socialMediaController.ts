@@ -5,6 +5,7 @@ import { Request, Response } from 'express';
 import mongoose, { Types } from 'mongoose';
 import SocialMediaPost from '../models/SocialMediaPost';
 import { Order } from '../models/Order';
+import { StorePayment } from '../models/StorePayment';
 import { Wallet } from '../models/Wallet';
 import AuditLog from '../models/AuditLog';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -29,24 +30,8 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
   const { platform, postUrl, orderId, fraudMetadata } = req.body;
 
-  console.log('\n========================================');
-  console.log('📱 [SOCIAL MEDIA] SUBMIT POST START');
-  console.log('========================================');
-  console.log('📱 [SOCIAL MEDIA] Request body:', JSON.stringify({ userId, platform, postUrl, orderId }, null, 2));
-
-  // Log fraud metadata if provided
+  // Log high risk submissions as warnings (don't block)
   if (fraudMetadata) {
-    console.log('🔒 [FRAUD] Metadata received:', {
-      deviceId: fraudMetadata.deviceId?.substring(0, 10) + '...',
-      trustScore: fraudMetadata.trustScore,
-      riskScore: fraudMetadata.riskScore,
-      riskLevel: fraudMetadata.riskLevel,
-      checksPassed: fraudMetadata.checksPassed,
-      totalChecks: fraudMetadata.totalChecks,
-      warningsCount: fraudMetadata.warnings?.length || 0
-    });
-
-    // Log high risk submissions as warnings (don't block)
     if (fraudMetadata.riskLevel === 'critical') {
       console.warn('⚠️ [FRAUD] High risk submission (allowed):', { userId, riskScore: fraudMetadata.riskScore });
     }
@@ -67,13 +52,10 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
     };
 
     const urlIsValid = urlPatterns[platform]?.test(postUrl);
-    console.log('📱 [SOCIAL MEDIA] URL validation:', { platform, postUrl, urlIsValid, pattern: urlPatterns[platform]?.toString() });
 
     if (!urlIsValid) {
-      console.log('❌ [SOCIAL MEDIA] URL validation FAILED');
       return sendError(res, `Invalid ${platform} post URL format`, 400);
     }
-    console.log('✅ [SOCIAL MEDIA] URL validation PASSED');
 
     // FRAUD PREVENTION CHECK 1: Check if URL already submitted
     const existingPost = await SocialMediaPost.findOne({ postUrl });
@@ -82,14 +64,14 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
       return sendError(res, 'This post URL has already been submitted', 409);
     }
 
-    // FRAUD PREVENTION CHECK 2: Check if user already submitted for this order
+    // FRAUD PREVENTION CHECK 2: Check if user already submitted for this order/payment
     if (orderId) {
-      const existingForOrder = await SocialMediaPost.findOne({
-        user: userId,
-        order: orderId
-      });
+      const isMongoOrderId = /^[a-f\d]{24}$/i.test(orderId);
+      const existingForOrder = isMongoOrderId
+        ? await SocialMediaPost.findOne({ user: userId, order: orderId })
+        : await SocialMediaPost.findOne({ user: userId, 'metadata.storePaymentId': orderId });
       if (existingForOrder) {
-        console.warn('⚠️ [FRAUD] User tried to submit same order twice:', { userId, orderId });
+        console.warn('⚠️ [FRAUD] User tried to submit same order/payment twice:', { userId, orderId });
         return sendError(res, 'You have already submitted a post for this order', 409);
       }
     }
@@ -132,34 +114,48 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
     let orderNumber = '';
     let storeId: Types.ObjectId | undefined;
     let merchantId: Types.ObjectId | undefined;
+    const isMongoId = orderId && /^[a-f\d]{24}$/i.test(orderId);
 
-    if (orderId) {
+    if (orderId && isMongoId) {
+      // Standard Order (MongoDB ObjectId)
       const order = await Order.findOne({ _id: orderId, user: userId })
         .populate({
           path: 'items.store',
-          select: 'merchantId name' // NOTE: Store model uses 'merchantId', not 'merchant'
+          select: 'merchantId name'
         });
 
       if (order) {
         const orderTotal = order.totals?.subtotal || 0;
-        cashbackAmount = Math.round(orderTotal * 0.05); // 5% cashback (based on subtotal)
+        cashbackAmount = Math.round(orderTotal * 0.05);
         orderNumber = order.orderNumber;
 
-        // Extract store and merchant from order items
-        // Use the first item's store (primary store for this order)
         const firstItemWithStore = order.items?.find((item: any) => item.store);
         if (firstItemWithStore && firstItemWithStore.store) {
           const store = firstItemWithStore.store as any;
           storeId = typeof store === 'object' ? store._id : store;
-
-          // Get merchantId from store if populated
-          // NOTE: Store model uses 'merchantId' field, not 'merchant'
           if (typeof store === 'object' && store.merchantId) {
             merchantId = store.merchantId;
           }
         }
 
-        console.log('📦 [SOCIAL MEDIA] Order store/merchant:', { storeId, merchantId, orderNumber });
+      }
+    } else if (orderId && !isMongoId) {
+      // StorePayment ID (e.g. "SP-xxx" format)
+      const payment = await StorePayment.findOne({ paymentId: orderId, userId })
+        .populate('storeId', 'merchantId name');
+
+      if (payment) {
+        const paymentTotal = (payment as any).billAmount || (payment as any).amount || 0;
+        cashbackAmount = Math.round(paymentTotal * 0.05);
+        orderNumber = orderId;
+        storeId = payment.storeId as any;
+
+        const storeObj = payment.storeId as any;
+        if (storeObj && typeof storeObj === 'object' && storeObj.merchantId) {
+          merchantId = storeObj.merchantId;
+          storeId = storeObj._id;
+        }
+
       }
     }
 
@@ -167,13 +163,6 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
     const submissionIp = req.ip || req.socket.remoteAddress || req.headers['x-forwarded-for'];
     const deviceFingerprint = req.headers['x-device-id'] as string;
     const userAgent = req.headers['user-agent'];
-
-    console.log('🔒 [FRAUD TRACKING] Submission metadata:', {
-      userId,
-      submissionIp,
-      deviceFingerprint: deviceFingerprint ? 'present' : 'missing',
-      userAgent: userAgent?.substring(0, 50)
-    });
 
     // Determine if manual review is required based on risk level
     const requiresManualReview = fraudMetadata && (
@@ -183,11 +172,13 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
     );
 
     // Create post submission
+    // Only set `order` field for valid MongoDB ObjectIds (Order model refs)
+    // StorePayment IDs (SP-xxx) are stored in metadata.storePaymentId
     const post = new SocialMediaPost({
       user: userId,
-      order: orderId,
-      store: storeId, // Link to store for merchant verification
-      merchant: merchantId, // Link to merchant for filtering
+      ...(orderId && isMongoId ? { order: orderId } : {}),
+      store: storeId,
+      merchant: merchantId,
       platform,
       postUrl,
       status: 'pending',
@@ -199,7 +190,7 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
       userAgent,
       metadata: {
         orderNumber,
-        // Store fraud metadata for review
+        ...(orderId && !isMongoId ? { storePaymentId: orderId } : {}),
         fraudMetadata: fraudMetadata ? {
           trustScore: fraudMetadata.trustScore,
           riskScore: fraudMetadata.riskScore,
@@ -213,18 +204,6 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
     });
 
     await post.save();
-
-    console.log('========================================');
-    console.log('✅ [SOCIAL MEDIA] POST SAVED SUCCESSFULLY');
-    console.log('========================================');
-    console.log('📱 [SOCIAL MEDIA] Saved post details:', JSON.stringify({
-      postId: post._id,
-      userId: post.user,
-      orderId: post.order,
-      storeId: post.store,
-      status: post.status,
-      cashbackAmount: post.cashbackAmount
-    }, null, 2));
 
     // Audit Log: Track submission
     await AuditLog.log({
@@ -269,9 +248,8 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
           customerName,
           amount: cashbackAmount,
         });
-        console.log('📬 [SOCIAL MEDIA] Merchant notified of new cashback request');
       } catch (notifyError) {
-        console.error('❌ [SOCIAL MEDIA] Error notifying merchant:', notifyError);
+        // Notification failure is non-critical
       }
     }
 
@@ -299,11 +277,6 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
   const { platform, orderId, fraudMetadata } = req.body;
   const files = req.files as Express.Multer.File[];
 
-  console.log('\n========================================');
-  console.log('📱 [SOCIAL MEDIA] SUBMIT POST WITH MEDIA START');
-  console.log('========================================');
-  console.log('📱 [SOCIAL MEDIA] Request:', JSON.stringify({ userId, platform, orderId, fileCount: files?.length }, null, 2));
-
   // Log fraud metadata if provided (non-blocking)
   if (fraudMetadata) {
     const parsed = typeof fraudMetadata === 'string' ? JSON.parse(fraudMetadata) : fraudMetadata;
@@ -320,14 +293,14 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
       return sendError(res, 'At least one photo or video is required', 400);
     }
 
-    // FRAUD PREVENTION CHECK 2: Check if user already submitted for this order
+    // FRAUD PREVENTION CHECK 2: Check if user already submitted for this order/payment
     if (orderId) {
-      const existingForOrder = await SocialMediaPost.findOne({
-        user: userId,
-        order: orderId
-      });
+      const isMongoOrderId = /^[a-f\d]{24}$/i.test(orderId);
+      const existingForOrder = isMongoOrderId
+        ? await SocialMediaPost.findOne({ user: userId, order: orderId })
+        : await SocialMediaPost.findOne({ user: userId, 'metadata.storePaymentId': orderId });
       if (existingForOrder) {
-        console.warn('⚠️ [FRAUD] User tried to submit same order twice:', { userId, orderId });
+        console.warn('⚠️ [FRAUD] User tried to submit same order/payment twice:', { userId, orderId });
         return sendError(res, 'You have already submitted a post for this order', 409);
       }
     }
@@ -374,8 +347,9 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
     let orderNumber = '';
     let storeId: Types.ObjectId | undefined;
     let merchantId: Types.ObjectId | undefined;
+    const isMongoId = orderId && /^[a-f\d]{24}$/i.test(orderId);
 
-    if (orderId) {
+    if (orderId && isMongoId) {
       const order = await Order.findOne({ _id: orderId, user: userId })
         .populate({
           path: 'items.store',
@@ -396,6 +370,26 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
           }
         }
       }
+    } else if (orderId && !isMongoId) {
+      // StorePayment ID (e.g. "SP-xxx" format)
+      const payment = await StorePayment.findOne({ paymentId: orderId, userId })
+        .populate('storeId', 'merchantId name');
+
+      if (payment) {
+        const paymentTotal = (payment as any).billAmount || (payment as any).amount || 0;
+        cashbackAmount = Math.round(paymentTotal * 0.05);
+        orderNumber = orderId;
+
+        const storeObj = payment.storeId as any;
+        if (storeObj && typeof storeObj === 'object') {
+          storeId = storeObj._id;
+          if (storeObj.merchantId) {
+            merchantId = storeObj.merchantId;
+          }
+        } else {
+          storeId = payment.storeId as any;
+        }
+      }
     }
 
     // Capture request metadata
@@ -404,13 +398,14 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
     const userAgent = req.headers['user-agent'];
 
     // Create post with media
+    // Only set `order` field for valid MongoDB ObjectIds
     const post = new SocialMediaPost({
       user: userId,
-      order: orderId,
+      ...(orderId && isMongoId ? { order: orderId } : {}),
       store: storeId,
       merchant: merchantId,
       platform,
-      postUrl: proofMedia[0]?.url || '', // Use first file URL as postUrl
+      postUrl: proofMedia[0]?.url || '',
       submissionType: 'media',
       proofMedia,
       status: 'pending',
@@ -421,17 +416,12 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
       deviceFingerprint: deviceFingerprint,
       userAgent,
       metadata: {
-        orderNumber
+        orderNumber,
+        ...(orderId && !isMongoId ? { storePaymentId: orderId } : {}),
       }
     });
 
     await post.save();
-
-    console.log('✅ [SOCIAL MEDIA] POST WITH MEDIA SAVED:', {
-      postId: post._id,
-      mediaCount: proofMedia.length,
-      cashbackAmount: post.cashbackAmount
-    });
 
     // Audit Log
     await AuditLog.log({
@@ -474,9 +464,8 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
           customerName,
           amount: cashbackAmount,
         });
-        console.log('📬 [SOCIAL MEDIA] Merchant notified of new cashback request (media)');
       } catch (notifyError) {
-        console.error('❌ [SOCIAL MEDIA] Error notifying merchant:', notifyError);
+        // Notification failure is non-critical
       }
     }
 
@@ -504,18 +493,11 @@ export const getUserPosts = asyncHandler(async (req: Request, res: Response) => 
   const userId = req.userId!;
   const { page = 1, limit = 20, status } = req.query;
 
-  console.log('\n========================================');
-  console.log('📱 [SOCIAL MEDIA] GET USER POSTS');
-  console.log('========================================');
-  console.log('📱 [SOCIAL MEDIA] Query params:', { userId, page, limit, status });
-
   try {
     const query: any = { user: userId };
     if (status) {
       query.status = status;
     }
-
-    console.log('📱 [SOCIAL MEDIA] MongoDB query:', JSON.stringify(query));
 
     const skip = (Number(page) - 1) * Number(limit);
 
@@ -527,11 +509,6 @@ export const getUserPosts = asyncHandler(async (req: Request, res: Response) => 
 
     const total = await SocialMediaPost.countDocuments(query);
     const totalPages = Math.ceil(total / Number(limit));
-
-    console.log(`✅ [SOCIAL MEDIA] Found ${posts.length} posts, total: ${total}`);
-    if (posts.length > 0) {
-      console.log('📱 [SOCIAL MEDIA] First post:', JSON.stringify(posts[0], null, 2));
-    }
 
     sendSuccess(res, {
       posts,
@@ -555,12 +532,8 @@ export const getUserPosts = asyncHandler(async (req: Request, res: Response) => 
 export const getUserEarnings = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
 
-  console.log('📱 [SOCIAL MEDIA] Getting user earnings:', userId);
-
   try {
     const earnings = await SocialMediaPost.getUserEarnings(new Types.ObjectId(userId));
-
-    console.log('✅ [SOCIAL MEDIA] Earnings calculated:', earnings);
 
     sendSuccess(res, earnings, 'Earnings retrieved successfully');
 
@@ -574,8 +547,6 @@ export const getUserEarnings = asyncHandler(async (req: Request, res: Response) 
 export const getPostById = asyncHandler(async (req: Request, res: Response) => {
   const { postId } = req.params;
   const userId = req.userId!;
-
-  console.log('📱 [SOCIAL MEDIA] Getting post:', { postId, userId });
 
   try {
     const post = await SocialMediaPost.findOne({ _id: postId, user: userId })
@@ -599,8 +570,6 @@ export const updatePostStatus = asyncHandler(async (req: Request, res: Response)
   const { postId } = req.params;
   const { status, rejectionReason } = req.body;
   const reviewerId = req.userId!;
-
-  console.log('📱 [SOCIAL MEDIA] Updating post status:', { postId, status, reviewerId });
 
   // Start transaction for atomic wallet update
   const session = await mongoose.startSession();
@@ -666,8 +635,6 @@ export const updatePostStatus = asyncHandler(async (req: Request, res: Response)
       // Mark post as credited (wallet update happens after transaction via coinService)
       await post.creditCashback();
 
-      console.log(`✅ [SOCIAL MEDIA] Post marked as credited, will award ${post.cashbackAmount} coins after commit`);
-
       // Audit Log: Track cashback crediting
       await AuditLog.log({
         merchantId: new Types.ObjectId('000000000000000000000000'), // System/user activity
@@ -688,8 +655,6 @@ export const updatePostStatus = asyncHandler(async (req: Request, res: Response)
 
     await session.commitTransaction();
 
-    console.log('✅ [SOCIAL MEDIA] Post status updated:', post.status);
-
     // After transaction commits: credit coins via coinService (creates CoinTransaction record)
     // CoinTransaction is the source of truth — wallet auto-syncs from it on /wallet/balance
     if (status === 'credited') {
@@ -702,9 +667,8 @@ export const updatePostStatus = asyncHandler(async (req: Request, res: Response)
           `Social media cashback (${post.platform}) for order ${post.order}`,
           { postId: post._id, platform: post.platform, orderId: post.order }
         );
-        console.log(`✅ [SOCIAL MEDIA] Credited ${post.cashbackAmount} REZ coins via CoinTransaction`);
       } catch (coinError) {
-        console.error('❌ [SOCIAL MEDIA] Failed to credit coins via coinService:', coinError);
+        console.error('Failed to credit coins via coinService:', coinError);
       }
 
       // Emit gamification event for social media post crediting
@@ -749,8 +713,6 @@ export const deletePost = asyncHandler(async (req: Request, res: Response) => {
   const { postId } = req.params;
   const userId = req.userId!;
 
-  console.log('📱 [SOCIAL MEDIA] Deleting post:', { postId, userId });
-
   try {
     const post = await SocialMediaPost.findOne({ _id: postId, user: userId });
 
@@ -764,8 +726,6 @@ export const deletePost = asyncHandler(async (req: Request, res: Response) => {
 
     await post.deleteOne();
 
-    console.log('✅ [SOCIAL MEDIA] Post deleted');
-
     sendSuccess(res, null, 'Post deleted successfully');
 
   } catch (error) {
@@ -777,8 +737,6 @@ export const deletePost = asyncHandler(async (req: Request, res: Response) => {
 // Get platform statistics
 export const getPlatformStats = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
-
-  console.log('📱 [SOCIAL MEDIA] Getting platform stats:', userId);
 
   try {
     const stats = await SocialMediaPost.aggregate([
@@ -807,8 +765,6 @@ export const getPlatformStats = asyncHandler(async (req: Request, res: Response)
         }
       }
     ]);
-
-    console.log('✅ [SOCIAL MEDIA] Platform stats calculated');
 
     sendSuccess(res, { stats }, 'Platform statistics retrieved successfully');
 
@@ -927,8 +883,6 @@ const analyzeCaption = (caption: string = ''): {
 export const verifyInstagramPost = asyncHandler(async (req: Request, res: Response) => {
   const { url, postId: providedPostId, username: providedUsername } = req.body;
 
-  console.log('📸 [INSTAGRAM] Verifying post:', { url });
-
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -1011,8 +965,6 @@ export const verifyInstagramPost = asyncHandler(async (req: Request, res: Respon
       warnings.push(`Account has fewer than ${INSTAGRAM_CONFIG.MIN_POSTS} posts`);
     }
 
-    console.log('✅ [INSTAGRAM] Post verification complete');
-
     sendSuccess(res, {
       isValid: errors.length === 0,
       exists: true,
@@ -1046,8 +998,6 @@ export const verifyInstagramPost = asyncHandler(async (req: Request, res: Respon
 export const verifyInstagramAccount = asyncHandler(async (req: Request, res: Response) => {
   const { username } = req.body;
 
-  console.log('📸 [INSTAGRAM] Verifying account:', username);
-
   const errors: string[] = [];
 
   try {
@@ -1067,8 +1017,6 @@ export const verifyInstagramAccount = asyncHandler(async (req: Request, res: Res
       profile_picture_url: `https://picsum.photos/seed/${username}/200/200`,
       is_verified: false
     };
-
-    console.log('✅ [INSTAGRAM] Account verification complete');
 
     sendSuccess(res, {
       isValid: true,
@@ -1090,8 +1038,6 @@ export const verifyInstagramAccount = asyncHandler(async (req: Request, res: Res
 export const extractInstagramPostData = asyncHandler(async (req: Request, res: Response) => {
   const { url, postId: providedPostId } = req.body;
 
-  console.log('📸 [INSTAGRAM] Extracting post data:', { url });
-
   try {
     const parsed = parseInstagramUrl(url);
     if (!parsed.isValid || !parsed.postId) {
@@ -1106,8 +1052,6 @@ export const extractInstagramPostData = asyncHandler(async (req: Request, res: R
     // In production, this would fetch actual thumbnail from Instagram
     const thumbnailUrl = `https://picsum.photos/seed/${postId}/400/400`;
 
-    console.log('✅ [INSTAGRAM] Post data extracted');
-
     sendSuccess(res, {
       success: true,
       postId,
@@ -1120,4 +1064,60 @@ export const extractInstagramPostData = asyncHandler(async (req: Request, res: R
     console.error('❌ [INSTAGRAM] Extract data error:', error);
     sendError(res, 'Failed to extract post data', 500);
   }
+});
+
+// Check if a post URL has already been submitted
+export const checkDuplicate = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.userId!;
+  const { url, postId } = req.body;
+
+  const query: any = { user: userId };
+
+  if (url) {
+    query.postUrl = url;
+  } else if (postId) {
+    query['metadata.postId'] = postId;
+  } else {
+    return sendSuccess(res, { isDuplicate: false });
+  }
+
+  const existing = await SocialMediaPost.findOne(query)
+    .select('_id submittedAt')
+    .lean();
+
+  if (existing) {
+    return sendSuccess(res, {
+      isDuplicate: true,
+      existingSubmissionId: existing._id,
+      submittedAt: existing.submittedAt,
+    });
+  }
+
+  sendSuccess(res, { isDuplicate: false });
+});
+
+// Check if user has already shared a specific order/payment
+export const checkSharedStatus = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.userId!;
+  const { orderId } = req.query;
+
+  if (!orderId || typeof orderId !== 'string') {
+    return sendSuccess(res, { hasShared: false });
+  }
+
+  const isMongoId = /^[a-f\d]{24}$/i.test(orderId);
+
+  const query = isMongoId
+    ? { user: userId, order: orderId }
+    : { user: userId, $or: [
+        { 'metadata.storePaymentId': orderId },
+        { 'metadata.orderNumber': orderId },
+      ]};
+
+  const existing = await SocialMediaPost.findOne(query).select('_id status').lean();
+
+  sendSuccess(res, {
+    hasShared: !!existing,
+    status: existing?.status || null,
+  });
 });
