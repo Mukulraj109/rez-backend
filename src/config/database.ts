@@ -14,8 +14,10 @@ const defaultConfig: DatabaseConfig = {
   uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/rez-app',
   options: {
     // Connection options - OPTIMIZED FOR PRODUCTION PERFORMANCE
-    maxPoolSize: 100, // Maintain up to 100 socket connections (increased from 10)
-    minPoolSize: 10, // Always maintain 10 connections
+    // Pool size reduced from 100 → 25 per pod (10 pods × 25 = 250 total, within Atlas limits)
+    // Override via MONGO_MAX_POOL_SIZE env var for Atlas M30+ (can raise to 50)
+    maxPoolSize: parseInt(process.env.MONGO_MAX_POOL_SIZE || '25', 10),
+    minPoolSize: 5, // Reduced idle overhead
     serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
     socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
     family: 4, // Use IPv4, skip trying IPv6

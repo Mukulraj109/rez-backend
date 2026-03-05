@@ -1020,24 +1020,31 @@ export const updateWalletSettings = asyncHandler(async (req: Request, res: Respo
     return sendError(res, 'User not authenticated', 401);
   }
 
-  const wallet = await Wallet.findOne({ user: userId });
+  const lockKey = `lock:wallet:settings:${userId}`;
+  const lockToken = await redisService.acquireLock(lockKey, 5);
 
-  if (!wallet) {
-    return sendNotFound(res, 'Wallet not found');
+  try {
+    const wallet = await Wallet.findOne({ user: userId });
+
+    if (!wallet) {
+      return sendNotFound(res, 'Wallet not found');
+    }
+
+    // Update settings
+    if (autoTopup !== undefined) wallet.settings.autoTopup = autoTopup;
+    if (autoTopupThreshold !== undefined) wallet.settings.autoTopupThreshold = autoTopupThreshold;
+    if (autoTopupAmount !== undefined) wallet.settings.autoTopupAmount = autoTopupAmount;
+    if (lowBalanceAlert !== undefined) wallet.settings.lowBalanceAlert = lowBalanceAlert;
+    if (lowBalanceThreshold !== undefined) wallet.settings.lowBalanceThreshold = lowBalanceThreshold;
+
+    await wallet.save();
+
+    sendSuccess(res, {
+      settings: wallet.settings
+    }, 'Wallet settings updated successfully');
+  } finally {
+    if (lockToken) await redisService.releaseLock(lockKey, lockToken);
   }
-
-  // Update settings
-  if (autoTopup !== undefined) wallet.settings.autoTopup = autoTopup;
-  if (autoTopupThreshold !== undefined) wallet.settings.autoTopupThreshold = autoTopupThreshold;
-  if (autoTopupAmount !== undefined) wallet.settings.autoTopupAmount = autoTopupAmount;
-  if (lowBalanceAlert !== undefined) wallet.settings.lowBalanceAlert = lowBalanceAlert;
-  if (lowBalanceThreshold !== undefined) wallet.settings.lowBalanceThreshold = lowBalanceThreshold;
-
-  await wallet.save();
-
-  sendSuccess(res, {
-    settings: wallet.settings
-  }, 'Wallet settings updated successfully');
 });
 
 /**
@@ -1444,6 +1451,9 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
     return sendError(res, 'User not authenticated', 401);
   }
 
+  const lockKey = `lock:wallet:topup:${userId}`;
+  const lockToken = await redisService.acquireLock(lockKey, 10);
+
   try {
     let wallet = await Wallet.findOne({ user: userId });
 
@@ -1475,7 +1485,7 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
     wallet.balance.total = (wallet.balance.total || 0) + devAmount;
     await wallet.save();
 
-    console.log('✅ [DEV TOPUP] Test funds added:', wallet.balance);
+    console.log('[DEV TOPUP] Test funds added:', wallet.balance);
 
     sendSuccess(res, {
       wallet: {
@@ -1487,8 +1497,10 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
       type: type
     }, `Test ${type} funds added successfully`);
   } catch (error: any) {
-    console.error('❌ [DEV TOPUP] Error:', error);
+    console.error('[DEV TOPUP] Error:', error);
     sendError(res, sanitizeErrorMessage(error, 'Failed to add test funds'), 500);
+  } finally {
+    if (lockToken) await redisService.releaseLock(lockKey, lockToken);
   }
 });
 
@@ -1500,11 +1512,12 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
 export const syncWalletBalance = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
 
-  console.log('🔄 [WALLET SYNC] Syncing wallet balance from CoinTransaction');
-
   if (!userId) {
     return sendError(res, 'User not authenticated', 401);
   }
+
+  const lockKey = `lock:wallet:sync:${userId}`;
+  const lockToken = await redisService.acquireLock(lockKey, 15);
 
   try {
     // Import CoinTransaction to get the true balance
@@ -1583,8 +1596,10 @@ export const syncWalletBalance = asyncHandler(async (req: Request, res: Response
       synced: true
     }, 'Wallet balance synced successfully');
   } catch (error: any) {
-    console.error('❌ [WALLET SYNC] Error:', error);
+    console.error('[WALLET SYNC] Error:', error);
     sendError(res, sanitizeErrorMessage(error, 'Failed to sync wallet balance'), 500);
+  } finally {
+    if (lockToken) await redisService.releaseLock(lockKey, lockToken);
   }
 });
 

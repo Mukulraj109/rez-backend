@@ -11,6 +11,7 @@ import { IEventBooking } from '../models/EventBooking';
 import paymentGatewayService from '../services/paymentGatewayService';
 import eventRewardService from '../services/eventRewardService';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
+import { withCache } from '../utils/cacheHelper';
 
 // Helper function to escape regex special characters to prevent ReDoS attacks
 const escapeRegex = (str: string): string => {
@@ -102,13 +103,16 @@ export const getAllEvents = asyncHandler(async (req: Request, res: Response) => 
       break;
   }
 
-  const events = await Event.find(query)
-    .sort(sort)
-    .limit(limit)
-    .skip(offset)
-    .lean();
+  const cacheKey = `events:list:${offset}:${limit}:${JSON.stringify(query)}:${JSON.stringify(sort)}`;
+  const result = await withCache(cacheKey, 1800, async () => {
+    const [events, total] = await Promise.all([
+      Event.find(query).sort(sort).limit(limit).skip(offset).lean(),
+      Event.countDocuments(query),
+    ]);
+    return { events, total };
+  });
 
-  const total = await Event.countDocuments(query);
+  const { events, total } = result;
 
   res.json({
     success: true,

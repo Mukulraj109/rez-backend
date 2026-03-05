@@ -72,6 +72,7 @@ import { initSentry, sentryRequestHandler, sentryTracingHandler, sentryErrorHand
 import { setCsrfToken, validateCsrfToken } from './middleware/csrf';
 import { metricsMiddleware, metricsEndpoint } from './config/prometheus';
 import { generalLimiter } from './middleware/rateLimiter';
+import { ipBlocker } from './middleware/ipBlocker';
 // Import routes
 import authRoutes from './routes/authRoutes';
 import productRoutes from './routes/productRoutes';
@@ -436,6 +437,9 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+// IP Blocker — blocks IPs flagged for suspicious activity (Redis-backed)
+app.use(ipBlocker);
+
 // ==================== WEBHOOK RAW BODY ROUTES ====================
 // Mount webhook routes BEFORE the JSON body parser so they receive the raw Buffer.
 // Stripe signature verification requires the original raw body (not re-stringified JSON).
@@ -452,39 +456,48 @@ app.post('/api/payment/webhook',
   handleRazorpayWebhook as any
 );
 
-// Body parsing middleware
-// Use custom JSON parser that handles null/empty bodies gracefully
+// Body parsing middleware — selective limits to prevent memory exhaustion
+const UPLOAD_PATHS = [
+  '/api/bills/upload',
+  '/api/products/import',
+  '/api/merchant/products/bulk',
+  '/api/ugc/upload',
+  '/api/merchant/uploads',
+];
+
 app.use((req: any, res: any, next: any) => {
-  express.json({ limit: '10mb' })(req, res, (err: any) => {
+  // Upload routes get 10MB; everything else gets 50KB
+  const isUpload = UPLOAD_PATHS.some((p: string) => req.path.startsWith(p));
+  const limit = isUpload ? '10mb' : '50kb';
+
+  express.json({ limit })(req, res, (err: any) => {
     if (err) {
-      // Check if it's a JSON parse error (includes "null" string issue)
-      if (err instanceof SyntaxError && 'body' in err) {
-        console.log('🔍 [BODY-PARSER] JSON parse error caught for:', req.method, req.path);
-        console.log('🔍 [BODY-PARSER] Error message:', err.message);
-        // Set body to empty object instead of failing
-        req.body = {};
-        return next(); // Continue without error
+      if (err.type === 'entity.too.large') {
+        return res.status(413).json({
+          success: false,
+          message: `Request body too large. Maximum size is ${limit}.`,
+        });
       }
-      // Pass other errors to error handler
+      if (err instanceof SyntaxError && 'body' in err) {
+        req.body = {};
+        return next();
+      }
       return next(err);
     }
-    // No error, continue normally
     next();
   });
 });
 
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50kb' }));
 
 // Cookie parser middleware (required for CSRF protection)
-// Note: Install cookie-parser package: npm install cookie-parser @types/cookie-parser
-// import cookieParser from 'cookie-parser';
-// app.use(cookieParser());
+import cookieParser from 'cookie-parser';
+app.use(cookieParser());
 
 // CSRF Protection Middleware
-// Automatically sets CSRF token in cookie and response header for all requests
-// Note: Requires cookie-parser to be installed and enabled above
-// app.use(setCsrfToken);
-console.log('⚠️  CSRF protection middleware available but not enabled (requires cookie-parser)');
+// Sets CSRF token in cookie and response header for all requests
+app.use(setCsrfToken);
+console.log('✅ CSRF protection middleware enabled');
 
 // Compression middleware
 app.use(compression());
@@ -651,10 +664,27 @@ const server = createServer(app);
 
 const io = new SocketIOServer(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || getAllowedOrigins(),
+    methods: ['GET', 'POST'],
+  },
+  maxHttpBufferSize: 1e4,       // 10 KB max payload (prevents memory exhaustion)
+  pingTimeout: 10_000,          // 10s (faster dead socket cleanup)
+  pingInterval: 25_000,         // 25s keepalive
+  connectTimeout: 10_000,       // 10s to complete handshake
+  transports: ['websocket', 'polling'],
 });
+
+// Attach Redis adapter so all pods share Socket.IO events
+import { attachRedisAdapter } from './config/socketAdapter';
+(async () => {
+  try {
+    await attachRedisAdapter(io);
+  } catch (err) {
+    // Non-fatal: fall back to in-memory adapter (works for single pod only)
+    console.error('[Socket.IO] Redis adapter failed, using in-memory fallback:', err);
+    console.warn('[Socket.IO] ⚠️  Real-time events will NOT work across multiple pods!');
+  }
+})();
 
 // Register Socket.IO instance so services (supportSocketService, etc.) can emit events
 import { initializeSocket } from './config/socket';
@@ -1204,10 +1234,9 @@ console.log('✅ Store gallery routes registered at /api/stores/:storeId/gallery
 app.use(`${API_PREFIX}/products`, productGalleryRoutes);
 console.log('✅ Product gallery routes registered at /api/products/:productId/gallery');
 
-// // Merchant API Routes
-// // Apply general rate limiting to all merchant routes
-// // DEV: app.use('/api/merchant', generalLimiter);
-// console.log('✅ General rate limiter applied to merchant routes');
+// Merchant API Routes — rate limiter re-enabled for production
+app.use('/api/merchant', generalLimiter);
+console.log('✅ General rate limiter applied to all merchant routes');
 
 app.use('/api/merchant/auth', authRoutes1);  // Merchant auth routes
 app.use('/api/merchant/categories', categoryRoutes1);
@@ -1590,24 +1619,56 @@ async function startServer() {
     initializeTournamentLifecycleJobs();
     console.log('✅ Tournament lifecycle jobs started (activation: 5m, completion: 5m)');
 
-    // Initialize wallet production-readiness jobs
+    // Initialize wallet production-readiness jobs with distributed locks
     console.log('🔄 Initializing wallet production jobs...');
     const cron = require('node-cron');
-    // Stuck transaction recovery — every 15 minutes
-    cron.schedule('*/15 * * * *', () => { runStuckTransactionRecovery().catch(console.error); });
-    console.log('✅ Stuck transaction recovery job started (runs every 15 min)');
-    // Scheduled gift delivery — every 5 minutes
-    cron.schedule('*/5 * * * *', () => { runGiftDelivery().catch(console.error); });
-    console.log('✅ Gift delivery job started (runs every 5 min)');
-    // Gift expiry processing — daily at 2:30 AM (before reconciliation at 3 AM)
-    cron.schedule('30 2 * * *', () => { runGiftExpiry().catch(console.error); });
-    console.log('✅ Gift expiry job started (runs daily at 2:30 AM)');
-    // Surprise drop expiry — every hour
-    cron.schedule('0 * * * *', () => { runSurpriseDropExpiry().catch(console.error); });
-    console.log('✅ Surprise drop expiry job started (runs every hour)');
-    // Partner earnings snapshot — daily at 1 AM
-    cron.schedule('0 1 * * *', () => { runPartnerEarningsSnapshot().catch(console.error); });
-    console.log('✅ Partner earnings snapshot job started (runs daily at 1 AM)');
+
+    // Stuck transaction recovery — every 15 min, one pod only
+    cron.schedule('*/15 * * * *', async () => {
+      const lock = await redisService.acquireLock('stuck_tx_recovery', 600);
+      if (!lock) return;
+      try { await runStuckTransactionRecovery(); }
+      catch (e) { console.error('[JOB] stuckTransactionRecovery:', e); }
+      finally { await redisService.releaseLock('stuck_tx_recovery', lock); }
+    });
+
+    // Gift delivery — every 5 min, one pod only
+    cron.schedule('*/5 * * * *', async () => {
+      const lock = await redisService.acquireLock('gift_delivery', 240);
+      if (!lock) return;
+      try { await runGiftDelivery(); }
+      catch (e) { console.error('[JOB] giftDelivery:', e); }
+      finally { await redisService.releaseLock('gift_delivery', lock); }
+    });
+
+    // Gift expiry — daily 2:30 AM, one pod only
+    cron.schedule('30 2 * * *', async () => {
+      const lock = await redisService.acquireLock('gift_expiry', 3600);
+      if (!lock) return;
+      try { await runGiftExpiry(); }
+      catch (e) { console.error('[JOB] giftExpiry:', e); }
+      finally { await redisService.releaseLock('gift_expiry', lock); }
+    });
+
+    // Surprise drop expiry — hourly, one pod only
+    cron.schedule('0 * * * *', async () => {
+      const lock = await redisService.acquireLock('surprise_drop_expiry', 3000);
+      if (!lock) return;
+      try { await runSurpriseDropExpiry(); }
+      catch (e) { console.error('[JOB] surpriseDropExpiry:', e); }
+      finally { await redisService.releaseLock('surprise_drop_expiry', lock); }
+    });
+
+    // Partner earnings snapshot — daily 1 AM, one pod only
+    cron.schedule('0 1 * * *', async () => {
+      const lock = await redisService.acquireLock('partner_earnings_snapshot', 7200);
+      if (!lock) return;
+      try { await runPartnerEarningsSnapshot(); }
+      catch (e) { console.error('[JOB] partnerEarningsSnapshot:', e); }
+      finally { await redisService.releaseLock('partner_earnings_snapshot', lock); }
+    });
+
+    console.log('✅ Wallet production jobs started with distributed locks');
     // Referral expiry — daily at 3 AM
     initializeReferralExpiryJob();
     console.log('✅ Referral expiry job started (runs daily at 3 AM)');

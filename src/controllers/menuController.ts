@@ -255,6 +255,7 @@ export const createPreOrder = async (req: Request, res: Response) => {
       items,
       scheduledTime,
       deliveryType,
+      tableNumber,
       deliveryAddress,
       contactPhone,
       notes,
@@ -265,11 +266,16 @@ export const createPreOrder = async (req: Request, res: Response) => {
       return sendError(res, 'Store ID and items are required', 400);
     }
 
-    if (!deliveryType || !['pickup', 'delivery'].includes(deliveryType)) {
-      return sendError(res, 'Valid delivery type (pickup/delivery) is required', 400);
+    if (!deliveryType || !['pickup', 'delivery', 'dine_in'].includes(deliveryType)) {
+      return sendError(res, 'Valid delivery type (pickup/delivery/dine_in) is required', 400);
     }
 
-    if (!contactPhone) {
+    if (deliveryType === 'dine_in' && !tableNumber) {
+      return sendError(res, 'Table number is required for dine-in orders', 400);
+    }
+
+    // For dine-in, contactPhone is optional (we have the authenticated user)
+    if (!contactPhone && deliveryType !== 'dine_in') {
       return sendError(res, 'Contact phone is required', 400);
     }
 
@@ -315,6 +321,7 @@ export const createPreOrder = async (req: Request, res: Response) => {
       items: orderItems,
       scheduledTime,
       deliveryType,
+      ...(tableNumber && { tableNumber }),
       deliveryAddress,
       contactPhone,
       notes,

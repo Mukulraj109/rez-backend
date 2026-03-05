@@ -28,7 +28,8 @@ export interface IPreOrder extends Document {
   total: number;
   status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled';
   scheduledTime?: Date;
-  deliveryType: 'pickup' | 'delivery';
+  deliveryType: 'pickup' | 'delivery' | 'dine_in';
+  tableNumber?: string;
   deliveryAddress?: {
     address: string;
     city: string;
@@ -87,9 +88,10 @@ const PreOrderSchema = new Schema<IPreOrder>({
   scheduledTime: { type: Date },
   deliveryType: {
     type: String,
-    enum: ['pickup', 'delivery'],
+    enum: ['pickup', 'delivery', 'dine_in'],
     required: true,
   },
+  tableNumber: { type: String, trim: true },
   deliveryAddress: {
     address: { type: String },
     city: { type: String },
@@ -104,7 +106,7 @@ const PreOrderSchema = new Schema<IPreOrder>({
       }
     },
   },
-  contactPhone: { type: String, required: true },
+  contactPhone: { type: String, default: '' },
   notes: { type: String },
   paymentStatus: {
     type: String,
@@ -146,7 +148,7 @@ PreOrderSchema.virtual('orderAge').get(function() {
 PreOrderSchema.methods.calculateTotals = function() {
   this.subtotal = this.items.reduce((total: number, item: IPreOrderItem) => total + (item.price * item.quantity), 0);
   this.tax = this.subtotal * 0.05; // 5% tax
-  this.deliveryFee = this.deliveryType === 'delivery' ? 50 : 0; // ₹50 delivery fee
+  this.deliveryFee = this.deliveryType === 'delivery' ? 50 : 0; // delivery fee only for delivery orders
   this.total = this.subtotal + this.tax + this.deliveryFee;
 };
 

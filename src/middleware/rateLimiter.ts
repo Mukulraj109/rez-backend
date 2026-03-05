@@ -1,4 +1,16 @@
+/**
+ * Rate Limiter with Redis Store
+ *
+ * Uses RedisStore so rate limit counters are shared across all K8s pods.
+ * Falls back to MemoryStore (single-pod only) if Redis is unavailable.
+ *
+ * Key generator: uses userId when authenticated, falls back to IP
+ * (fixes false-rate-limiting of mobile users sharing NAT IPs)
+ */
+
 import rateLimit from 'express-rate-limit';
+import { RedisStore } from 'rate-limit-redis';
+import { createClient } from 'redis';
 import { Request, Response, NextFunction } from 'express';
 
 // Extend Request interface to include rateLimit property
@@ -15,402 +27,390 @@ declare global {
   }
 }
 
-// Check if rate limiting is disabled
-const isRateLimitDisabled = process.env.DISABLE_RATE_LIMIT === 'true';
+// ─── Redis client for rate limiter (separate from main app client) ────────────
+let rateLimitRedisClient: ReturnType<typeof createClient> | null = null;
 
-// Log rate limiting status
-if (isRateLimitDisabled) {
-  console.log('⚠️  Rate limiting is DISABLED for development');
-} else {
-  console.log('✅ Rate limiting is ENABLED');
+async function getRateLimitRedisClient() {
+  if (rateLimitRedisClient) return rateLimitRedisClient;
+
+  const client = createClient({
+    url: process.env.REDIS_URL || 'redis://localhost:6379',
+    password: process.env.REDIS_PASSWORD,
+  });
+
+  client.on('error', (err) =>
+    console.error('[RateLimit Redis] error:', err.message)
+  );
+
+  await client.connect();
+  rateLimitRedisClient = client;
+  return client;
 }
 
-// Passthrough middleware for when rate limiting is disabled
-const passthroughMiddleware = (req: Request, res: Response, next: NextFunction) => {
-  next();
+// ─── Key generator: per-user when authenticated, per-IP otherwise ─────────────
+const keyGenerator = (req: Request): string => {
+  const userId = (req as any).user?.id || (req as any).userId;
+  if (userId) return `user:${userId}`;
+  return req.ip || 'unknown';
 };
 
-// Rate limiter error response
-const rateLimitErrorResponse = (req: Request, res: Response) => {
-  const resetTime = req.rateLimit?.resetTime ? 
-    Math.round(req.rateLimit.resetTime.getTime() / 1000) : 
-    Math.round(Date.now() / 1000) + 900; // Default to 15 minutes from now
+// ─── Check if disabled (dev override) ────────────────────────────────────────
+const isRateLimitDisabled = process.env.DISABLE_RATE_LIMIT === 'true';
 
+if (isRateLimitDisabled) {
+  console.log('⚠️  Rate limiting is DISABLED (DISABLE_RATE_LIMIT=true)');
+} else {
+  console.log('✅ Rate limiting is ENABLED with Redis store (global across all pods)');
+}
+
+const passthrough = (_req: Request, _res: Response, next: NextFunction) => next();
+
+// ─── Store factory ─────────────────────────────────────────────────────────────
+function makeStore(prefix: string) {
+  if (isRateLimitDisabled || !process.env.REDIS_URL) return undefined; // MemoryStore fallback
+  return new RedisStore({
+    sendCommand: async (...args: string[]) => {
+      const client = await getRateLimitRedisClient();
+      return (client as any).sendCommand(args);
+    },
+    prefix: `rl:${prefix}:`,
+  });
+}
+
+// ─── Error response helper ────────────────────────────────────────────────────
+const rateLimitResponse = (_req: Request, res: Response) => {
   res.status(429).json({
     success: false,
     message: 'Too many requests, please try again later.',
-    retryAfter: resetTime
   });
 };
 
-// General API rate limiter
+// ─────────────────────────────────────────────────────────────────────────────
+// LIMITERS — Redis-backed, per-user key
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const generalLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 15 * 60 * 1000, // 15 minutes
-      max: 500, // Limit each IP to 500 requests per windowMs
-      message: rateLimitErrorResponse,
-      standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-      legacyHeaders: false // Disable the `X-RateLimit-*` headers
+      windowMs: 15 * 60 * 1000,
+      max: 500,
+      keyGenerator,
+      store: makeStore('general'),
+      message: rateLimitResponse,
+      standardHeaders: true,
+      legacyHeaders: false,
     });
 
-// Authentication rate limiter (stricter) - for login attempts
 export const authLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 15 * 60 * 1000, // 15 minutes
-      max: 5, // Limit each IP to 5 login attempts per windowMs
-      message: (req: Request, res: Response) => {
+      windowMs: 15 * 60 * 1000,
+      max: 5,
+      keyGenerator,
+      store: makeStore('auth'),
+      message: (_req: Request, res: Response) => {
         res.status(429).json({
           success: false,
           error: 'Too many login attempts. Please try again after 15 minutes.',
-          retryAfter: 15 * 60 // seconds
+          retryAfter: 15 * 60,
         });
       },
-      standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-      legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-      skipSuccessfulRequests: true // Don't count successful requests
+      standardHeaders: true,
+      legacyHeaders: false,
+      skipSuccessfulRequests: true,
     });
 
-// Registration rate limiter - Medium limit
 export const registrationLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 60 * 1000, // 1 hour
-      max: 5, // 5 registrations per hour per IP
-      message: (req: Request, res: Response) => {
+      windowMs: 60 * 60 * 1000,
+      max: 5,
+      keyGenerator,
+      store: makeStore('register'),
+      message: (_req: Request, res: Response) => {
         res.status(429).json({
           success: false,
           error: 'Too many registration attempts. Please try again later.',
-          retryAfter: 60 * 60 // seconds
+          retryAfter: 60 * 60,
         });
       },
       standardHeaders: true,
       legacyHeaders: false,
     });
 
-// Password reset rate limiter - Strict limit
-export const passwordResetLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
-  : rateLimit({
-      windowMs: 60 * 60 * 1000, // 1 hour
-      max: 3, // 3 attempts per hour
-      message: (req: Request, res: Response) => {
-        res.status(429).json({
-          success: false,
-          error: 'Too many password reset attempts. Please try again after 1 hour.',
-          retryAfter: 60 * 60 // seconds
-        });
-      },
-      standardHeaders: true,
-      legacyHeaders: false,
-    });
-
-// OTP rate limiter (adjusted for development)
 export const otpLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 30 * 1000, // 30 seconds (reduced for development)
-      max: 3, // Allow 3 OTP requests per 30 seconds (increased for development)
-      message: (req: Request, res: Response) => {
+      windowMs: 30 * 1000,
+      max: 3,
+      keyGenerator,
+      store: makeStore('otp'),
+      message: (_req: Request, res: Response) => {
         res.status(429).json({
           success: false,
           message: 'Please wait 30 seconds before requesting another OTP.',
-          retryAfter: 30
+          retryAfter: 30,
         });
       },
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// Password/security related operations
-export const securityLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+export const passwordResetLimiter = isRateLimitDisabled
+  ? passthrough
   : rateLimit({
-      windowMs: 15 * 60 * 1000, // 15 minutes
-      max: 3, // 3 attempts per window
-      message: rateLimitErrorResponse,
+      windowMs: 60 * 60 * 1000,
+      max: 3,
+      keyGenerator,
+      store: makeStore('pwd-reset'),
+      message: rateLimitResponse,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// File upload rate limiter
-export const uploadLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+export const securityLimiter = isRateLimitDisabled
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 1000, // 1 minute
-      max: 10, // 10 uploads per minute
-      message: (req: Request, res: Response) => {
+      windowMs: 15 * 60 * 1000,
+      max: 3,
+      keyGenerator,
+      store: makeStore('security'),
+      message: rateLimitResponse,
+      standardHeaders: true,
+      legacyHeaders: false,
+    });
+
+export const uploadLimiter = isRateLimitDisabled
+  ? passthrough
+  : rateLimit({
+      windowMs: 60 * 1000,
+      max: 10,
+      keyGenerator,
+      store: makeStore('upload'),
+      message: (_req: Request, res: Response) => {
         res.status(429).json({
           success: false,
           message: 'Upload limit exceeded. Please wait before uploading more files.',
-          retryAfter: 60
+          retryAfter: 60,
         });
       },
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// Search rate limiter
 export const searchLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 1000, // 1 minute
-      max: 30, // 30 searches per minute
-      message: rateLimitErrorResponse,
+      windowMs: 60 * 1000,
+      max: 30,
+      keyGenerator,
+      store: makeStore('search'),
+      message: rateLimitResponse,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// AI search rate limiter (stricter — expensive LLM calls)
 export const aiSearchLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 1000, // 1 minute
-      max: 10, // 10 AI searches per minute
-      message: rateLimitErrorResponse,
+      windowMs: 60 * 1000,
+      max: 10,
+      keyGenerator,
+      store: makeStore('ai-search'),
+      message: rateLimitResponse,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// Strict rate limiter for sensitive operations
 export const strictLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 60 * 1000, // 1 hour
-      max: 10, // 10 requests per hour
-      message: rateLimitErrorResponse,
+      windowMs: 60 * 60 * 1000,
+      max: 10,
+      keyGenerator,
+      store: makeStore('strict'),
+      message: rateLimitResponse,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// Review rate limiter (for review operations)
 export const reviewLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 1000, // 1 minute
-      max: 5, // 5 review operations per minute
-      message: (req: Request, res: Response) => {
-        res.status(429).json({
-          success: false,
-          message: 'Too many review requests. Please wait before submitting another review.',
-          retryAfter: 60
-        });
-      },
+      windowMs: 60 * 1000,
+      max: 5,
+      keyGenerator,
+      store: makeStore('review'),
+      message: rateLimitResponse,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// Analytics rate limiter
 export const analyticsLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 1000, // 1 minute
-      max: 30, // 30 analytics requests per minute
-      message: rateLimitErrorResponse,
+      windowMs: 60 * 1000,
+      max: 30,
+      keyGenerator,
+      store: makeStore('analytics'),
+      message: rateLimitResponse,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// Comparison rate limiter
 export const comparisonLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 1000, // 1 minute
-      max: 10, // 10 comparison operations per minute
-      message: rateLimitErrorResponse,
+      windowMs: 60 * 1000,
+      max: 10,
+      keyGenerator,
+      store: makeStore('comparison'),
+      message: rateLimitResponse,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// Favorite rate limiter
 export const favoriteLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 1000, // 1 minute
-      max: 20, // 20 favorite operations per minute
-      message: rateLimitErrorResponse,
+      windowMs: 60 * 1000,
+      max: 20,
+      keyGenerator,
+      store: makeStore('favorite'),
+      message: rateLimitResponse,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// Recommendation rate limiter
 export const recommendationLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 1000, // 1 minute
-      max: 15, // 15 recommendation requests per minute
-      message: rateLimitErrorResponse,
+      windowMs: 60 * 1000,
+      max: 15,
+      keyGenerator,
+      store: makeStore('recommendation'),
+      message: rateLimitResponse,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// Referral rate limiter (prevent abuse of referral system)
 export const referralLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 60 * 1000, // 1 hour
-      max: 50, // 50 referral operations per hour (viewing, sharing, etc.)
-      message: (req: Request, res: Response) => {
-        res.status(429).json({
-          success: false,
-          message: 'Referral activity limit exceeded. Please try again later.',
-          retryAfter: Math.round(Date.now() / 1000) + 3600
-        });
-      },
+      windowMs: 60 * 60 * 1000,
+      max: 50,
+      keyGenerator,
+      store: makeStore('referral'),
+      message: rateLimitResponse,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// Referral share rate limiter (stricter to prevent spam)
 export const referralShareLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 1000, // 1 minute
-      max: 5, // 5 shares per minute
-      message: (req: Request, res: Response) => {
-        res.status(429).json({
-          success: false,
-          message: 'Too many share requests. Please wait before sharing again.',
-          retryAfter: 60
-        });
-      },
+      windowMs: 60 * 1000,
+      max: 5,
+      keyGenerator,
+      store: makeStore('referral-share'),
+      message: rateLimitResponse,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
 // ================================================
 // PRODUCT CRUD RATE LIMITERS
 // ================================================
 
-// Product GET requests rate limiter
 export const productGetLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 1000, // 1 minute
-      max: 100, // 100 GET requests per minute
-      message: (req: Request, res: Response) => {
-        console.warn(`[RATE LIMIT] Product GET exceeded: IP ${req.ip}, Path: ${req.path}`);
-        res.status(429).json({
-          success: false,
-          message: 'Too many product requests. Please try again in a minute.',
-          retryAfter: 60
-        });
-      },
+      windowMs: 60 * 1000,
+      max: 100,
+      keyGenerator,
+      store: makeStore('product-get'),
+      message: rateLimitResponse,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// Product POST/PUT rate limiter (create/update)
 export const productWriteLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 1000, // 1 minute
-      max: 30, // 30 POST/PUT requests per minute
-      message: (req: Request, res: Response) => {
-        console.warn(`[RATE LIMIT] Product write exceeded: IP ${req.ip}, Path: ${req.path}, Method: ${req.method}`);
-        res.status(429).json({
-          success: false,
-          message: 'Too many product creation/update requests. Please slow down.',
-          retryAfter: 60
-        });
-      },
+      windowMs: 60 * 1000,
+      max: 30,
+      keyGenerator,
+      store: makeStore('product-write'),
+      message: rateLimitResponse,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// Product DELETE rate limiter
 export const productDeleteLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 1000, // 1 minute
-      max: 10, // 10 DELETE requests per minute
-      message: (req: Request, res: Response) => {
-        console.warn(`[RATE LIMIT] Product delete exceeded: IP ${req.ip}, Path: ${req.path}`);
-        res.status(429).json({
-          success: false,
-          message: 'Too many product deletion requests. Please try again later.',
-          retryAfter: 60
-        });
-      },
+      windowMs: 60 * 1000,
+      max: 10,
+      keyGenerator,
+      store: makeStore('product-delete'),
+      message: rateLimitResponse,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// Product bulk operations rate limiter (stricter)
 export const productBulkLimiter = isRateLimitDisabled
-  ? passthroughMiddleware
+  ? passthrough
   : rateLimit({
-      windowMs: 60 * 1000, // 1 minute
-      max: 5, // 5 bulk operations per minute
-      message: (req: Request, res: Response) => {
-        console.warn(`[RATE LIMIT] Product bulk operation exceeded: IP ${req.ip}, Path: ${req.path}`);
-        res.status(429).json({
-          success: false,
-          message: 'Too many bulk operations. Please wait before performing another bulk action.',
-          retryAfter: 60
-        });
-      },
+      windowMs: 60 * 1000,
+      max: 5,
+      keyGenerator,
+      store: makeStore('product-bulk'),
+      message: rateLimitResponse,
       standardHeaders: true,
-      legacyHeaders: false
+      legacyHeaders: false,
     });
 
-// Combined product operation limiter (for routes that need flexible control)
 export const createProductLimiter = (method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'BULK') => {
-  if (isRateLimitDisabled) {
-    return passthroughMiddleware;
-  }
-
+  if (isRateLimitDisabled) return passthrough;
   const configs = {
-    GET: { windowMs: 60 * 1000, max: 100, operation: 'read' },
-    POST: { windowMs: 60 * 1000, max: 30, operation: 'create' },
-    PUT: { windowMs: 60 * 1000, max: 30, operation: 'update' },
-    DELETE: { windowMs: 60 * 1000, max: 10, operation: 'delete' },
-    BULK: { windowMs: 60 * 1000, max: 5, operation: 'bulk operation' }
+    GET:    { max: 100, prefix: 'product-get' },
+    POST:   { max: 30,  prefix: 'product-post' },
+    PUT:    { max: 30,  prefix: 'product-put' },
+    DELETE: { max: 10,  prefix: 'product-del' },
+    BULK:   { max: 5,   prefix: 'product-bulk2' },
   };
-
-  const config = configs[method];
-
+  const { max, prefix } = configs[method];
   return rateLimit({
-    windowMs: config.windowMs,
-    max: config.max,
-    message: (req: Request, res: Response) => {
-      console.warn(`[RATE LIMIT] Product ${config.operation} exceeded: IP ${req.ip}, Path: ${req.path}`);
-      res.status(429).json({
-        success: false,
-        message: `Too many product ${config.operation} requests. Please try again later.`,
-        retryAfter: Math.ceil(config.windowMs / 1000)
-      });
-    },
+    windowMs: 60 * 1000,
+    max,
+    keyGenerator,
+    store: makeStore(prefix),
+    message: rateLimitResponse,
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
   });
 };
 
-// Create custom rate limiter
 export const createRateLimiter = (options: {
   windowMs?: number;
   max?: number;
   message?: string;
   skipSuccessfulRequests?: boolean;
+  prefix?: string;
 }) => {
-  if (isRateLimitDisabled) {
-    return passthroughMiddleware;
-  }
-
+  if (isRateLimitDisabled) return passthrough;
   return rateLimit({
     windowMs: options.windowMs || 15 * 60 * 1000,
     max: options.max || 100,
-    message: options.message ?
-      (req: Request, res: Response) => {
-        res.status(429).json({
-          success: false,
-          message: options.message
-        });
-      } :
-      rateLimitErrorResponse,
+    keyGenerator,
+    store: makeStore(options.prefix || 'custom'),
+    message: options.message
+      ? (_req: Request, res: Response) => {
+          res.status(429).json({ success: false, message: options.message });
+        }
+      : rateLimitResponse,
     standardHeaders: true,
     legacyHeaders: false,
-    skipSuccessfulRequests: options.skipSuccessfulRequests || false
+    skipSuccessfulRequests: options.skipSuccessfulRequests || false,
   });
 };

@@ -13,10 +13,9 @@ spec:
     protocol: TCP
     name: http
   type: LoadBalancer
-  sessionAffinity: ClientIP
-  sessionAffinityConfig:
-    clientIP:
-      timeoutSeconds: 10800
+  # Sticky sessions removed — Redis adapter (Socket.IO) makes them unnecessary
+  # and they hurt load balancing, especially for mobile users changing IPs
+  sessionAffinity: None
 ---
 apiVersion: v1
 kind: Service

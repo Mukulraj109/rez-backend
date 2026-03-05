@@ -7,6 +7,8 @@ import { validateRequest } from '../middleware/merchantvalidation';
 import { requireRole, checkPermission } from '../middleware/rbac';
 import TeamInvitationService from '../services/TeamInvitationService';
 import { getPermissionsForRole, getRoleDescription } from '../config/permissions';
+import AuditService from '../services/AuditService';
+import AuditLog from '../models/AuditLog';
 
 const router = Router();
 
@@ -86,6 +88,21 @@ router.post('/invite', checkPermission('team:invite'), validateRequest(inviteSch
       });
     }
 
+    // Log audit event
+    AuditService.log({
+      merchantId: merchantId!,
+      merchantUserId: invitedBy,
+      action: 'team.invite',
+      resourceType: 'team_member',
+      resourceId: result.invitationId,
+      details: {
+        after: { email, name, role },
+        metadata: { action: 'invite' }
+      },
+      ipAddress: req.ip || 'unknown',
+      userAgent: req.get('user-agent') || 'unknown'
+    });
+
     return res.status(201).json({
       success: true,
       message: result.message,
@@ -125,6 +142,20 @@ router.post('/:userId/resend-invite', checkPermission('team:invite'), async (req
         message: result.message
       });
     }
+
+    // Log audit event
+    AuditService.log({
+      merchantId: req.merchantId!,
+      merchantUserId: req.merchantUser?._id ? String(req.merchantUser._id) : undefined,
+      action: 'team.resend_invite',
+      resourceType: 'team_member',
+      resourceId: userId,
+      details: {
+        metadata: { action: 'resend_invite' }
+      },
+      ipAddress: req.ip || 'unknown',
+      userAgent: req.get('user-agent') || 'unknown'
+    });
 
     return res.json({
       success: true,
@@ -185,7 +216,22 @@ router.put('/:userId/role', checkPermission('team:change_role'), validateRequest
     teamMember.permissions = getPermissionsForRole(role);
     await teamMember.save();
 
-    console.log(`✅ Role updated for ${teamMember.email}: ${oldRole} -> ${role}`);
+    // Log audit event
+    AuditService.log({
+      merchantId: merchantId!,
+      merchantUserId: req.merchantUser?._id ? String(req.merchantUser._id) : undefined,
+      action: 'team.role_change',
+      resourceType: 'team_member',
+      resourceId: teamMember._id,
+      details: {
+        before: { role: oldRole },
+        after: { role },
+        changes: { role: { from: oldRole, to: role } },
+        metadata: { action: 'role_change', name: teamMember.name, email: teamMember.email }
+      },
+      ipAddress: req.ip || 'unknown',
+      userAgent: req.get('user-agent') || 'unknown'
+    });
 
     return res.json({
       success: true,
@@ -255,7 +301,22 @@ router.put('/:userId/status', checkPermission('team:change_status'), validateReq
     teamMember.status = status;
     await teamMember.save();
 
-    console.log(`✅ Status updated for ${teamMember.email}: ${oldStatus} -> ${status}`);
+    // Log audit event
+    AuditService.log({
+      merchantId: merchantId!,
+      merchantUserId: req.merchantUser?._id ? String(req.merchantUser._id) : undefined,
+      action: 'team.status_change',
+      resourceType: 'team_member',
+      resourceId: teamMember._id,
+      details: {
+        before: { status: oldStatus },
+        after: { status },
+        changes: { status: { from: oldStatus, to: status } },
+        metadata: { action: 'status_change', name: teamMember.name, email: teamMember.email }
+      },
+      ipAddress: req.ip || 'unknown',
+      userAgent: req.get('user-agent') || 'unknown'
+    });
 
     return res.json({
       success: true,
@@ -328,7 +389,20 @@ router.delete('/:userId', checkPermission('team:remove'), async (req: Request, r
 
     await MerchantUser.deleteOne({ _id: userId });
 
-    console.log(`✅ Team member removed: ${teamMember.email}`);
+    // Log audit event
+    AuditService.log({
+      merchantId: merchantId!,
+      merchantUserId: req.merchantUser?._id ? String(req.merchantUser._id) : undefined,
+      action: 'team.remove',
+      resourceType: 'team_member',
+      resourceId: teamMember._id,
+      details: {
+        before: { name: teamMember.name, email: teamMember.email, role: teamMember.role },
+        metadata: { action: 'remove', name: teamMember.name, email: teamMember.email }
+      },
+      ipAddress: req.ip || 'unknown',
+      userAgent: req.get('user-agent') || 'unknown'
+    });
 
     return res.json({
       success: true,
@@ -371,6 +445,85 @@ router.get('/me/permissions', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch permissions',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   GET /api/merchant/team/activity
+ * @desc    Get team activity log from audit trail
+ * @access  Private (owner, admin)
+ */
+router.get('/activity', checkPermission('team:view'), async (req: Request, res: Response) => {
+  try {
+    const merchantId = req.merchantId;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const action = req.query.action as string; // e.g. 'team.invite'
+
+    const filters: any = {
+      resourceType: 'team_member',
+      page,
+      limit,
+    };
+    if (action) filters.action = action;
+
+    const result = await AuditService.getAuditLogs(merchantId!, filters);
+    const logs = Array.isArray(result?.logs) ? result.logs : [];
+
+    // Map AuditLog entries to TeamActivity shape
+    const activities = logs.map((log: any) => {
+      const meta = log.details?.metadata || {};
+      const actionType = meta.action || log.action?.replace('team.', '') || 'unknown';
+
+      return {
+        id: log._id,
+        merchantId: log.merchantId,
+        action: actionType,
+        targetUserId: log.resourceId ? String(log.resourceId) : '',
+        targetUserEmail: meta.email || log.details?.after?.email || log.details?.before?.email || '',
+        performedBy: log.merchantUserId ? String(log.merchantUserId) : '',
+        performedByName: meta.performedByName || '',
+        details: {
+          name: meta.name || log.details?.after?.name || log.details?.before?.name || '',
+          email: meta.email || log.details?.after?.email || log.details?.before?.email || '',
+          role: log.details?.after?.role || '',
+          oldRole: log.details?.before?.role || '',
+          newRole: log.details?.after?.role || '',
+          oldStatus: log.details?.before?.status || '',
+          newStatus: log.details?.after?.status || '',
+        },
+        timestamp: log.timestamp || log.createdAt,
+      };
+    });
+
+    // Populate performer names
+    const performerIds = [...new Set(activities.filter((a: any) => a.performedBy).map((a: any) => a.performedBy))];
+    if (performerIds.length > 0) {
+      const performers = await MerchantUser.find({ _id: { $in: performerIds } }).select('name email').lean();
+      const performerMap = new Map(performers.map(p => [String(p._id), p.name || p.email]));
+      activities.forEach((a: any) => {
+        if (a.performedBy && performerMap.has(a.performedBy)) {
+          a.performedByName = performerMap.get(a.performedBy);
+        }
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        activities,
+        total: result?.total ?? 0,
+        page: result?.page ?? 1,
+        totalPages: result?.totalPages ?? 0,
+      }
+    });
+  } catch (error: any) {
+    console.error('Error fetching team activity:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch team activity',
       error: error.message
     });
   }

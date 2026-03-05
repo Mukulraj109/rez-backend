@@ -6,55 +6,83 @@ import { Types } from 'mongoose';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess, sendError } from '../utils/response';
 import AuditLog from '../models/AuditLog';
+import redisService from '../services/redisService';
 
-// In-memory storage for blacklisted devices/IPs (in production, use Redis)
-const blacklist = {
-  devices: new Set<string>(),
-  ips: new Set<string>()
+// Redis key prefixes for persistent security data
+const REDIS_KEYS = {
+  BLACKLISTED_DEVICES: 'security:blacklist:devices',
+  BLACKLISTED_IPS: 'security:blacklist:ips',
+  SUSPICIOUS_PREFIX: 'security:suspicious:',
+  TRUST_PREFIX: 'security:trust:',
+  DEVICE_USERS_PREFIX: 'security:device_users:',
 };
 
-// In-memory storage for suspicious activity tracking
-const suspiciousActivity = new Map<string, {
-  count: number;
-  lastReported: Date;
-  reasons: string[];
-}>();
+// Helper: Get a set stored as JSON array in Redis
+const getRedisSet = async (key: string): Promise<Set<string>> => {
+  const data = await redisService.get<string[]>(key);
+  return new Set(data || []);
+};
 
-// Device trust scores (in production, use Redis or database)
-const deviceTrustScores = new Map<string, {
-  score: number;
-  lastVerified: Date;
-  verificationCount: number;
-}>();
+// Helper: Add to a set stored as JSON array in Redis
+const addToRedisSet = async (key: string, value: string): Promise<void> => {
+  const current = await getRedisSet(key);
+  current.add(value);
+  await redisService.set(key, Array.from(current));
+};
 
-// Multi-account tracking
-const deviceUserMap = new Map<string, Set<string>>();
-const ipUserMap = new Map<string, Set<string>>();
+// Helper: Check if device is blacklisted (Redis)
+const isDeviceBlacklisted = async (deviceId: string): Promise<boolean> => {
+  const set = await getRedisSet(REDIS_KEYS.BLACKLISTED_DEVICES);
+  return set.has(deviceId);
+};
+
+// Helper: Check if IP is blacklisted (Redis)
+const isIpBlacklistedFn = async (ip: string): Promise<boolean> => {
+  const set = await getRedisSet(REDIS_KEYS.BLACKLISTED_IPS);
+  return set.has(ip);
+};
+
+// Helper: Blacklist a device (Redis)
+const blacklistDevice = async (deviceId: string): Promise<void> => {
+  await addToRedisSet(REDIS_KEYS.BLACKLISTED_DEVICES, deviceId);
+};
+
+// Helper: Track device-user mapping (Redis)
+const trackDeviceUser = async (deviceId: string, userId: string): Promise<{ count: number; isNew: boolean }> => {
+  const key = `${REDIS_KEYS.DEVICE_USERS_PREFIX}${deviceId}`;
+  const current = await getRedisSet(key);
+  const isNew = !current.has(userId);
+  current.add(userId);
+  await redisService.set(key, Array.from(current), 86400 * 30); // 30 days TTL
+  return { count: current.size, isNew };
+};
+
+// Helper: Get/update trust score (Redis)
+const getTrustData = async (deviceId: string): Promise<{ score: number; verificationCount: number } | null> => {
+  return redisService.get<{ score: number; verificationCount: number }>(`${REDIS_KEYS.TRUST_PREFIX}${deviceId}`);
+};
+
+const setTrustData = async (deviceId: string, score: number, verificationCount: number): Promise<void> => {
+  await redisService.set(`${REDIS_KEYS.TRUST_PREFIX}${deviceId}`, { score, verificationCount }, 86400 * 30);
+};
 
 // Helper: Calculate trust score based on device info
 const calculateTrustScore = (
-  deviceId: string,
-  userId: string,
   isNewDevice: boolean,
-  suspiciousFlags: string[]
+  suspiciousFlags: string[],
+  deviceUserCount: number,
+  verificationCount: number
 ): number => {
   let score = 100;
 
-  // Deduct for new device
   if (isNewDevice) score -= 20;
-
-  // Deduct for suspicious flags
   score -= suspiciousFlags.length * 15;
 
-  // Deduct if device used by multiple accounts
-  const usersOnDevice = deviceUserMap.get(deviceId);
-  if (usersOnDevice && usersOnDevice.size > 1) {
-    score -= (usersOnDevice.size - 1) * 25;
+  if (deviceUserCount > 1) {
+    score -= (deviceUserCount - 1) * 25;
   }
 
-  // Bonus for verified device history
-  const deviceHistory = deviceTrustScores.get(deviceId);
-  if (deviceHistory && deviceHistory.verificationCount > 5) {
+  if (verificationCount > 5) {
     score += 10;
   }
 
@@ -71,8 +99,8 @@ export const verifyDevice = asyncHandler(async (req: Request, res: Response) => 
   try {
     const suspiciousFlags: string[] = [];
 
-    // Check if device is blacklisted
-    if (blacklist.devices.has(deviceId)) {
+    // Check if device is blacklisted (Redis)
+    if (await isDeviceBlacklisted(deviceId)) {
       return sendSuccess(res, {
         passed: false,
         isBlacklisted: true,
@@ -83,29 +111,21 @@ export const verifyDevice = asyncHandler(async (req: Request, res: Response) => 
       });
     }
 
-    // Track device-user relationship
-    if (!deviceUserMap.has(deviceId)) {
-      deviceUserMap.set(deviceId, new Set());
-    }
-    const usersOnDevice = deviceUserMap.get(deviceId)!;
-    const isNewDevice = !usersOnDevice.has(userId);
-    usersOnDevice.add(userId);
+    // Track device-user relationship (Redis)
+    const { count: deviceUserCount, isNew: isNewDevice } = await trackDeviceUser(deviceId, userId);
 
     // Check for multiple accounts on same device
-    if (usersOnDevice.size > 3) {
+    if (deviceUserCount > 3) {
       suspiciousFlags.push('Multiple accounts detected on device');
     }
 
-    // Get or create trust score entry
-    const existingTrust = deviceTrustScores.get(deviceId);
-    const trustScore = calculateTrustScore(deviceId, userId, isNewDevice, suspiciousFlags);
+    // Get existing trust data (Redis)
+    const existingTrust = await getTrustData(deviceId);
+    const verificationCount = (existingTrust?.verificationCount || 0) + 1;
+    const trustScore = calculateTrustScore(isNewDevice, suspiciousFlags, deviceUserCount, verificationCount);
 
-    // Update trust score
-    deviceTrustScores.set(deviceId, {
-      score: trustScore,
-      lastVerified: new Date(),
-      verificationCount: (existingTrust?.verificationCount || 0) + 1
-    });
+    // Update trust score (Redis)
+    await setTrustData(deviceId, trustScore, verificationCount);
 
     const isSuspicious = trustScore < 50 || suspiciousFlags.length > 0;
 
@@ -129,10 +149,8 @@ export const verifyDevice = asyncHandler(async (req: Request, res: Response) => 
       userAgent: (req.headers['user-agent'] || 'unknown') as string
     });
 
-    console.log('✅ [SECURITY] Device verified:', { trustScore, isSuspicious });
-
     sendSuccess(res, {
-      passed: trustScore >= 30 && !blacklist.devices.has(deviceId),
+      passed: trustScore >= 30,
       isBlacklisted: false,
       isSuspicious,
       trustScore,
@@ -149,8 +167,7 @@ export const verifyDevice = asyncHandler(async (req: Request, res: Response) => 
     });
 
   } catch (error) {
-    console.error('❌ [SECURITY] Device verification error:', error);
-    // Return safe defaults on error
+    console.error('[SECURITY] Device verification error:', error);
     sendSuccess(res, {
       passed: true,
       isBlacklisted: false,
@@ -170,18 +187,18 @@ export const checkBlacklist = asyncHandler(async (req: Request, res: Response) =
   console.log('🔒 [SECURITY] Checking blacklist:', { deviceId: deviceId?.substring(0, 10), ip: clientIp });
 
   try {
-    const isDeviceBlacklisted = deviceId ? blacklist.devices.has(deviceId) : false;
-    const isIpBlacklisted = clientIp ? blacklist.ips.has(clientIp as string) : false;
+    const deviceBlocked = deviceId ? await isDeviceBlacklisted(deviceId) : false;
+    const ipBlocked = clientIp ? await isIpBlacklistedFn(clientIp as string) : false;
 
     sendSuccess(res, {
-      isBlacklisted: isDeviceBlacklisted || isIpBlacklisted,
-      deviceBlacklisted: isDeviceBlacklisted,
-      ipBlacklisted: isIpBlacklisted,
-      reason: isDeviceBlacklisted ? 'Device blocked' : (isIpBlacklisted ? 'IP blocked' : null)
+      isBlacklisted: deviceBlocked || ipBlocked,
+      deviceBlacklisted: deviceBlocked,
+      ipBlacklisted: ipBlocked,
+      reason: deviceBlocked ? 'Device blocked' : (ipBlocked ? 'IP blocked' : null)
     });
 
   } catch (error) {
-    console.error('❌ [SECURITY] Blacklist check error:', error);
+    console.error('[SECURITY] Blacklist check error:', error);
     sendSuccess(res, {
       isBlacklisted: false,
       deviceBlacklisted: false,
@@ -200,31 +217,20 @@ export const reportSuspicious = asyncHandler(async (req: Request, res: Response)
   console.log('⚠️ [SECURITY] Suspicious activity reported:', { userId, type });
 
   try {
-    const key = `${userId}_${type}`;
-    const existing = suspiciousActivity.get(key);
+    const redisKey = `${REDIS_KEYS.SUSPICIOUS_PREFIX}${userId}_${type}`;
+    const incrResult = await redisService.incr(redisKey);
+    const reportCount = incrResult || 1;
 
-    if (existing) {
-      existing.count += 1;
-      existing.lastReported = new Date();
-      if (details?.reason && !existing.reasons.includes(details.reason)) {
-        existing.reasons.push(details.reason);
-      }
-    } else {
-      suspiciousActivity.set(key, {
-        count: 1,
-        lastReported: new Date(),
-        reasons: details?.reason ? [details.reason] : []
-      });
+    if (reportCount === 1) {
+      await redisService.expire(redisKey, 86400); // 24h TTL
     }
 
     // Auto-blacklist if too many reports
-    const activity = suspiciousActivity.get(key)!;
-    if (activity.count >= 10) {
-      if (details?.deviceId) {
-        blacklist.devices.add(details.deviceId);
-        console.log('🚫 [SECURITY] Device auto-blacklisted:', details.deviceId?.substring(0, 10));
-      }
+    if (reportCount >= 10 && details?.deviceId) {
+      await blacklistDevice(details.deviceId);
     }
+
+    const activity = { count: reportCount };
 
     // Log the report
     await AuditLog.log({
@@ -363,27 +369,30 @@ export const checkMultiAccount = asyncHandler(async (req: Request, res: Response
   try {
     const warnings: string[] = [];
     let riskScore = 0;
+    let deviceAccountCount = 1;
+    let ipAccountCount = 1;
 
-    // Check device-user relationship
+    // Check device-user relationship (Redis)
     if (deviceId) {
-      const usersOnDevice = deviceUserMap.get(deviceId);
-      if (usersOnDevice && usersOnDevice.size > 1) {
-        const otherUsers = usersOnDevice.size - 1;
+      const deviceData = await trackDeviceUser(deviceId, userId);
+      deviceAccountCount = deviceData.count;
+      if (deviceData.count > 1) {
+        const otherUsers = deviceData.count - 1;
         warnings.push(`Device used by ${otherUsers} other account(s)`);
         riskScore += otherUsers * 20;
       }
     }
 
-    // Check IP-user relationship
+    // Check IP-user relationship (Redis)
     if (clientIp) {
-      if (!ipUserMap.has(clientIp as string)) {
-        ipUserMap.set(clientIp as string, new Set());
-      }
-      const usersOnIp = ipUserMap.get(clientIp as string)!;
-      usersOnIp.add(userId);
+      const ipKey = `security:ip_users:${clientIp}`;
+      const ipSet = await getRedisSet(ipKey);
+      ipSet.add(userId);
+      await redisService.set(ipKey, Array.from(ipSet), 86400 * 30);
+      ipAccountCount = ipSet.size;
 
-      if (usersOnIp.size > 2) {
-        const otherUsers = usersOnIp.size - 1;
+      if (ipSet.size > 2) {
+        const otherUsers = ipSet.size - 1;
         warnings.push(`IP used by ${otherUsers} other account(s)`);
         riskScore += otherUsers * 10;
       }
@@ -397,8 +406,8 @@ export const checkMultiAccount = asyncHandler(async (req: Request, res: Response
       riskScore: Math.min(riskScore, 100),
       riskLevel,
       warnings,
-      deviceAccounts: deviceId ? (deviceUserMap.get(deviceId)?.size || 1) : 1,
-      ipAccounts: clientIp ? (ipUserMap.get(clientIp as string)?.size || 1) : 1
+      deviceAccounts: deviceAccountCount,
+      ipAccounts: ipAccountCount
     });
 
   } catch (error) {

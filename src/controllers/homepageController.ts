@@ -8,6 +8,7 @@ import { Wallet } from '../models/Wallet';
 import { UserVoucher } from '../models/Voucher';
 import OfferRedemption from '../models/OfferRedemption';
 import Offer from '../models/Offer';
+import redisService from '../services/redisService';
 import { Cart } from '../models/Cart';
 import subscriptionBenefitsService from '../services/subscriptionBenefitsService';
 
@@ -85,24 +86,43 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
       allHeaders: JSON.stringify(req.headers)
     });
 
-    // Fetch homepage data with mode and region filtering
+    // Server-side Redis cache — region-based (homepage content is the same for
+    // all users in the same region; personalization is done client-side)
+    const homepageCacheKey = `homepage:${region || 'default'}:${activeMode}`;
+    const HOMEPAGE_TTL = 60; // 60 seconds — fast refresh, absorbs traffic spikes
+
+    const cached = await redisService.get<any>(homepageCacheKey);
+    if (cached) {
+      const duration = Date.now() - startTime;
+      res.set({
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=120',
+        'Vary': 'X-Rez-Region',
+        'X-Response-Time': `${duration}ms`,
+        'X-Cache': 'HIT',
+      });
+      return sendSuccess(res, cached, 'Homepage data retrieved');
+    }
+
+    // Cache miss — fetch from DB
     const result = await getHomepageData({
       userId,
       sections: requestedSections,
       limit: limitNumber,
       location: locationCoords,
       mode: activeMode,
-      region, // Pass region to service for filtering
+      region,
     });
 
     const duration = Date.now() - startTime;
 
-    // Set cache headers - use private cache since response varies by region header
-    // Browser should not cache this publicly as it depends on X-Rez-Region header
+    // Store in Redis (fire and forget — don't delay response)
+    redisService.set(homepageCacheKey, result.data, HOMEPAGE_TTL).catch(() => {});
+
     res.set({
-      'Cache-Control': 'private, max-age=60',
+      'Cache-Control': 'public, max-age=60, stale-while-revalidate=120',
       'Vary': 'X-Rez-Region',
-      'X-Response-Time': `${duration}ms`
+      'X-Response-Time': `${duration}ms`,
+      'X-Cache': 'MISS',
     });
 
     console.log(`✅ [Homepage Controller] Response sent in ${duration}ms`);

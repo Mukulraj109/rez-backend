@@ -11,6 +11,8 @@ import {
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { escapeRegex } from '../utils/sanitize';
+import { withCache } from '../utils/cacheHelper';
+import { CacheTTL } from '../config/redis';
 
 // Helper function to format view count for frontend
 const formatViewCount = (views: number): string => {
@@ -174,16 +176,22 @@ export const getArticles = asyncHandler(async (req: Request, res: Response) => {
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const articles = await Article.find(query)
-      .populate('author', 'profile.firstName profile.lastName profile.avatar')
-      .populate('products', 'name images pricing')
-      .populate('stores', 'name slug logo')
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
+    const cacheKey = `articles:list:${JSON.stringify(query)}:${sortBy}:${page}:${limit}`;
+    const { articles, total } = await withCache(cacheKey, 1800, async () => {
+      const [articleResults, countResult] = await Promise.all([
+        Article.find(query)
+          .populate('author', 'profile.firstName profile.lastName profile.avatar')
+          .populate('products', 'name images pricing')
+          .populate('stores', 'name slug logo')
+          .sort(sortOptions)
+          .skip(skip)
+          .limit(Number(limit))
+          .lean(),
+        Article.countDocuments(query)
+      ]);
+      return { articles: articleResults, total: countResult };
+    });
 
-    const total = await Article.countDocuments(query);
     const totalPages = Math.ceil(total / Number(limit));
 
     // Transform articles to include id and viewCount fields for frontend compatibility
@@ -222,11 +230,14 @@ export const getArticleById = asyncHandler(async (req: Request, res: Response) =
   const userId = req.userId;
 
   try {
-    const article = await Article.findById(articleId)
-      .populate('author', 'profile.firstName profile.lastName profile.avatar profile.bio role')
-      .populate('products', 'name images pricing description store')
-      .populate('stores', 'name slug logo')
-      .lean();
+    const articleCacheKey = `article:detail:${articleId}`;
+    const article = await withCache(articleCacheKey, 3600, () =>
+      Article.findById(articleId)
+        .populate('author', 'profile.firstName profile.lastName profile.avatar profile.bio role')
+        .populate('products', 'name images pricing description store')
+        .populate('stores', 'name slug logo')
+        .lean()
+    );
 
     if (!article) {
       return sendNotFound(res, 'Article not found');
@@ -404,15 +415,21 @@ export const getArticlesByCategory = asyncHandler(async (req: Request, res: Resp
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const articles = await Article.find(query)
-      .populate('author', 'profile.firstName profile.lastName profile.avatar')
-      .populate('products', 'name images pricing')
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
+    const cacheKey = `articles:category:${category}:${sortBy}:${page}:${limit}`;
+    const { articles, total } = await withCache(cacheKey, 1800, async () => {
+      const [articleResults, countResult] = await Promise.all([
+        Article.find(query)
+          .populate('author', 'profile.firstName profile.lastName profile.avatar')
+          .populate('products', 'name images pricing')
+          .sort(sortOptions)
+          .skip(skip)
+          .limit(Number(limit))
+          .lean(),
+        Article.countDocuments(query)
+      ]);
+      return { articles: articleResults, total: countResult };
+    });
 
-    const total = await Article.countDocuments(query);
     const totalPages = Math.ceil(total / Number(limit));
 
     // Transform articles to include id and viewCount fields for frontend compatibility
@@ -468,16 +485,19 @@ export const getTrendingArticles = asyncHandler(async (req: Request, res: Respon
         startDate.setDate(now.getDate() - 7);
     }
 
-    const articles = await Article.find({
-      isPublished: true,
-      isApproved: true,
-      publishedAt: { $gte: startDate }
-    })
-      .populate('author', 'profile.firstName profile.lastName profile.avatar')
-      .populate('products', 'name images pricing')
-      .sort({ 'analytics.totalViews': -1, 'analytics.engagementRate': -1 })
-      .limit(Number(limit))
-      .lean();
+    const trendingCacheKey = `articles:trending:${timeframe}:${limit}`;
+    const articles = await withCache(trendingCacheKey, 1800, () =>
+      Article.find({
+        isPublished: true,
+        isApproved: true,
+        publishedAt: { $gte: startDate }
+      })
+        .populate('author', 'profile.firstName profile.lastName profile.avatar')
+        .populate('products', 'name images pricing')
+        .sort({ 'analytics.totalViews': -1, 'analytics.engagementRate': -1 })
+        .limit(Number(limit))
+        .lean()
+    );
 
     // Transform articles to include id and viewCount fields for frontend compatibility
     const transformedArticles = articles.map((article: any) => ({
@@ -507,16 +527,19 @@ export const getFeaturedArticles = asyncHandler(async (req: Request, res: Respon
   const { limit = 10 } = req.query;
 
   try {
-    const articles = await Article.find({
-      isFeatured: true,
-      isPublished: true,
-      isApproved: true
-    })
-      .populate('author', 'profile.firstName profile.lastName profile.avatar')
-      .populate('products', 'name images pricing')
-      .sort({ publishedAt: -1 })
-      .limit(Number(limit))
-      .lean();
+    const featuredCacheKey = `articles:featured:${limit}`;
+    const articles = await withCache(featuredCacheKey, 1800, () =>
+      Article.find({
+        isFeatured: true,
+        isPublished: true,
+        isApproved: true
+      })
+        .populate('author', 'profile.firstName profile.lastName profile.avatar')
+        .populate('products', 'name images pricing')
+        .sort({ publishedAt: -1 })
+        .limit(Number(limit))
+        .lean()
+    );
 
     // Transform articles to include id and viewCount fields for frontend compatibility
     const transformedArticles = articles.map((article: any) => ({

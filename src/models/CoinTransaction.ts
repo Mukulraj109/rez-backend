@@ -271,10 +271,13 @@ CoinTransactionSchema.statics.createTransaction = async function(
     if (HIGH_VALUE_SOURCES.includes(source)) {
       throw new Error(`idempotencyKey is required for source: ${source}. Generate a deterministic key from the event context.`);
     }
-    // For low-risk auto-tracked sources, auto-generate (retries are unlikely)
+    // For low-risk auto-tracked sources, generate a deterministic key so retries
+    // produce the same key and are deduplicated by the unique index.
+    const referenceId = metadata?.referenceId || metadata?.orderId || metadata?.transactionId || '';
+    const deterministicSeed = `${source}:${userId}:${referenceId}`;
     metadata = {
       ...metadata,
-      idempotencyKey: `${source}:${userId}:${Date.now()}:${crypto.randomUUID()}`,
+      idempotencyKey: crypto.createHash('sha256').update(deterministicSeed).digest('hex'),
     };
   }
 

@@ -10,6 +10,8 @@ import {
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+import { withCache } from '../utils/cacheHelper';
+import { CacheTTL } from '../config/redis';
 
 /**
  * Simple hex color lightener. Takes a hex color and returns a lighter version.
@@ -41,17 +43,20 @@ export const getCategories = asyncHandler(async (req: Request, res: Response) =>
     const limitNum = Math.min(Number(limit), 100); // cap at 100
     const skip = (pageNum - 1) * limitNum;
 
-    const [categories, total] = await Promise.all([
-      Category.find(query)
-        .select('name slug image icon sortOrder type parentCategory childCategories metadata isActive')
-        .populate('parentCategory', 'name slug')
-        .populate('childCategories', 'name slug icon image sortOrder metadata isActive')
-        .sort({ sortOrder: 1, name: 1 })
-        .skip(skip)
-        .limit(limitNum)
-        .lean(),
-      Category.countDocuments(query)
-    ]);
+    const cacheKey = `categories:list:${JSON.stringify(query)}:${pageNum}:${limitNum}`;
+    const [categories, total] = await withCache(cacheKey, CacheTTL.CATEGORY_LIST, () =>
+      Promise.all([
+        Category.find(query)
+          .select('name slug image icon sortOrder type parentCategory childCategories metadata isActive')
+          .populate('parentCategory', 'name slug')
+          .populate('childCategories', 'name slug icon image sortOrder metadata isActive')
+          .sort({ sortOrder: 1, name: 1 })
+          .skip(skip)
+          .limit(limitNum)
+          .lean(),
+        Category.countDocuments(query)
+      ])
+    );
 
     sendSuccess(res, {
       categories,
@@ -79,11 +84,14 @@ export const getCategoryTree = asyncHandler(async (req: Request, res: Response) 
     const query: any = { parentCategory: null, isActive: true };
     if (type) query.type = type;
 
-    const rootCategories = await Category.find(query)
-      .select('name slug image icon sortOrder type childCategories isActive')
-      .populate('childCategories', 'name slug icon image sortOrder metadata isActive')
-      .sort({ sortOrder: 1, name: 1 })
-      .lean();
+    const treeCacheKey = `categories:tree:${type || 'all'}`;
+    const rootCategories = await withCache(treeCacheKey, CacheTTL.CATEGORY_LIST, () =>
+      Category.find(query)
+        .select('name slug image icon sortOrder type childCategories isActive')
+        .populate('childCategories', 'name slug icon image sortOrder metadata isActive')
+        .sort({ sortOrder: 1, name: 1 })
+        .lean()
+    );
 
     sendSuccess(res, rootCategories, 'Category tree retrieved successfully');
 
