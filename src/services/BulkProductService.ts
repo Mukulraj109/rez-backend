@@ -236,7 +236,7 @@ class BulkProductService {
         const existingProduct = await MProduct.findOne({
           sku: product.sku.toUpperCase(),
           merchantId
-        });
+        }).lean();
 
         if (existingProduct) {
           errors.push({
@@ -296,7 +296,7 @@ class BulkProductService {
 
     try {
       // Find the store for this merchant
-      const store = await Store.findOne({ merchantId }).session(session);
+      const store = await Store.findOne({ merchantId }).session(session).lean();
       if (!store) {
         throw new Error('Store not found for merchant');
       }
@@ -415,7 +415,7 @@ class BulkProductService {
   ): Promise<void> {
     try {
       // Find or create category
-      let category = await Category.findOne({ name: merchantProduct.category }).session(session);
+      let category = await Category.findOne({ name: merchantProduct.category }).session(session).lean();
       if (!category) {
         const newCategory = await Category.create([{
           name: merchantProduct.category,
@@ -423,7 +423,7 @@ class BulkProductService {
           type: 'product',
           isActive: true
         }], { session });
-        category = newCategory[0];
+        category = newCategory[0] as any;
       }
 
       // Create unique slug
@@ -445,7 +445,7 @@ class BulkProductService {
         slug: productSlug,
         description: merchantProduct.description,
         shortDescription: merchantProduct.shortDescription,
-        category: category._id,
+        category: category!._id,
         store: storeId,
         brand: merchantProduct.brand,
         sku: merchantProduct.sku,

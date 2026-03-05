@@ -202,7 +202,7 @@ export const bookEmergencyService = asyncHandler(async (req: Request, res: Respo
     const activeBooking = await EmergencyBooking.findOne({
       userId,
       status: { $in: ['pending', 'confirmed', 'dispatched', 'en_route'] }
-    });
+    }).lean();
 
     if (activeBooking) {
       return sendError(res, 'You already have an active emergency booking', 400);
@@ -260,7 +260,7 @@ export const getEmergencyBookingStatus = asyncHandler(async (req: Request, res: 
   });
 
   try {
-    const booking = await EmergencyBooking.findOne({ _id: id, userId });
+    const booking = await EmergencyBooking.findOne({ _id: id, userId }).lean();
 
     if (!booking) {
       console.error('❌ [EMERGENCY] Emergency booking not found:', id);
@@ -363,7 +363,7 @@ export const cancelEmergencyBooking = asyncHandler(async (req: Request, res: Res
   });
 
   try {
-    const booking = await EmergencyBooking.findOne({ _id: id, userId });
+    const booking = await EmergencyBooking.findOne({ _id: id, userId }).lean();
 
     if (!booking) {
       console.error('❌ [EMERGENCY] Emergency booking not found:', id);
@@ -414,7 +414,7 @@ export const updateEmergencyBookingStatus = asyncHandler(async (req: Request, re
   });
 
   try {
-    const booking = await EmergencyBooking.findById(id);
+    const booking = await EmergencyBooking.findById(id).lean();
 
     if (!booking) {
       console.error('❌ [EMERGENCY] Emergency booking not found:', id);
@@ -468,7 +468,7 @@ export const getActiveEmergencyBooking = asyncHandler(async (req: Request, res: 
     const activeBooking = await EmergencyBooking.findOne({
       userId,
       status: { $in: ['pending', 'confirmed', 'dispatched', 'en_route'] }
-    });
+    }).lean();
 
     console.log('✅ [EMERGENCY] Active booking check:', {
       hasActive: !!activeBooking

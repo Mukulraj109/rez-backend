@@ -96,7 +96,7 @@ async function grantEventReward(
 
   // 5. Check verification requirement
   if (rule.requiresVerification) {
-    const attendance = await EventAttendance.findOne({ eventId, userId, isVerified: true });
+    const attendance = await EventAttendance.findOne({ eventId, userId, isVerified: true }).lean();
     if (!attendance) {
       return {
         success: false,
@@ -267,7 +267,7 @@ async function getUserEventRewards(
   userId: string,
   eventId: string
 ): Promise<Array<{ action: string; coins: number; grantedAt: Date }>> {
-  const attendance = await EventAttendance.findOne({ eventId, userId });
+  const attendance = await EventAttendance.findOne({ eventId, userId }).lean();
   if (!attendance) return [];
 
   return attendance.rewardsGranted.map((r) => ({

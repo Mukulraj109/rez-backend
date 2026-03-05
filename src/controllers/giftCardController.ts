@@ -53,7 +53,7 @@ export const purchaseGiftCard = asyncHandler(async (req: Request, res: Response)
   }
 
   // Find gift card template
-  const giftCard = await GiftCard.findOne({ _id: giftCardId, isActive: true });
+  const giftCard = await GiftCard.findOne({ _id: giftCardId, isActive: true }).lean();
   if (!giftCard) return sendBadRequest(res, 'Gift card not available');
 
   // Validate denomination
@@ -62,7 +62,7 @@ export const purchaseGiftCard = asyncHandler(async (req: Request, res: Response)
   }
 
   // Check wallet balance
-  const wallet = await Wallet.findOne({ user: userId });
+  const wallet = await Wallet.findOne({ user: userId }).lean();
   if (!wallet) return sendError(res, 'Wallet not found', 404);
   if (wallet.isFrozen) return sendBadRequest(res, 'Wallet is frozen');
   if (wallet.balance.available < validatedAmount) return sendBadRequest(res, 'Insufficient balance');
@@ -187,7 +187,7 @@ export const revealGiftCardCode = asyncHandler(async (req: Request, res: Respons
 
   if (!userId) return sendError(res, 'User not authenticated', 401);
 
-  const card = await UserGiftCard.findOne({ _id: id, user: userId });
+  const card = await UserGiftCard.findOne({ _id: id, user: userId }).lean();
   if (!card) return sendBadRequest(res, 'Gift card not found');
 
   // Reveal decrypted code

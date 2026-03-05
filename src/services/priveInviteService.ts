@@ -108,7 +108,7 @@ class PriveInviteService {
     const existingAccess = await PriveAccess.findOne({
       userId: applicantUserId,
       status: 'active',
-    });
+    }).lean();
     if (existingAccess) {
       return { valid: false, reason: 'You already have Privé access' };
     }
@@ -309,7 +309,7 @@ class PriveInviteService {
       creatorId: userId,
       isActive: true,
       expiresAt: { $gt: now },
-    }).sort({ createdAt: -1 });
+    }).sort({ createdAt: -1 }).lean();
 
     const pendingCodes = activeCodes.filter(c => c.usageCount < c.maxUses).length;
 

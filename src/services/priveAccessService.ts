@@ -314,7 +314,7 @@ class PriveAccessService {
     remainingCodes: number;
   }> {
     // Must have active access
-    const access = await PriveAccess.findOne({ userId, status: 'active' });
+    const access = await PriveAccess.findOne({ userId, status: 'active' }).lean();
     if (!access) {
       return { canGenerate: false, reason: 'No active Privé access', maxCodes: 0, activeCodes: 0, remainingCodes: 0 };
     }

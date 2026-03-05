@@ -270,7 +270,7 @@ class ReorderService {
       }
 
       // Get or create cart
-      let cart = await Cart.findOne({ user: userId }).session(session);
+      let cart = await Cart.findOne({ user: userId }).session(session).lean();
       if (!cart) {
         cart = new Cart({
           user: userId,
@@ -283,7 +283,7 @@ class ReorderService {
             cashback: 0,
             total: 0
           }
-        });
+        }) as any;
       }
 
       const addedItems: any[] = [];
@@ -307,7 +307,7 @@ class ReorderService {
         if (!originalItem) continue;
 
         // Check if item already in cart (only check product items, not events)
-        const existingCartItem = cart.items.find(
+        const existingCartItem = cart!.items.find(
           item => item.product && 
                   item.product.toString() === validItem.productId &&
                   JSON.stringify(item.variant) === JSON.stringify(originalItem.variant)
@@ -320,7 +320,7 @@ class ReorderService {
           existingCartItem.quantity += quantityToAdd;
         } else {
           // Add new item
-          cart.items.push({
+          cart!.items.push({
             product: new mongoose.Types.ObjectId(validItem.productId),
             store: originalItem.store._id,
             quantity: quantityToAdd,
@@ -343,16 +343,16 @@ class ReorderService {
 
       // Recalculate cart totals
       let subtotal = 0;
-      for (const item of cart.items) {
+      for (const item of cart!.items) {
         subtotal += item.price * item.quantity;
       }
 
-      cart.totals.subtotal = subtotal;
-      cart.totals.tax = pct(subtotal, 5); // 5% tax
-      cart.totals.delivery = subtotal > 500 ? 0 : 40; // Free delivery above ₹500
-      cart.totals.total = sub(add(subtotal, cart.totals.tax, cart.totals.delivery), cart.totals.discount);
+      cart!.totals.subtotal = subtotal;
+      cart!.totals.tax = pct(subtotal, 5); // 5% tax
+      cart!.totals.delivery = subtotal > 500 ? 0 : 40; // Free delivery above ₹500
+      cart!.totals.total = sub(add(subtotal, cart!.totals.tax, cart!.totals.delivery), cart!.totals.discount);
 
-      await cart.save({ session });
+      await cart!.save({ session });
 
       await session.commitTransaction();
       session.endSession();

@@ -31,7 +31,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
   } = req.body;
 
   try {
-    const order = await Order.findById(orderId);
+    const order = await Order.findById(orderId).lean();
 
     if (!order) {
       return sendNotFound(res, 'Order not found');
@@ -131,7 +131,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
 
     const populatedOrder = await Order.findById(order._id)
       .populate('items.product', 'name images')
-      .populate('user', 'profile.firstName profile.lastName');
+      .populate('user', 'profile.firstName profile.lastName').lean();
 
     // Emit socket event for order status update
     try {

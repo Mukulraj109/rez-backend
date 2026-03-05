@@ -378,7 +378,7 @@ export const getOfferById = async (req: Request, res: Response) => {
         user: req.user.id,
         itemType: 'offer',
         item: id,
-      });
+      }).lean();
       isFavorite = !!favorite;
     }
 
@@ -400,7 +400,7 @@ export const redeemOffer = async (req: Request, res: Response) => {
     const { redemptionType = 'online' } = req.body;
 
     // Find offer
-    const offer = await Offer.findById(id);
+    const offer = await Offer.findById(id).lean();
 
     if (!offer) {
       return sendError(res, 'Offer not found', 404);
@@ -414,7 +414,7 @@ export const redeemOffer = async (req: Request, res: Response) => {
 
     // Check exclusive zone eligibility
     if (offer.exclusiveZone) {
-      const user = await User.findById(userId);
+      const user = await User.findById(userId).lean();
       if (!user) {
         return sendError(res, 'User not found', 404);
       }
@@ -474,7 +474,7 @@ export const redeemOffer = async (req: Request, res: Response) => {
       user: userId,
       offer: id,
       status: { $in: ['active', 'pending'] }
-    });
+    }).lean();
 
     if (existingActiveRedemption) {
       return sendError(res, 'You have already redeemed this offer. Please check "My Vouchers" to view your voucher.', 400);
@@ -608,7 +608,7 @@ export const addOfferToFavorites = async (req: Request, res: Response) => {
     const userId = req.user!.id;
 
     // Check if offer exists
-    const offer = await Offer.findById(id);
+    const offer = await Offer.findById(id).lean();
 
     if (!offer) {
       return sendError(res, 'Offer not found', 404);
@@ -619,7 +619,7 @@ export const addOfferToFavorites = async (req: Request, res: Response) => {
       user: userId,
       itemType: 'offer',
       item: id,
-    });
+    }).lean();
 
     if (existing) {
       return sendError(res, 'Offer already in favorites', 400);
@@ -948,7 +948,7 @@ export const getOffersPageData = async (req: Request, res: Response) => {
       const likedInteractions = await UserOfferInteraction.find({
         user: userId,
         action: 'like'
-      }).select('offer');
+      }).select('offer').lean();
       userLikedOffers = likedInteractions.map(interaction => interaction.offer.toString());
     }
 
@@ -1033,13 +1033,13 @@ export const getOffersPageData = async (req: Request, res: Response) => {
     let userWalletBalance = 0;
     if (userId) {
       // Check Wallet model first (more accurate)
-      const wallet = await Wallet.findOne({ user: userId });
+      const wallet = await Wallet.findOne({ user: userId }).lean();
       
       if (wallet) {
         userWalletBalance = wallet.balance.available || wallet.balance.total || 0;
       } else {
         // Fallback to User.wallet
-        const user = await User.findById(userId).select('wallet walletBalance phoneNumber');
+        const user = await User.findById(userId).select('wallet walletBalance phoneNumber').lean();
         userWalletBalance = user?.wallet?.balance || user?.walletBalance || req.user?.wallet?.balance || 0;
       }
     }
@@ -1090,7 +1090,7 @@ export const toggleOfferLike = async (req: Request, res: Response) => {
       return sendError(res, 'Authentication required', 401);
     }
 
-    const offer = await Offer.findById(id);
+    const offer = await Offer.findById(id).lean();
     if (!offer) {
       return sendError(res, 'Offer not found', 404);
     }
@@ -1100,7 +1100,7 @@ export const toggleOfferLike = async (req: Request, res: Response) => {
       user: userId,
       offer: id,
       action: 'like'
-    });
+    }).lean();
 
     let isLiked = false;
 
@@ -1154,7 +1154,7 @@ export const shareOffer = async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const { platform, message } = req.body;
 
-    const offer = await Offer.findById(id);
+    const offer = await Offer.findById(id).lean();
     if (!offer) {
       return sendError(res, 'Offer not found', 404);
     }
@@ -1246,7 +1246,7 @@ export const validateRedemptionCode = async (req: Request, res: Response) => {
     // Find redemption by code
     const redemption = await OfferRedemption.findOne({
       redemptionCode: code.toUpperCase()
-    }).populate('offer', 'title image cashbackPercentage category type restrictions store');
+    }).populate('offer', 'title image cashbackPercentage category type restrictions store').lean();
 
     if (!redemption) {
       return sendError(res, 'Invalid redemption code', 404);
@@ -1533,7 +1533,7 @@ export const getRedemptionById = async (req: Request, res: Response) => {
     const redemption = await OfferRedemption.findOne({
       _id: id,
       user: userId
-    }).populate('offer', 'title image cashbackPercentage category type restrictions store');
+    }).populate('offer', 'title image cashbackPercentage category type restrictions store').lean();
 
     if (!redemption) {
       return sendError(res, 'Redemption not found', 404);

@@ -258,7 +258,7 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
             { 'paymentGateway.gatewayPaymentId': paymentId },
             { 'payment.transactionId': paymentId }
           ]
-        });
+        }).lean();
 
         if (order) {
           const refundAmount = refundEntity.amount / 100;

@@ -39,7 +39,7 @@ export const createServiceAppointment = async (req: Request, res: Response): Pro
     }
 
     // Check if store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       sendNotFound(res, 'Store not found');
       return;
@@ -87,7 +87,7 @@ export const createServiceAppointment = async (req: Request, res: Response): Pro
     // Populate store and user details
     const populatedAppointment = await ServiceAppointment.findById(appointment._id)
       .populate('store', 'name logo location contact')
-      .populate('user', 'profile.firstName profile.lastName profile.phoneNumber');
+      .populate('user', 'profile.firstName profile.lastName profile.phoneNumber').lean();
 
     console.log(`✅ [SERVICE APPOINTMENT] Created appointment ${appointmentNumber} for store ${storeId}`);
 
@@ -198,7 +198,7 @@ export const getStoreServiceAppointments = async (req: Request, res: Response): 
     }
 
     // Check if store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       sendNotFound(res, 'Store not found');
       return;
@@ -260,7 +260,7 @@ export const cancelServiceAppointment = async (req: Request, res: Response): Pro
       return;
     }
 
-    const appointment = await ServiceAppointment.findById(appointmentId);
+    const appointment = await ServiceAppointment.findById(appointmentId).lean();
 
     if (!appointment) {
       sendNotFound(res, 'Appointment not found');
@@ -321,7 +321,7 @@ export const checkAvailability = async (req: Request, res: Response): Promise<vo
     }
 
     // Check if store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       sendNotFound(res, 'Store not found');
       return;

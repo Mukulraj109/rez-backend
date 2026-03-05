@@ -22,7 +22,7 @@ export const getEventReviews = async (req: Request, res: Response) => {
     }
 
     // Check if event exists
-    const event = await Event.findById(eventId);
+    const event = await Event.findById(eventId).lean();
     if (!event) {
       return res.status(404).json({
         success: false,
@@ -177,7 +177,7 @@ export const submitReview = async (req: Request, res: Response) => {
     }
 
     // Check if event exists
-    const event = await Event.findById(eventId);
+    const event = await Event.findById(eventId).lean();
     if (!event) {
       return res.status(404).json({
         success: false,
@@ -186,7 +186,7 @@ export const submitReview = async (req: Request, res: Response) => {
     }
 
     // Check if user already reviewed this event
-    const existingReview = await EventReview.findOne({ eventId, userId });
+    const existingReview = await EventReview.findOne({ eventId, userId }).lean();
     if (existingReview) {
       return res.status(400).json({
         success: false,
@@ -199,7 +199,7 @@ export const submitReview = async (req: Request, res: Response) => {
       eventId,
       userId,
       status: { $in: ['confirmed', 'completed'] },
-    });
+    }).lean();
 
     const isVerifiedBooking = !!booking;
 
@@ -400,7 +400,7 @@ export const deleteReview = async (req: Request, res: Response) => {
     }
 
     // Find review
-    const review = await EventReview.findById(reviewId);
+    const review = await EventReview.findById(reviewId).lean();
     if (!review) {
       return res.status(404).json({
         success: false,
@@ -516,14 +516,14 @@ export const getUserReview = async (req: Request, res: Response) => {
     }
 
     // Find user's review
-    const review = await EventReview.findOne({ eventId, userId });
+    const review = await EventReview.findOne({ eventId, userId }).lean();
 
     // Check if user can review (has booking)
     const booking = await EventBooking.findOne({
       eventId,
       userId,
       status: { $in: ['confirmed', 'completed'] },
-    });
+    }).lean();
 
     res.status(200).json({
       success: true,

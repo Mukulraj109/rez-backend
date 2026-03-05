@@ -8,6 +8,7 @@ import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import BankOffer from '../../models/BankOffer';
 import { sendSuccess, sendError } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -26,12 +27,13 @@ router.get('/', async (req: Request, res: Response) => {
     const filter: any = {};
     if (req.query.status === 'active') filter.isActive = true;
     else if (req.query.status === 'inactive') filter.isActive = false;
-    if (req.query.bankName) filter.bankName = { $regex: req.query.bankName, $options: 'i' };
+    if (req.query.bankName) filter.bankName = { $regex: escapeRegex(req.query.bankName as string), $options: 'i' };
     if (req.query.cardType) filter.cardType = req.query.cardType;
     if (req.query.search) {
+      const safeSearch = escapeRegex(req.query.search as string);
       filter.$or = [
-        { bankName: { $regex: req.query.search, $options: 'i' } },
-        { offerTitle: { $regex: req.query.search, $options: 'i' } },
+        { bankName: { $regex: safeSearch, $options: 'i' } },
+        { offerTitle: { $regex: safeSearch, $options: 'i' } },
       ];
     }
 

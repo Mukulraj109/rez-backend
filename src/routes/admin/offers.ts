@@ -4,6 +4,7 @@ import { Types } from 'mongoose';
 import Offer from '../../models/Offer';
 import { Store } from '../../models/Store';
 import { authenticate, requireAdmin } from '../../middleware/auth';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = express.Router();
 
@@ -110,11 +111,12 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Search
     if (search) {
+      const escapedSearch = escapeRegex(search as string);
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { subtitle: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { 'store.name': { $regex: search, $options: 'i' } },
+        { title: { $regex: escapedSearch, $options: 'i' } },
+        { subtitle: { $regex: escapedSearch, $options: 'i' } },
+        { description: { $regex: escapedSearch, $options: 'i' } },
+        { 'store.name': { $regex: escapedSearch, $options: 'i' } },
       ];
     }
 

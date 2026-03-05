@@ -58,7 +58,7 @@ export const getRewards = asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    const referrals = await Referral.find({ referrer: userId });
+    const referrals = await Referral.find({ referrer: userId }).lean();
 
     const claimableRewards = [];
     const claimedRewards = [];
@@ -148,7 +148,7 @@ export const claimReward = asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    const referral = await Referral.findById(referralId);
+    const referral = await Referral.findById(referralId).lean();
 
     if (!referral) {
       return sendNotFound(res, 'Referral not found');
@@ -429,7 +429,7 @@ export const validateCode = asyncHandler(async (req: Request, res: Response) => 
   }
 
   try {
-    const user = await User.findOne({ referralCode: code.toUpperCase() });
+    const user = await User.findOne({ referralCode: code.toUpperCase() }).lean();
 
     if (!user) {
       return sendBadRequest(res, 'Invalid referral code');
@@ -463,20 +463,20 @@ export const applyCode = asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    const referrer = await User.findOne({ referralCode: code.toUpperCase() });
+    const referrer = await User.findOne({ referralCode: code.toUpperCase() }).lean();
 
     if (!referrer) {
       return sendBadRequest(res, 'Invalid referral code');
     }
 
-    const referee = await User.findById(userId);
+    const referee = await User.findById(userId).lean();
 
     if (!referee) {
       return sendNotFound(res, 'User not found');
     }
 
     // Check if user already used a referral code
-    const existingReferral = await Referral.findOne({ referee: userId });
+    const existingReferral = await Referral.findOne({ referee: userId }).lean();
 
     if (existingReferral) {
       return sendBadRequest(res, 'You have already used a referral code');

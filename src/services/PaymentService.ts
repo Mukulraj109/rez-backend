@@ -88,7 +88,7 @@ class PaymentService {
       }
 
       // Fetch order to get order number
-      const order = await Order.findById(orderId);
+      const order = await Order.findById(orderId).lean();
       if (!order) {
         throw new Error('Order not found');
       }
@@ -209,7 +209,7 @@ class PaymentService {
 
     if (!claimedOrder) {
       // Either not found or already paid/processing by another webhook
-      const existing = await Order.findById(orderId);
+      const existing = await Order.findById(orderId).lean();
       if (existing && (existing.payment.status === 'paid' || existing.payment.status === 'processing')) {
         console.log('⚠️ [PAYMENT SERVICE] Payment already processed/processing for order:', orderId);
         return existing;
@@ -482,7 +482,7 @@ class PaymentService {
             if (storeId) {
               console.log('💰 [PAYMENT SERVICE] Deducting branded coins:', storePromoCoins);
               // Use branded coins from wallet
-              const wallet = await Wallet.findOne({ user: userId });
+              const wallet = await Wallet.findOne({ user: userId }).lean();
               if (wallet) {
                 await wallet.useBrandedCoins(
                   new Types.ObjectId(storeId.toString()),
@@ -555,7 +555,7 @@ class PaymentService {
             // Get user info for customer details
             let user = order.user as any;
             if (typeof user === 'string' || user instanceof mongoose.Types.ObjectId) {
-              user = await User.findById(user);
+              user = await User.findById(user).lean();
             }
 
             const customerName = serviceBookingDetails.customerName ||
@@ -643,7 +643,7 @@ class PaymentService {
         // Get user details
         let user = order.user as any;
         if (typeof user === 'string' || user instanceof mongoose.Types.ObjectId) {
-          user = await User.findById(user);
+          user = await User.findById(user).lean();
         }
 
         const userPhone = user?.profile?.phoneNumber || user?.phoneNumber || user?.phone;
@@ -760,7 +760,7 @@ class PaymentService {
 
             // Deduct cashback from user's wallet if it was credited
             if (cashbackAmount > 0) {
-              const wallet = await Wallet.findOne({ user: userId }).session(session);
+              const wallet = await Wallet.findOne({ user: userId }).session(session).lean();
               if (wallet) {
                 const balanceBefore = wallet.balance.total;
 
@@ -871,7 +871,7 @@ class PaymentService {
     try {
       console.log('💸 [PAYMENT SERVICE] Processing refund for order:', orderId);
 
-      const order = await Order.findById(orderId);
+      const order = await Order.findById(orderId).lean();
       if (!order) {
         throw new Error('Order not found');
       }

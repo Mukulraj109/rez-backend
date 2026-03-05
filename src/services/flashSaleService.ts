@@ -3,6 +3,8 @@ import FlashSalePurchase, { IFlashSalePurchase } from '../models/FlashSalePurcha
 import mongoose from 'mongoose';
 import stockSocketService from './stockSocketService'; // Import socket service instead
 import stripeService from './stripeService';
+import { User } from '../models/User';
+import pushNotificationService from './pushNotificationService';
 
 interface CreateFlashSaleData {
   title: string;
@@ -274,7 +276,7 @@ class FlashSaleService {
     flashSale?: IFlashSale;
   }> {
     try {
-      const flashSale = await FlashSale.findById(data.flashSaleId);
+      const flashSale = await FlashSale.findById(data.flashSaleId).lean();
 
       if (!flashSale) {
         return { valid: false, message: 'Flash sale not found' };
@@ -446,9 +448,50 @@ class FlashSaleService {
           });
         }
 
-        // TODO: Send push notifications to users
+        // Send push notifications to users with phone numbers
+        this.sendFlashSaleNotifications(flashSale).catch(err =>
+          console.error('❌ [FlashSaleService] Error sending flash sale notifications:', err)
+        );
       }, timeUntilStart);
     }
+  }
+
+  /**
+   * Send push notifications to all users about a flash sale starting
+   */
+  private async sendFlashSaleNotifications(flashSale: IFlashSale): Promise<void> {
+    const BATCH_SIZE = 200;
+    let skip = 0;
+    let notifiedCount = 0;
+
+    while (true) {
+      const users = await User.find({ isOnboarded: true })
+        .select('_id phoneNumber')
+        .skip(skip)
+        .limit(BATCH_SIZE)
+        .lean();
+
+      if (users.length === 0) break;
+
+      const smsPromises = users
+        .filter(u => u.phoneNumber)
+        .map(u =>
+          pushNotificationService.sendOrderUpdate(
+            'FLASH_SALE',
+            u.phoneNumber,
+            `Flash Sale: ${flashSale.title}`,
+            `${flashSale.discountPercentage}% off! Hurry, limited stock available. Ends ${new Date(flashSale.endTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.`
+          ).catch(() => {}) // swallow individual failures
+        );
+
+      await Promise.all(smsPromises);
+      notifiedCount += smsPromises.length;
+      skip += BATCH_SIZE;
+
+      if (users.length < BATCH_SIZE) break;
+    }
+
+    console.log(`📢 [FlashSaleService] Flash sale notifications sent to ${notifiedCount} users`);
   }
 
   /**
@@ -518,7 +561,7 @@ class FlashSaleService {
     remainingTime: number;
   } | null> {
     try {
-      const flashSale = await FlashSale.findById(flashSaleId);
+      const flashSale = await FlashSale.findById(flashSaleId).lean();
 
       if (!flashSale) {
         return null;
@@ -556,7 +599,7 @@ class FlashSaleService {
     canPurchase: boolean;
   }> {
     try {
-      const flashSale = await FlashSale.findById(flashSaleId);
+      const flashSale = await FlashSale.findById(flashSaleId).lean();
       if (!flashSale) {
         throw new Error('Flash sale not found');
       }
@@ -605,7 +648,7 @@ class FlashSaleService {
   }> {
     try {
       // 1. Get and validate flash sale
-      const flashSale = await FlashSale.findById(flashSaleId).populate('stores', 'name logo');
+      const flashSale = await FlashSale.findById(flashSaleId).populate('stores', 'name logo').lean();
       if (!flashSale) {
         throw new Error('Flash sale not found');
       }
@@ -741,7 +784,7 @@ class FlashSaleService {
   }> {
     try {
       // 1. Get purchase record
-      const purchase = await FlashSalePurchase.findById(purchaseId);
+      const purchase = await FlashSalePurchase.findById(purchaseId).lean();
       if (!purchase) {
         throw new Error('Purchase record not found');
       }
@@ -865,7 +908,7 @@ class FlashSaleService {
       const purchase = await FlashSalePurchase.findById(purchaseId)
         .populate('flashSale', 'title image discountPercentage stores promoCode')
         .populate('store', 'name logo')
-        .populate('user', 'name email');
+        .populate('user', 'name email').lean();
 
       return purchase;
     } catch (error) {

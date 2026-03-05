@@ -45,7 +45,7 @@ export const uploadBill = asyncHandler(async (req: Request, res: Response) => {
       'billImage.imageHash': imageHash,
       verificationStatus: { $in: ['pending', 'processing', 'approved'] },
       isActive: true,
-    });
+    }).lean();
 
     if (duplicateImage) {
       throw new AppError('This bill image has already been uploaded', 400);
@@ -169,15 +169,15 @@ export const getUserBills = asyncHandler(async (req: Request, res: Response) => 
   const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
   const limitNum = parseInt(limit as string);
 
-  // Get bills
-  const bills = await Bill.find(query)
-    .populate('merchant', 'name logo cashbackPercentage')
-    .sort({ createdAt: -1 })
-    .limit(limitNum)
-    .skip(skip);
-
-  // Get total count
-  const total = await Bill.countDocuments(query);
+  // Get bills and total count in parallel
+  const [bills, total] = await Promise.all([
+    Bill.find(query)
+      .populate('merchant', 'name logo cashbackPercentage')
+      .sort({ createdAt: -1 })
+      .limit(limitNum)
+      .skip(skip).lean(),
+    Bill.countDocuments(query),
+  ]);
 
   sendSuccess(res, {
     bills,
@@ -202,7 +202,7 @@ export const getBillById = asyncHandler(async (req: Request, res: Response) => {
     _id: billId,
     user: req.user._id,
     isActive: true,
-  }).populate('merchant', 'name logo cashbackPercentage');
+  }).populate('merchant', 'name logo cashbackPercentage').lean();
 
   if (!bill) {
     return sendNotFound(res, 'Bill not found');
@@ -239,7 +239,7 @@ export const resubmitBill = asyncHandler(async (req: Request, res: Response) => 
     _id: billId,
     user: req.user._id,
     isActive: true,
-  });
+  }).lean();
 
   if (!bill) {
     return sendNotFound(res, 'Bill not found');
@@ -294,7 +294,7 @@ export const resubmitBill = asyncHandler(async (req: Request, res: Response) => 
     const updatedBill = await Bill.findById(billId).populate(
       'merchant',
       'name logo cashbackPercentage'
-    );
+    ).lean();
 
     sendSuccess(res, updatedBill, 'Bill resubmitted successfully');
   } catch (error) {
@@ -352,7 +352,7 @@ export const approveBill = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError(result.error || 'Approval failed', 400);
   }
 
-  const bill = await Bill.findById(billId).populate('merchant', 'name logo');
+  const bill = await Bill.findById(billId).populate('merchant', 'name logo').lean();
 
   sendSuccess(res, bill, 'Bill approved successfully');
 });
@@ -380,7 +380,7 @@ export const rejectBill = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError(result.error || 'Rejection failed', 400);
   }
 
-  const bill = await Bill.findById(billId).populate('merchant', 'name logo');
+  const bill = await Bill.findById(billId).populate('merchant', 'name logo').lean();
 
   sendSuccess(res, bill, 'Bill rejected successfully');
 });

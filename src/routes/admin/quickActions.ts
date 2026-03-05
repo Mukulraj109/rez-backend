@@ -8,6 +8,7 @@ import { requireAuth, requireAdmin } from '../../middleware/auth';
 import QuickAction from '../../models/QuickAction';
 import { sendSuccess, sendNotFound, sendBadRequest, sendCreated } from '../../utils/response';
 import { sendError, sendPaginated } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -31,7 +32,7 @@ router.get('/', async (req: Request, res: Response) => {
     const filter: any = {};
 
     if (req.query.search) {
-      const search = (req.query.search as string).trim();
+      const search = escapeRegex((req.query.search as string).trim());
       filter.$or = [
         { title: { $regex: search, $options: 'i' } },
         { slug: { $regex: search, $options: 'i' } },

@@ -50,7 +50,7 @@ export const getActivityById = asyncHandler(async (req: Request, res: Response) 
 
   const { id } = req.params;
 
-  const activity = await Activity.findOne({ _id: id, user: req.user._id });
+  const activity = await Activity.findOne({ _id: id, user: req.user._id }).lean();
 
   if (!activity) {
     return sendNotFound(res, 'Activity not found');

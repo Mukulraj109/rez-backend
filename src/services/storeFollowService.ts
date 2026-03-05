@@ -105,7 +105,7 @@ export const recalculateFollowers = async (storeId: string): Promise<number> => 
  */
 export const getFollowersCount = async (storeId: string): Promise<number> => {
   try {
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
 
     if (!store) {
       console.error(`[StoreFollowService] Store not found: ${storeId}`);

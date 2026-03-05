@@ -2,16 +2,27 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Video } from '../models/Video';
 import { User } from '../models/User';
-import { 
-  sendSuccess, 
-  sendNotFound, 
-  sendBadRequest 
+import {
+  sendSuccess,
+  sendNotFound,
+  sendBadRequest
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import achievementService from '../services/achievementService';
 import gamificationEventBus from '../events/gamificationEventBus';
 import { sendCreated } from '../utils/response';
+import { escapeRegex } from '../utils/sanitize';
+import redisService from '../services/redisService';
+import { withCache } from '../utils/cacheHelper';
+
+// Video cache TTLs (seconds)
+const VIDEO_CACHE_TTL = {
+  TRENDING: 5 * 60,    // 5 minutes — trending changes often
+  LIST: 10 * 60,       // 10 minutes — general listing
+  CATEGORY: 10 * 60,   // 10 minutes — category listing
+  STORE: 5 * 60,       // 5 minutes — store videos
+};
 
 // Create a new video
 export const createVideo = asyncHandler(async (req: Request, res: Response) => {
@@ -89,7 +100,9 @@ export const createVideo = asyncHandler(async (req: Request, res: Response) => {
 
     await video.save();
 
-    console.log('✅ [VIDEO] Video created successfully:', video._id);
+    // Invalidate video caches so new video appears in listings
+    const { CacheInvalidator } = await import('../utils/cacheHelper');
+    CacheInvalidator.invalidateVideo(String(video._id)).catch(() => {});
 
     // Emit gamification event for video creation
     gamificationEventBus.emit('video_created', {
@@ -139,6 +152,16 @@ export const getVideos = asyncHandler(async (req: Request, res: Response) => {
   } = req.query;
 
   try {
+    // Skip cache for search queries (too many permutations)
+    const cacheKey = search ? null : `video:list:${category || 'all'}:${contentType || 'all'}:${sortBy}:${page}:${limit}`;
+
+    if (cacheKey) {
+      const cached = await redisService.get<any>(cacheKey);
+      if (cached) {
+        return sendSuccess(res, cached, 'Videos retrieved successfully');
+      }
+    }
+
     const query: any = {
       isPublished: true,
       isApproved: true,
@@ -153,10 +176,11 @@ export const getVideos = asyncHandler(async (req: Request, res: Response) => {
       query['products.0'] = { $exists: true };
     }
     if (search) {
+      const escaped = escapeRegex(search as string);
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $in: [new RegExp(search as string, 'i')] } }
+        { title: { $regex: escaped, $options: 'i' } },
+        { description: { $regex: escaped, $options: 'i' } },
+        { tags: { $in: [new RegExp(escaped, 'i')] } }
       ];
     }
 
@@ -181,25 +205,27 @@ export const getVideos = asyncHandler(async (req: Request, res: Response) => {
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const videos = await Video.find(query)
-      .populate('creator', 'profile.firstName profile.lastName profile.avatar')
-      .populate({
-        path: 'products',
-        select: 'name images description price inventory rating category store',
-        populate: {
-          path: 'store',
-          select: 'name slug logo'
-        }
-      })
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
+    const [videos, total] = await Promise.all([
+      Video.find(query)
+        .populate('creator', 'profile.firstName profile.lastName profile.avatar')
+        .populate({
+          path: 'products',
+          select: 'name images description price inventory rating category store',
+          populate: {
+            path: 'store',
+            select: 'name slug logo'
+          }
+        })
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      Video.countDocuments(query)
+    ]);
 
-    const total = await Video.countDocuments(query);
     const totalPages = Math.ceil(total / Number(limit));
 
-    sendSuccess(res, {
+    const result = {
       videos,
       pagination: {
         page: Number(page),
@@ -209,7 +235,14 @@ export const getVideos = asyncHandler(async (req: Request, res: Response) => {
         hasNext: Number(page) < totalPages,
         hasPrev: Number(page) > 1
       }
-    }, 'Videos retrieved successfully');
+    };
+
+    // Cache non-search results
+    if (cacheKey) {
+      redisService.set(cacheKey, result, VIDEO_CACHE_TTL.LIST).catch(() => {});
+    }
+
+    sendSuccess(res, result, 'Videos retrieved successfully');
 
   } catch (error) {
     throw new AppError('Failed to fetch videos', 500);
@@ -363,6 +396,12 @@ export const getVideosByCategory = asyncHandler(async (req: Request, res: Respon
   const { page = 1, limit = 20, sortBy = 'newest' } = req.query;
 
   try {
+    const cacheKey = `video:category:${category}:${sortBy}:${page}:${limit}`;
+    const cached = await redisService.get<any>(cacheKey);
+    if (cached) {
+      return sendSuccess(res, cached, `Videos in category "${category}" retrieved successfully`);
+    }
+
     const query = {
       category,
       isPublished: true,
@@ -386,25 +425,27 @@ export const getVideosByCategory = asyncHandler(async (req: Request, res: Respon
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const videos = await Video.find(query)
-      .populate('creator', 'profile.firstName profile.lastName profile.avatar')
-      .populate({
-        path: 'products',
-        select: 'name images description price inventory rating category store',
-        populate: {
-          path: 'store',
-          select: 'name slug logo'
-        }
-      })
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
+    const [videos, total] = await Promise.all([
+      Video.find(query)
+        .populate('creator', 'profile.firstName profile.lastName profile.avatar')
+        .populate({
+          path: 'products',
+          select: 'name images description price inventory rating category store',
+          populate: {
+            path: 'store',
+            select: 'name slug logo'
+          }
+        })
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      Video.countDocuments(query)
+    ]);
 
-    const total = await Video.countDocuments(query);
     const totalPages = Math.ceil(total / Number(limit));
 
-    sendSuccess(res, {
+    const result = {
       videos,
       category,
       pagination: {
@@ -415,7 +456,11 @@ export const getVideosByCategory = asyncHandler(async (req: Request, res: Respon
         hasNext: Number(page) < totalPages,
         hasPrev: Number(page) > 1
       }
-    }, `Videos in category "${category}" retrieved successfully`);
+    };
+
+    redisService.set(cacheKey, result, VIDEO_CACHE_TTL.CATEGORY).catch(() => {});
+
+    sendSuccess(res, result, `Videos in category "${category}" retrieved successfully`);
 
   } catch (error) {
     throw new AppError('Failed to fetch videos by category', 500);
@@ -428,52 +473,59 @@ export const getTrendingVideos = asyncHandler(async (req: Request, res: Response
   const userId = req.userId; // From optional auth middleware
 
   try {
-    // Calculate date for timeframe
-    const days = timeframe === '1d' ? 1 : timeframe === '7d' ? 7 : 30;
+    // Cache the base data (without user-specific isLiked)
+    const cacheKey = `video:trending:${timeframe}:${limit}`;
+    let videos: any[] | null = await redisService.get<any[]>(cacheKey);
 
-    // Progressive timeframe fallback: try requested -> 30d -> all-time
-    const timeframes = [days, 30, null]; // null = no date filter
-    let videos: any[] = [];
+    if (!videos) {
+      // Calculate date for timeframe
+      const days = timeframe === '1d' ? 1 : timeframe === '7d' ? 7 : 30;
 
-    for (const tf of timeframes) {
-      const query: any = { isPublished: true, isApproved: true };
-      if (tf !== null) {
-        const sinceDate = new Date();
-        sinceDate.setDate(sinceDate.getDate() - tf);
-        query.createdAt = { $gte: sinceDate };
+      // Progressive timeframe fallback: try requested -> 30d -> all-time
+      const timeframes = [days, 30, null]; // null = no date filter
+      videos = [];
+
+      for (const tf of timeframes) {
+        const query: any = { isPublished: true, isApproved: true };
+        if (tf !== null) {
+          const sinceDate = new Date();
+          sinceDate.setDate(sinceDate.getDate() - tf);
+          query.createdAt = { $gte: sinceDate };
+        }
+
+        videos = await Video.find(query)
+          .populate('creator', 'profile.firstName profile.lastName profile.avatar username')
+          .populate({
+            path: 'products',
+            select: 'name images description pricing inventory rating category store',
+            populate: {
+              path: 'store',
+              select: 'name slug logo _id'
+            }
+          })
+          .populate('stores', 'name slug logo _id')
+          .sort({
+            isTrending: -1,
+            'analytics.engagement': -1,
+            'analytics.views': -1,
+            createdAt: -1
+          })
+          .limit(Number(limit))
+          .lean();
+
+        if (videos.length > 0) break;
       }
 
-      videos = await Video.find(query)
-        .populate('creator', 'profile.firstName profile.lastName profile.avatar username')
-        .populate({
-          path: 'products',
-          select: 'name images description pricing inventory rating category store',
-          populate: {
-            path: 'store',
-            select: 'name slug logo _id'
-          }
-        })
-        .populate('stores', 'name slug logo _id')
-        .sort({
-          isTrending: -1,
-          'analytics.engagement': -1,
-          'analytics.views': -1,
-          createdAt: -1
-        })
-        .limit(Number(limit))
-        .lean();
-
-      if (videos.length > 0) break;
+      // Cache raw data for 5 minutes
+      redisService.set(cacheKey, videos, VIDEO_CACHE_TTL.TRENDING).catch(() => {});
     }
 
-    // Transform videos to include isLiked status and flatten data
+    // Transform videos to include isLiked status and flatten data (per-user, not cached)
     const transformedVideos = videos.map((video: any) => {
-      // Check if current user has liked this video
       const isLiked = userId && video.engagement?.likes
         ? video.engagement.likes.some((likeId: any) => likeId.toString() === userId)
         : false;
 
-      // Get store from either stores array or products
       const store = video.stores?.[0] || video.products?.[0]?.store || null;
 
       return {
@@ -508,7 +560,7 @@ export const getVideosByCreator = asyncHandler(async (req: Request, res: Respons
   const { page = 1, limit = 20 } = req.query;
 
   try {
-    const creator = await User.findById(creatorId).select('profile.firstName profile.lastName profile.avatar profile.bio');
+    const creator = await User.findById(creatorId).select('profile.firstName profile.lastName profile.avatar profile.bio').lean();
     
     if (!creator) {
       return sendNotFound(res, 'Creator not found');
@@ -578,7 +630,7 @@ export const toggleVideoLike = asyncHandler(async (req: Request, res: Response) 
   const userId = req.userId!;
 
   try {
-    const video = await Video.findById(videoId);
+    const video = await Video.findById(videoId).lean();
 
     if (!video) {
       return sendNotFound(res, 'Video not found');
@@ -798,54 +850,48 @@ export const getVideosByStore = asyncHandler(async (req: Request, res: Response)
   const userId = req.userId; // Optional - can be undefined for non-authenticated users
 
   try {
-    console.log('🎥 [VIDEO] Fetching videos for store:', storeId);
-
     // Check if storeId is a valid ObjectId format (24 hex characters)
-    // If not, return empty results immediately since stores field only accepts ObjectIds
     if (!mongoose.Types.ObjectId.isValid(storeId) || !/^[0-9a-fA-F]{24}$/.test(storeId)) {
-      console.log(`ℹ️ [VIDEO] Store ID "${storeId}" is not a valid ObjectId format, returning empty array`);
       return sendSuccess(res, {
         content: [],
         total: 0
       }, 'Videos retrieved successfully');
     }
 
+    // Check cache first
+    const cacheKey = `video:store:${storeId}:${type || 'all'}:${offset}:${limit}`;
+    const cached = await redisService.get<any>(cacheKey);
+    if (cached) {
+      return sendSuccess(res, cached, 'Videos retrieved successfully');
+    }
+
     // Build query with valid ObjectId
-    // Include both approved UGC and merchant videos (merchant videos are auto-approved)
     const query: any = {
       isPublished: true,
       stores: new mongoose.Types.ObjectId(storeId),
       $or: [
-        // UGC videos that are approved
         { contentType: 'ugc', isApproved: true, moderationStatus: 'approved' },
-        // Merchant promotional videos (auto-approved)
         { contentType: 'merchant' }
       ]
     };
 
-    // Filter by type if specified (both ugc and merchant are treated as video content)
-    if (type === 'video') {
-      // Already filtered in $or clause above
-    }
-
-    const videos = await Video.find(query)
-      .populate('creator', 'profile.firstName profile.lastName profile.avatar')
-      .populate({
-        path: 'products',
-        select: 'name images description price inventory rating category store',
-        populate: {
-          path: 'store',
-          select: 'name slug logo'
-        }
-      })
-      .sort({ createdAt: -1 })
-      .skip(Number(offset))
-      .limit(Number(limit))
-      .lean();
-
-    const total = await Video.countDocuments(query);
-
-    console.log(`✅ [VIDEO] Found ${videos.length} videos for store ${storeId}`);
+    const [videos, total] = await Promise.all([
+      Video.find(query)
+        .populate('creator', 'profile.firstName profile.lastName profile.avatar')
+        .populate({
+          path: 'products',
+          select: 'name images description price inventory rating category store',
+          populate: {
+            path: 'store',
+            select: 'name slug logo'
+          }
+        })
+        .sort({ createdAt: -1 })
+        .skip(Number(offset))
+        .limit(Number(limit))
+        .lean(),
+      Video.countDocuments(query)
+    ]);
 
     // Return empty array if no videos found (not an error)
     if (videos.length === 0) {
@@ -897,13 +943,14 @@ export const getVideosByStore = asyncHandler(async (req: Request, res: Response)
       };
     });
 
-    sendSuccess(res, {
-      content,
-      total
-    }, 'Videos retrieved successfully');
+    const result = { content, total };
+
+    // Cache the result (user-specific fields are computed per-request above)
+    redisService.set(cacheKey, result, VIDEO_CACHE_TTL.STORE).catch(() => {});
+
+    sendSuccess(res, result, 'Videos retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [VIDEO] Get videos by store error:', error);
     throw new AppError('Failed to fetch store videos', 500);
   }
 });
@@ -915,7 +962,7 @@ export const reportVideo = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
 
   try {
-    const video = await Video.findById(videoId);
+    const video = await Video.findById(videoId).lean();
 
     if (!video) {
       return sendNotFound(res, 'Video not found');
@@ -944,7 +991,7 @@ export const toggleVideoBookmark = asyncHandler(async (req: Request, res: Respon
   const userId = req.userId!;
 
   try {
-    const video = await Video.findById(videoId);
+    const video = await Video.findById(videoId).lean();
 
     if (!video) {
       return sendNotFound(res, 'Video not found');
@@ -973,7 +1020,7 @@ export const trackVideoView = asyncHandler(async (req: Request, res: Response) =
   const userId = req.userId; // Optional - can be undefined for non-authenticated users
 
   try {
-    const video = await Video.findById(videoId);
+    const video = await Video.findById(videoId).lean();
 
     if (!video) {
       return sendNotFound(res, 'Video not found');
@@ -1040,7 +1087,7 @@ export const toggleCommentLike = asyncHandler(async (req: Request, res: Response
   const userId = req.userId!;
 
   try {
-    const video = await Video.findById(videoId);
+    const video = await Video.findById(videoId).lean();
 
     if (!video) {
       return sendNotFound(res, 'Video not found');

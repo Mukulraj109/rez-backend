@@ -29,7 +29,7 @@ async function getCachedGameConfig(gameType: string): Promise<IGameConfig | null
   }
 
   try {
-    const config = await GameConfig.findOne({ gameType, isEnabled: true });
+    const config = await GameConfig.findOne({ gameType, isEnabled: true }).lean();
     gameConfigCache.set(gameType, { config, cachedAt: Date.now() });
     return config;
   } catch (err) {
@@ -209,7 +209,7 @@ class GameService {
         status: 'active',
         gameType: { $in: [gameType, 'mixed'] },
         'participants.user': userId
-      }).select('_id name participants');
+      }).select('_id name participants').lean();
 
       let firstUpdate: { tournamentName: string; pointsAdded: number; newRank: number } | null = null;
 
@@ -283,7 +283,7 @@ class GameService {
     );
 
     if (!session) {
-      const existing = await GameSession.findOne({ sessionId });
+      const existing = await GameSession.findOne({ sessionId }).lean();
       if (!existing) throw new Error('Game session not found');
       if (existing.status === 'completed') throw new Error('Game already played');
       if (existing.status === 'expired' || new Date() > existing.expiresAt) throw new Error('Game session expired');
@@ -419,7 +419,7 @@ class GameService {
     );
 
     if (!session) {
-      const existing = await GameSession.findOne({ sessionId });
+      const existing = await GameSession.findOne({ sessionId }).lean();
       if (!existing) throw new Error('Game session not found');
       if (existing.status === 'completed') {
         // Already played — return existing result (idempotent read)
@@ -514,7 +514,7 @@ class GameService {
       user: userId,
       'result.won': true,
       expiresAt: { $gt: new Date() }
-    });
+    }).lean();
 
     if (!session) {
       throw new Error('Session not found or expired');
@@ -526,7 +526,7 @@ class GameService {
 
     // Check if coins were already awarded (idempotent check)
     const idempotencyKey = `scratch_card:${sessionId}`;
-    const existingTx = await CoinTransaction.findOne({ 'metadata.idempotencyKey': idempotencyKey });
+    const existingTx = await CoinTransaction.findOne({ 'metadata.idempotencyKey': idempotencyKey }).lean();
     if (existingTx) {
       // Already claimed successfully — ensure session is marked completed
       if (session.status !== 'completed') {
@@ -715,7 +715,7 @@ class GameService {
     );
 
     if (!session) {
-      const existing = await GameSession.findOne({ sessionId });
+      const existing = await GameSession.findOne({ sessionId }).lean();
       if (!existing) throw new Error('Game session not found');
       if (existing.status === 'completed') throw new Error('Quiz already submitted');
       if (new Date() > existing.expiresAt) throw new Error('Quiz session expired');
@@ -926,7 +926,7 @@ class GameService {
     return GameSession.find(query)
       .sort({ createdAt: -1 })
       .limit(limit)
-      .exec();
+      .lean().exec();
   }
 
   // Get pending games for user
@@ -939,7 +939,7 @@ class GameService {
       expiresAt: { $gt: now }
     })
       .sort({ createdAt: 1 })
-      .exec();
+      .lean().exec();
   }
 
   // Get game statistics
@@ -1117,7 +1117,7 @@ class GameService {
 
     if (!session) {
       // Either not found or already completed
-      const existing = await GameSession.findOne({ sessionId });
+      const existing = await GameSession.findOne({ sessionId }).lean();
       if (!existing) throw new Error('Game session not found');
       throw new Error('Game already completed');
     }
@@ -1264,7 +1264,7 @@ class GameService {
     );
 
     if (!session) {
-      const existing = await GameSession.findOne({ sessionId });
+      const existing = await GameSession.findOne({ sessionId }).lean();
       if (!existing) throw new Error('Game session not found');
       throw new Error('Game already completed');
     }
@@ -1394,7 +1394,7 @@ class GameService {
     );
 
     if (!session) {
-      const existing = await GameSession.findOne({ sessionId });
+      const existing = await GameSession.findOne({ sessionId }).lean();
       if (!existing) throw new Error('Game session not found');
       throw new Error('Game already completed');
     }

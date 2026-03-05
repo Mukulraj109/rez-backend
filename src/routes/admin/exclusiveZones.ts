@@ -8,6 +8,7 @@ import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import ExclusiveZone from '../../models/ExclusiveZone';
 import { sendSuccess, sendError } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -27,7 +28,7 @@ router.get('/', async (req: Request, res: Response) => {
     if (req.query.status === 'active') filter.isActive = true;
     else if (req.query.status === 'inactive') filter.isActive = false;
     if (req.query.eligibilityType) filter.eligibilityType = req.query.eligibilityType;
-    if (req.query.search) filter.name = { $regex: req.query.search, $options: 'i' };
+    if (req.query.search) filter.name = { $regex: escapeRegex(req.query.search as string), $options: 'i' };
 
     const [zones, total] = await Promise.all([
       ExclusiveZone.find(filter).sort({ priority: -1, createdAt: -1 }).skip(skip).limit(limit).lean(),

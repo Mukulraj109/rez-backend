@@ -6,6 +6,7 @@ import { sendSuccess, sendNotFound, sendBadRequest } from '../utils/response';
 import { AppError } from '../middleware/errorHandler';
 import mongoose from 'mongoose';
 import redisService from '../services/redisService';
+import { withCache } from '../utils/cacheHelper';
 
 /**
  * Enrich UserAchievement records with data from the Achievement model.
@@ -42,8 +43,13 @@ export const getUserAchievements = asyncHandler(async (req: Request, res: Respon
     throw new AppError('Authentication required', 401);
   }
 
-  const userAchievements = await UserAchievement.find({ user: req.user._id })
-    .sort({ unlocked: -1, progress: -1, createdAt: -1 });
+  const userId = String(req.user._id);
+  const userAchievements = await withCache(`achievements:user:${userId}:all`, 300, () =>
+    UserAchievement.find({ user: req.user!._id })
+      .sort({ unlocked: -1, progress: -1, createdAt: -1 })
+      .limit(200)
+      .lean()
+  );
 
   const enriched = await enrichAchievements(userAchievements);
   sendSuccess(res, enriched, 'Achievements retrieved successfully');
@@ -55,10 +61,13 @@ export const getUnlockedAchievements = asyncHandler(async (req: Request, res: Re
     throw new AppError('Authentication required', 401);
   }
 
-  const achievements = await UserAchievement.find({
-    user: req.user._id,
-    unlocked: true
-  }).sort({ unlockedDate: -1 });
+  const userId = String(req.user._id);
+  const achievements = await withCache(`achievements:user:${userId}:unlocked`, 300, () =>
+    UserAchievement.find({
+      user: req.user!._id,
+      unlocked: true
+    }).sort({ unlockedDate: -1 }).limit(200).lean()
+  );
 
   sendSuccess(res, achievements, 'Unlocked achievements retrieved successfully');
 });
@@ -69,7 +78,10 @@ export const getAchievementProgress = asyncHandler(async (req: Request, res: Res
     throw new AppError('Authentication required', 401);
   }
 
-  const userAchievements = await UserAchievement.find({ user: req.user._id });
+  const userId = String(req.user._id);
+  const userAchievements = await withCache(`achievements:user:${userId}:progress`, 300, () =>
+    UserAchievement.find({ user: req.user!._id }).limit(200).lean()
+  );
   const enriched = await enrichAchievements(userAchievements);
 
   const total = enriched.length;
@@ -107,7 +119,7 @@ export const initializeUserAchievements = asyncHandler(async (req: Request, res:
   }
 
   // Load active achievement definitions from DB (not hardcoded)
-  const activeDefinitions = await Achievement.find({ isActive: true }).lean();
+  const activeDefinitions = await Achievement.find({ isActive: true }).limit(200).lean();
 
   // Fallback to legacy ACHIEVEMENT_DEFINITIONS if no DB definitions exist yet
   const definitions = activeDefinitions.length > 0
@@ -204,7 +216,7 @@ export const recalculateAchievements = asyncHandler(async (req: Request, res: Re
         (projectStats[0]?.totalProjects || 0) + (reviewCount || 0) + (offerCount || 0)
     };
 
-    const achievements = await UserAchievement.find({ user: userId });
+    const achievements = await UserAchievement.find({ user: userId }).limit(200);
     await Promise.all(achievements.map(async (achievement) => {
       const definition = ACHIEVEMENT_DEFINITIONS.find(def => def.type === achievement.type);
       if (!definition) return;
@@ -220,7 +232,7 @@ export const recalculateAchievements = asyncHandler(async (req: Request, res: Re
   }
 
   const updatedAchievements = await UserAchievement.find({ user: userId })
-    .sort({ unlocked: -1, progress: -1 });
+    .sort({ unlocked: -1, progress: -1 }).limit(200).lean();
 
   const enriched = await enrichAchievements(updatedAchievements);
   sendSuccess(res, enriched, 'Achievements recalculated successfully');

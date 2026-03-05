@@ -304,7 +304,7 @@ export const moderateUgcReel = async (req: Request, res: Response) => {
         source: 'ugc_reel',
         referenceId: (video._id as any),
         status: 'pending',
-      });
+      }).lean();
 
       if (pendingReward) {
         if (action === 'approve') {

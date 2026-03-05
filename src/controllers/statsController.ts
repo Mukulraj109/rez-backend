@@ -16,7 +16,7 @@ export const getSocialProofStats = asyncHandler(async (req: Request, res: Respon
     let stats;
 
     if (category) {
-      const categoryDoc = await Category.findOne({ slug: category as string });
+      const categoryDoc = await Category.findOne({ slug: category as string }).lean();
       
       if (!categoryDoc) {
         return sendNotFound(res, 'Category not found');

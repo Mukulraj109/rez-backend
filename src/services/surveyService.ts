@@ -126,7 +126,7 @@ export async function getSurveyById(surveyId: string, userId?: string): Promise<
       user: userId,
       survey: surveyId,
       status: 'completed'
-    });
+    }).lean();
 
     if (completedSession) {
       userStatus = 'completed';
@@ -136,7 +136,7 @@ export async function getSurveyById(surveyId: string, userId?: string): Promise<
         user: userId,
         survey: surveyId,
         status: 'in_progress'
-      });
+      }).lean();
 
       if (inProgressSession) {
         userStatus = 'in_progress';
@@ -224,7 +224,7 @@ export async function startSurvey(userId: string, surveyId: string): Promise<any
     category: 'survey',
     type: 'survey',
     status: 'active'
-  });
+  }).lean();
 
   if (!survey) {
     throw new Error('Survey not found or not active');
@@ -235,7 +235,7 @@ export async function startSurvey(userId: string, surveyId: string): Promise<any
     user: userId,
     survey: surveyId,
     status: 'completed'
-  });
+  }).lean();
 
   if (completedSession) {
     throw new Error('You have already completed this survey');
@@ -246,7 +246,7 @@ export async function startSurvey(userId: string, surveyId: string): Promise<any
     user: userId,
     survey: surveyId,
     status: 'in_progress'
-  });
+  }).lean();
 
   if (session) {
     // Return existing session
@@ -271,9 +271,9 @@ export async function startSurvey(userId: string, surveyId: string): Promise<any
     currentQuestionIndex: 0,
     startedAt: new Date(),
     expiresAt
-  });
+  }) as any;
 
-  await session.save();
+  await (session as any).save();
 
   // Update survey analytics
   await Project.findByIdAndUpdate(surveyId, {
@@ -281,7 +281,7 @@ export async function startSurvey(userId: string, surveyId: string): Promise<any
   });
 
   return {
-    sessionId: (session._id as any).toString(),
+    sessionId: (session!._id as any).toString(),
     currentQuestionIndex: 0,
     answers: [],
     resumed: false
@@ -301,7 +301,7 @@ export async function submitSurvey(
     _id: surveyId,
     category: 'survey',
     type: 'survey'
-  });
+  }).lean();
 
   if (!survey) {
     throw new Error('Survey not found');
@@ -312,7 +312,7 @@ export async function submitSurvey(
     user: userId,
     survey: surveyId,
     status: 'in_progress'
-  });
+  }).lean();
 
   if (!session) {
     // Check if already completed
@@ -320,7 +320,7 @@ export async function submitSurvey(
       user: userId,
       survey: surveyId,
       status: 'completed'
-    });
+    }).lean();
 
     if (completedSession) {
       throw new Error('You have already completed this survey');
@@ -338,11 +338,11 @@ export async function submitSurvey(
       answers: [],
       startedAt: new Date(),
       expiresAt: directExpiresAt
-    });
+    }) as any;
   }
 
   // Update answers
-  session.answers = answers.map(a => ({
+  session!.answers = answers.map(a => ({
     questionId: a.questionId,
     answer: a.answer,
     answeredAt: new Date()
@@ -354,13 +354,13 @@ export async function submitSurvey(
   const qualityScore = questionsCount > 0 ? Math.round((answeredCount / questionsCount) * 10) : 10;
 
   // Complete the session
-  session.status = 'completed';
-  session.completedAt = new Date();
-  session.timeSpent = Math.floor((session.completedAt.getTime() - session.startedAt.getTime()) / 1000);
-  session.qualityScore = qualityScore;
-  session.coinsEarned = survey.reward?.amount || 0;
+  session!.status = 'completed' as any;
+  session!.completedAt = new Date();
+  session!.timeSpent = Math.floor((session!.completedAt.getTime() - session!.startedAt.getTime()) / 1000);
+  session!.qualityScore = qualityScore;
+  session!.coinsEarned = survey.reward?.amount || 0;
 
-  await session.save();
+  await (session as any).save();
 
   // Award coins to user
   const coinsEarned = survey.reward?.amount || 0;
@@ -373,7 +373,7 @@ export async function submitSurvey(
       {
         surveyId: survey._id,
         surveyTitle: survey.title,
-        sessionId: session._id
+        sessionId: session!._id
       }
     );
   }
@@ -388,11 +388,11 @@ export async function submitSurvey(
   });
 
   return {
-    sessionId: (session._id as any).toString(),
+    sessionId: (session!._id as any).toString(),
     coinsEarned,
-    timeSpent: session.timeSpent,
+    timeSpent: session!.timeSpent,
     qualityScore,
-    completedAt: session.completedAt
+    completedAt: session!.completedAt
   };
 }
 

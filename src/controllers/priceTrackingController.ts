@@ -118,7 +118,7 @@ export const createPriceAlert = async (req: Request, res: Response) => {
     }
 
     // Check if product exists
-    const product = await Product.findById(productId);
+    const product = await Product.findById(productId).lean() as any;
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -282,7 +282,7 @@ export const cancelAlert = async (req: Request, res: Response) => {
     const alert = await PriceAlert.findOne({
       _id: alertId,
       userId,
-    });
+    }).lean();
 
     if (!alert) {
       return res.status(404).json({
@@ -324,7 +324,18 @@ export const getAlertStats = async (req: Request, res: Response) => {
   try {
     const { productId } = req.params;
 
-    // TODO: Add authorization check (admin or store owner)
+    // Authorization: only admin or store owner can view alert stats
+    const user = (req as any).user;
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+    if (user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'operator' && user.role !== 'support') {
+      // Not admin — check if user is the store owner for this product
+      const product = await Product.findById(productId).select('store').lean() as any;
+      if (!product || String(product.store) !== String(user._id)) {
+        return res.status(403).json({ success: false, message: 'Not authorized to view these stats' });
+      }
+    }
 
     const stats = await PriceAlert.getProductStats(productId);
 

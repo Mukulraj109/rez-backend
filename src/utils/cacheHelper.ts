@@ -75,6 +75,12 @@ export const CacheKeys = {
   wallet: (userId: string) => `wallet:user:${userId}`,
   walletTransactions: (userId: string, filters: string) => `wallet:user:${userId}:txns:${filters}`,
 
+  // Video keys
+  videoList: (filters: string) => `video:list:${filters}`,
+  videoTrending: (timeframe: string, limit: number) => `video:trending:${timeframe}:${limit}`,
+  videoByCategory: (category: string, filters: string) => `video:category:${category}:${filters}`,
+  videoByStore: (storeId: string, filters: string) => `video:store:${storeId}:${filters}`,
+
   // Offers page aggregated data
   offersPageData: (region: string, tab: string) => `offers:page-data:${region}:${tab}`,
 
@@ -297,6 +303,18 @@ export class CacheInvalidator {
       redisService.del(CacheKeys.cartSummary(userId)),
       redisService.del(CacheKeys.userOffers(userId)),
       redisService.del(CacheKeys.userVouchers(userId)),
+    ]);
+  }
+
+  /**
+   * Invalidate video-related cache
+   */
+  static async invalidateVideo(videoId?: string): Promise<void> {
+    await CacheInvalidator.safeInvalidate(`video:${videoId || 'all'}`, [
+      redisService.delPattern('video:list:*'),
+      redisService.delPattern('video:trending:*'),
+      redisService.delPattern('video:category:*'),
+      redisService.delPattern('video:store:*'),
     ]);
   }
 

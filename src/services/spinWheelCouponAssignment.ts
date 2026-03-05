@@ -211,7 +211,7 @@ export async function getRandomProduct(storeId?: string): Promise<ProductAssignm
 async function getStoreById(storeId: string): Promise<StoreAssignment> {
   try {
     const { Store } = await import('../models/Store');
-    const store = await Store.findById(storeId) as any;
+    const store = await Store.findById(storeId).lean() as any;
 
     if (!store) {
       return {

@@ -148,7 +148,7 @@ class OfferService {
         startTime: { $lte: now },
         endTime: { $gte: now },
         status: { $nin: ['ended', 'sold_out'] },
-      }).sort({ priority: -1, discountPercentage: -1 });
+      }).sort({ priority: -1, discountPercentage: -1 }).lean();
 
       return flashSales.map(sale => {
         const savings = (cartTotal * sale.discountPercentage) / 100;
@@ -187,7 +187,7 @@ class OfferService {
   ): Promise<OfferCalculation[]> {
     try {
       // Get user's tier/loyalty level
-      const user = await User.findById(userId).select('tier loyaltyPoints');
+      const user = await User.findById(userId).select('tier loyaltyPoints').lean();
       if (!user) return [];
 
       const productIds = items.map(item => new mongoose.Types.ObjectId(item.productId));
@@ -202,7 +202,7 @@ class OfferService {
           { applicableProducts: { $in: productIds } },
           { tags: { $in: ['exclusive', 'vip', 'premium'] } },
         ],
-      });
+      }).lean();
 
       return exclusiveOffers.map(offer => {
         const discountPercentage = offer.cashbackPercentage || 0;
@@ -253,7 +253,7 @@ class OfferService {
         isActive: true,
         startDate: { $lte: now },
         endDate: { $gte: now },
-      });
+      }).lean();
 
       return categoryOffers.map(offer => {
         const discountPercentage = offer.cashbackPercentage || 0;
@@ -307,7 +307,7 @@ class OfferService {
         isActive: true,
         startDate: { $lte: now },
         endDate: { $gte: now },
-      });
+      }).lean();
 
       return storeOffers.map(offer => {
         const discountPercentage = offer.cashbackPercentage || 0;
@@ -355,7 +355,7 @@ class OfferService {
           { $or: [{ product: { $exists: false } }, { product: null }] },
           { $or: [{ store: { $exists: false } }, { store: null }] },
         ],
-      });
+      }).lean();
 
       return generalOffers.map(offer => {
         const discountPercentage = offer.cashbackPercentage || 0;
@@ -463,7 +463,7 @@ class OfferService {
         startTime: { $lte: now },
         endTime: { $gte: now },
         status: { $nin: ['ended', 'sold_out'] },
-      });
+      }).lean();
 
       if (flashSale) {
         const applicable = !flashSale.minimumPurchase || cartTotal >= flashSale.minimumPurchase;
@@ -494,7 +494,7 @@ class OfferService {
         isActive: true,
         startDate: { $lte: now },
         endDate: { $gte: now },
-      });
+      }).lean();
 
       if (!offer) {
         return {

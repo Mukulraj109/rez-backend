@@ -55,7 +55,7 @@ export class TeamInvitationService {
       }
 
       // Check if merchant exists
-      const merchant = await Merchant.findById(merchantId);
+      const merchant = await Merchant.findById(merchantId).lean();
       if (!merchant) {
         return {
           success: false,
@@ -67,7 +67,7 @@ export class TeamInvitationService {
       const existingUser = await MerchantUser.findOne({
         merchantId,
         email: email.toLowerCase()
-      });
+      }).lean();
 
       if (existingUser) {
         if (existingUser.status === 'active') {
@@ -166,7 +166,7 @@ export class TeamInvitationService {
       await merchantUser.save();
 
       // Get merchant details
-      const merchant = await Merchant.findById(merchantUser.merchantId);
+      const merchant = await Merchant.findById(merchantUser.merchantId).lean();
       if (!merchant) {
         return {
           success: false,
@@ -221,7 +221,7 @@ export class TeamInvitationService {
         invitationToken: hashedToken,
         invitationExpiry: { $gt: new Date() },
         status: 'inactive'
-      }).select('+invitationToken +invitationExpiry');
+      }).select('+invitationToken +invitationExpiry').lean();
 
       if (!merchantUser) {
         return {
@@ -274,7 +274,7 @@ export class TeamInvitationService {
         invitationToken: hashedToken,
         invitationExpiry: { $gt: new Date() },
         status: 'inactive'
-      }).select('+invitationToken +invitationExpiry');
+      }).select('+invitationToken +invitationExpiry').lean();
 
       if (!merchantUser) {
         return {
@@ -304,7 +304,7 @@ export class TeamInvitationService {
     message: string;
   }> {
     try {
-      const merchantUser = await MerchantUser.findById(merchantUserId);
+      const merchantUser = await MerchantUser.findById(merchantUserId).lean();
 
       if (!merchantUser) {
         return {

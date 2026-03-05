@@ -57,7 +57,7 @@ class AchievementService {
         ]),
         Review.countDocuments({ user: userId }),
         OfferRedemption.countDocuments({ user: userId }),
-        User.findById(userId)
+        User.findById(userId).lean()
       ]);
 
       // Build metrics object
@@ -81,7 +81,7 @@ class AchievementService {
       };
 
       // Get all user achievements
-      const achievements = await UserAchievement.find({ user: userId });
+      const achievements = await UserAchievement.find({ user: userId }).lean();
 
       // Update each achievement based on its metric
       const updates = achievements.map(async (achievement) => {
@@ -219,7 +219,7 @@ class AchievementService {
         user: userId,
         type: { $in: relevantAchievementTypes },
         unlocked: false // Only check unlocked achievements
-      });
+      }).lean();
 
       if (achievements.length === 0) {
         console.log(`ℹ️ [ACHIEVEMENT] No unlocked achievements to check for user: ${userId}`);

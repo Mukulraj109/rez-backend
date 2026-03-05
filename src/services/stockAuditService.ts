@@ -225,7 +225,7 @@ class StockAuditService {
       const netChange = totalIn - totalOut;
 
       // Get current stock
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       let currentStock = 0;
 
       if (product) {
@@ -280,7 +280,7 @@ class StockAuditService {
         'inventory.stock': { $lte: threshold },
         'inventory.isAvailable': true,
         isActive: true
-      });
+      }).lean();
 
       const alerts = [];
 
@@ -293,7 +293,7 @@ class StockAuditService {
           product: product._id,
           changeType: 'purchase',
           timestamp: { $gte: thirtyDaysAgo }
-        });
+        }).lean();
 
         const totalSold = salesHistory.reduce(
           (sum, entry) => sum + Math.abs(entry.changeAmount),

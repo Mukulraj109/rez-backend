@@ -67,7 +67,7 @@ export const getFeaturedFinancialServices = asyncHandler(async (req: Request, re
     const financialCategories = await ServiceCategory.find({
       slug: { $in: FINANCIAL_CATEGORY_SLUGS },
       isActive: true
-    }).select('_id');
+    }).select('_id').lean();
 
     const categoryIds = financialCategories.map(c => c._id);
 
@@ -113,7 +113,7 @@ export const getFinancialStats = asyncHandler(async (req: Request, res: Response
     const financialCategories = await ServiceCategory.find({
       slug: { $in: FINANCIAL_CATEGORY_SLUGS },
       isActive: true
-    }).select('_id');
+    }).select('_id').lean();
 
     const categoryIds = financialCategories.map(c => c._id);
 
@@ -135,7 +135,7 @@ export const getFinancialStats = asyncHandler(async (req: Request, res: Response
       .lean();
 
     // Get total billers (services in bills category)
-    const billsCategory = await ServiceCategory.findOne({ slug: 'bills' });
+    const billsCategory = await ServiceCategory.findOne({ slug: 'bills' }).lean();
     const totalBillers = billsCategory ? await Product.countDocuments({
       productType: 'service',
       isActive: true,
@@ -311,7 +311,7 @@ export const getFinancialServiceById = asyncHandler(async (req: Request, res: Re
     // Verify it's a financial service
     const serviceCategoryId = (service as any).serviceCategory?._id || (service as any).serviceCategory;
     if (serviceCategoryId) {
-      const category = await ServiceCategory.findById(serviceCategoryId);
+      const category = await ServiceCategory.findById(serviceCategoryId).lean();
       if (!category || !FINANCIAL_CATEGORY_SLUGS.includes(category.slug)) {
         return sendNotFound(res, 'Financial service not found');
       }
@@ -358,7 +358,7 @@ export const searchFinancialServices = asyncHandler(async (req: Request, res: Re
       const cat = await ServiceCategory.findOne({
         slug: category,
         isActive: true
-      });
+      }).lean();
       if (cat) {
         categoryIds = [cat._id];
       }
@@ -366,7 +366,7 @@ export const searchFinancialServices = asyncHandler(async (req: Request, res: Re
       const financialCategories = await ServiceCategory.find({
         slug: { $in: FINANCIAL_CATEGORY_SLUGS },
         isActive: true
-      }).select('_id');
+      }).select('_id').lean();
       categoryIds = financialCategories.map(c => c._id);
     }
 

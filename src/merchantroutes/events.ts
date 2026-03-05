@@ -8,6 +8,7 @@ import Joi from 'joi';
 import AuditService from '../services/AuditService';
 import mongoose from 'mongoose';
 import { sendSuccess, sendNotFound, sendBadRequest } from '../utils/response';
+import { escapeRegex } from '../utils/sanitize';
 
 const router = Router();
 
@@ -251,10 +252,11 @@ router.get('/', validateQuery(listEventsQuerySchema), async (req: Request, res: 
     }
 
     if (search) {
+      const escaped = escapeRegex(search as string);
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { 'location.city': { $regex: search, $options: 'i' } }
+        { title: { $regex: escaped, $options: 'i' } },
+        { description: { $regex: escaped, $options: 'i' } },
+        { 'location.city': { $regex: escaped, $options: 'i' } }
       ];
     }
 

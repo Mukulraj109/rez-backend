@@ -46,7 +46,7 @@ export const getAvailableCoupons = async (req: Request, res: Response): Promise<
       const claimedCouponIds = await UserCoupon.find({
         user: userId,
         coupon: { $in: coupons.map((c: any) => c._id) },
-      }).distinct('coupon');
+      }).distinct('coupon').lean();
 
       const claimedSet = new Set(claimedCouponIds.map((id: any) => id.toString()));
       coupons = coupons.filter((c: any) => !claimedSet.has(c._id.toString()));
@@ -93,7 +93,7 @@ export const getFeaturedCoupons = async (req: Request, res: Response): Promise<v
       const claimedCouponIds = await UserCoupon.find({
         user: userId,
         coupon: { $in: coupons.map((c: any) => c._id) },
-      }).distinct('coupon');
+      }).distinct('coupon').lean();
       const claimedSet = new Set(claimedCouponIds.map((id: any) => id.toString()));
       coupons = coupons.filter((c: any) => !claimedSet.has(c._id.toString()));
     }
@@ -146,7 +146,7 @@ export const getMyCoupons = async (req: Request, res: Response): Promise<void> =
           { path: 'applicableTo.stores', select: 'name logo' },
         ],
       })
-      .sort({ status: 1, expiryDate: 1 });
+      .sort({ status: 1, expiryDate: 1 }).lean();
 
     if (limit) {
       query = query.limit(Number(limit));
@@ -389,7 +389,7 @@ export const removeCoupon = async (req: Request, res: Response): Promise<void> =
     const userCoupon = await UserCoupon.findOne({
       _id: id,
       user: userId,
-    });
+    }).lean();
 
     if (!userCoupon) {
       res.status(404).json({
@@ -476,7 +476,7 @@ export const getCouponDetails = async (req: Request, res: Response): Promise<voi
   try {
     const { id } = req.params;
 
-    const coupon = await Coupon.findById(id);
+    const coupon = await Coupon.findById(id).lean();
 
     if (!coupon) {
       res.status(404).json({

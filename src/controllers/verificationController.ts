@@ -79,7 +79,7 @@ export const getVerificationStatus = asyncHandler(async (req: Request, res: Resp
     return sendError(res, 'Authentication required', 401);
   }
 
-  const user = await User.findById(userId);
+  const user = await User.findById(userId).lean();
   if (!user) {
     return sendError(res, 'User not found', 404);
   }
@@ -116,7 +116,7 @@ export const getZoneVerificationStatus = asyncHandler(async (req: Request, res: 
     return sendBadRequest(res, 'Invalid verification zone');
   }
 
-  const user = await User.findById(userId);
+  const user = await User.findById(userId).lean();
   if (!user) {
     return sendError(res, 'User not found', 404);
   }
@@ -127,7 +127,7 @@ export const getZoneVerificationStatus = asyncHandler(async (req: Request, res: 
   const pendingVerification = await UserZoneVerification.findOne({
     userId: user._id,
     verificationType: zone,
-  }).sort({ createdAt: -1 }); // Get most recent
+  }).sort({ createdAt: -1 }).lean(); // Get most recent
 
   // Build response with status
   const response: any = {
@@ -175,7 +175,7 @@ export const submitVerification = asyncHandler(async (req: Request, res: Respons
     return sendBadRequest(res, `Invalid verification method for ${zone}. Valid methods: ${config.methods.join(', ')}`);
   }
 
-  const user = await User.findById(userId);
+  const user = await User.findById(userId).lean();
   if (!user) {
     return sendError(res, 'User not found', 404);
   }
@@ -301,7 +301,7 @@ export const submitVerification = asyncHandler(async (req: Request, res: Respons
       userId: user._id,
       zoneSlug: zone,
       status: 'pending',
-    });
+    }).lean();
 
     if (!existingRequest) {
       await UserZoneVerification.create({
@@ -360,7 +360,7 @@ export const reviewVerification = asyncHandler(async (req: Request, res: Respons
     return sendBadRequest(res, 'Action must be either "approve" or "reject"');
   }
 
-  const user = await User.findById(userId);
+  const user = await User.findById(userId).lean();
   if (!user) {
     return sendError(res, 'User not found', 404);
   }

@@ -191,7 +191,7 @@ const JOB_DEFINITIONS: ScheduledJobDefinition[] = [
           createdAt: { $lt: thirtyMinutesAgo },
         })
           .populate('serviceCategory', 'slug')
-          .limit(100);
+          .limit(100).lean();
 
         const travelBookings = unpaidBookings.filter((b: any) => {
           const slug = b.serviceCategory?.slug || '';
@@ -242,7 +242,7 @@ const JOB_DEFINITIONS: ScheduledJobDefinition[] = [
           completedAt: { $exists: false },
         })
           .populate('serviceCategory', 'slug')
-          .limit(200);
+          .limit(200).lean();
 
         const travelBookings = bookings.filter((b: any) => {
           const slug = b.serviceCategory?.slug || '';

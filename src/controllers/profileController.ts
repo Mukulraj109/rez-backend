@@ -20,7 +20,7 @@ export const getProfile = asyncHandler(async (req: Request, res: Response) => {
     return sendError(res, 'Authentication required', 401);
   }
 
-  const user = await User.findById(userId);
+  const user = await User.findById(userId).lean();
   if (!user) {
     return sendNotFound(res, 'User not found');
   }
@@ -71,7 +71,7 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
     // Update email if provided
     if (email !== undefined && email !== user.email) {
       // Check if email already exists
-      const existingUser = await User.findOne({ email, _id: { $ne: user._id } });
+      const existingUser = await User.findOne({ email, _id: { $ne: user._id } }).lean();
       if (existingUser) {
         return sendBadRequest(res, 'Email is already in use');
       }
@@ -223,7 +223,7 @@ export const getProfileCompletion = asyncHandler(async (req: Request, res: Respo
     return sendError(res, 'Authentication required', 401);
   }
 
-  const user = await User.findById(userId);
+  const user = await User.findById(userId).lean();
   if (!user) {
     return sendNotFound(res, 'User not found');
   }

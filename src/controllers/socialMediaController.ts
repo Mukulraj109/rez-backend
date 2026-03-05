@@ -58,7 +58,7 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
     }
 
     // FRAUD PREVENTION CHECK 1: Check if URL already submitted
-    const existingPost = await SocialMediaPost.findOne({ postUrl });
+    const existingPost = await SocialMediaPost.findOne({ postUrl }).lean();
     if (existingPost) {
       console.warn('⚠️ [FRAUD] Duplicate URL submission attempt:', { userId, postUrl });
       return sendError(res, 'This post URL has already been submitted', 409);
@@ -69,7 +69,7 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
       const isMongoOrderId = /^[a-f\d]{24}$/i.test(orderId);
       const existingForOrder = isMongoOrderId
         ? await SocialMediaPost.findOne({ user: userId, order: orderId })
-        : await SocialMediaPost.findOne({ user: userId, 'metadata.storePaymentId': orderId });
+        : await SocialMediaPost.findOne({ user: userId, 'metadata.storePaymentId': orderId }).lean();
       if (existingForOrder) {
         console.warn('⚠️ [FRAUD] User tried to submit same order/payment twice:', { userId, orderId });
         return sendError(res, 'You have already submitted a post for this order', 409);
@@ -122,7 +122,7 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
         .populate({
           path: 'items.store',
           select: 'merchantId name'
-        });
+        }).lean();
 
       if (order) {
         const orderTotal = order.totals?.subtotal || 0;
@@ -142,7 +142,7 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
     } else if (orderId && !isMongoId) {
       // StorePayment ID (e.g. "SP-xxx" format)
       const payment = await StorePayment.findOne({ paymentId: orderId, userId })
-        .populate('storeId', 'merchantId name');
+        .populate('storeId', 'merchantId name').lean();
 
       if (payment) {
         const paymentTotal = (payment as any).billAmount || (payment as any).amount || 0;
@@ -298,7 +298,7 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
       const isMongoOrderId = /^[a-f\d]{24}$/i.test(orderId);
       const existingForOrder = isMongoOrderId
         ? await SocialMediaPost.findOne({ user: userId, order: orderId })
-        : await SocialMediaPost.findOne({ user: userId, 'metadata.storePaymentId': orderId });
+        : await SocialMediaPost.findOne({ user: userId, 'metadata.storePaymentId': orderId }).lean();
       if (existingForOrder) {
         console.warn('⚠️ [FRAUD] User tried to submit same order/payment twice:', { userId, orderId });
         return sendError(res, 'You have already submitted a post for this order', 409);
@@ -354,7 +354,7 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
         .populate({
           path: 'items.store',
           select: 'merchantId name'
-        });
+        }).lean();
 
       if (order) {
         const orderTotal = order.totals?.subtotal || 0;
@@ -373,7 +373,7 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
     } else if (orderId && !isMongoId) {
       // StorePayment ID (e.g. "SP-xxx" format)
       const payment = await StorePayment.findOne({ paymentId: orderId, userId })
-        .populate('storeId', 'merchantId name');
+        .populate('storeId', 'merchantId name').lean();
 
       if (payment) {
         const paymentTotal = (payment as any).billAmount || (payment as any).amount || 0;
@@ -576,7 +576,7 @@ export const updatePostStatus = asyncHandler(async (req: Request, res: Response)
   session.startTransaction();
 
   try {
-    const post = await SocialMediaPost.findById(postId).session(session);
+    const post = await SocialMediaPost.findById(postId).session(session).lean();
 
     if (!post) {
       await session.abortTransaction();

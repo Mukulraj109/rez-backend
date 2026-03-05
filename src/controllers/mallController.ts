@@ -325,7 +325,7 @@ export const createMallBrand = asyncHandler(async (req: Request, res: Response) 
   }
 
   // Check if category exists
-  const category = await MallCategory.findById(brandData.mallCategory);
+  const category = await MallCategory.findById(brandData.mallCategory).lean();
   if (!category) {
     return sendBadRequest(res, 'Invalid category');
   }
@@ -366,7 +366,7 @@ export const updateMallBrand = asyncHandler(async (req: Request, res: Response) 
   }
 
   // Get old brand to detect collection/category changes
-  const oldBrand = await MallBrand.findById(brandId);
+  const oldBrand = await MallBrand.findById(brandId).lean();
   if (!oldBrand) {
     return sendNotFound(res, 'Brand not found');
   }
@@ -410,7 +410,7 @@ export const deleteMallBrand = asyncHandler(async (req: Request, res: Response) 
     return sendBadRequest(res, 'Invalid brand ID');
   }
 
-  const brand = await MallBrand.findById(brandId);
+  const brand = await MallBrand.findById(brandId).lean();
 
   if (!brand) {
     return sendNotFound(res, 'Brand not found');
@@ -593,12 +593,12 @@ export const createMallOffer = asyncHandler(async (req: Request, res: Response) 
 
   // Validate referenced entity exists
   if (offerData.brand) {
-    const brand = await MallBrand.findById(offerData.brand);
+    const brand = await MallBrand.findById(offerData.brand).lean();
     if (!brand) {
       return sendBadRequest(res, 'Invalid brand ID');
     }
   } else if (offerData.store) {
-    const store = await Store.findById(offerData.store);
+    const store = await Store.findById(offerData.store).lean();
     if (!store) {
       return sendBadRequest(res, 'Invalid store ID');
     }

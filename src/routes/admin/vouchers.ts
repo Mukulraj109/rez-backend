@@ -8,6 +8,7 @@ import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { VoucherBrand } from '../../models/Voucher';
 import { sendSuccess, sendError } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -42,8 +43,8 @@ router.get('/', async (req: Request, res: Response) => {
 
     if (req.query.search) {
       filter.$or = [
-        { name: { $regex: req.query.search, $options: 'i' } },
-        { description: { $regex: req.query.search, $options: 'i' } },
+        { name: { $regex: escapeRegex(req.query.search as string), $options: 'i' } },
+        { description: { $regex: escapeRegex(req.query.search as string), $options: 'i' } },
       ];
     }
 

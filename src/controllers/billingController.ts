@@ -50,16 +50,16 @@ export const getBillingHistory = async (req: Request, res: Response) => {
       }
     }
 
-    // Get total count for pagination
-    const total = await Subscription.countDocuments(filter);
-
-    // Get subscription billing records
-    const subscriptions = await Subscription.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(Number(skip))
-      .limit(Number(limit))
-      .select('tier billingCycle price status createdAt startDate endDate razorpaySubscriptionId metadata')
-      .lean();
+    // Get total count and subscription billing records in parallel
+    const [total, subscriptions] = await Promise.all([
+      Subscription.countDocuments(filter),
+      Subscription.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(Number(skip))
+        .limit(Number(limit))
+        .select('tier billingCycle price status createdAt startDate endDate razorpaySubscriptionId metadata')
+        .lean(),
+    ]);
 
     // Get related payment records
     const paymentFilter: any = {
@@ -386,17 +386,15 @@ export const getBillingSummary = async (req: Request, res: Response) => {
       });
     }
 
-    // Get all subscriptions for the user
-    const subscriptions = await Subscription.find({
-      user: userId
-    }).sort({ createdAt: -1 });
-
-    // Get all payments for the user
-    const payments = await Payment.find({
-      user: userId,
-      status: 'completed',
-      'metadata.type': 'subscription'
-    });
+    // Get all subscriptions and payments for the user in parallel
+    const [subscriptions, payments] = await Promise.all([
+      Subscription.find({ user: userId }).sort({ createdAt: -1 }).limit(50).lean(),
+      Payment.find({
+        user: userId,
+        status: 'completed',
+        'metadata.type': 'subscription'
+      }).limit(50).lean(),
+    ]);
 
     // Calculate totals
     const totalSpent = subscriptions.reduce((sum, sub) => {

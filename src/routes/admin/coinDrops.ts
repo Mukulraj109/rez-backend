@@ -9,6 +9,7 @@ import { requireAuth, requireAdmin } from '../../middleware/auth';
 import CoinDrop from '../../models/CoinDrop';
 import { Store } from '../../models/Store';
 import { sendSuccess, sendError } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -75,7 +76,7 @@ router.get('/', async (req: Request, res: Response) => {
  */
 router.get('/stores', async (req: Request, res: Response) => {
   try {
-    const search = req.query.q as string;
+    const search = req.query.q ? escapeRegex(req.query.q as string) : undefined;
     const filter: any = { isActive: true };
 
     if (search) {

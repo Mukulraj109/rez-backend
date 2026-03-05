@@ -73,7 +73,7 @@ export const joinChallenge = asyncHandler(async (req: Request, res: Response) =>
   const userId = (req.user._id as Types.ObjectId).toString();
 
   // Validate challenge exists and is active
-  const challenge = await Challenge.findById(id);
+  const challenge = await Challenge.findById(id).lean();
   if (!challenge) {
     return sendNotFound(res, 'Challenge not found');
   }
@@ -88,7 +88,7 @@ export const joinChallenge = asyncHandler(async (req: Request, res: Response) =>
 
   // Check if user already joined
   const UserChallengeProgress = (await import('../models/UserChallengeProgress')).default;
-  const existing = await UserChallengeProgress.findOne({ user: userId, challenge: id });
+  const existing = await UserChallengeProgress.findOne({ user: userId, challenge: id }).lean();
   if (existing) {
     return sendSuccess(res, {
       progress: existing,
@@ -175,7 +175,7 @@ export const getUserAchievements = asyncHandler(async (req: Request, res: Respon
   const { userId } = req.params;
 
   const achievements = await UserAchievement.find({ user: userId })
-    .sort({ unlocked: -1, progress: -1 });
+    .sort({ unlocked: -1, progress: -1 }).lean();
 
   sendSuccess(res, achievements, 'User achievements retrieved successfully');
 });
@@ -193,7 +193,7 @@ export const getMyAchievements = asyncHandler(async (req: Request, res: Response
 
   // Get user's achievement records
   let userAchievements = await UserAchievement.find({ user: userId })
-    .sort({ unlocked: -1, progress: -1 });
+    .sort({ unlocked: -1, progress: -1 }).lean();
 
   // If user has no achievement records, initialize them from definitions
   if (userAchievements.length === 0) {
@@ -217,7 +217,7 @@ export const getMyAchievements = asyncHandler(async (req: Request, res: Response
         // Ignore duplicate key errors
       });
       userAchievements = await UserAchievement.find({ user: userId })
-        .sort({ unlocked: -1, progress: -1 });
+        .sort({ unlocked: -1, progress: -1 }).lean();
     }
   }
 
@@ -284,7 +284,7 @@ export const getUserBadges = asyncHandler(async (req: Request, res: Response) =>
   const achievements = await UserAchievement.find({
     user: userId,
     unlocked: true
-  });
+  }).lean();
 
   const badges = achievements.filter(a => {
     const def = ACHIEVEMENT_DEFINITIONS.find(d => d.type === a.type);
@@ -563,7 +563,7 @@ export const spinWheel = asyncHandler(async (req: Request, res: Response) => {
   // ✅ FIX: Get user's coin balance from WALLET (single source of truth)
   // This ensures consistency between homepage and spin wheel page
   const { Wallet } = await import('../models/Wallet');
-  const wallet = await Wallet.findOne({ user: userId });
+  const wallet = await Wallet.findOne({ user: userId }).lean();
 
   let actualBalance = 0;
   if (wallet) {
@@ -615,7 +615,7 @@ export const spinWheel = asyncHandler(async (req: Request, res: Response) => {
         status: 'active',
         gameType: { $in: ['spin_wheel', 'mixed'] },
         'participants.user': userId
-      }).select('_id name participants');
+      }).select('_id name participants').lean();
 
       for (const t of activeTournaments) {
         try {
@@ -793,7 +793,7 @@ export const submitQuizAnswer = asyncHandler(async (req: Request, res: Response)
         status: 'active',
         gameType: { $in: ['quiz', 'mixed'] },
         'participants.user': userId
-      }).select('_id name participants');
+      }).select('_id name participants').lean();
 
       for (const t of activeTournaments) {
         try {
@@ -843,7 +843,7 @@ export const completeQuiz = asyncHandler(async (req: Request, res: Response) => 
         status: 'active',
         gameType: { $in: ['quiz', 'mixed'] },
         'participants.user': userId
-      }).select('_id name participants');
+      }).select('_id name participants').lean();
 
       for (const t of activeTournaments) {
         try {
@@ -1304,7 +1304,7 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
 
   if (!previousStreak) {
     // Either already checked in today, or no streak document exists
-    const existingStreak = await UserStreak.findOne({ user: userId, type: 'app_open' });
+    const existingStreak = await UserStreak.findOne({ user: userId, type: 'app_open' }).lean();
 
     if (existingStreak) {
       // Already checked in today — return current state
@@ -1569,7 +1569,7 @@ export const getStreakMilestones = asyncHandler(async (req: Request, res: Respon
   }
 
   // Get user's streak for this type
-  let streak = await UserStreak.findOne({ user: userId, type });
+  let streak = await UserStreak.findOne({ user: userId, type }).lean();
 
   if (!streak) {
     // Return default milestones with no progress
@@ -1708,7 +1708,7 @@ export const getPromotionalPosters = asyncHandler(async (req: Request, res: Resp
     validFrom: { $lte: now },
     validUntil: { $gte: now },
     'metadata.tags': { $in: ['promotional', 'shareable', 'poster'] }
-  }).sort({ priority: -1 }).limit(10);
+  }).sort({ priority: -1 }).limit(10).lean();
 
   // If no promotional banners found, get any active banners
   let posters = banners;
@@ -1717,7 +1717,7 @@ export const getPromotionalPosters = asyncHandler(async (req: Request, res: Resp
       isActive: true,
       validFrom: { $lte: now },
       validUntil: { $gte: now },
-    }).sort({ priority: -1 }).limit(4);
+    }).sort({ priority: -1 }).limit(4).lean();
   }
 
   // Transform to frontend format
@@ -1766,7 +1766,7 @@ export const getShareSubmissions = asyncHandler(async (req: Request, res: Respon
   ]);
 
   // Transform to frontend format
-  const submissions = posts.map(post => ({
+  const submissions = posts.map((post: any) => ({
     id: (post._id as string).toString(),
     posterTitle: post.metadata?.orderNumber || 'Promotional Poster',
     posterId: post.metadata?.postId,
@@ -1825,7 +1825,7 @@ export const submitSharePost = asyncHandler(async (req: Request, res: Response) 
   const existingPost = await SocialMediaPost.findOne({
     postUrl: postUrl,
     status: { $in: ['pending', 'approved', 'credited'] }
-  });
+  }).lean();
 
   if (existingPost) {
     return sendBadRequest(res, 'This post URL has already been submitted');
@@ -1884,7 +1884,7 @@ export const getStreakBonuses = asyncHandler(async (req: Request, res: Response)
 
   // Get user's streak
   const streak = await UserStreak.findOne({ user: userId, type: 'app_open' }) ||
-                 await UserStreak.findOne({ user: userId, type: 'login' });
+                 await UserStreak.findOne({ user: userId, type: 'login' }).lean();
 
   const currentStreak = streak?.currentStreak || 0;
 

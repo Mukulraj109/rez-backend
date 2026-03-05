@@ -33,7 +33,7 @@ export const createOfferComment = async (req: Request, res: Response) => {
       offer: offerId,
       user: userId,
       text: text.trim(),
-    });
+    }).lean();
     if (duplicate) {
       return res.status(400).json({ success: false, error: 'You have already posted this exact comment on this offer' });
     }
@@ -158,7 +158,7 @@ export const toggleCommentLike = async (req: Request, res: Response) => {
     }
 
     const { commentId } = req.params;
-    const comment = await OfferComment.findById(commentId);
+    const comment = await OfferComment.findById(commentId).lean();
     if (!comment) {
       return res.status(404).json({ success: false, error: 'Comment not found' });
     }
@@ -333,7 +333,7 @@ export const moderateComment = async (req: Request, res: Response) => {
         source: 'offer_comment',
         referenceId: comment._id,
         status: 'pending',
-      });
+      }).lean();
 
       if (pendingReward) {
         if (action === 'approve') {

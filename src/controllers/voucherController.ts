@@ -5,6 +5,8 @@ import { Transaction } from '../models/Transaction';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import stripeService from '../services/stripeService';
 import coinService from '../services/coinService';
+import { withCache } from '../utils/cacheHelper';
+import { CacheTTL } from '../config/redis';
 
 /**
  * GET /api/vouchers/brands
@@ -51,15 +53,19 @@ export const getVoucherBrands = async (req: Request, res: Response) => {
     const limitNum = Math.min(50, Math.max(1, Number(limit)));
     const skip = (pageNum - 1) * limitNum;
 
-    const [brands, total] = await Promise.all([
-      VoucherBrand.find(filter)
-        .populate('store', 'name slug logo location.address location.city')
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(limitNum)
-        .lean(),
-      VoucherBrand.countDocuments(filter),
-    ]);
+    const cacheKey = `vouchers:brands:${JSON.stringify(filter)}:${pageNum}:${limitNum}:${sortBy}:${order}`;
+    const { brands, total } = await withCache(cacheKey, CacheTTL.VOUCHER_LIST, async () => {
+      const [brandsList, count] = await Promise.all([
+        VoucherBrand.find(filter)
+          .populate('store', 'name slug logo location.address location.city')
+          .sort(sortOptions)
+          .skip(skip)
+          .limit(limitNum)
+          .lean(),
+        VoucherBrand.countDocuments(filter),
+      ]);
+      return { brands: brandsList, total: count };
+    });
 
     sendPaginated(res, brands, pageNum, limitNum, total, 'Voucher brands fetched successfully');
   } catch (error) {
@@ -99,14 +105,16 @@ export const getFeaturedBrands = async (req: Request, res: Response) => {
   try {
     const { limit = 10 } = req.query;
 
-    const brands = await VoucherBrand.find({
-      isActive: true,
-      isFeatured: true,
-    })
-      .populate('store', 'name slug logo location.address location.city')
-      .sort({ purchaseCount: -1 })
-      .limit(Number(limit))
-      .lean();
+    const brands = await withCache(`vouchers:featured:${limit}`, CacheTTL.VOUCHER_LIST, () =>
+      VoucherBrand.find({
+        isActive: true,
+        isFeatured: true,
+      })
+        .populate('store', 'name slug logo location.address location.city')
+        .sort({ purchaseCount: -1 })
+        .limit(Number(limit))
+        .lean()
+    );
 
     sendSuccess(res, brands, 'Featured brands fetched successfully');
   } catch (error) {
@@ -123,14 +131,16 @@ export const getNewlyAddedBrands = async (req: Request, res: Response) => {
   try {
     const { limit = 10 } = req.query;
 
-    const brands = await VoucherBrand.find({
-      isActive: true,
-      isNewlyAdded: true,
-    })
-      .populate('store', 'name slug logo location.address location.city')
-      .sort({ createdAt: -1 })
-      .limit(Number(limit))
-      .lean();
+    const brands = await withCache(`vouchers:newly-added:${limit}`, CacheTTL.VOUCHER_LIST, () =>
+      VoucherBrand.find({
+        isActive: true,
+        isNewlyAdded: true,
+      })
+        .populate('store', 'name slug logo location.address location.city')
+        .sort({ createdAt: -1 })
+        .limit(Number(limit))
+        .lean()
+    );
 
     sendSuccess(res, brands, 'Newly added brands fetched successfully');
   } catch (error) {
@@ -145,7 +155,9 @@ export const getNewlyAddedBrands = async (req: Request, res: Response) => {
  */
 export const getVoucherCategories = async (req: Request, res: Response) => {
   try {
-    const categories = await VoucherBrand.distinct('category', { isActive: true });
+    const categories = await withCache('vouchers:categories', CacheTTL.VOUCHER_LIST, () =>
+      VoucherBrand.distinct('category', { isActive: true })
+    );
 
     sendSuccess(res, categories, 'Categories fetched successfully');
   } catch (error) {
@@ -173,7 +185,7 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
     }
 
     // Find brand
-    const brand = await VoucherBrand.findById(brandId);
+    const brand = await VoucherBrand.findById(brandId).lean();
 
     if (!brand) {
       return sendError(res, 'Voucher brand not found', 404);
@@ -271,7 +283,7 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
     await userVoucher.save();
 
     // Create transaction record for order history
-    const wallet = await Wallet.findOne({ user: userId });
+    const wallet = await Wallet.findOne({ user: userId }).lean();
     const transaction = new Transaction({
       user: userId,
       type: 'debit',
@@ -364,7 +376,7 @@ export const confirmCardPurchase = async (req: Request, res: Response) => {
     }
 
     // Idempotency: check if voucher already created for this payment
-    const existingVoucher = await UserVoucher.findOne({ transactionId: paymentIntentId });
+    const existingVoucher = await UserVoucher.findOne({ transactionId: paymentIntentId }).lean();
     if (existingVoucher) {
       await existingVoucher.populate('brand', 'name logo backgroundColor cashbackRate');
       return sendSuccess(res, {
@@ -373,7 +385,7 @@ export const confirmCardPurchase = async (req: Request, res: Response) => {
       }, 'Voucher already issued for this payment');
     }
 
-    const brand = await VoucherBrand.findById(brandId);
+    const brand = await VoucherBrand.findById(brandId).lean();
     if (!brand) {
       return sendError(res, 'Voucher brand not found', 404);
     }
@@ -532,7 +544,7 @@ export const useVoucher = async (req: Request, res: Response) => {
     const voucher = await UserVoucher.findOne({
       _id: id,
       user: userId,
-    });
+    }).lean();
 
     if (!voucher) {
       return sendError(res, 'Voucher not found', 404);
@@ -578,6 +590,9 @@ export const trackBrandView = async (req: Request, res: Response) => {
 export const getHeroCarousel = async (req: Request, res: Response) => {
   try {
     const { limit = 5 } = req.query;
+
+    const cacheKey = `vouchers:hero-carousel:${limit}`;
+    const cachedCarousel = await withCache(cacheKey, CacheTTL.VOUCHER_LIST, async () => {
 
     // Get featured brands with highest cashback rates, prioritizing travel brands (like MakeMyTrip) for hero carousel
     const featuredBrands = await VoucherBrand.find({
@@ -638,7 +653,10 @@ export const getHeroCarousel = async (req: Request, res: Response) => {
       };
     });
 
-    sendSuccess(res, carouselItems, 'Hero carousel items fetched successfully');
+    return carouselItems;
+    }); // end withCache
+
+    sendSuccess(res, cachedCarousel, 'Hero carousel items fetched successfully');
   } catch (error) {
     console.error('Error fetching hero carousel:', error);
     sendError(res, 'Failed to fetch hero carousel', 500);

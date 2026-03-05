@@ -140,7 +140,7 @@ export const getEventById = asyncHandler(async (req: Request, res: Response) => 
     });
   }
 
-  const event = await Event.findById(id);
+  const event = await Event.findById(id).lean();
   
   if (!event) {
     return res.status(404).json({
@@ -369,7 +369,7 @@ export const bookEventSlot = asyncHandler(async (req: Request, res: Response) =>
 
   // 1. Idempotency check: if same key was used before, return existing booking
   if (idempotencyKey) {
-    const existingByKey = await EventBooking.findOne({ idempotencyKey });
+    const existingByKey = await EventBooking.findOne({ idempotencyKey }).lean();
     if (existingByKey) {
       return res.status(200).json({
         success: true,
@@ -404,7 +404,7 @@ export const bookEventSlot = asyncHandler(async (req: Request, res: Response) =>
   if (attendeeInfo.specialRequirements) attendeeInfo.specialRequirements = attendeeInfo.specialRequirements.trim().substring(0, 500);
 
   // 3. Find event
-  const event = await Event.findById(id);
+  const event = await Event.findById(id).lean();
   if (!event || event.status !== 'published') {
     return res.status(404).json({ success: false, message: 'Event not found' });
   }
@@ -415,7 +415,7 @@ export const bookEventSlot = asyncHandler(async (req: Request, res: Response) =>
   // 4. Check for existing active booking
   const existingBooking = await EventBooking.findOne({
     eventId: id, userId, status: { $in: ['pending', 'confirmed'] }
-  });
+  }).lean();
   if (existingBooking) {
     if (existingBooking.status === 'confirmed') {
       return res.status(400).json({ success: false, message: 'You have already booked this event' });
@@ -468,7 +468,7 @@ export const bookEventSlot = asyncHandler(async (req: Request, res: Response) =>
       // Check if slot exists but is full vs doesn't exist
       const existingEvent = await Event.findOne(
         { _id: id, 'availableSlots.id': slotId, 'availableSlots.available': true }
-      );
+      ).lean();
       if (!existingEvent) {
         return res.status(409).json({ success: false, message: 'Selected slot is not available' });
       }
@@ -700,7 +700,7 @@ export const confirmBooking = asyncHandler(async (req: Request, res: Response) =
   const booking = await EventBooking.findOne({
     _id: bookingId,
     userId
-  });
+  }).lean();
 
   if (!booking) {
     console.error('❌ [EVENT BOOKING] Booking not found:', { bookingId, userId });
@@ -743,7 +743,7 @@ export const confirmBooking = asyncHandler(async (req: Request, res: Response) =
           { 'gatewayResponse.paymentIntentId': paymentIntentId }
         ],
         user: userId
-      });
+      }).lean();
 
       if (payment) {
         console.log('✅ [EVENT BOOKING] Payment found for confirmation:', {
@@ -793,7 +793,7 @@ export const confirmBooking = asyncHandler(async (req: Request, res: Response) =
     // Grant purchase reward on payment confirmation (paid events)
     let rewardResult = null;
     try {
-      const event = await Event.findById(booking.eventId);
+      const event = await Event.findById(booking.eventId).lean();
       rewardResult = await eventRewardService.grantEventReward(
         userId.toString(),
         booking.eventId.toString(),
@@ -840,7 +840,7 @@ export const cancelBooking = asyncHandler(async (req: Request, res: Response) =>
   const booking = await EventBooking.findOne({
     _id: bookingId,
     userId
-  });
+  }).lean();
 
   if (!booking) {
     return res.status(404).json({
@@ -858,7 +858,7 @@ export const cancelBooking = asyncHandler(async (req: Request, res: Response) =>
 
   // Update slot availability if applicable
   if (booking.slotId) {
-    const event = await Event.findById(booking.eventId);
+    const event = await Event.findById(booking.eventId).lean();
     if (event && event.availableSlots) {
       const slot = event.availableSlots.find(s => s.id === booking.slotId);
       if (slot) {
@@ -887,7 +887,7 @@ export const toggleEventFavorite = asyncHandler(async (req: Request, res: Respon
     return res.status(401).json({ success: false, message: 'Authentication required' });
   }
 
-  const event = await Event.findById(id);
+  const event = await Event.findById(id).lean();
   if (!event) {
     return res.status(404).json({ success: false, message: 'Event not found' });
   }
@@ -917,7 +917,7 @@ export const getRelatedEvents = asyncHandler(async (req: Request, res: Response)
   const { limit = 6 } = req.query;
 
   try {
-    const event = await Event.findById(id);
+    const event = await Event.findById(id).lean();
     if (!event) {
       return res.status(404).json({
         success: false,
@@ -977,7 +977,7 @@ export const shareEvent = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const userId = (req as any).user?.id;
 
-  const event = await Event.findById(id);
+  const event = await Event.findById(id).lean();
   if (!event) {
     return res.status(404).json({ success: false, message: 'Event not found' });
   }
@@ -991,7 +991,7 @@ export const shareEvent = asyncHandler(async (req: Request, res: Response) => {
       // Check if user has a booking for this event (required for share reward)
       const hasBooking = await EventBooking.findOne({
         eventId: id, userId, status: { $in: ['confirmed', 'completed'] }
-      });
+      }).lean();
       if (hasBooking) {
         rewardResult = await eventRewardService.grantEventReward(
           userId.toString(), id, hasBooking._id.toString(),
@@ -1029,7 +1029,7 @@ export const getEventAnalytics = asyncHandler(async (req: Request, res: Response
     });
   }
 
-  const event = await Event.findById(id);
+  const event = await Event.findById(id).lean();
   if (!event) {
     return res.status(404).json({
       success: false,
@@ -1198,12 +1198,12 @@ export const checkInToEvent = asyncHandler(async (req: Request, res: Response) =
   // Verify booking exists and is confirmed
   const booking = await EventBooking.findOne({
     _id: bookingId, eventId: id, userId, status: 'confirmed',
-  });
+  }).lean();
   if (!booking) {
     return res.status(404).json({ success: false, message: 'Confirmed booking not found' });
   }
 
-  const event = await Event.findById(id);
+  const event = await Event.findById(id).lean();
   if (!event) {
     return res.status(404).json({ success: false, message: 'Event not found' });
   }
@@ -1288,7 +1288,7 @@ export const getFavoriteStatus = asyncHandler(async (req: Request, res: Response
     return res.status(401).json({ success: false, message: 'Authentication required' });
   }
 
-  const favorite = await UserEventFavorite.findOne({ userId, eventId: id });
+  const favorite = await UserEventFavorite.findOne({ userId, eventId: id }).lean();
   res.json({ success: true, data: { isFavorited: !!favorite } });
 });
 

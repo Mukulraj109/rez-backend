@@ -32,7 +32,7 @@ class PartnerBenefitsService {
    */
   async getPartnerBenefits(userId: string): Promise<IPartnerBenefits | null> {
     try {
-      const partner = await Partner.findOne({ userId });
+      const partner = await Partner.findOne({ userId }).lean();
       if (!partner || !partner.isActive) {
         return null;
       }
@@ -53,7 +53,7 @@ class PartnerBenefitsService {
    */
   async isUserBirthdayMonth(userId: string): Promise<boolean> {
     try {
-      const user = await User.findById(userId);
+      const user = await User.findById(userId).lean();
       if (!user?.profile?.dateOfBirth) {
         return false;
       }
@@ -157,7 +157,7 @@ class PartnerBenefitsService {
    */
   async checkTransactionBonus(userId: string): Promise<number> {
     try {
-      const partner = await Partner.findOne({ userId });
+      const partner = await Partner.findOne({ userId }).lean();
       if (!partner || !partner.isActive) {
         return 0;
       }
@@ -175,7 +175,7 @@ class PartnerBenefitsService {
         
         // Add bonus to wallet via CoinTransaction (single source of truth — no direct wallet mutation)
         try {
-          let wallet = await Wallet.findOne({ user: userId });
+          let wallet = await Wallet.findOne({ user: userId }).lean();
           if (!wallet) {
             console.log(`⚠️ [PARTNER BENEFITS] Wallet not found, creating for user ${userId}`);
             wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));

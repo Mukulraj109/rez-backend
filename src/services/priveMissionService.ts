@@ -30,7 +30,7 @@ class PriveMissionService {
       status: 'active',
     })
       .populate('missionId')
-      .sort({ claimedAt: -1 });
+      .sort({ claimedAt: -1 }).lean();
   }
 
   /**
@@ -41,7 +41,7 @@ class PriveMissionService {
     const missionObjectId = new Types.ObjectId(missionId);
 
     // Check mission exists and is available
-    const mission = await PriveMission.findById(missionObjectId);
+    const mission = await PriveMission.findById(missionObjectId).lean();
     if (!mission || !mission.isActive || mission.isDeleted) {
       throw new Error('Mission not found or not available');
     }
@@ -124,7 +124,7 @@ class PriveMissionService {
     const activeMissions = await UserMission.find({
       userId: userObjectId,
       status: 'active',
-    }).populate('missionId');
+    }).populate('missionId').lean();
 
     for (const userMission of activeMissions) {
       const mission = userMission.missionId as unknown as IPriveMission;
@@ -175,13 +175,13 @@ class PriveMissionService {
       missionId: missionObjectId,
       status: 'completed',
       rewardDistributed: false,
-    });
+    }).lean();
 
     if (!userMission) {
       throw new Error('Mission not found, not completed, or reward already claimed');
     }
 
-    const mission = await PriveMission.findById(missionObjectId);
+    const mission = await PriveMission.findById(missionObjectId).lean();
     if (!mission) {
       throw new Error('Mission definition not found');
     }
@@ -285,7 +285,7 @@ class PriveMissionService {
     })
       .populate('missionId')
       .sort({ completedAt: -1 })
-      .limit(50);
+      .limit(50).lean();
   }
 
   /**
@@ -298,7 +298,7 @@ class PriveMissionService {
     const expiredMissions = await PriveMission.find({
       isActive: true,
       endDate: { $lt: now },
-    }).select('_id');
+    }).select('_id').lean();
 
     const expiredMissionIds = expiredMissions.map(m => m._id);
 

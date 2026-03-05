@@ -39,7 +39,7 @@ class WhatsNewService {
     const views = await WhatsNewStoryView.find({
       userId: userObjectId,
       storyId: { $in: stories.map(s => s._id) },
-    });
+    }).lean();
 
     const viewMap = new Map(
       views.map(v => [v.storyId.toString(), { viewed: true, completed: v.completed }])
@@ -64,7 +64,7 @@ class WhatsNewService {
    * Get a single story by ID
    */
   async getStoryById(storyId: string, userId?: string): Promise<StoryWithViewStatus | null> {
-    const story = await WhatsNewStory.findById(storyId);
+    const story = await WhatsNewStory.findById(storyId).lean();
     if (!story) return null;
 
     let hasViewed = false;
@@ -74,7 +74,7 @@ class WhatsNewService {
       const view = await WhatsNewStoryView.findOne({
         userId: new Types.ObjectId(userId),
         storyId: story._id,
-      });
+      }).lean();
       hasViewed = !!view;
       hasCompleted = view?.completed || false;
     }
@@ -222,7 +222,7 @@ class WhatsNewService {
   async getAllStoriesWithAnalytics(): Promise<IWhatsNewStory[]> {
     return WhatsNewStory.find()
       .sort({ createdAt: -1 })
-      .populate('createdBy', 'name email');
+      .populate('createdBy', 'name email').lean();
   }
 
   /**
@@ -236,7 +236,7 @@ class WhatsNewService {
     totalCompletions: number;
     averageCompletionRate: number;
   }> {
-    const allStories = await WhatsNewStory.find();
+    const allStories = await WhatsNewStory.find().lean();
     const activeStories = await WhatsNewStory.findActiveStories();
 
     const totals = allStories.reduce(

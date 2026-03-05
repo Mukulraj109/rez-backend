@@ -44,7 +44,7 @@ class PriveInviteFraudService {
     const existingAccess = await PriveAccess.findOne({
       userId: applicantId,
       status: 'active',
-    });
+    }).lean();
     if (existingAccess) {
       reasons.push('User already has active Privé access');
       riskScore += 100;
@@ -115,7 +115,7 @@ class PriveInviteFraudService {
     if (!metadata.ip && !metadata.device) return false;
 
     // Check invite codes created by this inviter
-    const codes = await PriveInviteCode.find({ creatorId: inviterId });
+    const codes = await PriveInviteCode.find({ creatorId: inviterId }).lean();
 
     for (const code of codes) {
       if (
@@ -169,7 +169,7 @@ class PriveInviteFraudService {
     const reverseInvite = await PriveAccess.findOne({
       userId: inviterId,
       invitedBy: applicantId,
-    });
+    }).lean();
 
     return !!reverseInvite;
   }

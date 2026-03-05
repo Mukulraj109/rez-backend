@@ -14,11 +14,11 @@ class PartnerService {
    * Get or create partner profile for user
    */
   async getOrCreatePartner(userId: string): Promise<any> {
-    let partner = await Partner.findOne({ userId });
+    let partner = await Partner.findOne({ userId }).lean();
     
     if (!partner) {
       // Get user details
-      const user = await User.findById(userId);
+      const user = await User.findById(userId).lean();
       if (!user) {
         throw new Error('User not found');
       }
@@ -50,7 +50,7 @@ class PartnerService {
    */
   async updatePartnerProgress(userId: string, orderId: string): Promise<void> {
     const partner = await this.getOrCreatePartner(userId);
-    const order = await Order.findById(orderId);
+    const order = await Order.findById(orderId).lean();
     
     if (!order) {
       throw new Error('Order not found');
@@ -140,7 +140,7 @@ class PartnerService {
         const { Wallet } = require('../models/Wallet');
         const mongoose = require('mongoose');
         // Ensure wallet exists before CoinTransaction
-        let wallet = await Wallet.findOne({ user: userId });
+        let wallet = await Wallet.findOne({ user: userId }).lean();
         if (!wallet) {
           console.log(`⚠️ [LEVEL UP] Wallet not found, creating for user ${userId}`);
           wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
@@ -427,7 +427,7 @@ class PartnerService {
 
         // Ensure wallet exists
         const { Wallet } = require('../models/Wallet');
-        let wallet = await Wallet.findOne({ user: userId }).session(session);
+        let wallet = await Wallet.findOne({ user: userId }).session(session).lean();
         if (!wallet) {
           console.log(`⚠️ [JACKPOT] Wallet not found, creating new wallet for user ${userId}`);
           wallet = await (Wallet as any).createForUser(
@@ -612,7 +612,7 @@ class PartnerService {
     error?: string;
   }> {
     try {
-      const partner = await Partner.findOne({ userId });
+      const partner = await Partner.findOne({ userId }).lean();
       
       if (!partner) {
         return { valid: false, discount: 0, offerTitle: '', error: 'Partner profile not found' };
@@ -726,7 +726,7 @@ class PartnerService {
     const topPerformers = await Partner.find({ isActive: true })
       .sort({ totalOrders: -1 })
       .limit(5)
-      .select('name totalOrders currentLevel.name avatar');
+      .select('name totalOrders currentLevel.name avatar').lean();
     
     return {
       totalPartners,
@@ -741,7 +741,7 @@ class PartnerService {
    */
   async calculateProfileCompletion(userId: string): Promise<number> {
     try {
-      const user = await User.findById(userId);
+      const user = await User.findById(userId).lean();
       if (!user) return 0;
       
       let completed = 0;
@@ -865,7 +865,7 @@ class PartnerService {
     
     // Sync referral task with actual referrals count
     try {
-      const user = await User.findById(userId);
+      const user = await User.findById(userId).lean();
       const referralCount = user?.referral?.totalReferrals || 0;
       const referralTask = partner.tasks.find((t: any) => t.type === 'referral');
       if (referralTask) {

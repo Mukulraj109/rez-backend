@@ -75,7 +75,7 @@ class LearningService {
     contentId: string,
     timeSpentSeconds: number
   ): Promise<{ completed: boolean; coinsAwarded: number; alreadyClaimed: boolean }> {
-    const content = await LearningContent.findById(contentId);
+    const content = await LearningContent.findById(contentId).lean();
     if (!content) {
       throw new Error('Learning content not found');
     }

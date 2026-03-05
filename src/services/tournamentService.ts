@@ -30,6 +30,7 @@ class TournamentService {
         .sort({ featured: -1, startDate: 1 })
         .skip(offset)
         .limit(limit)
+        .lean()
         .exec(),
       Tournament.countDocuments(query)
     ]);
@@ -41,7 +42,7 @@ class TournamentService {
   async getTournamentById(tournamentId: string): Promise<ITournament | null> {
     const tournament = await Tournament.findById(tournamentId)
       .populate('participants.user', 'name avatar')
-      .exec();
+      .lean().exec();
 
     if (!tournament) {
       throw new Error('Tournament not found');
@@ -52,7 +53,7 @@ class TournamentService {
 
   // Join tournament
   async joinTournament(tournamentId: string, userId: string): Promise<ITournament> {
-    const tournament = await Tournament.findById(tournamentId);
+    const tournament = await Tournament.findById(tournamentId).lean();
 
     if (!tournament) {
       throw new Error('Tournament not found');
@@ -77,7 +78,7 @@ class TournamentService {
 
     // Enforce entry fee
     if (tournament.entryFee > 0) {
-      const wallet = await Wallet.findOne({ user: userId });
+      const wallet = await Wallet.findOne({ user: userId }).lean();
       if (!wallet || wallet.balance.available < tournament.entryFee) {
         throw new Error(`Insufficient coins. Entry fee is ${tournament.entryFee} coins.`);
       }
@@ -129,7 +130,7 @@ class TournamentService {
 
   // Leave tournament
   async leaveTournament(tournamentId: string, userId: string): Promise<void> {
-    const tournament = await Tournament.findById(tournamentId);
+    const tournament = await Tournament.findById(tournamentId).lean();
 
     if (!tournament) {
       throw new Error('Tournament not found');
@@ -157,7 +158,7 @@ class TournamentService {
     userId: string,
     score: number
   ): Promise<void> {
-    const tournament = await Tournament.findById(tournamentId);
+    const tournament = await Tournament.findById(tournamentId).lean();
 
     if (!tournament) {
       throw new Error('Tournament not found');
@@ -217,7 +218,7 @@ class TournamentService {
   ): Promise<any[]> {
     const tournament = await Tournament.findById(tournamentId)
       .populate('participants.user', 'name avatar')
-      .exec();
+      .lean().exec();
 
     if (!tournament) {
       throw new Error('Tournament not found');
@@ -225,9 +226,9 @@ class TournamentService {
 
     // Sort participants by score
     const sortedParticipants = tournament.participants
-      .sort((a, b) => b.score - a.score)
+      .sort((a: any, b: any) => b.score - a.score)
       .slice(0, limit)
-      .map((p, index) => ({
+      .map((p: any, index: number) => ({
         rank: index + 1,
         user: p.user,
         score: p.score,
@@ -247,17 +248,17 @@ class TournamentService {
       .select('name type gameType status startDate endDate prizes participants')
       .sort({ startDate: -1 })
       .limit(20)
-      .exec();
+      .lean().exec();
 
-    return tournaments.map(t => {
+    return tournaments.map((t: any) => {
       const participant = t.participants.find(
-        p => p.user.toString() === userId
+        (p: any) => p.user.toString() === userId
       );
 
       // Calculate user's rank
-      const sortedParticipants = [...t.participants].sort((a, b) => b.score - a.score);
+      const sortedParticipants = [...t.participants].sort((a: any, b: any) => b.score - a.score);
       const userRank = sortedParticipants.findIndex(
-        p => p.user.toString() === userId
+        (p: any) => p.user.toString() === userId
       ) + 1;
 
       return {
@@ -278,7 +279,7 @@ class TournamentService {
 
   // Get user's rank in a tournament
   async getUserRankInTournament(tournamentId: string, userId: string): Promise<any> {
-    const tournament = await Tournament.findById(tournamentId);
+    const tournament = await Tournament.findById(tournamentId).lean();
 
     if (!tournament) {
       throw new Error('Tournament not found');
@@ -335,7 +336,7 @@ class TournamentService {
     const tournaments = await Tournament.find({
       status: 'active',
       endDate: { $lte: now }
-    });
+    }).lean();
 
     for (const tournament of tournaments) {
       // Calculate final ranks
@@ -524,7 +525,7 @@ class TournamentService {
       .select('-participants')
       .sort({ startDate: 1 })
       .limit(limit)
-      .exec();
+      .lean().exec();
   }
 
   // Get live tournaments for the Play & Earn hub
@@ -534,11 +535,11 @@ class TournamentService {
     })
       .sort({ featured: -1, status: 1, startDate: 1 })
       .limit(limit)
-      .exec();
+      .lean().exec();
 
     const now = new Date();
 
-    return tournaments.map(tournament => {
+    return tournaments.map((tournament: any) => {
       // Calculate time remaining
       const endDate = new Date(tournament.endDate);
       const startDate = new Date(tournament.startDate);
@@ -580,7 +581,7 @@ class TournamentService {
 
       if (userId) {
         const participant = tournament.participants.find(
-          p => p.user.toString() === userId
+          (p: any) => p.user.toString() === userId
         );
 
         if (participant) {
@@ -588,15 +589,15 @@ class TournamentService {
           userScore = participant.score;
 
           // Calculate rank
-          const sortedParticipants = [...tournament.participants].sort((a, b) => b.score - a.score);
+          const sortedParticipants = [...tournament.participants].sort((a: any, b: any) => b.score - a.score);
           userRank = sortedParticipants.findIndex(
-            p => p.user.toString() === userId
+            (p: any) => p.user.toString() === userId
           ) + 1;
         }
       }
 
       // Get prize pool total
-      const totalPrizeValue = tournament.prizes.reduce((sum, prize) => {
+      const totalPrizeValue = tournament.prizes.reduce((sum: number, prize: any) => {
         return sum + (prize.coins || 0);
       }, 0);
 

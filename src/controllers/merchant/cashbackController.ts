@@ -203,7 +203,7 @@ export const createCashbackRequest = asyncHandler(async (req: Request, res: Resp
     });
 
     // Validate order exists and belongs to merchant
-    const order = await Order.findById(orderId);
+    const order = await Order.findById(orderId).lean();
     if (!order) {
       return sendBadRequest(res, 'Order not found');
     }
@@ -228,7 +228,7 @@ export const createCashbackRequest = asyncHandler(async (req: Request, res: Resp
     }
 
     // Fetch customer details
-    const customer = await User.findById(customerId);
+    const customer = await User.findById(customerId).lean();
     if (!customer) {
       return sendBadRequest(res, 'Customer not found');
     }
@@ -414,7 +414,7 @@ export const markCashbackAsPaid = asyncHandler(async (req: Request, res: Respons
 
     // Send confirmation email to customer
     try {
-      const customer = await User.findById(cashbackRequest.customerId);
+      const customer = await User.findById(cashbackRequest.customerId).lean();
       if (customer && customer.email) {
         await EmailService.send({
           to: customer.email,
@@ -528,7 +528,7 @@ export const bulkCashbackAction = asyncHandler(async (req: Request, res: Respons
 
             // Send notification email
             try {
-              const customer = await User.findById(cashback.customerId);
+              const customer = await User.findById(cashback.customerId).lean();
               if (customer && customer.email) {
                 const subject = action === 'approve'
                   ? 'Cashback Request Approved'
@@ -638,7 +638,7 @@ export const exportCashbackData = asyncHandler(async (req: Request, res: Respons
     }
 
     // Fetch cashback data
-    const cashbackData = await CashbackMongoModel.find(query).sort({ createdAt: -1 });
+    const cashbackData = await CashbackMongoModel.find(query).sort({ createdAt: -1 }).lean();
 
 
     // Generate CSV data
@@ -772,7 +772,7 @@ export const getCashbackAnalytics = asyncHandler(async (req: Request, res: Respo
           $lte: dateRange.end
         }
       })
-    });
+    }).lean();
 
     const totalApproved = requests.filter(r => r.status === 'approved' || r.status === 'paid').length;
     const totalPending = requests.filter(r => r.status === 'pending' || r.status === 'under_review').length;
@@ -788,12 +788,12 @@ export const getCashbackAnalytics = asyncHandler(async (req: Request, res: Respo
     const thisMonthRequests = await CashbackMongoModel.find({
       merchantId,
       createdAt: { $gte: thisMonthStart }
-    });
+    }).lean();
 
     const lastMonthRequests = await CashbackMongoModel.find({
       merchantId,
       createdAt: { $gte: lastMonthStart, $lte: lastMonthEnd }
-    });
+    }).lean();
 
     const thisMonthTotal = thisMonthRequests.reduce((sum, r) => sum + r.requestedAmount, 0);
     const lastMonthTotal = lastMonthRequests.reduce((sum, r) => sum + r.requestedAmount, 0);
@@ -889,7 +889,7 @@ export const getCashbackMetrics = asyncHandler(async (req: Request, res: Respons
       };
     }
 
-    const requests = await CashbackMongoModel.find(query);
+    const requests = await CashbackMongoModel.find(query).lean();
 
     // Calculate period-over-period comparison
     const now = new Date();
@@ -904,12 +904,12 @@ export const getCashbackMetrics = asyncHandler(async (req: Request, res: Respons
     const currentPeriodRequests = await CashbackMongoModel.find({
       merchantId,
       createdAt: { $gte: currentPeriodStart, $lte: currentPeriodEnd }
-    });
+    }).lean();
 
     const previousPeriodRequests = await CashbackMongoModel.find({
       merchantId,
       createdAt: { $gte: previousPeriodStart, $lte: previousPeriodEnd }
-    });
+    }).lean();
 
     // Current period metrics
     const currentTotal = currentPeriodRequests.reduce((sum, r) => sum + r.requestedAmount, 0);

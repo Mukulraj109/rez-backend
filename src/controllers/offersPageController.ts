@@ -77,7 +77,7 @@ export const getHotspotOffers = async (req: Request, res: Response) => {
     const { slug } = req.params;
     const { limit = 20 } = req.query;
 
-    const hotspot = await HotspotArea.findOne({ slug, isActive: true });
+    const hotspot = await HotspotArea.findOne({ slug, isActive: true }).lean();
 
     if (!hotspot) {
       return sendError(res, 'Hotspot not found', 404);
@@ -300,7 +300,7 @@ export const getExclusiveZoneOffers = async (req: Request, res: Response) => {
     const { slug } = req.params;
     const { limit = 20 } = req.query;
 
-    const zone = await ExclusiveZone.findOne({ slug, isActive: true });
+    const zone = await ExclusiveZone.findOne({ slug, isActive: true }).lean();
 
     if (!zone) {
       return sendError(res, 'Exclusive zone not found', 404);
@@ -392,7 +392,7 @@ export const getSpecialProfileOffers = async (req: Request, res: Response) => {
     const { slug } = req.params;
     const { limit = 20 } = req.query;
 
-    const profile = await SpecialProfile.findOne({ slug, isActive: true });
+    const profile = await SpecialProfile.findOne({ slug, isActive: true }).lean();
 
     if (!profile) {
       return sendError(res, 'Special profile not found', 404);

@@ -215,7 +215,7 @@ async function handleRazorpayPaymentCaptured(event: any): Promise<void> {
 
   console.log('✅ [RAZORPAY WEBHOOK] Payment captured for order:', orderId);
 
-  const order = await Order.findById(orderId);
+  const order = await Order.findById(orderId).lean();
   if (!order) {
     console.error('❌ [RAZORPAY WEBHOOK] Order not found:', orderId);
     return;
@@ -309,7 +309,7 @@ async function handleRazorpayPaymentFailed(event: any): Promise<void> {
 
   console.log('❌ [RAZORPAY WEBHOOK] Payment failed for order:', orderId);
 
-  const order = await Order.findById(orderId);
+  const order = await Order.findById(orderId).lean();
   if (!order) {
     console.error('❌ [RAZORPAY WEBHOOK] Order not found:', orderId);
     return;
@@ -817,7 +817,7 @@ async function handleEventBookingPaymentSuccess(bookingId: string, paymentIntent
 
     // Grant purchase reward for paid events
     try {
-      const event = await Event.findById(booking.eventId);
+      const event = await Event.findById(booking.eventId).lean();
       await eventRewardService.grantEventReward(
         booking.userId.toString(),
         booking.eventId.toString(),
@@ -848,7 +848,7 @@ async function handleStripePaymentIntentFailed(event: Stripe.Event): Promise<voi
     return;
   }
 
-  const order = await Order.findById(orderId);
+  const order = await Order.findById(orderId).lean();
   if (!order) {
     console.error('❌ [STRIPE WEBHOOK] Order not found:', orderId);
     return;
@@ -996,7 +996,7 @@ async function handleDealPurchaseCompleted(session: Stripe.Checkout.Session): Pr
       const redemption = await DealRedemption.findOne({
         stripeSessionId: session.id,
         user: new mongoose.Types.ObjectId(userId),
-      }).session(mongoSession);
+      }).session(mongoSession).lean();
 
       if (!redemption) {
         throw new Error(`Redemption not found for session: ${session.id}`);
@@ -1009,7 +1009,7 @@ async function handleDealPurchaseCompleted(session: Stripe.Checkout.Session): Pr
       }
 
       // Verify campaign and deal exist
-      const campaign = await Campaign.findById(campaignId).session(mongoSession);
+      const campaign = await Campaign.findById(campaignId).session(mongoSession).lean();
       if (!campaign) {
         throw new Error(`Campaign not found: ${campaignId}`);
       }

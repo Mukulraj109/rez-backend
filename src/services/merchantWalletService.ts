@@ -46,7 +46,7 @@ class MerchantWalletService {
     const merchantObjectId = typeof merchantId === 'string' ? new Types.ObjectId(merchantId) : merchantId;
 
     // Try to find existing wallet
-    const existingWallet = await MerchantWallet.findOne({ merchant: merchantObjectId });
+    const existingWallet = await MerchantWallet.findOne({ merchant: merchantObjectId }).lean();
 
     if (existingWallet) {
       return existingWallet;
@@ -58,7 +58,7 @@ class MerchantWalletService {
     if (storeId) {
       storeObjectId = typeof storeId === 'string' ? new Types.ObjectId(storeId) : storeId;
     } else {
-      const store = await Store.findOne({ merchantId: merchantObjectId });
+      const store = await Store.findOne({ merchantId: merchantObjectId }).lean();
       if (!store) {
         throw new Error('No store found for this merchant');
       }
@@ -125,7 +125,7 @@ class MerchantWalletService {
   ): Promise<TransactionHistoryResult> {
     const merchantObjectId = typeof merchantId === 'string' ? new Types.ObjectId(merchantId) : merchantId;
 
-    const wallet = await MerchantWallet.findOne({ merchant: merchantObjectId });
+    const wallet = await MerchantWallet.findOne({ merchant: merchantObjectId }).lean();
 
     if (!wallet) {
       return {
@@ -197,7 +197,7 @@ class MerchantWalletService {
   ): Promise<void> {
     const merchantObjectId = typeof merchantId === 'string' ? new Types.ObjectId(merchantId) : merchantId;
 
-    const wallet = await MerchantWallet.findOne({ merchant: merchantObjectId });
+    const wallet = await MerchantWallet.findOne({ merchant: merchantObjectId }).lean();
 
     if (!wallet) {
       throw new Error('Wallet not found');
@@ -252,7 +252,7 @@ class MerchantWalletService {
   ): Promise<void> {
     const merchantObjectId = typeof merchantId === 'string' ? new Types.ObjectId(merchantId) : merchantId;
 
-    const wallet = await MerchantWallet.findOne({ merchant: merchantObjectId });
+    const wallet = await MerchantWallet.findOne({ merchant: merchantObjectId }).lean();
 
     if (!wallet) {
       throw new Error('Wallet not found');
@@ -400,7 +400,7 @@ class MerchantWalletService {
     const merchantObjectId = typeof merchantId === 'string' ? new Types.ObjectId(merchantId) : merchantId;
     const orderObjectId = typeof orderId === 'string' ? new Types.ObjectId(orderId) : orderId;
 
-    const wallet = await MerchantWallet.findOne({ merchant: merchantObjectId });
+    const wallet = await MerchantWallet.findOne({ merchant: merchantObjectId }).lean();
 
     if (!wallet) {
       throw new Error('Wallet not found');
@@ -459,7 +459,8 @@ class MerchantWalletService {
         .populate('store', 'name logo')
         .sort({ [sortBy]: sortDirection })
         .skip(skip)
-        .limit(limit),
+        .limit(limit)
+        .lean(),
       MerchantWallet.countDocuments({ isActive: true })
     ]);
 

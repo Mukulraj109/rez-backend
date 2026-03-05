@@ -28,7 +28,7 @@ export const createProductComparison = asyncHandler(async (req: Request, res: Re
     const products = await Product.find({
       _id: { $in: productIds },
       isActive: true
-    });
+    }).lean();
 
     if (products.length !== productIds.length) {
       throw new AppError('One or more products not found or inactive', 404);
@@ -125,7 +125,7 @@ export const getProductComparisonById = asyncHandler(async (req: Request, res: R
           select: 'name slug'
         }
       ]
-    });
+    }).lean();
 
     if (!comparison) {
       return sendNotFound(res, 'Product comparison not found');
@@ -155,7 +155,7 @@ export const updateProductComparison = asyncHandler(async (req: Request, res: Re
     const comparison = await ProductComparison.findOne({
       _id: comparisonId,
       user: userId
-    });
+    }).lean();
 
     if (!comparison) {
       return sendNotFound(res, 'Product comparison not found');
@@ -170,7 +170,7 @@ export const updateProductComparison = asyncHandler(async (req: Request, res: Re
       const products = await Product.find({
         _id: { $in: productIds },
         isActive: true
-      });
+      }).lean();
 
       if (products.length !== productIds.length) {
         throw new AppError('One or more products not found or inactive', 404);
@@ -257,7 +257,7 @@ export const addProductToComparison = asyncHandler(async (req: Request, res: Res
     const comparison = await ProductComparison.findOne({
       _id: comparisonId,
       user: userId
-    });
+    }).lean();
 
     if (!comparison) {
       return sendNotFound(res, 'Product comparison not found');
@@ -275,7 +275,7 @@ export const addProductToComparison = asyncHandler(async (req: Request, res: Res
     const product = await Product.findOne({
       _id: productId,
       isActive: true
-    });
+    }).lean();
 
     if (!product) {
       throw new AppError('Product not found or inactive', 404);

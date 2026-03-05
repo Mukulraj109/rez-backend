@@ -14,7 +14,7 @@ export async function getActivityFeed(
 ): Promise<any[]> {
   try {
     // Get list of users this user follows
-    const following = await Follow.find({ follower: userId }).select('following');
+    const following = await Follow.find({ follower: userId }).select('following').lean();
     const followingIds = following.map(f => f.following);
 
     // Include user's own activities
@@ -38,7 +38,7 @@ export async function getActivityFeed(
     const userInteractions = await ActivityInteraction.find({
       activity: { $in: activityIds },
       user: userId
-    });
+    }).lean();
 
     const interactionMap = new Map();
     userInteractions.forEach(interaction => {
@@ -141,7 +141,7 @@ export async function toggleLike(activityId: string, userId: string): Promise<{ 
       activity: activityId,
       user: userId,
       type: 'like'
-    });
+    }).lean();
 
     let likesCount = 0;
 
@@ -267,7 +267,7 @@ export async function toggleFollow(
     const existingFollow = await Follow.findOne({
       follower: followerId,
       following: followingId
-    });
+    }).lean();
 
     let followersCount = 0;
 
@@ -305,7 +305,7 @@ export async function isFollowing(followerId: string, followingId: string): Prom
     const follow = await Follow.findOne({
       follower: followerId,
       following: followingId
-    });
+    }).lean();
 
     return !!follow;
   } catch (error) {
@@ -387,7 +387,7 @@ export async function getFollowCounts(userId: string): Promise<{ followersCount:
 export async function getSuggestedUsers(userId: string, limit: number = 10): Promise<any[]> {
   try {
     // Get users current user already follows
-    const following = await Follow.find({ follower: userId }).select('following');
+    const following = await Follow.find({ follower: userId }).select('following').lean();
     const followingIds = following.map(f => f.following.toString());
     followingIds.push(userId); // Exclude self
 

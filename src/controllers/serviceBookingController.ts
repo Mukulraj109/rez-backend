@@ -52,7 +52,7 @@ export const createBooking = async (req: Request, res: Response) => {
       productType: 'service',
       isActive: true,
       isDeleted: { $ne: true }
-    }).populate('store serviceCategory');
+    }).populate('store serviceCategory').lean() as any;
 
     if (!service) {
       return res.status(404).json({
@@ -71,7 +71,7 @@ export const createBooking = async (req: Request, res: Response) => {
     }
 
     // Get store info
-    const store = await Store.findById(service.store);
+    const store = await Store.findById(service.store).lean();
     if (!store) {
       return res.status(404).json({
         success: false,
@@ -125,7 +125,7 @@ export const createBooking = async (req: Request, res: Response) => {
       service: service._id,
       bookingDate: bookingDateObj,
       status: { $in: ['pending', 'confirmed', 'assigned'] }
-    });
+    }).lean();
 
     if (existingBooking) {
       return res.status(400).json({
@@ -303,7 +303,7 @@ export const createBooking = async (req: Request, res: Response) => {
     const populatedBooking = await ServiceBooking.findById(booking._id)
       .populate('service', 'name images pricing serviceDetails')
       .populate('serviceCategory', 'name icon cashbackPercentage')
-      .populate('store', 'name logo location contact operationalInfo');
+      .populate('store', 'name logo location contact operationalInfo').lean();
 
     res.status(201).json({
       success: true,
@@ -458,7 +458,7 @@ export const cancelBooking = async (req: Request, res: Response) => {
     const booking = await ServiceBooking.findOne({
       _id: id,
       user: userId
-    });
+    }).lean();
 
     if (!booking) {
       return res.status(404).json({
@@ -476,7 +476,7 @@ export const cancelBooking = async (req: Request, res: Response) => {
     }
 
     // Determine category slug for travel-specific logic
-    const populatedCategory = await ServiceCategory.findById(booking.serviceCategory);
+    const populatedCategory = await ServiceCategory.findById(booking.serviceCategory).lean();
     const catSlug = populatedCategory?.slug || '';
     const isTravelCancel = travelCashbackService.isTravelCategory(catSlug);
 
@@ -625,7 +625,7 @@ export const rescheduleBooking = async (req: Request, res: Response) => {
     const booking = await ServiceBooking.findOne({
       _id: id,
       user: userId
-    });
+    }).lean();
 
     if (!booking) {
       return res.status(404).json({
@@ -721,7 +721,7 @@ export const rateBooking = async (req: Request, res: Response) => {
     const booking = await ServiceBooking.findOne({
       _id: id,
       user: userId
-    });
+    }).lean();
 
     if (!booking) {
       return res.status(404).json({
@@ -784,7 +784,7 @@ export const getAvailableSlots = async (req: Request, res: Response) => {
       _id: serviceId,
       productType: 'service',
       isActive: true
-    }).populate('store');
+    }).populate('store').lean() as any;
 
     if (!service) {
       return res.status(404).json({
@@ -794,7 +794,7 @@ export const getAvailableSlots = async (req: Request, res: Response) => {
     }
 
     // Get store info for operating hours
-    const store = await Store.findById(service.store);
+    const store = await Store.findById(service.store).lean();
     if (!store) {
       return res.status(404).json({
         success: false,

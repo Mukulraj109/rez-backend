@@ -144,7 +144,7 @@ class BillVerificationService {
     }
 
     // Check if merchant exists and is active
-    const merchant = await Merchant.findById(bill.merchant);
+    const merchant = await Merchant.findById(bill.merchant).lean();
     if (!merchant || !merchant.isActive) {
       await bill.reject(
         'Merchant not found or inactive. Please contact support.',
@@ -290,7 +290,7 @@ class BillVerificationService {
     try {
       console.log(`❌ [MANUAL REJECTION] Admin ${adminId} rejecting bill ${billId}`);
 
-      const bill = await Bill.findById(billId);
+      const bill = await Bill.findById(billId).lean();
       if (!bill) {
         return {
           success: false,
@@ -341,7 +341,7 @@ class BillVerificationService {
         .populate('merchant', 'name logo')
         .sort({ createdAt: 1 }) // Oldest first (FIFO)
         .limit(limit)
-        .skip(skip);
+        .skip(skip).lean();
 
       return bills;
     } catch (error) {

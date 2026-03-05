@@ -3,6 +3,7 @@ import { requireAuth, requireAdmin, requireSeniorAdmin } from '../../middleware/
 import { Merchant } from '../../models/Merchant';
 import { Store } from '../../models/Store';
 import { isSocketInitialized, getIO } from '../../config/socket';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -53,7 +54,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Search by business name, owner name, or email
     if (req.query.search) {
-      const searchRegex = { $regex: req.query.search, $options: 'i' };
+      const searchRegex = { $regex: escapeRegex(req.query.search as string), $options: 'i' };
       filter.$or = [
         { businessName: searchRegex },
         { ownerName: searchRegex },
@@ -64,12 +65,12 @@ router.get('/', async (req: Request, res: Response) => {
 
     // City filter
     if (req.query.city) {
-      filter['businessAddress.city'] = { $regex: req.query.city, $options: 'i' };
+      filter['businessAddress.city'] = { $regex: escapeRegex(req.query.city as string), $options: 'i' };
     }
 
     // State filter
     if (req.query.state) {
-      filter['businessAddress.state'] = { $regex: req.query.state, $options: 'i' };
+      filter['businessAddress.state'] = { $regex: escapeRegex(req.query.state as string), $options: 'i' };
     }
 
     const [merchants, totalArr] = await Promise.all([

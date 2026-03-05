@@ -90,6 +90,7 @@ export const getCategoryTree = asyncHandler(async (req: Request, res: Response) 
         .select('name slug image icon sortOrder type childCategories isActive')
         .populate('childCategories', 'name slug icon image sortOrder metadata isActive')
         .sort({ sortOrder: 1, name: 1 })
+        .limit(50)
         .lean()
     );
 
@@ -155,12 +156,15 @@ export const getCategoriesWithCounts = asyncHandler(async (req: Request, res: Re
     const limitNum = Math.min(Number(limit), 100);
     const skip = (pageNum - 1) * limitNum;
 
-    const categories = await Category.find(query)
-      .select('name slug image icon sortOrder type storeCount productCount maxCashback isActive')
-      .sort({ sortOrder: 1, name: 1 })
-      .skip(skip)
-      .limit(limitNum)
-      .lean();
+    const [categories, total] = await Promise.all([
+      Category.find(query)
+        .select('name slug image icon sortOrder type storeCount productCount maxCashback isActive')
+        .sort({ sortOrder: 1, name: 1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Category.countDocuments(query),
+    ]);
 
     // Batch compute store stats and product counts for all categories at once
     const categoryIds = categories.map((c: any) => c._id);
@@ -202,8 +206,6 @@ export const getCategoriesWithCounts = asyncHandler(async (req: Request, res: Re
         maxCashback: storeStats?.maxCashback || category.maxCashback || 0
       };
     });
-
-    const total = await Category.countDocuments(query);
 
     sendSuccess(res, {
       categories: categoriesWithCounts,

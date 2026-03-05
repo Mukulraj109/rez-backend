@@ -48,13 +48,13 @@ export class ShippingLabelService {
       this.ensureUploadDir();
 
       // Fetch merchant and store details
-      const merchant = await Merchant.findById(merchantId);
+      const merchant = await Merchant.findById(merchantId).lean();
       if (!merchant) {
         throw new Error('Merchant not found');
       }
 
       const storeId = order.items[0]?.store;
-      const store = storeId ? await Store.findById(storeId) : null;
+      const store = storeId ? await Store.findById(storeId).lean() : null;
 
       const filename = `shipping-label-${order.orderNumber}-${Date.now()}.pdf`;
       const filepath = path.join(this.UPLOAD_DIR, filename);
@@ -249,7 +249,7 @@ export class ShippingLabelService {
     try {
       this.ensureUploadDir();
 
-      const merchant = await Merchant.findById(merchantId);
+      const merchant = await Merchant.findById(merchantId).lean();
       if (!merchant) {
         throw new Error('Merchant not found');
       }
@@ -271,7 +271,7 @@ export class ShippingLabelService {
           for (let i = 0; i < orders.length; i++) {
             const order = orders[i];
             const storeId = order.items[0]?.store;
-            const store = storeId ? await Store.findById(storeId) : null;
+            const store = storeId ? await Store.findById(storeId).lean() : null;
 
             // Add new page for each label
             doc.addPage();

@@ -25,7 +25,7 @@ export const getReferralData = asyncHandler(async (req: Request, res: Response) 
 
   try {
     // Get user's referral information
-    const user = await User.findById(userId).select('referral');
+    const user = await User.findById(userId).select('referral').lean();
     if (!user) {
       return sendNotFound(res, 'User not found');
     }
@@ -75,7 +75,7 @@ export const getReferralHistory = asyncHandler(async (req: Request, res: Respons
       .select('profile.name email createdAt')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(Number(limit));
+      .limit(Number(limit)).lean();
 
     const total = await User.countDocuments({ 'referral.referredBy': userId });
 
@@ -218,7 +218,7 @@ export const shareReferralLink = asyncHandler(async (req: Request, res: Response
   }
 
   try {
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).lean();
     if (!user || !user.referral?.referralCode) {
       return sendNotFound(res, 'User or referral code not found');
     }
@@ -249,7 +249,7 @@ export const claimReferralRewards = asyncHandler(async (req: Request, res: Respo
   }
 
   try {
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).lean();
     if (!user) {
       return sendNotFound(res, 'User not found');
     }
@@ -463,7 +463,7 @@ export const getReferralStats = asyncHandler(async (req: Request, res: Response)
   }
 
   try {
-    const user = await User.findById(userId).select('referral wallet');
+    const user = await User.findById(userId).select('referral wallet').lean();
     if (!user) {
       return sendNotFound(res, 'User not found');
     }

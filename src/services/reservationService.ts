@@ -48,7 +48,7 @@ class ReservationService {
       });
 
       // Get the cart
-      const cart = await Cart.findById(cartId);
+      const cart = await Cart.findById(cartId).lean();
       if (!cart) {
         return {
           success: false,
@@ -57,7 +57,7 @@ class ReservationService {
       }
 
       // Get the product
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         return {
           success: false,
@@ -181,7 +181,7 @@ class ReservationService {
         variant
       });
 
-      const cart = await Cart.findById(cartId);
+      const cart = await Cart.findById(cartId).lean();
       if (!cart) {
         return {
           success: false,
@@ -235,7 +235,7 @@ class ReservationService {
     try {
       console.log('🔓 [RESERVATION] Releasing all stock for cart:', cartId);
 
-      const cart = await Cart.findById(cartId);
+      const cart = await Cart.findById(cartId).lean();
       if (!cart) {
         return {
           success: false,
@@ -283,7 +283,7 @@ class ReservationService {
         additionalMinutes
       });
 
-      const cart = await Cart.findById(cartId);
+      const cart = await Cart.findById(cartId).lean();
       if (!cart) {
         return {
           success: false,
@@ -353,7 +353,7 @@ class ReservationService {
       // Find all carts with expired reservations
       const carts = await Cart.find({
         'reservedItems.expiresAt': { $lt: now }
-      });
+      }).lean();
 
       console.log(`🧹 [RESERVATION] Found ${carts.length} carts with expired reservations`);
 
@@ -499,7 +499,7 @@ class ReservationService {
    */
   async getReservationStatus(cartId: string): Promise<IReservedItem[]> {
     try {
-      const cart = await Cart.findById(cartId).populate('reservedItems.productId', 'name sku');
+      const cart = await Cart.findById(cartId).populate('reservedItems.productId', 'name sku').lean();
       if (!cart) {
         return [];
       }
@@ -524,7 +524,7 @@ class ReservationService {
     issues?: string[];
   }> {
     try {
-      const cart = await Cart.findById(cartId);
+      const cart = await Cart.findById(cartId).lean();
       if (!cart) {
         return {
           valid: false,

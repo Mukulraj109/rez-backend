@@ -57,7 +57,7 @@ export const createConsultation = asyncHandler(async (req: Request, res: Respons
 
   try {
     // Check if store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
 
     if (!store) {
       console.error('❌ [CONSULTATION] Store not found:', storeId);
@@ -205,7 +205,7 @@ export const getConsultation = asyncHandler(async (req: Request, res: Response) 
       userId
     })
       .populate('storeId', 'name location contact consultationTypes bookingConfig')
-      .populate('userId', 'name phoneNumber email');
+      .populate('userId', 'name phoneNumber email').lean();
 
     if (!consultation) {
       console.error('❌ [CONSULTATION] Consultation not found:', consultationId);
@@ -250,7 +250,7 @@ export const getStoreConsultations = asyncHandler(async (req: Request, res: Resp
 
   try {
     // Check if store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
 
     if (!store) {
       return sendNotFound(res, 'Store not found');
@@ -388,7 +388,7 @@ export const checkAvailability = asyncHandler(async (req: Request, res: Response
 
   try {
     // Check if store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
 
     if (!store) {
       return sendNotFound(res, 'Store not found');

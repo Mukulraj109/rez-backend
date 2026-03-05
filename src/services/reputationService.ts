@@ -318,7 +318,7 @@ class ReputationService {
     const now = new Date();
 
     // Get user data (include password field to check security)
-    const user = await User.findById(userId).select('+password');
+    const user = await User.findById(userId).select('+password').lean();
     if (!user) {
       reputation.pillars.trust.score = 50; // Neutral if no user found
       return;
@@ -490,7 +490,7 @@ class ReputationService {
     const orders = await Order.find({
       user: userId,
       status: 'delivered',
-    }).select('totalAmount createdAt items');
+    }).select('totalAmount createdAt items').lean();
 
     const totalSpend = orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
     const averageOrderValue = orders.length > 0 ? totalSpend / orders.length : 0;
@@ -566,7 +566,7 @@ class ReputationService {
     const orders = await Order.find({
       user: userId,
       status: 'delivered',
-    }).select('items.store');
+    }).select('items.store').lean();
 
     // Count repeat stores (stores are inside order items)
     const storeCounts: Record<string, number> = {};
@@ -618,7 +618,7 @@ class ReputationService {
     const now = new Date();
 
     // Get referral network
-    const referrals = await Referral.find({ referrer: userId }).populate('referee', 'name');
+    const referrals = await Referral.find({ referrer: userId }).populate('referee', 'name').lean();
     const networkSize = referrals.length;
 
     // Calculate quality score (based on active referred users)
@@ -672,7 +672,7 @@ class ReputationService {
 
     return UserReputation.find(query)
       .sort({ totalScore: -1 })
-      .limit(100);
+      .limit(100).lean();
   }
 }
 

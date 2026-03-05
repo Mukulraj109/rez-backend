@@ -143,7 +143,7 @@ export const hasUserUsedPromoCode = async (
 ): Promise<boolean> => {
   try {
     const sanitizedCode = PromoCode.sanitizeCode(code);
-    const promoCode = await PromoCode.findOne({ code: sanitizedCode });
+    const promoCode = await PromoCode.findOne({ code: sanitizedCode }).lean();
 
     if (!promoCode) {
       return false;
@@ -163,7 +163,7 @@ export const hasUserUsedPromoCode = async (
 export const getPromoCodeStats = async (code: string): Promise<any> => {
   try {
     const sanitizedCode = PromoCode.sanitizeCode(code);
-    const promoCode = await PromoCode.findOne({ code: sanitizedCode });
+    const promoCode = await PromoCode.findOne({ code: sanitizedCode }).lean();
 
     if (!promoCode) {
       return null;

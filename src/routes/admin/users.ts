@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin, requireSeniorAdmin } from '../../middleware/auth';
 import { User } from '../../models/User';
 import { Wallet } from '../../models/Wallet';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -39,7 +40,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Search by name, email, or phone
     if (req.query.search) {
-      const searchRegex = { $regex: req.query.search, $options: 'i' };
+      const searchRegex = { $regex: escapeRegex(req.query.search as string), $options: 'i' };
       filter.$or = [
         { 'profile.firstName': searchRegex },
         { 'profile.lastName': searchRegex },

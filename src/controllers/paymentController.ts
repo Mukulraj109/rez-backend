@@ -46,7 +46,7 @@ export const createPaymentOrder = asyncHandler(async (req: Request, res: Respons
 
   try {
     // Verify order belongs to user
-    const order = await Order.findOne({ _id: orderId, user: userId });
+    const order = await Order.findOne({ _id: orderId, user: userId }).lean();
     if (!order) {
       return sendNotFound(res, 'Order not found');
     }
@@ -141,7 +141,7 @@ export const verifyPayment = asyncHandler(async (req: Request, res: Response) =>
 
   try {
     // Verify order belongs to user
-    const order = await Order.findOne({ _id: orderId, user: userId });
+    const order = await Order.findOne({ _id: orderId, user: userId }).lean();
     if (!order) {
       return sendNotFound(res, 'Order not found');
     }
@@ -230,7 +230,7 @@ export const verifyPayment = asyncHandler(async (req: Request, res: Response) =>
     const populatedOrder = await Order.findById(updatedOrder._id)
       .populate('items.product', 'name image images')
       .populate('items.store', 'name logo')
-      .populate('user', 'profile.firstName profile.lastName profile.phoneNumber');
+      .populate('user', 'profile.firstName profile.lastName profile.phoneNumber').lean();
 
     const response: IVerifyPaymentResponse = {
       success: true,
@@ -323,7 +323,7 @@ export const getPaymentStatus = asyncHandler(async (req: Request, res: Response)
 
   try {
     // Verify order belongs to user
-    const order = await Order.findOne({ _id: orderId, user: userId });
+    const order = await Order.findOne({ _id: orderId, user: userId }).lean();
     if (!order) {
       return sendNotFound(res, 'Order not found');
     }
@@ -942,7 +942,7 @@ async function handleStripeRefund(event: any) {
     console.log('💸 [STRIPE WEBHOOK] Refund processed for charge:', charge.id);
 
     // Find order by payment intent ID
-    const order = await Order.findOne({ 'payment.transactionId': paymentIntentId });
+    const order = await Order.findOne({ 'payment.transactionId': paymentIntentId }).lean();
 
     if (!order) {
       console.error('❌ [STRIPE WEBHOOK] Order not found for payment intent:', paymentIntentId);

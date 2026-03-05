@@ -49,7 +49,7 @@ export const createArticle = asyncHandler(async (req: Request, res: Response) =>
     }
 
     // Get user to determine authorType
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).lean();
     if (!user) {
       return sendNotFound(res, 'User not found');
     }
@@ -269,7 +269,7 @@ export const getArticleById = asyncHandler(async (req: Request, res: Response) =
     let isLiked = false;
     let isBookmarked = false;
     if (userId) {
-      const fullArticle = await Article.findById(articleId);
+      const fullArticle = await Article.findById(articleId).lean();
       if (fullArticle) {
         isLiked = fullArticle.engagement.likes.some(
           (id: mongoose.Types.ObjectId) => id.toString() === userId
@@ -363,7 +363,7 @@ export const deleteArticle = asyncHandler(async (req: Request, res: Response) =>
   const userId = req.userId!;
 
   try {
-    const article = await Article.findById(articleId);
+    const article = await Article.findById(articleId).lean();
 
     if (!article) {
       return sendNotFound(res, 'Article not found');
@@ -590,15 +590,16 @@ export const searchArticles = asyncHandler(async (req: Request, res: Response) =
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const articles = await Article.find(query)
-      .populate('author', 'profile.firstName profile.lastName profile.avatar')
-      .populate('products', 'name images pricing')
-      .sort({ 'analytics.totalViews': -1 })
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
-
-    const total = await Article.countDocuments(query);
+    const [articles, total] = await Promise.all([
+      Article.find(query)
+        .populate('author', 'profile.firstName profile.lastName profile.avatar')
+        .populate('products', 'name images pricing')
+        .sort({ 'analytics.totalViews': -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      Article.countDocuments(query),
+    ]);
     const totalPages = Math.ceil(total / Number(limit));
 
     // Transform articles to include id and viewCount fields for frontend compatibility
@@ -638,7 +639,7 @@ export const toggleArticleLike = asyncHandler(async (req: Request, res: Response
   const userId = req.userId!;
 
   try {
-    const article = await Article.findById(articleId);
+    const article = await Article.findById(articleId).lean();
 
     if (!article) {
       return sendNotFound(res, 'Article not found');
@@ -678,7 +679,7 @@ export const toggleArticleBookmark = asyncHandler(async (req: Request, res: Resp
   const userId = req.userId!;
 
   try {
-    const article = await Article.findById(articleId);
+    const article = await Article.findById(articleId).lean();
 
     if (!article) {
       return sendNotFound(res, 'Article not found');
@@ -716,7 +717,7 @@ export const incrementArticleShare = asyncHandler(async (req: Request, res: Resp
   const { articleId } = req.params;
 
   try {
-    const article = await Article.findById(articleId);
+    const article = await Article.findById(articleId).lean();
 
     if (!article) {
       return sendNotFound(res, 'Article not found');

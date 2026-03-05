@@ -12,11 +12,11 @@ export const getUserSettings = asyncHandler(async (req: Request, res: Response) 
 
   let settings = await UserSettings.findOne({ user: req.user._id })
     .populate('delivery.defaultAddressId')
-    .populate('payment.defaultPaymentMethodId');
+    .populate('payment.defaultPaymentMethodId').lean();
 
   // If settings don't exist, create default settings
   if (!settings) {
-    settings = await UserSettings.create({ user: req.user._id });
+    settings = await UserSettings.create({ user: req.user._id }) as any;
   }
 
   sendSuccess(res, settings, 'Settings retrieved successfully');
@@ -154,7 +154,7 @@ export const verifyTwoFactorCode = asyncHandler(async (req: Request, res: Respon
 
   const { code, method } = req.body;
 
-  const settings = await UserSettings.findOne({ user: req.user._id });
+  const settings = await UserSettings.findOne({ user: req.user._id }).lean();
   if (!settings || !settings.security.twoFactorAuth.enabled) {
     throw new AppError('2FA is not enabled', 400);
   }
@@ -191,7 +191,7 @@ export const generateBackupCodes = asyncHandler(async (req: Request, res: Respon
     throw new AppError('Authentication required', 401);
   }
 
-  const settings = await UserSettings.findOne({ user: req.user._id });
+  const settings = await UserSettings.findOne({ user: req.user._id }).lean();
   if (!settings || !settings.security.twoFactorAuth.enabled) {
     throw new AppError('2FA is not enabled', 400);
   }
@@ -241,7 +241,7 @@ export const getSecurityStatus = asyncHandler(async (req: Request, res: Response
     throw new AppError('Authentication required', 401);
   }
 
-  const settings = await UserSettings.findOne({ user: req.user._id });
+  const settings = await UserSettings.findOne({ user: req.user._id }).lean();
   if (!settings) {
     throw new AppError('Settings not found', 404);
   }
@@ -329,7 +329,7 @@ export const getCourierPreferences = asyncHandler(async (req: Request, res: Resp
     throw new AppError('Authentication required', 401);
   }
 
-  const settings = await UserSettings.findOne({ user: req.user._id });
+  const settings = await UserSettings.findOne({ user: req.user._id }).lean();
 
   if (!settings) {
     throw new AppError('Settings not found', 404);
@@ -363,7 +363,7 @@ export const getNotificationSettings = asyncHandler(async (req: Request, res: Re
     throw new AppError('Authentication required', 401);
   }
 
-  const settings = await UserSettings.findOne({ user: req.user._id });
+  const settings = await UserSettings.findOne({ user: req.user._id }).lean();
 
   if (!settings) {
     throw new AppError('Settings not found', 404);

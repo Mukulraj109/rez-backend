@@ -147,7 +147,7 @@ export const initiateLock = asyncHandler(async (req: Request, res: Response) => 
 
   try {
     // 1. Find the deal
-    const deal = await LockPriceDeal.findById(id);
+    const deal = await LockPriceDeal.findById(id).lean();
     if (!deal) {
       return sendNotFound(res, 'Lock deal not found');
     }
@@ -253,7 +253,7 @@ export const confirmLock = asyncHandler(async (req: Request, res: Response) => {
     }
 
     // 2. Find the deal
-    const deal = await LockPriceDeal.findById(id);
+    const deal = await LockPriceDeal.findById(id).lean();
     if (!deal) {
       return sendNotFound(res, 'Lock deal not found');
     }
@@ -408,7 +408,7 @@ export const initiateBalancePayment = asyncHandler(async (req: Request, res: Res
       _id: lockId,
       user: userId,
       status: 'locked',
-    });
+    }).lean();
 
     if (!userLock) {
       return sendNotFound(res, 'Active lock not found');
@@ -719,7 +719,7 @@ export const cancelLock = asyncHandler(async (req: Request, res: Response) => {
       _id: lockId,
       user: userId,
       status: { $in: ['locked', 'paid_balance'] },
-    });
+    }).lean();
 
     if (!userLock) {
       return sendNotFound(res, 'Active lock not found');
@@ -830,7 +830,7 @@ export const processExpiredLocks = asyncHandler(async (req: Request, res: Respon
     const expiredLocks = await UserLockDeal.find({
       status: { $in: ['locked', 'paid_balance'] },
       expiresAt: { $lt: now },
-    });
+    }).lean();
 
     let processedCount = 0;
     const errors: string[] = [];

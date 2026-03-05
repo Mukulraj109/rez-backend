@@ -118,7 +118,7 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
 
     // Verify product exists and is available
     console.log('🛒 [ADD TO CART] Finding product:', productId);
-    let product = await Product.findById(productId).populate('store');
+    let product = await Product.findById(productId).populate('store').lean() as any;
     let event = null;
     let isEvent = false;
     let isService = itemType === 'service';
@@ -126,7 +126,7 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
     // If product not found, check if it's an event
     if (!product) {
       console.log('🛒 [ADD TO CART] Product not found, checking if it\'s an event:', productId);
-      event = await Event.findById(productId);
+      event = await Event.findById(productId).lean() as any;
 
       if (event) {
         console.log('✅ [ADD TO CART] Event found:', event.title);
@@ -425,7 +425,7 @@ export const updateCartItem = asyncHandler(async (req: Request, res: Response) =
 
     // Validate stock before updating quantity (only if increasing)
     if (quantity > 0) {
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
 
       if (!product) {
         console.log('❌ [UPDATE CART] Product not found');
@@ -649,9 +649,9 @@ export const applyCoupon = asyncHandler(async (req: Request, res: Response) => {
     let coupon;
 
     if (couponId) {
-      coupon = await Coupon.findById(couponId);
+      coupon = await Coupon.findById(couponId).lean() as any;
     } else if (couponCode) {
-      coupon = await Coupon.findOne({ couponCode: couponCode.toUpperCase() });
+      coupon = await Coupon.findOne({ couponCode: couponCode.toUpperCase() }).lean() as any;
     }
 
     if (!coupon) {
@@ -662,7 +662,7 @@ export const applyCoupon = asyncHandler(async (req: Request, res: Response) => {
 
     // Build validation context from cart items
     const cartItems = await Promise.all(cart.items.map(async (item: any) => {
-      const product = await Product.findById(item.product);
+      const product = await Product.findById(item.product).lean() as any;
       return {
         productId: item.product.toString(),
         storeId: product?.store?.toString() || '',
@@ -815,7 +815,7 @@ export const validateCart = asyncHandler(async (req: Request, res: Response) => 
 
     // Check each item's availability and stock with detailed messages
     for (const item of cart.items) {
-      const product = await Product.findById(item.product);
+      const product = await Product.findById(item.product).lean() as any;
 
       if (!product) {
         unavailableItems.push({
@@ -998,7 +998,7 @@ export const lockItem = asyncHandler(async (req: Request, res: Response) => {
       .populate({
         path: 'lockedItems.store',
         select: 'name logo location'
-      });
+      }).lean();
 
     sendSuccess(res, { cart: populatedCart, message: 'Item locked successfully' }, 'Item locked successfully');
 
@@ -1055,7 +1055,7 @@ export const unlockItem = asyncHandler(async (req: Request, res: Response) => {
       const { Wallet } = await import('../models/Wallet');
       const { Transaction } = await import('../models/Transaction');
 
-      const wallet = await Wallet.findOne({ user: req.userId });
+      const wallet = await Wallet.findOne({ user: req.userId }).lean() as any;
       if (wallet) {
         // Refund to wallet balance
         await wallet.addFunds(lockedItem.lockFee, 'refund');
@@ -1197,7 +1197,7 @@ export const getLockedItems = asyncHandler(async (req: Request, res: Response) =
       .populate({
         path: 'lockedItems.store',
         select: 'name logo location'
-      });
+      }).lean();
 
     console.log('🔒 [GET LOCKED] Cart found:', !!cart);
     console.log('🔒 [GET LOCKED] Total locked items in cart:', cart?.lockedItems?.length || 0);
@@ -1293,7 +1293,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
   try {
     // 1. Get product details
     console.log('🔒💰 [LOCK WITH PAYMENT] Finding product:', productId);
-    const product = await Product.findById(productId).populate('store');
+    const product = await Product.findById(productId).populate('store').lean() as any;
 
     if (!product) {
       return sendNotFound(res, 'Product not found');
@@ -1365,7 +1365,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
     const { Wallet } = await import('../models/Wallet');
     const { Transaction } = await import('../models/Transaction');
 
-    const wallet = await Wallet.findOne({ user: req.userId });
+    const wallet = await Wallet.findOne({ user: req.userId }).lean() as any;
     if (!wallet) {
       return sendBadRequest(res, 'Wallet not found. Please set up your wallet first.');
     }
@@ -1555,7 +1555,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
       .populate({
         path: 'lockedItems.store',
         select: 'name logo location'
-      });
+      }).lean();
 
     sendSuccess(res, {
       cart: populatedCart,
@@ -1587,7 +1587,7 @@ export const getLockFeeOptions = asyncHandler(async (req: Request, res: Response
   }
 
   try {
-    const product = await Product.findById(productId);
+    const product = await Product.findById(productId).lean() as any;
 
     if (!product) {
       return sendNotFound(res, 'Product not found');

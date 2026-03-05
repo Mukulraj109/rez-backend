@@ -56,7 +56,7 @@ export const getFeaturedHomeServices = asyncHandler(async (req: Request, res: Re
       : undefined;
 
     // Get home services category
-    const homeServicesCategory = await ServiceCategory.findOne({ slug: 'home-services' });
+    const homeServicesCategory = await ServiceCategory.findOne({ slug: 'home-services' }).lean();
     if (!homeServicesCategory) {
       return sendSuccess(res, [], 'No home services found');
     }
@@ -65,7 +65,7 @@ export const getFeaturedHomeServices = asyncHandler(async (req: Request, res: Re
     const childCategories = await ServiceCategory.find({
       parentCategory: homeServicesCategory._id,
       isActive: true
-    }).select('_id');
+    }).select('_id').lean();
 
     const categoryIds = [homeServicesCategory._id, ...childCategories.map(c => c._id)];
 
@@ -126,7 +126,7 @@ export const getHomeServicesByCategory = asyncHandler(async (req: Request, res: 
       : undefined;
 
     // Find category
-    const category = await ServiceCategory.findOne({ slug, isActive: true });
+    const category = await ServiceCategory.findOne({ slug, isActive: true }).lean();
     if (!category) {
       return sendNotFound(res, 'Category not found');
     }
@@ -225,7 +225,7 @@ export const getHomeServicesByCategory = asyncHandler(async (req: Request, res: 
  */
 export const getHomeServicesStats = asyncHandler(async (req: Request, res: Response) => {
   try {
-    const homeServicesCategory = await ServiceCategory.findOne({ slug: 'home-services' });
+    const homeServicesCategory = await ServiceCategory.findOne({ slug: 'home-services' }).lean();
     if (!homeServicesCategory) {
       return sendSuccess(res, {
         professionals: 0,
@@ -240,7 +240,7 @@ export const getHomeServicesStats = asyncHandler(async (req: Request, res: Respo
         { parentCategory: homeServicesCategory._id }
       ],
       isActive: true
-    }).select('_id');
+    }).select('_id').lean();
 
     const serviceCount = await Product.countDocuments({
       productType: 'service',
@@ -296,7 +296,7 @@ export const getPopularHomeServices = asyncHandler(async (req: Request, res: Res
       ? regionHeader as RegionId
       : undefined;
 
-    const homeServicesCategory = await ServiceCategory.findOne({ slug: 'home-services' });
+    const homeServicesCategory = await ServiceCategory.findOne({ slug: 'home-services' }).lean();
     if (!homeServicesCategory) {
       return sendSuccess(res, [], 'No home services found');
     }
@@ -307,7 +307,7 @@ export const getPopularHomeServices = asyncHandler(async (req: Request, res: Res
         { parentCategory: homeServicesCategory._id }
       ],
       isActive: true
-    }).select('_id');
+    }).select('_id').lean();
 
     // Build query with region filter
     const query: any = {

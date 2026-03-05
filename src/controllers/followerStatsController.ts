@@ -18,7 +18,7 @@ export const getFollowerCount = asyncHandler(async (req: Request, res: Response)
 
   try {
     // Verify store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       return sendNotFound(res, 'Store not found');
     }
@@ -53,7 +53,7 @@ export const getFollowersList = asyncHandler(async (req: Request, res: Response)
 
   try {
     // Verify store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       return sendNotFound(res, 'Store not found');
     }
@@ -124,7 +124,7 @@ export const getFollowerAnalytics = asyncHandler(async (req: Request, res: Respo
 
   try {
     // Verify store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       return sendNotFound(res, 'Store not found');
     }
@@ -243,7 +243,7 @@ export const getTopFollowers = asyncHandler(async (req: Request, res: Response) 
 
   try {
     // Verify store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       return sendNotFound(res, 'Store not found');
     }

@@ -9,6 +9,7 @@ import LeaderboardConfig from '../../models/LeaderboardConfig';
 import LeaderboardPrizeDistribution from '../../models/LeaderboardPrizeDistribution';
 import { sendSuccess, sendNotFound, sendBadRequest, sendCreated } from '../../utils/response';
 import { sendError, sendPaginated } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -120,7 +121,7 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     if (req.query.search) {
-      const search = (req.query.search as string).trim();
+      const search = escapeRegex((req.query.search as string).trim());
       filter.$or = [
         { title: { $regex: search, $options: 'i' } },
         { slug: { $regex: search, $options: 'i' } },

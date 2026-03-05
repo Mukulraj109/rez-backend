@@ -7,6 +7,7 @@ import { SupportTicket } from '../../models/SupportTicket';
 import { User } from '../../models/User';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { sendSuccess, sendError } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 import supportSocketService from '../../services/supportSocketService';
 
 const router = Router();
@@ -38,9 +39,10 @@ router.get('/tickets', async (req: Request, res: Response) => {
     if (priority) query.priority = priority;
     if (assignedTo) query.assignedTo = new Types.ObjectId(assignedTo as string);
     if (search) {
+      const escapedSearch = escapeRegex(search as string);
       query.$or = [
-        { ticketNumber: { $regex: search, $options: 'i' } },
-        { subject: { $regex: search, $options: 'i' } },
+        { ticketNumber: { $regex: escapedSearch, $options: 'i' } },
+        { subject: { $regex: escapedSearch, $options: 'i' } },
       ];
     }
     if (dateFrom || dateTo) {

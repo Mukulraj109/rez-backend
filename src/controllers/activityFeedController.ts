@@ -91,7 +91,7 @@ export async function createActivity(req: Request, res: Response) {
     if (type === 'share' || metadata?.action === 'share') {
       try {
         const Partner = require('../models/Partner').default;
-        const partner = await Partner.findOne({ userId });
+        const partner = await Partner.findOne({ userId }).lean();
         
         if (partner) {
           const socialTask = partner.tasks.find((t: any) => t.type === 'social');

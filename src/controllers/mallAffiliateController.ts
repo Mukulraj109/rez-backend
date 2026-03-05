@@ -668,7 +668,7 @@ export const fastTrackCredit = asyncHandler(async (req: Request, res: Response) 
   const { purchaseId } = req.params;
 
   const { MallPurchase } = await import('../models/MallPurchase');
-  const purchase = await MallPurchase.findOne({ purchaseId });
+  const purchase = await MallPurchase.findOne({ purchaseId }).lean();
 
   if (!purchase) {
     return sendNotFound(res, 'Purchase not found');

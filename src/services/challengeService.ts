@@ -63,7 +63,7 @@ class ChallengeService {
 
     let challenges = await Challenge.find(query)
       .sort({ featured: -1, difficulty: 1, endDate: 1 })
-      .exec();
+      .lean().exec();
 
     // Auto-regenerate if no active challenges found
     if (challenges.length === 0) {
@@ -73,7 +73,7 @@ class ChallengeService {
       // Fetch again after regeneration
       challenges = await Challenge.find(query)
         .sort({ featured: -1, difficulty: 1, endDate: 1 })
-        .exec();
+        .lean().exec();
 
       console.log(`✅ [CHALLENGE SERVICE] Regenerated ${challenges.length} active challenges`);
     }
@@ -120,7 +120,7 @@ class ChallengeService {
           'requirements.action': challenge.requirements.action,
           active: true,
           endDate: { $gte: now },
-        });
+        }).lean();
 
         if (existingActive) continue; // Skip - already has active replacement
 
@@ -198,7 +198,7 @@ class ChallengeService {
       type: 'daily',
       active: true,
       startDate: { $gte: today, $lt: tomorrow }
-    }).exec();
+    }).lean().exec();
   }
 
   // Get user's challenge progress
@@ -215,7 +215,7 @@ class ChallengeService {
     return UserChallengeProgress.find(query)
       .populate('challenge')
       .sort({ completed: 1, lastUpdatedAt: -1 })
-      .exec();
+      .lean().exec();
   }
 
   // Join a challenge
@@ -224,7 +224,7 @@ class ChallengeService {
     challengeId: string
   ): Promise<IUserChallengeProgress> {
     // Check if challenge exists and is active
-    const challenge = await Challenge.findById(challengeId);
+    const challenge = await Challenge.findById(challengeId).lean();
 
     if (!challenge) {
       throw new Error('Challenge not found');
@@ -239,7 +239,7 @@ class ChallengeService {
     }
 
     // Check if already joined first
-    const existing = await UserChallengeProgress.findOne({ user: userId, challenge: challengeId });
+    const existing = await UserChallengeProgress.findOne({ user: userId, challenge: challengeId }).lean();
 
     if (existing) {
       // Already joined — return existing progress
@@ -302,7 +302,7 @@ class ChallengeService {
       active: true,
       startDate: { $lte: now },
       endDate: { $gte: now }
-    });
+    }).lean();
 
     const updates: IUserChallengeProgress[] = [];
 
@@ -311,7 +311,7 @@ class ChallengeService {
       let progress = await UserChallengeProgress.findOne({
         user: userId,
         challenge: challenge._id
-      });
+      }).lean();
 
       // Auto-join if not joined
       if (!progress) {
@@ -435,7 +435,7 @@ class ChallengeService {
 
       if (!progress) {
         // Determine why it failed for a clear error message
-        const existing = await UserChallengeProgress.findOne({ _id: progressId, user: userId });
+        const existing = await UserChallengeProgress.findOne({ _id: progressId, user: userId }).lean();
         if (!existing) throw new Error('Challenge progress not found');
         if (!existing.completed) throw new Error('Challenge not completed yet');
         if (existing.rewardsClaimed) throw new Error('Rewards already claimed');
@@ -907,7 +907,7 @@ class ChallengeService {
    * Pause an active challenge
    */
   async pauseChallenge(challengeId: string, reason?: string, changedBy?: string): Promise<IChallenge | null> {
-    const challenge = await Challenge.findById(challengeId);
+    const challenge = await Challenge.findById(challengeId).lean();
     if (!challenge) return null;
     const currentStatus = challenge.status || (challenge.active ? 'active' : 'disabled');
     const validation = this.validateStatusTransition(currentStatus, 'paused');
@@ -934,7 +934,7 @@ class ChallengeService {
    * Resume a paused challenge
    */
   async resumeChallenge(challengeId: string, changedBy?: string): Promise<IChallenge | null> {
-    const challenge = await Challenge.findById(challengeId);
+    const challenge = await Challenge.findById(challengeId).lean();
     if (!challenge) return null;
     const currentStatus = challenge.status || (challenge.active ? 'active' : 'disabled');
     const validation = this.validateStatusTransition(currentStatus, 'active');
@@ -961,7 +961,7 @@ class ChallengeService {
    * Disable a challenge permanently
    */
   async disableChallenge(challengeId: string, reason?: string, changedBy?: string): Promise<IChallenge | null> {
-    const challenge = await Challenge.findById(challengeId);
+    const challenge = await Challenge.findById(challengeId).lean();
     if (!challenge) return null;
     const currentStatus = challenge.status || (challenge.active ? 'active' : 'disabled');
     const validation = this.validateStatusTransition(currentStatus, 'disabled');

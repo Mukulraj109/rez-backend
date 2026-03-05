@@ -13,14 +13,14 @@ class ProgramService {
     })
       .select('-participants')
       .sort({ featured: -1, startDate: 1 })
-      .exec();
+      .lean().exec();
   }
 
   // Get program details
   async getProgramById(programId: string): Promise<IProgram | null> {
     return Program.findById(programId)
       .populate('participants.user', 'name avatar email')
-      .exec();
+      .lean().exec();
   }
 
   // Join college ambassador program
@@ -30,7 +30,7 @@ class ProgramService {
     collegeName: string,
     collegeId: string
   ): Promise<void> {
-    const program = await Program.findById(programId);
+    const program = await Program.findById(programId).lean();
 
     if (!program) {
       throw new Error('Program not found');
@@ -91,7 +91,7 @@ class ProgramService {
     companyName: string,
     employeeId: string
   ): Promise<void> {
-    const program = await Program.findById(programId);
+    const program = await Program.findById(programId).lean();
 
     if (!program) {
       throw new Error('Program not found');
@@ -140,7 +140,7 @@ class ProgramService {
 
   // Register for social impact event
   async registerForSocialImpact(programId: string, userId: string): Promise<void> {
-    const program = await Program.findById(programId);
+    const program = await Program.findById(programId).lean();
 
     if (!program) {
       throw new Error('Program not found');
@@ -194,7 +194,7 @@ class ProgramService {
     taskId: string,
     submissionUrl: string
   ): Promise<void> {
-    const program = await Program.findById(programId);
+    const program = await Program.findById(programId).lean();
 
     if (!program) {
       throw new Error('Program not found');
@@ -239,11 +239,11 @@ class ProgramService {
       'participants.user': userId
     })
       .select('name type status startDate endDate image participants')
-      .exec();
+      .lean().exec();
 
-    return programs.map(p => {
+    return programs.map((p: any) => {
       const participant = p.participants.find(
-        pp => pp.user.toString() === userId
+        (pp: any) => pp.user.toString() === userId
       );
 
       return {
@@ -264,7 +264,7 @@ class ProgramService {
 
   // Get user's tasks in a program
   async getUserProgramTasks(programId: string, userId: string): Promise<any> {
-    const program = await Program.findById(programId);
+    const program = await Program.findById(programId).lean();
 
     if (!program) {
       throw new Error('Program not found');
@@ -294,7 +294,7 @@ class ProgramService {
     })
       .select('-participants')
       .sort({ startDate: 1 })
-      .exec();
+      .lean().exec();
   }
 
   // Get social impact event details
@@ -304,12 +304,12 @@ class ProgramService {
       type: 'social_impact'
     })
       .populate('participants.user', 'name avatar')
-      .exec();
+      .lean().exec();
   }
 
   // Admin: Approve participant
   async approveParticipant(programId: string, participantUserId: string): Promise<void> {
-    const program = await Program.findById(programId);
+    const program = await Program.findById(programId).lean();
 
     if (!program) {
       throw new Error('Program not found');
@@ -340,7 +340,7 @@ class ProgramService {
     approved: boolean,
     notes?: string
   ): Promise<void> {
-    const program = await Program.findById(programId);
+    const program = await Program.findById(programId).lean();
 
     if (!program) {
       throw new Error('Program not found');

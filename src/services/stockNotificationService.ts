@@ -51,13 +51,13 @@ class StockNotificationService {
     const { userId, productId, method = 'push' } = params;
 
     // Validate product exists
-    const product = await Product.findById(productId);
+    const product = await Product.findById(productId).lean() as any;
     if (!product) {
       throw new Error('Product not found');
     }
 
     // Get user details
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).lean();
     if (!user) {
       throw new Error('User not found');
     }
@@ -155,7 +155,7 @@ class StockNotificationService {
       userId: new Types.ObjectId(userId),
       productId: new Types.ObjectId(productId),
       status: 'pending'
-    });
+    }).lean();
 
     return !!subscription;
   }
@@ -173,7 +173,7 @@ class StockNotificationService {
     const subscriptions = await StockNotification.find({
       productId: new Types.ObjectId(productId),
       status: 'pending'
-    }).populate('userId');
+    }).populate('userId').lean();
 
     if (subscriptions.length === 0) {
       console.log(`ℹ️ No pending subscriptions for product ${productId}`);

@@ -95,7 +95,7 @@ export const updatePaymentMethod = asyncHandler(async (req: Request, res: Respon
   const { id } = req.params;
 
   // Find payment method and ensure it belongs to the user
-  const paymentMethod = await PaymentMethod.findOne({ _id: id, user: req.user._id });
+  const paymentMethod = await PaymentMethod.findOne({ _id: id, user: req.user._id }).lean();
 
   if (!paymentMethod) {
     return sendNotFound(res, 'Payment method not found');

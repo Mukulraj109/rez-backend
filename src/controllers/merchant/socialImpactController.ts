@@ -4,6 +4,7 @@ import Program from '../../models/Program';
 import Sponsor from '../../models/Sponsor';
 import socialImpactService from '../../services/socialImpactService';
 import { sendSuccess, sendNotFound, sendBadRequest, sendInternalError } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 
 /**
  * Verify that the event belongs to the authenticated merchant.
@@ -14,7 +15,7 @@ async function verifyEventOwnership(eventId: string, merchantId: string) {
     _id: eventId,
     type: 'social_impact',
     merchant: merchantId
-  });
+  }).lean();
 }
 
 // GET / — List merchant's social impact events
@@ -44,7 +45,7 @@ export const getMerchantEvents = async (req: Request, res: Response) => {
       .populate('sponsor', 'name logo brandCoinName brandCoinLogo')
       .sort({ eventDate: 1 })
       .skip((pg.page - 1) * pg.limit)
-      .limit(pg.limit);
+      .limit(pg.limit).lean();
 
     return sendSuccess(res, {
       events,
@@ -203,7 +204,7 @@ export const getSponsors = async (req: Request, res: Response) => {
   try {
     const { page, limit, search } = req.query;
     const query: any = { isActive: true };
-    if (search) query.name = { $regex: search, $options: 'i' };
+    if (search) query.name = { $regex: escapeRegex(search as string), $options: 'i' };
 
     const pg = {
       page: Math.max(1, parseInt(page as string) || 1),
@@ -215,7 +216,7 @@ export const getSponsors = async (req: Request, res: Response) => {
       .select('name slug logo brandCoinName brandCoinLogo industry isActive')
       .sort({ name: 1 })
       .skip((pg.page - 1) * pg.limit)
-      .limit(pg.limit);
+      .limit(pg.limit).lean();
 
     return sendSuccess(res, {
       sponsors,
@@ -230,7 +231,7 @@ export const getSponsors = async (req: Request, res: Response) => {
 export const getSponsorById = async (req: Request, res: Response) => {
   try {
     const sponsor = await Sponsor.findById(req.params.id)
-      .select('name slug logo description brandCoinName brandCoinLogo contactPerson website industry isActive');
+      .select('name slug logo description brandCoinName brandCoinLogo contactPerson website industry isActive').lean();
     if (!sponsor) return sendNotFound(res, 'Sponsor not found');
     return sendSuccess(res, sponsor);
   } catch (error: any) {

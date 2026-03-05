@@ -9,6 +9,7 @@ import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { Coupon } from '../../models/Coupon';
 import { Store } from '../../models/Store';
 import { sendSuccess, sendError } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -52,10 +53,11 @@ router.get('/', async (req: Request, res: Response) => {
     }
 
     if (req.query.search) {
+      const safeSearch = escapeRegex(req.query.search as string);
       filter.$or = [
-        { couponCode: { $regex: req.query.search, $options: 'i' } },
-        { title: { $regex: req.query.search, $options: 'i' } },
-        { description: { $regex: req.query.search, $options: 'i' } },
+        { couponCode: { $regex: safeSearch, $options: 'i' } },
+        { title: { $regex: safeSearch, $options: 'i' } },
+        { description: { $regex: safeSearch, $options: 'i' } },
       ];
     }
 
@@ -95,7 +97,7 @@ router.get('/stores', async (req: Request, res: Response) => {
     const search = req.query.q as string;
     const filter: any = { isActive: true };
     if (search) {
-      filter.name = { $regex: search, $options: 'i' };
+      filter.name = { $regex: escapeRegex(search), $options: 'i' };
     }
     const stores = await Store.find(filter)
       .select('_id name logo category')

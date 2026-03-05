@@ -27,7 +27,7 @@ export const updateUserLocation = asyncHandler(async (req: Request, res: Respons
 
   try {
     // Get user
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).lean();
     if (!user) {
       return sendNotFound(res, 'User not found');
     }
@@ -117,7 +117,7 @@ export const getCurrentLocation = asyncHandler(async (req: Request, res: Respons
   }
 
   try {
-    const user = await User.findById(userId).select('profile.location profile.timezone');
+    const user = await User.findById(userId).select('profile.location profile.timezone').lean();
     if (!user) {
       return sendNotFound(res, 'User not found');
     }
@@ -152,7 +152,7 @@ export const getLocationHistory = asyncHandler(async (req: Request, res: Respons
   const { limit = 10, page = 1 } = req.query;
 
   try {
-    const user = await User.findById(userId).select('profile.locationHistory');
+    const user = await User.findById(userId).select('profile.locationHistory').lean();
     if (!user) {
       return sendNotFound(res, 'User not found');
     }
@@ -364,7 +364,7 @@ export const getLocationStats = asyncHandler(async (req: Request, res: Response)
   }
 
   try {
-    const user = await User.findById(userId).select('profile.location profile.locationHistory');
+    const user = await User.findById(userId).select('profile.location profile.locationHistory').lean();
     if (!user) {
       return sendNotFound(res, 'User not found');
     }

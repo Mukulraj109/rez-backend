@@ -345,7 +345,7 @@ export async function submitAnswer(
  * Get quiz progress
  */
 export async function getQuizProgress(quizId: string): Promise<any> {
-  const quiz = await MiniGame.findById(quizId);
+  const quiz = await MiniGame.findById(quizId).lean();
 
   if (!quiz) {
     throw new Error('Quiz not found');
@@ -409,7 +409,7 @@ export async function getQuizStats(userId: string): Promise<any> {
     user: userId,
     gameType: 'quiz',
     status: 'completed'
-  });
+  }).lean();
 
   const totalQuizzes = quizzes.length;
   let totalCoinsEarned = 0;
@@ -465,7 +465,7 @@ export async function getQuizHistory(userId: string, limit: number = 10): Promis
     status: 'completed'
   })
     .sort({ completedAt: -1 })
-    .limit(limit);
+    .limit(limit).lean();
 
   return quizzes.map(q => ({
     id: q._id,

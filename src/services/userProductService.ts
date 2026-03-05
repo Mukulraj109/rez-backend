@@ -85,7 +85,7 @@ class UserProductService {
    */
   async createUserProductsFromOrder(orderId: Types.ObjectId): Promise<IUserProduct[]> {
     try {
-      const order = await Order.findById(orderId).populate('items.product');
+      const order = await Order.findById(orderId).populate('items.product').lean();
 
       if (!order) {
         console.log(`⚠️ [USER PRODUCT SERVICE] Order not found: ${orderId}`);
@@ -99,7 +99,7 @@ class UserProductService {
       }
 
       // Check if user products already exist for this order
-      const existingProducts = await UserProduct.find({ order: orderId });
+      const existingProducts = await UserProduct.find({ order: orderId }).lean();
       if (existingProducts.length > 0) {
         console.log(`⚠️ [USER PRODUCT SERVICE] User products already exist for order: ${orderId}`);
         return existingProducts;
@@ -232,7 +232,7 @@ class UserProductService {
       const userProduct = await UserProduct.findOne({
         _id: productId,
         user: userId,
-      });
+      }).lean();
 
       if (!userProduct) {
         throw new Error('Product not found');
@@ -267,7 +267,7 @@ class UserProductService {
       const userProduct = await UserProduct.findOne({
         _id: productId,
         user: userId,
-      });
+      }).lean();
 
       if (!userProduct) {
         throw new Error('Product not found');
@@ -301,7 +301,7 @@ class UserProductService {
       const userProduct = await UserProduct.findOne({
         _id: productId,
         user: userId,
-      });
+      }).lean();
 
       if (!userProduct) {
         throw new Error('Product not found');
@@ -327,7 +327,7 @@ class UserProductService {
       const userProduct = await UserProduct.findOne({
         _id: data.userProductId,
         user: data.userId,
-      });
+      }).lean();
 
       if (!userProduct) {
         throw new Error('Product not found');
@@ -431,7 +431,7 @@ class UserProductService {
       const request = await ServiceRequest.findOne({
         _id: requestId,
         user: userId,
-      });
+      }).lean();
 
       if (!request) {
         throw new Error('Service request not found');
@@ -460,7 +460,7 @@ class UserProductService {
       const request = await ServiceRequest.findOne({
         _id: requestId,
         user: userId,
-      });
+      }).lean();
 
       if (!request) {
         throw new Error('Service request not found');
@@ -490,7 +490,7 @@ class UserProductService {
       const request = await ServiceRequest.findOne({
         _id: requestId,
         user: userId,
-      });
+      }).lean();
 
       if (!request) {
         throw new Error('Service request not found');
@@ -520,7 +520,7 @@ class UserProductService {
       const request = await ServiceRequest.findOne({
         _id: requestId,
         user: userId,
-      });
+      }).lean();
 
       if (!request) {
         throw new Error('Service request not found');

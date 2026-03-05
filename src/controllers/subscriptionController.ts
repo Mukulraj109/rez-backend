@@ -276,9 +276,8 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
       subscriptionData.razorpayPlanId = paymentGatewaySubscription.plan_id;
       subscriptionData.razorpayCustomerId = paymentGatewaySubscription.customer_id;
     } else if (useStripe && paymentGatewaySubscription) {
-      // Store Stripe subscription ID in paymentMethod context
-      // TODO: Add stripeSubscriptionId field to Subscription model for proper tracking
-      subscriptionData.paymentMethod = `stripe:${paymentGatewaySubscription.id}`;
+      subscriptionData.stripeSubscriptionId = paymentGatewaySubscription.id;
+      subscriptionData.stripeCustomerId = paymentGatewaySubscription.customer;
     }
 
     const subscription = new Subscription(subscriptionData);
@@ -438,7 +437,7 @@ export const initiateUpgrade = async (req: Request, res: Response) => {
       status: { $in: ['pending_payment', 'processing'] },
       toTier: newTier,
       expiresAt: { $gt: new Date() },
-    });
+    }).lean();
 
     if (existingPending) {
       return res.status(200).json({
@@ -553,7 +552,7 @@ export const confirmUpgrade = async (req: Request, res: Response) => {
 
     if (!upgradeRecord) {
       // Check if already completed (idempotent success)
-      const existing = await SubscriptionUpgrade.findOne({ _id: upgradeId, userId, status: 'completed' });
+      const existing = await SubscriptionUpgrade.findOne({ _id: upgradeId, userId, status: 'completed' }).lean();
       if (existing) {
         return res.status(200).json({ success: true, message: 'Upgrade already completed' });
       }
@@ -728,7 +727,7 @@ export const downgradeSubscription = async (req: Request, res: Response) => {
       userId,
       status: { $in: ['pending_payment', 'processing'] },
       expiresAt: { $gt: new Date() },
-    });
+    }).lean();
     if (pendingUpgrade) {
       return res.status(409).json({
         success: false,
@@ -909,7 +908,7 @@ export const renewSubscription = async (req: Request, res: Response) => {
     const subscription = await Subscription.findOne({
       user: userId,
       status: { $in: ['cancelled', 'expired', 'grace_period'] },
-    }).sort({ endDate: -1 });
+    }).sort({ endDate: -1 }).lean();
 
     if (!subscription) {
       return res.status(400).json({

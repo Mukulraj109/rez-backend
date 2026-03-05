@@ -8,6 +8,7 @@ import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import LoyaltyMilestone from '../../models/LoyaltyMilestone';
 import { sendSuccess, sendError } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -29,7 +30,7 @@ router.get('/', async (req: Request, res: Response) => {
     if (req.query.targetType) filter.targetType = req.query.targetType;
     if (req.query.rewardType) filter.rewardType = req.query.rewardType;
     if (req.query.tier) filter.tier = req.query.tier;
-    if (req.query.search) filter.title = { $regex: req.query.search, $options: 'i' };
+    if (req.query.search) filter.title = { $regex: escapeRegex(req.query.search as string), $options: 'i' };
 
     const [milestones, total] = await Promise.all([
       LoyaltyMilestone.find(filter).sort({ order: 1, createdAt: -1 }).skip(skip).limit(limit).lean(),

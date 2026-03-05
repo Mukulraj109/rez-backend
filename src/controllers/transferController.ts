@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { logger } from '../config/logger';
 import { Transfer } from '../models/Transfer';
 import { Wallet } from '../models/Wallet';
 import { WalletConfig } from '../models/WalletConfig';
@@ -13,6 +14,7 @@ import redisService from '../services/redisService';
 import { validateAmount } from '../utils/walletValidation';
 import { checkVelocity, checkUniqueRecipients } from '../services/walletVelocityService';
 import { SMSService } from '../services/SMSService';
+import { escapeRegex } from '../utils/sanitize';
 import pushNotificationService from '../services/pushNotificationService';
 import { ledgerService } from '../services/ledgerService';
 import { invalidateWalletCache } from '../services/walletCacheService';
@@ -34,7 +36,7 @@ export const initiateTransfer = asyncHandler(async (req: Request, res: Response)
 
   // Idempotency check — handle duplicate requests intelligently
   if (idempotencyKey) {
-    const existing = await Transfer.findOne({ sender: senderId, idempotencyKey });
+    const existing = await Transfer.findOne({ sender: senderId, idempotencyKey }).lean();
     if (existing) {
       // Already completed — return as duplicate
       if (existing.status === 'completed') {
@@ -111,9 +113,9 @@ export const initiateTransfer = asyncHandler(async (req: Request, res: Response)
     // Find recipient
     let recipient;
     if (recipientId) {
-      recipient = await User.findById(recipientId);
+      recipient = await User.findById(recipientId).lean();
     } else if (recipientPhone) {
-      recipient = await User.findOne({ phoneNumber: recipientPhone });
+      recipient = await User.findOne({ phoneNumber: recipientPhone }).lean();
     }
 
     if (!recipient) return sendBadRequest(res, 'Recipient not found');
@@ -129,7 +131,7 @@ export const initiateTransfer = asyncHandler(async (req: Request, res: Response)
     }
 
     // Check sender wallet
-    const senderWallet = await Wallet.findOne({ user: senderId });
+    const senderWallet = await Wallet.findOne({ user: senderId }).lean();
     if (!senderWallet) return sendError(res, 'Sender wallet not found', 404);
     if (senderWallet.isFrozen) return sendBadRequest(res, 'Your wallet is frozen');
 
@@ -143,7 +145,7 @@ export const initiateTransfer = asyncHandler(async (req: Request, res: Response)
     }
 
     // Check recipient wallet
-    const recipientWallet = await Wallet.findOne({ user: recipient._id });
+    const recipientWallet = await Wallet.findOne({ user: recipient._id }).lean();
     if (!recipientWallet) return sendBadRequest(res, 'Recipient wallet not active');
     if (recipientWallet.isFrozen) return sendBadRequest(res, 'Recipient wallet is frozen');
 
@@ -211,7 +213,7 @@ export const initiateTransfer = asyncHandler(async (req: Request, res: Response)
 
       // Send OTP via SMS
       if (process.env.NODE_ENV === 'development') {
-        console.log(`[Transfer] OTP for transfer ${transfer._id}: ${otp}`);
+        logger.debug('[Transfer] OTP generated', { transferId: String(transfer._id) });
       }
       const senderUser = await User.findById(senderId).select('phoneNumber').lean();
       if (senderUser?.phoneNumber) {
@@ -262,7 +264,7 @@ export const confirmTransfer = asyncHandler(async (req: Request, res: Response) 
     _id: transferId,
     sender: senderId,
     status: 'otp_pending'
-  });
+  }).lean();
 
   if (!transfer) return sendBadRequest(res, 'Transfer not found or already processed');
 
@@ -337,7 +339,7 @@ async function executeTransfer(transferId: string): Promise<{ success: boolean; 
       return { success: false, error: 'Transfer already being processed' };
     }
 
-    const transfer = await Transfer.findById(transferId);
+    const transfer = await Transfer.findById(transferId).lean();
     if (!transfer || transfer.status === 'completed') {
       return { success: false, error: 'Transfer not found or already completed' };
     }
@@ -346,8 +348,8 @@ async function executeTransfer(transferId: string): Promise<{ success: boolean; 
     session.startTransaction();
 
     try {
-      const senderWallet = await Wallet.findOne({ user: transfer.sender }).session(session);
-      const recipientWallet = await Wallet.findOne({ user: transfer.recipient }).session(session);
+      const senderWallet = await Wallet.findOne({ user: transfer.sender }).session(session).lean();
+      const recipientWallet = await Wallet.findOne({ user: transfer.recipient }).session(session).lean();
 
       if (!senderWallet || !recipientWallet) {
         throw new Error('Wallet not found');
@@ -634,8 +636,8 @@ export const getRecentRecipients = asyncHandler(async (req: Request, res: Respon
     const users = await User.find({
       _id: { $ne: userId },
       $or: [
-        { fullName: { $regex: search, $options: 'i' } },
-        { phoneNumber: { $regex: search, $options: 'i' } }
+        { fullName: { $regex: escapeRegex(search), $options: 'i' } },
+        { phoneNumber: { $regex: escapeRegex(search), $options: 'i' } }
       ]
     })
       .select('fullName phoneNumber profile.avatar')

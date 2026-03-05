@@ -1,17 +1,14 @@
 /**
  * Rate Limiter with Redis Store
  *
- * Uses RedisStore so rate limit counters are shared across all K8s pods.
- * Falls back to MemoryStore (single-pod only) if Redis is unavailable.
- *
- * Key generator: uses userId when authenticated, falls back to IP
- * (fixes false-rate-limiting of mobile users sharing NAT IPs)
+ * Uses the shared Redis client from redisService.
+ * Falls back to MemoryStore if Redis is unavailable.
  */
 
 import rateLimit from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
-import { createClient } from 'redis';
 import { Request, Response, NextFunction } from 'express';
+import redisService from '../services/redisService';
 
 // Extend Request interface to include rateLimit property
 declare global {
@@ -27,26 +24,6 @@ declare global {
   }
 }
 
-// ─── Redis client for rate limiter (separate from main app client) ────────────
-let rateLimitRedisClient: ReturnType<typeof createClient> | null = null;
-
-async function getRateLimitRedisClient() {
-  if (rateLimitRedisClient) return rateLimitRedisClient;
-
-  const client = createClient({
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
-    password: process.env.REDIS_PASSWORD,
-  });
-
-  client.on('error', (err) =>
-    console.error('[RateLimit Redis] error:', err.message)
-  );
-
-  await client.connect();
-  rateLimitRedisClient = client;
-  return client;
-}
-
 // ─── Key generator: per-user when authenticated, per-IP otherwise ─────────────
 const keyGenerator = (req: Request): string => {
   const userId = (req as any).user?.id || (req as any).userId;
@@ -59,18 +36,26 @@ const isRateLimitDisabled = process.env.DISABLE_RATE_LIMIT === 'true';
 
 if (isRateLimitDisabled) {
   console.log('⚠️  Rate limiting is DISABLED (DISABLE_RATE_LIMIT=true)');
-} else {
-  console.log('✅ Rate limiting is ENABLED with Redis store (global across all pods)');
 }
 
 const passthrough = (_req: Request, _res: Response, next: NextFunction) => next();
 
-// ─── Store factory ─────────────────────────────────────────────────────────────
+// ─── Store factory — uses shared Redis client from redisService ──────────────
+let redisStoreWarningLogged = false;
+
 function makeStore(prefix: string) {
-  if (isRateLimitDisabled || !process.env.REDIS_URL) return undefined; // MemoryStore fallback
+  if (isRateLimitDisabled) return undefined; // MemoryStore fallback
+
   return new RedisStore({
     sendCommand: async (...args: string[]) => {
-      const client = await getRateLimitRedisClient();
+      const client = redisService.getClient();
+      if (!client) {
+        if (!redisStoreWarningLogged) {
+          console.warn('⚠️  [RateLimit] Redis not available — using MemoryStore fallback');
+          redisStoreWarningLogged = true;
+        }
+        return [];
+      }
       return (client as any).sendCommand(args);
     },
     prefix: `rl:${prefix}:`,

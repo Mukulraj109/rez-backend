@@ -124,7 +124,7 @@ class StreakController {
 
       // Get app_open streak (same type used by daily check-in endpoint)
       // Query directly since streakService.getOrCreateStreak only supports login/order/review types
-      const loginStreak = await UserStreak.findOne({ user: userId, type: 'app_open' })
+      const loginStreak = await UserStreak.findOne({ user: userId, type: 'app_open' }).lean()
         || await streakService.getOrCreateStreak(userId, 'login');
 
       // Get total earned from all check-ins

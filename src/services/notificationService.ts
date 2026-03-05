@@ -48,7 +48,7 @@ export class NotificationService {
     } = options;
 
     // Check user preferences to determine delivery channels
-    const userSettings = await UserSettings.findOne({ user: userId });
+    const userSettings = await UserSettings.findOne({ user: userId }).lean();
     const finalDeliveryChannels = this.determineDeliveryChannels(
       deliveryChannels,
       category,
@@ -378,7 +378,7 @@ export class NotificationService {
    * Get user notification preferences
    */
   static async getUserPreferences(userId: string | Types.ObjectId): Promise<any> {
-    const userSettings = await UserSettings.findOne({ user: userId });
+    const userSettings = await UserSettings.findOne({ user: userId }).lean();
 
     if (!userSettings) {
       // Return default preferences
@@ -421,7 +421,7 @@ export class NotificationService {
     const notification = await Notification.findOne({
       _id: notificationId,
       user: userId
-    });
+    }).lean();
 
     if (!notification) {
       return null;
@@ -471,7 +471,7 @@ export class NotificationService {
       scheduledAt: { $lte: new Date() },
       sentAt: { $exists: false },
       expiresAt: { $gt: new Date() }
-    }).limit(100);
+    }).limit(100).lean();
 
     for (const notification of scheduledNotifications) {
       this.emitNotificationToUser(notification.user.toString(), notification);

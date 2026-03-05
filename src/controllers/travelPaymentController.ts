@@ -41,7 +41,7 @@ export const createTravelPaymentOrder = asyncHandler(async (req: Request, res: R
   }
 
   // Verify booking belongs to user
-  const booking = await ServiceBooking.findOne({ _id: bookingId, user: userId });
+  const booking = await ServiceBooking.findOne({ _id: bookingId, user: userId }).lean();
   if (!booking) {
     return sendNotFound(res, 'Booking not found');
   }
@@ -121,7 +121,7 @@ export const verifyTravelPayment = asyncHandler(async (req: Request, res: Respon
 
   // Verify booking belongs to user
   const booking = await ServiceBooking.findOne({ _id: bookingId, user: userId })
-    .populate('serviceCategory', 'name slug');
+    .populate('serviceCategory', 'name slug').lean();
   if (!booking) {
     return sendNotFound(res, 'Booking not found');
   }
@@ -219,7 +219,7 @@ export const createTravelStripeSession = asyncHandler(async (req: Request, res: 
 
   // Verify booking belongs to user
   const booking = await ServiceBooking.findOne({ _id: bookingId, user: userId })
-    .populate('service', 'name');
+    .populate('service', 'name').lean();
   if (!booking) {
     return sendNotFound(res, 'Booking not found');
   }
@@ -298,7 +298,7 @@ export const verifyTravelStripeSession = asyncHandler(async (req: Request, res: 
 
   // Verify booking belongs to user
   const booking = await ServiceBooking.findOne({ _id: bookingId, user: userId })
-    .populate('serviceCategory', 'name slug');
+    .populate('serviceCategory', 'name slug').lean();
   if (!booking) {
     return sendNotFound(res, 'Booking not found');
   }

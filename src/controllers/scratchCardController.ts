@@ -134,7 +134,7 @@ export const claimPrize = asyncHandler(async (req: Request, res: Response) => {
       isScratched: true,
       isClaimed: false,
       expiresAt: { $gt: new Date() }
-    });
+    }).lean();
 
     if (!scratchCard) {
       return sendNotFound(res, 'Scratch card not found or already claimed');
@@ -268,7 +268,7 @@ export const checkEligibility = asyncHandler(async (req: Request, res: Response)
     const isEligible = await ScratchCard.isEligibleForScratchCard(userId);
     
     // Get profile completion percentage
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).lean();
     if (!user) {
       return sendNotFound(res, 'User not found');
     }

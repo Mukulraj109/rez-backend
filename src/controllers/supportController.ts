@@ -804,7 +804,7 @@ export const requestCallback = async (req: Request, res: Response): Promise<void
         tags: 'callback',
         'metadata.idempotencyKey': idempotencyKey,
         createdAt: { $gte: fiveMinAgo },
-      });
+      }).lean();
 
       if (existing) {
         res.status(201).json({
@@ -885,7 +885,7 @@ export const markTicketAsRead = async (req: Request, res: Response): Promise<voi
     const ticket = await SupportTicket.findOne({
       _id: id,
       user: userId,
-    });
+    }).lean();
 
     if (!ticket) {
       res.status(404).json({ success: false, message: 'Ticket not found' });

@@ -8,6 +8,7 @@ import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import SpecialProfile from '../../models/SpecialProfile';
 import { sendSuccess, sendError } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -26,7 +27,7 @@ router.get('/', async (req: Request, res: Response) => {
     const filter: any = {};
     if (req.query.status === 'active') filter.isActive = true;
     else if (req.query.status === 'inactive') filter.isActive = false;
-    if (req.query.search) filter.name = { $regex: req.query.search, $options: 'i' };
+    if (req.query.search) filter.name = { $regex: escapeRegex(req.query.search as string), $options: 'i' };
 
     const [profiles, total] = await Promise.all([
       SpecialProfile.find(filter).sort({ priority: -1, createdAt: -1 }).skip(skip).limit(limit).lean(),

@@ -136,7 +136,7 @@ class TravelCashbackService {
 
     try {
       // CRITICAL: Double-credit guard — re-read booking within transaction
-      const freshBooking = await ServiceBooking.findById(booking._id).session(session);
+      const freshBooking = await ServiceBooking.findById(booking._id).session(session).lean();
       if (!freshBooking || freshBooking.cashbackStatus === 'credited') {
         await session.abortTransaction();
         session.endSession();
@@ -150,7 +150,7 @@ class TravelCashbackService {
       }
 
       // Get category info for description
-      const category = await ServiceCategory.findById(booking.serviceCategory).session(session);
+      const category = await ServiceCategory.findById(booking.serviceCategory).session(session).lean();
       const categoryName = category?.name || 'Travel';
 
       // Create UserCashback entry (isRedeemed: false — redeemed means user SPENT it, not received it)
@@ -174,7 +174,7 @@ class TravelCashbackService {
       }], { session });
 
       // Credit to wallet (addFunds logic with session support)
-      const wallet = await Wallet.findOne({ user: booking.user }).session(session);
+      const wallet = await Wallet.findOne({ user: booking.user }).session(session).lean();
       if (!wallet) {
         throw new Error(`Wallet not found for user ${booking.user}`);
       }
@@ -335,7 +335,7 @@ class TravelCashbackService {
     refundAmount?: number
   ): Promise<IServiceBooking> {
     const booking = await ServiceBooking.findById(bookingId)
-      .populate('serviceCategory', 'name slug');
+      .populate('serviceCategory', 'name slug').lean();
     if (!booking) {
       throw new Error(`Booking not found: ${bookingId}`);
     }
@@ -368,7 +368,7 @@ class TravelCashbackService {
 
       try {
         // Deduct from wallet — MUST succeed for refund to complete
-        const wallet = await Wallet.findOne({ user: booking.user }).session(session);
+        const wallet = await Wallet.findOne({ user: booking.user }).session(session).lean();
         if (!wallet || !wallet.isActive) {
           throw new Error(`Wallet not found or inactive for user ${booking.user} — cannot process refund deduction. Manual admin review required.`);
         }
@@ -514,7 +514,7 @@ class TravelCashbackService {
           }
         })
           .limit(BATCH_SIZE)
-          .populate('serviceCategory', 'name slug');
+          .populate('serviceCategory', 'name slug').lean();
 
         if (batch.length === 0) break;
 

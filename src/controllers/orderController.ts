@@ -145,7 +145,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   try {
     // Idempotency check: prevent duplicate orders from network retries
     if (idempotencyKey) {
-      const existingOrder = await Order.findOne({ user: userId, idempotencyKey }).session(session);
+      const existingOrder = await Order.findOne({ user: userId, idempotencyKey }).session(session).lean();
       if (existingOrder) {
         await session.abortTransaction();
         session.endSession();
@@ -163,7 +163,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         path: 'items.store',
         select: 'name logo'
       })
-      .session(session);
+      .session(session).lean();
 
     if (!cart || cart.items.length === 0) {
       await session.abortTransaction();
@@ -297,7 +297,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
       // Validate promo coins
       if (coinsUsed.promoCoins > 0) {
-        const wallet = await Wallet.findOne({ user: userId }).session(session);
+        const wallet = await Wallet.findOne({ user: userId }).session(session).lean();
         const promoCoin = wallet?.coins?.find((c: any) => c.type === 'promo');
         const promoBalance = promoCoin?.amount || 0;
         if (promoBalance < coinsUsed.promoCoins) {
@@ -321,7 +321,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
         if (orderStoreId) {
           // Get branded coins balance from wallet
-          const wallet = await Wallet.findOne({ user: userId }).session(session);
+          const wallet = await Wallet.findOne({ user: userId }).session(session).lean();
           const brandedCoin = wallet?.brandedCoins?.find(
             (bc: any) => bc.merchantId?.toString() === orderStoreId.toString()
           );
@@ -586,7 +586,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       const redemption = await DealRedemption.findOne({
         redemptionCode: redemptionCode.toUpperCase(),
         user: new mongoose.Types.ObjectId(userId),
-      }).session(session);
+      }).session(session).lean();
 
       if (redemption) {
         // Check if redemption is active - return error if not
@@ -653,7 +653,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
           { verificationCode: offerRedemptionCode }
         ],
         user: new mongoose.Types.ObjectId(userId),
-      }).populate('offer', 'title cashbackPercentage restrictions').session(session);
+      }).populate('offer', 'title cashbackPercentage restrictions').session(session).lean();
 
       if (offerRedemption) {
         // Check if redemption is active
@@ -745,7 +745,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
     // Fetch store once for fulfillment validation, address lookup, and details
     const primaryStoreDoc = (fulfillmentType !== 'delivery' && primaryStoreId)
-      ? await Store.findById(primaryStoreId).select('serviceCapabilities name location').session(session)
+      ? await Store.findById(primaryStoreId).select('serviceCapabilities name location').lean().session(session)
       : null;
 
     if (fulfillmentType !== 'delivery' && primaryStoreId) {
@@ -999,7 +999,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
           // Emit real-time stock update
           if (stockSocketService) {
-            const product = await Product.findById(stockUpdate.productId).select('inventory');
+            const product = await Product.findById(stockUpdate.productId).select('inventory').lean() as any;
             if (product) {
               stockSocketService.emitStockUpdate(
                 stockUpdate.productId.toString(),
@@ -1025,7 +1025,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     // Online payments deduct coins in PaymentService after payment confirmation
     if (paymentMethod === 'cod' && coinsUsed && coinDiscount > 0) {
       // Get wallet with session for atomic operation
-      const wallet = await Wallet.findOne({ user: userId }).session(session);
+      const wallet = await Wallet.findOne({ user: userId }).session(session).lean();
 
       if (!wallet) {
         await session.abortTransaction();
@@ -1087,7 +1087,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         if (deductedFromCategory && codCategory) {
           try {
             const UserLoyalty = require('../models/UserLoyalty').default || require('../models/UserLoyalty').UserLoyalty;
-            const loyalty = await UserLoyalty.findOne({ userId: userId.toString() });
+            const loyalty = await UserLoyalty.findOne({ userId: userId.toString() }).lean();
             if (loyalty && loyalty.categoryCoins) {
               const catCoins = loyalty.categoryCoins.get(codCategory);
               if (catCoins) {
@@ -1206,7 +1206,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     const populatedOrder = await Order.findById(order._id)
       .populate('items.product', 'name image images')
       .populate('items.store', 'name logo')
-      .populate('user', 'profile.firstName profile.lastName profile.phoneNumber');
+      .populate('user', 'profile.firstName profile.lastName profile.phoneNumber').lean();
 
     // Mark coupon as used if one was applied
     // Check both cart.coupon (from DB) and couponCode (from request body)
@@ -1245,7 +1245,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       source: { controller: 'orderController', action: 'createOrder' }
     });
 
-    // Send notifications to customer and merchant
+    // Send notifications to customer and merchant (all independent — run in parallel)
     try {
       const user = populatedOrder?.user as any;
       const userPhone = user?.profile?.phoneNumber || user?.phoneNumber || user?.phone;
@@ -1255,9 +1255,11 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       const storeName = storeData?.name || 'Store';
       const orderNumber = populatedOrder?.orderNumber || (order._id as any).toString();
 
+      const notifPromises: Promise<any>[] = [];
+
       // Send SMS to customer
       if (userPhone) {
-        await SMSService.sendOrderConfirmation(userPhone, orderNumber, storeName);
+        notifPromises.push(SMSService.sendOrderConfirmation(userPhone, orderNumber, storeName));
       }
 
       // Send email to customer
@@ -1268,7 +1270,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
           price: item.price * item.quantity
         })) || [];
 
-        await EmailService.sendOrderConfirmation(userEmail, userName, {
+        notifPromises.push(EmailService.sendOrderConfirmation(userEmail, userName, {
           orderId: (order._id as any).toString(),
           orderNumber,
           items: orderItems,
@@ -1278,42 +1280,44 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
           estimatedDelivery: 'Within 30-45 minutes',
           storeName,
           deliveryAddress: deliveryAddress
-        });
+        }));
       }
 
-      // Send new order alert to merchant
+      // Send new order alert to merchant (fetch store contact in parallel with customer notifications)
       if (storeData?._id) {
-        const store = await Store.findById(storeData._id).select('contact merchant');
-        const merchantPhone = store?.contact?.phone;
-        const merchantId = (store as any)?.merchant?.toString();
+        notifPromises.push(
+          Store.findById(storeData._id).select('contact merchant').lean().then(async (store) => {
+            if (!store) return;
+            const merchantPhone = store?.contact?.phone;
+            const merchantId = (store as any)?.merchant?.toString();
 
-        if (merchantPhone) {
-          await SMSService.sendNewOrderAlertToMerchant(
-            merchantPhone,
-            orderNumber,
-            userName,
-            total
-          );
+            const merchantPromises: Promise<any>[] = [];
 
-          // Send high-value order alert if total > ₹10,000
-          if (total > 10000) {
-            await SMSService.sendHighValueOrderAlert(merchantPhone, orderNumber, total);
-          }
-        }
+            if (merchantPhone) {
+              merchantPromises.push(SMSService.sendNewOrderAlertToMerchant(merchantPhone, orderNumber, userName, total));
+              if (total > 10000) {
+                merchantPromises.push(SMSService.sendHighValueOrderAlert(merchantPhone, orderNumber, total));
+              }
+            }
 
-        // Send in-app notification to merchant
-        if (merchantId) {
-          await merchantNotificationService.notifyNewOrder({
-            merchantId,
-            orderId: (order._id as any).toString(),
-            orderNumber,
-            customerName: userName,
-            totalAmount: total,
-            itemCount: populatedOrder?.items?.length || 0,
-            paymentMethod,
-          });
-        }
+            if (merchantId) {
+              merchantPromises.push(merchantNotificationService.notifyNewOrder({
+                merchantId,
+                orderId: (order._id as any).toString(),
+                orderNumber,
+                customerName: userName,
+                totalAmount: total,
+                itemCount: populatedOrder?.items?.length || 0,
+                paymentMethod,
+              }));
+            }
+
+            await Promise.all(merchantPromises);
+          })
+        );
       }
+
+      await Promise.all(notifPromises);
 
     } catch (error) {
       console.error('❌ [ORDER] Error sending notifications:', error);
@@ -1500,25 +1504,82 @@ export const getOrderCounts = asyncHandler(async (req: Request, res: Response) =
   }
 });
 
-// Get single order by ID
+// Get single order by ID — uses $lookup aggregation to replace 4 populate() round trips
 export const getOrderById = asyncHandler(async (req: Request, res: Response) => {
   const { orderId } = req.params;
   const userId = req.userId!;
 
   try {
-    const order = await Order.findOne({
-      _id: orderId,
-      user: userId
-    })
-    .populate('items.product', 'name images basePrice description')
-    .populate('items.store', 'name logo location')
-    .populate('store', 'name logo location') // Top-level store field
-    .populate('user', 'profile.firstName profile.lastName profile.phoneNumber profile.email')
-    .lean();
+    const orders = await Order.aggregate([
+      { $match: { _id: new Types.ObjectId(orderId), user: new Types.ObjectId(userId) } },
+      // Lookup top-level store
+      { $lookup: {
+        from: 'stores', localField: 'store', foreignField: '_id', as: '_storeDoc',
+        pipeline: [{ $project: { name: 1, logo: 1, location: 1 } }]
+      }},
+      { $unwind: { path: '$_storeDoc', preserveNullAndEmptyArrays: true } },
+      // Lookup user
+      { $lookup: {
+        from: 'users', localField: 'user', foreignField: '_id', as: '_userDoc',
+        pipeline: [{ $project: { 'profile.firstName': 1, 'profile.lastName': 1, 'profile.phoneNumber': 1, 'profile.email': 1 } }]
+      }},
+      { $unwind: { path: '$_userDoc', preserveNullAndEmptyArrays: true } },
+      // Collect all product IDs and store IDs from items for batch lookups
+      { $lookup: {
+        from: 'products',
+        let: { productIds: '$items.product' },
+        pipeline: [
+          { $match: { $expr: { $in: ['$_id', '$$productIds'] } } },
+          { $project: { name: 1, images: 1, basePrice: 1, description: 1 } }
+        ],
+        as: '_products'
+      }},
+      { $lookup: {
+        from: 'stores',
+        let: { storeIds: '$items.store' },
+        pipeline: [
+          { $match: { $expr: { $in: ['$_id', '$$storeIds'] } } },
+          { $project: { name: 1, logo: 1, location: 1 } }
+        ],
+        as: '_itemStores'
+      }},
+      // Merge looked-up data into items
+      { $addFields: {
+        items: {
+          $map: {
+            input: '$items',
+            as: 'item',
+            in: {
+              $mergeObjects: [
+                '$$item',
+                {
+                  product: {
+                    $ifNull: [
+                      { $arrayElemAt: [{ $filter: { input: '$_products', as: 'p', cond: { $eq: ['$$p._id', '$$item.product'] } } }, 0] },
+                      '$$item.product'
+                    ]
+                  },
+                  store: {
+                    $ifNull: [
+                      { $arrayElemAt: [{ $filter: { input: '$_itemStores', as: 's', cond: { $eq: ['$$s._id', '$$item.store'] } } }, 0] },
+                      '$$item.store'
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        store: { $ifNull: ['$_storeDoc', '$store'] },
+        user: { $ifNull: ['$_userDoc', '$user'] }
+      }},
+      // Remove temporary lookup arrays
+      { $project: { _storeDoc: 0, _userDoc: 0, _products: 0, _itemStores: 0 } }
+    ]);
+
+    const order = orders[0] || null;
 
     if (!order) {
-      // Debug: Check if order exists but belongs to different user
-      const orderExists = await Order.findById(orderId).select('_id user orderNumber').lean();
       return sendNotFound(res, 'Order not found');
     }
 
@@ -1562,7 +1623,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
   const originalStatus = preClaimOrder?.status || 'placed';
 
   if (!claimedOrder) {
-    const existing = await Order.findOne({ _id: orderId, user: userId });
+    const existing = await Order.findOne({ _id: orderId, user: userId }).lean();
     if (!existing) {
       return sendNotFound(res, 'Order not found');
     }
@@ -1577,7 +1638,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
   session.startTransaction();
 
   try {
-    const order = await Order.findById(orderId).session(session);
+    const order = await Order.findById(orderId).session(session).lean();
     if (!order) {
       await session.abortTransaction();
       session.endSession();
@@ -1689,7 +1750,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
       // Refund promo coins
       if (promoCoins > 0) {
         try {
-          const wallet = await Wallet.findOne({ user: userId }).session(session);
+          const wallet = await Wallet.findOne({ user: userId }).session(session).lean();
           if (wallet) {
             const promoCoin = wallet.coins.find((c: any) => c.type === 'promo');
             if (promoCoin) {
@@ -1716,7 +1777,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
             : 'Store';
 
           if (storeId) {
-            const wallet = await Wallet.findOne({ user: userId }).session(session);
+            const wallet = await Wallet.findOne({ user: userId }).session(session).lean();
             if (wallet) {
               await wallet.addBrandedCoins(
                 new Types.ObjectId(storeId.toString()),
@@ -1761,7 +1822,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
         if (offerRedemption) {
           // Deduct cashback from user's wallet if it was credited
           if (cashbackAmount > 0) {
-            const wallet = await Wallet.findOne({ user: userId }).session(session);
+            const wallet = await Wallet.findOne({ user: userId }).session(session).lean();
             if (wallet) {
               const balanceBefore = wallet.balance.total;
 
@@ -1899,7 +1960,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
   const { status, estimatedDeliveryTime, trackingInfo } = req.body;
 
   try {
-    const order = await Order.findById(orderId);
+    const order = await Order.findById(orderId).lean();
 
     if (!order) {
       return sendNotFound(res, 'Order not found');
@@ -1953,7 +2014,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
     const populatedOrder = await Order.findById(order._id)
       .populate('items.product', 'name images')
       .populate('items.store', 'name')
-      .populate('user', 'profile.firstName profile.lastName');
+      .populate('user', 'profile.firstName profile.lastName').lean();
 
     // Create activity for order delivery
     if (status === 'delivered' && populatedOrder) {
@@ -2084,46 +2145,32 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         const bonusCategory = bonusStoreId ? await getStoreCategorySlug(bonusStoreId.toString()) : null;
 
         const orderIdStr = (populatedOrder as any)._id.toString();
-        await bonusCampaignService.autoClaimForTransaction('cashback_boost', userIdObj.toString(), {
+        const baseClaimData = {
           transactionRef: { type: 'order' as const, refId: orderIdStr },
           transactionAmount: populatedOrder.totals.subtotal,
           paymentMethod: populatedOrder.payment?.method,
           category: bonusCategory || undefined,
           storeId: bonusStoreId?.toString(),
-        });
-        // Also check for category_multiplier campaigns
+        };
+
+        // All bonus campaign claims are independent — run in parallel
+        const bonusPromises: Promise<any>[] = [
+          bonusCampaignService.autoClaimForTransaction('cashback_boost', userIdObj.toString(), baseClaimData),
+          bonusCampaignService.autoClaimForTransaction('first_transaction_bonus', userIdObj.toString(), baseClaimData),
+          bonusCampaignService.autoClaimForTransaction('festival_offer', userIdObj.toString(), baseClaimData),
+          bonusCampaignService.autoClaimForTransaction('bank_offer', userIdObj.toString(), baseClaimData),
+        ];
+
         if (bonusCategory) {
-          await bonusCampaignService.autoClaimForTransaction('category_multiplier', userIdObj.toString(), {
-            transactionRef: { type: 'order' as const, refId: orderIdStr },
-            transactionAmount: populatedOrder.totals.subtotal,
-            category: bonusCategory,
-            storeId: bonusStoreId?.toString(),
-          });
+          bonusPromises.push(
+            bonusCampaignService.autoClaimForTransaction('category_multiplier', userIdObj.toString(), {
+              ...baseClaimData,
+              category: bonusCategory,
+            })
+          );
         }
-        // Also check for first_transaction_bonus campaigns
-        await bonusCampaignService.autoClaimForTransaction('first_transaction_bonus', userIdObj.toString(), {
-          transactionRef: { type: 'order' as const, refId: orderIdStr },
-          transactionAmount: populatedOrder.totals.subtotal,
-          paymentMethod: populatedOrder.payment?.method,
-          category: bonusCategory || undefined,
-          storeId: bonusStoreId?.toString(),
-        });
-        // Also check for festival_offer campaigns
-        await bonusCampaignService.autoClaimForTransaction('festival_offer', userIdObj.toString(), {
-          transactionRef: { type: 'order' as const, refId: orderIdStr },
-          transactionAmount: populatedOrder.totals.subtotal,
-          paymentMethod: populatedOrder.payment?.method,
-          category: bonusCategory || undefined,
-          storeId: bonusStoreId?.toString(),
-        });
-        // Also check for bank_offer campaigns (bank-specific validation happens in service)
-        await bonusCampaignService.autoClaimForTransaction('bank_offer', userIdObj.toString(), {
-          transactionRef: { type: 'order' as const, refId: orderIdStr },
-          transactionAmount: populatedOrder.totals.subtotal,
-          paymentMethod: populatedOrder.payment?.method,
-          category: bonusCategory || undefined,
-          storeId: bonusStoreId?.toString(),
-        });
+
+        await Promise.all(bonusPromises);
       } catch (bonusErr) {
         console.error('[ORDER] Bonus campaign auto-claim failed (non-blocking):', bonusErr);
       }
@@ -2136,7 +2183,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
             ? (firstItem.store as any)._id
             : firstItem.store;
 
-          const store = await Store.findById(storeId);
+          const store = await Store.findById(storeId).lean();
 
           if (store && store.merchantId) {
             const grossAmount = populatedOrder.totals.subtotal || 0;
@@ -2200,37 +2247,29 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         console.error('❌ [ORDER] Failed to credit admin wallet:', adminError);
       }
 
-      // Create cashback for delivered order
-      try {
-        await cashbackService.createCashbackFromOrder(populatedOrder._id as Types.ObjectId);
-      } catch (error) {
-        console.error('❌ [ORDER] Error creating cashback:', error);
-        // Don't fail the order update if cashback creation fails
-      }
+      // Run independent post-delivery tasks in parallel (cashback, user products, creator conversion)
+      {
+        const postDeliveryTasks: Promise<any>[] = [
+          cashbackService.createCashbackFromOrder(populatedOrder._id as Types.ObjectId)
+            .catch((err: any) => console.error('❌ [ORDER] Error creating cashback:', err)),
+          userProductService.createUserProductsFromOrder(populatedOrder._id as Types.ObjectId)
+            .catch((err: any) => console.error('❌ [ORDER] Error creating user products:', err)),
+        ];
 
-      // Create user products for delivered order
-      try {
-        await userProductService.createUserProductsFromOrder(populatedOrder._id as Types.ObjectId);
-      } catch (error) {
-        console.error('❌ [ORDER] Error creating user products:', error);
-        // Don't fail the order update if user product creation fails
-      }
-
-      // Process creator pick conversion attribution on delivery
-      try {
         const attributionPickId = populatedOrder.analytics?.attributionPickId;
         if (attributionPickId) {
-          await processConversion(
-            attributionPickId.toString(),
-            (populatedOrder._id as Types.ObjectId).toString(),
-            userIdObj.toString(),
-            populatedOrder.totals.subtotal,
-            req.ip
+          postDeliveryTasks.push(
+            processConversion(
+              attributionPickId.toString(),
+              (populatedOrder._id as Types.ObjectId).toString(),
+              userIdObj.toString(),
+              populatedOrder.totals.subtotal,
+              req.ip
+            ).catch((err: any) => console.error('❌ [ORDER] Error processing creator conversion:', err))
           );
         }
-      } catch (conversionError) {
-        console.error('❌ [ORDER] Error processing creator conversion:', conversionError);
-        // Don't fail the order update if conversion processing fails
+
+        await Promise.all(postDeliveryTasks);
       }
 
       // Award store promo coins for delivered order
@@ -2241,7 +2280,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
           const subscription = await Subscription.findOne({
             user: userIdObj,
             status: 'active'
-          }).select('tier');
+          }).select('tier').lean();
           if (subscription?.tier) {
             userTier = subscription.tier;
           }
@@ -2264,7 +2303,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
 
           if (storeId) {
             // Award branded coins (store-specific coins)
-            const wallet = await Wallet.findOne({ user: userIdObj });
+            const wallet = await Wallet.findOne({ user: userIdObj }).lean();
             if (wallet) {
               await wallet.addBrandedCoins(
                 new Types.ObjectId(storeId.toString()),
@@ -2425,7 +2464,7 @@ export const rateOrder = asyncHandler(async (req: Request, res: Response) => {
       const partnerService = require('../services/partnerService').default;
       const Partner = require('../models/Partner').default;
       
-      const partner = await Partner.findOne({ userId });
+      const partner = await Partner.findOne({ userId }).lean();
       if (partner) {
         const reviewTask = partner.tasks.find((t: any) => t.type === 'review');
         if (reviewTask && reviewTask.progress.current < reviewTask.progress.target) {
@@ -2606,7 +2645,7 @@ export const requestRefund = asyncHandler(async (req: Request, res: Response) =>
 
   try {
     // Verify order belongs to user
-    const order = await Order.findOne({ _id: orderId, user: userId });
+    const order = await Order.findOne({ _id: orderId, user: userId }).lean();
     if (!order) {
       return sendNotFound(res, 'Order not found');
     }
@@ -2681,7 +2720,7 @@ export const requestRefund = asyncHandler(async (req: Request, res: Response) =>
     // Notify admin/merchant for approval
     try {
       // Get user information
-      const user = await User.findById(userId);
+      const user = await User.findById(userId).lean();
       const customerName = user?.profile?.firstName || user?.phoneNumber || 'Customer';
       const refundId = (refund._id as any)?.toString() || '';
       
@@ -2690,7 +2729,7 @@ export const requestRefund = asyncHandler(async (req: Request, res: Response) =>
       
       if (storeIds.length > 0) {
         const Store = (await import('../models/Store')).Store;
-        const stores = await Store.find({ _id: { $in: storeIds } }).select('name contact owner');
+        const stores = await Store.find({ _id: { $in: storeIds } }).select('name contact owner').lean();
         
         for (const store of stores) {
           // Get merchant contact info

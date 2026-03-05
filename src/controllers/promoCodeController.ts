@@ -216,7 +216,7 @@ export const createPromoCode = async (req: Request, res: Response) => {
     const sanitizedCode = PromoCode.sanitizeCode(code);
 
     // Check if code already exists
-    const existingCode = await PromoCode.findOne({ code: sanitizedCode });
+    const existingCode = await PromoCode.findOne({ code: sanitizedCode }).lean();
     if (existingCode) {
       return res.status(400).json({
         success: false,
@@ -300,7 +300,7 @@ export const getAllPromoCodes = async (req: Request, res: Response) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit))
-      .populate('createdBy', 'name email');
+      .populate('createdBy', 'name email').lean();
 
     const total = await PromoCode.countDocuments(query);
 
@@ -345,7 +345,7 @@ export const getPromoCode = async (req: Request, res: Response) => {
     const promoCode = await PromoCode.findById(id)
       .populate('createdBy', 'name email')
       .populate('usedBy.user', 'name email')
-      .populate('usedBy.subscriptionId');
+      .populate('usedBy.subscriptionId').lean();
 
     if (!promoCode) {
       return res.status(404).json({
@@ -385,7 +385,7 @@ export const updatePromoCode = async (req: Request, res: Response) => {
       });
     }
 
-    const promoCode = await PromoCode.findById(id);
+    const promoCode = await PromoCode.findById(id).lean();
     if (!promoCode) {
       return res.status(404).json({
         success: false,
@@ -533,7 +533,7 @@ export const getPromoCodeUsage = async (req: Request, res: Response) => {
 
     const promoCode = await PromoCode.findById(id)
       .populate('usedBy.user', 'name email')
-      .populate('usedBy.subscriptionId');
+      .populate('usedBy.subscriptionId').lean();
 
     if (!promoCode) {
       return res.status(404).json({
@@ -600,13 +600,13 @@ export const getPromoCodeAnalytics = async (req: Request, res: Response) => {
     const now = new Date();
 
     // Get all promo codes
-    const allCodes = await PromoCode.find();
-    const activeCodes = await PromoCode.find({ isActive: true });
+    const allCodes = await PromoCode.find().lean();
+    const activeCodes = await PromoCode.find({ isActive: true }).lean();
     const validCodes = await PromoCode.find({
       isActive: true,
       validFrom: { $lte: now },
       validUntil: { $gte: now }
-    });
+    }).lean();
 
     // Calculate total statistics
     let totalDiscount = 0;

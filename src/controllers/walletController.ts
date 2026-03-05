@@ -27,7 +27,7 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
   }
 
   // Get or create wallet
-  let wallet = await Wallet.findOne({ user: userId });
+  let wallet = await Wallet.findOne({ user: userId }).lean();
 
   if (!wallet) {
     wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
@@ -189,7 +189,7 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
     categoryBalances: (() => {
       const result: Record<string, { available: number; earned: number; spent: number }> = {};
       if (wallet.categoryBalances) {
-        wallet.categoryBalances.forEach((val: any, key: string) => {
+        Object.entries(wallet.categoryBalances as any || {}).forEach(([key, val]: [string, any]) => {
           result[key] = {
             available: val?.available || 0,
             earned: val?.earned || 0,
@@ -264,7 +264,7 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
   }
 
   // Get or create wallet
-  let wallet = await Wallet.findOne({ user: userId });
+  let wallet = await Wallet.findOne({ user: userId }).lean();
 
   if (!wallet) {
     wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
@@ -471,7 +471,7 @@ export const getTransactionById = asyncHandler(async (req: Request, res: Respons
   const transaction = await Transaction.findOne({
     _id: id,
     user: userId
-  }).populate('source.reference');
+  }).populate('source.reference').lean();
 
   if (!transaction) {
     return sendNotFound(res, 'Transaction not found');
@@ -509,7 +509,7 @@ export const topupWallet = asyncHandler(async (req: Request, res: Response) => {
 
   // Get wallet
   console.log('🔍 [TOPUP] Finding wallet for user:', userId);
-  let wallet = await Wallet.findOne({ user: userId });
+  let wallet = await Wallet.findOne({ user: userId }).lean();
 
   if (!wallet) {
     console.log('🆕 [TOPUP] Wallet not found, creating new wallet');
@@ -649,7 +649,7 @@ export const withdrawFunds = asyncHandler(async (req: Request, res: Response) =>
 
   try {
     // Get wallet
-    const wallet = await Wallet.findOne({ user: userId });
+    const wallet = await Wallet.findOne({ user: userId }).lean();
 
     if (!wallet) {
       return sendNotFound(res, 'Wallet not found');
@@ -802,7 +802,7 @@ export const processPayment = asyncHandler(async (req: Request, res: Response) =
   // Validate orderId ownership — prevent paying for someone else's order
   if (orderId) {
     const { Order } = await import('../models/Order');
-    const order = await Order.findOne({ _id: orderId, user: userId });
+    const order = await Order.findOne({ _id: orderId, user: userId }).lean();
     if (!order) {
       return sendBadRequest(res, 'Order not found or does not belong to you');
     }
@@ -817,7 +817,7 @@ export const processPayment = asyncHandler(async (req: Request, res: Response) =
 
   try {
     // Get wallet
-    const wallet = await Wallet.findOne({ user: userId });
+    const wallet = await Wallet.findOne({ user: userId }).lean();
 
     if (!wallet) {
       return sendNotFound(res, 'Wallet not found');
@@ -961,7 +961,7 @@ export const getTransactionSummary = asyncHandler(async (req: Request, res: Resp
     period as 'day' | 'week' | 'month' | 'year'
   );
 
-  const wallet = await Wallet.findOne({ user: userId });
+  const wallet = await Wallet.findOne({ user: userId }).lean();
 
   sendSuccess(res, {
     summary: summary[0] || { summary: [], totalTransactions: 0 },
@@ -1127,7 +1127,7 @@ export const initiatePayment = asyncHandler(async (req: Request, res: Response) 
   }
 
   // Get user wallet
-  const wallet = await Wallet.findOne({ user: userId });
+  const wallet = await Wallet.findOne({ user: userId }).lean();
   if (!wallet) {
     return sendNotFound(res, 'Wallet not found');
   }
@@ -1218,7 +1218,7 @@ export const confirmPayment = asyncHandler(async (req: Request, res: Response) =
         { 'gatewayResponse.paymentIntentId': paymentIntentId }
       ],
       user: new mongoose.Types.ObjectId(userId)
-    });
+    }).lean();
 
     if (!payment) {
       return sendError(res, 'Payment record not found', 404);
@@ -1242,7 +1242,7 @@ export const confirmPayment = asyncHandler(async (req: Request, res: Response) =
     }
 
     // Re-fetch payment (checkPaymentStatus may have updated it)
-    const freshPayment = await Payment.findById(payment._id);
+    const freshPayment = await Payment.findById(payment._id).lean();
     if (!freshPayment) {
       return sendError(res, 'Payment record not found after status check', 404);
     }
@@ -1455,7 +1455,7 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
   const lockToken = await redisService.acquireLock(lockKey, 10);
 
   try {
-    let wallet = await Wallet.findOne({ user: userId });
+    let wallet = await Wallet.findOne({ user: userId }).lean();
 
     if (!wallet) {
       wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
@@ -1558,7 +1558,7 @@ export const syncWalletBalance = asyncHandler(async (req: Request, res: Response
     console.log('📊 [WALLET SYNC] Aggregated balance — earned:', result[0]?.earned || 0, 'spent:', result[0]?.spent || 0, 'actual ReZ:', actualRezBalance);
 
     // Get or create wallet
-    let wallet = await Wallet.findOne({ user: userId });
+    let wallet = await Wallet.findOne({ user: userId }).lean();
 
     if (!wallet) {
       wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
@@ -1635,7 +1635,7 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
       transactionId,
       user: userId,
       type: 'debit',
-    }).session(session);
+    }).session(session).lean();
 
     if (!originalTransaction) {
       await session.abortTransaction();
@@ -1658,7 +1658,7 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
     }
 
     // Get user's wallet
-    const wallet = await Wallet.findOne({ user: userId }).session(session);
+    const wallet = await Wallet.findOne({ user: userId }).session(session).lean();
 
     if (!wallet) {
       await session.abortTransaction();
@@ -1844,7 +1844,7 @@ export const getExpiringCoins = asyncHandler(async (req: Request, res: Response)
   ]);
 
   // Also check promo coins from wallet
-  const wallet = await Wallet.findOne({ user: userId });
+  const wallet = await Wallet.findOne({ user: userId }).lean();
   const promoCoin = wallet?.coins.find((c: any) => c.type === 'promo' && c.amount > 0);
   let promoExpiry = null;
   if (promoCoin?.promoDetails?.expiryDate || promoCoin?.expiryDate) {

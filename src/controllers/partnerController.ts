@@ -27,7 +27,7 @@ export const getPartnerBenefits = async (req: Request, res: Response): Promise<v
     const Partner = require('../models/Partner').default;
     
     // Get user's current partner level
-    const partner = await Partner.findOne({ userId });
+    const partner = await Partner.findOne({ userId }).lean();
     const currentLevel = partner?.currentLevel?.level || 1;
     const currentBenefits = await partnerBenefitsService.getPartnerBenefits(userId);
     

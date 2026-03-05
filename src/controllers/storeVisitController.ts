@@ -56,7 +56,7 @@ export const scheduleStoreVisit = asyncHandler(async (req: Request, res: Respons
   }
 
   // Check if store exists
-  const store = await Store.findById(storeId);
+  const store = await Store.findById(storeId).lean();
   if (!store) {
     return sendNotFound(res, 'Store not found');
   }
@@ -68,7 +68,7 @@ export const scheduleStoreVisit = asyncHandler(async (req: Request, res: Respons
     visitDate: parsedVisitDate,
     visitTime,
     status: { $in: [VisitStatus.PENDING, VisitStatus.CHECKED_IN] }
-  });
+  }).lean();
   if (existingBooking) {
     return sendBadRequest(res, 'You already have a visit scheduled at this store for this date and time.');
   }
@@ -98,7 +98,7 @@ export const scheduleStoreVisit = asyncHandler(async (req: Request, res: Respons
 
   const populatedVisit = await StoreVisit.findById(visit._id)
     .populate('storeId', 'name location contact images')
-    .populate('userId', 'name phoneNumber email');
+    .populate('userId', 'name phoneNumber email').lean();
 
   console.log('✅ [STORE VISIT] Visit scheduled successfully:', {
     visitNumber: visit.visitNumber,
@@ -161,7 +161,7 @@ export const getQueueNumber = asyncHandler(async (req: Request, res: Response) =
   });
 
   // Check if store exists
-  const store = await Store.findById(storeId);
+  const store = await Store.findById(storeId).lean();
   if (!store) {
     return sendNotFound(res, 'Store not found');
   }
@@ -185,7 +185,7 @@ export const getQueueNumber = asyncHandler(async (req: Request, res: Response) =
 
   const populatedVisit = await StoreVisit.findById(visit._id)
     .populate('storeId', 'name location contact images')
-    .populate('userId', 'name phoneNumber email');
+    .populate('userId', 'name phoneNumber email').lean();
 
   console.log('✅ [QUEUE] Queue number generated:', {
     queueNumber,
@@ -296,7 +296,7 @@ export const getStoreVisit = asyncHandler(async (req: Request, res: Response) =>
 
   const visit = await StoreVisit.findById(visitId)
     .populate('storeId', 'name location contact images')
-    .populate('userId', 'name phoneNumber email');
+    .populate('userId', 'name phoneNumber email').lean();
 
   if (!visit) {
     return sendNotFound(res, 'Visit not found');
@@ -333,7 +333,7 @@ export const getStoreVisits = asyncHandler(async (req: Request, res: Response) =
   });
 
   // Check if store exists
-  const store = await Store.findById(storeId);
+  const store = await Store.findById(storeId).lean();
   if (!store) {
     return sendNotFound(res, 'Store not found');
   }
@@ -366,7 +366,7 @@ export const cancelStoreVisit = asyncHandler(async (req: Request, res: Response)
 
   console.log('❌ [STORE VISIT] Cancelling visit:', { visitId, userId });
 
-  const visit = await StoreVisit.findById(visitId);
+  const visit = await StoreVisit.findById(visitId).lean();
 
   if (!visit) {
     return sendNotFound(res, 'Visit not found');
@@ -394,7 +394,7 @@ export const cancelStoreVisit = asyncHandler(async (req: Request, res: Response)
   });
 
   // Notify merchant of cancellation
-  const cancelStore = await Store.findById(visit.storeId);
+  const cancelStore = await Store.findById(visit.storeId).lean();
   if (cancelStore && (cancelStore as any).merchantId) {
     merchantNotificationService.notifyVisitCancelled({
       merchantId: (cancelStore as any).merchantId.toString(),
@@ -426,7 +426,7 @@ export const getCurrentQueueStatus = asyncHandler(async (req: Request, res: Resp
   console.log('📊 [QUEUE STATUS] Fetching queue status:', { storeId });
 
   // Check if store exists
-  const store = await Store.findById(storeId);
+  const store = await Store.findById(storeId).lean();
   if (!store) {
     return sendNotFound(res, 'Store not found');
   }
@@ -442,7 +442,7 @@ export const getCurrentQueueStatus = asyncHandler(async (req: Request, res: Resp
     storeId,
     visitType: VisitType.QUEUE,
     visitDate: { $gte: today, $lt: tomorrow }
-  }).sort({ queueNumber: 1 });
+  }).sort({ queueNumber: 1 }).lean();
 
   // Calculate statistics
   const totalInQueue = queueVisits.filter(v => v.status === VisitStatus.PENDING).length;
@@ -486,7 +486,7 @@ export const checkStoreAvailability = asyncHandler(async (req: Request, res: Res
   console.log('🏪 [AVAILABILITY] Checking store availability:', { storeId });
 
   // Check if store exists
-  const store = await Store.findById(storeId);
+  const store = await Store.findById(storeId).lean();
   if (!store) {
     return sendNotFound(res, 'Store not found');
   }
@@ -502,7 +502,7 @@ export const checkStoreAvailability = asyncHandler(async (req: Request, res: Res
     storeId,
     visitDate: { $gte: today, $lt: tomorrow },
     status: { $in: [VisitStatus.PENDING, VisitStatus.CHECKED_IN] }
-  });
+  }).lean();
 
   const currentCrowd = todayVisits.length;
 
@@ -547,7 +547,7 @@ export const getAvailableSlotsHandler = asyncHandler(async (req: Request, res: R
     return sendBadRequest(res, 'Date query parameter is required (YYYY-MM-DD)');
   }
 
-  const store = await Store.findById(storeId);
+  const store = await Store.findById(storeId).lean();
   if (!store) {
     return sendNotFound(res, 'Store not found');
   }
@@ -605,7 +605,7 @@ export const rescheduleStoreVisit = asyncHandler(async (req: Request, res: Respo
     return sendBadRequest(res, 'Invalid time format. Use "HH:MM AM/PM" or "HH:MM" (24-hour).');
   }
 
-  const visit = await StoreVisit.findById(visitId);
+  const visit = await StoreVisit.findById(visitId).lean();
   if (!visit) {
     return sendNotFound(res, 'Visit not found');
   }
@@ -640,12 +640,12 @@ export const rescheduleStoreVisit = asyncHandler(async (req: Request, res: Respo
 
   const populatedVisit = await StoreVisit.findById(visit._id)
     .populate('storeId', 'name location contact images')
-    .populate('userId', 'name phoneNumber email');
+    .populate('userId', 'name phoneNumber email').lean();
 
   console.log('✅ [STORE VISIT] Visit rescheduled:', { visitNumber: visit.visitNumber });
 
   // Notify merchant of reschedule
-  const store = await Store.findById(visit.storeId);
+  const store = await Store.findById(visit.storeId).lean();
   if (store && (store as any).merchantId) {
     merchantNotificationService.notifyNewVisit({
       merchantId: (store as any).merchantId.toString(),
@@ -690,7 +690,7 @@ export const getStoreVisitsForMerchant = asyncHandler(async (req: Request, res: 
   }
 
   // Verify store belongs to merchant
-  const store = await Store.findById(storeId);
+  const store = await Store.findById(storeId).lean();
   if (!store || (store as any).merchantId?.toString() !== merchantId) {
     return sendNotFound(res, 'Store not found');
   }
@@ -719,7 +719,8 @@ export const getStoreVisitsForMerchant = asyncHandler(async (req: Request, res: 
       .populate('userId', 'name phoneNumber email')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limitNum),
+      .limit(limitNum)
+      .lean(),
     StoreVisit.countDocuments(query)
   ]);
 
@@ -741,7 +742,7 @@ export const getVisitStats = asyncHandler(async (req: Request, res: Response) =>
     return sendBadRequest(res, 'Store ID is required');
   }
 
-  const store = await Store.findById(storeId);
+  const store = await Store.findById(storeId).lean();
   if (!store || (store as any).merchantId?.toString() !== merchantId) {
     return sendNotFound(res, 'Store not found');
   }
@@ -761,7 +762,7 @@ export const getVisitStats = asyncHandler(async (req: Request, res: Response) =>
     StoreVisit.find({
       storeId,
       visitDate: { $gte: today, $lt: tomorrow }
-    }),
+    }).lean(),
     StoreVisit.countDocuments({
       storeId,
       visitDate: { $gte: weekStart, $lt: tomorrow }
@@ -770,10 +771,10 @@ export const getVisitStats = asyncHandler(async (req: Request, res: Response) =>
 
   const stats = {
     totalToday: todayVisits.length,
-    upcoming: todayVisits.filter(v => v.status === VisitStatus.PENDING).length,
-    checkedIn: todayVisits.filter(v => v.status === VisitStatus.CHECKED_IN).length,
-    completed: todayVisits.filter(v => v.status === VisitStatus.COMPLETED).length,
-    cancelled: todayVisits.filter(v => v.status === VisitStatus.CANCELLED).length,
+    upcoming: todayVisits.filter((v: any) => v.status === VisitStatus.PENDING).length,
+    checkedIn: todayVisits.filter((v: any) => v.status === VisitStatus.CHECKED_IN).length,
+    completed: todayVisits.filter((v: any) => v.status === VisitStatus.COMPLETED).length,
+    cancelled: todayVisits.filter((v: any) => v.status === VisitStatus.CANCELLED).length,
     totalThisWeek: weekVisits
   };
 
@@ -795,13 +796,13 @@ export const updateVisitStatusByMerchant = asyncHandler(async (req: Request, res
     [VisitStatus.CHECKED_IN]: [VisitStatus.COMPLETED, VisitStatus.CANCELLED],
   };
 
-  const visit = await StoreVisit.findById(visitId);
+  const visit = await StoreVisit.findById(visitId).lean();
   if (!visit) {
     return sendNotFound(res, 'Visit not found');
   }
 
   // Verify store belongs to merchant
-  const store = await Store.findById(visit.storeId);
+  const store = await Store.findById(visit.storeId).lean();
   if (!store || (store as any).merchantId?.toString() !== merchantId) {
     return sendError(res, 'Unauthorized access', 403);
   }

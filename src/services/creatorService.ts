@@ -11,6 +11,7 @@ import EarningConfig, { ICreatorProgramConfig } from '../models/EarningConfig';
 import { awardCoins } from './coinService';
 import redisService from './redisService';
 import merchantNotificationService from './merchantNotificationService';
+import { escapeRegex } from '../utils/sanitize';
 
 // ============================================
 // CACHE KEYS
@@ -84,7 +85,7 @@ export async function applyAsCreator(
   }
 
   // Check if already applied
-  const existing = await CreatorProfile.findOne({ user: userId });
+  const existing = await CreatorProfile.findOne({ user: userId }).lean();
   if (existing) {
     if (existing.status === 'approved') throw new Error('You are already an approved creator');
     if (existing.status === 'pending') throw new Error('Your application is already under review');
@@ -257,7 +258,7 @@ export async function updateCreatorProfile(
   userId: string,
   updates: Partial<Pick<ICreatorProfile, 'displayName' | 'bio' | 'avatar' | 'coverImage' | 'tags' | 'socialLinks'>>
 ): Promise<ICreatorProfile> {
-  const profile = await CreatorProfile.findOne({ user: userId });
+  const profile = await CreatorProfile.findOne({ user: userId }).lean();
   if (!profile) throw new Error('Creator profile not found');
   if (profile.status !== 'approved') throw new Error('Only approved creators can update their profile');
 
@@ -378,10 +379,11 @@ export async function getApprovedCreators(params: {
     query.category = category;
   }
   if (search) {
+    const escaped = escapeRegex(search);
     query.$or = [
-      { displayName: { $regex: search, $options: 'i' } },
-      { bio: { $regex: search, $options: 'i' } },
-      { tags: { $regex: search, $options: 'i' } },
+      { displayName: { $regex: escaped, $options: 'i' } },
+      { bio: { $regex: escaped, $options: 'i' } },
+      { tags: { $regex: escaped, $options: 'i' } },
     ];
   }
 
@@ -601,7 +603,7 @@ export async function submitPick(
     videoId?: string;
   }
 ): Promise<ICreatorPick> {
-  const profile = await CreatorProfile.findOne({ user: userId, status: 'approved' });
+  const profile = await CreatorProfile.findOne({ user: userId, status: 'approved' }).lean();
   if (!profile) throw new Error('You must be an approved creator to submit picks');
 
   const config = await getCreatorConfig();
@@ -772,7 +774,7 @@ export async function deleteMyPick(
   userId: string,
   pickId: string
 ): Promise<{ deleted: boolean; archived: boolean }> {
-  const profile = await CreatorProfile.findOne({ user: userId });
+  const profile = await CreatorProfile.findOne({ user: userId }).lean();
   if (!profile) throw new Error('Creator profile not found');
 
   const pick = await CreatorPick.findById(pickId);
@@ -829,7 +831,7 @@ export async function updateMyPick(
     videoUrl?: string;
   }
 ): Promise<ICreatorPick> {
-  const profile = await CreatorProfile.findOne({ user: userId });
+  const profile = await CreatorProfile.findOne({ user: userId }).lean();
   if (!profile) throw new Error('Creator profile not found');
 
   const pick = await CreatorPick.findById(pickId);
@@ -1062,7 +1064,7 @@ export async function processConversion(
   }
 
   // Check for duplicate conversion
-  const existingConversion = await CreatorConversion.findOne({ order: orderId, pick: pickId });
+  const existingConversion = await CreatorConversion.findOne({ order: orderId, pick: pickId }).lean();
   if (existingConversion) {
     console.log(`[CREATOR] Duplicate conversion blocked: order=${orderId}, pick=${pickId}`);
     return;
@@ -1213,7 +1215,7 @@ export async function computeTrendingScores(): Promise<number> {
     isPublished: true,
     moderationStatus: 'approved',
     status: 'approved',
-  }).select('engagement conversions createdAt trendingScore');
+  }).select('engagement conversions createdAt trendingScore').lean();
 
   const now = Date.now();
   let updated = 0;
@@ -1251,7 +1253,7 @@ export async function refreshCreatorStats(creatorProfileId?: string): Promise<nu
   const query: any = { status: 'approved' };
   if (creatorProfileId) query._id = creatorProfileId;
 
-  const profiles = await CreatorProfile.find(query).select('_id user');
+  const profiles = await CreatorProfile.find(query).select('_id user').lean();
   let updated = 0;
 
   for (const profile of profiles) {
@@ -1324,7 +1326,7 @@ export async function refreshCreatorStats(creatorProfileId?: string): Promise<nu
 export async function calculateTiers(): Promise<number> {
   const config = await getCreatorConfig();
   const profiles = await CreatorProfile.find({ status: 'approved' })
-    .select('_id tier stats.totalPicks');
+    .select('_id tier stats.totalPicks').lean();
 
   let upgraded = 0;
 
@@ -1379,13 +1381,13 @@ export async function trackPickClick(pickId: string, viewerUserId?: string): Pro
 }
 
 export async function togglePickLike(pickId: string, userId: string): Promise<boolean> {
-  const pick = await CreatorPick.findById(pickId);
+  const pick = await CreatorPick.findById(pickId).lean();
   if (!pick) throw new Error('Pick not found');
   return pick.toggleLike(new mongoose.Types.ObjectId(userId));
 }
 
 export async function togglePickBookmark(pickId: string, userId: string): Promise<boolean> {
-  const pick = await CreatorPick.findById(pickId);
+  const pick = await CreatorPick.findById(pickId).lean();
   if (!pick) throw new Error('Pick not found');
   return pick.toggleBookmark(new mongoose.Types.ObjectId(userId));
 }
@@ -1403,10 +1405,11 @@ export async function getCreatorApplications(
   const query: any = {};
   if (status) query.status = status;
   if (search) {
+    const escaped = escapeRegex(search);
     query.$or = [
-      { displayName: { $regex: search, $options: 'i' } },
-      { bio: { $regex: search, $options: 'i' } },
-      { category: { $regex: search, $options: 'i' } },
+      { displayName: { $regex: escaped, $options: 'i' } },
+      { bio: { $regex: escaped, $options: 'i' } },
+      { category: { $regex: escaped, $options: 'i' } },
     ];
   }
 

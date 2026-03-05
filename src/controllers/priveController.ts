@@ -18,6 +18,8 @@ import { Order } from '../models/Order';
 import { Review } from '../models/Review';
 import Referral from '../models/Referral';
 import { CoinTransaction } from '../models/CoinTransaction';
+import { Store } from '../models/Store';
+import BonusCampaign from '../models/BonusCampaign';
 import { WalletConfig } from '../models/WalletConfig';
 import { getCachedWalletConfig } from '../services/walletCacheService';
 import { SOURCE_TO_CATEGORY } from '../config/earningsCategories';
@@ -119,7 +121,7 @@ const buildHabitLoops = async (
 
     setImmediate(async () => {
       try {
-        const existing = await CoinTransaction.findOne({ 'metadata.idempotencyKey': idempotencyKey });
+        const existing = await CoinTransaction.findOne({ 'metadata.idempotencyKey': idempotencyKey }).lean();
         if (!existing) {
           await (CoinTransaction as any).createTransaction({
             user: userObjectId,
@@ -276,7 +278,7 @@ export const getReputationHistory = async (req: Request, res: Response) => {
       });
     }
 
-    const reputation = await UserReputation.findOne({ userId });
+    const reputation = await UserReputation.findOne({ userId }).lean();
 
     if (!reputation) {
       return res.status(200).json({
@@ -714,7 +716,7 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
           allCompleted,
         };
       })(),
-      highlights: (() => {
+      highlights: await (async () => {
         // Use real featured offer for curatedOffer, null for others without real data
         const curatedOffer = formattedOffers[0]
           ? {
@@ -728,10 +730,56 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
             }
           : null;
 
+        // Find nearby Prive-eligible store
+        const lat = parseFloat(req.query.lat as string);
+        const lng = parseFloat(req.query.lng as string);
+        let nearbyStore = null;
+        if (!isNaN(lat) && !isNaN(lng)) {
+          const stores = await Store.find({
+            'location.coordinates': {
+              $near: {
+                $geometry: { type: 'Point', coordinates: [lng, lat] },
+                $maxDistance: 5000,
+              },
+            },
+            isActive: true,
+          }).select('name logo slug location tags').limit(1).lean();
+          if (stores.length) {
+            nearbyStore = {
+              id: String(stores[0]._id),
+              type: 'store' as const,
+              icon: '📍',
+              title: (stores[0] as any).name,
+              subtitle: 'Nearby Prive partner',
+              badge: 'Near You',
+              badgeColor: '#4CAF50',
+            };
+          }
+        }
+
+        // Find active Prive opportunity (campaign with budget remaining)
+        const now = new Date();
+        const campaign = await BonusCampaign.findOne({
+          status: 'active',
+          startTime: { $lte: now },
+          endTime: { $gte: now },
+        }).select('title description type').sort({ endTime: 1 }).lean();
+        const opportunity = campaign
+          ? {
+              id: String(campaign._id),
+              type: 'campaign' as const,
+              icon: '🎯',
+              title: (campaign as any).title,
+              subtitle: (campaign as any).description || 'Limited time opportunity',
+              badge: 'Live',
+              badgeColor: '#FF9800',
+            }
+          : null;
+
         return {
           curatedOffer,
-          nearbyStore: null,
-          opportunity: null,
+          nearbyStore,
+          opportunity,
         };
       })(),
       featuredOffers: formattedOffers,
@@ -901,7 +949,7 @@ export const getPriveOfferById = async (req: Request, res: Response) => {
       });
     }
 
-    const offer = await PriveOffer.findById(id);
+    const offer = await PriveOffer.findById(id).lean();
 
     if (!offer) {
       return res.status(404).json({
@@ -1042,8 +1090,27 @@ export const getPriveHighlights = async (req: Request, res: Response) => {
             badgeColor: '#E91E63',
           }
         : null,
-      nearbyStore: null, // TODO: Implement real nearby store query with user geolocation
-      opportunity: null, // TODO: Implement real campaign/opportunity query
+      nearbyStore: await (async () => {
+        const lat = parseFloat(req.query.lat as string);
+        const lng = parseFloat(req.query.lng as string);
+        if (isNaN(lat) || isNaN(lng)) return null;
+        const stores = await Store.find({
+          'location.coordinates': {
+            $near: { $geometry: { type: 'Point', coordinates: [lng, lat] }, $maxDistance: 5000 },
+          },
+          isActive: true,
+        }).select('name logo slug').limit(1).lean();
+        return stores.length
+          ? { id: String(stores[0]._id), type: 'store' as const, icon: '📍', title: (stores[0] as any).name, subtitle: 'Nearby Prive partner', badge: 'Near You', badgeColor: '#4CAF50' }
+          : null;
+      })(),
+      opportunity: await (async () => {
+        const now = new Date();
+        const campaign = await BonusCampaign.findOne({ status: 'active', startTime: { $lte: now }, endTime: { $gte: now } }).select('title description').sort({ endTime: 1 }).lean();
+        return campaign
+          ? { id: String(campaign._id), type: 'campaign' as const, icon: '🎯', title: (campaign as any).title, subtitle: (campaign as any).description || 'Limited time opportunity', badge: 'Live', badgeColor: '#FF9800' }
+          : null;
+      })()
     };
 
     return res.status(200).json({
@@ -1518,7 +1585,7 @@ export const redeemCoins = async (req: Request, res: Response) => {
 
     // Offer validation if linked to a specific offer (pre-transaction checks)
     if (offerId) {
-      const offer = await PriveOffer.findById(offerId);
+      const offer = await PriveOffer.findById(offerId).lean();
       if (offer) {
         // Fix 1C: Query CoinTransaction instead of PriveVoucher for per-user limit
         if (offer.limitPerUser) {
@@ -1864,7 +1931,7 @@ export const getVoucherById = async (req: Request, res: Response) => {
     const voucher = await PriveVoucher.findOne({
       _id: new mongoose.Types.ObjectId(id),
       userId: new mongoose.Types.ObjectId(userId),
-    });
+    }).lean();
 
     if (!voucher) {
       return res.status(404).json({

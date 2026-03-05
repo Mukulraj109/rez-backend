@@ -278,12 +278,12 @@ class GamificationAnalyticsService {
     ] = await Promise.all([
       UserChallengeProgress.countDocuments({ user: userId, completed: true }),
       UserAchievement.countDocuments({ user: userId, unlocked: true }),
-      UserStreak.find({ user: userId }),
+      UserStreak.find({ user: userId }).lean(),
       GameSession.countDocuments({ user: userId, status: 'completed' })
     ]);
 
-    const totalStreak = streaks.reduce((sum, s) => sum + s.currentStreak, 0);
-    const longestStreak = Math.max(...streaks.map(s => s.longestStreak), 0);
+    const totalStreak = streaks.reduce((sum: number, s: any) => sum + s.currentStreak, 0);
+    const longestStreak = Math.max(...streaks.map((s: any) => s.longestStreak), 0);
 
     return {
       challengesCompleted: challengeProgress,

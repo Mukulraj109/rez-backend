@@ -51,10 +51,12 @@ export interface ISubscription extends Document {
   autoRenew: boolean;
   paymentMethod?: string;
 
-  // Razorpay integration
+  // Payment gateway integration
   razorpaySubscriptionId?: string;
   razorpayPlanId?: string;
   razorpayCustomerId?: string;
+  stripeSubscriptionId?: string;
+  stripeCustomerId?: string;
 
   // Benefits
   benefits: ISubscriptionBenefits;
@@ -186,6 +188,14 @@ const SubscriptionSchema = new Schema<ISubscription, ISubscriptionModel>({
     type: String
   },
   razorpayCustomerId: {
+    type: String
+  },
+  stripeSubscriptionId: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  stripeCustomerId: {
     type: String
   },
 

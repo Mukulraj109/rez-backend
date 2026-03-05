@@ -5,6 +5,7 @@ import { Product } from '../../models/Product';
 import { ServiceCategory } from '../../models/ServiceCategory';
 import travelCashbackService from '../../services/travelCashbackService';
 import { sendSuccess, sendError } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 import mongoose from 'mongoose';
 
 const router = Router();
@@ -228,9 +229,10 @@ router.get('/services', async (req: Request, res: Response) => {
       query.isActive = isActive === 'true';
     }
     if (search) {
+      const escapedSearch = escapeRegex(search as string);
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
+        { name: { $regex: escapedSearch, $options: 'i' } },
+        { description: { $regex: escapedSearch, $options: 'i' } },
       ];
     }
 
@@ -329,11 +331,12 @@ router.get('/bookings', async (req: Request, res: Response) => {
       query.serviceCategory = new mongoose.Types.ObjectId(category as string);
     }
     if (search) {
+      const escapedSearch = escapeRegex(search as string);
       query.$or = [
-        { bookingNumber: { $regex: search, $options: 'i' } },
-        { pnr: { $regex: search, $options: 'i' } },
-        { customerName: { $regex: search, $options: 'i' } },
-        { customerPhone: { $regex: search, $options: 'i' } },
+        { bookingNumber: { $regex: escapedSearch, $options: 'i' } },
+        { pnr: { $regex: escapedSearch, $options: 'i' } },
+        { customerName: { $regex: escapedSearch, $options: 'i' } },
+        { customerPhone: { $regex: escapedSearch, $options: 'i' } },
       ];
     }
     if (dateFrom || dateTo) {

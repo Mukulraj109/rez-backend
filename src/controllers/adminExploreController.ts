@@ -584,7 +584,7 @@ export const deleteAdminVideo = asyncHandler(async (req: Request, res: Response)
   const { videoId } = req.params;
 
   try {
-    const video = await Video.findById(videoId);
+    const video = await Video.findById(videoId).lean();
 
     if (!video) {
       throw new AppError('Video not found', 404);

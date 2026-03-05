@@ -94,7 +94,7 @@ export class QRCodeService {
   static async generateStoreQR(storeId: string): Promise<QRGenerationResult> {
     try {
       // Find the store
-      const store = await Store.findById(storeId);
+      const store = await Store.findById(storeId).lean();
       if (!store) {
         throw new Error('Store not found');
       }
@@ -216,7 +216,7 @@ export class QRCodeService {
         isActive: true,
       })
         .select('name slug logo category location paymentSettings rewardRules ratings isActive merchantId')
-        .populate('category', 'name slug icon');
+        .populate('category', 'name slug icon').lean();
 
       if (!store) {
         return {
@@ -303,7 +303,7 @@ export class QRCodeService {
    */
   static async activateQR(storeId: string): Promise<boolean> {
     try {
-      const store = await Store.findById(storeId);
+      const store = await Store.findById(storeId).lean();
 
       // If no QR exists, generate one
       if (!store?.storeQR?.code) {
@@ -333,7 +333,7 @@ export class QRCodeService {
     generatedAt?: Date;
   }> {
     try {
-      const store = await Store.findById(storeId).select('storeQR');
+      const store = await Store.findById(storeId).select('storeQR').lean();
 
       if (!store?.storeQR?.code) {
         return { hasQR: false };

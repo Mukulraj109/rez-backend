@@ -68,6 +68,16 @@ import './workers/exportWorker';
 // Import middleware
 import { globalErrorHandler, notFoundHandler } from './middleware/errorHandler';
 import { logger, requestLogger, correlationIdMiddleware } from './config/logger';
+
+// Override console methods in production to route through structured logger
+// This ensures all 9000+ existing console.log calls get PII masking and proper log formatting
+if (process.env.NODE_ENV === 'production') {
+  console.log = (...args: any[]) => logger.info(args.map(String).join(' '));
+  console.error = (...args: any[]) => logger.error(args.map(String).join(' '));
+  console.warn = (...args: any[]) => logger.warn(args.map(String).join(' '));
+  console.debug = (...args: any[]) => logger.debug(args.map(String).join(' '));
+}
+
 import { initSentry, sentryRequestHandler, sentryTracingHandler, sentryErrorHandler } from './config/sentry';
 import { setCsrfToken, validateCsrfToken } from './middleware/csrf';
 import { metricsMiddleware, metricsEndpoint } from './config/prometheus';
@@ -674,17 +684,8 @@ const io = new SocketIOServer(server, {
   transports: ['websocket', 'polling'],
 });
 
-// Attach Redis adapter so all pods share Socket.IO events
+// Socket.IO Redis adapter is attached after Redis connects in startServer()
 import { attachRedisAdapter } from './config/socketAdapter';
-(async () => {
-  try {
-    await attachRedisAdapter(io);
-  } catch (err) {
-    // Non-fatal: fall back to in-memory adapter (works for single pod only)
-    console.error('[Socket.IO] Redis adapter failed, using in-memory fallback:', err);
-    console.warn('[Socket.IO] ⚠️  Real-time events will NOT work across multiple pods!');
-  }
-})();
 
 // Register Socket.IO instance so services (supportSocketService, etc.) can emit events
 import { initializeSocket } from './config/socket';
@@ -1516,6 +1517,13 @@ async function startServer() {
     console.log('🔄 Connecting to Redis...');
     await redisService.connect();
     console.log(redisService.isReady() ? '✅ Redis connected' : '⚠️ Redis unavailable — app will continue without caching');
+
+    // Attach Socket.IO Redis adapter (needs Redis to be connected first)
+    try {
+      await attachRedisAdapter(io);
+    } catch (err) {
+      console.error('[Socket.IO] Redis adapter failed, using in-memory fallback:', err);
+    }
 
     // Validate Cloudinary configuration
     const cloudinaryConfigured = validateCloudinaryConfig();

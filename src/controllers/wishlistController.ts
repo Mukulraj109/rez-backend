@@ -6,6 +6,7 @@ import Discount from '../models/Discount';
 import { sendSuccess, sendNotFound, sendBadRequest } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+import { escapeRegex } from '../utils/sanitize';
 import * as storeFollowService from '../services/storeFollowService';
 import { recordNewFollow, recordUnfollow } from '../services/followerAnalyticsService';
 
@@ -108,7 +109,7 @@ export const addToWishlist = asyncHandler(async (req: Request, res: Response) =>
       return sendBadRequest(res, `Invalid itemType. Must be one of: ${validTypes.join(', ')}`);
     }
 
-    const wishlist = await Wishlist.findOne({ _id: wishlistId, user: userId });
+    const wishlist = await Wishlist.findOne({ _id: wishlistId, user: userId }).lean();
 
     if (!wishlist) {
       return sendNotFound(res, 'Wishlist not found');
@@ -127,18 +128,18 @@ export const addToWishlist = asyncHandler(async (req: Request, res: Response) =>
     let discountSnapshot: IDiscountSnapshot | undefined;
 
     if (itemType === 'Product') {
-      const product = await Product.findById(itemId);
+      const product = await Product.findById(itemId).lean();
       if (!product) {
         return sendNotFound(res, 'Product not found');
       }
     } else if (itemType === 'Store') {
-      const store = await Store.findById(itemId);
+      const store = await Store.findById(itemId).lean();
       if (!store) {
         return sendNotFound(res, 'Store not found');
       }
     } else if (itemType === 'Discount') {
       // Fetch discount and create snapshot
-      const discount = await Discount.findById(itemId).populate('storeId', 'name');
+      const discount = await Discount.findById(itemId).populate('storeId', 'name').lean();
       if (!discount) {
         return sendNotFound(res, 'Discount not found');
       }
@@ -213,7 +214,7 @@ export const removeFromWishlist = asyncHandler(async (req: Request, res: Respons
   const userId = req.userId!;
 
   try {
-    const wishlist = await Wishlist.findOne({ _id: wishlistId, user: userId });
+    const wishlist = await Wishlist.findOne({ _id: wishlistId, user: userId }).lean();
 
     if (!wishlist) {
       return sendNotFound(res, 'Wishlist not found');
@@ -260,7 +261,7 @@ export const updateWishlistItem = asyncHandler(async (req: Request, res: Respons
   const { priority, notes, targetPrice, notifyOnPriceChange, notifyOnAvailability, tags } = req.body;
 
   try {
-    const wishlist = await Wishlist.findOne({ _id: wishlistId, user: userId });
+    const wishlist = await Wishlist.findOne({ _id: wishlistId, user: userId }).lean();
     
     if (!wishlist) {
       return sendNotFound(res, 'Wishlist not found');
@@ -320,9 +321,10 @@ export const getPublicWishlists = asyncHandler(async (req: Request, res: Respons
     const query: any = { isPublic: true };
     if (category) query.category = category;
     if (search) {
+      const escaped = escapeRegex(search as string);
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { name: { $regex: escaped, $options: 'i' } },
+        { description: { $regex: escaped, $options: 'i' } }
       ];
     }
 

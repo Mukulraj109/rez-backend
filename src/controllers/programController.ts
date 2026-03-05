@@ -743,7 +743,7 @@ class ProgramController {
         .populate('merchant', 'businessName logo')
         .sort({ createdAt: -1 })
         .skip((pg.page - 1) * pg.limit)
-        .limit(pg.limit);
+        .limit(pg.limit).lean();
 
       return res.json({
         success: true,

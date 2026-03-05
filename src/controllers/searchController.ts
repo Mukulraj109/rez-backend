@@ -1343,7 +1343,7 @@ export const markSearchAsClicked = asyncHandler(async (req: Request, res: Respon
   const searchHistory = await SearchHistory.findOne({
     _id: id,
     user: userId
-  });
+  }).lean();
 
   if (!searchHistory) {
     throw new AppError('Search history not found', 404);

@@ -28,6 +28,7 @@ import referralService from '../services/referralService';
 import { ReferralFraudDetection } from '../services/referralFraudDetection';
 import { Wallet } from '../models/Wallet';
 import { Types } from 'mongoose';
+import { logger } from '../config/logger';
 
 const referralFraudDetection = new ReferralFraudDetection();
 import achievementService from '../services/achievementService';
@@ -56,13 +57,13 @@ let client = null;
 if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_ACCOUNT_SID.startsWith('AC')) {
   try {
     client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-    console.log('✅ Twilio client initialized successfully');
+    logger.info('Twilio client initialized successfully');
   } catch (error) {
-    console.log('❌ Failed to initialize Twilio client:', error instanceof Error ? error.message : String(error));
+    logger.error('Failed to initialize Twilio client', { error: error instanceof Error ? error.message : String(error) });
     client = null;
   }
 } else {
-  console.log('🔧 Development mode: Twilio client not initialized (using console OTP)');
+  logger.info('Development mode: Twilio client not initialized (using console OTP)');
 }
 
 const isDev = process.env.NODE_ENV === 'development';
@@ -72,9 +73,9 @@ const smsService = {
     // In development without Twilio, log OTP to console for testing
     if (!client) {
       if (isDev) {
-        console.log(`📱 [DEV_MODE] OTP for ${phoneNumber}: ${otp}`);
+        logger.debug('[DEV_MODE] OTP generated', { phone: `***${phoneNumber.slice(-4)}` });
       } else {
-        console.error(`❌ [OTP_SERVICE] No SMS provider configured in production!`);
+        logger.error('[OTP_SERVICE] No SMS provider configured in production!');
         return false;
       }
       return true;
@@ -87,12 +88,12 @@ const smsService = {
         from: TWILIO_PHONE_NUMBER,
         to: phoneNumber
       });
-      console.log(`✅ [OTP_SERVICE] SMS sent to ***${phoneNumber.slice(-4)}`);
+      logger.info('[OTP_SERVICE] SMS sent', { phone: `***${phoneNumber.slice(-4)}` });
       return true;
     } catch (error) {
-      console.error("❌ [OTP_SERVICE] SMS send failed:", error instanceof Error ? error.message : String(error));
+      logger.error('[OTP_SERVICE] SMS send failed', { error: error instanceof Error ? error.message : String(error) });
       if (isDev) {
-        console.log(`📱 [DEV_FALLBACK] OTP for ${phoneNumber}: ${otp}`);
+        logger.debug('[DEV_FALLBACK] OTP generated', { phone: `***${phoneNumber.slice(-4)}` });
         return true;
       }
       return false;
@@ -132,18 +133,18 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
   phoneNumber = normalizePhoneNumber(phoneNumber);
 
   if (isDev) {
-    console.log(`[SEND_OTP] Phone: ${phoneNumber}, Email: ${email || 'none'}`);
+    logger.debug('[SEND_OTP]', { phone: `***${phoneNumber.slice(-4)}`, hasEmail: !!email });
   }
 
   try {
     // Check if user exists
-    let user = await User.findOne({ phoneNumber });
+    let user = await User.findOne({ phoneNumber }).lean() as any;
 
     // Create user if doesn't exist, or reactivate if inactive
     if (!user) {
       // Check if email already exists (only if email is provided)
       if (email) {
-        const emailExists = await User.findOne({ email });
+        const emailExists = await User.findOne({ email }).lean();
         if (emailExists) {
           return sendConflict(res, 'Email is already registered');
         }
@@ -152,7 +153,7 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
       // Check if referral code is valid (if provided)
       let referrerUser = null;
       if (referralCode) {
-        referrerUser = await User.findOne({ 'referral.referralCode': referralCode });
+        referrerUser = await User.findOne({ 'referral.referralCode': referralCode }).lean();
         if (!referrerUser) {
           return sendBadRequest(res, 'Invalid referral code');
         }
@@ -256,11 +257,11 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
   phoneNumber = normalizePhoneNumber(phoneNumber);
 
   if (isDev) {
-    console.log(`[VERIFY_OTP] Phone: ${phoneNumber}`);
+    logger.debug('[VERIFY_OTP]', { phone: `***${phoneNumber.slice(-4)}` });
   }
 
   // Find user with OTP fields
-  const user = await User.findOne({ phoneNumber }).select('+auth.otpCode +auth.otpExpiry');
+  const user = await User.findOne({ phoneNumber }).select('+auth.otpCode +auth.otpExpiry').lean();
 
   if (!user) {
     return sendNotFound(res, 'User not found');
@@ -277,7 +278,7 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
   const isDevelopmentBypass = isDev && otp.startsWith('123');
 
   if (isDevelopmentBypass) {
-    console.log(`[DEV_BYPASS] Development OTP bypass for ${phoneNumber}`);
+    logger.debug('[DEV_BYPASS] Development OTP bypass', { phone: `***${phoneNumber.slice(-4)}` });
   } else {
     // Verify OTP properly
     const isValidOTP = user.verifyOTP(otp);
@@ -294,7 +295,7 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
   // Process referral if this is a new user with a referrer
   if (!user.auth.isVerified && user.referral.referredBy) {
     try {
-      const referrerUser = await User.findOne({ 'referral.referralCode': user.referral.referredBy });
+      const referrerUser = await User.findOne({ 'referral.referralCode': user.referral.referredBy }).lean();
       if (referrerUser) {
         // Fraud check before processing referral
         const fraudCheck = await referralFraudDetection.checkReferral(
@@ -325,7 +326,7 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
         });
 
         // Add referee discount (₹30) to their wallet for first order
-        let refereeWallet = await Wallet.findOne({ user: user._id });
+        let refereeWallet = await Wallet.findOne({ user: user._id }).lean() as any;
         if (!refereeWallet) {
           // Create wallet if doesn't exist
           refereeWallet = await Wallet.create({
@@ -366,7 +367,7 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
         // Update referrer's partner referral task progress
         try {
           const Partner = require('../models/Partner').default;
-          const partner = await Partner.findOne({ userId: referrerUser._id });
+          const partner = await Partner.findOne({ userId: referrerUser._id }).lean();
           
           if (partner) {
             const referralTask = partner.tasks.find((t: any) => t.type === 'referral');
@@ -465,7 +466,7 @@ export const refreshToken = asyncHandler(async (req: Request, res: Response) => 
     const decoded = verifyRefreshToken(refreshToken);
     
     // Find user and check if refresh token matches
-    const user = await User.findById(decoded.userId).select('+auth.refreshToken');
+    const user = await User.findById(decoded.userId).select('+auth.refreshToken').lean();
     
     if (!user || user.auth.refreshToken !== hashRefreshToken(refreshToken)) {
       return sendUnauthorized(res, 'Invalid refresh token');
@@ -718,22 +719,173 @@ export const changePassword = asyncHandler(async (req: Request, res: Response) =
   }
 });
 
-// Delete account (soft delete)
+// Delete account (GDPR-compliant: anonymize + cascade)
 export const deleteAccount = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     return sendUnauthorized(res, 'Authentication required');
   }
 
   try {
-    // Soft delete - deactivate account
+    const userId = req.user._id;
+    const anonymizedId = `deleted_${userId}`;
+
+    // Dynamic imports to avoid circular dependencies
+    const { Order } = await import('../models/Order');
+    const { Review } = await import('../models/Review');
+    const { Video } = await import('../models/Video');
+    const { Subscription } = await import('../models/Subscription');
+    const { CoinTransaction } = await import('../models/CoinTransaction');
+    const { Transfer } = await import('../models/Transfer');
+    const { CoinGift } = await import('../models/CoinGift');
+    const { Wishlist } = await import('../models/Wishlist');
+    const { Favorite } = await import('../models/Favorite');
+    const { Conversation } = await import('../models/Conversation');
+    const { Message } = await import('../models/Message');
+    const PriceAlert = (await import('../models/PriceAlert')).default;
+    const { SupportTicket } = await import('../models/SupportTicket');
+    const { Notification } = await import('../models/Notification');
+
+    // 1. Anonymize orders (retain for financial compliance, strip PII)
+    await Order.updateMany(
+      { user: userId },
+      { $set: {
+        'deliveryAddress.name': 'Deleted User',
+        'deliveryAddress.phone': '',
+        'deliveryAddress.email': '',
+      }}
+    );
+
+    // 2. Anonymize reviews (retain for store integrity, strip PII)
+    await Review.updateMany(
+      { user: userId },
+      { $set: { userName: 'Deleted User', userAvatar: '' } }
+    );
+
+    // 3. Delete user's videos/UGC content
+    await Video.deleteMany({ user: userId });
+
+    // 4. Cancel active subscriptions
+    await Subscription.updateMany(
+      { userId, status: { $in: ['active', 'trialing'] } },
+      { $set: { status: 'cancelled', cancelledAt: new Date() } }
+    );
+
+    // 5. Anonymize financial records (retain for audit, strip PII)
+    await CoinTransaction.updateMany(
+      { userId },
+      { $set: { 'metadata.userName': 'Deleted User' } }
+    );
+    await Transfer.updateMany(
+      { $or: [{ sender: userId }, { recipient: userId }] },
+      { $set: { 'metadata.userName': 'Deleted User' } }
+    );
+
+    // 6. Delete personal data collections
+    await Promise.all([
+      Wishlist.deleteMany({ user: userId }),
+      Favorite.deleteMany({ user: userId }),
+      CoinGift.deleteMany({ $or: [{ sender: userId }, { recipient: userId }] }),
+      PriceAlert.deleteMany({ userId }),
+      Notification.deleteMany({ userId }),
+    ]);
+
+    // 7. Anonymize conversations/messages
+    await Conversation.updateMany(
+      { participants: userId },
+      { $pull: { participants: userId } }
+    );
+    await Message.updateMany(
+      { sender: userId },
+      { $set: { senderName: 'Deleted User' } }
+    );
+
+    // 8. Delete support tickets
+    await SupportTicket.deleteMany({ user: userId });
+
+    // 9. Deactivate wallet (zero out, keep for ledger integrity)
+    await Wallet.updateMany(
+      { userId },
+      { $set: {
+        'balance.available': 0,
+        'balance.pending': 0,
+        'balance.cashback': 0,
+        isFrozen: true,
+      }}
+    );
+
+    // 10. Remove referral references
+    await User.updateMany(
+      { referredBy: userId },
+      { $unset: { referredBy: 1 } }
+    );
+
+    // 11. Anonymize and deactivate the user
     req.user.isActive = false;
+    req.user.phoneNumber = anonymizedId;
+    req.user.email = `${anonymizedId}@deleted.local`;
+    if (req.user.profile) {
+      req.user.profile.firstName = 'Deleted';
+      req.user.profile.lastName = 'User';
+      req.user.profile.avatar = '';
+    }
     req.user.auth.refreshToken = undefined;
+    (req.user as any).pushTokens = [];
+    (req.user as any).deviceInfo = [];
     await req.user.save();
 
-    sendSuccess(res, null, 'Account deleted successfully');
+    sendSuccess(res, null, 'Account and associated data deleted successfully');
 
   } catch (error) {
     throw new AppError('Failed to delete account', 500);
+  }
+});
+
+// GDPR data export — returns all user data as JSON
+export const exportUserData = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return sendUnauthorized(res, 'Authentication required');
+  }
+
+  try {
+    const userId = req.user._id;
+
+    const { Order } = await import('../models/Order');
+    const { Review } = await import('../models/Review');
+    const { CoinTransaction } = await import('../models/CoinTransaction');
+    const { Subscription } = await import('../models/Subscription');
+    const { Wishlist } = await import('../models/Wishlist');
+    const { Favorite } = await import('../models/Favorite');
+
+    const [orders, reviews, transactions, subscriptions, wishlists, favorites, wallet] = await Promise.all([
+      Order.find({ user: userId }).select('-__v').lean(),
+      Review.find({ user: userId }).select('-__v').lean(),
+      CoinTransaction.find({ userId }).select('-__v').lean(),
+      Subscription.find({ userId }).select('-__v').lean(),
+      Wishlist.find({ user: userId }).select('-__v').lean(),
+      Favorite.find({ user: userId }).select('-__v').lean(),
+      Wallet.findOne({ userId }).select('-__v').lean(),
+    ]);
+
+    const userData = {
+      profile: {
+        phoneNumber: req.user.phoneNumber,
+        email: req.user.email,
+        profile: req.user.profile,
+        createdAt: req.user.createdAt,
+      },
+      wallet,
+      orders,
+      reviews,
+      transactions,
+      subscriptions,
+      wishlists,
+      favorites,
+      exportedAt: new Date().toISOString(),
+    };
+
+    sendSuccess(res, userData, 'User data exported successfully');
+  } catch (error) {
+    throw new AppError('Failed to export user data', 500);
   }
 });
 

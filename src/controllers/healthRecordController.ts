@@ -351,7 +351,7 @@ export const shareHealthRecord = asyncHandler(async (req: Request, res: Response
   });
 
   try {
-    const healthRecord = await HealthRecord.findOne({ _id: id, userId });
+    const healthRecord = await HealthRecord.findOne({ _id: id, userId }).lean();
 
     if (!healthRecord) {
       console.error('❌ [HEALTH_RECORD] Health record not found:', id);
@@ -407,7 +407,7 @@ export const revokeShare = asyncHandler(async (req: Request, res: Response) => {
   });
 
   try {
-    const healthRecord = await HealthRecord.findOne({ _id: id, userId });
+    const healthRecord = await HealthRecord.findOne({ _id: id, userId }).lean();
 
     if (!healthRecord) {
       console.error('❌ [HEALTH_RECORD] Health record not found:', id);
@@ -452,7 +452,7 @@ export const archiveHealthRecord = asyncHandler(async (req: Request, res: Respon
   });
 
   try {
-    const healthRecord = await HealthRecord.findOne({ _id: id, userId });
+    const healthRecord = await HealthRecord.findOne({ _id: id, userId }).lean();
 
     if (!healthRecord) {
       console.error('❌ [HEALTH_RECORD] Health record not found:', id);

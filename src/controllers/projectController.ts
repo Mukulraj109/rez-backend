@@ -11,6 +11,7 @@ import { AppError } from '../middleware/errorHandler';
 import achievementService from '../services/achievementService';
 import gamificationEventBus from '../events/gamificationEventBus';
 import { sendCreated } from '../utils/response';
+import { escapeRegex } from '../utils/sanitize';
 import earningsSocketService from '../services/earningsSocketService';
 
 // Submit a project
@@ -36,7 +37,7 @@ export const submitProject = asyncHandler(async (req: Request, res: Response) =>
     const isStarting = !content;
 
     // Check if project exists
-    const project = await Project.findById(projectId);
+    const project = await Project.findById(projectId).lean();
     if (!project) {
       return sendNotFound(res, 'Project not found');
     }
@@ -286,10 +287,11 @@ export const getProjects = asyncHandler(async (req: Request, res: Response) => {
     // If status is explicitly provided, use it, otherwise default to 'active'
     query.status = status || 'active';
     if (search) {
+      const escaped = escapeRegex(search as string);
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $in: [new RegExp(search as string, 'i')] } }
+        { title: { $regex: escaped, $options: 'i' } },
+        { description: { $regex: escaped, $options: 'i' } },
+        { tags: { $in: [new RegExp(escaped, 'i')] } }
       ];
     }
 
@@ -520,7 +522,7 @@ export const toggleProjectLike = asyncHandler(async (req: Request, res: Response
   const userId = req.userId!;
 
   try {
-    const project = await Project.findById(projectId);
+    const project = await Project.findById(projectId).lean();
     
     if (!project) {
       return sendNotFound(res, 'Project not found');

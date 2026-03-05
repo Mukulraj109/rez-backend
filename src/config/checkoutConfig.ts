@@ -4,17 +4,17 @@
 
 export const CHECKOUT_CONFIG = {
   // Platform Fees (fixed fee - legacy)
-  platformFee: 2, // in currency units (e.g., ₹2)
+  platformFee: parseFloat(process.env.PLATFORM_FEE || '2'),
 
-  // Merchant Fee Configuration (15% commission)
+  // Merchant Fee Configuration (configurable via env vars, no redeploy needed)
   merchantFee: {
-    percentage: 0.15,  // 15% of subtotal
-    minFee: 2,         // Minimum fee ₹2
-    maxFee: 10000,     // Maximum fee cap ₹10,000
+    percentage: parseFloat(process.env.MERCHANT_FEE_PERCENTAGE || '0.15'),
+    minFee: parseFloat(process.env.MERCHANT_FEE_MIN || '2'),
+    maxFee: parseFloat(process.env.MERCHANT_FEE_MAX || '10000'),
   },
 
-  // Tax Rates
-  taxRate: 0.05, // 5% tax
+  // Tax Rates (configurable via env var)
+  taxRate: parseFloat(process.env.TAX_RATE || '0.05'),
 
   // Coin System Limits
   coins: {

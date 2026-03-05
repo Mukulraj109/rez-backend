@@ -67,7 +67,7 @@ class PriveConciergeService {
       _id: new Types.ObjectId(ticketId),
       user: new Types.ObjectId(userId),
       isPriveTicket: true,
-    });
+    }).lean();
   }
 
   /**

@@ -167,7 +167,7 @@ export class ReferralAnalyticsService {
    * Track referral attribution
    */
   async trackAttribution(referralId: string | Types.ObjectId, event: string, metadata?: any) {
-    const referral = await Referral.findById(referralId);
+    const referral = await Referral.findById(referralId).lean();
 
     if (!referral) {
       throw new Error('Referral not found');
@@ -283,7 +283,7 @@ export class ReferralAnalyticsService {
     const referrals = await Referral.find({
       ...dateFilter,
       status: { $in: [ReferralStatus.QUALIFIED, ReferralStatus.COMPLETED] }
-    });
+    }).lean();
 
     // Calculate total rewards paid out
     const totalRewardsCost = referrals.reduce((sum: number, ref: any) => {
@@ -306,7 +306,7 @@ export class ReferralAnalyticsService {
     const referrals = await Referral.find({
       ...dateFilter,
       status: { $in: [ReferralStatus.QUALIFIED, ReferralStatus.COMPLETED] }
-    }).populate('referee');
+    }).populate('referee').lean();
 
     let totalValue = 0;
 
@@ -315,7 +315,7 @@ export class ReferralAnalyticsService {
         const orders = await Order.find({
           userId: ref.referee,
           status: { $in: ['delivered', 'completed'] }
-        });
+        }).lean();
 
         const customerValue = orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
         totalValue += customerValue;
@@ -380,7 +380,7 @@ export class ReferralAnalyticsService {
       status: { $in: [ReferralStatus.QUALIFIED, ReferralStatus.COMPLETED] },
       qualifiedAt: { $exists: true },
       registeredAt: { $exists: true }
-    });
+    }).lean();
 
     if (qualifiedReferrals.length === 0) return 0;
 

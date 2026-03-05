@@ -135,7 +135,7 @@ export class VoucherRedemptionService {
     userId: string | Types.ObjectId,
     referralId: string | Types.ObjectId
   ) {
-    const referral = await Referral.findById(referralId);
+    const referral = await Referral.findById(referralId).lean();
 
     if (!referral) {
       throw new Error('Referral not found');
@@ -211,7 +211,7 @@ export class VoucherRedemptionService {
   async checkVoucherValidity(voucherCode: string): Promise<boolean> {
     const referral = await Referral.findOne({
       'rewards.voucherCode': voucherCode
-    });
+    }).lean();
 
     if (!referral) return false;
 
@@ -238,7 +238,7 @@ export class VoucherRedemptionService {
   async getClaimableVouchers(userId: string | Types.ObjectId) {
     const referrals = await Referral.find({
       referrer: userId
-    });
+    }).lean();
 
     const claimableVouchers = [];
 
@@ -269,7 +269,7 @@ export class VoucherRedemptionService {
     const referrals = await Referral.find({
       referrer: userId,
       'rewards.voucherCode': { $exists: true }
-    });
+    }).lean();
 
     const claimedVouchers = [];
 

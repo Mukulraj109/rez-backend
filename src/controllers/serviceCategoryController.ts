@@ -54,7 +54,7 @@ export const getServiceCategories = async (req: Request, res: Response) => {
       categories = await ServiceCategory.find({
         isActive: true,
         parentCategory: null
-      }).sort({ sortOrder: 1, name: 1 });
+      }).sort({ sortOrder: 1, name: 1 }).lean();
     }
 
     res.status(200).json({
@@ -83,7 +83,7 @@ export const getServiceCategoryBySlug = async (req: Request, res: Response) => {
     const category = await ServiceCategory.findOne({
       slug,
       isActive: true
-    }).populate('childCategories');
+    }).populate('childCategories').lean();
 
     if (!category) {
       return res.status(404).json({
@@ -134,7 +134,7 @@ export const getServicesInCategory = async (req: Request, res: Response) => {
     } = req.query;
 
     // Find the category
-    const category = await ServiceCategory.findOne({ slug, isActive: true });
+    const category = await ServiceCategory.findOne({ slug, isActive: true }).lean();
 
     if (!category) {
       return res.status(404).json({
@@ -238,7 +238,7 @@ export const getChildCategories = async (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
 
-    const parentCategory = await ServiceCategory.findOne({ slug, isActive: true });
+    const parentCategory = await ServiceCategory.findOne({ slug, isActive: true }).lean();
 
     if (!parentCategory) {
       return res.status(404).json({
@@ -250,7 +250,7 @@ export const getChildCategories = async (req: Request, res: Response) => {
     const childCategories = await ServiceCategory.find({
       parentCategory: parentCategory._id,
       isActive: true
-    }).sort({ sortOrder: 1, name: 1 });
+    }).sort({ sortOrder: 1, name: 1 }).lean();
 
     res.status(200).json({
       success: true,

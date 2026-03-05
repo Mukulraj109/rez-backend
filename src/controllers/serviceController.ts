@@ -47,7 +47,7 @@ export const getServices = async (req: Request, res: Response) => {
 
     // Category filter
     if (category) {
-      const serviceCategory = await ServiceCategory.findOne({ slug: category });
+      const serviceCategory = await ServiceCategory.findOne({ slug: category }).lean();
       if (serviceCategory) {
         query.serviceCategory = serviceCategory._id;
       }
@@ -237,7 +237,7 @@ export const getNearbyServices = async (req: Request, res: Response) => {
     }
 
     // Find nearby stores first
-    const nearbyStores = await Store.find(storeQuery).select('_id');
+    const nearbyStores = await Store.find(storeQuery).select('_id').lean();
 
     const storeIds = nearbyStores.map(store => store._id);
 
@@ -251,7 +251,7 @@ export const getNearbyServices = async (req: Request, res: Response) => {
 
     // Category filter
     if (category) {
-      const serviceCategory = await ServiceCategory.findOne({ slug: category });
+      const serviceCategory = await ServiceCategory.findOne({ slug: category }).lean();
       if (serviceCategory) {
         query.serviceCategory = serviceCategory._id;
       }
@@ -349,7 +349,7 @@ export const getRelatedServices = async (req: Request, res: Response) => {
       });
     }
 
-    const service = await Product.findById(id);
+    const service = await Product.findById(id).lean() as any;
 
     if (!service) {
       return res.status(404).json({
@@ -492,7 +492,7 @@ export const searchServices = async (req: Request, res: Response) => {
 
     // Category filter
     if (category) {
-      const serviceCategory = await ServiceCategory.findOne({ slug: category });
+      const serviceCategory = await ServiceCategory.findOne({ slug: category }).lean();
       if (serviceCategory) {
         query.serviceCategory = serviceCategory._id;
       }

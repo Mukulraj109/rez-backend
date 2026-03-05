@@ -14,7 +14,7 @@ export const getStoreMenu = async (req: Request, res: Response) => {
     const { storeId } = req.params;
 
     // Check if store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       return sendError(res, 'Store not found', 404);
     }
@@ -84,7 +84,7 @@ export const createOrUpdateMenu = async (req: Request, res: Response) => {
     }
 
     // Check if store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       return sendError(res, 'Store not found', 404);
     }
@@ -134,7 +134,7 @@ export const addMenuItem = async (req: Request, res: Response) => {
     }
 
     // Get menu
-    const menu = await Menu.findOne({ storeId });
+    const menu = await Menu.findOne({ storeId }).lean();
     if (!menu) {
       return sendError(res, 'Menu not found', 404);
     }
@@ -164,7 +164,7 @@ export const updateMenuItem = async (req: Request, res: Response) => {
     }
 
     // Get menu
-    const menu = await Menu.findOne({ storeId });
+    const menu = await Menu.findOne({ storeId }).lean();
     if (!menu) {
       return sendError(res, 'Menu not found', 404);
     }
@@ -194,7 +194,7 @@ export const deleteMenuItem = async (req: Request, res: Response) => {
     }
 
     // Get menu
-    const menu = await Menu.findOne({ storeId });
+    const menu = await Menu.findOne({ storeId }).lean();
     if (!menu) {
       return sendError(res, 'Menu not found', 404);
     }
@@ -222,7 +222,7 @@ export const getMenuItem = async (req: Request, res: Response) => {
       return sendError(res, 'Store ID and category ID are required', 400);
     }
 
-    const menu = await Menu.findOne({ storeId });
+    const menu = await Menu.findOne({ storeId }).lean();
     if (!menu) {
       return sendError(res, 'Menu not found', 404);
     }
@@ -375,7 +375,7 @@ export const getPreOrder = async (req: Request, res: Response) => {
 
     const preOrder = await PreOrder.findById(preOrderId)
       .populate('storeId', 'name logo location contact')
-      .populate('userId', 'profile.firstName profile.lastName profile.avatar');
+      .populate('userId', 'profile.firstName profile.lastName profile.avatar').lean();
 
     if (!preOrder) {
       return sendError(res, 'Pre-order not found', 404);
@@ -402,7 +402,7 @@ export const cancelPreOrder = async (req: Request, res: Response) => {
     const { preOrderId } = req.params;
     const userId = req.userId;
 
-    const preOrder = await PreOrder.findById(preOrderId);
+    const preOrder = await PreOrder.findById(preOrderId).lean();
     if (!preOrder) {
       return sendError(res, 'Pre-order not found', 404);
     }
@@ -443,7 +443,7 @@ export const searchMenuItems = async (req: Request, res: Response) => {
       searchQuery.storeId = storeId;
     }
 
-    const menus = await Menu.find(searchQuery);
+    const menus = await Menu.find(searchQuery).lean();
 
     // Extract matching items from all menus
     const results: any[] = [];

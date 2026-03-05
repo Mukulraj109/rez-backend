@@ -56,7 +56,7 @@ class CouponService {
       // Find coupon
       const coupon = await Coupon.findOne({
         couponCode: couponCode.toUpperCase(),
-      });
+      }).lean();
 
       if (!coupon) {
         return {
@@ -139,7 +139,7 @@ class CouponService {
         user: cartData.userId,
         coupon: coupon._id,
         status: 'available',
-      });
+      }).lean();
 
       // Check applicability to cart items
       const isApplicable = await this.checkCouponApplicability(coupon, cartData);
@@ -259,7 +259,7 @@ class CouponService {
     // Check user tier
     if (coupon.applicableTo.userTiers.length > 0 &&
         !coupon.applicableTo.userTiers.includes('all')) {
-      const user = await User.findById(cartData.userId).select('tier');
+      const user = await User.findById(cartData.userId).select('tier').lean();
       const userTier = (user as any)?.tier || 'bronze';
 
       if (!coupon.applicableTo.userTiers.includes(userTier)) {
@@ -337,7 +337,7 @@ class CouponService {
   ): Promise<{ success: boolean; userCoupon?: IUserCoupon; message: string }> {
     try {
       // Check if coupon exists and is active
-      const coupon = await Coupon.findById(couponId);
+      const coupon = await Coupon.findById(couponId).lean();
 
       if (!coupon) {
         return {
@@ -432,7 +432,7 @@ class CouponService {
 
       if (!updatedCoupon) {
         // Either coupon not found, expired, inactive, or usage limit reached
-        const existingCoupon = await Coupon.findOne({ couponCode: upperCouponCode });
+        const existingCoupon = await Coupon.findOne({ couponCode: upperCouponCode }).lean();
 
         if (!existingCoupon) {
           console.error('❌ [COUPON SERVICE] Coupon not found:', couponCode);
@@ -535,7 +535,7 @@ class CouponService {
         ...filters,
       })
         .sort({ isFeatured: -1, createdAt: -1 })
-        .limit(20);
+        .limit(20).lean();
     } catch (error) {
       console.error('❌ [COUPON SERVICE] Error searching coupons:', error);
       return [];

@@ -199,7 +199,7 @@ export const getDiscountsForProduct = async (req: Request, res: Response) => {
       const availableDiscounts = [];
 
       for (const discount of discounts) {
-        const discountDoc = await Discount.findById(discount._id);
+        const discountDoc = await Discount.findById(discount._id).lean();
         if (discountDoc) {
           const canUse = await discountDoc.canUserUse(userObjId);
           if (canUse.can) {
@@ -264,7 +264,7 @@ export const validateDiscount = async (req: Request, res: Response) => {
     const discount = await Discount.findOne({
       code: code.toUpperCase(),
       isActive: true
-    });
+    }).lean();
 
     if (!discount) {
       return sendError(res, 'Invalid discount code', 404);
@@ -374,7 +374,7 @@ export const applyDiscount = async (req: Request, res: Response) => {
     }
 
     // Find discount
-    const discount = await Discount.findById(discountId);
+    const discount = await Discount.findById(discountId).lean();
 
     if (!discount) {
       return sendError(res, 'Discount not found', 404);
@@ -732,7 +732,7 @@ export const applyCardOffer = async (req: Request, res: Response) => {
       return sendError(res, 'Discount ID is required', 400);
     }
 
-    const discount = await Discount.findById(discountId);
+    const discount = await Discount.findById(discountId).lean();
     if (!discount) {
       return sendError(res, 'Discount not found', 404);
     }

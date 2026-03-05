@@ -175,15 +175,15 @@ export const sendGift = asyncHandler(async (req: Request, res: Response) => {
   // Find recipient
   let recipient;
   if (recipientId) {
-    recipient = await User.findById(recipientId);
+    recipient = await User.findById(recipientId).lean();
   } else if (recipientPhone) {
-    recipient = await User.findOne({ phoneNumber: recipientPhone });
+    recipient = await User.findOne({ phoneNumber: recipientPhone }).lean();
   }
   if (!recipient) return sendBadRequest(res, 'Recipient not found');
   if (String(recipient._id) === senderId) return sendBadRequest(res, 'Cannot gift to yourself');
 
   // Check sender wallet balance
-  const senderWallet = await Wallet.findOne({ user: senderId });
+  const senderWallet = await Wallet.findOne({ user: senderId }).lean();
   if (!senderWallet) return sendError(res, 'Wallet not found', 404);
   if (senderWallet.isFrozen) return sendBadRequest(res, 'Your wallet is frozen');
 
@@ -435,7 +435,7 @@ export const claimGift = asyncHandler(async (req: Request, res: Response) => {
 
   if (!gift) {
     // Check if it was expired vs already claimed vs not found
-    const existing = await CoinGift.findOne({ _id: id, recipient: userId });
+    const existing = await CoinGift.findOne({ _id: id, recipient: userId }).lean();
     if (!existing) return sendBadRequest(res, 'Gift not found');
     if (existing.status === 'claimed') return sendBadRequest(res, 'Gift already claimed');
     if (existing.expiresAt < new Date()) {
@@ -449,7 +449,7 @@ export const claimGift = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Credit recipient wallet atomically — capture result for accurate audit log
-  const recipientWallet = await Wallet.findOne({ user: userId });
+  const recipientWallet = await Wallet.findOne({ user: userId }).lean();
   if (!recipientWallet) return sendError(res, 'Wallet not found', 404);
 
   const creditResult = await Wallet.findOneAndUpdate(

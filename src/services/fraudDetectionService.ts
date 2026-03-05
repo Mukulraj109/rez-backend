@@ -82,7 +82,7 @@ class FraudDetectionService {
         },
         verificationStatus: { $in: ['pending', 'processing', 'approved'] },
         isActive: true,
-      });
+      }).lean();
 
       if (duplicate) {
         result.flags.push('DUPLICATE_BILL');
@@ -97,7 +97,7 @@ class FraudDetectionService {
           billNumber: billData.billNumber,
           verificationStatus: { $in: ['pending', 'processing', 'approved'] },
           isActive: true,
-        });
+        }).lean();
 
         if (sameBillNumber) {
           result.flags.push('DUPLICATE_BILL_NUMBER');
@@ -125,7 +125,7 @@ class FraudDetectionService {
         'billImage.imageHash': billData.imageHash,
         verificationStatus: { $in: ['pending', 'processing', 'approved'] },
         isActive: true,
-      });
+      }).lean();
 
       if (sameImage) {
         result.flags.push('DUPLICATE_IMAGE');
@@ -205,7 +205,7 @@ class FraudDetectionService {
         user: billData.userId,
         verificationStatus: 'approved',
         isActive: true,
-      }).limit(10).sort({ createdAt: -1 });
+      }).limit(10).sort({ createdAt: -1 }).lean();
 
       if (userBills.length >= 3) {
         const avgAmount = userBills.reduce((sum, bill) => sum + bill.amount, 0) / userBills.length;
@@ -272,7 +272,7 @@ class FraudDetectionService {
         user: billData.userId,
         createdAt: { $gte: oneHourAgo },
         isActive: true,
-      }).distinct('merchant');
+      }).distinct('merchant').lean();
 
       // If user is uploading bills from 5+ different merchants in 1 hour, suspicious
       if (recentBills.length >= 5) {
@@ -307,7 +307,7 @@ class FraudDetectionService {
         user: { $ne: excludeUserId },
         verificationStatus: { $in: ['pending', 'processing', 'approved'] },
         isActive: true,
-      });
+      }).lean();
 
       return !!duplicate;
     } catch (error) {
@@ -329,7 +329,7 @@ class FraudDetectionService {
       const userBills = await Bill.find({
         user: userId,
         isActive: true,
-      }).sort({ createdAt: -1 }).limit(50);
+      }).sort({ createdAt: -1 }).limit(50).lean();
 
       const flaggedBills = userBills.filter(bill => (bill.metadata.fraudScore || 0) > 50);
       const rejectedBills = userBills.filter(bill => bill.verificationStatus === 'rejected');

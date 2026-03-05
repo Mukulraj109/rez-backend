@@ -39,7 +39,7 @@ export const generateStoreQR = async (req: Request, res: Response) => {
     const store = await Store.findOne({
       _id: storeId,
       merchantId: merchantId,
-    });
+    }).lean();
 
     if (!store) {
       return res.status(404).json({
@@ -92,7 +92,7 @@ export const regenerateQR = async (req: Request, res: Response) => {
     const store = await Store.findOne({
       _id: storeId,
       merchantId: merchantId,
-    });
+    }).lean();
 
     if (!store) {
       return res.status(404).json({
@@ -131,7 +131,7 @@ export const getStoreQRDetails = async (req: Request, res: Response) => {
     const store = await Store.findOne({
       _id: storeId,
       merchantId: merchantId,
-    }).select('storeQR name');
+    }).select('storeQR name').lean();
 
     if (!store) {
       return res.status(404).json({
@@ -172,7 +172,7 @@ export const toggleQRStatus = async (req: Request, res: Response) => {
     const store = await Store.findOne({
       _id: storeId,
       merchantId: merchantId,
-    });
+    }).lean();
 
     if (!store) {
       return res.status(404).json({
@@ -272,7 +272,7 @@ export const getPaymentSettings = async (req: Request, res: Response) => {
     const store = await Store.findOne({
       _id: storeId,
       merchantId: merchantId,
-    }).select('paymentSettings rewardRules name');
+    }).select('paymentSettings rewardRules name').lean();
 
     if (!store) {
       return res.status(404).json({
@@ -337,7 +337,7 @@ export const updatePaymentSettings = async (req: Request, res: Response) => {
     const store = await Store.findOne({
       _id: storeId,
       merchantId: merchantId,
-    });
+    }).lean();
 
     if (!store) {
       return res.status(404).json({
@@ -422,7 +422,7 @@ export const getStorePaymentOffers = async (req: Request, res: Response) => {
     // Get store with payment settings
     const store = await Store.findById(storeId)
       .select('paymentSettings rewardRules offers name')
-      .populate('offers.discounts');
+      .populate('offers.discounts').lean();
 
     if (!store) {
       return res.status(404).json({
@@ -490,7 +490,7 @@ export const getStorePaymentOffers = async (req: Request, res: Response) => {
           { scope: 'merchant', merchantId: store.merchantId },
         ],
         minOrderValue: { $lte: billAmount || 0 },
-      }).sort({ priority: -1 }).limit(5);
+      }).sort({ priority: -1 }).limit(5).lean();
 
       for (const discount of cardDiscounts) {
         const calculatedDiscount = discount.calculateDiscount(billAmount || 0);
@@ -524,7 +524,7 @@ export const getStorePaymentOffers = async (req: Request, res: Response) => {
         scope: 'global',
         applicableOn: { $in: ['bill_payment', 'all'] },
         minOrderValue: { $lte: billAmount || 0 },
-      }).sort({ priority: -1 }).limit(3);
+      }).sort({ priority: -1 }).limit(3).lean();
 
       for (const discount of platformDiscounts) {
         // Skip if already added to bank offers
@@ -622,7 +622,7 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
     }
 
     // Get store
-    const store = await Store.findById(storeId).select('paymentSettings rewardRules name isActive');
+    const store = await Store.findById(storeId).select('paymentSettings rewardRules name isActive').lean();
 
     if (!store || !store.isActive) {
       return res.status(404).json({
@@ -690,7 +690,7 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
 
       // Validate user has enough coins
       if (coinRedemptionAmount > 0) {
-        const wallet = await Wallet.findOne({ user: userId });
+        const wallet = await Wallet.findOne({ user: userId }).lean();
         if (!wallet) {
           return res.status(400).json({
             success: false,
@@ -968,7 +968,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
       if (storePayment.coinRedemption.totalAmount > 0) {
         console.log('💰 [STORE PAYMENT] Deducting coins:', storePayment.coinRedemption);
 
-        const wallet = await Wallet.findOne({ user: storePayment.userId }).session(session);
+        const wallet = await Wallet.findOne({ user: storePayment.userId }).session(session).lean();
 
         if (!wallet) {
           throw new Error('Wallet not found for coin deduction');
@@ -999,7 +999,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
                 // Also update UserLoyalty.categoryCoins to keep in sync
                 try {
                   const UserLoyalty = require('../models/UserLoyalty').default || require('../models/UserLoyalty').UserLoyalty;
-                  const loyalty = await UserLoyalty.findOne({ userId: userId.toString() }).session(session);
+                  const loyalty = await UserLoyalty.findOne({ userId: userId.toString() }).session(session).lean();
                   if (loyalty && loyalty.categoryCoins) {
                     const catCoins = loyalty.categoryCoins.get(paymentCategorySlug);
                     if (catCoins) {
@@ -1054,7 +1054,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
         // Deduct Branded Coins (merchant-specific) - CRITICAL FIX
         if (brandedCoinsToDeduct > 0) {
           // Find the merchant's branded coin entry
-          const store = await Store.findById(storePayment.storeId).select('merchantId').session(session);
+          const store = await Store.findById(storePayment.storeId).select('merchantId').session(session).lean();
           const storeMerchantId = store?.merchantId?.toString() || storePayment.storeId.toString();
 
           const merchantCoinIndex = wallet.brandedCoins?.findIndex(
@@ -1171,7 +1171,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
       }
 
       // Calculate rewards
-      const store = await Store.findById(storePayment.storeId).select('rewardRules merchantId').session(session);
+      const store = await Store.findById(storePayment.storeId).select('rewardRules merchantId').session(session).lean();
       const rewardRules = store?.rewardRules;
 
       // Get user's actual visit count at this store
@@ -1635,7 +1635,7 @@ export const getCoinsForStore = async (req: Request, res: Response) => {
     }
 
     // Get user's wallet
-    const wallet = await Wallet.findOne({ user: userId });
+    const wallet = await Wallet.findOne({ user: userId }).lean();
 
     if (!wallet) {
       return res.status(200).json({
@@ -1978,7 +1978,7 @@ export const autoOptimizeCoins = async (req: Request, res: Response) => {
     const maxCoinsAllowed = Math.floor((billAmount * maxCoinPercent) / 100);
 
     // Get user's wallet
-    const wallet = await Wallet.findOne({ user: userId });
+    const wallet = await Wallet.findOne({ user: userId }).lean();
     
     if (!wallet) {
       return res.status(200).json({

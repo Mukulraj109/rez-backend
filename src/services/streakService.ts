@@ -29,7 +29,7 @@ class StreakService {
     userId: string,
     type: 'login' | 'order' | 'review'
   ): Promise<IUserStreak> {
-    let streak = await UserStreak.findOne({ user: userId, type });
+    let streak = await UserStreak.findOne({ user: userId, type }).lean();
 
     if (!streak) {
       streak = await UserStreak.create({
@@ -44,10 +44,10 @@ class StreakService {
           day: m.day,
           rewardsClaimed: false
         }))
-      });
+      }) as any;
     }
 
-    return streak;
+    return streak as any;
   }
 
   // Update streak (call this when user performs action)
@@ -193,7 +193,7 @@ class StreakService {
 
   // Get streak statistics
   async getStreakStats(userId: string): Promise<any> {
-    const streaks = await UserStreak.find({ user: userId });
+    const streaks = await UserStreak.find({ user: userId }).lean();
 
     const stats = {
       totalStreaks: 0,
@@ -237,7 +237,7 @@ class StreakService {
     const streaks = await UserStreak.find({
       currentStreak: { $gt: 0 },
       lastActivityDate: { $lt: yesterday }
-    });
+    }).lean();
 
     for (const streak of streaks) {
       // Check if frozen

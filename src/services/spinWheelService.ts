@@ -74,7 +74,7 @@ export async function checkEligibility(userId: string): Promise<{
     gameType: 'spin_wheel',
     status: 'completed',
     completedAt: { $gte: today }
-  }).select('reward');
+  }).select('reward').lean();
 
   let totalCoinsEarned = 0;
   todaySessions.forEach(s => {
@@ -86,7 +86,7 @@ export async function checkEligibility(userId: string): Promise<{
     user: userId,
     gameType: 'spin_wheel',
     status: 'completed'
-  }).sort({ completedAt: -1 }).select('completedAt');
+  }).sort({ completedAt: -1 }).select('completedAt').lean();
 
   // Next reset at midnight UTC
   const tomorrow = new Date();
@@ -279,7 +279,7 @@ export async function awardSpinPrize(userId: string, prize: SpinResult): Promise
       console.log(`💰 [SPIN_WHEEL] Added ${prize.value} coins to wallet atomically. New balance: ${updated.balance.total}`);
     } else {
       // Wallet might not exist or no rez coin entry — try creating
-      const wallet = await Wallet.findOne({ user: userId });
+      const wallet = await Wallet.findOne({ user: userId }).lean();
       if (!wallet) {
         const newWallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
         if (newWallet) {
@@ -637,7 +637,8 @@ export async function getSpinHistory(userId: string, limit: number = 10, page: n
     })
       .sort({ completedAt: -1 })
       .skip(skip)
-      .limit(limit),
+      .limit(limit)
+      .lean(),
     MiniGame.countDocuments({
       user: userId,
       gameType: 'spin_wheel',
@@ -645,7 +646,7 @@ export async function getSpinHistory(userId: string, limit: number = 10, page: n
     })
   ]);
 
-  const history = sessions.map(s => ({
+  const history = sessions.map((s: any) => ({
     id: s._id,
     completedAt: s.completedAt,
     prize: s.metadata?.prize,
@@ -679,13 +680,13 @@ export async function getSpinStats(userId: string): Promise<any> {
       user: userId,
       gameType: 'spin_wheel',
       status: 'completed'
-    }).select('reward'),
+    }).select('reward').lean(),
     MiniGame.find({
       user: userId,
       gameType: 'spin_wheel',
       status: 'completed',
       completedAt: { $gte: today }
-    }).select('reward'),
+    }).select('reward').lean(),
   ]);
 
   let totalCoinsWon = 0;
@@ -693,7 +694,7 @@ export async function getSpinStats(userId: string): Promise<any> {
   let totalDiscountsWon = 0;
   let totalVouchersWon = 0;
 
-  allSessions.forEach(session => {
+  allSessions.forEach((session: any) => {
     if (session.reward?.coins) totalCoinsWon += session.reward.coins;
     if (session.reward?.cashback) totalCashbackWon += session.reward.cashback;
     if (session.reward?.discount) totalDiscountsWon += session.reward.discount;
@@ -701,7 +702,7 @@ export async function getSpinStats(userId: string): Promise<any> {
   });
 
   let todayCoinsWon = 0;
-  todaySessions.forEach(session => {
+  todaySessions.forEach((session: any) => {
     if (session.reward?.coins) todayCoinsWon += session.reward.coins;
   });
 

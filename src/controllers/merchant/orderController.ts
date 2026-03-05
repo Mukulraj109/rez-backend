@@ -87,7 +87,7 @@ async function sendOrderStatusNotification(order: any, action: string): Promise<
     // Populate user if needed
     let user = order.user;
     if (typeof user === 'string' || user instanceof mongoose.Types.ObjectId) {
-      user = await User.findById(user);
+      user = await User.findById(user).lean();
     }
     
     if (!user) {
@@ -814,7 +814,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
     // Find order
     const order = await Order.findById(orderId)
       .populate('user', 'profile.firstName profile.lastName profile.email phoneNumber')
-      .session(session);
+      .session(session).lean();
 
     if (!order) {
       await session.abortTransaction();
@@ -1198,7 +1198,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
         // Populate user data if not already populated
         let user = order.user as any;
         if (typeof user === 'string' || user instanceof mongoose.Types.ObjectId) {
-          user = await User.findById(user);
+          user = await User.findById(user).lean();
         }
 
         const userPhone = user?.profile?.phoneNumber || user?.phoneNumber || user?.phone;
@@ -1318,7 +1318,7 @@ export const updateMerchantOrderStatus = asyncHandler(async (req: Request, res: 
     const order = await Order.findOne({
       _id: new Types.ObjectId(id),
       'items.store': { $in: merchantStores.map(s => s._id) }
-    }).session(session);
+    }).session(session).lean();
 
     if (!order) {
       await session.abortTransaction();
@@ -1387,7 +1387,7 @@ export const updateMerchantOrderStatus = asyncHandler(async (req: Request, res: 
       const populatedOrder = await Order.findById(order._id)
         .populate('items.product', 'name images')
         .populate('items.store', 'name logo')
-        .populate('user', 'profile.firstName profile.lastName');
+        .populate('user', 'profile.firstName profile.lastName').lean();
 
       if (populatedOrder) {
         const userIdObj = typeof populatedOrder.user === 'object'
@@ -1420,7 +1420,7 @@ export const updateMerchantOrderStatus = asyncHandler(async (req: Request, res: 
               ? (firstItem.store as any)._id
               : firstItem.store;
 
-            const store = await Store.findById(storeId);
+            const store = await Store.findById(storeId).lean();
             if (store && store.merchantId) {
               const grossAmount = populatedOrder.totals.subtotal || 0;
               const platformFee = populatedOrder.totals.platformFee || 0;

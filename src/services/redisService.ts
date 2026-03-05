@@ -133,6 +133,15 @@ class RedisService {
   }
 
   /**
+   * Get the underlying Redis client for shared use by other services.
+   * Avoids creating multiple Redis connections.
+   */
+  public getClient(): RedisClientType | null {
+    if (!this.isReady()) return null;
+    return this.client;
+  }
+
+  /**
    * Get a value from cache
    * @param key - Cache key
    * @returns Cached value or null
@@ -587,6 +596,7 @@ export const {
   connect,
   disconnect,
   isReady,
+  getClient,
   get,
   set,
   del,

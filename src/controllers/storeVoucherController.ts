@@ -45,7 +45,7 @@ export const getStoreVouchers = async (req: Request, res: Response) => {
       const vouchersWithEligibility = [];
 
       for (const voucher of vouchers) {
-        const voucherDoc = await StoreVoucher.findById(voucher._id);
+        const voucherDoc = await StoreVoucher.findById(voucher._id).lean();
         if (voucherDoc) {
           const canRedeem = await voucherDoc.canUserRedeem(userObjId);
 
@@ -53,7 +53,7 @@ export const getStoreVouchers = async (req: Request, res: Response) => {
           const userVoucher = await UserStoreVoucher.findOne({
             user: userObjId,
             voucher: voucher._id,
-          });
+          }).lean();
 
           vouchersWithEligibility.push({
             ...voucher,
@@ -102,7 +102,7 @@ export const getStoreVoucherById = async (req: Request, res: Response) => {
     // If user is authenticated, check eligibility
     if (userId) {
       const userObjId = new mongoose.Types.ObjectId(userId);
-      const voucherDoc = await StoreVoucher.findById(id);
+      const voucherDoc = await StoreVoucher.findById(id).lean();
 
       if (voucherDoc) {
         const canRedeem = await voucherDoc.canUserRedeem(userObjId);
@@ -110,7 +110,7 @@ export const getStoreVoucherById = async (req: Request, res: Response) => {
         const userVoucher = await UserStoreVoucher.findOne({
           user: userObjId,
           voucher: id,
-        });
+        }).lean();
 
         return sendSuccess(
           res,
@@ -143,7 +143,7 @@ export const claimStoreVoucher = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     // Find voucher
-    const voucher = await StoreVoucher.findById(id);
+    const voucher = await StoreVoucher.findById(id).lean();
 
     if (!voucher) {
       return sendError(res, 'Store voucher not found', 404);
@@ -161,7 +161,7 @@ export const claimStoreVoucher = async (req: Request, res: Response) => {
     const existingUserVoucher = await UserStoreVoucher.findOne({
       user: userId,
       voucher: id,
-    });
+    }).lean();
 
     if (existingUserVoucher) {
       return sendError(res, 'You have already claimed this voucher', 400);
@@ -215,7 +215,7 @@ export const redeemStoreVoucher = async (req: Request, res: Response) => {
     const userVoucher = await UserStoreVoucher.findOne({
       _id: id,
       user: userId,
-    }).populate('voucher');
+    }).populate('voucher').lean();
 
     if (!userVoucher) {
       return sendError(res, 'Voucher not found or not assigned to you', 404);
@@ -225,7 +225,7 @@ export const redeemStoreVoucher = async (req: Request, res: Response) => {
       return sendError(res, 'This voucher has already been used or expired', 400);
     }
 
-    const voucher = await StoreVoucher.findById(userVoucher.voucher);
+    const voucher = await StoreVoucher.findById(userVoucher.voucher).lean();
 
     if (!voucher) {
       return sendError(res, 'Voucher details not found', 404);
@@ -295,7 +295,7 @@ export const validateStoreVoucher = async (req: Request, res: Response) => {
       code: code.toUpperCase(),
       store: storeId,
       isActive: true,
-    });
+    }).lean();
 
     if (!voucher) {
       return sendError(res, 'Invalid voucher code', 404);

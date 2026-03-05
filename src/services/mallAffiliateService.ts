@@ -65,7 +65,7 @@ class MallAffiliateService {
   async trackClick(data: TrackClickData): Promise<TrackClickResult> {
     try {
       // Find the brand
-      const brand = await MallBrand.findById(data.brandId);
+      const brand = await MallBrand.findById(data.brandId).lean();
       if (!brand) {
         throw new Error('Brand not found');
       }
@@ -96,7 +96,7 @@ class MallAffiliateService {
         dedupQuery.user = new Types.ObjectId(data.userId);
       }
       const recentClick = await MallAffiliateClick.findOne(dedupQuery)
-        .sort({ clickedAt: -1 });
+        .sort({ clickedAt: -1 }).lean();
 
       if (recentClick) {
         // Return existing click instead of creating duplicate
@@ -184,7 +184,7 @@ class MallAffiliateService {
         clickId: data.clickId,
         status: 'clicked',
         expiresAt: { $gt: new Date() },
-      }).populate('brand');
+      }).populate('brand').lean();
 
       if (!click) {
         throw new Error('Invalid or expired click ID');
@@ -202,7 +202,7 @@ class MallAffiliateService {
       const existingPurchase = await MallPurchase.findOne({
         externalOrderId: data.externalOrderId,
         brand: click.brand,
-      });
+      }).lean();
 
       if (existingPurchase) {
         console.log(`⚠️ [AFFILIATE] Duplicate order: ${data.externalOrderId}`);
@@ -321,7 +321,7 @@ class MallAffiliateService {
           const existingDup = await MallPurchase.findOne({
             externalOrderId: data.externalOrderId,
             brand: click.brand,
-          });
+          }).lean();
           if (existingDup) {
             console.log(`⚠️ [AFFILIATE] Duplicate order (concurrent): ${data.externalOrderId}`);
             return existingDup;
@@ -344,7 +344,7 @@ class MallAffiliateService {
    */
   async confirmPurchase(purchaseId: string, reason?: string): Promise<IMallPurchase> {
     try {
-      const purchase = await MallPurchase.findOne({ purchaseId });
+      const purchase = await MallPurchase.findOne({ purchaseId }).lean();
       if (!purchase) {
         throw new Error('Purchase not found');
       }
@@ -376,7 +376,7 @@ class MallAffiliateService {
    */
   async rejectPurchase(purchaseId: string, reason: string): Promise<IMallPurchase> {
     try {
-      const purchase = await MallPurchase.findOne({ purchaseId });
+      const purchase = await MallPurchase.findOne({ purchaseId }).lean();
       if (!purchase) {
         throw new Error('Purchase not found');
       }
@@ -422,7 +422,7 @@ class MallAffiliateService {
     refundAmount?: number  // Optional: for partial refunds (deduct proportional cashback)
   ): Promise<IMallPurchase> {
     try {
-      const purchase = await MallPurchase.findOne({ purchaseId });
+      const purchase = await MallPurchase.findOne({ purchaseId }).lean();
       if (!purchase) {
         throw new Error('Purchase not found');
       }
@@ -448,7 +448,7 @@ class MallAffiliateService {
 
         try {
           // Deduct from wallet — MUST succeed for refund to complete
-          const wallet = await Wallet.findOne({ user: purchase.user }).session(session);
+          const wallet = await Wallet.findOne({ user: purchase.user }).session(session).lean();
           if (!wallet || !wallet.isActive) {
             throw new Error(`Wallet not found or inactive for user ${purchase.user} — cannot process refund deduction. Manual admin review required.`);
           }
@@ -651,7 +651,7 @@ class MallAffiliateService {
 
     try {
       // Re-fetch inside transaction for consistency
-      const freshPurchase = await MallPurchase.findById(purchase._id).session(session);
+      const freshPurchase = await MallPurchase.findById(purchase._id).session(session).lean();
       if (!freshPurchase) {
         await session.abortTransaction();
         session.endSession();
@@ -659,7 +659,7 @@ class MallAffiliateService {
       }
 
       // Get brand info
-      const brand = await MallBrand.findById(purchase.brand).session(session);
+      const brand = await MallBrand.findById(purchase.brand).session(session).lean();
 
       // Create UserCashback entry (isRedeemed: false — redeemed means user SPENT it, not received it)
       const [cashback] = await UserCashback.create([{
@@ -682,7 +682,7 @@ class MallAffiliateService {
       }], { session });
 
       // Credit to wallet (addFunds logic with session support)
-      const wallet = await Wallet.findOne({ user: purchase.user }).session(session);
+      const wallet = await Wallet.findOne({ user: purchase.user }).session(session).lean();
       if (!wallet) {
         throw new Error(`Wallet not found for user ${purchase.user}`);
       }
@@ -902,7 +902,7 @@ class MallAffiliateService {
     error?: string;
   }> {
     const click = await MallAffiliateClick.findOne({ clickId })
-      .populate('brand', 'name slug cashback isActive');
+      .populate('brand', 'name slug cashback isActive').lean();
 
     if (!click) {
       return { valid: false, error: 'Click not found' };

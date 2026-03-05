@@ -13,6 +13,7 @@ import cashbackService from '../../services/cashbackService';
 import userProductService from '../../services/userProductService';
 import achievementService from '../../services/achievementService';
 import { calculatePromoCoinsEarned, calculatePromoCoinsWithTierBonus } from '../../config/promoCoins.config';
+import { escapeRegex } from '../../utils/sanitize';
 import merchantWalletService from '../../services/merchantWalletService';
 import orderSocketService from '../../services/orderSocketService';
 import { Store } from '../../models/Store';
@@ -71,7 +72,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Search by order number
     if (req.query.search) {
-      filter.orderNumber = { $regex: req.query.search, $options: 'i' };
+      filter.orderNumber = { $regex: escapeRegex(req.query.search as string), $options: 'i' };
     }
 
     // Fulfillment type filter

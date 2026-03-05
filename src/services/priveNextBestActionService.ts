@@ -50,7 +50,7 @@ const ACTION_TEMPLATES: Array<{
 class PriveNextBestActionService {
   async getNextActions(userId: string): Promise<NextActionsResponse> {
     const userObjectId = new Types.ObjectId(userId);
-    const reputation = await UserReputation.findOne({ userId: userObjectId });
+    const reputation = await UserReputation.findOne({ userId: userObjectId }).lean();
 
     if (!reputation) {
       return this.getDefaultResponse();

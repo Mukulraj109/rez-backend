@@ -4,6 +4,7 @@ import { Wallet } from '../../models/Wallet';
 import { User } from '../../models/User';
 import { TransactionAuditLog, logTransaction } from '../../models/TransactionAuditLog';
 import mongoose from 'mongoose';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -23,11 +24,12 @@ router.get('/', async (req: Request, res: Response) => {
 
     let userQuery: any = {};
     if (search) {
+      const escapedSearch = escapeRegex(search as string);
       userQuery = {
         $or: [
-          { phoneNumber: { $regex: search, $options: 'i' } },
-          { fullName: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } },
+          { phoneNumber: { $regex: escapedSearch, $options: 'i' } },
+          { fullName: { $regex: escapedSearch, $options: 'i' } },
+          { email: { $regex: escapedSearch, $options: 'i' } },
         ]
       };
     }

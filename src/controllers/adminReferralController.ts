@@ -37,15 +37,16 @@ export const getReferrals = asyncHandler(async (req: Request, res: Response) => 
   if (tier) filter.tier = tier;
   if (fraudOnly === 'true') filter['metadata.fraudFlag'] = true;
 
-  const referrals = await Referral.find(filter)
-    .populate('referrer', 'phoneNumber profile.firstName referral.referralCode')
-    .populate('referee', 'phoneNumber profile.firstName')
-    .sort({ [sortBy as string]: sortOrder === 'asc' ? 1 : -1 })
-    .skip(skip)
-    .limit(limitNum)
-    .lean();
-
-  const total = await Referral.countDocuments(filter);
+  const [referrals, total] = await Promise.all([
+    Referral.find(filter)
+      .populate('referrer', 'phoneNumber profile.firstName referral.referralCode')
+      .populate('referee', 'phoneNumber profile.firstName')
+      .sort({ [sortBy as string]: sortOrder === 'asc' ? 1 : -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean(),
+    Referral.countDocuments(filter),
+  ]);
 
   sendSuccess(res, {
     referrals,
@@ -106,7 +107,7 @@ export const getFraudDashboard = asyncHandler(async (req: Request, res: Response
 export const approveReferral = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  const referral = await Referral.findById(id);
+  const referral = await Referral.findById(id).lean();
   if (!referral) return sendNotFound(res, 'Referral not found');
 
   // Clear fraud flags (metadata is Mixed/flexible on the Mongoose schema)
@@ -133,7 +134,7 @@ export const rejectReferral = asyncHandler(async (req: Request, res: Response) =
 
   if (!reason) return sendBadRequest(res, 'Rejection reason is required');
 
-  const referral = await Referral.findById(id);
+  const referral = await Referral.findById(id).lean();
   if (!referral) return sendNotFound(res, 'Referral not found');
 
   await fraudDetection.markAsFraud(id, reason);

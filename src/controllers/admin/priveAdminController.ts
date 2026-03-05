@@ -288,7 +288,7 @@ export const invalidateVoucher = async (req: Request, res: Response) => {
     const { reason } = req.body;
     const adminId = (req as any).userId || 'unknown';
 
-    const voucher = await PriveVoucher.findById(req.params.id);
+    const voucher = await PriveVoucher.findById(req.params.id).lean();
     if (!voucher) {
       return sendError(res, 'Voucher not found', 404);
     }
@@ -368,7 +368,7 @@ export const extendVoucher = async (req: Request, res: Response) => {
       return sendError(res, 'Provide either newExpiresAt (date) or extendDays (number)', 400);
     }
 
-    const voucher = await PriveVoucher.findById(req.params.id);
+    const voucher = await PriveVoucher.findById(req.params.id).lean();
     if (!voucher) {
       return sendError(res, 'Voucher not found', 404);
     }
@@ -593,7 +593,7 @@ export const overrideUserReputation = async (req: Request, res: Response) => {
     // Find or create reputation
     let reputation = await UserReputation.findOne({
       userId: new Types.ObjectId(req.params.userId),
-    });
+    }) as any;
 
     if (!reputation) {
       reputation = new UserReputation({

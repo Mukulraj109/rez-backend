@@ -8,6 +8,7 @@ import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { FAQ } from '../../models/FAQ';
 import { sendSuccess, sendError, sendPaginated, sendCreated, sendNotFound, sendBadRequest } from '../../utils/response';
 import { Types } from 'mongoose';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -42,7 +43,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     // Search by question/answer text
     if (req.query.search) {
-      const search = (req.query.search as string).trim();
+      const search = escapeRegex((req.query.search as string).trim());
       filter.$or = [
         { question: { $regex: search, $options: 'i' } },
         { answer: { $regex: search, $options: 'i' } },

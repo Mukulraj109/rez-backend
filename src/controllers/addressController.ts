@@ -10,7 +10,7 @@ export const getUserAddresses = asyncHandler(async (req: Request, res: Response)
     throw new AppError('Authentication required', 401);
   }
 
-  const addresses = await Address.find({ user: req.user._id }).sort({ isDefault: -1, createdAt: -1 });
+  const addresses = await Address.find({ user: req.user._id }).sort({ isDefault: -1, createdAt: -1 }).limit(50).lean();
 
   sendSuccess(res, addresses, 'Addresses retrieved successfully');
 });
@@ -23,7 +23,7 @@ export const getAddressById = asyncHandler(async (req: Request, res: Response) =
 
   const { id } = req.params;
 
-  const address = await Address.findOne({ _id: id, user: req.user._id });
+  const address = await Address.findOne({ _id: id, user: req.user._id }).lean();
 
   if (!address) {
     return sendNotFound(res, 'Address not found');

@@ -77,7 +77,7 @@ export const getFeaturedTravelServices = asyncHandler(async (req: Request, res: 
     const travelCategories = await ServiceCategory.find({
       slug: { $in: travelCategorySlugs },
       isActive: true
-    }).select('_id');
+    }).select('_id').lean();
 
     if (travelCategories.length === 0) {
       return sendSuccess(res, [], 'No travel services found');
@@ -139,7 +139,7 @@ export const getTravelServicesByCategory = asyncHandler(async (req: Request, res
       : undefined;
 
     // Find category
-    const category = await ServiceCategory.findOne({ slug, isActive: true });
+    const category = await ServiceCategory.findOne({ slug, isActive: true }).lean();
     if (!category) {
       return sendNotFound(res, 'Category not found');
     }
@@ -243,7 +243,7 @@ export const getTravelServicesStats = asyncHandler(async (req: Request, res: Res
     const travelCategories = await ServiceCategory.find({
       slug: { $in: travelCategorySlugs },
       isActive: true
-    }).select('_id cashbackPercentage');
+    }).select('_id cashbackPercentage').lean();
 
     // Configurable coin multiplier — can be overridden via environment variable
     const coinMultiplier = Number(process.env.TRAVEL_COIN_MULTIPLIER) || 2;
@@ -271,7 +271,7 @@ export const getTravelServicesStats = asyncHandler(async (req: Request, res: Res
       const cat = travelCategories.find(tc => tc._id.toString() === c._id.toString());
       return cat;
     });
-    const hotelsCategoryId = await ServiceCategory.findOne({ slug: 'hotels' }).select('_id');
+    const hotelsCategoryId = await ServiceCategory.findOne({ slug: 'hotels' }).select('_id').lean();
     const hotelCount = hotelsCategoryId ? await Product.countDocuments({
       productType: 'service',
       isActive: true,
@@ -316,7 +316,7 @@ export const getPopularTravelServices = asyncHandler(async (req: Request, res: R
     const travelCategories = await ServiceCategory.find({
       slug: { $in: travelCategorySlugs },
       isActive: true
-    }).select('_id');
+    }).select('_id').lean();
 
     if (travelCategories.length === 0) {
       return sendSuccess(res, [], 'No travel services found');

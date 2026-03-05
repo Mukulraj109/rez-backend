@@ -67,7 +67,7 @@ export class ReferralTierService {
    * Check if user qualified for tier upgrade
    */
   async checkTierUpgrade(userId: string | Types.ObjectId) {
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).lean();
     if (!user) throw new Error('User not found');
 
     const currentStoredTier = user.referralTier || 'STARTER';
@@ -94,7 +94,7 @@ export class ReferralTierService {
    * Award tier upgrade rewards
    */
   async awardTierRewards(userId: string | Types.ObjectId, newTier: string) {
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).lean();
     if (!user) throw new Error('User not found');
 
     const tierData = REFERRAL_TIERS[newTier];
@@ -214,7 +214,7 @@ export class ReferralTierService {
         referrer: userId,
         status: ReferralStatus.PENDING
       }),
-      Referral.find({ referrer: userId })
+      Referral.find({ referrer: userId }).lean()
     ]);
 
     // Calculate lifetime earnings

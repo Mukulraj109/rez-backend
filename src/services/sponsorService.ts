@@ -2,6 +2,7 @@ import Sponsor, { ISponsor } from '../models/Sponsor';
 import Program from '../models/Program';
 import SocialImpactEnrollment from '../models/SocialImpactEnrollment';
 import mongoose from 'mongoose';
+import { escapeRegex } from '../utils/sanitize';
 
 interface CreateSponsorData {
   name: string;
@@ -49,7 +50,7 @@ class SponsorService {
   // Create a new sponsor
   async createSponsor(data: CreateSponsorData): Promise<ISponsor> {
     // Check if sponsor with same name exists
-    const existing = await Sponsor.findOne({ name: data.name });
+    const existing = await Sponsor.findOne({ name: data.name }).lean();
     if (existing) {
       throw new Error('Sponsor with this name already exists');
     }
@@ -75,7 +76,7 @@ class SponsorService {
       const existing = await Sponsor.findOne({
         name: data.name,
         _id: { $ne: sponsorId }
-      });
+      }).lean();
       if (existing) {
         throw new Error('Sponsor with this name already exists');
       }
@@ -92,12 +93,12 @@ class SponsorService {
 
   // Get sponsor by ID
   async getSponsorById(sponsorId: string): Promise<ISponsor | null> {
-    return Sponsor.findById(sponsorId);
+    return Sponsor.findById(sponsorId).lean();
   }
 
   // Get sponsor by slug
   async getSponsorBySlug(slug: string): Promise<ISponsor | null> {
-    return Sponsor.findOne({ slug });
+    return Sponsor.findOne({ slug }).lean();
   }
 
   // List all sponsors with filters
@@ -119,9 +120,10 @@ class SponsorService {
     }
 
     if (search) {
+      const escaped = escapeRegex(search);
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { name: { $regex: escaped, $options: 'i' } },
+        { description: { $regex: escaped, $options: 'i' } }
       ];
     }
 
@@ -132,7 +134,7 @@ class SponsorService {
       .sort({ name: 1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .exec();
+      .lean().exec();
 
     return { sponsors, total, page, totalPages };
   }
@@ -163,7 +165,7 @@ class SponsorService {
     })
       .select('name description eventType eventDate eventStatus capacity rewards impact image')
       .sort({ eventDate: -1 })
-      .exec();
+      .lean().exec();
 
     return events;
   }
@@ -171,7 +173,7 @@ class SponsorService {
   // Get sponsor analytics
   async getSponsorAnalytics(sponsorId: string): Promise<any> {
     // Verify sponsor exists
-    const sponsor = await Sponsor.findById(sponsorId);
+    const sponsor = await Sponsor.findById(sponsorId).lean();
     if (!sponsor) {
       throw new Error('Sponsor not found');
     }
@@ -180,9 +182,9 @@ class SponsorService {
     const events = await Program.find({
       type: 'social_impact',
       sponsor: sponsorId
-    }).exec();
+    }).lean().exec();
 
-    const eventIds = events.map(e => e._id);
+    const eventIds = events.map((e: any) => e._id);
 
     // Get enrollment stats
     const enrollmentStats = await SocialImpactEnrollment.aggregate([
@@ -233,7 +235,7 @@ class SponsorService {
     ]);
 
     // Event breakdown
-    const eventBreakdown = events.map(event => ({
+    const eventBreakdown = events.map((event: any) => ({
       _id: event._id,
       name: event.name,
       eventType: event.eventType,
@@ -255,9 +257,9 @@ class SponsorService {
       },
       summary: {
         totalEvents: events.length,
-        upcomingEvents: events.filter(e => e.eventStatus === 'upcoming').length,
-        ongoingEvents: events.filter(e => e.eventStatus === 'ongoing').length,
-        completedEvents: events.filter(e => e.eventStatus === 'completed').length,
+        upcomingEvents: events.filter((e: any) => e.eventStatus === 'upcoming').length,
+        ongoingEvents: events.filter((e: any) => e.eventStatus === 'ongoing').length,
+        completedEvents: events.filter((e: any) => e.eventStatus === 'completed').length,
         totalParticipants,
         completedParticipants,
         completionRate: totalParticipants > 0
@@ -283,9 +285,9 @@ class SponsorService {
     const events = await Program.find({
       type: 'social_impact',
       sponsor: sponsorId
-    }).exec();
+    }).lean().exec();
 
-    const eventIds = events.map(e => e._id);
+    const eventIds = events.map((e: any) => e._id);
 
     const stats = await SocialImpactEnrollment.aggregate([
       {

@@ -53,7 +53,7 @@ export const getHeroBannerById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const banner = await HeroBanner.findById(id);
+    const banner = await HeroBanner.findById(id).lean();
 
     if (!banner) {
       return sendError(res, 'Hero banner not found', 404);
@@ -83,7 +83,7 @@ export const trackBannerView = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { source, device, location } = req.body;
 
-    const banner = await HeroBanner.findById(id);
+    const banner = await HeroBanner.findById(id).lean();
     if (!banner) {
       return sendError(res, 'Hero banner not found', 404);
     }
@@ -111,7 +111,7 @@ export const trackBannerClick = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { source, device, location } = req.body;
 
-    const banner = await HeroBanner.findById(id);
+    const banner = await HeroBanner.findById(id).lean();
     if (!banner) {
       return sendError(res, 'Hero banner not found', 404);
     }
@@ -139,7 +139,7 @@ export const trackBannerConversion = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { conversionType, value, source, device } = req.body;
 
-    const banner = await HeroBanner.findById(id);
+    const banner = await HeroBanner.findById(id).lean();
     if (!banner) {
       return sendError(res, 'Hero banner not found', 404);
     }

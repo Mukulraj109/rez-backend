@@ -18,7 +18,7 @@ export async function getCoinBalance(userId: string, category?: MainCategorySlug
  * Get user's category-specific coin balance
  */
 export async function getCategoryBalance(userId: string, category: MainCategorySlug): Promise<number> {
-  const wallet = await Wallet.findOne({ user: userId });
+  const wallet = await Wallet.findOne({ user: userId }).lean();
   return wallet?.getCategoryBalance(category) || 0;
 }
 
@@ -26,12 +26,12 @@ export async function getCategoryBalance(userId: string, category: MainCategoryS
  * Get all category balances for a user
  */
 export async function getAllCategoryBalances(userId: string): Promise<Record<string, { available: number; earned: number; spent: number }>> {
-  const wallet = await Wallet.findOne({ user: userId });
+  const wallet = await Wallet.findOne({ user: userId }).lean();
   const result: Record<string, { available: number; earned: number; spent: number }> = {};
   const categories: MainCategorySlug[] = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
 
   for (const cat of categories) {
-    const catBal = wallet?.categoryBalances?.get(cat);
+    const catBal = (wallet?.categoryBalances as any)?.[cat];
     result[cat] = {
       available: catBal?.available || 0,
       earned: catBal?.earned || 0,
@@ -146,7 +146,7 @@ export async function awardCoins(
   // Also update the Wallet model to keep balances in sync (with retry)
   const updateWallet = async (retryCount = 0): Promise<void> => {
     try {
-      let wallet = await Wallet.findOne({ user: userId });
+      let wallet = await Wallet.findOne({ user: userId }).lean();
 
       if (!wallet) {
         wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
@@ -201,14 +201,14 @@ export async function awardCoins(
   // Also update UserLoyalty categoryCoins if category is provided
   if (category) {
     try {
-      let loyalty = await UserLoyalty.findOne({ userId });
+      const loyalty = await UserLoyalty.findOne({ userId });
       if (loyalty) {
         const catCoins = loyalty.categoryCoins?.get(category) || { available: 0, expiring: 0 };
         catCoins.available += adjustedAmount;
         if (!loyalty.categoryCoins) {
-          loyalty.categoryCoins = new Map();
+          (loyalty as any).categoryCoins = new Map();
         }
-        loyalty.categoryCoins.set(category, catCoins);
+        loyalty.categoryCoins!.set(category, catCoins);
         loyalty.markModified('categoryCoins');
         await loyalty.save();
       }
@@ -236,7 +236,7 @@ export async function awardCoins(
 
       // Update Wallet with bonus
       try {
-        const bonusWallet = await Wallet.findOne({ user: userId });
+        const bonusWallet = await Wallet.findOne({ user: userId }).lean();
         if (bonusWallet) {
           if (category) {
             await Wallet.findByIdAndUpdate(bonusWallet._id, {
@@ -340,7 +340,7 @@ export async function deductCoins(
 
   // Also update the Wallet model to keep balances in sync
   try {
-    const wallet = await Wallet.findOne({ user: userId });
+    const wallet = await Wallet.findOne({ user: userId }).lean();
 
     if (wallet) {
       if (category) {
@@ -399,7 +399,7 @@ export async function deductCoins(
         const catCoins = loyalty.categoryCoins?.get(category);
         if (catCoins) {
           catCoins.available = Math.max(0, catCoins.available - amount);
-          loyalty.categoryCoins.set(category, catCoins);
+          loyalty.categoryCoins!.set(category, catCoins);
           loyalty.markModified('categoryCoins');
           await loyalty.save();
         }

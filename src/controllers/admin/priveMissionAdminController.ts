@@ -102,7 +102,7 @@ export const updateAdminMission = asyncHandler(async (req: Request, res: Respons
     throw new AppError('Invalid mission ID', 400);
   }
 
-  const mission = await PriveMission.findById(id);
+  const mission = await PriveMission.findById(id).lean();
   if (!mission || mission.isDeleted) {
     throw new AppError('Mission not found', 404);
   }

@@ -276,7 +276,7 @@ async function awardScratchCardPrize(userId: string, prize: ScratchCardPrize, se
     const existingCoupon = await UserCoupon.findOne({
       user: new mongoose.Types.ObjectId(userId),
       'metadata.idempotencyKey': idempotencyKey
-    });
+    }).lean();
     if (existingCoupon) return;
 
     const couponCode = `SC-${prize.value}OFF-${Date.now().toString(36).toUpperCase()}`;
@@ -321,7 +321,7 @@ async function awardScratchCardPrize(userId: string, prize: ScratchCardPrize, se
     const existingVoucher = await UserCoupon.findOne({
       user: new mongoose.Types.ObjectId(userId),
       'metadata.idempotencyKey': idempotencyKey
-    });
+    }).lean();
     if (existingVoucher) return;
 
     const couponCode = `SC-V${prize.value}-${Date.now().toString(36).toUpperCase()}`;
@@ -373,7 +373,7 @@ async function awardScratchCardPrize(userId: string, prize: ScratchCardPrize, se
  * Claim scratch card (reveal all cells)
  */
 export async function claimScratchCard(sessionId: string): Promise<any> {
-  const scratchCard = await MiniGame.findById(sessionId);
+  const scratchCard = await MiniGame.findById(sessionId).lean();
 
   if (!scratchCard) {
     throw new Error('Scratch card not found');
@@ -419,7 +419,7 @@ export async function getScratchCardHistory(userId: string, limit: number = 10):
     status: 'completed'
   })
     .sort({ completedAt: -1 })
-    .limit(limit);
+    .limit(limit).lean();
 
   return cards.map(c => ({
     id: c._id,
@@ -437,7 +437,7 @@ export async function getScratchCardStats(userId: string): Promise<any> {
     user: userId,
     gameType: 'scratch_card',
     status: 'completed'
-  });
+  }).lean();
 
   const totalCards = cards.length;
   let totalWins = 0;

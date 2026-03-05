@@ -189,7 +189,7 @@ export async function checkEligibility(
 ): Promise<EligibilityResult> {
   const reasons: string[] = [];
 
-  const campaign = await BonusCampaign.findById(campaignId);
+  const campaign = await BonusCampaign.findById(campaignId).lean();
   if (!campaign) {
     return { eligible: false, reasons: ['Campaign not found'] };
   }
@@ -361,7 +361,7 @@ export async function claimReward(
 
   try {
     // 1. Fetch campaign
-    const campaign = await BonusCampaign.findById(campaignId);
+    const campaign = await BonusCampaign.findById(campaignId).lean();
     if (!campaign) {
       throw new Error('Campaign not found');
     }
@@ -548,7 +548,7 @@ async function creditRewardToWallet(
   if (!wallet) {
     wallet = await Wallet.create({ user: userObjId });
   }
-  await wallet.addFunds(amount, 'bonus');
+  await (wallet as any).addFunds(amount, 'bonus');
 
   return coinTransaction;
 }
@@ -558,14 +558,14 @@ async function creditRewardToWallet(
 // ============================================
 
 export async function verifyAndCreditBillClaim(claimId: string): Promise<IBonusClaim | null> {
-  const claim = await BonusClaim.findById(claimId);
+  const claim = await BonusClaim.findById(claimId).lean();
   if (!claim) return null;
   // Already credited — return idempotently
   if (claim.status === 'credited' || claim.status === 'verified') return claim;
   // Only process pending claims
   if (claim.status !== 'pending') return claim;
 
-  const campaign = await BonusCampaign.findById(claim.campaignId);
+  const campaign = await BonusCampaign.findById(claim.campaignId).lean();
   if (!campaign) {
     claim.status = 'rejected';
     claim.rejectionReason = 'Campaign no longer exists';
@@ -627,7 +627,7 @@ export async function expirePendingClaims(): Promise<number> {
       { endTime: { $lt: now }, status: { $in: ['expired', 'cancelled', 'paused'] } },
       { status: 'cancelled' }, // Always expire pending claims for cancelled campaigns
     ],
-  }).select('_id');
+  }).select('_id').lean();
 
   if (expiredCampaigns.length === 0) return 0;
 
@@ -637,7 +637,7 @@ export async function expirePendingClaims(): Promise<number> {
   const pendingClaims = await BonusClaim.find({
     campaignId: { $in: campaignIds },
     status: 'pending',
-  });
+  }).lean();
 
   if (pendingClaims.length === 0) return 0;
 
@@ -713,7 +713,7 @@ export async function transitionCampaignStatuses(): Promise<{ activated: number;
 // ============================================
 
 export async function getCampaignAnalytics(campaignId: string): Promise<CampaignAnalytics> {
-  const campaign = await BonusCampaign.findById(campaignId);
+  const campaign = await BonusCampaign.findById(campaignId).lean();
   if (!campaign) {
     throw new Error('Campaign not found');
   }

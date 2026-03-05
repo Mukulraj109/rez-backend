@@ -18,7 +18,7 @@ export const getBankOffers = asyncHandler(async (req: Request, res: Response) =>
     const query: any = { isActive: true };
     
     if (category) {
-      const categoryDoc = await Category.findOne({ slug: category as string });
+      const categoryDoc = await Category.findOne({ slug: category as string }).lean();
       if (categoryDoc) {
         query.$or = [
           { applicableCategories: { $in: [category] } },
@@ -67,7 +67,7 @@ export const getExclusiveOffers = asyncHandler(async (req: Request, res: Respons
     };
 
     if (category) {
-      const categoryDoc = await Category.findOne({ slug: category as string });
+      const categoryDoc = await Category.findOne({ slug: category as string }).lean();
       if (categoryDoc) {
         query.categories = { $in: [categoryDoc._id] };
       }

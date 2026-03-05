@@ -34,7 +34,7 @@ export const createTableBooking = async (req: Request, res: Response) => {
     }
 
     // Check if store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       console.error('❌ [TABLE BOOKING] Store not found:', storeId);
       return sendNotFound(res, 'Store not found');
@@ -143,7 +143,7 @@ export const createTableBooking = async (req: Request, res: Response) => {
     // Populate booking for response
     const populatedBooking = await TableBooking.findById(booking._id)
       .populate('storeId', 'name logo location contact')
-      .populate('userId', 'profile.firstName profile.lastName phoneNumber email');
+      .populate('userId', 'profile.firstName profile.lastName phoneNumber email').lean();
 
     // Send notifications (fire-and-forget)
     const formattedDate = bookingDateTime.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -282,7 +282,7 @@ export const getStoreTableBookings = async (req: Request, res: Response) => {
     }
 
     // Check if store exists and verify ownership
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       return sendNotFound(res, 'Store not found');
     }
@@ -448,7 +448,7 @@ export const updateTableBookingStatus = async (req: Request, res: Response) => {
     }
 
     // Find the booking
-    const booking = await TableBooking.findById(bookingId);
+    const booking = await TableBooking.findById(bookingId).lean();
     if (!booking) {
       return sendNotFound(res, 'Booking not found');
     }
@@ -457,7 +457,7 @@ export const updateTableBookingStatus = async (req: Request, res: Response) => {
     const store = await Store.findOne({
       _id: booking.storeId,
       merchantId: new Types.ObjectId(userId)
-    });
+    }).lean();
 
     if (!store) {
       return sendBadRequest(res, 'You do not have permission to update this booking');
@@ -484,7 +484,7 @@ export const updateTableBookingStatus = async (req: Request, res: Response) => {
 
     const populatedBooking = await TableBooking.findById(booking._id)
       .populate('storeId', 'name logo location contact')
-      .populate('userId', 'profile.firstName profile.lastName phoneNumber email');
+      .populate('userId', 'profile.firstName profile.lastName phoneNumber email').lean();
 
     // Notify the customer about status change (fire-and-forget)
     const statusMessages: Record<string, { title: string; message: string; type: 'success' | 'warning' | 'info' }> = {
@@ -585,7 +585,7 @@ export const cancelTableBooking = async (req: Request, res: Response) => {
     // Populate booking for response
     const populatedBooking = await TableBooking.findById(booking._id)
       .populate('storeId', 'name logo location contact')
-      .populate('userId', 'profile.firstName profile.lastName phoneNumber email');
+      .populate('userId', 'profile.firstName profile.lastName phoneNumber email').lean();
 
     // Notify merchant about cancellation (fire-and-forget)
     const store = await Store.findById(booking.storeId).select('merchantId name').lean();
@@ -618,7 +618,7 @@ export const checkAvailability = async (req: Request, res: Response) => {
     }
 
     // Check if store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       console.error('❌ [TABLE BOOKING] Store not found:', storeId);
       return sendNotFound(res, 'Store not found');

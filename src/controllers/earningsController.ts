@@ -442,7 +442,7 @@ export const getPartnerEarningsSummary = asyncHandler(async (req: Request, res: 
     // 5. Get partner level info
     let partnerLevel = { level: 0, name: 'None', daysRemaining: 0, ordersToNextLevel: 0 };
     try {
-      const partner = await Partner.findOne({ userId });
+      const partner = await Partner.findOne({ userId }).lean();
       if (partner) {
         partnerLevel = {
           level: (partner as any).currentLevel?.level || 0,
@@ -1022,7 +1022,7 @@ export const withdrawEarnings = asyncHandler(async (req: Request, res: Response)
 
     // Get user's wallet balance
     const { Wallet } = await import('../models/Wallet');
-    const wallet = await Wallet.findOne({ user: userId });
+    const wallet = await Wallet.findOne({ user: userId }).lean();
 
     if (!wallet) {
       return sendNotFound(res, 'Wallet not found');

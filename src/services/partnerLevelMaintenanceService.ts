@@ -23,7 +23,7 @@ class PartnerLevelMaintenanceService {
           validUntil: { $lt: now },
           isActive: true,
           status: 'active'
-        });
+        }).lean();
         
         console.log(`📊 [LEVEL MAINTENANCE] Found ${expiredPartners.length} expired levels`);
         
@@ -71,7 +71,7 @@ class PartnerLevelMaintenanceService {
           validUntil: { $lte: sevenDaysFromNow, $gt: now },
           isActive: true,
           status: 'active'
-        }).populate('userId', 'email phoneNumber');
+        }).populate('userId', 'email phoneNumber').lean();
         
         console.log(`📊 [LEVEL WARNINGS] Found ${expiringPartners.length} partners expiring in next 7 days`);
         
@@ -116,7 +116,7 @@ class PartnerLevelMaintenanceService {
           isActive: true,
           status: 'active',
           'currentLevel.level': { $gt: 1 } // Only check Influencer and Ambassador
-        });
+        }).lean();
         
         console.log(`📊 [INACTIVITY CHECK] Found ${inactivePartners.length} inactive partners (3+ months)`);
         
@@ -178,7 +178,7 @@ class PartnerLevelMaintenanceService {
         validUntil: { $lt: now },
         isActive: true,
         status: 'active'
-      });
+      }).lean();
       
       console.log(`📊 [MANUAL TRIGGER] Found ${expiredPartners.length} expired levels`);
       

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import Outlet from '../models/Outlet';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
+import { escapeRegex } from '../utils/sanitize';
 
 /**
  * GET /api/outlets
@@ -319,8 +320,8 @@ export const searchOutlets = async (req: Request, res: Response) => {
     const filter: any = {
       isActive: true,
       $or: [
-        { name: { $regex: query, $options: 'i' } },
-        { address: { $regex: query, $options: 'i' } },
+        { name: { $regex: escapeRegex(query), $options: 'i' } },
+        { address: { $regex: escapeRegex(query), $options: 'i' } },
       ],
     };
 

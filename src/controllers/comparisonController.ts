@@ -28,7 +28,7 @@ export const createComparison = asyncHandler(async (req: Request, res: Response)
     const stores = await Store.find({
       _id: { $in: storeIds },
       isActive: true
-    });
+    }).lean();
 
     if (stores.length !== storeIds.length) {
       throw new AppError('One or more stores not found or inactive', 404);
@@ -99,7 +99,7 @@ export const getComparisonById = asyncHandler(async (req: Request, res: Response
     const comparison = await StoreComparison.findOne({
       _id: comparisonId,
       user: userId
-    }).populate('stores', 'name logo description location ratings operationalInfo deliveryCategories isActive isFeatured isVerified');
+    }).populate('stores', 'name logo description location ratings operationalInfo deliveryCategories isActive isFeatured isVerified').lean();
 
     if (!comparison) {
       throw new AppError('Comparison not found', 404);
@@ -132,7 +132,7 @@ export const updateComparison = asyncHandler(async (req: Request, res: Response)
     const comparison = await StoreComparison.findOne({
       _id: comparisonId,
       user: userId
-    });
+    }).lean();
 
     if (!comparison) {
       throw new AppError('Comparison not found', 404);
@@ -148,7 +148,7 @@ export const updateComparison = asyncHandler(async (req: Request, res: Response)
       const stores = await Store.find({
         _id: { $in: storeIds },
         isActive: true
-      });
+      }).lean();
 
       if (stores.length !== storeIds.length) {
         throw new AppError('One or more stores not found or inactive', 404);
@@ -222,7 +222,7 @@ export const addStoreToComparison = asyncHandler(async (req: Request, res: Respo
     const comparison = await StoreComparison.findOne({
       _id: comparisonId,
       user: userId
-    });
+    }).lean();
 
     if (!comparison) {
       throw new AppError('Comparison not found', 404);
@@ -242,7 +242,7 @@ export const addStoreToComparison = asyncHandler(async (req: Request, res: Respo
     const store = await Store.findOne({
       _id: storeId,
       isActive: true
-    });
+    }).lean();
 
     if (!store) {
       throw new AppError('Store not found or inactive', 404);

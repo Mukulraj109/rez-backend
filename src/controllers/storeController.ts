@@ -14,6 +14,8 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import StoreCollectionConfig from '../models/StoreCollectionConfig';
 import redisService from '../services/redisService';
+import { withCache } from '../utils/cacheHelper';
+import { CacheTTL } from '../config/redis';
 import { logStoreSearch } from '../services/searchHistoryService';
 import { regionService, isValidRegion, RegionId, getRegionConfig } from '../services/regionService';
 
@@ -60,10 +62,10 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
         query.category = categoryStr;
       } else {
         // Look up category by slug
-        const categoryDoc = await Category.findOne({ slug: categoryStr }).select('_id');
+        const categoryDoc = await Category.findOne({ slug: categoryStr }).select('_id').lean();
         if (categoryDoc) {
           // Also find subcategories under this parent
-          const subCategories = await Category.find({ parentCategory: categoryDoc._id }).select('_id');
+          const subCategories = await Category.find({ parentCategory: categoryDoc._id }).select('_id').lean();
           const categoryIds = [categoryDoc._id, ...subCategories.map(sc => sc._id)];
           query.category = { $in: categoryIds };
         } else {
@@ -156,17 +158,20 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
     console.log('🔍 [GET STORES] Query:', JSON.stringify(query));
     console.log('🔍 [GET STORES] Sort options:', sortOptions);
 
-    const stores = await Store.find(query)
-      .select('name slug logo banner description category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
-      .populate({
-        path: 'category',
-        select: 'name slug',
-        options: { strictPopulate: false }
-      })
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
+    const [stores, total] = await Promise.all([
+      Store.find(query)
+        .select('name slug logo banner description category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
+        .populate({
+          path: 'category',
+          select: 'name slug',
+          options: { strictPopulate: false }
+        })
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      Store.countDocuments(query),
+    ]);
 
     console.log(`✅ [GET STORES] Found ${stores.length} stores`);
 
@@ -203,7 +208,6 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
       }
     }
 
-    const total = await Store.countDocuments(query);
     const totalPages = Math.ceil(total / Number(limit));
 
     // Log search history for authenticated users (async, don't block)
@@ -244,94 +248,91 @@ export const getStoreById = asyncHandler(async (req: Request, res: Response) => 
   const { storeId } = req.params;
 
   try {
-    console.log('🔍 [GET STORE] Fetching store:', storeId);
+    const isObjectId = storeId.match(/^[0-9a-fA-F]{24}$/);
+    const matchStage: any = isObjectId
+      ? { _id: new mongoose.Types.ObjectId(storeId), isActive: true }
+      : { slug: storeId, isActive: true };
 
-    const query = storeId.match(/^[0-9a-fA-F]{24}$/)
-      ? { _id: storeId }
-      : { slug: storeId };
+    // Single aggregation: fetch store with category $lookup (replaces populate)
+    const storeResults = await Store.aggregate([
+      { $match: matchStage },
+      { $lookup: { from: 'categories', localField: 'category', foreignField: '_id', as: 'category' } },
+      { $unwind: { path: '$category', preserveNullAndEmptyArrays: true } },
+      { $project: {
+        // Keep all fields, but only project category.name and category.slug
+        category: { _id: '$category._id', name: '$category.name', slug: '$category.slug' },
+        name: 1, slug: 1, description: 1, logo: 1, coverImage: 1, images: 1,
+        location: 1, contact: 1, operationalInfo: 1, ratings: 1, tags: 1,
+        isFeatured: 1, isActive: 1, serviceCapabilities: 1, analytics: 1,
+        merchantId: 1, merchant: 1, socialMedia: 1, businessHours: 1,
+        deliveryInfo: 1, minimumOrder: 1, avgPrepTime: 1, features: 1,
+        createdAt: 1, updatedAt: 1
+      }}
+    ]);
 
-    console.log('🔍 [GET STORE] Query:', query);
-
-    const store = await Store.findOne({ ...query, isActive: true })
-      .populate('category', 'name slug')
-      .lean();
-
-    console.log('🔍 [GET STORE] Store found:', !!store);
+    const store = storeResults[0] || null;
 
     if (!store) {
-      console.error('❌ [GET STORE] Store not found or not active');
       return sendNotFound(res, 'Store not found');
     }
 
     // Region check - log mismatch but allow direct store access by ID
-    // Users who navigate directly to a store page should still be able to view it
     const regionHeader = req.headers['x-rez-region'] as string;
     if (regionHeader && isValidRegion(regionHeader)) {
       const storeCity = store.location?.city;
       if (!regionService.validateStoreAccess(storeCity, regionHeader as RegionId)) {
-        const suggestedRegion = regionService.getSuggestedRegion(storeCity);
-        console.log('⚠️ [GET STORE] Region mismatch (allowed) - store region:', suggestedRegion, 'user region:', regionHeader);
+        // Region mismatch allowed for direct store access
       }
     }
 
-    // Debug: Log what fields are available in the store
-    console.log('✅ [GET STORE] Store retrieved:', store.name);
-    console.log('📋 [GET STORE] Store fields check:', {
-      hasDescription: !!store.description,
-      hasContact: !!store.contact,
-      hasOperationalInfo: !!store.operationalInfo,
-      contact: store.contact,
-      operationalInfo: store.operationalInfo,
-      description: store.description,
-    });
+    // Parallel: fetch products, increment views, resolve category slug, count products
+    const VALID_MAIN_SLUGS = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
 
-    // Get store products
-    console.log('🔍 [GET STORE] Fetching products for store...');
-    const products = await Product.find({
-      store: store._id,
-      isActive: true
-    })
-      .populate('category', 'name slug')
-      .limit(20)
-      .sort({ createdAt: -1 })
-      .lean();
-
-    console.log('✅ [GET STORE] Found', products.length, 'products');
-
-    // Increment view count (simplified)
-    await Store.updateOne({ _id: store._id }, { $inc: { 'analytics.views': 1 } });
-
-    // Resolve root MainCategory slug for category-specific coins
-    let mainCategorySlug: string | null = null;
-    try {
-      const VALID_MAIN_SLUGS = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
-      const storeCat = (store as any).category;
-      let catId = storeCat && typeof storeCat === 'object' && '_id' in storeCat
-        ? storeCat._id?.toString()
-        : storeCat?.toString();
-      let depth = 5;
-      while (catId && depth-- > 0) {
-        const cat = await Category.findById(catId).select('slug parentCategory').lean();
-        if (!cat) break;
-        if (!cat.parentCategory) {
-          if (VALID_MAIN_SLUGS.includes(cat.slug)) mainCategorySlug = cat.slug;
-          break;
+    // Build category resolution promise
+    const resolveCategorySlug = async (): Promise<string | null> => {
+      try {
+        const storeCat = store.category;
+        let catId = storeCat && typeof storeCat === 'object' && '_id' in storeCat
+          ? storeCat._id?.toString()
+          : storeCat?.toString();
+        let depth = 5;
+        while (catId && depth-- > 0) {
+          const cat = await Category.findById(catId).select('slug parentCategory').lean();
+          if (!cat) break;
+          if (!cat.parentCategory) {
+            return VALID_MAIN_SLUGS.includes(cat.slug) ? cat.slug : null;
+          }
+          catId = cat.parentCategory.toString();
         }
-        catId = cat.parentCategory.toString();
-      }
-    } catch (e) {
-      // Non-critical — continue without mainCategorySlug
-    }
+      } catch { /* Non-critical */ }
+      return null;
+    };
+
+    const [products, , mainCategorySlug, productsCount] = await Promise.all([
+      // Fetch products with category $lookup (replaces populate)
+      Product.aggregate([
+        { $match: { store: store._id, isActive: true } },
+        { $sort: { createdAt: -1 } },
+        { $limit: 20 },
+        { $lookup: { from: 'categories', localField: 'category', foreignField: '_id', as: 'category' } },
+        { $unwind: { path: '$category', preserveNullAndEmptyArrays: true } },
+        { $addFields: { category: { _id: '$category._id', name: '$category.name', slug: '$category.slug' } } }
+      ]),
+      // Increment view count (fire-and-forget style, but awaited for safety)
+      Store.updateOne({ _id: store._id }, { $inc: { 'analytics.views': 1 } }),
+      // Resolve root MainCategory slug
+      resolveCategorySlug(),
+      // Count total active products
+      Product.countDocuments({ store: store._id, isActive: true })
+    ]);
 
     sendSuccess(res, {
       store: { ...store, mainCategorySlug },
       products,
-      productsCount: await Product.countDocuments({ store: store._id, isActive: true })
+      productsCount
     }, 'Store retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [GET STORE] Error:', error.message);
-    console.error('❌ [GET STORE] Stack:', error.stack);
     throw new AppError(`Failed to fetch store: ${error.message}`, 500);
   }
 });
@@ -348,7 +349,7 @@ export const getStoreProducts = asyncHandler(async (req: Request, res: Response)
   } = req.query;
 
   try {
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       return sendNotFound(res, 'Store not found');
     }
@@ -387,14 +388,15 @@ export const getStoreProducts = asyncHandler(async (req: Request, res: Response)
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const products = await Product.find(query)
-      .populate('category', 'name slug')
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
-
-    const total = await Product.countDocuments(query);
+    const [products, total] = await Promise.all([
+      Product.find(query)
+        .populate('category', 'name slug')
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      Product.countDocuments(query),
+    ]);
     const totalPages = Math.ceil(total / Number(limit));
 
     sendSuccess(res, {
@@ -535,51 +537,55 @@ export const getFeaturedStores = asyncHandler(async (req: Request, res: Response
     }
 
     const storeListSelect = 'name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo';
+    const effectiveRegion = regionHeader || 'all';
+    const cacheKey = `store:featured:${effectiveRegion}:${limit}`;
 
-    // First, try to get featured stores
-    let stores = await Store.find({
-      ...baseQuery,
-      isFeatured: true
-    })
-      .select(storeListSelect)
-      .populate('category', 'name slug icon')
-      .sort({ 'ratings.average': -1, createdAt: -1 })
-      .limit(Number(limit))
-      .lean();
-
-    // If no featured stores, get all active stores sorted by rating
-    if (stores.length === 0) {
-      stores = await Store.find(baseQuery)
+    const transformedStores = await withCache(cacheKey, CacheTTL.STORE_LIST, async () => {
+      // First, try to get featured stores
+      let stores = await Store.find({
+        ...baseQuery,
+        isFeatured: true
+      })
         .select(storeListSelect)
         .populate('category', 'name slug icon')
         .sort({ 'ratings.average': -1, createdAt: -1 })
         .limit(Number(limit))
         .lean();
-    }
-    // If featured stores exist but less than limit, fill with other active stores
-    else if (stores.length < Number(limit)) {
-      const featuredIds = stores.map(s => s._id);
-      const additionalStores = await Store.find({
-        ...baseQuery,
-        _id: { $nin: featuredIds }
-      })
-        .select(storeListSelect)
-        .populate('category', 'name slug icon')
-        .sort({ 'ratings.average': -1, createdAt: -1 })
-        .limit(Number(limit) - stores.length)
-        .lean();
 
-      stores = [...stores, ...additionalStores];
-    }
+      // If no featured stores, get all active stores sorted by rating
+      if (stores.length === 0) {
+        stores = await Store.find(baseQuery)
+          .select(storeListSelect)
+          .populate('category', 'name slug icon')
+          .sort({ 'ratings.average': -1, createdAt: -1 })
+          .limit(Number(limit))
+          .lean();
+      }
+      // If featured stores exist but less than limit, fill with other active stores
+      else if (stores.length < Number(limit)) {
+        const featuredIds = stores.map(s => s._id);
+        const additionalStores = await Store.find({
+          ...baseQuery,
+          _id: { $nin: featuredIds }
+        })
+          .select(storeListSelect)
+          .populate('category', 'name slug icon')
+          .sort({ 'ratings.average': -1, createdAt: -1 })
+          .limit(Number(limit) - stores.length)
+          .lean();
 
-    // Transform stores to include frontend-friendly fields
-    const transformedStores = stores.map((store: any) => ({
-      ...store,
-      rating: store.ratings?.average || 0,
-      cashback: store.offers?.cashback || 0,
-      deliveryTime: store.operationalInfo?.deliveryTime || null,
-      image: store.logo || store.banner
-    }));
+        stores = [...stores, ...additionalStores];
+      }
+
+      // Transform stores to include frontend-friendly fields
+      return stores.map((store: any) => ({
+        ...store,
+        rating: store.ratings?.average || 0,
+        cashback: store.offers?.cashback || 0,
+        deliveryTime: store.operationalInfo?.deliveryTime || null,
+        image: store.logo || store.banner
+      }));
+    });
 
     sendSuccess(res, { stores: transformedStores }, 'Featured stores retrieved successfully');
 
@@ -627,7 +633,7 @@ export const searchStores = asyncHandler(async (req: Request, res: Response) => 
         const categoryDoc = await Category.findOne({
           slug: category.toLowerCase(),
           isActive: true
-        });
+        }).lean();
 
         if (categoryDoc) {
           query.category = categoryDoc._id;
@@ -653,15 +659,16 @@ export const searchStores = asyncHandler(async (req: Request, res: Response) => 
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const stores = await Store.find(query)
-      .select('name slug logo banner description category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
-      .populate('category', 'name slug')
-      .sort({ 'ratings.average': -1, createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
-
-    const total = await Store.countDocuments(query);
+    const [stores, total] = await Promise.all([
+      Store.find(query)
+        .select('name slug logo banner description category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
+        .populate('category', 'name slug')
+        .sort({ 'ratings.average': -1, createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      Store.countDocuments(query),
+    ]);
     const totalPages = Math.ceil(total / Number(limit));
 
     sendSuccess(res, {
@@ -709,13 +716,16 @@ export const getStoresByCategory = asyncHandler(async (req: Request, res: Respon
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    const stores = await Store.find(query)
-      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
-      .populate('category', 'name slug')
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
+    const [stores, total] = await Promise.all([
+      Store.find(query)
+        .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup')
+        .populate('category', 'name slug')
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      Store.countDocuments(query),
+    ]);
 
     // Fetch products for all stores in a single bulk query (avoids N+1)
     const storeIds = stores.map((s: any) => s._id);
@@ -725,6 +735,7 @@ export const getStoresByCategory = asyncHandler(async (req: Request, res: Respon
       isDeleted: { $ne: true }
     })
       .select('name images pricing ratings inventory tags brand shortDescription subCategory category store')
+      .limit(500)
       .lean();
 
     // Group products by store ID (limit 10 per store)
@@ -766,7 +777,6 @@ export const getStoresByCategory = asyncHandler(async (req: Request, res: Respon
       };
     });
 
-    const total = await Store.countDocuments(query);
     const totalPages = Math.ceil(total / Number(limit));
 
     sendSuccess(res, {
@@ -1273,15 +1283,16 @@ export const advancedStoreSearch = asyncHandler(async (req: Request, res: Respon
     // Pagination
     const skip = (Number(page) - 1) * Number(limit);
 
-    const stores = await Store.find(query)
-      .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup paymentSettings.acceptRezCoins paymentSettings.acceptPromoCoins paymentSettings.maxCoinRedemptionPercent rewardRules.baseCashbackPercent')
-      .sort(sort)
-      .skip(skip)
-      .limit(Number(limit))
-      .populate('category', 'name slug')
-      .lean();
-
-    const total = await Store.countDocuments(query);
+    const [stores, total] = await Promise.all([
+      Store.find(query)
+        .select('name slug logo banner category tags ratings location isActive isFeatured offers operationalInfo serviceCapabilities bookingConfig bookingType hasStorePickup paymentSettings.acceptRezCoins paymentSettings.acceptPromoCoins paymentSettings.maxCoinRedemptionPercent rewardRules.baseCashbackPercent')
+        .sort(sort)
+        .skip(skip)
+        .limit(Number(limit))
+        .populate('category', 'name slug')
+        .lean(),
+      Store.countDocuments(query),
+    ]);
 
     // Calculate distances if location provided
     if (userLng !== undefined && userLat !== undefined && stores.length > 0) {
@@ -1331,6 +1342,7 @@ export const getStoreCategories = asyncHandler(async (req: Request, res: Respons
     // Try to read from admin-configurable StoreCollectionConfig
     const configs = await StoreCollectionConfig.find({ isEnabled: true })
       .sort({ sortOrder: 1 })
+      .limit(50)
       .lean();
 
     // Fallback to hardcoded if no configs exist
@@ -1460,7 +1472,7 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
             { slug: category.toLowerCase() }
           ],
           isActive: true
-        });
+        }).lean();
 
         if (!categoryDoc) {
           console.log('❌ [TRENDING STORES] Category not found:', category);
@@ -1648,7 +1660,7 @@ export const getStoreFollowers = asyncHandler(async (req: Request, res: Response
 
   try {
     // Verify user is store owner/merchant
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       return sendNotFound(res, 'Store not found');
     }
@@ -1683,7 +1695,7 @@ export const sendFollowerNotification = asyncHandler(async (req: Request, res: R
 
   try {
     // Verify user is store owner/merchant
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       return sendNotFound(res, 'Store not found');
     }
@@ -1723,7 +1735,7 @@ export const notifyNewOffer = asyncHandler(async (req: Request, res: Response) =
 
   try {
     // Verify user is store owner/merchant
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       return sendNotFound(res, 'Store not found');
     }
@@ -1760,7 +1772,7 @@ export const notifyNewProduct = asyncHandler(async (req: Request, res: Response)
 
   try {
     // Verify user is store owner/merchant
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       return sendNotFound(res, 'Store not found');
     }
@@ -1771,7 +1783,7 @@ export const notifyNewProduct = asyncHandler(async (req: Request, res: Response)
     }
 
     // Get product details
-    const product = await Product.findById(productId);
+    const product = await Product.findById(productId).lean() as any;
     if (!product) {
       return sendNotFound(res, 'Product not found');
     }
@@ -2003,7 +2015,7 @@ export const getUserStoreVisits = asyncHandler(async (req: Request, res: Respons
 
   try {
     // Get the store to check loyalty config
-    const store = await Store.findById(storeId).select('name rewardRules');
+    const store = await Store.findById(storeId).select('name rewardRules').lean();
 
     if (!store) {
       return sendNotFound(res, 'Store not found');
@@ -2071,7 +2083,7 @@ export const getRecentEarnings = asyncHandler(async (req: Request, res: Response
 
   try {
     // Get the store to verify it exists
-    const store = await Store.findById(storeId).select('name');
+    const store = await Store.findById(storeId).select('name').lean();
 
     if (!store) {
       return sendNotFound(res, 'Store not found');
@@ -2733,9 +2745,9 @@ export const getStoresByServiceType = asyncHandler(async (req: Request, res: Res
       if (mongoose.Types.ObjectId.isValid(categoryStr)) {
         query.category = categoryStr;
       } else {
-        const categoryDoc = await Category.findOne({ slug: categoryStr }).select('_id');
+        const categoryDoc = await Category.findOne({ slug: categoryStr }).select('_id').lean();
         if (categoryDoc) {
-          const subCategories = await Category.find({ parentCategory: categoryDoc._id }).select('_id');
+          const subCategories = await Category.find({ parentCategory: categoryDoc._id }).select('_id').lean();
           query.category = { $in: [categoryDoc._id, ...subCategories.map(sc => sc._id)] };
         }
       }

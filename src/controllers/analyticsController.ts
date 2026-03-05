@@ -23,7 +23,7 @@ export const trackEvent = asyncHandler(async (req: Request, res: Response) => {
 
   try {
     // Verify store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       throw new AppError('Store not found', 404);
     }
@@ -67,7 +67,7 @@ export const getStoreAnalytics = asyncHandler(async (req: Request, res: Response
 
   try {
     // Verify store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       throw new AppError('Store not found', 404);
     }

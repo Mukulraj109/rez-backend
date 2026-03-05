@@ -65,21 +65,21 @@ class SocialImpactService {
       .sort({ eventDate: 1 })
       .skip((page - 1) * limit)
       .limit(limit)
-      .exec();
+      .lean().exec();
 
     // If user is logged in, check their enrollment status
     let userEnrollments: Map<string, ISocialImpactEnrollment> = new Map();
     if (userId) {
       const enrollments = await SocialImpactEnrollment.find({
         user: userId,
-        program: { $in: events.map(e => e._id) }
-      });
-      enrollments.forEach(e => {
+        program: { $in: events.map((e: any) => e._id) }
+      }).lean();
+      enrollments.forEach((e: any) => {
         userEnrollments.set(e.program.toString(), e);
       });
     }
 
-    const eventsWithStatus = events.map(event => {
+    const eventsWithStatus = events.map((event: any) => {
       const enrollment = userEnrollments.get((event._id as mongoose.Types.ObjectId).toString());
       return {
         ...event.toObject(),
@@ -100,7 +100,7 @@ class SocialImpactService {
     })
       .populate('sponsor', 'name logo brandCoinName brandCoinLogo description website')
       .populate('merchant', 'businessName logo description phone businessAddress website')
-      .exec();
+      .lean().exec();
 
     if (!event) {
       return null;
@@ -111,7 +111,7 @@ class SocialImpactService {
       enrollment = await SocialImpactEnrollment.findOne({
         user: userId,
         program: eventId
-      });
+      }).lean();
     }
 
     // Look up the merchant's store if merchant exists
@@ -138,7 +138,7 @@ class SocialImpactService {
     const event = await Program.findOne({
       _id: eventId,
       type: 'social_impact'
-    });
+    }).lean();
 
     if (!event) {
       throw new Error('Event not found');
@@ -291,7 +291,7 @@ class SocialImpactService {
     const event = await Program.findOne({
       _id: eventId,
       type: 'social_impact'
-    }).populate('sponsor');
+    }).populate('sponsor').lean();
 
     if (!event) {
       throw new Error('Event not found');
@@ -335,7 +335,7 @@ class SocialImpactService {
       const existing = await SocialImpactEnrollment.findOne({
         user: userId,
         program: eventId
-      });
+      }).lean();
       if (!existing) {
         throw new Error('User is not registered for this event');
       }
@@ -390,7 +390,7 @@ class SocialImpactService {
 
         if (budgetSufficient) {
           // Credit branded coins to user's wallet
-          let wallet = await Wallet.findOne({ user: userId });
+          let wallet = await Wallet.findOne({ user: userId }).lean();
           if (!wallet) {
             wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
           }
@@ -477,7 +477,7 @@ class SocialImpactService {
     }
 
     // Return the updated enrollment
-    const updatedEnrollment = await SocialImpactEnrollment.findById(enrollment._id);
+    const updatedEnrollment = await SocialImpactEnrollment.findById(enrollment._id).lean();
     return updatedEnrollment!;
   }
 
@@ -502,7 +502,7 @@ class SocialImpactService {
 
   // Get user's impact stats
   async getUserStats(userId: string): Promise<any> {
-    let stats = await UserImpactStats.findOne({ user: userId });
+    let stats = await UserImpactStats.findOne({ user: userId }).lean();
 
     if (!stats) {
       // Return default stats if none exist
@@ -544,9 +544,9 @@ class SocialImpactService {
         }
       })
       .sort({ registeredAt: -1 })
-      .exec();
+      .lean().exec();
 
-    return enrollments.map(e => ({
+    return enrollments.map((e: any) => ({
       enrollmentId: e._id,
       status: e.status,
       registeredAt: e.registeredAt,
@@ -570,7 +570,7 @@ class SocialImpactService {
     const enrollments = await SocialImpactEnrollment.find(query)
       .populate('user', 'fullName phoneNumber email profile.firstName profile.lastName profile.avatar')
       .sort({ registeredAt: -1 })
-      .exec();
+      .lean().exec();
 
     return enrollments;
   }
@@ -602,7 +602,7 @@ class SocialImpactService {
   async createEvent(data: any): Promise<IProgram> {
     // Validate sponsor if provided
     if (data.sponsor) {
-      const sponsor = await Sponsor.findById(data.sponsor);
+      const sponsor = await Sponsor.findById(data.sponsor).lean();
       if (!sponsor) {
         throw new Error('Sponsor not found');
       }
@@ -644,7 +644,7 @@ class SocialImpactService {
       user: userId,
       program: eventId,
       status: 'registered'
-    });
+    }).lean();
     if (!enrollment) {
       throw new Error('No active registration found');
     }
@@ -696,7 +696,7 @@ class SocialImpactService {
       user: userId,
       program: eventId,
       status: 'registered'
-    });
+    }).lean();
     if (!enrollment) {
       throw new Error('No active registration found');
     }
@@ -743,7 +743,7 @@ class SocialImpactService {
 
   // Verify geo check-in (user submits location, server validates proximity)
   async verifyGeoCheckIn(eventId: string, userId: string, lat: number, lng: number): Promise<ISocialImpactEnrollment> {
-    const event = await Program.findById(eventId);
+    const event = await Program.findById(eventId).lean();
     if (!event?.location?.coordinates?.lat || !event?.location?.coordinates?.lng) {
       throw new Error('Event has no location coordinates configured');
     }
@@ -752,7 +752,7 @@ class SocialImpactService {
       user: userId,
       program: eventId,
       status: 'registered'
-    });
+    }).lean();
     if (!enrollment) {
       throw new Error('Not registered for this event');
     }
@@ -808,9 +808,9 @@ class SocialImpactService {
       .populate('user', 'fullName profile.firstName profile.lastName profile.avatar')
       .sort(sortField)
       .limit(limit)
-      .exec();
+      .lean().exec();
 
-    return leaderboard.map((entry, index) => ({
+    return leaderboard.map((entry: any, index: number) => ({
       rank: index + 1,
       user: entry.user,
       [metric]: (entry as any)[metric],

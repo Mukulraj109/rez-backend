@@ -50,13 +50,13 @@ export class MerchantUserSyncService {
     try {
       console.log('🔄 Starting sync of all merchants to stores...');
       
-      const merchants = await Merchant.find({});
+      const merchants = await Merchant.find({}).lean();
       let syncedCount = 0;
       let skippedCount = 0;
 
       for (const merchant of merchants) {
         // Check if store already exists for this merchant
-        const existingStore = await Store.findOne({ merchantId: merchant._id });
+        const existingStore = await Store.findOne({ merchantId: merchant._id }).lean();
         if (existingStore) {
           skippedCount++;
           continue;
@@ -79,13 +79,13 @@ export class MerchantUserSyncService {
     try {
       console.log('🔄 Starting sync of all merchant products to user products...');
       
-      const merchantProducts = await MProduct.find({});
+      const merchantProducts = await MProduct.find({}).lean();
       let syncedCount = 0;
       let skippedCount = 0;
 
       for (const merchantProduct of merchantProducts) {
         // Check if user product already exists with this SKU
-        const existingProduct = await Product.findOne({ sku: merchantProduct.sku });
+        const existingProduct = await Product.findOne({ sku: merchantProduct.sku }).lean();
         if (existingProduct) {
           skippedCount++;
           continue;
@@ -126,7 +126,7 @@ export class MerchantUserSyncService {
         // Direct mapping lookup
         const categorySlug = BUSINESS_TYPE_TO_CATEGORY_SLUG[businessType];
         if (categorySlug) {
-          targetCategory = await Category.findOne({ slug: categorySlug, isActive: true });
+          targetCategory = await Category.findOne({ slug: categorySlug, isActive: true }).lean();
         }
         // Fallback: fuzzy match by category name (escape regex special chars to prevent crashes)
         if (!targetCategory) {
@@ -135,13 +135,13 @@ export class MerchantUserSyncService {
             name: { $regex: new RegExp(escapedType, 'i') },
             isActive: true,
             parentCategory: null,
-          });
+          }).lean();
         }
       }
 
       // Final fallback to General
       if (!targetCategory) {
-        targetCategory = await Category.findOne({ name: 'General' });
+        targetCategory = await Category.findOne({ name: 'General' }).lean();
         if (!targetCategory) {
           targetCategory = await Category.create({
             name: 'General',
@@ -239,7 +239,7 @@ export class MerchantUserSyncService {
   static async createUserSideProduct(merchantProduct: any, merchantId: string): Promise<void> {
     try {
       // Find the store associated with this merchant
-      const store = await Store.findOne({ merchantId: merchantId });
+      const store = await Store.findOne({ merchantId: merchantId }).lean();
       if (!store) {
         console.error('No store found for merchant:', merchantId);
         return;
@@ -251,7 +251,7 @@ export class MerchantUserSyncService {
       let category = await Category.findOne({ 
         name: merchantProduct.category,
         type: categoryType 
-      });
+      }).lean();
       
       if (!category) {
         // Check if category exists with different type
@@ -260,7 +260,7 @@ export class MerchantUserSyncService {
           // Update existing category type if it's different
           existingCategory.type = categoryType as any;
           await existingCategory.save();
-          category = existingCategory;
+          category = existingCategory as any;
         } else {
           // Create new category with the specified type
           category = await Category.create({
@@ -268,7 +268,7 @@ export class MerchantUserSyncService {
             slug: merchantProduct.category.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, '-'),
             type: categoryType, // Use the category type from the product
             isActive: true
-          });
+          }) as any;
         }
       }
 
@@ -291,7 +291,7 @@ export class MerchantUserSyncService {
         slug: productSlug,
         description: merchantProduct.description,
         shortDescription: merchantProduct.shortDescription,
-        category: category._id,
+        category: category!._id,
         store: store._id,
         brand: merchantProduct.brand,
         sku: merchantProduct.sku,

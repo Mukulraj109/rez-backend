@@ -9,6 +9,7 @@ import { requireAuth, requireAdmin } from '../../middleware/auth';
 import Achievement from '../../models/Achievement';
 import UserAchievement from '../../models/UserAchievement';
 import { sendSuccess, sendError } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 import { ACHIEVEMENT_METRICS } from '../../config/achievementMetrics';
 
 // Legacy config import — used only for seed endpoint fallback
@@ -37,7 +38,7 @@ router.get('/', async (req: Request, res: Response) => {
     const filter: any = {};
 
     if (req.query.type) {
-      filter.type = { $regex: req.query.type, $options: 'i' };
+      filter.type = { $regex: escapeRegex(req.query.type as string), $options: 'i' };
     }
 
     if (req.query.category) {

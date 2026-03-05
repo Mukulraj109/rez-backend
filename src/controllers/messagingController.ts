@@ -5,6 +5,10 @@ import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { Conversation, ConversationStatus } from '../models/Conversation';
 import { Message, MessageType, MessageStatus, SenderType } from '../models/Message';
+import { Store } from '../models/Store';
+import { escapeRegex } from '../utils/sanitize';
+import { getIO } from '../config/socket';
+import { SocketRoom } from '../types/socket';
 
 /**
  * Get all conversations for a user
@@ -44,7 +48,7 @@ export const getConversations = async (req: Request, res: Response): Promise<voi
 
     // Apply search filter
     if (search) {
-      query.storeName = { $regex: search, $options: 'i' };
+      query.storeName = { $regex: escapeRegex(search as string), $options: 'i' };
     }
 
     // Calculate pagination
@@ -164,7 +168,7 @@ export const getConversation = async (req: Request, res: Response): Promise<void
     const conversation = await Conversation.findOne({
       _id: new Types.ObjectId(id),
       customerId: new Types.ObjectId(userId)
-    });
+    }).lean();
 
     if (!conversation) {
       res.status(404).json({
@@ -210,7 +214,7 @@ export const getMessages = async (req: Request, res: Response): Promise<void> =>
     const conversation = await Conversation.findOne({
       _id: new Types.ObjectId(id),
       customerId: new Types.ObjectId(userId)
-    });
+    }).lean();
 
     if (!conversation) {
       res.status(404).json({
@@ -355,8 +359,25 @@ export const sendMessage = async (req: Request, res: Response): Promise<void> =>
       data: { message }
     });
 
-    // TODO: Emit WebSocket event for real-time updates
-    // io.to(storeId).emit('new_message', message);
+    // Emit WebSocket event for real-time updates
+    try {
+      const socketIO = getIO();
+      const storeId = String(conversation.storeId);
+      // Notify the store room so merchant sees the new message
+      socketIO.to(SocketRoom.store(storeId)).emit('messaging:new_message', {
+        conversationId: id,
+        message,
+        timestamp: new Date(),
+      });
+      // Also notify the customer room (for multi-device sync)
+      socketIO.to(SocketRoom.user(userId)).emit('messaging:new_message', {
+        conversationId: id,
+        message,
+        timestamp: new Date(),
+      });
+    } catch (socketErr) {
+      console.error('⚠️ [MESSAGING CONTROLLER] Socket emit failed:', socketErr);
+    }
 
   } catch (error: any) {
     console.error('❌ [MESSAGING CONTROLLER] Error sending message:', error);
@@ -389,7 +410,7 @@ export const markConversationAsRead = async (req: Request, res: Response): Promi
     const conversation = await Conversation.findOne({
       _id: new Types.ObjectId(id),
       customerId: new Types.ObjectId(userId)
-    });
+    }).lean();
 
     if (!conversation) {
       res.status(404).json({
@@ -442,7 +463,7 @@ export const archiveConversation = async (req: Request, res: Response): Promise<
     const conversation = await Conversation.findOne({
       _id: new Types.ObjectId(id),
       customerId: new Types.ObjectId(userId)
-    });
+    }).lean();
 
     if (!conversation) {
       res.status(404).json({
@@ -488,7 +509,7 @@ export const unarchiveConversation = async (req: Request, res: Response): Promis
     const conversation = await Conversation.findOne({
       _id: new Types.ObjectId(id),
       customerId: new Types.ObjectId(userId)
-    });
+    }).lean();
 
     if (!conversation) {
       res.status(404).json({
@@ -534,7 +555,7 @@ export const deleteConversation = async (req: Request, res: Response): Promise<v
     const conversation = await Conversation.findOne({
       _id: new Types.ObjectId(id),
       customerId: new Types.ObjectId(userId)
-    });
+    }).lean();
 
     if (!conversation) {
       res.status(404).json({
@@ -594,7 +615,7 @@ export const searchMessages = async (req: Request, res: Response): Promise<void>
 
     // Build search query
     const searchQuery: any = {
-      content: { $regex: query, $options: 'i' },
+      content: { $regex: escapeRegex(query as string), $options: 'i' },
       deletedAt: { $exists: false }
     };
 
@@ -604,7 +625,7 @@ export const searchMessages = async (req: Request, res: Response): Promise<void>
       const conversation = await Conversation.findOne({
         _id: new Types.ObjectId(conversationId as string),
         customerId: new Types.ObjectId(userId)
-      });
+      }).lean();
 
       if (!conversation) {
         res.status(404).json({
@@ -619,7 +640,7 @@ export const searchMessages = async (req: Request, res: Response): Promise<void>
       // Search in all user's conversations
       const userConversations = await Conversation.find({
         customerId: new Types.ObjectId(userId)
-      }).select('_id');
+      }).select('_id').lean();
 
       const conversationIds = userConversations.map(c => c._id);
       searchQuery.conversationId = { $in: conversationIds };
@@ -705,7 +726,7 @@ export const reportMessage = async (req: Request, res: Response): Promise<void> 
     const conversation = await Conversation.findOne({
       _id: message.conversationId,
       customerId: new Types.ObjectId(userId)
-    });
+    }).lean();
 
     if (!conversation) {
       res.status(404).json({
@@ -733,7 +754,21 @@ export const reportMessage = async (req: Request, res: Response): Promise<void> 
       message: 'Message reported successfully'
     });
 
-    // TODO: Send notification to admin/moderation team
+    // Notify admin/moderation team via Socket.IO
+    try {
+      const socketIO = getIO();
+      socketIO.to('admin-moderation').emit('messaging:content_flagged', {
+        messageId: id,
+        conversationId: String(message.conversationId),
+        reportedBy: userId,
+        reason,
+        details,
+        content: message.content,
+        timestamp: new Date(),
+      });
+    } catch (socketErr) {
+      console.error('⚠️ [MESSAGING CONTROLLER] Admin notification socket emit failed:', socketErr);
+    }
 
   } catch (error: any) {
     console.error('❌ [MESSAGING CONTROLLER] Error reporting message:', error);
@@ -789,31 +824,59 @@ export const getStoreAvailability = async (req: Request, res: Response): Promise
   try {
     const { id } = req.params;
 
-    // For now, return default business hours
-    // TODO: Fetch actual store business hours from Store model
+    // Fetch actual store business hours from Store model
+    const store = await Store.findById(id)
+      .select('name operationalInfo')
+      .lean();
+
+    const defaultHours = { open: '09:00', close: '21:00', closed: false };
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+
+    const storeHours = store?.operationalInfo?.hours as Record<string, any> | undefined;
+
+    // Build business hours object from store data or use defaults
+    const businessHours: Record<string, { open: string; close: string; isOpen: boolean }> = {};
+    for (const day of dayNames) {
+      const dayData = storeHours?.[day];
+      if (dayData) {
+        businessHours[day] = {
+          open: dayData.open || defaultHours.open,
+          close: dayData.close || defaultHours.close,
+          isOpen: !dayData.closed,
+        };
+      } else {
+        businessHours[day] = {
+          open: defaultHours.open,
+          close: defaultHours.close,
+          isOpen: true,
+        };
+      }
+    }
+
+    // Determine current open/closed status
+    const now = new Date();
+    const currentDay = dayNames[now.getDay()];
+    const currentTime = now.toTimeString().slice(0, 5); // HH:MM
+    const todayHours = businessHours[currentDay];
+    const isCurrentlyOpen = todayHours.isOpen &&
+      currentTime >= todayHours.open &&
+      currentTime <= todayHours.close;
+
     const availability = {
-      isOpen: true,
-      businessHours: {
-        monday: { open: '09:00', close: '21:00', isOpen: true },
-        tuesday: { open: '09:00', close: '21:00', isOpen: true },
-        wednesday: { open: '09:00', close: '21:00', isOpen: true },
-        thursday: { open: '09:00', close: '21:00', isOpen: true },
-        friday: { open: '09:00', close: '21:00', isOpen: true },
-        saturday: { open: '10:00', close: '20:00', isOpen: true },
-        sunday: { open: '10:00', close: '20:00', isOpen: true }
-      },
+      isOpen: isCurrentlyOpen,
+      businessHours,
       currentStatus: {
-        isOpen: true,
-        message: 'Store is currently open',
+        isOpen: isCurrentlyOpen,
+        message: isCurrentlyOpen ? 'Store is currently open' : 'Store is currently closed',
         nextChange: {
-          time: '21:00',
-          status: 'closed'
-        }
+          time: isCurrentlyOpen ? todayHours.close : todayHours.open,
+          status: isCurrentlyOpen ? 'closed' : 'open',
+        },
       },
       responseTime: {
         average: '5-15 minutes',
-        status: 'active'
-      }
+        status: isCurrentlyOpen ? 'active' : 'away',
+      },
     };
 
     res.status(200).json({
@@ -850,7 +913,7 @@ export const blockStore = async (req: Request, res: Response): Promise<void> => 
     const conversation = await Conversation.findOne({
       customerId: new Types.ObjectId(userId),
       storeId: new Types.ObjectId(id)
-    });
+    }).lean();
 
     if (!conversation) {
       res.status(404).json({
@@ -896,7 +959,7 @@ export const unblockStore = async (req: Request, res: Response): Promise<void> =
     const conversation = await Conversation.findOne({
       customerId: new Types.ObjectId(userId),
       storeId: new Types.ObjectId(id)
-    });
+    }).lean();
 
     if (!conversation) {
       res.status(404).json({

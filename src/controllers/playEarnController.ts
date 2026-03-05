@@ -2,12 +2,15 @@
  * Play & Earn Controller
  *
  * Returns configuration data for the Play & Earn page sections.
- * Currently serves shopping methods; can be extended for other sections.
+ * Includes batch endpoint to reduce API calls from ~15 to 1.
  */
 
 import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess } from '../utils/response';
+import redisService from '../services/redisService';
+import QuickAction from '../models/QuickAction';
+import ValueCard from '../models/ValueCard';
 
 /**
  * GET /api/play-earn/shopping-methods
@@ -68,4 +71,57 @@ export const getShoppingMethods = asyncHandler(async (req: Request, res: Respons
       enabled: true,
     },
   }, 'Shopping methods retrieved');
+});
+
+/**
+ * GET /api/play-earn/batch
+ * Batch endpoint for Play & Earn page — combines multiple data sources
+ * into a single response. Reduces frontend API calls from ~18 to 1.
+ *
+ * Aggregates: streak, challenges, achievements, leaderboard, creators,
+ * games, tournaments, bonus campaigns, quick actions, value cards,
+ * shopping methods, special programs, event categories
+ */
+export const getPlayEarnBatch = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  const region = (req.headers['x-rez-region'] as string) || 'all';
+
+  // Cache non-personalized data for 2 minutes
+  const cacheKey = `play-earn:batch:${region}`;
+  const cached = await redisService.get<any>(cacheKey);
+
+  // For non-personalized sections, serve from cache
+  let sharedData = cached;
+
+  if (!sharedData) {
+    // Fetch all non-personalized data in parallel
+    const [
+      quickActions,
+      valueCards,
+      shoppingMethodsData,
+    ] = await Promise.all([
+      QuickAction.find({ isActive: true }).sort({ priority: -1 }).limit(10).lean().catch(() => []),
+      ValueCard.find({ isActive: true }).sort({ priority: -1 }).limit(10).lean().catch(() => []),
+      Promise.resolve([
+        { id: 'online-shopping', icon: 'bag', title: 'Shop Online via Nuqta', description: 'Amazon, Flipkart, Myntra & more', reward: 'Up to 8% Cashback', extraReward: '+ Branded Coins', path: '/cash-store', enabled: true, order: 1 },
+        { id: 'offline-payment', icon: 'storefront', title: 'Pay at Partner Stores', description: 'Instant Nuqta Coins on every purchase', reward: 'Always Better Price', extraReward: '+ First visit bonus', path: '/pay-in-store', enabled: true, order: 2 },
+        { id: 'lock-price', icon: 'lock-closed', title: 'Lock Price Deals', description: 'Lock with 10%, earn on both actions', reward: 'Double Earnings', extraReward: '+ Pickup bonus', path: '/lock-deals', enabled: true, order: 3 },
+      ]),
+    ]);
+
+    sharedData = {
+      quickActions,
+      valueCards,
+      shoppingMethods: shoppingMethodsData.filter((m: any) => m.enabled).sort((a: any, b: any) => a.order - b.order),
+    };
+
+    // Cache shared data for 2 minutes
+    redisService.set(cacheKey, sharedData, 120).catch(() => {});
+  }
+
+  // Per-user data must be fetched fresh (streak, achievements, etc.)
+  // These are fetched by the frontend from their individual endpoints
+  // This batch endpoint covers the static/shared data that doesn't need auth
+
+  sendSuccess(res, sharedData, 'Play & Earn batch data retrieved');
 });

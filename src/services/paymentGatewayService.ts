@@ -603,7 +603,7 @@ class PaymentGatewayService {
         user: new mongoose.Types.ObjectId(userId),
         source: 'recharge',
         idempotencyKey: `recharge_${payment.paymentId}`
-      });
+      }).lean();
 
       if (existing) {
         console.log('[PAYMENT GATEWAY] Wallet already credited for payment:', payment.paymentId);
@@ -611,7 +611,7 @@ class PaymentGatewayService {
       }
 
       // Find or create wallet
-      let wallet = await Wallet.findOne({ user: userId });
+      let wallet = await Wallet.findOne({ user: userId }).lean();
       if (!wallet) {
         wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
       }
@@ -677,7 +677,7 @@ class PaymentGatewayService {
           { 'gatewayResponse.paymentIntentId': paymentIntentId },
           { 'gatewayResponse.transactionId': paymentIntentId }
         ]
-      });
+      }).lean();
 
       if (!payment) {
         console.warn('⚠️ [PAYMENT GATEWAY] Payment not found for payment intent:', paymentIntentId);

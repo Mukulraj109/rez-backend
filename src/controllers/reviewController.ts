@@ -296,7 +296,7 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
 
   try {
     // Check if store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       throw new AppError('Store not found', 404);
     }
@@ -332,7 +332,7 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
       store: storeId,
       user: userId,
       isActive: true
-    });
+    }).lean();
 
     if (existingReview) {
       throw new AppError('You have already reviewed this store', 400);
@@ -511,7 +511,7 @@ export const updateReview = asyncHandler(async (req: Request, res: Response) => 
       _id: reviewId,
       user: userId,
       isActive: true
-    });
+    }).lean();
 
     if (!review) {
       throw new AppError('Review not found or you are not authorized to update it', 404);
@@ -738,7 +738,7 @@ export const getFeaturedReviews = asyncHandler(async (req: Request, res: Respons
       .populate('store', 'name logo slug category')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(Number(limit));
+      .limit(Number(limit)).lean();
 
     const [reviews, total] = await Promise.all([
       reviewQuery.lean(),

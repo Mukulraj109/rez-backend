@@ -8,6 +8,7 @@ import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import FlashSale from '../../models/FlashSale';
 import { sendSuccess, sendError } from '../../utils/response';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -35,7 +36,7 @@ router.get('/', async (req: Request, res: Response) => {
       filter.enabled = false;
     }
     if (req.query.search) {
-      filter.title = { $regex: req.query.search, $options: 'i' };
+      filter.title = { $regex: escapeRegex(req.query.search as string), $options: 'i' };
     }
 
     const [sales, total] = await Promise.all([

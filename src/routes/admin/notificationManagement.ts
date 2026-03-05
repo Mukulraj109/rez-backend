@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express';
 import mongoose, { Schema, Types, Document, Model } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
+import { escapeRegex } from '../../utils/sanitize';
 import {
   sendSuccess,
   sendError,
@@ -78,7 +79,7 @@ router.get('/templates', async (req: Request, res: Response) => {
       filter.channel = req.query.channel;
     }
     if (req.query.category) {
-      filter.category = { $regex: req.query.category as string, $options: 'i' };
+      filter.category = { $regex: escapeRegex(req.query.category as string), $options: 'i' };
     }
     if (req.query.isActive !== undefined) {
       filter.isActive = req.query.isActive === 'true';

@@ -17,6 +17,9 @@
 
 import Bull, { Queue, Job, JobOptions } from 'bull';
 import { getRedisConfig } from '../config/redis';
+import EmailService from './EmailService';
+import SMSService from './SMSService';
+import { logger } from '../config/logger';
 
 interface EmailJobData {
   to: string | string[];
@@ -305,20 +308,14 @@ export class QueueService {
    */
   private static setupEmailProcessor(): void {
     this.emailQueue?.process(async (job: Job<EmailJobData>) => {
-      console.log(`📧 Processing email job ${job.id}`);
+      logger.info(`Processing email job ${job.id}`);
       const { to, subject, body, html, from } = job.data;
 
       try {
-        // TODO: Integrate with actual email service (SendGrid, SES, etc.)
-        console.log(`Sending email to: ${to}`);
-        console.log(`Subject: ${subject}`);
-
-        // Simulate email sending
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
+        await EmailService.send({ to, subject, text: body, html, from });
         return { success: true, messageId: `msg_${Date.now()}` };
       } catch (error) {
-        console.error('Email sending failed:', error);
+        logger.error('Email sending failed', { error, jobId: job.id });
         throw error;
       }
     });
@@ -329,19 +326,14 @@ export class QueueService {
    */
   private static setupSMSProcessor(): void {
     this.smsQueue?.process(async (job: Job<SMSJobData>) => {
-      console.log(`📱 Processing SMS job ${job.id}`);
+      logger.info(`Processing SMS job ${job.id}`);
       const { to, message } = job.data;
 
       try {
-        // TODO: Integrate with actual SMS service (Twilio, SNS, etc.)
-        console.log(`Sending SMS to: ${to}`);
-
-        // Simulate SMS sending
-        await new Promise(resolve => setTimeout(resolve, 500));
-
+        await SMSService.send({ to, message });
         return { success: true, messageId: `sms_${Date.now()}` };
       } catch (error) {
-        console.error('SMS sending failed:', error);
+        logger.error('SMS sending failed', { error, jobId: job.id });
         throw error;
       }
     });
@@ -352,23 +344,40 @@ export class QueueService {
    */
   private static setupReportProcessor(): void {
     this.reportQueue?.process(async (job: Job<ReportJobData>) => {
-      console.log(`📊 Processing report job ${job.id}`);
+      logger.info(`Processing report job ${job.id}`, { reportType: job.data.reportType, merchantId: job.data.merchantId });
       const { merchantId, reportType, format, dateRange, email } = job.data;
 
       try {
-        // TODO: Implement report generation logic
-        console.log(`Generating ${reportType} report for merchant ${merchantId}`);
+        // Report generation — aggregates data from DB and sends via email
+        const { Order } = await import('../models/Order');
+        const dateFilter: any = {};
+        if (dateRange?.start) dateFilter.$gte = new Date(dateRange.start);
+        if (dateRange?.end) dateFilter.$lte = new Date(dateRange.end);
 
-        // Simulate report generation
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        const orders = await Order.find({
+          'items.store': merchantId,
+          ...(Object.keys(dateFilter).length && { createdAt: dateFilter }),
+        }).select('orderNumber totals status createdAt').lean();
 
-        return {
-          success: true,
-          reportUrl: `https://reports.example.com/${merchantId}/${reportType}.${format}`,
-          generatedAt: new Date()
+        const reportData = {
+          merchantId,
+          reportType,
+          generatedAt: new Date(),
+          totalOrders: orders.length,
+          totalRevenue: orders.reduce((sum: number, o: any) => sum + (o.totals?.grandTotal || 0), 0),
         };
+
+        if (email) {
+          await EmailService.send({
+            to: email,
+            subject: `Your ${reportType} Report`,
+            text: `Report generated with ${reportData.totalOrders} orders, total revenue: ${reportData.totalRevenue}`,
+          });
+        }
+
+        return { success: true, ...reportData };
       } catch (error) {
-        console.error('Report generation failed:', error);
+        logger.error('Report generation failed', { error, jobId: job.id });
         throw error;
       }
     });
@@ -379,19 +388,29 @@ export class QueueService {
    */
   private static setupAnalyticsProcessor(): void {
     this.analyticsQueue?.process(async (job: Job<AnalyticsJobData>) => {
-      console.log(`📈 Processing analytics job ${job.id}`);
+      logger.info(`Processing analytics job ${job.id}`, { type: job.data.type, merchantId: job.data.merchantId });
       const { merchantId, type, data } = job.data;
 
       try {
-        // TODO: Implement analytics calculation logic
-        console.log(`Calculating ${type} analytics for merchant ${merchantId}`);
+        const { Order } = await import('../models/Order');
+        const now = new Date();
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-        // Simulate analytics calculation
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        const [orderCount, revenue] = await Promise.all([
+          Order.countDocuments({ 'items.store': merchantId, createdAt: { $gte: thirtyDaysAgo } }),
+          Order.aggregate([
+            { $match: { 'items.store': merchantId, createdAt: { $gte: thirtyDaysAgo } } },
+            { $group: { _id: null, total: { $sum: '$totals.grandTotal' } } },
+          ]),
+        ]);
 
-        return { success: true, calculatedAt: new Date() };
+        return {
+          success: true,
+          calculatedAt: new Date(),
+          metrics: { orderCount, revenue: revenue[0]?.total || 0, type },
+        };
       } catch (error) {
-        console.error('Analytics calculation failed:', error);
+        logger.error('Analytics calculation failed', { error, jobId: job.id });
         throw error;
       }
     });
@@ -405,15 +424,18 @@ export class QueueService {
       const { merchantId, action, resourceType, resourceId, userId, metadata } = job.data;
 
       try {
-        // TODO: Write to audit log database
-        console.log(`Writing audit log: ${action} on ${resourceType}`);
-
-        // Simulate audit log write
-        await new Promise(resolve => setTimeout(resolve, 100));
-
+        const { AdminAuditLog } = await import('../models/AdminAuditLog');
+        await AdminAuditLog.create({
+          adminId: userId || merchantId,
+          action,
+          targetType: resourceType,
+          targetId: resourceId,
+          metadata,
+          createdAt: new Date(),
+        });
         return { success: true, loggedAt: new Date() };
       } catch (error) {
-        console.error('Audit log write failed:', error);
+        logger.error('Audit log write failed', { error, action, resourceType });
         throw error;
       }
     });

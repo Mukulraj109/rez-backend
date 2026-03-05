@@ -102,7 +102,7 @@ class EventService {
    * Get event by ID
    */
   async getEventById(id: string): Promise<IEvent | null> {
-    const event = await Event.findById(id);
+    const event = await Event.findById(id).lean();
     if (event && event.status === 'published') {
       // Increment view count
       await (event as any).incrementViews();
@@ -197,7 +197,7 @@ class EventService {
   async bookEventSlot(eventId: string, userId: string, slotId?: string, attendeeInfo?: any): Promise<BookingResult> {
     try {
       // Find event
-      const event = await Event.findById(eventId);
+      const event = await Event.findById(eventId).lean();
       if (!event || event.status !== 'published') {
         return {
           success: false,
@@ -218,7 +218,7 @@ class EventService {
         eventId,
         userId,
         status: { $in: ['pending', 'confirmed'] }
-      });
+      }).lean();
 
       if (existingBooking) {
         return {
@@ -320,7 +320,7 @@ class EventService {
       const booking = await EventBooking.findOne({
         _id: bookingId,
         userId
-      });
+      }).lean();
 
       if (!booking) {
         return {
@@ -338,7 +338,7 @@ class EventService {
 
       // Update slot availability if applicable
       if (booking.slotId) {
-        const event = await Event.findById(booking.eventId);
+        const event = await Event.findById(booking.eventId).lean();
         if (event && event.availableSlots) {
           const slot = event.availableSlots.find(s => s.id === booking.slotId);
           if (slot) {
@@ -367,7 +367,7 @@ class EventService {
    * Get event analytics
    */
   async getEventAnalytics(eventId: string): Promise<any> {
-    const event = await Event.findById(eventId);
+    const event = await Event.findById(eventId).lean();
     if (!event) {
       throw new Error('Event not found');
     }
@@ -443,7 +443,7 @@ class EventService {
    * Increment event shares
    */
   async incrementEventShares(eventId: string): Promise<void> {
-    const event = await Event.findById(eventId);
+    const event = await Event.findById(eventId).lean();
     if (event) {
       await event.incrementShares();
     }
@@ -453,7 +453,7 @@ class EventService {
    * Increment event favorites
    */
   async incrementEventFavorites(eventId: string): Promise<void> {
-    const event = await Event.findById(eventId);
+    const event = await Event.findById(eventId).lean();
     if (event) {
       await event.incrementFavorites();
     }

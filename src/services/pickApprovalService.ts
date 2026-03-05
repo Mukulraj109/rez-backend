@@ -24,7 +24,7 @@ export async function merchantApprovePick(
   storeId: string,
   rewardOptions?: RewardOptions
 ): Promise<ICreatorPick> {
-  const pick = await CreatorPick.findById(pickId);
+  const pick = await CreatorPick.findById(pickId).lean();
   if (!pick) throw new Error('Pick not found');
 
   // Validate pick is pending merchant approval
@@ -82,7 +82,7 @@ export async function merchantApprovePick(
       };
     } else if (rewardOptions.type === 'branded_coins') {
       // Award branded coins to creator
-      const wallet = await Wallet.findOne({ user: creatorUserId });
+      const wallet = await Wallet.findOne({ user: creatorUserId }).lean();
       if (!wallet) throw new Error('Creator wallet not found');
 
       await wallet.addBrandedCoins(
@@ -139,7 +139,7 @@ export async function merchantRejectPick(
   merchantId: string,
   reason: string
 ): Promise<ICreatorPick> {
-  const pick = await CreatorPick.findById(pickId);
+  const pick = await CreatorPick.findById(pickId).lean();
   if (!pick) throw new Error('Pick not found');
 
   if (pick.status !== 'pending_merchant' || pick.merchantApproval?.status !== 'pending') {

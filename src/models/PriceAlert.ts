@@ -279,15 +279,46 @@ priceAlertSchema.statics.checkAndTriggerAlerts = async function (productId: stri
 
   for (const alert of activeAlerts) {
     if (alert.shouldTrigger(newPrice)) {
-      console.log(`🔔 [PriceAlert] Triggering alert ${alert._id} for user ${alert.userId}`);
-
       await alert.trigger(newPrice);
       triggeredAlerts.push(alert);
 
-      // TODO: Send notification via selected methods
-      // - Push notification
-      // - Email
-      // - SMS
+      // Send notifications via user's selected methods (fire-and-forget)
+      (async () => {
+        try {
+          const { Product } = await import('./Product');
+          const product = await Product.findById(alert.productId).select('name').lean();
+          const productName = (product as any)?.name || 'Product';
+          const message = `Price alert: ${productName} dropped to ${newPrice.toFixed(2)}!`;
+
+          if (alert.notificationMethod.includes('push')) {
+            const pushService = (await import('../services/pushNotificationService')).default;
+            const { User } = await import('./User');
+            const user = await User.findById(alert.userId).select('phoneNumber').lean();
+            if (user?.phoneNumber) {
+              await pushService.sendOrderUpdate(
+                String(alert._id),
+                user.phoneNumber,
+                'Price Drop Alert',
+                message
+              );
+            }
+          }
+          if (alert.notificationMethod.includes('email') && alert.contact.email) {
+            const EmailService = (await import('../services/EmailService')).default;
+            await EmailService.send({
+              to: alert.contact.email,
+              subject: `Price Drop Alert: ${productName}`,
+              text: message,
+            });
+          }
+          if (alert.notificationMethod.includes('sms') && alert.contact.phone) {
+            const SMSService = (await import('../services/SMSService')).default;
+            await SMSService.send({ to: alert.contact.phone, message });
+          }
+        } catch (err) {
+          // Notification failure should not block alert processing
+        }
+      })();
     }
   }
 

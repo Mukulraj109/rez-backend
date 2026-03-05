@@ -216,7 +216,7 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
   try {
     let productsQuery = Product.find(query)
       .populate('category', 'name slug')
-      .populate('store', 'name logo location.city');
+      .populate('store', 'name logo location.city').lean();
 
     // Apply search if provided
     if (search) {
@@ -227,7 +227,7 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
         .select({ score: { $meta: 'textScore' } })
         .populate('category', 'name slug')
         .populate('store', 'name logo location.city')
-        .sort({ score: { $meta: 'textScore' } });
+        .sort({ score: { $meta: 'textScore' } }).lean();
     } else {
       // Apply sorting
       let sortOptions: any = {};
@@ -343,7 +343,8 @@ export const getProductById = asyncHandler(async (req: Request, res: Response) =
       return sendSuccess(res, cachedProduct, 'Product retrieved successfully');
     }
 
-    const product = await Product.findOne({
+    // Use non-lean query to access Mongoose instance methods (calculateCashback, getEstimatedDelivery)
+    const productDoc = await Product.findOne({
       _id: id,
       isActive: true
     })
@@ -351,14 +352,17 @@ export const getProductById = asyncHandler(async (req: Request, res: Response) =
       .populate('store', 'name logo slug location contact ratings operationalInfo')
       .populate('serviceCategory', 'name slug icon cashbackPercentage');
 
-    if (!product) {
+    if (!productDoc) {
       return sendNotFound(res, 'Product not found');
     }
 
-    // Get similar products
+    // Run instance method computation and similar products query in parallel
+    const cashbackAmount = productDoc.calculateCashback();
+    const estimatedDelivery = productDoc.getEstimatedDelivery();
+
     const similarProducts = await Product.find({
-      category: product.category,
-      _id: { $ne: product._id },
+      category: productDoc.category,
+      _id: { $ne: productDoc._id },
       isActive: true,
       'inventory.isAvailable': true
     })
@@ -366,12 +370,10 @@ export const getProductById = asyncHandler(async (req: Request, res: Response) =
       .limit(6)
       .lean();
 
-    // Calculate cashback and delivery for this product
-    const cashbackAmount = product.calculateCashback();
-    const estimatedDelivery = product.getEstimatedDelivery();
+    const product = productDoc.toObject();
 
     const response = {
-      ...product.toObject(),
+      ...product,
       similarProducts,
       // Add computed fields for immediate use
       computedCashback: {
@@ -424,7 +426,7 @@ export const getProductsByCategory = asyncHandler(async (req: Request, res: Resp
     const category = await Category.findOne({
       slug: categorySlug,
       isActive: true
-    });
+    }).lean();
 
     if (!category) {
       return sendNotFound(res, 'Category not found');
@@ -517,7 +519,7 @@ export const getProductsBySubcategory = asyncHandler(async (req: Request, res: R
     const subcategory = await Category.findOne({
       slug: subcategorySlug,
       isActive: true
-    });
+    }).lean();
 
     let products: any[] = [];
 
@@ -638,7 +640,7 @@ export const getProductsByStore = asyncHandler(async (req: Request, res: Respons
     const store = await Store.findOne({
       _id: new mongoose.Types.ObjectId(storeId),
       isActive: true
-    });
+    }).lean();
 
     if (!store) {
       return sendNotFound(res, 'Store not found');
@@ -1056,7 +1058,7 @@ export const getRecommendations = asyncHandler(async (req: Request, res: Respons
   const { limit = 6 } = req.query;
 
   try {
-    const product = await Product.findById(productId);
+    const product = await Product.findById(productId).lean() as any;
 
     if (!product) {
       return sendNotFound(res, 'Product not found');
@@ -1133,7 +1135,7 @@ export const trackProductView = asyncHandler(async (req: Request, res: Response)
   const { id } = req.params;
 
   try {
-    const product = await Product.findById(id);
+    const product = await Product.findById(id) as any;
 
     if (!product) {
       return sendNotFound(res, 'Product not found');
@@ -1163,8 +1165,9 @@ export const getProductAnalytics = asyncHandler(async (req: Request, res: Respon
   const { id } = req.params;
 
   try {
+    // Use non-lean query to access Mongoose instance methods
     const product = await Product.findById(id)
-      .select('analytics cashback deliveryInfo pricing');
+      .select('analytics cashback deliveryInfo pricing inventory store');
 
     if (!product) {
       return sendNotFound(res, 'Product not found');
@@ -1218,7 +1221,7 @@ export const getFrequentlyBoughtTogether = asyncHandler(async (req: Request, res
       .populate({
         path: 'frequentlyBoughtWith.productId',
         select: 'name title price pricing image images rating ratings inventory'
-      });
+      }).lean() as any;
 
     if (!product) {
       return sendNotFound(res, 'Product not found');
@@ -1263,7 +1266,7 @@ export const getBundleProducts = asyncHandler(async (req: Request, res: Response
       .populate({
         path: 'bundleProducts',
         select: 'name title price pricing image images rating ratings inventory cashback'
-      });
+      }).lean() as any;
 
     if (!product) {
       return sendNotFound(res, 'Product not found');
@@ -1547,7 +1550,7 @@ export const getRelatedProducts = asyncHandler(async (req: Request, res: Respons
       return sendSuccess(res, cachedProducts, 'Related products retrieved successfully');
     }
 
-    const product = await Product.findById(id);
+    const product = await Product.findById(id).lean() as any;
 
     if (!product) {
       return sendNotFound(res, 'Product not found');
@@ -1622,7 +1625,7 @@ export const checkAvailability = asyncHandler(async (req: Request, res: Response
   const { variantId, quantity = 1 } = req.query;
 
   try {
-    const product = await Product.findById(id);
+    const product = await Product.findById(id).lean() as any;
 
     if (!product) {
       return sendNotFound(res, 'Product not found');
@@ -1949,7 +1952,7 @@ export const getProductsByCategorySlugHomepage = asyncHandler(async (req: Reques
     const category = await Category.findOne({
       slug: categorySlug,
       isActive: true
-    });
+    }).lean();
 
     if (!category) {
       return sendSuccess(res, [], 'Category not found');

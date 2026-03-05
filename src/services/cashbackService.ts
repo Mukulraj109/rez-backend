@@ -138,7 +138,7 @@ class CashbackService {
    */
   async createCashbackFromOrder(orderId: Types.ObjectId): Promise<IUserCashback | null> {
     try {
-      const order = await Order.findById(orderId).populate('items.product');
+      const order = await Order.findById(orderId).populate('items.product').lean();
 
       if (!order) {
         console.log(`⚠️ [CASHBACK SERVICE] Order not found: ${orderId}`);
@@ -196,7 +196,7 @@ class CashbackService {
         // MongoDB duplicate key error — cashback already exists for this order+user
         if (createError?.code === 11000 || createError?.message?.includes('E11000')) {
           console.log(`⚠️ [CASHBACK SERVICE] Cashback already exists for order: ${orderId} (caught duplicate key)`);
-          const existing = await UserCashback.findOne({ order: orderId, user: order.user });
+          const existing = await UserCashback.findOne({ order: orderId, user: order.user }).lean();
           return existing;
         }
         throw createError;
@@ -206,7 +206,7 @@ class CashbackService {
       if (amount > 0) {
         try {
           const { Wallet } = await import('../models/Wallet');
-          const wallet = await Wallet.findOne({ user: order.user });
+          const wallet = await Wallet.findOne({ user: order.user }).lean();
 
           if (wallet) {
             // Atomic balance update via $inc (addFunds is already atomic)
@@ -356,7 +356,7 @@ class CashbackService {
    */
   async creditCashbackToWallet(cashbackId: Types.ObjectId): Promise<IUserCashback> {
     try {
-      const cashback = await UserCashback.findById(cashbackId);
+      const cashback = await UserCashback.findById(cashbackId).lean();
 
       if (!cashback) {
         throw new Error('Cashback not found');

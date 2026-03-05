@@ -2,6 +2,7 @@
 // Main model for managing all types of offers (mega, student, new arrival, etc.)
 
 import mongoose, { Document, Schema, Types, Model } from 'mongoose';
+import { escapeRegex } from '../utils/sanitize';
 
 export interface IOffer extends Document {
   _id: Types.ObjectId;
@@ -651,12 +652,13 @@ OfferSchema.statics.searchOffers = function(query: string, filters: any = {}): P
 
   // Text search
   if (query) {
+    const escaped = escapeRegex(query);
     searchQuery.$or = [
-      { title: { $regex: query, $options: 'i' } },
-      { subtitle: { $regex: query, $options: 'i' } },
-      { description: { $regex: query, $options: 'i' } },
-      { 'store.name': { $regex: query, $options: 'i' } },
-      { 'metadata.tags': { $in: [new RegExp(query, 'i')] } }
+      { title: { $regex: escaped, $options: 'i' } },
+      { subtitle: { $regex: escaped, $options: 'i' } },
+      { description: { $regex: escaped, $options: 'i' } },
+      { 'store.name': { $regex: escaped, $options: 'i' } },
+      { 'metadata.tags': { $in: [new RegExp(escaped, 'i')] } }
     ];
   }
 

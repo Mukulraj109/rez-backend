@@ -213,7 +213,7 @@ class ShareService {
 
   // Track conversion (purchase/signup from share)
   async trackConversion(trackingCode: string): Promise<void> {
-    const share = await Share.findOne({ trackingCode });
+    const share = await Share.findOne({ trackingCode }).lean();
 
     if (!share || share.status === 'expired') {
       return;
@@ -248,6 +248,7 @@ class ShareService {
         .sort({ createdAt: -1 })
         .skip(offset)
         .limit(limit)
+        .lean()
         .exec(),
       Share.countDocuments(query)
     ]);
@@ -337,7 +338,7 @@ class ShareService {
     const { Types } = require('mongoose');
 
     // Validate order exists and belongs to user
-    const order = await Order.findById(orderId);
+    const order = await Order.findById(orderId).lean();
     if (!order) {
       throw new Error('Order not found');
     }
@@ -360,7 +361,7 @@ class ShareService {
       user: userId,
       contentType: 'purchase',
       orderId: new Types.ObjectId(orderId)
-    });
+    }).lean();
 
     if (existingShare) {
       throw new Error('This order has already been shared');
@@ -460,7 +461,7 @@ class ShareService {
     const { Types } = require('mongoose');
 
     // Check order exists and belongs to user
-    const order = await Order.findById(orderId);
+    const order = await Order.findById(orderId).lean();
     if (!order) {
       return { canShare: false, reason: 'Order not found' };
     }
@@ -479,7 +480,7 @@ class ShareService {
       user: userId,
       contentType: 'purchase',
       orderId: new Types.ObjectId(orderId)
-    });
+    }).lean();
 
     if (existingShare) {
       return { canShare: false, reason: 'Order already shared' };

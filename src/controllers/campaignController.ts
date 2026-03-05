@@ -56,7 +56,7 @@ export const getActiveCampaigns = asyncHandler(async (req: Request, res: Respons
       const userMemberships = await ProgramMembership.find({
         user: req.user._id,
         status: 'active',
-      }).select('programSlug').lean();
+      }).select('programSlug').limit(50).lean();
       const activeSlugs = new Set(userMemberships.map(m => m.programSlug));
       campaigns = campaigns.filter((c: any) =>
         !c.exclusiveToProgramSlug || activeSlugs.has(c.exclusiveToProgramSlug)
@@ -121,7 +121,7 @@ export const getCampaignsByType = asyncHandler(async (req: Request, res: Respons
       const userMemberships = await ProgramMembership.find({
         user: req.user._id,
         status: 'active',
-      }).select('programSlug').lean();
+      }).select('programSlug').limit(50).lean();
       const activeSlugs = new Set(userMemberships.map(m => m.programSlug));
       campaigns = campaigns.filter((c: any) =>
         !c.exclusiveToProgramSlug || activeSlugs.has(c.exclusiveToProgramSlug)
@@ -419,7 +419,7 @@ export const redeemDeal = asyncHandler(async (req: Request, res: Response) => {
       ? { _id: campaignId }
       : { campaignId: campaignId.toLowerCase() };
 
-    const campaign = await Campaign.findOne(query);
+    const campaign = await Campaign.findOne(query).lean();
 
     if (!campaign) {
       return sendNotFound(res, 'Campaign not found');
@@ -444,7 +444,7 @@ export const redeemDeal = asyncHandler(async (req: Request, res: Response) => {
       campaign: campaign._id,
       dealIndex: index,
       status: { $in: ['active', 'used'] },
-    });
+    }).lean();
 
     if (existingRedemption) {
       return sendBadRequest(res, 'You have already redeemed this deal');

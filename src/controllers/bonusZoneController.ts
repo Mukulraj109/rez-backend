@@ -93,7 +93,7 @@ export const getCampaignDetail = asyncHandler(async (req: Request, res: Response
   const userId = (req as any).userId;
   const { slug } = req.params;
 
-  const campaign = await BonusCampaign.findOne({ slug });
+  const campaign = await BonusCampaign.findOne({ slug }).lean();
   if (!campaign) {
     return sendNotFound(res, 'Campaign not found');
   }
@@ -201,7 +201,7 @@ export const claimCampaignReward = asyncHandler(async (req: Request, res: Respon
     transactionAmount,
   } = req.body;
 
-  const campaign = await BonusCampaign.findOne({ slug });
+  const campaign = await BonusCampaign.findOne({ slug }).lean();
   if (!campaign) {
     return sendNotFound(res, 'Campaign not found');
   }
@@ -295,7 +295,7 @@ export const checkEligibility = asyncHandler(async (req: Request, res: Response)
   const userId = (req as any).userId;
   const { slug } = req.params;
 
-  const campaign = await BonusCampaign.findOne({ slug });
+  const campaign = await BonusCampaign.findOne({ slug }).lean();
   if (!campaign) {
     return sendNotFound(res, 'Campaign not found');
   }
@@ -388,7 +388,7 @@ export const adminCreateCampaign = asyncHandler(async (req: Request, res: Respon
   }
 
   // Check slug uniqueness
-  const existing = await BonusCampaign.findOne({ slug: slug.toLowerCase().trim() });
+  const existing = await BonusCampaign.findOne({ slug: slug.toLowerCase().trim() }).lean();
   if (existing) {
     return sendBadRequest(res, `Campaign with slug "${slug}" already exists`);
   }
@@ -435,7 +435,7 @@ export const adminUpdateCampaign = asyncHandler(async (req: Request, res: Respon
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendBadRequest(res, 'Invalid campaign ID');
 
-  const campaign = await BonusCampaign.findById(id);
+  const campaign = await BonusCampaign.findById(id).lean();
   if (!campaign) {
     return sendNotFound(res, 'Campaign not found');
   }
@@ -519,7 +519,7 @@ export const adminUpdateCampaign = asyncHandler(async (req: Request, res: Respon
 
   // Prevent updating slug to an existing one
   if (updates.slug && updates.slug !== campaign.slug) {
-    const existing = await BonusCampaign.findOne({ slug: updates.slug.toLowerCase().trim() });
+    const existing = await BonusCampaign.findOne({ slug: updates.slug.toLowerCase().trim() }).lean();
     if (existing) {
       return sendBadRequest(res, `Campaign with slug "${updates.slug}" already exists`);
     }
@@ -560,7 +560,7 @@ export const adminDeleteCampaign = asyncHandler(async (req: Request, res: Respon
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendBadRequest(res, 'Invalid campaign ID');
 
-  const campaign = await BonusCampaign.findById(id);
+  const campaign = await BonusCampaign.findById(id).lean();
   if (!campaign) {
     return sendNotFound(res, 'Campaign not found');
   }
@@ -601,7 +601,7 @@ export const adminUpdateStatus = asyncHandler(async (req: Request, res: Response
     cancelled: [],
   };
 
-  const campaign = await BonusCampaign.findById(id);
+  const campaign = await BonusCampaign.findById(id).lean();
   if (!campaign) {
     return sendNotFound(res, 'Campaign not found');
   }
@@ -742,7 +742,7 @@ export const adminDuplicateCampaign = asyncHandler(async (req: Request, res: Res
 
   const slug = newSlug || `${source.slug}-copy-${Date.now()}`;
 
-  const existing = await BonusCampaign.findOne({ slug });
+  const existing = await BonusCampaign.findOne({ slug }).lean();
   if (existing) {
     return sendBadRequest(res, `Slug "${slug}" already exists`);
   }
@@ -779,7 +779,7 @@ export const adminRejectClaim = asyncHandler(async (req: Request, res: Response)
     return sendBadRequest(res, 'Invalid claim ID');
   }
 
-  const claim = await BonusClaim.findById(claimId);
+  const claim = await BonusClaim.findById(claimId).lean();
   if (!claim) return sendNotFound(res, 'Claim not found');
 
   if (claim.status === 'rejected') {

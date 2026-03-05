@@ -9,6 +9,7 @@ import {
   completeOnboarding,
   changePassword,
   deleteAccount,
+  exportUserData,
   getUserStatistics,
   uploadAvatar
 } from '../controllers/authController';
@@ -71,6 +72,12 @@ router.delete('/account',
   authenticate,
   securityLimiter,
   deleteAccount
+);
+
+router.get('/me/data-export',
+  authenticate,
+  securityLimiter,
+  exportUserData
 );
 
 router.get('/statistics',

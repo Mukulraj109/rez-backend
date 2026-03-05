@@ -22,7 +22,7 @@ export const addToFavorites = asyncHandler(async (req: Request, res: Response) =
 
   try {
     // Check if store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       throw new AppError('Store not found', 404);
     }
@@ -31,7 +31,7 @@ export const addToFavorites = asyncHandler(async (req: Request, res: Response) =
     const existingFavorite = await Favorite.findOne({ 
       user: userId, 
       store: storeId 
-    });
+    }).lean();
 
     if (existingFavorite) {
       throw new AppError('Store is already in your favorites', 400);
@@ -102,7 +102,7 @@ export const toggleFavorite = asyncHandler(async (req: Request, res: Response) =
 
   try {
     // Check if store exists
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
     if (!store) {
       throw new AppError('Store not found', 404);
     }
@@ -111,7 +111,7 @@ export const toggleFavorite = asyncHandler(async (req: Request, res: Response) =
     const existingFavorite = await Favorite.findOne({ 
       user: userId, 
       store: storeId 
-    });
+    }).lean();
 
     let isFavorited = false;
     let favorite = null;
@@ -213,7 +213,7 @@ export const getFavoriteStatuses = asyncHandler(async (req: Request, res: Respon
     const favorites = await Favorite.find({
       user: userId,
       store: { $in: storeIds }
-    }).select('store');
+    }).select('store').lean();
 
     const favoritedStoreIds = favorites.map(fav => fav.store.toString());
     const statuses = storeIds.reduce((acc, storeId) => {

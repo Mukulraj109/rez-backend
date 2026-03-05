@@ -98,7 +98,7 @@ export class ReferralFraudDetection {
    * Check if referee has qualified (met qualification criteria)
    */
   async checkQualification(referralId: string | Types.ObjectId): Promise<boolean> {
-    const referral = await Referral.findById(referralId).populate('referee');
+    const referral = await Referral.findById(referralId).populate('referee').lean();
 
     if (!referral || !referral.referee) {
       return false;
@@ -118,7 +118,7 @@ export class ReferralFraudDetection {
           criteria.timeframeDays * 24 * 60 * 60 * 1000
         )
       }
-    });
+    }).lean();
 
     // Check minimum orders
     if (orders.length < criteria.minOrders) {
@@ -151,7 +151,7 @@ export class ReferralFraudDetection {
     refereeId: string | Types.ObjectId,
     metadata: any
   ): Promise<boolean> {
-    const referrerReferrals = await Referral.find({ referrer: referrerId });
+    const referrerReferrals = await Referral.find({ referrer: referrerId }).lean();
 
     if (!metadata.deviceId && !metadata.ipAddress) {
       return false;
@@ -173,7 +173,7 @@ export class ReferralFraudDetection {
    * Check for suspicious account patterns
    */
   private async checkAccountPattern(refereeId: string | Types.ObjectId): Promise<boolean> {
-    const user = await User.findById(refereeId);
+    const user = await User.findById(refereeId).lean();
 
     if (!user) return true;
 
@@ -203,7 +203,7 @@ export class ReferralFraudDetection {
    * Check referee account age
    */
   private async checkAccountAge(refereeId: string | Types.ObjectId): Promise<boolean> {
-    const user = await User.findById(refereeId);
+    const user = await User.findById(refereeId).lean();
 
     if (!user) return true;
 
@@ -224,12 +224,12 @@ export class ReferralFraudDetection {
     const reverseReferral = await Referral.findOne({
       referrer: refereeId,
       referee: referrerId
-    });
+    }).lean();
 
     if (reverseReferral) return true;
 
     // Check for indirect circular patterns (max depth 2)
-    const refereeReferrals = await Referral.find({ referrer: refereeId });
+    const refereeReferrals = await Referral.find({ referrer: refereeId }).lean();
 
     for (const ref of refereeReferrals) {
       if (ref.referee.toString() === referrerId.toString()) {
@@ -248,8 +248,8 @@ export class ReferralFraudDetection {
     refereeId: string | Types.ObjectId
   ): Promise<boolean> {
     const [referrer, referee] = await Promise.all([
-      User.findById(referrerId),
-      User.findById(refereeId)
+      User.findById(referrerId).lean(),
+      User.findById(refereeId).lean()
     ]);
 
     if (!referrer?.email || !referee?.email) return false;
@@ -330,7 +330,7 @@ export class ReferralFraudDetection {
   async scanExistingReferrals() {
     const referrals = await Referral.find({
       status: { $in: [ReferralStatus.PENDING, ReferralStatus.REGISTERED] }
-    }).limit(100);
+    }).limit(100).lean();
 
     const results = [];
 

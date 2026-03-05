@@ -36,7 +36,7 @@ export async function validateCouponForCart(
     const { UserCoupon } = await import('../models/UserCoupon');
 
     // 1. Find the coupon
-    const coupon = await Coupon.findById(couponId);
+    const coupon = await Coupon.findById(couponId).lean();
 
     if (!coupon) {
       return {
@@ -72,7 +72,7 @@ export async function validateCouponForCart(
     const userCoupon = await UserCoupon.findOne({
       user: context.userId,
       coupon: couponId
-    });
+    }).lean();
 
     if (!userCoupon) {
       return {
@@ -324,7 +324,7 @@ export async function markCouponAsUsed(
 
     if (!updatedCoupon) {
       // Check why the update failed
-      const existingCoupon = await Coupon.findById(couponId);
+      const existingCoupon = await Coupon.findById(couponId).lean();
 
       if (!existingCoupon) {
         console.error('❌ [COUPON_VALIDATION] Coupon not found:', couponId);

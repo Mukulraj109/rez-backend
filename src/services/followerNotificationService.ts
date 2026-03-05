@@ -38,7 +38,7 @@ export async function getStoreFollowers(storeId: string | Types.ObjectId): Promi
           itemId: storeId
         }
       }
-    }).select('user');
+    }).select('user').lean();
 
     // Get unique user IDs
     const userIdSet = new Set<string>();
@@ -153,7 +153,7 @@ export async function notifyNewOffer(
   }
 ): Promise<NotificationResult> {
   try {
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
 
     if (!store) {
       throw new Error('Store not found');
@@ -197,7 +197,7 @@ export async function notifyNewProduct(
   }
 ): Promise<NotificationResult> {
   try {
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
 
     if (!store) {
       throw new Error('Store not found');
@@ -244,7 +244,7 @@ export async function notifyPriceDrop(
   newPrice: number
 ): Promise<NotificationResult> {
   try {
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
 
     if (!store) {
       throw new Error('Store not found');
@@ -290,7 +290,7 @@ export async function notifyBackInStock(
   }
 ): Promise<NotificationResult> {
   try {
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
 
     if (!store) {
       throw new Error('Store not found');
@@ -333,7 +333,7 @@ export async function notifyNewMenuItem(
   }
 ): Promise<NotificationResult> {
   try {
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
 
     if (!store) {
       throw new Error('Store not found');
@@ -374,7 +374,7 @@ export async function notifyStoreUpdate(
   }
 ): Promise<NotificationResult> {
   try {
-    const store = await Store.findById(storeId);
+    const store = await Store.findById(storeId).lean();
 
     if (!store) {
       throw new Error('Store not found');

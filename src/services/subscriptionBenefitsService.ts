@@ -15,7 +15,7 @@ class SubscriptionBenefitsService {
       const subscription = await Subscription.findOne({
         user: userId,
         status: { $in: ['active', 'trial', 'grace_period'] }
-      }).sort({ createdAt: -1 }); // FIXED: Sort by most recently created instead of end date
+      }).sort({ createdAt: -1 }).lean(); // FIXED: Sort by most recently created instead of end date
 
       if (subscription) {
         console.log('📊 [SUBSCRIPTION SERVICE] Found subscription:', {
@@ -389,7 +389,7 @@ class SubscriptionBenefitsService {
   async qualifiesForBirthdayOffer(userId: string | Types.ObjectId): Promise<boolean> {
     try {
       const subscription = await this.getUserSubscription(userId);
-      const user = await User.findById(userId);
+      const user = await User.findById(userId).lean();
 
       if (!subscription || !subscription.isActive() || !user) {
         return false;
@@ -476,7 +476,7 @@ class SubscriptionBenefitsService {
         user: userId,
         status: 'delivered',
         createdAt: { $gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) } // Last 90 days
-      });
+      }).lean();
 
       // Get tier config from DB (single source of truth)
       const tierConfig = await tierConfigService.getTierConfig(targetTier);

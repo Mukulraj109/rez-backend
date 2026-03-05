@@ -13,6 +13,7 @@ import { CoinTransaction } from '../models/CoinTransaction';
 import { reputationService } from './reputationService';
 import redisService from './redisService';
 import { NotificationService } from './notificationService';
+import { escapeRegex } from '../utils/sanitize';
 
 /**
  * Special Program Service
@@ -987,9 +988,9 @@ class SpecialProgramService {
       memberPipeline.push({
         $match: {
           $or: [
-            { 'userInfo.fullName': { $regex: search, $options: 'i' } },
-            { 'userInfo.email': { $regex: search, $options: 'i' } },
-            { 'userInfo.phoneNumber': { $regex: search, $options: 'i' } },
+            { 'userInfo.fullName': { $regex: escapeRegex(search), $options: 'i' } },
+            { 'userInfo.email': { $regex: escapeRegex(search), $options: 'i' } },
+            { 'userInfo.phoneNumber': { $regex: escapeRegex(search), $options: 'i' } },
           ],
         },
       });

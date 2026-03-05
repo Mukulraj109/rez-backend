@@ -68,7 +68,7 @@ class ReferralService {
     // Check if referral already exists
     const existingReferral = await Referral.findOne({
       referee: refereeId,
-    });
+    }).lean();
 
     if (existingReferral) {
       throw new Error('User already has a referral relationship');
@@ -210,7 +210,7 @@ class ReferralService {
       referee: refereeId,
       status: { $in: [ReferralStatus.ACTIVE, ReferralStatus.COMPLETED] },
       milestoneRewarded: false,
-    });
+    }).lean();
 
     if (!referral) {
       console.log(`ℹ️ [REFERRAL] No active referral found for milestone bonus`);
@@ -273,7 +273,7 @@ class ReferralService {
    * Get user's referral statistics
    */
   async getReferralStats(userId: Types.ObjectId): Promise<ReferralStats> {
-    const referrals = await Referral.find({ referrer: userId });
+    const referrals = await Referral.find({ referrer: userId }).lean();
 
     const stats = referrals.reduce(
       (acc, ref) => {
@@ -362,7 +362,7 @@ class ReferralService {
   async validateReferralCode(code: string): Promise<{ valid: boolean; referrer?: any }> {
     const user = await User.findOne({
       'referral.referralCode': code
-    }).select('_id phoneNumber profile.firstName referral.referralCode');
+    }).select('_id phoneNumber profile.firstName referral.referralCode').lean();
 
     if (!user) {
       return { valid: false };

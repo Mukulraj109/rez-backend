@@ -212,7 +212,7 @@ export const votePoll = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'optionId is required' });
     }
 
-    const poll = await Poll.findById(id);
+    const poll = await Poll.findById(id).lean();
     if (!poll) {
       return res.status(404).json({ success: false, error: 'Poll not found' });
     }
@@ -233,7 +233,7 @@ export const votePoll = async (req: Request, res: Response) => {
     }
 
     // Check duplicate vote (unique index will also catch this)
-    const existingVote = await PollVote.findOne({ poll: id, user: userId });
+    const existingVote = await PollVote.findOne({ poll: id, user: userId }).lean();
     if (existingVote) {
       return res.status(400).json({ success: false, error: 'You have already voted on this poll' });
     }
@@ -412,7 +412,7 @@ export const updatePoll = async (req: Request, res: Response) => {
     const { id } = req.params;
     const updates = req.body;
 
-    const poll = await Poll.findById(id);
+    const poll = await Poll.findById(id).lean();
     if (!poll) {
       return res.status(404).json({ success: false, error: 'Poll not found' });
     }

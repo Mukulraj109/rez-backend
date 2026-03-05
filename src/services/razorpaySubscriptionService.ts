@@ -95,7 +95,7 @@ class RazorpaySubscriptionService {
    */
   async createCustomer(userId: string, email?: string, phoneNumber?: string): Promise<string> {
     try {
-      const user = await User.findById(userId);
+      const user = await User.findById(userId).lean();
       if (!user) {
         throw new Error('User not found');
       }
@@ -288,7 +288,7 @@ class RazorpaySubscriptionService {
 
       const subscription = await Subscription.findOne({
         razorpaySubscriptionId: subscriptionData.id
-      });
+      }).lean();
 
       if (!subscription) {
         console.warn('Subscription not found for webhook:', subscriptionData.id);

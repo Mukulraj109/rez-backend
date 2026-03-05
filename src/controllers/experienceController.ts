@@ -31,7 +31,7 @@ export const getExperiences = asyncHandler(async (req: Request, res: Response) =
 
     // Filter by category slug if provided
     if (category && typeof category === 'string') {
-      const categoryDoc = await Category.findOne({ slug: category });
+      const categoryDoc = await Category.findOne({ slug: category }).lean();
       if (categoryDoc) {
         query.$or = query.$or || [];
         // Show experiences linked to this category or with no category set (global)

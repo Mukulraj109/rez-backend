@@ -221,7 +221,7 @@ export const moderatePhoto = async (req: Request, res: Response) => {
           source: 'photo_upload',
           referenceId: photoUpload._id,
           status: 'pending',
-        });
+        }).lean();
 
         if (pendingReward) {
           await pendingReward.approve(new mongoose.Types.ObjectId(adminId), notes);
@@ -244,7 +244,7 @@ export const moderatePhoto = async (req: Request, res: Response) => {
           source: 'photo_upload',
           referenceId: photoUpload._id,
           status: 'pending',
-        });
+        }).lean();
 
         if (pendingReward) {
           await pendingReward.reject(new mongoose.Types.ObjectId(adminId), notes || 'Photo rejected');

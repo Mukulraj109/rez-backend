@@ -96,7 +96,7 @@ export class AuditAlertService {
       }
 
       // Get merchant info
-      const merchant = await Merchant.findById(log.merchantId);
+      const merchant = await Merchant.findById(log.merchantId).lean();
       if (!merchant) {
         console.error('❌ [ALERT] Merchant not found:', log.merchantId);
         return;

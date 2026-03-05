@@ -50,7 +50,7 @@ class SupportService {
           user: data.userId,
           'metadata.idempotencyKey': data.idempotencyKey,
           createdAt: { $gte: fiveMinutesAgo },
-        });
+        }).lean();
         if (existing) {
           console.log(`🔁 [SUPPORT SERVICE] Returning existing ticket for idempotency key: ${data.idempotencyKey}`);
           return existing;
@@ -195,7 +195,7 @@ class SupportService {
       const ticket = await SupportTicket.findOne({
         _id: ticketId,
         user: userId,
-      });
+      }).lean();
 
       if (!ticket) {
         console.log(`⚠️ [SUPPORT SERVICE] Ticket not found: ${ticketId}`);
@@ -227,7 +227,7 @@ class SupportService {
       const ticket = await SupportTicket.findOne({
         _id: ticketId,
         user: userId,
-      });
+      }).lean();
 
       if (!ticket) {
         console.log(`⚠️ [SUPPORT SERVICE] Ticket not found: ${ticketId}`);
@@ -255,7 +255,7 @@ class SupportService {
       const ticket = await SupportTicket.findOne({
         _id: ticketId,
         user: userId,
-      });
+      }).lean();
 
       if (!ticket) {
         console.log(`⚠️ [SUPPORT SERVICE] Ticket not found: ${ticketId}`);
@@ -287,7 +287,7 @@ class SupportService {
       const ticket = await SupportTicket.findOne({
         _id: ticketId,
         user: userId,
-      });
+      }).lean();
 
       if (!ticket) {
         console.log(`⚠️ [SUPPORT SERVICE] Ticket not found: ${ticketId}`);
@@ -319,7 +319,7 @@ class SupportService {
       const ticket = await SupportTicket.findOne({
         _id: ticketId,
         user: userId,
-      });
+      }).lean();
 
       if (!ticket) {
         console.log(`⚠️ [SUPPORT SERVICE] Ticket not found: ${ticketId}`);
@@ -538,7 +538,7 @@ class SupportService {
    */
   async markFAQAsHelpful(faqId: Types.ObjectId): Promise<void> {
     try {
-      const faq = await FAQ.findById(faqId);
+      const faq = await FAQ.findById(faqId).lean();
       if (faq) {
         await (faq as any).markAsHelpful();
       }
@@ -553,7 +553,7 @@ class SupportService {
    */
   async markFAQAsNotHelpful(faqId: Types.ObjectId): Promise<void> {
     try {
-      const faq = await FAQ.findById(faqId);
+      const faq = await FAQ.findById(faqId).lean();
       if (faq) {
         await (faq as any).markAsNotHelpful();
       }
@@ -568,7 +568,7 @@ class SupportService {
    */
   async incrementFAQView(faqId: Types.ObjectId): Promise<void> {
     try {
-      const faq = await FAQ.findById(faqId);
+      const faq = await FAQ.findById(faqId).lean();
       if (faq) {
         await (faq as any).incrementView();
       }

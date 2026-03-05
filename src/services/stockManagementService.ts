@@ -25,7 +25,7 @@ class StockManagementService {
     }
   ): Promise<{ success: boolean; previousStock: number; newStock: number }> {
     try {
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         throw new Error('Product not found');
       }
@@ -102,7 +102,7 @@ class StockManagementService {
     }
   ): Promise<{ success: boolean; previousStock: number; newStock: number }> {
     try {
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         throw new Error('Product not found');
       }
@@ -174,7 +174,7 @@ class StockManagementService {
     }
   ): Promise<{ success: boolean; previousStock: number; newStock: number }> {
     try {
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         throw new Error('Product not found');
       }
@@ -253,7 +253,7 @@ class StockManagementService {
     }
   ): Promise<{ success: boolean }> {
     try {
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         throw new Error('Product not found');
       }
@@ -308,7 +308,7 @@ class StockManagementService {
     }
   ): Promise<{ success: boolean }> {
     try {
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         throw new Error('Product not found');
       }
