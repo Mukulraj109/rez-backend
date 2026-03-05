@@ -6,6 +6,7 @@
  */
 
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 export interface CacheOptions {
   ttl?: number; // Time to live in seconds (default: 900 = 15 minutes)
@@ -33,23 +34,23 @@ export class AnalyticsCacheService {
       const cached = await redisService.get<T>(fullKey);
 
       if (cached !== null) {
-        console.log(`✅ Analytics Cache HIT: ${fullKey}`);
+        logger.info(`✅ Analytics Cache HIT: ${fullKey}`);
         return cached;
       }
 
-      console.log(`❌ Analytics Cache MISS: ${fullKey}`);
+      logger.info(`❌ Analytics Cache MISS: ${fullKey}`);
 
       // Compute value
       const value = await computeFn();
 
       // Store in cache (async, don't wait)
       redisService.set(fullKey, value, ttl).catch(err => {
-        console.error(`Failed to cache ${fullKey}:`, err);
+        logger.error(`Failed to cache ${fullKey}:`, err);
       });
 
       return value;
     } catch (error) {
-      console.error(`Analytics cache error for ${fullKey}:`, error);
+      logger.error(`Analytics cache error for ${fullKey}:`, error);
       // Fallback: compute without cache
       return computeFn();
     }
@@ -65,7 +66,7 @@ export class AnalyticsCacheService {
     try {
       return await redisService.get<T>(fullKey);
     } catch (error) {
-      console.error(`Failed to get analytics cache ${fullKey}:`, error);
+      logger.error(`Failed to get analytics cache ${fullKey}:`, error);
       return null;
     }
   }
@@ -80,7 +81,7 @@ export class AnalyticsCacheService {
     try {
       return await redisService.set(fullKey, value, ttl);
     } catch (error) {
-      console.error(`Failed to set analytics cache ${fullKey}:`, error);
+      logger.error(`Failed to set analytics cache ${fullKey}:`, error);
       return false;
     }
   }
@@ -95,7 +96,7 @@ export class AnalyticsCacheService {
     try {
       return await redisService.del(fullKey);
     } catch (error) {
-      console.error(`Failed to invalidate analytics cache ${fullKey}:`, error);
+      logger.error(`Failed to invalidate analytics cache ${fullKey}:`, error);
       return false;
     }
   }
@@ -110,7 +111,7 @@ export class AnalyticsCacheService {
     try {
       return await redisService.delPattern(fullPattern);
     } catch (error) {
-      console.error(`Failed to invalidate pattern ${fullPattern}:`, error);
+      logger.error(`Failed to invalidate pattern ${fullPattern}:`, error);
       return 0;
     }
   }
@@ -120,10 +121,10 @@ export class AnalyticsCacheService {
    */
   static async invalidateStore(storeId: string): Promise<number> {
     try {
-      console.log(`🔄 Invalidating all analytics cache for store ${storeId}`);
+      logger.info(`🔄 Invalidating all analytics cache for store ${storeId}`);
       return await this.invalidatePattern(`*:${storeId}:*`);
     } catch (error) {
-      console.error(`Failed to invalidate store cache ${storeId}:`, error);
+      logger.error(`Failed to invalidate store cache ${storeId}:`, error);
       return 0;
     }
   }
@@ -135,7 +136,7 @@ export class AnalyticsCacheService {
     try {
       return await redisService.getStats();
     } catch (error) {
-      console.error('Failed to get analytics cache stats:', error);
+      logger.error('Failed to get analytics cache stats:', error);
       return {
         enabled: false,
         connected: false,
@@ -149,11 +150,11 @@ export class AnalyticsCacheService {
    */
   static async clearAll(): Promise<boolean> {
     try {
-      console.log('🗑️ Clearing all analytics cache');
+      logger.info('🗑️ Clearing all analytics cache');
       const deletedCount = await this.invalidatePattern('*');
       return deletedCount > 0;
     } catch (error) {
-      console.error('Failed to clear all analytics cache:', error);
+      logger.error('Failed to clear all analytics cache:', error);
       return false;
     }
   }
@@ -239,7 +240,7 @@ export class AnalyticsCacheService {
    * Warm up cache for a store (pre-compute common queries)
    */
   static async warmUpCache(storeId: string): Promise<void> {
-    console.log(`🔥 Warming up analytics cache for store ${storeId}...`);
+    logger.info(`🔥 Warming up analytics cache for store ${storeId}...`);
 
     try {
       // Import services dynamically to avoid circular dependencies
@@ -290,9 +291,9 @@ export class AnalyticsCacheService {
       ];
 
       await Promise.all(warmupPromises);
-      console.log(`✅ Analytics cache warmed up for store ${storeId}`);
+      logger.info(`✅ Analytics cache warmed up for store ${storeId}`);
     } catch (error) {
-      console.error(`Failed to warm up cache for store ${storeId}:`, error);
+      logger.error(`Failed to warm up cache for store ${storeId}:`, error);
     }
   }
 
@@ -300,7 +301,7 @@ export class AnalyticsCacheService {
    * Auto-refresh cache on new order
    */
   static async onNewOrder(storeId: string): Promise<void> {
-    console.log(`🔄 Invalidating analytics cache for store ${storeId} due to new order`);
+    logger.info(`🔄 Invalidating analytics cache for store ${storeId} due to new order`);
 
     try {
       // Invalidate all analytics cache for this store
@@ -309,11 +310,11 @@ export class AnalyticsCacheService {
       // Optionally warm up cache again in background
       setImmediate(() => {
         this.warmUpCache(storeId).catch(err => {
-          console.error(`Failed to warm up cache after new order:`, err);
+          logger.error(`Failed to warm up cache after new order:`, err);
         });
       });
     } catch (error) {
-      console.error(`Failed to invalidate cache on new order for store ${storeId}:`, error);
+      logger.error(`Failed to invalidate cache on new order for store ${storeId}:`, error);
     }
   }
 
@@ -321,7 +322,7 @@ export class AnalyticsCacheService {
    * Auto-refresh cache on product update
    */
   static async onProductUpdate(productId: string, storeId: string): Promise<void> {
-    console.log(`🔄 Invalidating product and store analytics cache due to product update`);
+    logger.info(`🔄 Invalidating product and store analytics cache due to product update`);
 
     try {
       // Invalidate product-specific cache
@@ -333,7 +334,7 @@ export class AnalyticsCacheService {
       await this.invalidate(this.getTopProductsKey(storeId, 10, 'revenue'));
       await this.invalidate(this.getCategoryPerformanceKey(storeId));
     } catch (error) {
-      console.error(`Failed to invalidate cache on product update:`, error);
+      logger.error(`Failed to invalidate cache on product update:`, error);
     }
   }
 }

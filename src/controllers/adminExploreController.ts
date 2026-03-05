@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { logger } from '../config/logger';
 import { Review } from '../models/Review';
 import { StoreComparison } from '../models/StoreComparison';
 import { Store } from '../models/Store';
@@ -64,7 +65,7 @@ export const getExploreDashboardStats = asyncHandler(async (req: Request, res: R
       }
     }, 'Admin explore stats retrieved successfully');
   } catch (error) {
-    console.error('Get admin explore stats error:', error);
+    logger.error('Get admin explore stats error:', error);
     throw new AppError('Failed to fetch admin explore stats', 500);
   }
 });
@@ -97,7 +98,7 @@ export const getFeaturedReviews = asyncHandler(async (req: Request, res: Respons
       }
     }, 'Featured reviews retrieved successfully');
   } catch (error) {
-    console.error('Get featured reviews error:', error);
+    logger.error('Get featured reviews error:', error);
     throw new AppError('Failed to fetch featured reviews', 500);
   }
 });
@@ -124,7 +125,7 @@ export const toggleReviewFeatured = asyncHandler(async (req: Request, res: Respo
       }
     }, `Review ${review.isFeaturedOnExplore ? 'featured' : 'unfeatured'} on explore page`);
   } catch (error) {
-    console.error('Toggle review featured error:', error);
+    logger.error('Toggle review featured error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -160,7 +161,7 @@ export const getFeaturedComparisons = asyncHandler(async (req: Request, res: Res
       }
     }, 'Featured comparisons retrieved successfully');
   } catch (error) {
-    console.error('Get featured comparisons error:', error);
+    logger.error('Get featured comparisons error:', error);
     throw new AppError('Failed to fetch featured comparisons', 500);
   }
 });
@@ -187,7 +188,7 @@ export const toggleComparisonFeatured = asyncHandler(async (req: Request, res: R
       }
     }, `Comparison ${comparison.isFeaturedOnExplore ? 'featured' : 'unfeatured'} on explore page`);
   } catch (error) {
-    console.error('Toggle comparison featured error:', error);
+    logger.error('Toggle comparison featured error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -231,7 +232,7 @@ export const getEligibleReviews = asyncHandler(async (req: Request, res: Respons
       }
     }, 'Eligible reviews retrieved successfully');
   } catch (error) {
-    console.error('Get eligible reviews error:', error);
+    logger.error('Get eligible reviews error:', error);
     throw new AppError('Failed to fetch eligible reviews', 500);
   }
 });
@@ -254,7 +255,7 @@ export const bulkToggleReviewsFeatured = asyncHandler(async (req: Request, res: 
       modifiedCount: result.modifiedCount
     }, `${result.modifiedCount} reviews ${featured ? 'featured' : 'unfeatured'} successfully`);
   } catch (error) {
-    console.error('Bulk toggle reviews featured error:', error);
+    logger.error('Bulk toggle reviews featured error:', error);
     throw new AppError('Failed to bulk update reviews', 500);
   }
 });
@@ -294,7 +295,7 @@ export const getExploreVideoStats = asyncHandler(async (req: Request, res: Respo
       totalViews
     }, 'Video stats retrieved successfully');
   } catch (error) {
-    console.error('Get explore video stats error:', error);
+    logger.error('Get explore video stats error:', error);
     throw new AppError('Failed to fetch video stats', 500);
   }
 });
@@ -385,7 +386,7 @@ export const getAdminVideos = asyncHandler(async (req: Request, res: Response) =
       }
     }, 'Videos retrieved successfully');
   } catch (error) {
-    console.error('Get admin videos error:', error);
+    logger.error('Get admin videos error:', error);
     throw new AppError('Failed to fetch videos', 500);
   }
 });
@@ -407,7 +408,7 @@ export const getAdminVideoById = asyncHandler(async (req: Request, res: Response
 
     sendSuccess(res, { video }, 'Video retrieved successfully');
   } catch (error) {
-    console.error('Get admin video by id error:', error);
+    logger.error('Get admin video by id error:', error);
     if (error instanceof AppError) throw error;
     throw new AppError('Failed to fetch video', 500);
   }
@@ -501,7 +502,7 @@ export const createAdminVideo = asyncHandler(async (req: Request, res: Response)
       }
     }, 'Video created successfully', 201);
   } catch (error) {
-    console.error('Create admin video error:', error);
+    logger.error('Create admin video error:', error);
     if (error instanceof AppError) throw error;
     throw new AppError('Failed to create video', 500);
   }
@@ -573,7 +574,7 @@ export const updateAdminVideo = asyncHandler(async (req: Request, res: Response)
       }
     }, 'Video updated successfully');
   } catch (error) {
-    console.error('Update admin video error:', error);
+    logger.error('Update admin video error:', error);
     if (error instanceof AppError) throw error;
     throw new AppError('Failed to update video', 500);
   }
@@ -603,7 +604,7 @@ export const deleteAdminVideo = asyncHandler(async (req: Request, res: Response)
           await deleteFromCloudinary(publicId);
         }
       } catch (cloudinaryError) {
-        console.error('Failed to delete from Cloudinary:', cloudinaryError);
+        logger.error('Failed to delete from Cloudinary:', cloudinaryError);
       }
     }
 
@@ -611,7 +612,7 @@ export const deleteAdminVideo = asyncHandler(async (req: Request, res: Response)
 
     sendSuccess(res, { deleted: true }, 'Video deleted successfully');
   } catch (error) {
-    console.error('Delete admin video error:', error);
+    logger.error('Delete admin video error:', error);
     if (error instanceof AppError) throw error;
     throw new AppError('Failed to delete video', 500);
   }
@@ -639,7 +640,7 @@ export const toggleVideoFeatured = asyncHandler(async (req: Request, res: Respon
       }
     }, `Video ${video.isFeatured ? 'featured' : 'unfeatured'} successfully`);
   } catch (error) {
-    console.error('Toggle video featured error:', error);
+    logger.error('Toggle video featured error:', error);
     if (error instanceof AppError) throw error;
     throw new AppError('Failed to toggle video featured status', 500);
   }
@@ -667,7 +668,7 @@ export const toggleVideoTrending = asyncHandler(async (req: Request, res: Respon
       }
     }, `Video ${video.isTrending ? 'marked as trending' : 'removed from trending'}`);
   } catch (error) {
-    console.error('Toggle video trending error:', error);
+    logger.error('Toggle video trending error:', error);
     if (error instanceof AppError) throw error;
     throw new AppError('Failed to toggle video trending status', 500);
   }
@@ -698,7 +699,7 @@ export const toggleVideoPublished = asyncHandler(async (req: Request, res: Respo
       }
     }, `Video ${video.isPublished ? 'published' : 'unpublished'} successfully`);
   } catch (error) {
-    console.error('Toggle video published error:', error);
+    logger.error('Toggle video published error:', error);
     if (error instanceof AppError) throw error;
     throw new AppError('Failed to toggle video publish status', 500);
   }
@@ -757,7 +758,7 @@ export const bulkUpdateVideos = asyncHandler(async (req: Request, res: Response)
       modifiedCount: result.modifiedCount
     }, `${result.modifiedCount} videos updated successfully`);
   } catch (error) {
-    console.error('Bulk update videos error:', error);
+    logger.error('Bulk update videos error:', error);
     if (error instanceof AppError) throw error;
     throw new AppError('Failed to bulk update videos', 500);
   }

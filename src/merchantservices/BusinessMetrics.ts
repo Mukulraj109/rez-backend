@@ -1,6 +1,7 @@
 import { Order } from '../models/Order';
 import { Product } from '../models/Product';
 import { Store } from '../models/Store';
+import { logger } from '../config/logger';
 import { CashbackModel } from '../models/Cashback';
 import mongoose from 'mongoose';
 
@@ -97,16 +98,16 @@ export class BusinessMetricsService {
 
     // Get merchant's store IDs, optionally filtered to a specific store
     const allStoreIds = await this.getMerchantStoreIds(merchantId);
-    console.log('[DASHBOARD DEBUG] merchantId:', merchantId);
-    console.log('[DASHBOARD DEBUG] allStoreIds found:', allStoreIds.length, allStoreIds.map(id => id.toString()));
+    logger.info('[DASHBOARD DEBUG] merchantId:', merchantId);
+    logger.info('[DASHBOARD DEBUG] allStoreIds found:', allStoreIds.length, allStoreIds.map(id => id.toString()));
     const filterStoreIds = storeId
       ? allStoreIds.filter(id => id.toString() === storeId)
       : allStoreIds;
-    console.log('[DASHBOARD DEBUG] storeId filter:', storeId || 'none');
-    console.log('[DASHBOARD DEBUG] filterStoreIds:', filterStoreIds.length);
+    logger.info('[DASHBOARD DEBUG] storeId filter:', storeId || 'none');
+    logger.info('[DASHBOARD DEBUG] filterStoreIds:', filterStoreIds.length);
 
     if (filterStoreIds.length === 0) {
-      console.log('[DASHBOARD DEBUG] No stores found — returning empty metrics');
+      logger.info('[DASHBOARD DEBUG] No stores found — returning empty metrics');
       // No stores found — return empty metrics
       return this.emptyMetrics();
     }
@@ -127,8 +128,8 @@ export class BusinessMetricsService {
       Product.find({ store: { $in: filterStoreIds } }).lean(),
       CashbackModel.findByMerchantId(merchantId)
     ]);
-    console.log('[DASHBOARD DEBUG] orders found:', orders.length);
-    console.log('[DASHBOARD DEBUG] products found:', products.length);
+    logger.info('[DASHBOARD DEBUG] orders found:', orders.length);
+    logger.info('[DASHBOARD DEBUG] products found:', products.length);
 
     // Calculate revenue metrics using real schema fields
     const totalRevenue = orders.reduce((sum: number, order: any) => sum + (order.totals?.total || 0), 0);

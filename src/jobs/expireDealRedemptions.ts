@@ -1,6 +1,7 @@
 import * as cron from 'node-cron';
 import DealRedemption from '../models/DealRedemption';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 /**
  * Deal Redemption Expiry Job
@@ -69,11 +70,11 @@ async function processExpiredDealRedemptions(): Promise<ExpiryStats> {
     stats.totalExpired = stats.activeExpired + stats.pendingExpired;
 
     if (stats.totalExpired > 0) {
-      console.log(`🎫 [DEAL EXPIRY] Expired ${stats.totalExpired} deal redemptions (${stats.activeExpired} active, ${stats.pendingExpired} pending)`);
+      logger.info(`🎫 [DEAL EXPIRY] Expired ${stats.totalExpired} deal redemptions (${stats.activeExpired} active, ${stats.pendingExpired} pending)`);
     }
 
   } catch (error: any) {
-    console.error('❌ [DEAL EXPIRY] Error processing expired deals:', error);
+    logger.error('❌ [DEAL EXPIRY] Error processing expired deals:', error);
     stats.errors.push({ error: error.message || 'Unknown error' });
   }
 
@@ -85,16 +86,16 @@ async function processExpiredDealRedemptions(): Promise<ExpiryStats> {
  */
 export function startDealExpiryJob(): void {
   if (expiryJob) {
-    console.log('⚠️ [DEAL EXPIRY] Job already running');
+    logger.info('⚠️ [DEAL EXPIRY] Job already running');
     return;
   }
 
-  console.log(`🎫 [DEAL EXPIRY] Starting deal expiry job (runs every hour)`);
+  logger.info(`🎫 [DEAL EXPIRY] Starting deal expiry job (runs every hour)`);
 
   expiryJob = cron.schedule(CRON_SCHEDULE, async () => {
     // Prevent concurrent executions
     if (isRunning) {
-      console.log('⏭️ [DEAL EXPIRY] Previous expiry job still running, skipping this execution');
+      logger.info('⏭️ [DEAL EXPIRY] Previous expiry job still running, skipping this execution');
       return;
     }
 
@@ -102,7 +103,7 @@ export function startDealExpiryJob(): void {
     const lockKey = 'job:deal-expiry';
     const lockToken = await redisService.acquireLock(lockKey, 300);
     if (!lockToken) {
-      console.log('deal-expiry skipped — lock held by another instance');
+      logger.info('deal-expiry skipped — lock held by another instance');
       return;
     }
 
@@ -115,7 +116,7 @@ export function startDealExpiryJob(): void {
       const duration = Date.now() - startTime;
 
       if (stats.totalExpired > 0 || stats.errors.length > 0) {
-        console.log('✅ [DEAL EXPIRY] Expiry job completed:', {
+        logger.info('✅ [DEAL EXPIRY] Expiry job completed:', {
           duration: `${duration}ms`,
           totalExpired: stats.totalExpired,
           activeExpired: stats.activeExpired,
@@ -126,15 +127,15 @@ export function startDealExpiryJob(): void {
       }
 
       if (stats.errors.length > 0) {
-        console.error('❌ [DEAL EXPIRY] Errors during expiry:');
+        logger.error('❌ [DEAL EXPIRY] Errors during expiry:');
         stats.errors.forEach((error, index) => {
-          console.error(`   ${index + 1}. ${error.error}`);
+          logger.error(`   ${index + 1}. ${error.error}`);
         });
       }
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error('❌ [DEAL EXPIRY] Expiry job failed:', {
+      logger.error('❌ [DEAL EXPIRY] Expiry job failed:', {
         duration: `${duration}ms`,
         error: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString()
@@ -145,7 +146,7 @@ export function startDealExpiryJob(): void {
     }
   });
 
-  console.log('✅ [DEAL EXPIRY] Deal expiry job started successfully');
+  logger.info('✅ [DEAL EXPIRY] Deal expiry job started successfully');
 }
 
 /**
@@ -155,9 +156,9 @@ export function stopDealExpiryJob(): void {
   if (expiryJob) {
     expiryJob.stop();
     expiryJob = null;
-    console.log('🛑 [DEAL EXPIRY] Deal expiry job stopped');
+    logger.info('🛑 [DEAL EXPIRY] Deal expiry job stopped');
   } else {
-    console.log('⚠️ [DEAL EXPIRY] No job running to stop');
+    logger.info('⚠️ [DEAL EXPIRY] No job running to stop');
   }
 }
 
@@ -181,11 +182,11 @@ export function getDealExpiryJobStatus(): {
  */
 export async function triggerManualDealExpiry(): Promise<ExpiryStats> {
   if (isRunning) {
-    console.log('⚠️ [DEAL EXPIRY] Expiry already running, please wait');
+    logger.info('⚠️ [DEAL EXPIRY] Expiry already running, please wait');
     throw new Error('Expiry already in progress');
   }
 
-  console.log('🎫 [DEAL EXPIRY] Manual expiry triggered');
+  logger.info('🎫 [DEAL EXPIRY] Manual expiry triggered');
 
   isRunning = true;
   const startTime = Date.now();
@@ -194,14 +195,14 @@ export async function triggerManualDealExpiry(): Promise<ExpiryStats> {
     const stats = await processExpiredDealRedemptions();
     const duration = Date.now() - startTime;
 
-    console.log('✅ [DEAL EXPIRY] Manual expiry completed:', {
+    logger.info('✅ [DEAL EXPIRY] Manual expiry completed:', {
       duration: `${duration}ms`,
       totalExpired: stats.totalExpired
     });
 
     return stats;
   } catch (error) {
-    console.error('❌ [DEAL EXPIRY] Manual expiry failed:', error);
+    logger.error('❌ [DEAL EXPIRY] Manual expiry failed:', error);
     throw error;
   } finally {
     isRunning = false;

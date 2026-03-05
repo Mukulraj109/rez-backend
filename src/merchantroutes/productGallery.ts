@@ -10,6 +10,7 @@ import CloudinaryService from '../services/CloudinaryService';
 import Joi from 'joi';
 import mongoose from 'mongoose';
 import { sendSuccess, sendBadRequest, sendNotFound, sendError } from '../utils/response';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -221,7 +222,7 @@ router.post(
         fs.unlinkSync(req.file.path);
       }
 
-      console.error('❌ Product gallery upload error:', error);
+      logger.error('❌ Product gallery upload error:', error);
       return sendError(res, error.message || 'Failed to upload product image', 500);
     }
   }
@@ -360,7 +361,7 @@ router.post(
             fs.unlinkSync(file.path);
           }
         } catch (error: any) {
-          console.error(`❌ Failed to upload file ${i + 1}:`, error);
+          logger.error(`❌ Failed to upload file ${i + 1}:`, error);
           failedItems.push({
             fileName: file.originalname,
             error: error.message,
@@ -380,7 +381,7 @@ router.post(
         totalFailed: failedItems.length,
       }, `Successfully uploaded ${uploadedItems.length} of ${files.length} images`);
     } catch (error: any) {
-      console.error('❌ Bulk upload error:', error);
+      logger.error('❌ Bulk upload error:', error);
       return sendError(res, error.message || 'Failed to upload images', 500);
     }
   }
@@ -463,7 +464,7 @@ router.get(
         offset: parseInt(offset as string),
       }, 'Gallery items retrieved successfully');
     } catch (error: any) {
-      console.error('❌ Get gallery error:', error);
+      logger.error('❌ Get gallery error:', error);
       return sendError(res, error.message || 'Failed to retrieve gallery items', 500);
     }
   }
@@ -526,7 +527,7 @@ router.get(
 
       return sendSuccess(res, categories, 'Categories retrieved successfully');
     } catch (error: any) {
-      console.error('❌ Get categories error:', error);
+      logger.error('❌ Get categories error:', error);
       return sendError(res, error.message || 'Failed to retrieve categories', 500);
     }
   }
@@ -588,7 +589,7 @@ router.get(
         updatedAt: item.updatedAt,
       }, 'Gallery item retrieved successfully');
     } catch (error: any) {
-      console.error('❌ Get gallery item error:', error);
+      logger.error('❌ Get gallery item error:', error);
       return sendError(res, error.message || 'Failed to retrieve gallery item', 500);
     }
   }
@@ -673,7 +674,7 @@ router.put(
         isCover: item.isCover,
       }, 'Gallery item updated successfully');
     } catch (error: any) {
-      console.error('❌ Update gallery item error:', error);
+      logger.error('❌ Update gallery item error:', error);
       return sendError(res, error.message || 'Failed to update gallery item', 500);
     }
   }
@@ -734,7 +735,7 @@ router.put(
         isCover: item.isCover,
       }, 'Cover image set successfully');
     } catch (error: any) {
-      console.error('❌ Set cover error:', error);
+      logger.error('❌ Set cover error:', error);
       return sendError(res, error.message || 'Failed to set cover image', 500);
     }
   }
@@ -782,7 +783,7 @@ router.put(
 
       return sendSuccess(res, null, 'Gallery items reordered successfully');
     } catch (error: any) {
-      console.error('❌ Reorder error:', error);
+      logger.error('❌ Reorder error:', error);
       return sendError(res, error.message || 'Failed to reorder gallery items', 500);
     }
   }
@@ -828,7 +829,7 @@ router.delete(
       try {
         await CloudinaryService.deleteFile(item.publicId);
       } catch (error) {
-        console.warn('⚠️ Failed to delete from Cloudinary:', error);
+        logger.warn('⚠️ Failed to delete from Cloudinary:', error);
         // Continue with database deletion even if Cloudinary fails
       }
 
@@ -839,7 +840,7 @@ router.delete(
 
       return sendSuccess(res, null, 'Gallery item deleted successfully');
     } catch (error: any) {
-      console.error('❌ Delete gallery item error:', error);
+      logger.error('❌ Delete gallery item error:', error);
       return sendError(res, error.message || 'Failed to delete gallery item', 500);
     }
   }
@@ -884,7 +885,7 @@ router.delete(
       // Delete from Cloudinary
       const deletePromises = items.map(item =>
         CloudinaryService.deleteFile(item.publicId).catch((error: any) => {
-          console.warn(`⚠️ Failed to delete ${item.publicId} from Cloudinary:`, error);
+          logger.warn(`⚠️ Failed to delete ${item.publicId} from Cloudinary:`, error);
         })
       );
 
@@ -905,7 +906,7 @@ router.delete(
         deletedCount: items.length,
       }, `Successfully deleted ${items.length} gallery item(s)`);
     } catch (error: any) {
-      console.error('❌ Bulk delete error:', error);
+      logger.error('❌ Bulk delete error:', error);
       return sendError(res, error.message || 'Failed to delete gallery items', 500);
     }
   }

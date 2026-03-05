@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Article } from '../models/Article';
+import { logger } from '../config/logger';
 import { User } from '../models/User';
 import {
   sendSuccess,
@@ -41,7 +42,7 @@ export const createArticle = asyncHandler(async (req: Request, res: Response) =>
   } = req.body;
 
   try {
-    console.log('📝 [ARTICLE] Creating article for user:', userId);
+    logger.info('📝 [ARTICLE] Creating article for user:', userId);
 
     // Validate required fields
     if (!title || !excerpt || !content || !coverImage) {
@@ -99,7 +100,7 @@ export const createArticle = asyncHandler(async (req: Request, res: Response) =>
 
     await article.save();
 
-    console.log('✅ [ARTICLE] Article created successfully:', article._id);
+    logger.info('✅ [ARTICLE] Article created successfully:', article._id);
 
     // Populate author info for response
     await article.populate('author', 'profile.firstName profile.lastName profile.avatar');
@@ -124,7 +125,7 @@ export const createArticle = asyncHandler(async (req: Request, res: Response) =>
     }, 'Article created successfully');
 
   } catch (error) {
-    console.error('❌ [ARTICLE] Create article error:', error);
+    logger.error('❌ [ARTICLE] Create article error:', error);
     throw new AppError('Failed to create article', 500);
   }
 });

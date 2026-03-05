@@ -1,4 +1,5 @@
 import { Server as SocketIOServer } from 'socket.io';
+import { logger } from './logger';
 
 let io: SocketIOServer | null = null;
 
@@ -8,7 +9,7 @@ let io: SocketIOServer | null = null;
  */
 export const initializeSocket = (socketInstance: SocketIOServer): void => {
   io = socketInstance;
-  console.log('✅ Socket.IO instance initialized');
+  logger.info('✅ Socket.IO instance initialized');
 };
 
 /**

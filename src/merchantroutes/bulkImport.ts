@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import multer from 'multer';
+import { logger } from '../config/logger';
 import path from 'path';
 import fs from 'fs';
 import { bulkImportService } from '../merchantservices/bulkImportService';
@@ -115,7 +116,7 @@ router.post(
       // Process import asynchronously
       processImportJob(importJob._id.toString(), file.path, fileType, storeId, merchantId).catch(
         error => {
-          console.error('Import job failed:', error);
+          logger.error('Import job failed:', error);
         }
       );
 
@@ -129,7 +130,7 @@ router.post(
         }
       });
     } catch (error) {
-      console.error('Bulk import error:', error);
+      logger.error('Bulk import error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to process bulk import',
@@ -183,7 +184,7 @@ async function processImportJob(
       fs.unlinkSync(filePath);
     }
   } catch (error) {
-    console.error('Import processing error:', error);
+    logger.error('Import processing error:', error);
 
     // Update job with error
     await ImportJob.findByIdAndUpdate(jobId, {
@@ -245,7 +246,7 @@ router.get(
         }
       });
     } catch (error) {
-      console.error('Get import status error:', error);
+      logger.error('Get import status error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to get import status',
@@ -310,7 +311,7 @@ router.get(
         }
       });
     } catch (error) {
-      console.error('Get import jobs error:', error);
+      logger.error('Get import jobs error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to get import jobs',
@@ -337,7 +338,7 @@ router.get(
 
       return res.status(200).send(csv);
     } catch (error) {
-      console.error('Get template error:', error);
+      logger.error('Get template error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to generate template',
@@ -364,7 +365,7 @@ router.get(
         data: instructions
       });
     } catch (error) {
-      console.error('Get instructions error:', error);
+      logger.error('Get instructions error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to get instructions',
@@ -411,7 +412,7 @@ router.delete(
         message: 'Import job deleted successfully'
       });
     } catch (error) {
-      console.error('Delete import job error:', error);
+      logger.error('Delete import job error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to delete import job',

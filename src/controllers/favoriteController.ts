@@ -1,15 +1,16 @@
 import { Request, Response } from 'express';
 import { Favorite } from '../models/Favorite';
 import { Store } from '../models/Store';
-import { 
-  sendSuccess, 
-  sendNotFound, 
+import {
+  sendSuccess,
+  sendNotFound,
   sendBadRequest,
-  sendCreated 
+  sendCreated
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import challengeService from '../services/challengeService';
+import redisService from '../services/redisService';
 
 // Add store to favorites
 export const addToFavorites = asyncHandler(async (req: Request, res: Response) => {
@@ -137,6 +138,9 @@ export const toggleFavorite = asyncHandler(async (req: Request, res: Response) =
       ).catch(err => console.error('[FAVORITE] Challenge progress update failed:', err));
     }
 
+    // Invalidate favorites cache for this user
+    redisService.delPattern(`favorites:user:${userId}:*`).catch(() => {});
+
     sendSuccess(res, {
       isFavorited,
       favorite
@@ -161,12 +165,22 @@ export const getUserFavorites = asyncHandler(async (req: Request, res: Response)
   }
 
   try {
+    const cacheKey = `favorites:user:${userId}:${page}:${limit}`;
+    const cached = await redisService.get<any>(cacheKey);
+    if (cached) {
+      return sendSuccess(res, cached);
+    }
+
     const result = await Favorite.getUserFavorites(userId, Number(page), Number(limit));
 
-    sendSuccess(res, {
+    const data = {
       favorites: result.favorites,
       pagination: result.pagination
-    });
+    };
+
+    redisService.set(cacheKey, data, 60).catch(() => {}); // 60s cache
+
+    sendSuccess(res, data);
 
   } catch (error) {
     console.error('Get user favorites error:', error);

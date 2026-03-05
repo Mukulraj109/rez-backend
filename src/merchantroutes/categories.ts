@@ -7,6 +7,7 @@ import mongoose from 'mongoose';
 import Joi from 'joi';
 // P-12: Cache invalidation on category mutations
 import { CacheInvalidator } from '../utils/cacheHelper';
+import { logger } from '../config/logger';
 
 // Extend Request interface to include merchantId
 declare global {
@@ -255,7 +256,7 @@ router.get('/stats', async (req, res) => {
       }
     });
   } catch (error: any) {
-    console.error('Get category stats error:', error);
+    logger.error('Get category stats error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch category statistics',
@@ -434,7 +435,7 @@ router.get('/', validateQuery(searchCategoriesSchema), async (req, res) => {
       }
     });
   } catch (error: any) {
-    console.error('Get categories error:', error);
+    logger.error('Get categories error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch categories',
@@ -543,7 +544,7 @@ router.post('/bulk-update', async (req, res) => {
     // P-12: Invalidate all category caches after bulk update.
     // P-13: Failures are logged as warnings but never break the request.
     CacheInvalidator.invalidateAllCategories().catch((err) => {
-      console.warn('[CACHE-INVALIDATION-WARN] categories.bulk-update — invalidation failed:', err);
+      logger.warn('[CACHE-INVALIDATION-WARN] categories.bulk-update — invalidation failed:', err);
     });
 
     return res.json({
@@ -552,7 +553,7 @@ router.post('/bulk-update', async (req, res) => {
       data: { results }
     });
   } catch (error: any) {
-    console.error('Bulk category update error:', error);
+    logger.error('Bulk category update error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to perform bulk category update',
@@ -604,7 +605,7 @@ router.put('/organize', async (req, res) => {
     // P-12: Invalidate all category caches after reorganization.
     // P-13: Failures are logged as warnings but never break the request.
     CacheInvalidator.invalidateAllCategories().catch((err) => {
-      console.warn('[CACHE-INVALIDATION-WARN] categories.organize — invalidation failed:', err);
+      logger.warn('[CACHE-INVALIDATION-WARN] categories.organize — invalidation failed:', err);
     });
 
     return res.json({
@@ -616,7 +617,7 @@ router.put('/organize', async (req, res) => {
       }
     });
   } catch (error: any) {
-    console.error('Category reorganization error:', error);
+    logger.error('Category reorganization error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to reorganize categories',
@@ -673,7 +674,7 @@ router.get('/suggestions', async (req, res) => {
       data: suggestions
     });
   } catch (error: any) {
-    console.error('Get category suggestions error:', error);
+    logger.error('Get category suggestions error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch category suggestions',
@@ -788,7 +789,7 @@ router.post('/auto-categorize', async (req, res) => {
 
     // P-12: Invalidate category caches after auto-categorization.
     CacheInvalidator.invalidateAllCategories().catch((err) => {
-      console.warn('[CACHE-INVALIDATION-WARN] categories.auto-categorize — invalidation failed:', err);
+      logger.warn('[CACHE-INVALIDATION-WARN] categories.auto-categorize — invalidation failed:', err);
     });
 
     return res.json({
@@ -802,7 +803,7 @@ router.post('/auto-categorize', async (req, res) => {
       }
     });
   } catch (error: any) {
-    console.error('Auto-categorize error:', error);
+    logger.error('Auto-categorize error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to auto-categorize products',
@@ -873,7 +874,7 @@ router.get('/export', async (req, res) => {
       });
     }
   } catch (error: any) {
-    console.error('Export categories error:', error);
+    logger.error('Export categories error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to export categories',

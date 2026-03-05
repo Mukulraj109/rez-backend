@@ -13,6 +13,9 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import activityService from '../services/activityService';
 import achievementService from '../services/achievementService';
+import redisService from '../services/redisService';
+
+const REVIEW_CACHE_TTL = 5 * 60; // 5 minutes
 import gamificationEventBus from '../events/gamificationEventBus';
 import { reputationService } from '../services/reputationService';
 import coinService from '../services/coinService';
@@ -35,6 +38,18 @@ export const getStoreReviews = asyncHandler(async (req: Request, res: Response) 
 
   try {
     const userId = req.user?.id;
+
+    // Cache for anonymous users (most common case — store page visitors)
+    const cacheKey = !userId && !rating
+      ? `review:store:${storeId}:${sortParam}:${page}:${limit}`
+      : null;
+
+    if (cacheKey) {
+      const cached = await redisService.get<any>(cacheKey);
+      if (cached) {
+        return sendSuccess(res, cached, 'Reviews retrieved successfully');
+      }
+    }
 
     // Base query: show approved reviews to all users
     // Also show user's own pending reviews if they're the reviewer
@@ -82,17 +97,16 @@ export const getStoreReviews = asyncHandler(async (req: Request, res: Response) 
     // Pagination
     const skip = (Number(page) - 1) * Number(limit);
 
-    const reviews = await Review.find(query)
-      .populate('user', 'profile.firstName profile.lastName profile.avatar')
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
-
-    const total = await Review.countDocuments(query);
-
-    // Get rating statistics (only approved reviews for public stats)
-    const ratingStats = await Review.getStoreRatingStats(storeId);
+    const [reviews, total, ratingStats] = await Promise.all([
+      Review.find(query)
+        .populate('user', 'profile.firstName profile.lastName profile.avatar')
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      Review.countDocuments(query),
+      Review.getStoreRatingStats(storeId),
+    ]);
 
     // If user has pending reviews, add them to the count for their view
     let adjustedStats = { ...ratingStats };
@@ -163,7 +177,7 @@ export const getStoreReviews = asyncHandler(async (req: Request, res: Response) 
       },
     };
 
-    sendSuccess(res, {
+    const result = {
       reviews: transformedReviews,
       summary,
       pagination: {
@@ -174,7 +188,14 @@ export const getStoreReviews = asyncHandler(async (req: Request, res: Response) 
         hasNext: skip + reviews.length < total,
         hasPrevious: Number(page) > 1
       }
-    });
+    };
+
+    // Cache anonymous results for 5 minutes
+    if (cacheKey) {
+      redisService.set(cacheKey, result, REVIEW_CACHE_TTL).catch(() => {});
+    }
+
+    sendSuccess(res, result);
 
   } catch (error) {
     console.error('Get store reviews error:', error);
@@ -378,6 +399,10 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
     });
 
     // Coin award moved to moderateReview (merchant approval)
+
+    // Invalidate review caches for this store
+    redisService.delPattern(`review:store:${req.body.store || req.body.storeId}:*`).catch(() => {});
+    redisService.delPattern('review:featured:*').catch(() => {});
 
     sendCreated(res, {
       review
@@ -711,6 +736,12 @@ export const getFeaturedReviews = asyncHandler(async (req: Request, res: Respons
   const { page = 1, limit = 20, category } = req.query;
 
   try {
+    const cacheKey = `review:featured:${category || 'all'}:${page}:${limit}`;
+    const cached = await redisService.get<any>(cacheKey);
+    if (cached) {
+      return sendSuccess(res, cached, 'Featured reviews retrieved successfully');
+    }
+
     const skip = (Number(page) - 1) * Number(limit);
 
     const query: any = { isActive: true, status: 'approved' };
@@ -757,7 +788,7 @@ export const getFeaturedReviews = asyncHandler(async (req: Request, res: Respons
       }
     }
 
-    sendSuccess(res, {
+    const result = {
       reviews: filteredReviews,
       pagination: {
         current: Number(page),
@@ -765,7 +796,11 @@ export const getFeaturedReviews = asyncHandler(async (req: Request, res: Respons
         total,
         limit: Number(limit)
       }
-    }, 'Featured reviews retrieved successfully');
+    };
+
+    redisService.set(cacheKey, result, REVIEW_CACHE_TTL).catch(() => {});
+
+    sendSuccess(res, result, 'Featured reviews retrieved successfully');
   } catch (error) {
     console.error('Get featured reviews error:', error);
     throw new AppError('Failed to fetch featured reviews', 500);

@@ -9,6 +9,7 @@ import { AppError } from '../middleware/errorHandler';
 import { escapeRegex } from '../utils/sanitize';
 import * as storeFollowService from '../services/storeFollowService';
 import { recordNewFollow, recordUnfollow } from '../services/followerAnalyticsService';
+import redisService from '../services/redisService';
 
 // Get user's wishlists
 export const getUserWishlists = asyncHandler(async (req: Request, res: Response) => {
@@ -202,6 +203,9 @@ export const addToWishlist = asyncHandler(async (req: Request, res: Response) =>
       .populate('items.itemId', 'name images basePrice salePrice')
       .lean();
 
+    // Invalidate wishlist status cache for this user
+    redisService.delPattern(`wishlist:status:${userId}:*`).catch(() => {});
+
     sendSuccess(res, populatedWishlist, 'Item added to wishlist successfully');
   } catch (error) {
     throw new AppError('Failed to add item to wishlist', 500);
@@ -247,6 +251,9 @@ export const removeFromWishlist = asyncHandler(async (req: Request, res: Respons
         // Don't fail the entire request if followers update fails
       }
     }
+
+    // Invalidate wishlist status cache
+    redisService.delPattern(`wishlist:status:${userId}:*`).catch(() => {});
 
     sendSuccess(res, null, 'Item removed from wishlist successfully');
   } catch (error) {
@@ -388,7 +395,7 @@ export const getDefaultWishlist = asyncHandler(async (req: Request, res: Respons
   }
 });
 
-// Check if an item is in user's wishlist
+// Check if an item is in user's wishlist (cached 60s)
 export const checkWishlistStatus = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
   const { itemType, itemId } = req.query;
@@ -407,6 +414,13 @@ export const checkWishlistStatus = asyncHandler(async (req: Request, res: Respon
       return sendBadRequest(res, `Invalid itemType. Must be one of: ${validTypes.join(', ')}`);
     }
 
+    // Check cache first
+    const cacheKey = `wishlist:status:${userId}:${normalizedItemType}:${itemId}`;
+    const cached = await redisService.get<any>(cacheKey);
+    if (cached !== null) {
+      return sendSuccess(res, cached);
+    }
+
     // Find any wishlist belonging to the user that contains this item
     const wishlist = await Wishlist.findOne({
       user: userId,
@@ -414,22 +428,24 @@ export const checkWishlistStatus = asyncHandler(async (req: Request, res: Respon
       'items.itemId': itemId
     }).lean();
 
+    let result: any;
     if (wishlist) {
       const item = (wishlist as any).items.find((i: any) =>
         i.itemType === normalizedItemType && i.itemId.toString() === itemId
       );
 
-      sendSuccess(res, {
+      result = {
         inWishlist: true,
         wishlistItemId: item?._id?.toString(),
         wishlistId: (wishlist as any)._id.toString(),
         addedAt: item?.addedAt
-      }, 'Item is in wishlist');
+      };
     } else {
-      sendSuccess(res, {
-        inWishlist: false
-      }, 'Item is not in wishlist');
+      result = { inWishlist: false };
     }
+
+    redisService.set(cacheKey, result, 60).catch(() => {}); // 60s cache
+    sendSuccess(res, result, result.inWishlist ? 'Item is in wishlist' : 'Item is not in wishlist');
   } catch (error) {
     throw new AppError('Failed to check wishlist status', 500);
   }
@@ -474,6 +490,9 @@ export const removeItemByTypeAndId = asyncHandler(async (req: Request, res: Resp
         // Don't fail the entire request if followers update fails
       }
     }
+
+    // Invalidate wishlist status cache
+    redisService.delPattern(`wishlist:status:${userId}:*`).catch(() => {});
 
     sendSuccess(res, null, 'Item removed from wishlist successfully');
   } catch (error) {

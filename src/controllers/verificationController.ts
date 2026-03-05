@@ -3,6 +3,7 @@
 
 import { Request, Response } from 'express';
 import { User } from '../models/User';
+import { logger } from '../config/logger';
 import UserZoneVerification from '../models/UserZoneVerification';
 import { sendSuccess, sendError, sendBadRequest } from '../utils/response';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -323,11 +324,11 @@ export const submitVerification = asyncHandler(async (req: Request, res: Respons
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
       });
-      console.log(`📝 [VERIFICATION] Created UserZoneVerification record for admin review`);
+      logger.info(`📝 [VERIFICATION] Created UserZoneVerification record for admin review`);
     }
   }
 
-  console.log(`✅ [VERIFICATION] ${zone} verification ${isAutoApproved ? 'auto-approved' : 'submitted'} for user ${userId}`);
+  logger.info(`✅ [VERIFICATION] ${zone} verification ${isAutoApproved ? 'auto-approved' : 'submitted'} for user ${userId}`);
 
   sendSuccess(res, {
     zone,
@@ -381,7 +382,7 @@ export const reviewVerification = asyncHandler(async (req: Request, res: Respons
   user.markModified('verifications');
   await user.save();
 
-  console.log(`✅ [VERIFICATION] Admin ${isApproved ? 'approved' : 'rejected'} ${zone} verification for user ${userId}`);
+  logger.info(`✅ [VERIFICATION] Admin ${isApproved ? 'approved' : 'rejected'} ${zone} verification for user ${userId}`);
 
   sendSuccess(res, {
     zone,

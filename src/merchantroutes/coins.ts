@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/merchantauth';
+import { logger } from '../config/logger';
 import { Wallet } from '../models/Wallet';
 import { CoinTransaction } from '../models/CoinTransaction';
 import { Store } from '../models/Store';
@@ -135,7 +136,7 @@ router.post('/award', async (req: Request, res: Response) => {
       }
     );
 
-    console.log(`🎁 [MERCHANT COINS] ${store.name} awarded ${coinAmount} branded coins to user ${userId}`);
+    logger.info(`🎁 [MERCHANT COINS] ${store.name} awarded ${coinAmount} branded coins to user ${userId}`);
 
     return res.json({
       success: true,
@@ -152,7 +153,7 @@ router.post('/award', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('❌ [MERCHANT COINS] Error awarding coins:', error);
+    logger.error('❌ [MERCHANT COINS] Error awarding coins:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to award coins'
@@ -218,7 +219,7 @@ router.get('/history', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('❌ [MERCHANT COINS] Error fetching history:', error);
+    logger.error('❌ [MERCHANT COINS] Error fetching history:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch coin award history'
@@ -335,7 +336,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('❌ [MERCHANT COINS] Error fetching stats:', error);
+    logger.error('❌ [MERCHANT COINS] Error fetching stats:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch coin statistics'
@@ -413,7 +414,7 @@ router.get('/search-customer', async (req: Request, res: Response) => {
       }))
     });
   } catch (error: any) {
-    console.error('❌ [MERCHANT COINS] Error searching customer:', error);
+    logger.error('❌ [MERCHANT COINS] Error searching customer:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to search customers'
@@ -503,7 +504,7 @@ router.get('/recent-customers', async (req: Request, res: Response) => {
 
     return res.json({ success: true, data });
   } catch (error: any) {
-    console.error('❌ [MERCHANT COINS] Error fetching recent customers:', error);
+    logger.error('❌ [MERCHANT COINS] Error fetching recent customers:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch recent customers'
@@ -533,7 +534,7 @@ router.get('/wallet-balance', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('❌ [MERCHANT COINS] Error fetching wallet balance:', error);
+    logger.error('❌ [MERCHANT COINS] Error fetching wallet balance:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch wallet balance'

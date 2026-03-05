@@ -179,7 +179,7 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
       try {
         await achievementService.initializeUserAchievements(String(user._id));
       } catch (error) {
-        console.error('❌ [AUTH] Error initializing achievements for new user:', error);
+        logger.error('❌ [AUTH] Error initializing achievements for new user:', error);
         // Don't fail user creation if achievement initialization fails
       }
     } else if (user && user.isActive && email) {
@@ -199,7 +199,7 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
       // S-13: Do NOT apply email changes during reactivation — email must be
       // verified separately after the account is reactivated. Log if attempted.
       if (email && user.email !== email) {
-        console.log(`⚠️ [AUTH] Email change attempted during reactivation for user ${user._id} — will be ignored. User must update email after reactivation.`);
+        logger.info(`⚠️ [AUTH] Email change attempted during reactivation for user ${user._id} — will be ignored. User must update email after reactivation.`);
       }
     }
 
@@ -243,7 +243,7 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
     if (error instanceof AppError) {
       throw error;
     }
-    console.error('[SEND_OTP] Error:', error instanceof Error ? error.message : String(error));
+    logger.error('[SEND_OTP] Error:', error instanceof Error ? error.message : String(error));
     throw new AppError('Failed to send OTP. Please try again.', 500);
   }
 });
@@ -362,7 +362,7 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
           entityType: 'referral',
           source: { controller: 'authController', action: 'verifyOTP' }
         });
-        console.log(`🏆 [REFERRAL] Gamification event emitted for referrer: ${referrerUser._id}`);
+        logger.info(`🏆 [REFERRAL] Gamification event emitted for referrer: ${referrerUser._id}`);
 
         // Update referrer's partner referral task progress
         try {
@@ -380,18 +380,18 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
               }
               
               await partner.save();
-              console.log('✅ [REFERRAL] Partner referral task updated:', referralTask.progress.current, '/', referralTask.progress.target);
+              logger.info('✅ [REFERRAL] Partner referral task updated:', referralTask.progress.current, '/', referralTask.progress.target);
             }
           }
         } catch (error) {
-          console.error('❌ [REFERRAL] Error updating partner referral task:', error);
+          logger.error('❌ [REFERRAL] Error updating partner referral task:', error);
         }
 
-        console.log(`🎁 [REFERRAL] New referral created! Referee ${user._id} received ₹30 signup bonus.`);
+        logger.info(`🎁 [REFERRAL] New referral created! Referee ${user._id} received ₹30 signup bonus.`);
         } // end else (fraud check passed)
       }
     } catch (error) {
-      console.error('Error processing referral:', error);
+      logger.error('Error processing referral:', error);
       // Don't fail the OTP verification if referral processing fails
     }
   }
@@ -407,10 +407,10 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
     // Email changes must go through a separate verified flow (profile update with OTP/email verification).
     // The original email on file is preserved to prevent unverified email takeover.
     if ((user as any)._pendingReactivationEmail) {
-      console.log(`⚠️ [AUTH] Email change requested during reactivation for user ${user._id} — ignored. User must update email separately after reactivation.`);
+      logger.info(`⚠️ [AUTH] Email change requested during reactivation for user ${user._id} — ignored. User must update email separately after reactivation.`);
     }
 
-    console.log('✅ [AUTH] Deactivated account reactivated after OTP verification:', user._id);
+    logger.info('✅ [AUTH] Deactivated account reactivated after OTP verification:', user._id);
   }
 
   // Update last login
@@ -522,15 +522,15 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
           // Clear refresh token from DB
           user.auth.refreshToken = undefined;
           await user.save();
-          console.log('✅ [LOGOUT] User tokens cleared:', user._id);
+          logger.info('✅ [LOGOUT] User tokens cleared:', user._id);
         }
       } catch (tokenError) {
         // Token is invalid/expired, but that's okay for logout
-        console.log('⚠️ [LOGOUT] Invalid token during logout (this is expected):', tokenError instanceof Error ? tokenError.message : String(tokenError));
+        logger.info('⚠️ [LOGOUT] Invalid token during logout (this is expected):', tokenError instanceof Error ? tokenError.message : String(tokenError));
       }
     }
     
-    console.log('✅ [LOGOUT] Logout successful');
+    logger.info('✅ [LOGOUT] Logout successful');
     sendSuccess(res, null, 'Logged out successfully');
   } catch (error) {
     // Even if there's an error, logout should succeed
@@ -597,7 +597,7 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
       const userId = (req.user._id as any).toString();
       await partnerService.syncProfileCompletion(userId);
     } catch (error) {
-      console.error('Error syncing partner profile:', error);
+      logger.error('Error syncing partner profile:', error);
       // Don't fail the profile update if partner sync fails
     }
 
@@ -669,7 +669,7 @@ export const completeOnboarding = asyncHandler(async (req: Request, res: Respons
     sendSuccess(res, userData, 'Onboarding completed successfully');
 
   } catch (error) {
-    console.error('❌ [COMPLETE_ONBOARDING] Error details:', error);
+    logger.error('❌ [COMPLETE_ONBOARDING] Error details:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -1082,7 +1082,7 @@ export const getUserStatistics = asyncHandler(async (req: Request, res: Response
 
     sendSuccess(res, statistics, 'User statistics retrieved successfully');
   } catch (error) {
-    console.error('Error fetching user statistics:', error);
+    logger.error('Error fetching user statistics:', error);
     throw new AppError('Failed to fetch user statistics', 500);
   }
 });
@@ -1090,14 +1090,14 @@ export const getUserStatistics = asyncHandler(async (req: Request, res: Response
 // Upload profile avatar
 export const uploadAvatar = asyncHandler(async (req: Request, res: Response) => {
   const startTime = Date.now();
-  console.log('📸 [AVATAR UPLOAD] Started for user:', req.user?._id);
+  logger.info('📸 [AVATAR UPLOAD] Started for user:', req.user?._id);
   
   if (!req.user) {
     return sendUnauthorized(res, 'Authentication required');
   }
 
   if (!req.file) {
-    console.error('❌ [AVATAR UPLOAD] No file provided');
+    logger.error('❌ [AVATAR UPLOAD] No file provided');
     return sendBadRequest(res, 'No image file provided');
   }
 
@@ -1107,16 +1107,16 @@ export const uploadAvatar = asyncHandler(async (req: Request, res: Response) => 
     const avatarUrl = (req.file as any).path;
     
     if (!avatarUrl) {
-      console.error('❌ [AVATAR UPLOAD] No URL returned from Cloudinary');
+      logger.error('❌ [AVATAR UPLOAD] No URL returned from Cloudinary');
       throw new AppError('Failed to upload image to Cloudinary', 500);
     }
     
-    console.log('✅ [AVATAR UPLOAD] Cloudinary upload successful:', avatarUrl);
+    logger.info('✅ [AVATAR UPLOAD] Cloudinary upload successful:', avatarUrl);
 
     // Update user profile with new avatar URL
     req.user.profile.avatar = avatarUrl;
     await req.user.save();
-    console.log('💾 [AVATAR UPLOAD] User profile updated');
+    logger.info('💾 [AVATAR UPLOAD] User profile updated');
 
     // Sync with partner profile to update avatar AND completion percentage
     try {
@@ -1129,12 +1129,12 @@ export const uploadAvatar = asyncHandler(async (req: Request, res: Response) => 
         { userId: userId },
         { avatar: avatarUrl }
       );
-      console.log('✅ [AVATAR UPLOAD] Partner profile avatar synced');
+      logger.info('✅ [AVATAR UPLOAD] Partner profile avatar synced');
       
       // Update profile completion
       await partnerService.syncProfileCompletion(userId);
     } catch (error) {
-      console.error('Error syncing partner profile:', error);
+      logger.error('Error syncing partner profile:', error);
       // Don't fail the avatar upload if partner sync fails
     }
 
@@ -1151,13 +1151,13 @@ export const uploadAvatar = asyncHandler(async (req: Request, res: Response) => 
     };
 
     const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`⏱️ [AVATAR UPLOAD] Completed in ${uploadTime} seconds`);
+    logger.info(`⏱️ [AVATAR UPLOAD] Completed in ${uploadTime} seconds`);
 
     sendSuccess(res, userData, 'Profile picture updated successfully');
 
   } catch (error) {
     const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.error(`❌ [AVATAR UPLOAD] Failed after ${uploadTime} seconds:`, error);
+    logger.error(`❌ [AVATAR UPLOAD] Failed after ${uploadTime} seconds:`, error);
     throw new AppError('Failed to upload profile picture', 500);
   }
 });

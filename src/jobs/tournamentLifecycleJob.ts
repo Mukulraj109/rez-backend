@@ -4,6 +4,7 @@ import Tournament from '../models/Tournament';
 import { User } from '../models/User';
 import pushNotificationService from '../services/pushNotificationService';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 /**
  * Tournament Lifecycle Jobs
@@ -32,16 +33,16 @@ const ENDING_SOON_SCHEDULE = '0 * * * *';    // Every hour
  */
 export function initializeTournamentLifecycleJobs(): void {
   if (activationJob || completionJob) {
-    console.log('⚠️ [TOURNAMENT] Lifecycle jobs already running');
+    logger.info('⚠️ [TOURNAMENT] Lifecycle jobs already running');
     return;
   }
 
-  console.log('🏆 [TOURNAMENT] Starting tournament lifecycle jobs');
+  logger.info('🏆 [TOURNAMENT] Starting tournament lifecycle jobs');
 
   // Job 1: Activate upcoming tournaments every 5 minutes
   activationJob = cron.schedule(ACTIVATION_SCHEDULE, async () => {
     if (isActivationRunning) {
-      console.log('⏭️ [TOURNAMENT] Previous activation job still running, skipping');
+      logger.info('⏭️ [TOURNAMENT] Previous activation job still running, skipping');
       return;
     }
 
@@ -52,7 +53,7 @@ export function initializeTournamentLifecycleJobs(): void {
     try {
       activationLockToken = await redisService.acquireLock(activationLockKey, 300);
       if (!activationLockToken) {
-        console.log('tournament-lifecycle skipped — lock held by another instance');
+        logger.info('tournament-lifecycle skipped — lock held by another instance');
         return;
       }
 
@@ -62,11 +63,11 @@ export function initializeTournamentLifecycleJobs(): void {
         const activated = await tournamentService.activateUpcomingTournaments();
         const duration = Date.now() - startTime;
         if (activated > 0) {
-          console.log(`✅ [TOURNAMENT] Activated ${activated} tournaments in ${duration}ms`);
+          logger.info(`✅ [TOURNAMENT] Activated ${activated} tournaments in ${duration}ms`);
         }
       } catch (error) {
         const duration = Date.now() - startTime;
-        console.error(`❌ [TOURNAMENT] Activation job failed after ${duration}ms:`, error);
+        logger.error(`❌ [TOURNAMENT] Activation job failed after ${duration}ms:`, error);
       }
     } finally {
       if (activationLockToken) {
@@ -79,7 +80,7 @@ export function initializeTournamentLifecycleJobs(): void {
   // Job 2: Complete ended tournaments every 5 minutes
   completionJob = cron.schedule(COMPLETION_SCHEDULE, async () => {
     if (isCompletionRunning) {
-      console.log('⏭️ [TOURNAMENT] Previous completion job still running, skipping');
+      logger.info('⏭️ [TOURNAMENT] Previous completion job still running, skipping');
       return;
     }
 
@@ -90,7 +91,7 @@ export function initializeTournamentLifecycleJobs(): void {
     try {
       completionLockToken = await redisService.acquireLock(completionLockKey, 300);
       if (!completionLockToken) {
-        console.log('tournament-lifecycle-completion skipped — lock held by another instance');
+        logger.info('tournament-lifecycle-completion skipped — lock held by another instance');
         return;
       }
 
@@ -100,11 +101,11 @@ export function initializeTournamentLifecycleJobs(): void {
         const completed = await tournamentService.completeEndedTournaments();
         const duration = Date.now() - startTime;
         if (completed > 0) {
-          console.log(`✅ [TOURNAMENT] Completed ${completed} tournaments (with prize distribution) in ${duration}ms`);
+          logger.info(`✅ [TOURNAMENT] Completed ${completed} tournaments (with prize distribution) in ${duration}ms`);
         }
       } catch (error) {
         const duration = Date.now() - startTime;
-        console.error(`❌ [TOURNAMENT] Completion job failed after ${duration}ms:`, error);
+        logger.error(`❌ [TOURNAMENT] Completion job failed after ${duration}ms:`, error);
       }
     } finally {
       if (completionLockToken) {
@@ -117,7 +118,7 @@ export function initializeTournamentLifecycleJobs(): void {
   // Job 3: Notify participants of tournaments ending within 24h (every hour)
   endingSoonJob = cron.schedule(ENDING_SOON_SCHEDULE, async () => {
     if (isEndingSoonRunning) {
-      console.log('⏭️ [TOURNAMENT] Previous ending-soon job still running, skipping');
+      logger.info('⏭️ [TOURNAMENT] Previous ending-soon job still running, skipping');
       return;
     }
 
@@ -128,7 +129,7 @@ export function initializeTournamentLifecycleJobs(): void {
     try {
       endingSoonLockToken = await redisService.acquireLock(endingSoonLockKey, 300);
       if (!endingSoonLockToken) {
-        console.log('tournament-lifecycle-ending-soon skipped — lock held by another instance');
+        logger.info('tournament-lifecycle-ending-soon skipped — lock held by another instance');
         return;
       }
 
@@ -138,11 +139,11 @@ export function initializeTournamentLifecycleJobs(): void {
         const notified = await notifyTournamentsEndingSoon();
         const duration = Date.now() - startTime;
         if (notified > 0) {
-          console.log(`✅ [TOURNAMENT] Sent ending-soon notifications to ${notified} participants in ${duration}ms`);
+          logger.info(`✅ [TOURNAMENT] Sent ending-soon notifications to ${notified} participants in ${duration}ms`);
         }
       } catch (error) {
         const duration = Date.now() - startTime;
-        console.error(`❌ [TOURNAMENT] Ending-soon job failed after ${duration}ms:`, error);
+        logger.error(`❌ [TOURNAMENT] Ending-soon job failed after ${duration}ms:`, error);
       }
     } finally {
       if (endingSoonLockToken) {
@@ -152,10 +153,10 @@ export function initializeTournamentLifecycleJobs(): void {
     }
   });
 
-  console.log('✅ [TOURNAMENT] Lifecycle jobs started successfully');
-  console.log('   - Activation: every 5 minutes');
-  console.log('   - Completion + prize distribution: every 5 minutes');
-  console.log('   - Ending-soon notifications: every hour');
+  logger.info('✅ [TOURNAMENT] Lifecycle jobs started successfully');
+  logger.info('   - Activation: every 5 minutes');
+  logger.info('   - Completion + prize distribution: every 5 minutes');
+  logger.info('   - Ending-soon notifications: every hour');
 }
 
 /**
@@ -206,7 +207,7 @@ async function notifyTournamentsEndingSoon(): Promise<number> {
         totalNotified++;
       } catch (notifErr) {
         if (process.env.NODE_ENV === 'development') {
-          console.log(`[TOURNAMENT] Failed to send ending-soon notification:`, notifErr);
+          logger.info(`[TOURNAMENT] Failed to send ending-soon notification:`, notifErr);
         }
       }
     }
@@ -234,7 +235,7 @@ export function stopTournamentLifecycleJobs(): void {
     endingSoonJob.stop();
     endingSoonJob = null;
   }
-  console.log('🛑 [TOURNAMENT] Lifecycle jobs stopped');
+  logger.info('🛑 [TOURNAMENT] Lifecycle jobs stopped');
 }
 
 export default {

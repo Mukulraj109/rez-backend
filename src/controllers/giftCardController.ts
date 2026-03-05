@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { GiftCard, UserGiftCard } from '../models/GiftCard';
+import { logger } from '../config/logger';
 import { Wallet } from '../models/Wallet';
 import { CoinTransaction } from '../models/CoinTransaction';
 import { sendSuccess, sendError, sendBadRequest } from '../utils/response';
@@ -129,7 +130,7 @@ export const purchaseGiftCard = asyncHandler(async (req: Request, res: Response)
       { giftCardId: giftCard._id, userGiftCardId: userGiftCard._id, cashback }
     );
   } catch (ctxError) {
-    console.error('❌ [GIFT-CARD] Failed to create CoinTransaction:', ctxError);
+    logger.error('❌ [GIFT-CARD] Failed to create CoinTransaction:', ctxError);
   }
 
   sendSuccess(res, {

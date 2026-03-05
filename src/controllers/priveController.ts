@@ -6,6 +6,7 @@
 
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
+import { logger } from '../config/logger';
 import { reputationService } from '../services/reputationService';
 import { UserReputation } from '../models/UserReputation';
 import priveAccessService from '../services/priveAccessService';
@@ -133,7 +134,7 @@ const buildHabitLoops = async (
           });
         }
       } catch (err) {
-        console.error('[PRIVE] Error awarding habit completion bonus:', err);
+        logger.error('[PRIVE] Error awarding habit completion bonus:', err);
       }
     });
   }
@@ -187,7 +188,7 @@ export const getPriveEligibility = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error getting eligibility:', error);
+    logger.error('[PRIVE] Error getting eligibility:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get eligibility status',
@@ -218,7 +219,7 @@ export const getPillarBreakdown = async (req: Request, res: Response) => {
       data: breakdown,
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error getting pillar breakdown:', error);
+    logger.error('[PRIVE] Error getting pillar breakdown:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get pillar breakdown',
@@ -254,7 +255,7 @@ export const refreshEligibility = async (req: Request, res: Response) => {
       data: eligibility,
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error refreshing eligibility:', error);
+    logger.error('[PRIVE] Error refreshing eligibility:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to refresh eligibility',
@@ -300,7 +301,7 @@ export const getReputationHistory = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error getting history:', error);
+    logger.error('[PRIVE] Error getting history:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get reputation history',
@@ -407,7 +408,7 @@ export const getImprovementTips = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error getting tips:', error);
+    logger.error('[PRIVE] Error getting tips:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get improvement tips',
@@ -436,7 +437,7 @@ export const dailyCheckIn = async (req: Request, res: Response) => {
     const { streakCheckin } = await import('./gamificationController');
     return (streakCheckin as any)(req, res);
   } catch (error: any) {
-    console.error('[PRIVE] Error delegating check-in:', error);
+    logger.error('[PRIVE] Error delegating check-in:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to check in',
@@ -506,7 +507,7 @@ export const getHabitLoops = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error getting habit loops:', error);
+    logger.error('[PRIVE] Error getting habit loops:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get habit loops',
@@ -811,7 +812,7 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
       data: dashboard,
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error getting dashboard:', error);
+    logger.error('[PRIVE] Error getting dashboard:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get dashboard',
@@ -917,7 +918,7 @@ export const getPriveOffers = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error getting offers:', error);
+    logger.error('[PRIVE] Error getting offers:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get offers',
@@ -987,7 +988,7 @@ export const getPriveOfferById = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error getting offer:', error);
+    logger.error('[PRIVE] Error getting offer:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get offer',
@@ -1042,7 +1043,7 @@ export const trackOfferClick = async (req: Request, res: Response) => {
       message: 'Click tracked',
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error tracking click:', error);
+    logger.error('[PRIVE] Error tracking click:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to track click',
@@ -1118,7 +1119,7 @@ export const getPriveHighlights = async (req: Request, res: Response) => {
       data: highlights,
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error getting highlights:', error);
+    logger.error('[PRIVE] Error getting highlights:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get highlights',
@@ -1276,7 +1277,7 @@ export const getEarnings = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error getting earnings:', error);
+    logger.error('[PRIVE] Error getting earnings:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get earnings',
@@ -1385,7 +1386,7 @@ export const getTransactions = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error getting transactions:', error);
+    logger.error('[PRIVE] Error getting transactions:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get transactions',
@@ -1718,7 +1719,7 @@ export const redeemCoins = async (req: Request, res: Response) => {
       PriveOffer.updateOne(
         { _id: offerId },
         { $inc: { redemptions: 1 } }
-      ).exec().catch(err => console.warn('[PRIVE] Failed to increment offer redemptions:', err));
+      ).exec().catch(err => logger.warn('[PRIVE] Failed to increment offer redemptions:', err));
     }
 
     // Emit offer_redeemed event for mission progress tracking
@@ -1760,7 +1761,7 @@ export const redeemCoins = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error redeeming coins:', error);
+    logger.error('[PRIVE] Error redeeming coins:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to redeem coins',
@@ -1896,7 +1897,7 @@ export const getVouchers = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error getting vouchers:', error);
+    logger.error('[PRIVE] Error getting vouchers:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get vouchers',
@@ -1962,7 +1963,7 @@ export const getVoucherById = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error getting voucher:', error);
+    logger.error('[PRIVE] Error getting voucher:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get voucher',
@@ -2038,7 +2039,7 @@ export const markVoucherUsed = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error marking voucher used:', error);
+    logger.error('[PRIVE] Error marking voucher used:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to mark voucher as used',
@@ -2074,7 +2075,7 @@ export const getRedeemConfig = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error getting redeem config:', error);
+    logger.error('[PRIVE] Error getting redeem config:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get redemption configuration',
@@ -2128,7 +2129,7 @@ export const getCatalog = async (_req: Request, res: Response) => {
       data: catalog,
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error getting catalog:', error);
+    logger.error('[PRIVE] Error getting catalog:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to get redemption catalog',
@@ -2174,7 +2175,7 @@ export const getPublicProgramConfig = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('[PRIVE] Error fetching public config:', error);
+    logger.error('[PRIVE] Error fetching public config:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch program config' });
   }
 };
@@ -2222,7 +2223,7 @@ export const getTierComparison = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('[PRIVE] Error fetching tier comparison:', error);
+    logger.error('[PRIVE] Error fetching tier comparison:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch tier comparison' });
   }
 };

@@ -14,6 +14,7 @@ import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import { filterExclusiveOffers, getUserFollowedStores } from '../middleware/exclusiveOfferMiddleware';
 import { recordExclusiveOfferView, recordExclusiveOfferRedemption } from '../services/followerAnalyticsService';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
+import redisService from '../services/redisService';
 
 /**
  * GET /api/offers
@@ -169,11 +170,19 @@ export const getFeaturedOffers = async (req: Request, res: Response) => {
       ];
     }
 
+    const cacheKey = `offers:featured:${region || 'all'}:${limit}`;
+    const cached = await redisService.get<any>(cacheKey);
+    if (cached) {
+      return sendSuccess(res, cached);
+    }
+
     const offers = await Offer.find(filter)
     .sort({ 'metadata.priority': -1, createdAt: -1 })
     .limit(Number(limit))
     .populate('store.id', 'name logo rating')
     .lean();
+
+    redisService.set(cacheKey, offers, 300).catch(() => {}); // 5min cache
 
     sendSuccess(res, offers, 'Featured offers fetched successfully');
   } catch (error) {
@@ -190,7 +199,15 @@ export const getTrendingOffers = async (req: Request, res: Response) => {
   try {
     const { limit = 10 } = req.query;
 
+    const cacheKey = `offers:trending:${limit}`;
+    const cached = await redisService.get<any>(cacheKey);
+    if (cached) {
+      return sendSuccess(res, cached);
+    }
+
     const offers = await Offer.findTrendingOffers(Number(limit));
+
+    redisService.set(cacheKey, offers, 300).catch(() => {}); // 5min cache
 
     sendSuccess(res, offers, 'Trending offers fetched successfully');
   } catch (error) {

@@ -1,3 +1,5 @@
+import { logger } from './logger';
+
 /**
  * Razorpay Payment Gateway Configuration
  * 
@@ -54,17 +56,17 @@ export function validateRazorpayConfig(): boolean {
   const { keyId, keySecret } = razorpayConfig;
   
   if (!keyId || keyId === 'rzp_test_dummy_key') {
-    console.warn('⚠️  [RAZORPAY] Key ID not configured. Add RAZORPAY_KEY_ID to .env');
+    logger.warn('⚠️  [RAZORPAY] Key ID not configured. Add RAZORPAY_KEY_ID to .env');
     return false;
   }
   
   if (!keySecret || keySecret === 'dummy_secret') {
-    console.warn('⚠️  [RAZORPAY] Key Secret not configured. Add RAZORPAY_KEY_SECRET to .env');
+    logger.warn('⚠️  [RAZORPAY] Key Secret not configured. Add RAZORPAY_KEY_SECRET to .env');
     return false;
   }
   
-  console.log('✅ [RAZORPAY] Configuration validated');
-  console.log(`🔧 [RAZORPAY] Mode: ${razorpayConfig.isTestMode ? 'TEST' : 'PRODUCTION'}`);
+  logger.info('✅ [RAZORPAY] Configuration validated');
+  logger.info(`🔧 [RAZORPAY] Mode: ${razorpayConfig.isTestMode ? 'TEST' : 'PRODUCTION'}`);
   
   return true;
 }

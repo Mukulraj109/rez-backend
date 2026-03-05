@@ -200,6 +200,10 @@ ScratchCardSchema.statics.isEligibleForScratchCard = async function(userId: stri
   return completionPercentage >= 80 && !existingCard;
 };
 
+// Compound indexes
+ScratchCardSchema.index({ userId: 1, isClaimed: 1, expiresAt: 1 });
+ScratchCardSchema.index({ userId: 1, createdAt: -1 });
+
 // Pre-save middleware
 ScratchCardSchema.pre('save', function(next) {
   this.updatedAt = new Date();

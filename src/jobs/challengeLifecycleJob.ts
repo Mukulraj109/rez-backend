@@ -1,6 +1,7 @@
 import * as cron from 'node-cron';
 import challengeService from '../services/challengeService';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 /**
  * Challenge Lifecycle Jobs
@@ -27,16 +28,16 @@ const CLEANUP_SCHEDULE = '*/30 * * * *';              // Every 30 minutes
  */
 export function initChallengeLifecycleJobs(): void {
   if (statusTransitionJob || cleanupJob) {
-    console.log('⚠️ [CHALLENGE LIFECYCLE] Jobs already running');
+    logger.info('⚠️ [CHALLENGE LIFECYCLE] Jobs already running');
     return;
   }
 
-  console.log('🎯 [CHALLENGE LIFECYCLE] Starting challenge lifecycle jobs');
+  logger.info('🎯 [CHALLENGE LIFECYCLE] Starting challenge lifecycle jobs');
 
   // Job 1: Transition challenge statuses every 5 minutes
   statusTransitionJob = cron.schedule(STATUS_TRANSITION_SCHEDULE, async () => {
     if (isTransitionRunning) {
-      console.log('⏭️ [CHALLENGE LIFECYCLE] Previous status transition still running, skipping');
+      logger.info('⏭️ [CHALLENGE LIFECYCLE] Previous status transition still running, skipping');
       return;
     }
 
@@ -47,7 +48,7 @@ export function initChallengeLifecycleJobs(): void {
     try {
       lockToken = await redisService.acquireLock(lockKey, 300);
       if (!lockToken) {
-        console.log('challenge-lifecycle skipped — lock held by another instance');
+        logger.info('challenge-lifecycle skipped — lock held by another instance');
         return;
       }
 
@@ -58,19 +59,19 @@ export function initChallengeLifecycleJobs(): void {
         const duration = Date.now() - startTime;
 
         if (result.activated > 0 || result.expired > 0) {
-          console.log(`✅ [CHALLENGE LIFECYCLE] Transitions completed in ${duration}ms: ${result.activated} activated, ${result.expired} expired`);
+          logger.info(`✅ [CHALLENGE LIFECYCLE] Transitions completed in ${duration}ms: ${result.activated} activated, ${result.expired} expired`);
         }
 
         // Auto-regenerate if no active challenges exist
         const activeChallenges = await challengeService.getActiveChallenges();
         if (activeChallenges.length === 0) {
-          console.log('📅 [CHALLENGE LIFECYCLE] No active challenges, auto-regenerating...');
+          logger.info('📅 [CHALLENGE LIFECYCLE] No active challenges, auto-regenerating...');
           const regenerated = await challengeService.regenerateExpiredChallenges();
-          console.log(`✅ [CHALLENGE LIFECYCLE] Regenerated ${regenerated} challenges`);
+          logger.info(`✅ [CHALLENGE LIFECYCLE] Regenerated ${regenerated} challenges`);
         }
       } catch (error) {
         const duration = Date.now() - startTime;
-        console.error(`❌ [CHALLENGE LIFECYCLE] Status transition failed after ${duration}ms:`, error);
+        logger.error(`❌ [CHALLENGE LIFECYCLE] Status transition failed after ${duration}ms:`, error);
       }
     } finally {
       if (lockToken) {
@@ -83,7 +84,7 @@ export function initChallengeLifecycleJobs(): void {
   // Job 2: Cleanup expired challenge progress every 30 minutes
   cleanupJob = cron.schedule(CLEANUP_SCHEDULE, async () => {
     if (isCleanupRunning) {
-      console.log('⏭️ [CHALLENGE LIFECYCLE] Previous cleanup still running, skipping');
+      logger.info('⏭️ [CHALLENGE LIFECYCLE] Previous cleanup still running, skipping');
       return;
     }
 
@@ -94,7 +95,7 @@ export function initChallengeLifecycleJobs(): void {
     try {
       cleanupLockToken = await redisService.acquireLock(cleanupLockKey, 300);
       if (!cleanupLockToken) {
-        console.log('challenge-lifecycle-cleanup skipped — lock held by another instance');
+        logger.info('challenge-lifecycle-cleanup skipped — lock held by another instance');
         return;
       }
 
@@ -110,11 +111,11 @@ export function initChallengeLifecycleJobs(): void {
 
         const duration = Date.now() - startTime;
         if (duration > 100) {
-          console.log(`✅ [CHALLENGE LIFECYCLE] Cleanup completed in ${duration}ms`);
+          logger.info(`✅ [CHALLENGE LIFECYCLE] Cleanup completed in ${duration}ms`);
         }
       } catch (error) {
         const duration = Date.now() - startTime;
-        console.error(`❌ [CHALLENGE LIFECYCLE] Cleanup failed after ${duration}ms:`, error);
+        logger.error(`❌ [CHALLENGE LIFECYCLE] Cleanup failed after ${duration}ms:`, error);
       }
     } finally {
       if (cleanupLockToken) {
@@ -124,9 +125,9 @@ export function initChallengeLifecycleJobs(): void {
     }
   });
 
-  console.log('✅ [CHALLENGE LIFECYCLE] Jobs started successfully');
-  console.log('   - Status transitions: every 5 minutes');
-  console.log('   - Cleanup: every 30 minutes');
+  logger.info('✅ [CHALLENGE LIFECYCLE] Jobs started successfully');
+  logger.info('   - Status transitions: every 5 minutes');
+  logger.info('   - Cleanup: every 30 minutes');
 }
 
 /**
@@ -141,7 +142,7 @@ export function stopChallengeLifecycleJobs(): void {
     cleanupJob.stop();
     cleanupJob = null;
   }
-  console.log('🛑 [CHALLENGE LIFECYCLE] Jobs stopped');
+  logger.info('🛑 [CHALLENGE LIFECYCLE] Jobs stopped');
 }
 
 export default {

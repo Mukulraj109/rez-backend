@@ -1,5 +1,6 @@
 import * as cron from 'node-cron';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 import { Bill, IBill } from '../models/Bill';
 
 /**
@@ -81,7 +82,7 @@ async function verifyBill(bill: IBill): Promise<{ passed: boolean; reason?: stri
     }
   } catch (err) {
     // Don't block verification on duplicate check failure
-    console.warn('⚠️ [BILL VERIFICATION] Duplicate check failed:', err);
+    logger.warn('⚠️ [BILL VERIFICATION] Duplicate check failed:', err);
   }
 
   // Check 5: Image hash duplicate
@@ -130,7 +131,7 @@ async function processPendingBills(): Promise<VerificationStats> {
   };
 
   try {
-    console.log('📄 [BILL VERIFICATION] Processing pending bills...');
+    logger.info('📄 [BILL VERIFICATION] Processing pending bills...');
 
     // Find pending bills, oldest first
     const pendingBills = await Bill.find({
@@ -142,12 +143,12 @@ async function processPendingBills(): Promise<VerificationStats> {
       .populate('merchant', 'name cashbackPercentage');
 
     if (pendingBills.length === 0) {
-      console.log('📄 [BILL VERIFICATION] No pending bills to process');
+      logger.info('📄 [BILL VERIFICATION] No pending bills to process');
       stats.duration = Date.now() - startTime;
       return stats;
     }
 
-    console.log(`📄 [BILL VERIFICATION] Found ${pendingBills.length} pending bills`);
+    logger.info(`📄 [BILL VERIFICATION] Found ${pendingBills.length} pending bills`);
 
     for (const bill of pendingBills) {
       try {
@@ -169,14 +170,14 @@ async function processPendingBills(): Promise<VerificationStats> {
 
         stats.processed++;
       } catch (error: any) {
-        console.error(`❌ [BILL VERIFICATION] Error processing bill ${bill._id}:`, error.message);
+        logger.error(`❌ [BILL VERIFICATION] Error processing bill ${bill._id}:`, error.message);
         stats.errors++;
       }
     }
 
     stats.duration = Date.now() - startTime;
 
-    console.log('✅ [BILL VERIFICATION] Batch completed:', {
+    logger.info('✅ [BILL VERIFICATION] Batch completed:', {
       processed: stats.processed,
       approved: stats.approved,
       rejected: stats.rejected,
@@ -189,7 +190,7 @@ async function processPendingBills(): Promise<VerificationStats> {
   } catch (error: any) {
     stats.duration = Date.now() - startTime;
 
-    console.error('❌ [BILL VERIFICATION] Job failed:', {
+    logger.error('❌ [BILL VERIFICATION] Job failed:', {
       error: error.message,
       duration: `${stats.duration}ms`,
       timestamp: new Date().toISOString(),
@@ -204,17 +205,17 @@ async function processPendingBills(): Promise<VerificationStats> {
  */
 export function startBillVerificationJob(): void {
   if (billVerificationJob) {
-    console.log('⚠️ [BILL VERIFICATION] Bill verification job already running');
+    logger.info('⚠️ [BILL VERIFICATION] Bill verification job already running');
     return;
   }
 
-  console.log('📄 [BILL VERIFICATION] Starting bill verification job (runs every 10 minutes)');
+  logger.info('📄 [BILL VERIFICATION] Starting bill verification job (runs every 10 minutes)');
 
   billVerificationJob = cron.schedule(BILL_VERIFICATION_SCHEDULE, async () => {
     // Acquire distributed lock with owner token — only one instance runs the job
     const lockToken = await redisService.acquireLock('bill_verification_job', BILL_VERIFICATION_LOCK_TTL);
     if (!lockToken) {
-      console.log('⏭️ [BILL VERIFICATION] Another instance is running the verification job, skipping');
+      logger.info('⏭️ [BILL VERIFICATION] Another instance is running the verification job, skipping');
       return;
     }
 
@@ -227,7 +228,7 @@ export function startBillVerificationJob(): void {
     }
   });
 
-  console.log('✅ [BILL VERIFICATION] Bill verification job started');
+  logger.info('✅ [BILL VERIFICATION] Bill verification job started');
 }
 
 /**
@@ -237,7 +238,7 @@ export function stopBillVerificationJob(): void {
   if (billVerificationJob) {
     billVerificationJob.stop();
     billVerificationJob = null;
-    console.log('🛑 [BILL VERIFICATION] Bill verification job stopped');
+    logger.info('🛑 [BILL VERIFICATION] Bill verification job stopped');
   }
 }
 
@@ -250,7 +251,7 @@ export async function triggerManualBillVerification(): Promise<VerificationStats
     throw new Error('Bill verification already in progress (locked by another instance)');
   }
 
-  console.log('📄 [BILL VERIFICATION] Manual bill verification triggered');
+  logger.info('📄 [BILL VERIFICATION] Manual bill verification triggered');
 
   try {
     return await processPendingBills();

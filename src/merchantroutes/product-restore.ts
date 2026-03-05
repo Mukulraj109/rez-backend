@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { logger } from '../config/logger';
 import { authMiddleware } from '../middleware/merchantauth';
 import { validateParams } from '../middleware/merchantvalidation';
 import { Product } from '../models/Product';
@@ -25,13 +26,13 @@ router.post('/:id/restore', validateParams(productIdSchema), async (req, res) =>
     const productId = req.params.id;
     const merchantId = req.merchantId;
 
-    console.log('🔄 [RESTORE PRODUCT] Request received:');
-    console.log('   Product ID:', productId);
-    console.log('   Merchant ID:', merchantId);
+    logger.info('🔄 [RESTORE PRODUCT] Request received:');
+    logger.info('   Product ID:', productId);
+    logger.info('   Merchant ID:', merchantId);
 
     // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(productId)) {
-      console.log('❌ [RESTORE PRODUCT] Invalid product ID format');
+      logger.info('❌ [RESTORE PRODUCT] Invalid product ID format');
       return res.status(400).json({
         success: false,
         message: 'Invalid product ID format'
@@ -50,7 +51,7 @@ router.post('/:id/restore', validateParams(productIdSchema), async (req, res) =>
 
     // If not found by merchantId, try finding through stores
     if (!product) {
-      console.log('🔍 [RESTORE PRODUCT] Product not found by merchantId, checking through stores...');
+      logger.info('🔍 [RESTORE PRODUCT] Product not found by merchantId, checking through stores...');
 
       const merchantStores = await Store.find({ merchantId: merchantObjectId }).select('_id');
       const storeIds = merchantStores.map(store => store._id);
@@ -63,23 +64,23 @@ router.post('/:id/restore', validateParams(productIdSchema), async (req, res) =>
         });
 
         if (product) {
-          console.log('✅ [RESTORE PRODUCT] Product found via store relationship');
+          logger.info('✅ [RESTORE PRODUCT] Product found via store relationship');
         }
       }
     } else {
-      console.log('✅ [RESTORE PRODUCT] Product found via merchantId');
+      logger.info('✅ [RESTORE PRODUCT] Product found via merchantId');
     }
 
     if (!product) {
-      console.log('❌ [RESTORE PRODUCT] Product not found or not deleted');
+      logger.info('❌ [RESTORE PRODUCT] Product not found or not deleted');
       return res.status(404).json({
         success: false,
         message: 'Product not found or not deleted'
       });
     }
 
-    console.log('✅ [RESTORE PRODUCT] Deleted product found:', product.name);
-    console.log('   Deleted At:', product.deletedAt);
+    logger.info('✅ [RESTORE PRODUCT] Deleted product found:', product.name);
+    logger.info('   Deleted At:', product.deletedAt);
 
     // Check if product can be restored (within 30 days)
     if (product.deletedAt) {
@@ -87,7 +88,7 @@ router.post('/:id/restore', validateParams(productIdSchema), async (req, res) =>
         (Date.now() - product.deletedAt.getTime()) / (1000 * 60 * 60 * 24)
       );
 
-      console.log('   Days since deletion:', daysSinceDeletion);
+      logger.info('   Days since deletion:', daysSinceDeletion);
 
       if (daysSinceDeletion > 30) {
         return res.status(400).json({
@@ -100,7 +101,7 @@ router.post('/:id/restore', validateParams(productIdSchema), async (req, res) =>
     // Restore the product
     await product.restore();
 
-    console.log(`✅ Product "${product.name}" (ID: ${product._id}) restored successfully`);
+    logger.info(`✅ Product "${product.name}" (ID: ${product._id}) restored successfully`);
 
     // Restore corresponding user-side product
     await restoreUserSideProduct(product.sku);
@@ -139,7 +140,7 @@ router.post('/:id/restore', validateParams(productIdSchema), async (req, res) =>
       }
     });
   } catch (error: any) {
-    console.error('Restore product error:', error);
+    logger.error('Restore product error:', error);
 
     // Handle specific error for restoration time limit
     if (error.message && error.message.includes('Cannot restore product deleted more than 30 days ago')) {
@@ -167,9 +168,9 @@ router.get('/deleted', async (req, res) => {
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
 
-    console.log('📋 [GET DELETED PRODUCTS] Request received:');
-    console.log('   Merchant ID:', merchantId);
-    console.log('   Page:', page, 'Limit:', limit);
+    logger.info('📋 [GET DELETED PRODUCTS] Request received:');
+    logger.info('   Merchant ID:', merchantId);
+    logger.info('   Page:', page, 'Limit:', limit);
 
     const merchantObjectId = new mongoose.Types.ObjectId(merchantId);
 
@@ -208,7 +209,7 @@ router.get('/deleted', async (req, res) => {
       Product.countDocuments(query)
     ]);
 
-    console.log(`✅ Found ${totalCount} deleted products`);
+    logger.info(`✅ Found ${totalCount} deleted products`);
 
     const totalPages = Math.ceil(totalCount / limit);
 
@@ -248,7 +249,7 @@ router.get('/deleted', async (req, res) => {
       }
     });
   } catch (error: any) {
-    console.error('Get deleted products error:', error);
+    logger.error('Get deleted products error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch deleted products',
@@ -271,7 +272,7 @@ async function restoreUserSideProduct(sku: string): Promise<void> {
 
     if (!userProduct) {
       await session.abortTransaction();
-      console.log(`⚠️ No corresponding deleted user-side product found for SKU "${sku}"`);
+      logger.info(`⚠️ No corresponding deleted user-side product found for SKU "${sku}"`);
       return;
     }
 
@@ -279,7 +280,7 @@ async function restoreUserSideProduct(sku: string): Promise<void> {
     await userProduct.restore();
     await session.commitTransaction();
 
-    console.log(`🔄 Restored user-side product with SKU "${sku}"`);
+    logger.info(`🔄 Restored user-side product with SKU "${sku}"`);
 
     // Emit Socket.IO event after successful restoration
     if (global.io) {
@@ -293,7 +294,7 @@ async function restoreUserSideProduct(sku: string): Promise<void> {
     }
   } catch (error) {
     await session.abortTransaction();
-    console.error('Error restoring user-side product:', error);
+    logger.error('Error restoring user-side product:', error);
   } finally {
     session.endSession();
   }

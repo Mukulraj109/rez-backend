@@ -1,6 +1,7 @@
 import { v2 as cloudinary } from 'cloudinary';
 import path from 'path';
 import fs from 'fs';
+import { logger } from '../config/logger';
 
 // Configure Cloudinary
 cloudinary.config({
@@ -16,14 +17,14 @@ export function validateCloudinaryConfig(): boolean {
   const { cloud_name, api_key, api_secret } = cloudinary.config();
 
   if (!cloud_name || !api_key || !api_secret) {
-    console.error('❌ Cloudinary configuration missing. Please set environment variables:');
-    console.error('   - CLOUDINARY_CLOUD_NAME');
-    console.error('   - CLOUDINARY_API_KEY');
-    console.error('   - CLOUDINARY_API_SECRET');
+    logger.error('❌ Cloudinary configuration missing. Please set environment variables:');
+    logger.error('   - CLOUDINARY_CLOUD_NAME');
+    logger.error('   - CLOUDINARY_API_KEY');
+    logger.error('   - CLOUDINARY_API_SECRET');
     return false;
   }
 
-  console.log('✅ Cloudinary configured successfully');
+  logger.info('✅ Cloudinary configured successfully');
   return true;
 }
 
@@ -82,7 +83,7 @@ export async function uploadToCloudinary(
       bytes: result.bytes
     };
   } catch (error: any) {
-    console.error('Cloudinary upload error:', error);
+    logger.error('Cloudinary upload error:', error);
     throw new Error(`Failed to upload to Cloudinary: ${error.message}`);
   }
 }
@@ -96,7 +97,7 @@ export async function deleteFromCloudinary(publicId: string): Promise<boolean> {
     const result = await cloudinary.uploader.destroy(publicId);
     return result.result === 'ok';
   } catch (error: any) {
-    console.error('Cloudinary delete error:', error);
+    logger.error('Cloudinary delete error:', error);
     throw new Error(`Failed to delete from Cloudinary: ${error.message}`);
   }
 }

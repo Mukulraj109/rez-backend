@@ -10,6 +10,7 @@ import { User } from '../models/User';
 import { Transaction } from '../models/Transaction';
 import referralService from '../services/referralService';
 import achievementService from '../services/achievementService';
+import redisService from '../services/redisService';
 
 /**
  * @desc    Get referral data
@@ -325,6 +326,22 @@ export const getReferralLeaderboard = asyncHandler(async (req: Request, res: Res
   }
 
   try {
+    // Cache leaderboard for 5 minutes (heavy aggregation, shared data)
+    const cacheKey = `referral:leaderboard:${period}`;
+    const cached = await redisService.get<any>(cacheKey);
+    if (cached) {
+      // Add user-specific rank from cached data
+      const userEntry = cached.fullRanking?.find((u: any) => u.userId === userId);
+      return sendSuccess(res, {
+        leaderboard: cached.leaderboard,
+        userRank: userEntry ? {
+          rank: cached.fullRanking.indexOf(userEntry) + 1,
+          totalReferrals: userEntry.totalReferrals || 0,
+          totalEarned: userEntry.totalEarned || 0
+        } : null
+      }, 'Referral leaderboard retrieved successfully');
+    }
+
     // Get top referrers
     const topReferrers = await User.aggregate([
       {
@@ -383,6 +400,14 @@ export const getReferralLeaderboard = asyncHandler(async (req: Request, res: Res
 
     const currentUserRank = userRank.findIndex(user => (user._id as any).toString() === userId) + 1;
     const currentUser = userRank.find(user => (user._id as any).toString() === userId);
+
+    // Cache leaderboard + full ranking for user rank lookup
+    const fullRanking = userRank.map(u => ({
+      userId: (u._id as any).toString(),
+      totalReferrals: u.totalReferrals,
+      totalEarned: u.totalEarned
+    }));
+    redisService.set(cacheKey, { leaderboard, fullRanking }, 300).catch(() => {}); // 5 min cache
 
     sendSuccess(res, {
       leaderboard,

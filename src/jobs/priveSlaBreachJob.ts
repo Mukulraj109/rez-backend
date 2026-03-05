@@ -8,31 +8,32 @@
 import cron from 'node-cron';
 import { priveConciergeService } from '../services/priveConciergeService';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 let isRunning = false;
 
 export const runPriveSlaBreachCheck = async (): Promise<number> => {
   if (isRunning) {
-    console.log('[PriveSlaBreachJob] Job already running, skipping');
+    logger.info('[PriveSlaBreachJob] Job already running, skipping');
     return 0;
   }
 
   const lockKey = 'job:prive-sla-breach';
   const lockToken = await redisService.acquireLock(lockKey, 300);
   if (!lockToken) {
-    console.log('prive-sla-breach skipped — lock held by another instance');
+    logger.info('prive-sla-breach skipped — lock held by another instance');
     return 0;
   }
 
   isRunning = true;
 
   try {
-    console.log('[PriveSlaBreachJob] Starting SLA breach check...');
+    logger.info('[PriveSlaBreachJob] Starting SLA breach check...');
     const breachedCount = await priveConciergeService.markSlaBreached();
-    console.log(`[PriveSlaBreachJob] SLA breach check complete: ${breachedCount} tickets breached`);
+    logger.info(`[PriveSlaBreachJob] SLA breach check complete: ${breachedCount} tickets breached`);
     return breachedCount;
   } catch (error) {
-    console.error('[PriveSlaBreachJob] Job failed:', error);
+    logger.error('[PriveSlaBreachJob] Job failed:', error);
     return 0;
   } finally {
     isRunning = false;
@@ -50,5 +51,5 @@ export const initializePriveSlaBreachJob = () => {
     timezone: 'UTC',
   });
 
-  console.log('✅ Prive SLA breach job scheduled (every 15 minutes)');
+  logger.info('✅ Prive SLA breach job scheduled (every 15 minutes)');
 };

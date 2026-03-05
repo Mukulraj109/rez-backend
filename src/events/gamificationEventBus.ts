@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
+import { logger } from '../config/logger';
 
 /**
  * Activity Event — standard event format consumed by all gamification systems.
@@ -99,7 +100,7 @@ class GamificationEventBus {
         this.emitter.emit('gamification_event', event);
         this.emitter.emit(`event:${type}`, event);
       } catch (error) {
-        console.error(`[EVENT BUS] Error emitting event ${type}:`, error);
+        logger.error(`[EVENT BUS] Error emitting event ${type}:`, error);
       }
     });
   }
@@ -112,7 +113,7 @@ class GamificationEventBus {
       try {
         await handler(event);
       } catch (error) {
-        console.error(`[EVENT BUS] Handler error for ${event.type}:`, error);
+        logger.error(`[EVENT BUS] Handler error for ${event.type}:`, error);
       }
     });
   }
@@ -125,7 +126,7 @@ class GamificationEventBus {
       try {
         await handler(event);
       } catch (error) {
-        console.error(`[EVENT BUS] Handler error for ${type}:`, error);
+        logger.error(`[EVENT BUS] Handler error for ${type}:`, error);
       }
     });
   }
@@ -151,9 +152,9 @@ class GamificationEventBus {
       registerMissionProgressHandler(this);
 
       this.initialized = true;
-      console.log('[EVENT BUS] Gamification event bus initialized with all handlers');
+      logger.info('[EVENT BUS] Gamification event bus initialized with all handlers');
     } catch (error) {
-      console.error('[EVENT BUS] Failed to initialize handlers:', error);
+      logger.error('[EVENT BUS] Failed to initialize handlers:', error);
     }
   }
 

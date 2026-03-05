@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/merchantauth';
+import { logger } from '../config/logger';
 import { validateParams, validateRequest } from '../middleware/merchantvalidation';
 import { Review } from '../models/Review';
 import { Product } from '../models/Product';
@@ -107,7 +108,7 @@ router.get('/:id/reviews', validateParams(productIdSchema), async (req: Request,
     });
 
   } catch (error: any) {
-    console.error('Get product reviews error:', error);
+    logger.error('Get product reviews error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch reviews',
@@ -191,7 +192,7 @@ router.post(
       });
 
     } catch (error: any) {
-      console.error('Post review response error:', error);
+      logger.error('Post review response error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to post response',
@@ -252,7 +253,7 @@ router.put(
       // This would require updating the Review model to include flags
       // For now, we'll track this in a separate moderation system
 
-      console.log(`Review ${reviewId} flagged by merchant ${merchantId}:`, {
+      logger.info(`Review ${reviewId} flagged by merchant ${merchantId}:`, {
         reason,
         details
       });
@@ -279,7 +280,7 @@ router.put(
       });
 
     } catch (error: any) {
-      console.error('Flag review error:', error);
+      logger.error('Flag review error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to flag review',
@@ -359,7 +360,7 @@ router.get('/:id/reviews/stats', validateParams(productIdSchema), async (req: Re
     });
 
   } catch (error: any) {
-    console.error('Get review stats error:', error);
+    logger.error('Get review stats error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch review stats',

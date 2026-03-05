@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import stockAuditService from '../services/stockAuditService';
+import { logger } from '../config/logger';
 import { StockChangeType } from '../models/StockHistory';
 
 /**
@@ -55,7 +56,7 @@ export const getProductStockHistory = async (req: Request, res: Response) => {
       count: history.length
     });
   } catch (error) {
-    console.error('Error fetching product stock history:', error);
+    logger.error('Error fetching product stock history:', error);
     res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to fetch stock history'
@@ -100,7 +101,7 @@ export const getStockSnapshot = async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching stock snapshot:', error);
+    logger.error('Error fetching stock snapshot:', error);
     res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to fetch stock snapshot'
@@ -134,7 +135,7 @@ export const detectStockAnomalies = async (req: Request, res: Response) => {
       count: anomalies.length
     });
   } catch (error) {
-    console.error('Error detecting stock anomalies:', error);
+    logger.error('Error detecting stock anomalies:', error);
     res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to detect anomalies'
@@ -172,7 +173,7 @@ export const generateStockReport = async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error generating stock report:', error);
+    logger.error('Error generating stock report:', error);
     res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to generate stock report'
@@ -218,7 +219,7 @@ export const getStockMovementSummary = async (req: Request, res: Response) => {
       data: summary
     });
   } catch (error) {
-    console.error('Error fetching stock movement summary:', error);
+    logger.error('Error fetching stock movement summary:', error);
     res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to fetch stock movement summary'
@@ -244,7 +245,7 @@ export const getLowStockAlerts = async (req: Request, res: Response) => {
       count: alerts.length
     });
   } catch (error) {
-    console.error('Error fetching low stock alerts:', error);
+    logger.error('Error fetching low stock alerts:', error);
     res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to fetch low stock alerts'
@@ -289,7 +290,7 @@ export const getStockValueOverTime = async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching stock value over time:', error);
+    logger.error('Error fetching stock value over time:', error);
     res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : 'Failed to fetch stock value over time'

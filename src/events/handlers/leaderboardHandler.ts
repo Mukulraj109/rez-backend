@@ -1,5 +1,6 @@
 import type { ActivityEvent } from '../gamificationEventBus';
 import redisService from '../../services/redisService';
+import { logger } from '../../config/logger';
 
 /**
  * Leaderboard Handler
@@ -30,9 +31,9 @@ export function registerLeaderboardHandler(eventBus: any): void {
       await redisService.del(cacheKey);
     } catch (error) {
       // Cache invalidation is best-effort
-      console.error(`[LEADERBOARD HANDLER] Cache invalidation error:`, error);
+      logger.error(`[LEADERBOARD HANDLER] Cache invalidation error:`, error);
     }
   });
 
-  console.log('[LEADERBOARD HANDLER] Registered leaderboard handler');
+  logger.info('[LEADERBOARD HANDLER] Registered leaderboard handler');
 }

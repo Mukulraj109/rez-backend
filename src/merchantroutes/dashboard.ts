@@ -8,6 +8,7 @@ import { Product } from '../models/Product';
 import { Store } from '../models/Store';
 import { CashbackModel } from '../models/Cashback';
 import mongoose from 'mongoose';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -100,7 +101,7 @@ router.get('/', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching dashboard overview:', error);
+    logger.error('Error fetching dashboard overview:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch dashboard overview',
@@ -178,7 +179,7 @@ router.get('/metrics', async (req, res) => {
       data: metricCards
     });
   } catch (error) {
-    console.error('Error fetching dashboard metrics:', error);
+    logger.error('Error fetching dashboard metrics:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch dashboard metrics',
@@ -208,7 +209,7 @@ router.get('/activity', async (req, res) => {
       data: activityArray
     });
   } catch (error) {
-    console.error('Error fetching activity feed:', error);
+    logger.error('Error fetching activity feed:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch activity feed',
@@ -241,7 +242,7 @@ router.get('/top-products', async (req, res) => {
       data: productsArray
     });
   } catch (error) {
-    console.error('Error fetching top products:', error);
+    logger.error('Error fetching top products:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch top products',
@@ -274,7 +275,7 @@ router.get('/sales-data', async (req, res) => {
       data: salesArray
     });
   } catch (error) {
-    console.error('Error fetching sales data:', error);
+    logger.error('Error fetching sales data:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch sales data',
@@ -304,7 +305,7 @@ router.get('/low-stock', async (req, res) => {
       data: productsArray
     });
   } catch (error) {
-    console.error('Error fetching low stock products:', error);
+    logger.error('Error fetching low stock products:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch low stock products',
@@ -380,7 +381,7 @@ router.get('/overview', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching dashboard overview:', error);
+    logger.error('Error fetching dashboard overview:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch dashboard overview',
@@ -411,7 +412,7 @@ router.get('/timeseries', async (req, res) => {
       data: timeSeriesData
     });
   } catch (error) {
-    console.error('Error fetching time series data:', error);
+    logger.error('Error fetching time series data:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch time series data',
@@ -458,7 +459,7 @@ router.get('/recent-orders', async (req, res) => {
       data: recentOrders
     });
   } catch (error) {
-    console.error('Error fetching recent orders:', error);
+    logger.error('Error fetching recent orders:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch recent orders',
@@ -505,7 +506,7 @@ router.get('/revenue', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching revenue analytics:', error);
+    logger.error('Error fetching revenue analytics:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch revenue analytics',
@@ -558,7 +559,7 @@ router.get('/analytics', async (req, res) => {
       data: metrics
     });
   } catch (error) {
-    console.error('Error fetching analytics:', error);
+    logger.error('Error fetching analytics:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch analytics',
@@ -584,7 +585,7 @@ router.get('/categories', async (req, res) => {
       data: categoryPerformance
     });
   } catch (error) {
-    console.error('Error fetching category performance:', error);
+    logger.error('Error fetching category performance:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch category performance',
@@ -610,7 +611,7 @@ router.get('/customers', async (req, res) => {
       data: customerInsights
     });
   } catch (error) {
-    console.error('Error fetching customer insights:', error);
+    logger.error('Error fetching customer insights:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch customer insights',
@@ -636,7 +637,7 @@ router.get('/insights', async (req, res) => {
       data: insights
     });
   } catch (error) {
-    console.error('Error fetching business insights:', error);
+    logger.error('Error fetching business insights:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch business insights',
@@ -744,7 +745,7 @@ router.get('/notifications', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching notifications:', error);
+    logger.error('Error fetching notifications:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch notifications',
@@ -823,7 +824,7 @@ router.get('/performance', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching performance data:', error);
+    logger.error('Error fetching performance data:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch performance data',
@@ -850,7 +851,7 @@ router.post('/sample-data', async (req, res) => {
       message: 'Sample dashboard data generated successfully'
     });
   } catch (error) {
-    console.error('Error generating sample data:', error);
+    logger.error('Error generating sample data:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to generate sample data',
@@ -886,7 +887,7 @@ router.get('/realtime/stats', async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Error fetching real-time stats:', error);
+    logger.error('Error fetching real-time stats:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch real-time stats',
@@ -923,7 +924,7 @@ router.post('/realtime/broadcast', async (req, res) => {
       message: 'Notification broadcasted successfully'
     });
   } catch (error) {
-    console.error('Error broadcasting notification:', error);
+    logger.error('Error broadcasting notification:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to broadcast notification',
@@ -949,7 +950,7 @@ router.post('/realtime/chart-data/:merchantId', async (req, res) => {
       message: 'Live chart data sent successfully'
     });
   } catch (error) {
-    console.error('Error sending live chart data:', error);
+    logger.error('Error sending live chart data:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to send live chart data',
@@ -999,7 +1000,7 @@ router.post('/export', async (req, res) => {
     return res.send(exportResult.data);
 
   } catch (error) {
-    console.error('Error exporting dashboard data:', error);
+    logger.error('Error exporting dashboard data:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to export dashboard data',
@@ -1047,7 +1048,7 @@ router.post('/export/orders', async (req, res) => {
     return res.send(exportResult.data);
 
   } catch (error) {
-    console.error('Error exporting orders data:', error);
+    logger.error('Error exporting orders data:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to export orders data',
@@ -1085,7 +1086,7 @@ router.get('/export/scheduled/:type', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error generating scheduled report:', error);
+    logger.error('Error generating scheduled report:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to generate scheduled report',
@@ -1112,7 +1113,7 @@ router.get('/reports/schedules', async (req, res) => {
       data: schedules
     });
   } catch (error) {
-    console.error('Error fetching report schedules:', error);
+    logger.error('Error fetching report schedules:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch report schedules',
@@ -1156,7 +1157,7 @@ router.post('/reports/schedules', async (req, res) => {
       message: 'Report schedule created successfully'
     });
   } catch (error) {
-    console.error('Error creating report schedule:', error);
+    logger.error('Error creating report schedule:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to create report schedule',
@@ -1188,7 +1189,7 @@ router.put('/reports/schedules/:id', async (req, res) => {
       message: 'Report schedule updated successfully'
     });
   } catch (error) {
-    console.error('Error updating report schedule:', error);
+    logger.error('Error updating report schedule:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to update report schedule',
@@ -1217,7 +1218,7 @@ router.delete('/reports/schedules/:id', async (req, res) => {
       message: 'Report schedule deleted successfully'
     });
   } catch (error) {
-    console.error('Error deleting report schedule:', error);
+    logger.error('Error deleting report schedule:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to delete report schedule',
@@ -1244,7 +1245,7 @@ router.get('/reports/history', async (req, res) => {
       data: history
     });
   } catch (error) {
-    console.error('Error fetching report history:', error);
+    logger.error('Error fetching report history:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch report history',
@@ -1269,7 +1270,7 @@ router.get('/reports/statistics', async (req, res) => {
       data: statistics
     });
   } catch (error) {
-    console.error('Error fetching report statistics:', error);
+    logger.error('Error fetching report statistics:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch report statistics',
@@ -1296,7 +1297,7 @@ router.get('/reports/upcoming', async (req, res) => {
       data: upcoming
     });
   } catch (error) {
-    console.error('Error fetching upcoming reports:', error);
+    logger.error('Error fetching upcoming reports:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch upcoming reports',
@@ -1342,7 +1343,7 @@ router.post('/reports/generate', async (req, res) => {
       message: 'Ad-hoc report generated successfully'
     });
   } catch (error) {
-    console.error('Error generating ad-hoc report:', error);
+    logger.error('Error generating ad-hoc report:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to generate ad-hoc report',
@@ -1366,7 +1367,7 @@ router.post('/reports/trigger/:scheduleId', async (req, res) => {
       message: 'Scheduled report triggered successfully'
     });
   } catch (error) {
-    console.error('Error triggering scheduled report:', error);
+    logger.error('Error triggering scheduled report:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to trigger scheduled report',
@@ -1391,7 +1392,7 @@ router.post('/reports/sample-schedules', async (req, res) => {
       message: 'Sample report schedules created successfully'
     });
   } catch (error) {
-    console.error('Error creating sample schedules:', error);
+    logger.error('Error creating sample schedules:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to create sample schedules',
@@ -1484,7 +1485,7 @@ async function getRecentActivity(merchantId: string, limit: number = 20, storeId
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, limit);
   } catch (error) {
-    console.error('Error getting recent activity:', error);
+    logger.error('Error getting recent activity:', error);
     return [];
   }
 }
@@ -1504,7 +1505,7 @@ async function getTopProducts(merchantId: string, limit: number = 5, storeId?: s
       growth: 0 // Would need historical data to calculate
     }));
   } catch (error) {
-    console.error('Error getting top products:', error);
+    logger.error('Error getting top products:', error);
     return [];
   }
 }
@@ -1578,7 +1579,7 @@ async function getTopProductsByPeriod(
 
     return topProducts.slice(0, limit);
   } catch (error) {
-    console.error('Error getting top products by period:', error);
+    logger.error('Error getting top products by period:', error);
     return [];
   }
 }
@@ -1651,7 +1652,7 @@ async function getSalesChartData(
 
     return aggregated;
   } catch (error) {
-    console.error('Error getting sales chart data:', error);
+    logger.error('Error getting sales chart data:', error);
     return [];
   }
 }
@@ -1688,7 +1689,7 @@ async function getLowStockProducts(merchantId: string, threshold: number = 10, s
       }))
       .sort((a, b) => a.currentStock - b.currentStock);
   } catch (error) {
-    console.error('Error getting low stock products:', error);
+    logger.error('Error getting low stock products:', error);
     return [];
   }
 }

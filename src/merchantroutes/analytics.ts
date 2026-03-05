@@ -13,6 +13,7 @@ import { AnalyticsCacheService } from '../merchantservices/AnalyticsCacheService
 import { Store } from '../models/Store';
 import { exportQueue, isRedisAvailable } from '../config/queue.config';
 import { ExportJobData } from '../services/exportService';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -80,7 +81,7 @@ async function getStoreId(req: Request, res: Response): Promise<string | null> {
 
     return store._id.toString();
   } catch (error) {
-    console.error('Error getting store ID:', error);
+    logger.error('Error getting store ID:', error);
     res.status(500).json({ success: false, message: 'Failed to get store information' });
     return null;
   }
@@ -192,7 +193,7 @@ router.get('/sales/overview', async (req: Request, res: Response) => {
       data: overviewData
     });
   } catch (error) {
-    console.error('Error fetching sales overview:', error);
+    logger.error('Error fetching sales overview:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch sales overview',
@@ -229,7 +230,7 @@ router.get('/sales/trends', async (req: Request, res: Response) => {
       data: trendsArray
     });
   } catch (error) {
-    console.error('Error fetching sales trends:', error);
+    logger.error('Error fetching sales trends:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch sales trends',
@@ -258,7 +259,7 @@ router.get('/sales/by-time', async (req: Request, res: Response) => {
       data: salesArray
     });
   } catch (error) {
-    console.error('Error fetching sales by time:', error);
+    logger.error('Error fetching sales by time:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch sales by time',
@@ -287,7 +288,7 @@ router.get('/sales/by-day', async (req: Request, res: Response) => {
       data: salesArray
     });
   } catch (error) {
-    console.error('Error fetching sales by day:', error);
+    logger.error('Error fetching sales by day:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch sales by day',
@@ -326,7 +327,7 @@ router.get('/products/top-selling', async (req: Request, res: Response) => {
       data: productsArray
     });
   } catch (error) {
-    console.error('Error fetching top selling products:', error);
+    logger.error('Error fetching top selling products:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch top selling products',
@@ -361,7 +362,7 @@ router.get('/categories/performance', async (req: Request, res: Response) => {
       data: categoriesArray
     });
   } catch (error) {
-    console.error('Error fetching category performance:', error);
+    logger.error('Error fetching category performance:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch category performance',
@@ -668,7 +669,7 @@ router.get('/customers/insights', async (req: Request, res: Response) => {
       data: insightsData
     });
   } catch (error) {
-    console.error('Error fetching customer insights:', error);
+    logger.error('Error fetching customer insights:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch customer insights',
@@ -711,7 +712,7 @@ router.get('/inventory/status', async (req: Request, res: Response) => {
       data: statusData
     });
   } catch (error) {
-    console.error('Error fetching inventory status:', error);
+    logger.error('Error fetching inventory status:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch inventory status',
@@ -742,7 +743,7 @@ router.get('/payments/breakdown', async (req: Request, res: Response) => {
       data: breakdownArray
     });
   } catch (error) {
-    console.error('Error fetching payment breakdown:', error);
+    logger.error('Error fetching payment breakdown:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch payment breakdown',
@@ -852,7 +853,7 @@ router.get('/forecast/sales', async (req: Request, res: Response) => {
       data: responseData
     });
   } catch (error) {
-    console.error('Error fetching sales forecast:', error);
+    logger.error('Error fetching sales forecast:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch sales forecast',
@@ -917,7 +918,7 @@ router.get('/forecast/stockout/:productId', async (req: Request, res: Response) 
       data: prediction
     });
   } catch (error) {
-    console.error('Error fetching stockout prediction:', error);
+    logger.error('Error fetching stockout prediction:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch stockout prediction',
@@ -946,7 +947,7 @@ router.get('/forecast/demand/:productId', async (req: Request, res: Response) =>
       data: demandForecast
     });
   } catch (error) {
-    console.error('Error fetching demand forecast:', error);
+    logger.error('Error fetching demand forecast:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch demand forecast',
@@ -1120,7 +1121,7 @@ router.get('/trends/seasonal', async (req: Request, res: Response) => {
       data: trendsData
     });
   } catch (error) {
-    console.error('Error fetching seasonal trends:', error);
+    logger.error('Error fetching seasonal trends:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch seasonal trends',
@@ -1148,7 +1149,7 @@ router.post('/cache/warm-up', async (req: Request, res: Response) => {
       message: 'Cache warmed up successfully'
     });
   } catch (error) {
-    console.error('Error warming up cache:', error);
+    logger.error('Error warming up cache:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to warm up cache',
@@ -1174,7 +1175,7 @@ router.post('/cache/invalidate', async (req: Request, res: Response) => {
       message: `Invalidated ${count} cache entries`
     });
   } catch (error) {
-    console.error('Error invalidating cache:', error);
+    logger.error('Error invalidating cache:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to invalidate cache',
@@ -1197,7 +1198,7 @@ router.get('/cache/stats', async (req: Request, res: Response) => {
       data: stats
     });
   } catch (error) {
-    console.error('Error fetching cache stats:', error);
+    logger.error('Error fetching cache stats:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch cache stats',
@@ -1280,7 +1281,7 @@ router.get('/overview', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching analytics overview:', error);
+    logger.error('Error fetching analytics overview:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch analytics overview',
@@ -1392,7 +1393,7 @@ router.get('/inventory/stockout-prediction', async (req: Request, res: Response)
       });
     }
   } catch (error) {
-    console.error('Error fetching stockout prediction:', error);
+    logger.error('Error fetching stockout prediction:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch stockout prediction',
@@ -1463,7 +1464,7 @@ router.get('/products/performance', async (req: Request, res: Response) => {
       data: enhancedProducts
     });
   } catch (error) {
-    console.error('Error fetching product performance:', error);
+    logger.error('Error fetching product performance:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch product performance',
@@ -1572,7 +1573,7 @@ router.get('/revenue/breakdown', async (req: Request, res: Response) => {
       data: breakdownData
     });
   } catch (error) {
-    console.error('Error fetching revenue breakdown:', error);
+    logger.error('Error fetching revenue breakdown:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch revenue breakdown',
@@ -1656,7 +1657,7 @@ router.get('/comparison', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching comparison:', error);
+    logger.error('Error fetching comparison:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch comparison',
@@ -1713,7 +1714,7 @@ router.get('/realtime', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching realtime metrics:', error);
+    logger.error('Error fetching realtime metrics:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch realtime metrics',
@@ -1801,7 +1802,7 @@ router.post('/export', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error creating export job:', error);
+    logger.error('Error creating export job:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to create export job',
@@ -1902,7 +1903,7 @@ router.get('/export/:exportId', async (req: Request, res: Response) => {
       data: exportStatus
     });
   } catch (error) {
-    console.error('Error fetching export status:', error);
+    logger.error('Error fetching export status:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch export status',
@@ -2064,7 +2065,7 @@ router.get('/customers/segments', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching customer segments:', error);
+    logger.error('Error fetching customer segments:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch customer segments',
@@ -2183,7 +2184,7 @@ router.get('/offers/top', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching top offers:', error);
+    logger.error('Error fetching top offers:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch top offers',

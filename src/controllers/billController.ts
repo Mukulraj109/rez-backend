@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
+import { logger } from '../config/logger';
 import { Bill } from '../models/Bill';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess, sendNotFound, sendError } from '../utils/response';
@@ -9,6 +10,7 @@ import { uploadToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryUti
 import { fraudDetectionService } from '../services/fraudDetectionService';
 import crypto from 'crypto';
 import gamificationEventBus from '../events/gamificationEventBus';
+import redisService from '../services/redisService';
 
 // Upload bill with image
 export const uploadBill = asyncHandler(async (req: Request, res: Response) => {
@@ -28,10 +30,10 @@ export const uploadBill = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('Merchant, amount, and bill date are required', 400);
   }
 
-  console.log('📤 [BILL UPLOAD] Processing bill upload...');
-  console.log('User:', req.user._id);
-  console.log('Merchant:', merchantId);
-  console.log('Amount:', amount);
+  logger.info('📤 [BILL UPLOAD] Processing bill upload...');
+  logger.info('User:', req.user._id);
+  logger.info('Merchant:', merchantId);
+  logger.info('Amount:', amount);
 
   try {
     // Generate image hash for duplicate detection
@@ -52,7 +54,7 @@ export const uploadBill = asyncHandler(async (req: Request, res: Response) => {
     }
 
     // Upload to Cloudinary
-    console.log('☁️ [CLOUDINARY] Uploading bill image...');
+    logger.info('☁️ [CLOUDINARY] Uploading bill image...');
     const cloudinaryResult = await uploadToCloudinary(
       req.file.buffer,
       `bills/${req.user._id}`,
@@ -65,7 +67,7 @@ export const uploadBill = asyncHandler(async (req: Request, res: Response) => {
       }
     );
 
-    console.log('✅ [CLOUDINARY] Image uploaded successfully');
+    logger.info('✅ [CLOUDINARY] Image uploaded successfully');
 
     // Create bill document
     const bill = await Bill.create({
@@ -89,16 +91,16 @@ export const uploadBill = asyncHandler(async (req: Request, res: Response) => {
       },
     });
 
-    console.log('✅ [BILL] Bill created:', bill._id);
+    logger.info('✅ [BILL] Bill created:', bill._id);
 
     // Trigger async verification process
     billVerificationService
       .processBill(bill._id as Types.ObjectId, cloudinaryResult.url, imageHash)
       .then((result) => {
-        console.log(`✅ [VERIFICATION] Bill ${bill._id} processed:`, result.status);
+        logger.info(`✅ [VERIFICATION] Bill ${bill._id} processed:`, result.status);
       })
       .catch((error) => {
-        console.error(`❌ [VERIFICATION] Error processing bill ${bill._id}:`, error);
+        logger.error(`❌ [VERIFICATION] Error processing bill ${bill._id}:`, error);
       });
 
     // Emit bill_uploaded event for mission progress tracking
@@ -114,6 +116,9 @@ export const uploadBill = asyncHandler(async (req: Request, res: Response) => {
     // Populate merchant details before sending response
     await bill.populate('merchant', 'name logo cashbackPercentage');
 
+    // Invalidate user's bill list cache
+    redisService.delPattern(`bills:user:${req.user!._id}:*`).catch(() => {});
+
     sendSuccess(
       res,
       bill,
@@ -121,7 +126,7 @@ export const uploadBill = asyncHandler(async (req: Request, res: Response) => {
       201
     );
   } catch (error) {
-    console.error('❌ [BILL UPLOAD] Error:', error);
+    logger.error('❌ [BILL UPLOAD] Error:', error);
     throw error;
   }
 });
@@ -166,8 +171,16 @@ export const getUserBills = asyncHandler(async (req: Request, res: Response) => 
   }
 
   // Pagination
-  const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+  const pageNum = parseInt(page as string);
   const limitNum = parseInt(limit as string);
+  const skip = (pageNum - 1) * limitNum;
+
+  // Check cache (60s TTL)
+  const cacheKey = `bills:user:${req.user._id}:${status || 'all'}:${merchantId || ''}:${page}:${limit}`;
+  const cached = await redisService.get<any>(cacheKey);
+  if (cached) {
+    return sendSuccess(res, cached);
+  }
 
   // Get bills and total count in parallel
   const [bills, total] = await Promise.all([
@@ -179,15 +192,19 @@ export const getUserBills = asyncHandler(async (req: Request, res: Response) => 
     Bill.countDocuments(query),
   ]);
 
-  sendSuccess(res, {
+  const data = {
     bills,
     pagination: {
       total,
-      page: parseInt(page as string),
+      page: pageNum,
       limit: limitNum,
       pages: Math.ceil(total / limitNum),
     },
-  });
+  };
+
+  redisService.set(cacheKey, data, 60).catch(() => {});
+
+  sendSuccess(res, data);
 });
 
 // Get bill by ID
@@ -298,7 +315,7 @@ export const resubmitBill = asyncHandler(async (req: Request, res: Response) => 
 
     sendSuccess(res, updatedBill, 'Bill resubmitted successfully');
   } catch (error) {
-    console.error('❌ [RESUBMIT] Error:', error);
+    logger.error('❌ [RESUBMIT] Error:', error);
     throw error;
   }
 });

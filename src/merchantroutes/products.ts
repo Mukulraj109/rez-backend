@@ -24,6 +24,7 @@ import {
 import { sanitizeProductRequest } from '../middleware/sanitization';
 // P-12: Cache invalidation on product mutations
 import { CacheInvalidator } from '../utils/cacheHelper';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -136,18 +137,18 @@ router.get('/', productGetLimiter, validateQuery(searchProductsSchema), async (r
 
 
     // Build search criteria - Products are linked to stores, not directly to merchants
-    console.log('🔍 [PRODUCTS] Query params:', { storeId, category, status, visibility, page, limit });
-    console.log('🔍 [PRODUCTS] Merchant ID:', req.merchantId);
+    logger.info('🔍 [PRODUCTS] Query params:', { storeId, category, status, visibility, page, limit });
+    logger.info('🔍 [PRODUCTS] Merchant ID:', req.merchantId);
     
     // First, find all stores belonging to this merchant
     const merchantStores = await Store.find({ merchantId: req.merchantId }).select('_id');
     const storeIds = merchantStores.map(store => store._id);
     
-    console.log('🔍 [PRODUCTS] Found', storeIds.length, 'stores for merchant');
+    logger.info('🔍 [PRODUCTS] Found', storeIds.length, 'stores for merchant');
     
     // If no stores found, return empty
     if (storeIds.length === 0) {
-      console.log('⚠️ [PRODUCTS] No stores found for merchant, returning empty');
+      logger.info('⚠️ [PRODUCTS] No stores found for merchant, returning empty');
       return res.json({
         success: true,
         data: {
@@ -170,7 +171,7 @@ router.get('/', productGetLimiter, validateQuery(searchProductsSchema), async (r
     if (status) searchCriteria.status = status;
     if (visibility) searchCriteria.visibility = visibility;
     if (storeId) {
-      console.log('🔍 [PRODUCTS] Filtering by specific store:', storeId);
+      logger.info('🔍 [PRODUCTS] Filtering by specific store:', storeId);
       
       // Validate store belongs to merchant
       const store = await Store.findOne({
@@ -178,10 +179,10 @@ router.get('/', productGetLimiter, validateQuery(searchProductsSchema), async (r
         merchantId: req.merchantId
       });
       
-      console.log('🔍 [PRODUCTS] Store validation:', store ? `Found: ${store.name}` : 'NOT FOUND');
+      logger.info('🔍 [PRODUCTS] Store validation:', store ? `Found: ${store.name}` : 'NOT FOUND');
       
       if (!store) {
-        console.log('❌ [PRODUCTS] Store does not belong to merchant');
+        logger.info('❌ [PRODUCTS] Store does not belong to merchant');
         return res.status(403).json({
           success: false,
           message: 'Store does not belong to this merchant'
@@ -190,10 +191,10 @@ router.get('/', productGetLimiter, validateQuery(searchProductsSchema), async (r
       
       // Override to query only this specific store
       searchCriteria.store = storeId;
-      console.log('🔍 [PRODUCTS] Search criteria updated to specific store');
+      logger.info('🔍 [PRODUCTS] Search criteria updated to specific store');
     }
     
-    console.log('🔍 [PRODUCTS] Final search criteria:', JSON.stringify(searchCriteria));
+    logger.info('🔍 [PRODUCTS] Final search criteria:', JSON.stringify(searchCriteria));
 
     // Text search
     if (query) {
@@ -242,7 +243,7 @@ router.get('/', productGetLimiter, validateQuery(searchProductsSchema), async (r
     const skip = (page - 1) * limit;
 
     // Execute query
-    console.log('🔍 [PRODUCTS] Executing query...');
+    logger.info('🔍 [PRODUCTS] Executing query...');
     const [products, totalCount] = await Promise.all([
       Product.find(searchCriteria)
         .sort(sortCriteria)
@@ -251,8 +252,8 @@ router.get('/', productGetLimiter, validateQuery(searchProductsSchema), async (r
       Product.countDocuments(searchCriteria)
     ]);
 
-    console.log('✅ [PRODUCTS] Query complete:', totalCount, 'products found');
-    console.log('📦 [PRODUCTS] Returning', products.length, 'products for this page');
+    logger.info('✅ [PRODUCTS] Query complete:', totalCount, 'products found');
+    logger.info('📦 [PRODUCTS] Returning', products.length, 'products for this page');
 
     const totalPages = Math.ceil(totalCount / limit);
     const hasNext = page < totalPages;
@@ -273,7 +274,7 @@ router.get('/', productGetLimiter, validateQuery(searchProductsSchema), async (r
       }
     });
   } catch (error: any) {
-    console.error('Get products error:', error);
+    logger.error('Get products error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch products',
@@ -334,7 +335,7 @@ router.get('/validate-sku', productGetLimiter, async (req, res) => {
       }
     });
   } catch (error: any) {
-    console.error('Validate SKU error:', error);
+    logger.error('Validate SKU error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to validate SKU',
@@ -403,7 +404,7 @@ router.get('/categories', productGetLimiter, async (req, res) => {
       data: { categories: categoryList }
     });
   } catch (error: any) {
-    console.error('Get categories error:', error);
+    logger.error('Get categories error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch categories',
@@ -419,14 +420,14 @@ router.get('/:id', productGetLimiter, validateParams(productIdSchema), async (re
     const productId = req.params.id;
     const merchantId = req.merchantId;
     
-    console.log('🔍 [GET PRODUCT] Request received:');
-    console.log('   Product ID:', productId);
-    console.log('   Merchant ID:', merchantId);
-    console.log('   Merchant ID type:', typeof merchantId);
+    logger.info('🔍 [GET PRODUCT] Request received:');
+    logger.info('   Product ID:', productId);
+    logger.info('   Merchant ID:', merchantId);
+    logger.info('   Merchant ID type:', typeof merchantId);
     
     // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(productId)) {
-      console.log('❌ [GET PRODUCT] Invalid product ID format');
+      logger.info('❌ [GET PRODUCT] Invalid product ID format');
       return res.status(400).json({
         success: false,
         message: 'Invalid product ID format'
@@ -440,7 +441,7 @@ router.get('/:id', productGetLimiter, validateParams(productIdSchema), async (re
     const merchantStores = await Store.find({ merchantId: merchantId }).select('_id');
     const storeIds = merchantStores.map(store => store._id);
 
-    console.log('   Merchant stores:', storeIds.length);
+    logger.info('   Merchant stores:', storeIds.length);
 
     // Query product by ID, verifying ownership via store OR direct merchantId
     const product = await Product.findOne({
@@ -454,11 +455,11 @@ router.get('/:id', productGetLimiter, validateParams(productIdSchema), async (re
     .populate('store', 'name logo');
 
     if (!product) {
-      console.log('❌ [GET PRODUCT] Product not found or does not belong to merchant');
+      logger.info('❌ [GET PRODUCT] Product not found or does not belong to merchant');
 
       const productExists = await Product.findById(productObjectId);
       if (productExists) {
-        console.log('   Product exists but belongs to different merchant. Store:', productExists.store?.toString(), 'MerchantId:', productExists.merchantId?.toString());
+        logger.info('   Product exists but belongs to different merchant. Store:', productExists.store?.toString(), 'MerchantId:', productExists.merchantId?.toString());
       }
 
       return res.status(404).json({
@@ -467,14 +468,14 @@ router.get('/:id', productGetLimiter, validateParams(productIdSchema), async (re
       });
     }
 
-    console.log('✅ [GET PRODUCT] Product found:', product.name);
-    console.log('✅ [GET PRODUCT] Category:', product.category);
+    logger.info('✅ [GET PRODUCT] Product found:', product.name);
+    logger.info('✅ [GET PRODUCT] Category:', product.category);
     return res.json({
       success: true,
       data: product
     });
   } catch (error: any) {
-    console.error('❌ [GET PRODUCT] Error:', error);
+    logger.error('❌ [GET PRODUCT] Error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch product',
@@ -492,7 +493,7 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
     productData.merchantId = req.merchantId;
 
     // Log images for debugging
-    console.log('📸 Received images:', JSON.stringify(productData.images, null, 2));
+    logger.info('📸 Received images:', JSON.stringify(productData.images, null, 2));
 
     // Handle storeId assignment
     if (productData.storeId) {
@@ -542,7 +543,7 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
         });
         
         if (!category) {
-          console.log('❌ [CREATE PRODUCT] Category not found:', productData.category);
+          logger.info('❌ [CREATE PRODUCT] Category not found:', productData.category);
           return res.status(400).json({
             success: false,
             message: `Category "${productData.category}" not found. Please use a valid category name or ID.`
@@ -550,7 +551,7 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
         }
         
         productData.category = category._id;
-        console.log('✅ [CREATE PRODUCT] Category converted to ObjectId:', category.name, category._id);
+        logger.info('✅ [CREATE PRODUCT] Category converted to ObjectId:', category.name, category._id);
       } else if (mongoose.Types.ObjectId.isValid(productData.category)) {
         // Already a valid ObjectId, convert to ObjectId type
         productData.category = new mongoose.Types.ObjectId(productData.category);
@@ -572,7 +573,7 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
         });
         
         if (!subcategory) {
-          console.log('❌ [CREATE PRODUCT] Subcategory not found:', subcategoryValue);
+          logger.info('❌ [CREATE PRODUCT] Subcategory not found:', subcategoryValue);
           return res.status(400).json({
             success: false,
             message: `Subcategory "${subcategoryValue}" not found. Please use a valid subcategory name or ID.`
@@ -581,7 +582,7 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
         
         productData.subCategory = subcategory._id;
         delete productData.subcategory; // Remove lowercase version if it exists
-        console.log('✅ [CREATE PRODUCT] Subcategory converted to ObjectId:', subcategory.name, subcategory._id);
+        logger.info('✅ [CREATE PRODUCT] Subcategory converted to ObjectId:', subcategory.name, subcategory._id);
       } else if (mongoose.Types.ObjectId.isValid(subcategoryValue)) {
         // Already a valid ObjectId, convert to ObjectId type and use subCategory (camelCase)
         productData.subCategory = new mongoose.Types.ObjectId(subcategoryValue);
@@ -623,7 +624,7 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
         .filter((url: string | null) => url !== null && url.trim() !== '');
       
       productData.images = imageUrls;
-      console.log('📸 [CREATE PRODUCT] Transformed images to URLs:', imageUrls);
+      logger.info('📸 [CREATE PRODUCT] Transformed images to URLs:', imageUrls);
     }
 
     // Transform pricing from flat structure to nested structure
@@ -647,7 +648,7 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
       delete productData.compareAtPrice;
       delete productData.currency; // Already moved to pricing.currency
       
-      console.log('💰 [CREATE PRODUCT] Transformed pricing:', productData.pricing);
+      logger.info('💰 [CREATE PRODUCT] Transformed pricing:', productData.pricing);
     }
 
     // Generate slug from product name if not provided
@@ -673,7 +674,7 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
       const timestamp = Date.now().toString().slice(-6);
       productData.slug = `${slug}-${timestamp}`;
       
-      console.log('🔗 [CREATE PRODUCT] Generated slug:', productData.slug);
+      logger.info('🔗 [CREATE PRODUCT] Generated slug:', productData.slug);
     }
 
     // Set productType if not provided
@@ -703,14 +704,14 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
     await product.save();
 
     // Log saved product images for debugging
-    console.log('💾 Saved merchant product images:', JSON.stringify(product.images, null, 2));
-    console.log('✅ Merchant product created with ID:', product._id);
+    logger.info('💾 Saved merchant product images:', JSON.stringify(product.images, null, 2));
+    logger.info('✅ Merchant product created with ID:', product._id);
 
     // Automatically create product on user side (sync to user Product model)
     let userProductId: string | null = null;
     try {
       await createUserSideProduct(product, req.merchantId!);
-      console.log('✅ Product successfully synced to user-side');
+      logger.info('✅ Product successfully synced to user-side');
       
       // Get the user-side product ID for cache invalidation
       const UserProduct = require('../models/Product').Product;
@@ -723,8 +724,8 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
       }
     } catch (syncError: any) {
       // Log error but don't fail the merchant product creation
-      console.error('⚠️ Warning: Failed to sync product to user-side:', syncError.message);
-      console.error('   Product was still created in merchant database');
+      logger.error('⚠️ Warning: Failed to sync product to user-side:', syncError.message);
+      logger.error('   Product was still created in merchant database');
       // Continue - merchant product creation should succeed even if sync fails
     }
 
@@ -732,11 +733,11 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
     // P-13: Failures are logged as warnings but never break the request.
     if (userProductId) {
       CacheInvalidator.invalidateProduct(userProductId).catch((err) => {
-        console.warn('[CACHE-INVALIDATION-WARN] product.created — invalidation failed:', err);
+        logger.warn('[CACHE-INVALIDATION-WARN] product.created — invalidation failed:', err);
       });
     } else {
       CacheInvalidator.invalidateProductLists().catch((err) => {
-        console.warn('[CACHE-INVALIDATION-WARN] product.created (lists) — invalidation failed:', err);
+        logger.warn('[CACHE-INVALIDATION-WARN] product.created (lists) — invalidation failed:', err);
       });
     }
 
@@ -769,7 +770,7 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
       data: product.toObject ? product.toObject() : product
     });
   } catch (error: any) {
-    console.error('Create product error:', error);
+    logger.error('Create product error:', error);
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
@@ -798,13 +799,13 @@ router.put('/:id',
       const merchantId = req.merchantId;
       const productData = req.body;
 
-      console.log('✏️ [UPDATE PRODUCT] Request received:');
-      console.log('   Product ID:', productId);
-      console.log('   Merchant ID:', merchantId);
+      logger.info('✏️ [UPDATE PRODUCT] Request received:');
+      logger.info('   Product ID:', productId);
+      logger.info('   Merchant ID:', merchantId);
       
       // Validate ObjectId format
       if (!mongoose.Types.ObjectId.isValid(productId)) {
-        console.log('❌ [UPDATE PRODUCT] Invalid product ID format');
+        logger.info('❌ [UPDATE PRODUCT] Invalid product ID format');
         return res.status(400).json({
           success: false,
           message: 'Invalid product ID format'
@@ -822,14 +823,14 @@ router.put('/:id',
       });
 
       if (!product) {
-        console.log('❌ [UPDATE PRODUCT] Product not found');
+        logger.info('❌ [UPDATE PRODUCT] Product not found');
         
         // Check if product exists but belongs to different merchant
         const productExists = await Product.findById(productObjectId);
         if (productExists) {
-          console.log('   Product exists but belongs to different merchant:', productExists.merchantId?.toString());
+          logger.info('   Product exists but belongs to different merchant:', productExists.merchantId?.toString());
         } else {
-          console.log('   Product does not exist at all');
+          logger.info('   Product does not exist at all');
         }
         
         return res.status(404).json({
@@ -838,7 +839,7 @@ router.put('/:id',
         });
       }
       
-      console.log('✅ [UPDATE PRODUCT] Product found:', product.name);
+      logger.info('✅ [UPDATE PRODUCT] Product found:', product.name);
 
       // Handle store update if provided (can be storeId or store)
       const storeId = productData.store || productData.storeId;
@@ -850,7 +851,7 @@ router.put('/:id',
         });
         
         if (!store) {
-          console.log('❌ [UPDATE PRODUCT] Store not found or does not belong to merchant');
+          logger.info('❌ [UPDATE PRODUCT] Store not found or does not belong to merchant');
           return res.status(400).json({
             success: false,
             message: 'Store not found or does not belong to this merchant'
@@ -860,7 +861,7 @@ router.put('/:id',
         // Convert to ObjectId and set as store (not storeId)
         productData.store = new mongoose.Types.ObjectId(storeId);
         delete productData.storeId; // Remove storeId if it exists
-        console.log('✅ [UPDATE PRODUCT] Store validated:', store.name);
+        logger.info('✅ [UPDATE PRODUCT] Store validated:', store.name);
       }
 
       // Handle category conversion if provided (can be string name/slug or ObjectId)
@@ -876,7 +877,7 @@ router.put('/:id',
           });
           
           if (!category) {
-            console.log('❌ [UPDATE PRODUCT] Category not found:', productData.category);
+            logger.info('❌ [UPDATE PRODUCT] Category not found:', productData.category);
             return res.status(400).json({
               success: false,
               message: `Category "${productData.category}" not found. Please use a valid category name or ID.`
@@ -884,7 +885,7 @@ router.put('/:id',
           }
           
           productData.category = category._id;
-          console.log('✅ [UPDATE PRODUCT] Category converted to ObjectId:', category.name, category._id);
+          logger.info('✅ [UPDATE PRODUCT] Category converted to ObjectId:', category.name, category._id);
         } else if (mongoose.Types.ObjectId.isValid(productData.category)) {
           // Already a valid ObjectId, convert to ObjectId type
           productData.category = new mongoose.Types.ObjectId(productData.category);
@@ -906,7 +907,7 @@ router.put('/:id',
           });
           
           if (!subcategory) {
-            console.log('❌ [UPDATE PRODUCT] Subcategory not found:', subcategoryValue);
+            logger.info('❌ [UPDATE PRODUCT] Subcategory not found:', subcategoryValue);
             return res.status(400).json({
               success: false,
               message: `Subcategory "${subcategoryValue}" not found. Please use a valid subcategory name or ID.`
@@ -915,7 +916,7 @@ router.put('/:id',
           
           productData.subCategory = subcategory._id;
           delete productData.subcategory; // Remove lowercase version if it exists
-          console.log('✅ [UPDATE PRODUCT] Subcategory converted to ObjectId:', subcategory.name, subcategory._id);
+          logger.info('✅ [UPDATE PRODUCT] Subcategory converted to ObjectId:', subcategory.name, subcategory._id);
         } else if (mongoose.Types.ObjectId.isValid(subcategoryValue)) {
           // Already a valid ObjectId, convert to ObjectId type and use subCategory (camelCase)
           productData.subCategory = new mongoose.Types.ObjectId(subcategoryValue);
@@ -936,7 +937,7 @@ router.put('/:id',
 
       // Handle image updates - Product schema expects array of strings (URLs)
       if (productData.images) {
-        console.log('📸 [UPDATE PRODUCT] Received images:', JSON.stringify(productData.images, null, 2));
+        logger.info('📸 [UPDATE PRODUCT] Received images:', JSON.stringify(productData.images, null, 2));
         
         // Transform images array to array of URLs (strings)
         // If images are objects with url property, extract just the URLs
@@ -952,7 +953,7 @@ router.put('/:id',
           })
           .filter((url: string | null) => url !== null && url.trim() !== '');
         
-        console.log('📸 [UPDATE PRODUCT] Transformed images to URLs:', imageUrls);
+        logger.info('📸 [UPDATE PRODUCT] Transformed images to URLs:', imageUrls);
         productData.images = imageUrls;
       }
 
@@ -976,7 +977,7 @@ router.put('/:id',
       // Assign fields to product
       Object.assign(product, fieldsToUpdate);
       
-      console.log('💾 [UPDATE PRODUCT] Saving product with data:', {
+      logger.info('💾 [UPDATE PRODUCT] Saving product with data:', {
         name: product.name,
         imagesCount: product.images?.length || 0,
         pricing: product.pricing,
@@ -986,17 +987,17 @@ router.put('/:id',
       await product.save();
 
       // Log updated product images for debugging
-      console.log('💾 Updated merchant product images:', JSON.stringify(product.images, null, 2));
-      console.log('✅ Merchant product updated with ID:', product._id);
+      logger.info('💾 Updated merchant product images:', JSON.stringify(product.images, null, 2));
+      logger.info('✅ Merchant product updated with ID:', product._id);
 
       // Update corresponding product on user side (sync to user Product model)
       try {
         await updateUserSideProduct(product, req.merchantId!);
-        console.log('✅ Product update successfully synced to user-side');
+        logger.info('✅ Product update successfully synced to user-side');
       } catch (syncError: any) {
         // Log error but don't fail the merchant product update
-        console.error('⚠️ Warning: Failed to sync product update to user-side:', syncError.message);
-        console.error('   Product was still updated in merchant database');
+        logger.error('⚠️ Warning: Failed to sync product update to user-side:', syncError.message);
+        logger.error('   Product was still updated in merchant database');
         // Continue - merchant product update should succeed even if sync fails
       }
 
@@ -1014,9 +1015,9 @@ router.put('/:id',
               productName: product.name,
               storeId: product.store?.toString(),
             });
-            console.log('📬 [PRODUCT] Sent out of stock notification for:', product.name);
+            logger.info('📬 [PRODUCT] Sent out of stock notification for:', product.name);
           } catch (notifyError) {
-            console.warn('Failed to send out of stock notification:', notifyError);
+            logger.warn('Failed to send out of stock notification:', notifyError);
           }
         }
         // Low stock notification and SMS
@@ -1030,9 +1031,9 @@ router.put('/:id',
               threshold: threshold,
               storeId: product.store?.toString(),
             });
-            console.log('📬 [PRODUCT] Sent low stock notification for:', product.name);
+            logger.info('📬 [PRODUCT] Sent low stock notification for:', product.name);
           } catch (notifyError) {
-            console.warn('Failed to send low stock notification:', notifyError);
+            logger.warn('Failed to send low stock notification:', notifyError);
           }
 
           // Also send SMS alert
@@ -1047,7 +1048,7 @@ router.put('/:id',
               );
             }
           } catch (smsError) {
-            console.warn('Failed to send low stock SMS:', smsError);
+            logger.warn('Failed to send low stock SMS:', smsError);
           }
         }
       }
@@ -1055,7 +1056,7 @@ router.put('/:id',
       // P-12: Invalidate product caches so the updated data is served fresh.
       // P-13: Failures are logged as warnings but never break the request.
       CacheInvalidator.invalidateProduct((product._id as any).toString()).catch((err) => {
-        console.warn('[CACHE-INVALIDATION-WARN] product.updated — invalidation failed:', err);
+        logger.warn('[CACHE-INVALIDATION-WARN] product.updated — invalidation failed:', err);
       });
 
       // Send real-time notification
@@ -1072,7 +1073,7 @@ router.put('/:id',
         data: { product }
       });
     } catch (error: any) {
-      console.error('Update product error:', error);
+      logger.error('Update product error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to update product',
@@ -1090,13 +1091,13 @@ router.delete('/:id', productDeleteLimiter, validateParams(productIdSchema), asy
     const productId = req.params.id;
     const merchantId = req.merchantId;
     
-    console.log('🗑️ [DELETE PRODUCT] Request received:');
-    console.log('   Product ID:', productId);
-    console.log('   Merchant ID:', merchantId);
+    logger.info('🗑️ [DELETE PRODUCT] Request received:');
+    logger.info('   Product ID:', productId);
+    logger.info('   Merchant ID:', merchantId);
     
     // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(productId)) {
-      console.log('❌ [DELETE PRODUCT] Invalid product ID format');
+      logger.info('❌ [DELETE PRODUCT] Invalid product ID format');
       return res.status(400).json({
         success: false,
         message: 'Invalid product ID format'
@@ -1114,7 +1115,7 @@ router.delete('/:id', productDeleteLimiter, validateParams(productIdSchema), asy
     
     // If not found by merchantId, try finding through stores (for products linked via store)
     if (!product) {
-      console.log('🔍 [DELETE PRODUCT] Product not found by merchantId, checking through stores...');
+      logger.info('🔍 [DELETE PRODUCT] Product not found by merchantId, checking through stores...');
       
       // Find all stores belonging to this merchant
       const merchantStores = await Store.find({ merchantId: merchantObjectId }).select('_id');
@@ -1128,28 +1129,28 @@ router.delete('/:id', productDeleteLimiter, validateParams(productIdSchema), asy
         });
         
         if (product) {
-          console.log('✅ [DELETE PRODUCT] Product found via store relationship');
+          logger.info('✅ [DELETE PRODUCT] Product found via store relationship');
         }
       }
     } else {
-      console.log('✅ [DELETE PRODUCT] Product found via merchantId');
+      logger.info('✅ [DELETE PRODUCT] Product found via merchantId');
     }
 
     if (!product) {
-      console.log('❌ [DELETE PRODUCT] Product not found');
+      logger.info('❌ [DELETE PRODUCT] Product not found');
       
       // Check if product exists but doesn't belong to this merchant
       const productExists = await Product.findById(productObjectId);
       if (productExists) {
-        console.log('   Product exists but belongs to different merchant/store');
+        logger.info('   Product exists but belongs to different merchant/store');
         if (productExists.merchantId) {
-          console.log('   Product merchantId:', productExists.merchantId.toString());
+          logger.info('   Product merchantId:', productExists.merchantId.toString());
         }
         if (productExists.store) {
-          console.log('   Product store:', productExists.store.toString());
+          logger.info('   Product store:', productExists.store.toString());
         }
       } else {
-        console.log('   Product does not exist at all');
+        logger.info('   Product does not exist at all');
       }
       
       return res.status(404).json({
@@ -1158,7 +1159,7 @@ router.delete('/:id', productDeleteLimiter, validateParams(productIdSchema), asy
       });
     }
     
-    console.log('✅ [DELETE PRODUCT] Product found:', product.name);
+    logger.info('✅ [DELETE PRODUCT] Product found:', product.name);
 
     // Delete images from Cloudinary
     if (product.images && Array.isArray(product.images)) {
@@ -1167,9 +1168,9 @@ router.delete('/:id', productDeleteLimiter, validateParams(productIdSchema), asy
         .map(async (img: any) => {
           try {
             await CloudinaryService.deleteFile(img.publicId);
-            console.log(`🗑️ Deleted image from Cloudinary: ${img.publicId}`);
+            logger.info(`🗑️ Deleted image from Cloudinary: ${img.publicId}`);
           } catch (error: any) {
-            console.error(`⚠️ Failed to delete image ${img.publicId} from Cloudinary:`, error.message);
+            logger.error(`⚠️ Failed to delete image ${img.publicId} from Cloudinary:`, error.message);
             // Continue even if Cloudinary deletion fails
           }
         });
@@ -1183,9 +1184,9 @@ router.delete('/:id', productDeleteLimiter, validateParams(productIdSchema), asy
         .map(async (video: any) => {
           try {
             await CloudinaryService.deleteVideo(video.publicId);
-            console.log(`🗑️ Deleted video from Cloudinary: ${video.publicId}`);
+            logger.info(`🗑️ Deleted video from Cloudinary: ${video.publicId}`);
           } catch (error: any) {
-            console.error(`⚠️ Failed to delete video ${video.publicId} from Cloudinary:`, error.message);
+            logger.error(`⚠️ Failed to delete video ${video.publicId} from Cloudinary:`, error.message);
             // Continue even if Cloudinary deletion fails
           }
         });
@@ -1217,14 +1218,14 @@ router.delete('/:id', productDeleteLimiter, validateParams(productIdSchema), asy
     const deleteResult = await Product.findOneAndDelete(deleteQuery);
     
     if (!deleteResult) {
-      console.log('❌ [DELETE PRODUCT] Failed to delete product from database');
+      logger.info('❌ [DELETE PRODUCT] Failed to delete product from database');
       return res.status(404).json({
         success: false,
         message: 'Product not found or already deleted'
       });
     }
     
-    console.log('✅ [DELETE PRODUCT] Product deleted from database');
+    logger.info('✅ [DELETE PRODUCT] Product deleted from database');
 
     // Delete corresponding product on user side
     await deleteUserSideProduct(product._id.toString());
@@ -1232,16 +1233,16 @@ router.delete('/:id', productDeleteLimiter, validateParams(productIdSchema), asy
     // Delete related reviews (optional - you may want to keep reviews)
     try {
       await Review.deleteMany({ productId: product._id.toString() });
-      console.log(`Deleted reviews for product: ${product._id}`);
+      logger.info(`Deleted reviews for product: ${product._id}`);
     } catch (error: any) {
-      console.error(`Failed to delete reviews:`, error.message);
+      logger.error(`Failed to delete reviews:`, error.message);
       // Continue even if review deletion fails
     }
 
     // P-12: Invalidate product caches so the deleted product disappears immediately.
     // P-13: Failures are logged as warnings but never break the request.
     CacheInvalidator.invalidateProduct(product._id.toString()).catch((err) => {
-      console.warn('[CACHE-INVALIDATION-WARN] product.deleted — invalidation failed:', err);
+      logger.warn('[CACHE-INVALIDATION-WARN] product.deleted — invalidation failed:', err);
     });
 
     // Send real-time notification
@@ -1252,14 +1253,14 @@ router.delete('/:id', productDeleteLimiter, validateParams(productIdSchema), asy
       });
     }
 
-    console.log(`✅ Product "${product.name}" (ID: ${product._id}) deleted successfully with all related data`);
+    logger.info(`✅ Product "${product.name}" (ID: ${product._id}) deleted successfully with all related data`);
 
     return res.json({
       success: true,
       message: 'Product and all related data deleted successfully'
     });
   } catch (error: any) {
-    console.error('Delete product error:', error);
+    logger.error('Delete product error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to delete product',
@@ -1292,7 +1293,7 @@ router.get('/:id/variants', productGetLimiter, async (req, res) => {
       }
     });
   } catch (error: any) {
-    console.error('Get product variants error:', error);
+    logger.error('Get product variants error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch product variants',
@@ -1346,7 +1347,7 @@ router.post('/:id/variants', productWriteLimiter, async (req, res) => {
       }
     });
   } catch (error: any) {
-    console.error('Create product variant error:', error);
+    logger.error('Create product variant error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to create product variant',
@@ -1362,10 +1363,10 @@ router.put('/:id/variants/:variantId', productWriteLimiter, async (req, res) => 
   try {
     const { id: productId, variantId } = req.params;
 
-    console.log('✏️ [UPDATE VARIANT] Request received:');
-    console.log('   Product ID:', productId);
-    console.log('   Variant ID:', variantId);
-    console.log('   Merchant ID:', req.merchantId);
+    logger.info('✏️ [UPDATE VARIANT] Request received:');
+    logger.info('   Product ID:', productId);
+    logger.info('   Variant ID:', variantId);
+    logger.info('   Merchant ID:', req.merchantId);
 
     // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(productId)) {
@@ -1385,7 +1386,7 @@ router.put('/:id/variants/:variantId', productWriteLimiter, async (req, res) => 
     });
 
     if (!product) {
-      console.log('❌ [UPDATE VARIANT] Product not found');
+      logger.info('❌ [UPDATE VARIANT] Product not found');
       return res.status(404).json({
         success: false,
         message: 'Product not found'
@@ -1405,7 +1406,7 @@ router.put('/:id/variants/:variantId', productWriteLimiter, async (req, res) => 
     );
 
     if (variantIndex === -1) {
-      console.log('❌ [UPDATE VARIANT] Variant not found');
+      logger.info('❌ [UPDATE VARIANT] Variant not found');
       return res.status(404).json({
         success: false,
         message: 'Variant not found'
@@ -1429,7 +1430,7 @@ router.put('/:id/variants/:variantId', productWriteLimiter, async (req, res) => 
     product.markModified('inventory.variants');
     await product.save();
 
-    console.log('✅ [UPDATE VARIANT] Variant updated successfully');
+    logger.info('✅ [UPDATE VARIANT] Variant updated successfully');
 
     return res.json({
       success: true,
@@ -1439,7 +1440,7 @@ router.put('/:id/variants/:variantId', productWriteLimiter, async (req, res) => 
       }
     });
   } catch (error: any) {
-    console.error('❌ [UPDATE VARIANT] Error:', error);
+    logger.error('❌ [UPDATE VARIANT] Error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to update product variant',
@@ -1455,10 +1456,10 @@ router.delete('/:id/variants/:variantId', productDeleteLimiter, async (req, res)
   try {
     const { id: productId, variantId } = req.params;
 
-    console.log('🗑️ [DELETE VARIANT] Request received:');
-    console.log('   Product ID:', productId);
-    console.log('   Variant ID:', variantId);
-    console.log('   Merchant ID:', req.merchantId);
+    logger.info('🗑️ [DELETE VARIANT] Request received:');
+    logger.info('   Product ID:', productId);
+    logger.info('   Variant ID:', variantId);
+    logger.info('   Merchant ID:', req.merchantId);
 
     // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(productId)) {
@@ -1478,7 +1479,7 @@ router.delete('/:id/variants/:variantId', productDeleteLimiter, async (req, res)
     });
 
     if (!product) {
-      console.log('❌ [DELETE VARIANT] Product not found');
+      logger.info('❌ [DELETE VARIANT] Product not found');
       return res.status(404).json({
         success: false,
         message: 'Product not found'
@@ -1498,7 +1499,7 @@ router.delete('/:id/variants/:variantId', productDeleteLimiter, async (req, res)
     );
 
     if (variantIndex === -1) {
-      console.log('❌ [DELETE VARIANT] Variant not found');
+      logger.info('❌ [DELETE VARIANT] Variant not found');
       return res.status(404).json({
         success: false,
         message: 'Variant not found'
@@ -1513,7 +1514,7 @@ router.delete('/:id/variants/:variantId', productDeleteLimiter, async (req, res)
     product.markModified('inventory.variants');
     await product.save();
 
-    console.log('✅ [DELETE VARIANT] Variant deleted successfully');
+    logger.info('✅ [DELETE VARIANT] Variant deleted successfully');
 
     return res.json({
       success: true,
@@ -1523,7 +1524,7 @@ router.delete('/:id/variants/:variantId', productDeleteLimiter, async (req, res)
       }
     });
   } catch (error: any) {
-    console.error('❌ [DELETE VARIANT] Error:', error);
+    logger.error('❌ [DELETE VARIANT] Error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to delete product variant',
@@ -1613,7 +1614,7 @@ router.get('/:id/reviews', productGetLimiter, async (req, res) => {
       }
     });
   } catch (error: any) {
-    console.error('Get product reviews error:', error);
+    logger.error('Get product reviews error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch product reviews',
@@ -1699,7 +1700,7 @@ router.post('/bulk', productBulkLimiter, async (req, res) => {
       data: { affectedCount }
     });
   } catch (error: any) {
-    console.error('Bulk operation error:', error);
+    logger.error('Bulk operation error:', error);
     return res.status(500).json({
       success: false,
       message: 'Bulk operation failed',
@@ -1882,7 +1883,7 @@ router.post('/bulk-action', productBulkLimiter, async (req, res) => {
     }
 
   } catch (error: any) {
-    console.error('Bulk action error:', error);
+    logger.error('Bulk action error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to perform bulk action',
@@ -1904,13 +1905,13 @@ async function createUserSideProduct(merchantProduct: any, merchantId: string): 
     if (merchantProduct.storeId) {
       store = await Store.findById(merchantProduct.storeId).session(session);
       if (!store) {
-        console.error('Store not found for storeId:', merchantProduct.storeId);
+        logger.error('Store not found for storeId:', merchantProduct.storeId);
         await session.abortTransaction();
         return;
       }
       // Verify store belongs to merchant
       if (store.merchantId?.toString() !== merchantId) {
-        console.error('Store does not belong to merchant:', merchantId);
+        logger.error('Store does not belong to merchant:', merchantId);
         await session.abortTransaction();
         return;
       }
@@ -1918,7 +1919,7 @@ async function createUserSideProduct(merchantProduct: any, merchantId: string): 
       // Fallback: Find the store associated with this merchant (backward compatibility)
       store = await Store.findOne({ merchantId: merchantId }).session(session);
       if (!store) {
-        console.error('No store found for merchant:', merchantId);
+        logger.error('No store found for merchant:', merchantId);
         await session.abortTransaction();
         return;
       }
@@ -1977,16 +1978,16 @@ async function createUserSideProduct(merchantProduct: any, merchantId: string): 
       return typeof video === 'string' ? video : video.url;
     }).filter(Boolean) || [];
 
-    console.log(`🔄 Syncing product "${merchantProduct.name}" to user-side:`);
-    console.log(`   - Images: ${imageUrls.length} image(s)`);
-    console.log(`   - Videos: ${videoUrls.length} video(s)`);
-    console.log(`   - Store: ${store.name} (${store._id})`);
-    console.log(`   - Category: ${category.name} (${category._id})`);
+    logger.info(`🔄 Syncing product "${merchantProduct.name}" to user-side:`);
+    logger.info(`   - Images: ${imageUrls.length} image(s)`);
+    logger.info(`   - Videos: ${videoUrls.length} video(s)`);
+    logger.info(`   - Store: ${store.name} (${store._id})`);
+    logger.info(`   - Category: ${category.name} (${category._id})`);
 
     // Sync relatedProducts - map merchant product IDs to user product IDs
     let relatedProductIds: Types.ObjectId[] = [];
     if (merchantProduct.relatedProducts && merchantProduct.relatedProducts.length > 0) {
-      console.log(`   - Syncing ${merchantProduct.relatedProducts.length} related products...`);
+      logger.info(`   - Syncing ${merchantProduct.relatedProducts.length} related products...`);
 
       // Find corresponding user products by SKU (merchant products should have been synced)
       const relatedMerchantProducts = await Product.find({
@@ -2000,14 +2001,14 @@ async function createUserSideProduct(merchantProduct: any, merchantId: string): 
         }).select('_id').session(session);
 
         relatedProductIds = relatedUserProducts.map(p => p._id);
-        console.log(`   - Found ${relatedProductIds.length} user-side related products`);
+        logger.info(`   - Found ${relatedProductIds.length} user-side related products`);
       }
     }
 
     // Sync frequentlyBoughtWith - map merchant product IDs to user product IDs
     let frequentlyBoughtWithData: Array<{ productId: Types.ObjectId; purchaseCount: number }> = [];
     if (merchantProduct.frequentlyBoughtWith && merchantProduct.frequentlyBoughtWith.length > 0) {
-      console.log(`   - Syncing ${merchantProduct.frequentlyBoughtWith.length} frequently bought with products...`);
+      logger.info(`   - Syncing ${merchantProduct.frequentlyBoughtWith.length} frequently bought with products...`);
 
       // Extract product IDs from frequentlyBoughtWith
       const merchantProductIds = merchantProduct.frequentlyBoughtWith.map((item: any) => item.product);
@@ -2039,14 +2040,14 @@ async function createUserSideProduct(merchantProduct: any, merchantId: string): 
             });
           }
         }
-        console.log(`   - Mapped ${frequentlyBoughtWithData.length} frequently bought with products`);
+        logger.info(`   - Mapped ${frequentlyBoughtWithData.length} frequently bought with products`);
       }
     }
 
     // Sync variants if available
     let variantsData: any[] = [];
     if (merchantProduct.variants && merchantProduct.variants.length > 0) {
-      console.log(`   - Syncing ${merchantProduct.variants.length} variants...`);
+      logger.info(`   - Syncing ${merchantProduct.variants.length} variants...`);
       variantsData = merchantProduct.variants.map((variant: any) => ({
         variantId: variant._id?.toString() || variant.variantId || `variant-${Date.now()}-${Math.random()}`,
         type: variant.option || variant.type || 'option',
@@ -2152,10 +2153,10 @@ async function createUserSideProduct(merchantProduct: any, merchantId: string): 
     await userProduct.save({ session });
     await session.commitTransaction();
 
-    console.log(`✅ Successfully synced product "${merchantProduct.name}" to user-side`);
-    console.log(`   - User Product ID: ${userProduct._id}`);
-    console.log(`   - Images synced: ${imageUrls.length}`);
-    console.log(`   - Videos synced: ${videoUrls.length}`);
+    logger.info(`✅ Successfully synced product "${merchantProduct.name}" to user-side`);
+    logger.info(`   - User Product ID: ${userProduct._id}`);
+    logger.info(`   - Images synced: ${imageUrls.length}`);
+    logger.info(`   - Videos synced: ${videoUrls.length}`);
 
     // Emit Socket.IO event after successful sync
     if (global.io) {
@@ -2170,7 +2171,7 @@ async function createUserSideProduct(merchantProduct: any, merchantId: string): 
 
   } catch (error) {
     await session.abortTransaction();
-    console.error('Error creating user-side product:', error);
+    logger.error('Error creating user-side product:', error);
     // Don't throw error to avoid breaking merchant product creation
   } finally {
     session.endSession();
@@ -2187,7 +2188,7 @@ async function updateUserSideProduct(merchantProduct: any, merchantId: string): 
     const userProduct = await Product.findOne({ sku: merchantProduct.sku }).session(session);
     if (!userProduct) {
       await session.abortTransaction();
-      console.log('No corresponding user-side product found, creating new one');
+      logger.info('No corresponding user-side product found, creating new one');
       await createUserSideProduct(merchantProduct, merchantId);
       return;
     }
@@ -2272,7 +2273,7 @@ async function updateUserSideProduct(merchantProduct: any, merchantId: string): 
     // Update relatedProducts - map merchant product IDs to user product IDs
     if (merchantProduct.relatedProducts !== undefined) {
       if (merchantProduct.relatedProducts && merchantProduct.relatedProducts.length > 0) {
-        console.log(`   - Syncing ${merchantProduct.relatedProducts.length} related products...`);
+        logger.info(`   - Syncing ${merchantProduct.relatedProducts.length} related products...`);
 
         // Find corresponding user products by SKU
         const relatedMerchantProducts = await Product.find({
@@ -2286,7 +2287,7 @@ async function updateUserSideProduct(merchantProduct: any, merchantId: string): 
           }).select('_id').session(session);
 
           updates.relatedProducts = relatedUserProducts.map(p => p._id);
-          console.log(`   - Updated ${updates.relatedProducts.length} related products`);
+          logger.info(`   - Updated ${updates.relatedProducts.length} related products`);
         } else {
           updates.relatedProducts = [];
         }
@@ -2298,7 +2299,7 @@ async function updateUserSideProduct(merchantProduct: any, merchantId: string): 
     // Update frequentlyBoughtWith - map merchant product IDs to user product IDs
     if (merchantProduct.frequentlyBoughtWith !== undefined) {
       if (merchantProduct.frequentlyBoughtWith && merchantProduct.frequentlyBoughtWith.length > 0) {
-        console.log(`   - Syncing ${merchantProduct.frequentlyBoughtWith.length} frequently bought with products...`);
+        logger.info(`   - Syncing ${merchantProduct.frequentlyBoughtWith.length} frequently bought with products...`);
 
         // Extract product IDs
         const merchantProductIds = merchantProduct.frequentlyBoughtWith.map((item: any) => item.product);
@@ -2333,7 +2334,7 @@ async function updateUserSideProduct(merchantProduct: any, merchantId: string): 
           }
 
           updates.frequentlyBoughtWith = frequentlyBoughtWithData;
-          console.log(`   - Updated ${frequentlyBoughtWithData.length} frequently bought with products`);
+          logger.info(`   - Updated ${frequentlyBoughtWithData.length} frequently bought with products`);
         } else {
           updates.frequentlyBoughtWith = [];
         }
@@ -2345,7 +2346,7 @@ async function updateUserSideProduct(merchantProduct: any, merchantId: string): 
     // Update variants if provided
     if (merchantProduct.variants !== undefined) {
       if (merchantProduct.variants && merchantProduct.variants.length > 0) {
-        console.log(`   - Syncing ${merchantProduct.variants.length} variants...`);
+        logger.info(`   - Syncing ${merchantProduct.variants.length} variants...`);
         const variantsData = merchantProduct.variants.map((variant: any) => ({
           variantId: variant._id?.toString() || variant.variantId || `variant-${Date.now()}-${Math.random()}`,
           type: variant.option || variant.type || 'option',
@@ -2362,7 +2363,7 @@ async function updateUserSideProduct(merchantProduct: any, merchantId: string): 
         }));
 
         updates['inventory.variants'] = variantsData;
-        console.log(`   - Updated ${variantsData.length} variants`);
+        logger.info(`   - Updated ${variantsData.length} variants`);
       } else {
         updates['inventory.variants'] = [];
       }
@@ -2371,13 +2372,13 @@ async function updateUserSideProduct(merchantProduct: any, merchantId: string): 
     await Product.updateOne({ _id: userProduct._id }, updates, { session });
     await session.commitTransaction();
 
-    console.log(`✅ Successfully synced product update "${merchantProduct.name}" to user-side`);
-    console.log(`   - User Product ID: ${userProduct._id}`);
+    logger.info(`✅ Successfully synced product update "${merchantProduct.name}" to user-side`);
+    logger.info(`   - User Product ID: ${userProduct._id}`);
     if (updates.images) {
-      console.log(`   - Images synced: ${updates.images.length}`);
+      logger.info(`   - Images synced: ${updates.images.length}`);
     }
     if (updates.videos) {
-      console.log(`   - Videos synced: ${updates.videos.length}`);
+      logger.info(`   - Videos synced: ${updates.videos.length}`);
     }
 
     // Emit Socket.IO event after successful sync
@@ -2393,7 +2394,7 @@ async function updateUserSideProduct(merchantProduct: any, merchantId: string): 
 
   } catch (error) {
     await session.abortTransaction();
-    console.error('Error updating user-side product:', error);
+    logger.error('Error updating user-side product:', error);
   } finally {
     session.endSession();
   }
@@ -2417,7 +2418,7 @@ async function deleteUserSideProduct(merchantProductId: string): Promise<void> {
     await session.commitTransaction();
 
     if (result.deletedCount > 0) {
-      console.log(`📦 Deleted user-side product with SKU "${merchantProduct.sku}"`);
+      logger.info(`📦 Deleted user-side product with SKU "${merchantProduct.sku}"`);
 
       // Emit Socket.IO event after successful deletion
       if (global.io) {
@@ -2432,7 +2433,7 @@ async function deleteUserSideProduct(merchantProductId: string): Promise<void> {
 
   } catch (error) {
     await session.abortTransaction();
-    console.error('Error deleting user-side product:', error);
+    logger.error('Error deleting user-side product:', error);
   } finally {
     session.endSession();
   }

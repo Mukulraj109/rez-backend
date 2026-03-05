@@ -1,5 +1,6 @@
 import type { ActivityEvent, ActivityEventType } from '../gamificationEventBus';
 import { priveMissionService } from '../../services/priveMissionService';
+import { logger } from '../../config/logger';
 
 /**
  * Mission Progress Handler
@@ -29,10 +30,10 @@ export function registerMissionProgressHandler(eventBus: any): void {
           event.data as Record<string, any>
         );
       } catch (err) {
-        console.error(`[MISSION] Error tracking progress for ${eventType}:`, err);
+        logger.error(`[MISSION] Error tracking progress for ${eventType}:`, err);
       }
     });
   }
 
-  console.log('[MISSION HANDLER] Registered mission progress handler');
+  logger.info('[MISSION HANDLER] Registered mission progress handler');
 }

@@ -1,5 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { BusinessMetricsService } from './BusinessMetrics';
+import { logger } from '../config/logger';
 import { OrderModel } from '../models/MerchantOrder';
 import { CashbackModel } from '../models/Cashback';
 import { ProductModel } from '../models/MerchantProduct';
@@ -31,13 +32,13 @@ export class RealTimeService {
 
   private setupEventHandlers() {
     this.io.on('connection', (socket) => {
-      console.log('Real-time client connected:', socket.id);
+      logger.info('Real-time client connected:', socket.id);
 
       // Handle merchant room joining
       socket.on('join-merchant-dashboard', (merchantId: string) => {
         socket.join(`merchant-${merchantId}`);
         socket.join(`dashboard-${merchantId}`);
-        console.log(`Merchant ${merchantId} joined dashboard room`);
+        logger.info(`Merchant ${merchantId} joined dashboard room`);
         
         // Send initial dashboard data
         this.sendInitialDashboardData(merchantId, socket.id);
@@ -46,17 +47,17 @@ export class RealTimeService {
       // Handle real-time data subscriptions
       socket.on('subscribe-metrics', (merchantId: string) => {
         socket.join(`metrics-${merchantId}`);
-        console.log(`Subscribed to metrics for merchant ${merchantId}`);
+        logger.info(`Subscribed to metrics for merchant ${merchantId}`);
       });
 
       socket.on('subscribe-orders', (merchantId: string) => {
         socket.join(`orders-${merchantId}`);
-        console.log(`Subscribed to orders for merchant ${merchantId}`);
+        logger.info(`Subscribed to orders for merchant ${merchantId}`);
       });
 
       socket.on('subscribe-cashback', (merchantId: string) => {
         socket.join(`cashback-${merchantId}`);
-        console.log(`Subscribed to cashback for merchant ${merchantId}`);
+        logger.info(`Subscribed to cashback for merchant ${merchantId}`);
       });
 
       socket.on('unsubscribe-all', () => {
@@ -67,11 +68,11 @@ export class RealTimeService {
             socket.leave(room);
           }
         });
-        console.log(`Client ${socket.id} unsubscribed from all rooms`);
+        logger.info(`Client ${socket.id} unsubscribed from all rooms`);
       });
 
       socket.on('disconnect', () => {
-        console.log('Real-time client disconnected:', socket.id);
+        logger.info('Real-time client disconnected:', socket.id);
       });
     });
   }
@@ -91,7 +92,7 @@ export class RealTimeService {
         timestamp: new Date()
       });
     } catch (error) {
-      console.error('Error sending initial dashboard data:', error);
+      logger.error('Error sending initial dashboard data:', error);
     }
   }
 
@@ -202,7 +203,7 @@ export class RealTimeService {
           });
 
         } catch (error) {
-          console.error(`Error updating metrics for merchant ${merchantId}:`, error);
+          logger.error(`Error updating metrics for merchant ${merchantId}:`, error);
         }
       }
     }, 30000); // 30 seconds
@@ -250,7 +251,7 @@ export class RealTimeService {
       });
 
     } catch (error) {
-      console.error(`Error updating metrics for merchant ${merchantId}:`, error);
+      logger.error(`Error updating metrics for merchant ${merchantId}:`, error);
     }
   }
 
@@ -290,7 +291,7 @@ export class RealTimeService {
       });
 
     } catch (error) {
-      console.error(`Error sending live chart data for merchant ${merchantId}:`, error);
+      logger.error(`Error sending live chart data for merchant ${merchantId}:`, error);
     }
   }
 

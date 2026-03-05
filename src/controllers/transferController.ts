@@ -504,7 +504,7 @@ async function executeTransfer(transferId: string): Promise<{ success: boolean; 
         });
       } catch (ledgerErr) {
         // Ledger failure should not abort the transfer — log and continue
-        console.error('[Transfer] Ledger entry failed (non-blocking):', ledgerErr);
+        logger.error('[Transfer] Ledger entry failed (non-blocking):', ledgerErr);
       }
 
       // Update transfer status
@@ -550,7 +550,7 @@ async function executeTransfer(transferId: string): Promise<{ success: boolean; 
         }
       } catch (notifErr) {
         if (process.env.NODE_ENV === 'development') {
-          console.log('[Transfer] Failed to send transfer received notification:', notifErr);
+          logger.info('[Transfer] Failed to send transfer received notification:', notifErr);
         }
       }
 

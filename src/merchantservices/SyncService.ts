@@ -1,4 +1,5 @@
 import { ProductModel, MProduct } from '../models/MerchantProduct';
+import { logger } from '../config/logger';
 import { OrderModel } from '../models/MerchantOrder';
 import { CashbackModel } from '../models/Cashback';
 import { MerchantModel } from '../models/Merchant';
@@ -118,7 +119,7 @@ export class SyncService {
     };
 
     try {
-      console.log(`🔄 Starting sync ${syncId} for merchant ${config.merchantId}`);
+      logger.info(`🔄 Starting sync ${syncId} for merchant ${config.merchantId}`);
 
       // Sync products
       if (config.syncTypes.includes('products')) {
@@ -141,10 +142,10 @@ export class SyncService {
       }
 
       result.success = true;
-      console.log(`✅ Sync ${syncId} completed successfully`);
+      logger.info(`✅ Sync ${syncId} completed successfully`);
 
     } catch (error) {
-      console.error(`❌ Sync ${syncId} failed:`, error);
+      logger.error(`❌ Sync ${syncId} failed:`, error);
       result.errors.push(error instanceof Error ? error.message : 'Unknown error');
     } finally {
       result.duration = Date.now() - startTime;
@@ -220,10 +221,10 @@ export class SyncService {
       result.created = products.filter(p => !config.lastSync || p.createdAt > config.lastSync).length;
       result.updated = products.filter(p => config.lastSync && p.updatedAt > config.lastSync && p.createdAt <= config.lastSync).length;
 
-      console.log(`📦 Synced ${products.length} products to customer app`);
+      logger.info(`📦 Synced ${products.length} products to customer app`);
 
     } catch (error) {
-      console.error('Error syncing products:', error);
+      logger.error('Error syncing products:', error);
       result.errors++;
     }
 
@@ -263,10 +264,10 @@ export class SyncService {
       result.created = ordersToSync.filter(o => !config.lastSync || o.createdAt > config.lastSync).length;
       result.updated = ordersToSync.filter(o => config.lastSync && o.updatedAt > config.lastSync && o.createdAt <= config.lastSync).length;
 
-      console.log(`📋 Synced ${ordersToSync.length} orders to customer app`);
+      logger.info(`📋 Synced ${ordersToSync.length} orders to customer app`);
 
     } catch (error) {
-      console.error('Error syncing orders:', error);
+      logger.error('Error syncing orders:', error);
       result.errors++;
     }
 
@@ -304,10 +305,10 @@ export class SyncService {
       result.created = cashbackToSync.filter(c => !config.lastSync || c.createdAt > config.lastSync).length;
       result.updated = cashbackToSync.filter(c => config.lastSync && c.updatedAt > config.lastSync && c.createdAt <= config.lastSync).length;
 
-      console.log(`💰 Synced ${cashbackToSync.length} cashback requests to customer app`);
+      logger.info(`💰 Synced ${cashbackToSync.length} cashback requests to customer app`);
 
     } catch (error) {
-      console.error('Error syncing cashback:', error);
+      logger.error('Error syncing cashback:', error);
       result.errors++;
     }
 
@@ -348,11 +349,11 @@ export class SyncService {
         await this.syncToDatabase('merchant', customerAppMerchant, config);
         result.updated = true;
 
-        console.log(`🏪 Synced merchant profile to customer app`);
+        logger.info(`🏪 Synced merchant profile to customer app`);
       }
 
     } catch (error) {
-      console.error('Error syncing merchant profile:', error);
+      logger.error('Error syncing merchant profile:', error);
       result.errors++;
     }
 
@@ -377,14 +378,14 @@ export class SyncService {
         case 'orders':
         case 'cashback':
           // Orders and cashback are read-only from merchant side, no sync needed
-          console.log(`ℹ️ ${type} sync skipped - managed by user backend`);
+          logger.info(`ℹ️ ${type} sync skipped - managed by user backend`);
           break;
         default:
           throw new Error(`Unknown sync type: ${type}`);
       }
 
       await session.commitTransaction();
-      console.log(`✅ Successfully synced ${syncedCount} ${type} records to database`);
+      logger.info(`✅ Successfully synced ${syncedCount} ${type} records to database`);
 
       // Emit Socket.IO event if available
       if (global.io) {
@@ -399,7 +400,7 @@ export class SyncService {
       return { success: true, synced: syncedCount };
     } catch (error) {
       await session.abortTransaction();
-      console.error(`❌ Database sync failed for ${type}:`, error);
+      logger.error(`❌ Database sync failed for ${type}:`, error);
       throw error;
     } finally {
       session.endSession();
@@ -513,9 +514,9 @@ export class SyncService {
         );
 
         syncedCount++;
-        console.log(`📦 Synced product: ${merchantProduct.name} (SKU: ${merchantProduct.productId})`);
+        logger.info(`📦 Synced product: ${merchantProduct.name} (SKU: ${merchantProduct.productId})`);
       } catch (error) {
-        console.error(`❌ Error syncing product ${merchantProduct.name}:`, error);
+        logger.error(`❌ Error syncing product ${merchantProduct.name}:`, error);
         // Continue with other products instead of failing entire sync
       }
     }
@@ -612,10 +613,10 @@ export class SyncService {
         { upsert: true, new: true, session }
       );
 
-      console.log(`🏪 Synced merchant profile: ${merchantData.businessName}`);
+      logger.info(`🏪 Synced merchant profile: ${merchantData.businessName}`);
       return 1;
     } catch (error) {
-      console.error(`❌ Error syncing merchant profile:`, error);
+      logger.error(`❌ Error syncing merchant profile:`, error);
       throw error;
     }
   }
@@ -656,7 +657,7 @@ export class SyncService {
           batchSize: 100,
         });
       } catch (error) {
-        console.error(`Auto-sync failed for merchant ${merchantId}:`, error);
+        logger.error(`Auto-sync failed for merchant ${merchantId}:`, error);
       }
     }, intervalMinutes * 60 * 1000);
 
@@ -664,7 +665,7 @@ export class SyncService {
     (global as any).syncIntervals = (global as any).syncIntervals || new Map();
     (global as any).syncIntervals.set(merchantId, interval);
 
-    console.log(`⏰ Scheduled auto-sync for merchant ${merchantId} every ${intervalMinutes} minutes`);
+    logger.info(`⏰ Scheduled auto-sync for merchant ${merchantId} every ${intervalMinutes} minutes`);
   }
 
   // Clear auto sync
@@ -672,7 +673,7 @@ export class SyncService {
     if ((global as any).syncIntervals?.has(merchantId)) {
       clearInterval((global as any).syncIntervals.get(merchantId));
       (global as any).syncIntervals.delete(merchantId);
-      console.log(`⏹️ Cleared auto-sync for merchant ${merchantId}`);
+      logger.info(`⏹️ Cleared auto-sync for merchant ${merchantId}`);
     }
   }
 

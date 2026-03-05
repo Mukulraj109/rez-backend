@@ -13,6 +13,7 @@ import paymentGatewayService from '../services/paymentGatewayService';
 import redisService from '../services/redisService';
 import Stripe from 'stripe';
 import { validateAmount, sanitizeErrorMessage, validatePagination } from '../utils/walletValidation';
+import { logger } from '../config/logger';
 
 /**
  * @desc    Get user wallet balance
@@ -104,7 +105,7 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
         await wallet.syncWithUser();
       }
     } catch (syncError) {
-      console.error('⚠️ [WALLET] Auto-sync failed:', syncError);
+      logger.error('⚠️ [WALLET] Auto-sync failed:', syncError);
       // Continue with existing wallet data if sync fails
     } finally {
       await redisService.releaseLock(syncLockKey, syncLockToken);
@@ -143,7 +144,7 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
       avgPerVisit: allTime?.count ? Math.round((allTime.total || 0) / allTime.count) : 0
     };
   } catch (insightsError) {
-    console.error('⚠️ [WALLET] Insights computation failed:', insightsError);
+    logger.error('⚠️ [WALLET] Insights computation failed:', insightsError);
   }
 
   // Get ReZ and Promo coins from coins array
@@ -342,9 +343,9 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
       isReversible: false
     });
 
-    console.log('✅ [WALLET] Transaction created for loyalty points credit');
+    logger.info('✅ [WALLET] Transaction created for loyalty points credit');
   } catch (txError) {
-    console.error('❌ [WALLET] Failed to create transaction:', txError);
+    logger.error('❌ [WALLET] Failed to create transaction:', txError);
   }
 
   // Create CoinTransaction (source of truth for auto-sync)
@@ -357,9 +358,9 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
       source?.description || 'Loyalty points credited',
       { loyaltySource: source?.type || 'loyalty_sync', reference: source?.reference }
     );
-    console.log('✅ [WALLET] CoinTransaction created for loyalty points');
+    logger.info('✅ [WALLET] CoinTransaction created for loyalty points');
   } catch (ctxError) {
-    console.error('❌ [WALLET] Failed to create CoinTransaction:', ctxError);
+    logger.error('❌ [WALLET] Failed to create CoinTransaction:', ctxError);
   }
 
   // Log activity
@@ -369,10 +370,10 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
       amount
     );
   } catch (activityError) {
-    console.error('❌ [WALLET] Failed to log activity:', activityError);
+    logger.error('❌ [WALLET] Failed to log activity:', activityError);
   }
 
-  console.log('✅ [WALLET] Loyalty points credited successfully:', {
+  logger.info('✅ [WALLET] Loyalty points credited successfully:', {
     amount,
     newBalance: updatedWallet.balance.available,
     rezCoins: rezCoin?.amount
@@ -489,59 +490,59 @@ export const topupWallet = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
   const { amount, paymentMethod, paymentId } = req.body;
 
-  console.log('💰 [TOPUP] Starting wallet topup');
-  console.log('💰 [TOPUP] User ID:', userId);
-  console.log('💰 [TOPUP] Amount:', amount);
-  console.log('💰 [TOPUP] Payment Method:', paymentMethod);
+  logger.info('💰 [TOPUP] Starting wallet topup');
+  logger.info('💰 [TOPUP] User ID:', userId);
+  logger.info('💰 [TOPUP] Amount:', amount);
+  logger.info('💰 [TOPUP] Payment Method:', paymentMethod);
 
   if (!userId) {
-    console.error('❌ [TOPUP] No user ID found');
+    logger.error('❌ [TOPUP] No user ID found');
     return sendError(res, 'User not authenticated', 401);
   }
 
   // Validate amount
   const topupAmountCheck = validateAmount(amount, { fieldName: 'Topup amount' });
   if (!topupAmountCheck.valid) {
-    console.error('❌ [TOPUP] Invalid amount:', amount);
+    logger.error('❌ [TOPUP] Invalid amount:', amount);
     return sendBadRequest(res, topupAmountCheck.error);
   }
   const topupAmount = topupAmountCheck.amount;
 
   // Get wallet
-  console.log('🔍 [TOPUP] Finding wallet for user:', userId);
+  logger.info('🔍 [TOPUP] Finding wallet for user:', userId);
   let wallet = await Wallet.findOne({ user: userId }).lean();
 
   if (!wallet) {
-    console.log('🆕 [TOPUP] Wallet not found, creating new wallet');
+    logger.info('🆕 [TOPUP] Wallet not found, creating new wallet');
     wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
   }
 
   if (!wallet) {
-    console.error('❌ [TOPUP] Failed to create wallet');
+    logger.error('❌ [TOPUP] Failed to create wallet');
     return sendError(res, 'Failed to create wallet', 500);
   }
 
-  console.log('✅ [TOPUP] Wallet found/created:', wallet._id);
-  console.log('💵 [TOPUP] Current balance:', wallet.balance.total);
+  logger.info('✅ [TOPUP] Wallet found/created:', wallet._id);
+  logger.info('💵 [TOPUP] Current balance:', wallet.balance.total);
 
   // Check if wallet is frozen
   if (wallet.isFrozen) {
-    console.error('❌ [TOPUP] Wallet is frozen:', wallet.frozenReason);
+    logger.error('❌ [TOPUP] Wallet is frozen:', wallet.frozenReason);
     return sendError(res, `Wallet is frozen: ${wallet.frozenReason}`, 403);
   }
 
   // Check max balance limit
   if (wallet.balance.total + amount > wallet.limits.maxBalance) {
-    console.error('❌ [TOPUP] Max balance limit would be exceeded');
+    logger.error('❌ [TOPUP] Max balance limit would be exceeded');
     return sendBadRequest(res, `Maximum wallet balance limit (${wallet.limits.maxBalance} RC) would be exceeded`);
   }
 
   // Get current balance for transaction record
   const balanceBefore = wallet.balance.total;
 
-  console.log('📝 [TOPUP] Creating transaction record');
-  console.log('📝 [TOPUP] Wallet ID for reference:', wallet._id);
-  console.log('📝 [TOPUP] Wallet ID type:', typeof wallet._id);
+  logger.info('📝 [TOPUP] Creating transaction record');
+  logger.info('📝 [TOPUP] Wallet ID for reference:', wallet._id);
+  logger.info('📝 [TOPUP] Wallet ID type:', typeof wallet._id);
 
   // Create transaction record
   try {
@@ -572,14 +573,14 @@ export const topupWallet = asyncHandler(async (req: Request, res: Response) => {
       }
     });
 
-    console.log('💾 [TOPUP] Saving transaction');
+    logger.info('💾 [TOPUP] Saving transaction');
     await transaction.save();
-    console.log('✅ [TOPUP] Transaction saved:', transaction._id);
+    logger.info('✅ [TOPUP] Transaction saved:', transaction._id);
 
     // Add funds to wallet
-    console.log('💰 [TOPUP] Adding funds to wallet');
+    logger.info('💰 [TOPUP] Adding funds to wallet');
     await wallet.addFunds(topupAmount, 'topup');
-    console.log('✅ [TOPUP] Funds added, new balance:', wallet.balance.total);
+    logger.info('✅ [TOPUP] Funds added, new balance:', wallet.balance.total);
 
     // Create CoinTransaction (source of truth for auto-sync)
     try {
@@ -592,7 +593,7 @@ export const topupWallet = asyncHandler(async (req: Request, res: Response) => {
         { paymentId: paymentId || `PAY_${Date.now()}`, paymentMethod: paymentMethod || 'gateway' }
       );
     } catch (ctxError) {
-      console.error('❌ [TOPUP] Failed to create CoinTransaction:', ctxError);
+      logger.error('❌ [TOPUP] Failed to create CoinTransaction:', ctxError);
     }
 
     // Create activity for wallet topup
@@ -609,8 +610,8 @@ export const topupWallet = asyncHandler(async (req: Request, res: Response) => {
       }
     }, 'Wallet topup successful', 201);
   } catch (error) {
-    console.error('❌ [TOPUP] Error creating transaction:', error);
-    console.error('❌ [TOPUP] Error details:', JSON.stringify(error, null, 2));
+    logger.error('❌ [TOPUP] Error creating transaction:', error);
+    logger.error('❌ [TOPUP] Error details:', JSON.stringify(error, null, 2));
     throw error;
   }
 });
@@ -746,7 +747,7 @@ export const withdrawFunds = asyncHandler(async (req: Request, res: Response) =>
           { withdrawalId, method, fees, netAmount }
         );
       } catch (ctxError) {
-        console.error('❌ [WITHDRAW] Failed to create CoinTransaction:', ctxError);
+        logger.error('❌ [WITHDRAW] Failed to create CoinTransaction:', ctxError);
       }
 
       sendSuccess(res, {
@@ -786,7 +787,7 @@ export const processPayment = asyncHandler(async (req: Request, res: Response) =
     items
   } = req.body;
 
-  console.log('💳 [PAYMENT] Starting payment processing');
+  logger.info('💳 [PAYMENT] Starting payment processing');
 
   if (!userId) {
     return sendError(res, 'User not authenticated', 401);
@@ -910,7 +911,7 @@ export const processPayment = asyncHandler(async (req: Request, res: Response) =
           { orderId, storeId, storeName }
         );
       } catch (ctxError) {
-        console.error('❌ [PAYMENT] Failed to create CoinTransaction:', ctxError);
+        logger.error('❌ [PAYMENT] Failed to create CoinTransaction:', ctxError);
       }
 
       // Create activity for wallet spending
@@ -1104,7 +1105,7 @@ export const initiatePayment = asyncHandler(async (req: Request, res: Response) 
     cancelUrl
   } = req.body;
 
-  console.log('💳 [PAYMENT] Initiating payment:', {
+  logger.info('💳 [PAYMENT] Initiating payment:', {
     userId,
     amount,
     currency,
@@ -1162,11 +1163,11 @@ export const initiatePayment = asyncHandler(async (req: Request, res: Response) 
             const rawDiscount = Math.floor(creditAmount * applicableTier.cashbackPercentage / 100);
             const discount = Math.min(rawDiscount, config.rechargeConfig.maxCashback);
             chargeAmount = creditAmount - discount;
-            console.log('💰 [PAYMENT] Recharge discount applied:', { creditAmount, discount, chargeAmount });
+            logger.info('💰 [PAYMENT] Recharge discount applied:', { creditAmount, discount, chargeAmount });
           }
         }
       } catch (e) {
-        console.warn('⚠️ [PAYMENT] Failed to calculate discount, charging full amount');
+        logger.warn('⚠️ [PAYMENT] Failed to calculate discount, charging full amount');
       }
     }
 
@@ -1184,11 +1185,11 @@ export const initiatePayment = asyncHandler(async (req: Request, res: Response) 
 
     const gatewayResponse = await paymentGatewayService.initiatePayment(paymentData, userId);
 
-    console.log('✅ [PAYMENT] Payment initiated successfully:', gatewayResponse.paymentId);
+    logger.info('✅ [PAYMENT] Payment initiated successfully:', gatewayResponse.paymentId);
 
     sendSuccess(res, gatewayResponse, 'Payment initiated successfully');
   } catch (error: any) {
-    console.error('❌ [PAYMENT] Payment initiation failed:', error);
+    logger.error('❌ [PAYMENT] Payment initiation failed:', error);
     sendError(res, sanitizeErrorMessage(error, 'Payment initiation failed'), 500);
   }
 });
@@ -1207,7 +1208,7 @@ export const confirmPayment = asyncHandler(async (req: Request, res: Response) =
     return sendBadRequest(res, 'Payment intent ID is required');
   }
 
-  console.log('💳 [PAYMENT] Confirming payment:', { userId, paymentIntentId });
+  logger.info('💳 [PAYMENT] Confirming payment:', { userId, paymentIntentId });
 
   try {
     // Find the Payment record FIRST (before status check updates it)
@@ -1226,7 +1227,7 @@ export const confirmPayment = asyncHandler(async (req: Request, res: Response) =
 
     // Prevent double wallet credit — check if already processed
     if (payment.walletCredited) {
-      console.log('ℹ️ [PAYMENT] Already credited, skipping:', paymentIntentId);
+      logger.info('ℹ️ [PAYMENT] Already credited, skipping:', paymentIntentId);
       return sendSuccess(res, { status: 'completed', alreadyProcessed: true }, 'Payment already confirmed');
     }
 
@@ -1254,12 +1255,12 @@ export const confirmPayment = asyncHandler(async (req: Request, res: Response) =
       // Mark as credited to prevent double processing
       freshPayment.walletCredited = true;
       await freshPayment.save();
-      console.log('✅ [PAYMENT] Wallet credited for confirmed payment:', paymentIntentId);
+      logger.info('✅ [PAYMENT] Wallet credited for confirmed payment:', paymentIntentId);
     }
 
     sendSuccess(res, { status: 'completed' }, 'Payment confirmed and processed');
   } catch (error: any) {
-    console.error('❌ [PAYMENT] Confirm payment failed:', error);
+    logger.error('❌ [PAYMENT] Confirm payment failed:', error);
     sendError(res, sanitizeErrorMessage(error, 'Failed to confirm payment'), 500);
   }
 });
@@ -1274,7 +1275,7 @@ export const checkPaymentStatus = asyncHandler(async (req: Request, res: Respons
   const { paymentId } = req.params;
   const { gateway } = req.query;
 
-  console.log('💳 [PAYMENT] Checking payment status:', { userId, paymentId, gateway });
+  logger.info('💳 [PAYMENT] Checking payment status:', { userId, paymentId, gateway });
 
   if (!paymentId) {
     return sendBadRequest(res, 'Payment ID is required');
@@ -1292,11 +1293,11 @@ export const checkPaymentStatus = asyncHandler(async (req: Request, res: Respons
       userId
     );
 
-    console.log('✅ [PAYMENT] Payment status retrieved:', paymentStatus);
+    logger.info('✅ [PAYMENT] Payment status retrieved:', paymentStatus);
 
     sendSuccess(res, paymentStatus, 'Payment status retrieved successfully');
   } catch (error: any) {
-    console.error('❌ [PAYMENT] Status check failed:', error);
+    logger.error('❌ [PAYMENT] Status check failed:', error);
     sendError(res, sanitizeErrorMessage(error, 'Failed to check payment status'), 500);
   }
 });
@@ -1315,7 +1316,7 @@ export const getPaymentMethods = asyncHandler(async (req: Request, res: Response
   const resolvedCurrency = (regionFiat as string) || defaultCurrency;
   const fiatCurrency = (rawCurrency === 'NC' || rawCurrency === 'RC') ? resolvedCurrency : rawCurrency as string;
 
-  console.log('💳 [PAYMENT] Fetching payment methods for user:', userId, 'currency:', fiatCurrency);
+  logger.info('💳 [PAYMENT] Fetching payment methods for user:', userId, 'currency:', fiatCurrency);
 
   try {
     // Method display config
@@ -1388,11 +1389,11 @@ export const getPaymentMethods = asyncHandler(async (req: Request, res: Response
       }
     }
 
-    console.log('✅ [PAYMENT] Payment methods retrieved:', paymentMethods.length);
+    logger.info('✅ [PAYMENT] Payment methods retrieved:', paymentMethods.length);
 
     sendSuccess(res, paymentMethods, 'Payment methods retrieved successfully');
   } catch (error: any) {
-    console.error('❌ [PAYMENT] Failed to fetch payment methods:', error);
+    logger.error('❌ [PAYMENT] Failed to fetch payment methods:', error);
     sendError(res, 'Failed to fetch payment methods', 500);
   }
 });
@@ -1406,7 +1407,7 @@ export const handlePaymentWebhook = asyncHandler(async (req: Request, res: Respo
   const { gateway } = req.params;
   const signature = req.headers['stripe-signature'] || req.headers['x-razorpay-signature'] || req.headers['paypal-signature'] || '';
 
-  console.log('🔔 [PAYMENT WEBHOOK] Received webhook:', { gateway, signature });
+  logger.info('🔔 [PAYMENT WEBHOOK] Received webhook:', { gateway, signature });
 
   try {
     const result = await paymentGatewayService.handleWebhook(gateway, req.body, signature as string);
@@ -1417,7 +1418,7 @@ export const handlePaymentWebhook = asyncHandler(async (req: Request, res: Respo
       res.status(400).json({ success: false, message: result.message });
     }
   } catch (error) {
-    console.error('❌ [PAYMENT WEBHOOK] Webhook processing failed:', error);
+    logger.error('❌ [PAYMENT WEBHOOK] Webhook processing failed:', error);
     res.status(500).json({ success: false, message: 'Webhook processing failed' });
   }
 });
@@ -1445,7 +1446,7 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
     return sendBadRequest(res, 'Invalid coin type. Must be rez, promo, or cashback');
   }
 
-  console.log('🧪 [DEV TOPUP] Adding test funds:', { userId, amount: devAmount, type });
+  logger.info('🧪 [DEV TOPUP] Adding test funds:', { userId, amount: devAmount, type });
 
   if (!userId) {
     return sendError(res, 'User not authenticated', 401);
@@ -1485,7 +1486,7 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
     wallet.balance.total = (wallet.balance.total || 0) + devAmount;
     await wallet.save();
 
-    console.log('[DEV TOPUP] Test funds added:', wallet.balance);
+    logger.info('[DEV TOPUP] Test funds added:', wallet.balance);
 
     sendSuccess(res, {
       wallet: {
@@ -1497,7 +1498,7 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
       type: type
     }, `Test ${type} funds added successfully`);
   } catch (error: any) {
-    console.error('[DEV TOPUP] Error:', error);
+    logger.error('[DEV TOPUP] Error:', error);
     sendError(res, sanitizeErrorMessage(error, 'Failed to add test funds'), 500);
   } finally {
     if (lockToken) await redisService.releaseLock(lockKey, lockToken);
@@ -1555,7 +1556,7 @@ export const syncWalletBalance = asyncHandler(async (req: Request, res: Response
     // Update computed balance cache
     await redisService.set(`wallet:computed_balance:${userId}`, actualRezBalance, 120);
 
-    console.log('📊 [WALLET SYNC] Aggregated balance — earned:', result[0]?.earned || 0, 'spent:', result[0]?.spent || 0, 'actual ReZ:', actualRezBalance);
+    logger.info('📊 [WALLET SYNC] Aggregated balance — earned:', result[0]?.earned || 0, 'spent:', result[0]?.spent || 0, 'actual ReZ:', actualRezBalance);
 
     // Get or create wallet
     let wallet = await Wallet.findOne({ user: userId }).lean();
@@ -1583,7 +1584,7 @@ export const syncWalletBalance = asyncHandler(async (req: Request, res: Response
 
     await wallet.save();
 
-    console.log(`✅ [WALLET SYNC] Balance synced: ${oldBalance} → ${actualRezBalance}`);
+    logger.info(`✅ [WALLET SYNC] Balance synced: ${oldBalance} → ${actualRezBalance}`);
 
     sendSuccess(res, {
       previousBalance: oldBalance,
@@ -1596,7 +1597,7 @@ export const syncWalletBalance = asyncHandler(async (req: Request, res: Response
       synced: true
     }, 'Wallet balance synced successfully');
   } catch (error: any) {
-    console.error('[WALLET SYNC] Error:', error);
+    logger.error('[WALLET SYNC] Error:', error);
     sendError(res, sanitizeErrorMessage(error, 'Failed to sync wallet balance'), 500);
   } finally {
     if (lockToken) await redisService.releaseLock(lockKey, lockToken);
@@ -1612,7 +1613,7 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
   const userId = (req as any).userId;
   const { transactionId, amount, reason } = req.body;
 
-  console.log('💸 [WALLET REFUND] Processing refund:', { transactionId, amount, reason });
+  logger.info('💸 [WALLET REFUND] Processing refund:', { transactionId, amount, reason });
 
   if (!userId) {
     return sendError(res, 'User not authenticated', 401);
@@ -1738,14 +1739,14 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
     await session.commitTransaction();
     session.endSession();
 
-    console.log('✅ [WALLET REFUND] Refund processed successfully:', {
+    logger.info('✅ [WALLET REFUND] Refund processed successfully:', {
       refundId: (refundTransaction[0] as any)._id,
       amount: refundAmount,
     });
 
     // Structured monitoring log for order-creation-failed refunds
     if (reason === 'order_creation_failed') {
-      console.warn(`⚠️ [WALLET_REFUND_ORDER_FAILED] userId=${userId} txnId=${transactionId} amount=${refundAmount} refundId=${(refundTransaction[0] as any)._id}`);
+      logger.warn(`⚠️ [WALLET_REFUND_ORDER_FAILED] userId=${userId} txnId=${transactionId} amount=${refundAmount} refundId=${(refundTransaction[0] as any)._id}`);
     }
 
     sendSuccess(res, {
@@ -1764,7 +1765,7 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
   } catch (error: any) {
     await session.abortTransaction();
     session.endSession();
-    console.error('❌ [WALLET REFUND] Error:', error);
+    logger.error('❌ [WALLET REFUND] Error:', error);
     sendError(res, sanitizeErrorMessage(error, 'Failed to process refund'), 500);
   }
 });

@@ -8,6 +8,8 @@ import {
 import { optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams } from '../middleware/validation';
 import { Joi } from '../middleware/validation';
+import { cacheMiddleware } from '../middleware/cacheMiddleware';
+import { CacheTTL } from '../config/redis';
 
 const router = Router();
 
@@ -18,6 +20,7 @@ router.get('/bank',
     category: Joi.string(),
     limit: Joi.number().integer().min(1).max(50).default(10)
   })),
+  cacheMiddleware({ ttl: CacheTTL.OFFER_LIST, keyPrefix: 'offers:bank', condition: () => true }),
   getBankOffers
 );
 
@@ -26,6 +29,7 @@ router.get('/bank/:id',
   validateParams(Joi.object({
     id: Joi.string().required()
   })),
+  cacheMiddleware({ ttl: CacheTTL.OFFER_LIST, keyPrefix: 'offers:bankdetail', condition: () => true }),
   getBankOfferById
 );
 
@@ -36,6 +40,7 @@ router.get('/exclusive',
     category: Joi.string(),
     targetAudience: Joi.string().valid('student', 'women', 'senior', 'corporate', 'birthday', 'first', 'all')
   })),
+  cacheMiddleware({ ttl: CacheTTL.OFFER_LIST, keyPrefix: 'offers:exclusive', condition: () => true }),
   getExclusiveOffers
 );
 
@@ -44,6 +49,7 @@ router.get('/exclusive/:id',
   validateParams(Joi.object({
     id: Joi.string().required()
   })),
+  cacheMiddleware({ ttl: CacheTTL.OFFER_LIST, keyPrefix: 'offers:exclusivedetail', condition: () => true }),
   getExclusiveOfferById
 );
 

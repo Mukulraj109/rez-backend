@@ -6,6 +6,7 @@
 
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
+import { logger } from '../config/logger';
 import priveAccessService from '../services/priveAccessService';
 import priveInviteService from '../services/priveInviteService';
 import { sendSuccess, sendError, sendBadRequest, sendForbidden, sendPaginated } from '../utils/response';
@@ -36,7 +37,7 @@ export const checkAccessStatus = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[PriveInvite] Error checking access:', error);
+    logger.error('[PriveInvite] Error checking access:', error);
     return sendError(res, 'Failed to check access status');
   }
 };
@@ -69,7 +70,7 @@ export const generateInviteCode = async (req: Request, res: Response) => {
       usageCount: inviteCode.usageCount,
     }, 'Invite code generated successfully');
   } catch (error: any) {
-    console.error('[PriveInvite] Error generating code:', error);
+    logger.error('[PriveInvite] Error generating code:', error);
     return sendBadRequest(res, error.message || 'Failed to generate invite code');
   }
 };
@@ -97,7 +98,7 @@ export const validateInviteCode = async (req: Request, res: Response) => {
 
     return sendSuccess(res, result);
   } catch (error: any) {
-    console.error('[PriveInvite] Error validating code:', error);
+    logger.error('[PriveInvite] Error validating code:', error);
     return sendError(res, 'Failed to validate invite code');
   }
 };
@@ -147,7 +148,7 @@ export const applyInviteCode = async (req: Request, res: Response) => {
       inviteeReward: result.inviteeReward,
     }, 'Welcome to Privé! Your access has been activated.');
   } catch (error: any) {
-    console.error('[PriveInvite] Error applying code:', error);
+    logger.error('[PriveInvite] Error applying code:', error);
     return sendBadRequest(res, error.message || 'Failed to apply invite code');
   }
 };
@@ -184,7 +185,7 @@ export const getMyInviteStats = async (req: Request, res: Response) => {
       isWhitelisted: access.isWhitelisted,
     });
   } catch (error: any) {
-    console.error('[PriveInvite] Error getting stats:', error);
+    logger.error('[PriveInvite] Error getting stats:', error);
     return sendError(res, 'Failed to load invite stats');
   }
 };
@@ -220,7 +221,7 @@ export const getMyInviteCodes = async (req: Request, res: Response) => {
       })),
     });
   } catch (error: any) {
-    console.error('[PriveInvite] Error getting codes:', error);
+    logger.error('[PriveInvite] Error getting codes:', error);
     return sendError(res, 'Failed to load invite codes');
   }
 };
@@ -243,7 +244,7 @@ export const getInviteLeaderboard = async (req: Request, res: Response) => {
 
     return sendSuccess(res, result);
   } catch (error: any) {
-    console.error('[PriveInvite] Error getting leaderboard:', error);
+    logger.error('[PriveInvite] Error getting leaderboard:', error);
     return sendError(res, 'Failed to load leaderboard');
   }
 };

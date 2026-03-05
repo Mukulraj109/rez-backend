@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
+import { logger } from '../config/logger';
 import { asyncHandler } from '../utils/asyncHandler';
 import { Order } from '../models/Order';
 import { WebhookLog } from '../models/WebhookLog';
@@ -29,7 +30,7 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
   const webhookBody = JSON.stringify(req.body);
   const event = req.body;
 
-  console.log('🔔 [RAZORPAY WEBHOOK] Event received:', {
+  logger.info('🔔 [RAZORPAY WEBHOOK] Event received:', {
     eventType: event.event,
     eventId: event.payload?.payment?.entity?.id || event.payload?.order?.entity?.id || 'unknown',
     timestamp: new Date().toISOString()
@@ -37,7 +38,7 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
 
   // Validate webhook signature
   if (!webhookSignature) {
-    console.error('❌ [RAZORPAY WEBHOOK] Missing signature');
+    logger.error('❌ [RAZORPAY WEBHOOK] Missing signature');
     return sendBadRequest(res, 'Missing webhook signature');
   }
 
@@ -49,7 +50,7 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
     );
 
     if (!isValidSignature) {
-      console.error('❌ [RAZORPAY WEBHOOK] Invalid signature');
+      logger.error('❌ [RAZORPAY WEBHOOK] Invalid signature');
 
       // Log failed verification attempt
       await WebhookLog.create({
@@ -67,7 +68,7 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
       return sendUnauthorized(res, 'Invalid webhook signature');
     }
 
-    console.log('✅ [RAZORPAY WEBHOOK] Signature verified');
+    logger.info('✅ [RAZORPAY WEBHOOK] Signature verified');
 
     // Step 2: Extract event details
     const eventType = event.event;
@@ -99,7 +100,7 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
     } catch (err: any) {
       // Unique index violation = duplicate event
       if (err.code === 11000) {
-        console.log('⚠️ [RAZORPAY WEBHOOK] Duplicate event detected:', eventId);
+        logger.info('⚠️ [RAZORPAY WEBHOOK] Duplicate event detected:', eventId);
         return res.status(200).json({
           received: true,
           status: 'duplicate',
@@ -109,7 +110,7 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
       throw err;
     }
 
-    console.log('📝 [RAZORPAY WEBHOOK] Log created:', webhookLog._id);
+    logger.info('📝 [RAZORPAY WEBHOOK] Log created:', webhookLog._id);
 
     // Step 5: Process the webhook event
     try {
@@ -121,7 +122,7 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
       webhookLog.status = 'success';
       await webhookLog.save();
 
-      console.log('✅ [RAZORPAY WEBHOOK] Event processed successfully');
+      logger.info('✅ [RAZORPAY WEBHOOK] Event processed successfully');
 
       return res.status(200).json({
         received: true,
@@ -130,7 +131,7 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
       });
 
     } catch (processingError: any) {
-      console.error('❌ [RAZORPAY WEBHOOK] Processing error:', processingError);
+      logger.error('❌ [RAZORPAY WEBHOOK] Processing error:', processingError);
 
       // Update log with error
       webhookLog.status = 'failed';
@@ -147,7 +148,7 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
     }
 
   } catch (error: any) {
-    console.error('❌ [RAZORPAY WEBHOOK] Unexpected error:', error);
+    logger.error('❌ [RAZORPAY WEBHOOK] Unexpected error:', error);
 
     // Return 200 to prevent retries
     return res.status(200).json({
@@ -164,7 +165,7 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
 async function processRazorpayEvent(event: any, webhookLog: any): Promise<void> {
   const eventType = event.event;
 
-  console.log(`🔄 [RAZORPAY WEBHOOK] Processing event type: ${eventType}`);
+  logger.info(`🔄 [RAZORPAY WEBHOOK] Processing event type: ${eventType}`);
 
   switch (eventType) {
     case 'payment.captured':
@@ -196,7 +197,7 @@ async function processRazorpayEvent(event: any, webhookLog: any): Promise<void> 
       break;
 
     default:
-      console.log(`ℹ️ [RAZORPAY WEBHOOK] Unhandled event type: ${eventType}`);
+      logger.info(`ℹ️ [RAZORPAY WEBHOOK] Unhandled event type: ${eventType}`);
       // Don't throw error for unhandled events
   }
 }
@@ -209,21 +210,21 @@ async function handleRazorpayPaymentCaptured(event: any): Promise<void> {
   const orderId = payment.notes?.orderId;
 
   if (!orderId) {
-    console.error('❌ [RAZORPAY WEBHOOK] Order ID not found in payment notes');
+    logger.error('❌ [RAZORPAY WEBHOOK] Order ID not found in payment notes');
     return;
   }
 
-  console.log('✅ [RAZORPAY WEBHOOK] Payment captured for order:', orderId);
+  logger.info('✅ [RAZORPAY WEBHOOK] Payment captured for order:', orderId);
 
   const order = await Order.findById(orderId).lean();
   if (!order) {
-    console.error('❌ [RAZORPAY WEBHOOK] Order not found:', orderId);
+    logger.error('❌ [RAZORPAY WEBHOOK] Order not found:', orderId);
     return;
   }
 
   // Check if already processed
   if (order.payment.status === 'paid') {
-    console.log('⚠️ [RAZORPAY WEBHOOK] Payment already marked as paid');
+    logger.info('⚠️ [RAZORPAY WEBHOOK] Payment already marked as paid');
     return;
   }
 
@@ -231,7 +232,7 @@ async function handleRazorpayPaymentCaptured(event: any): Promise<void> {
   const capturedAmount = payment.amount / 100;
   const orderTotal = order.totals?.total ?? 0;
   if (Math.abs(capturedAmount - orderTotal) > 1) {
-    console.error('🚨 [RAZORPAY WEBHOOK] Amount mismatch!', {
+    logger.error('🚨 [RAZORPAY WEBHOOK] Amount mismatch!', {
       captured: capturedAmount,
       orderTotal,
       orderId,
@@ -261,10 +262,10 @@ async function handleRazorpayPaymentCaptured(event: any): Promise<void> {
         timestamp: new Date(),
       });
     } catch (alertErr) {
-      console.error('[RAZORPAY WEBHOOK] Failed to emit admin alert:', alertErr);
+      logger.error('[RAZORPAY WEBHOOK] Failed to emit admin alert:', alertErr);
     }
 
-    console.warn(`🚨 [RAZORPAY WEBHOOK] Order ${order.orderNumber} flagged for amount mismatch review`);
+    logger.warn(`🚨 [RAZORPAY WEBHOOK] Order ${order.orderNumber} flagged for amount mismatch review`);
     return;
   }
 
@@ -292,7 +293,7 @@ async function handleRazorpayPaymentCaptured(event: any): Promise<void> {
 
   await order.save();
 
-  console.log('✅ [RAZORPAY WEBHOOK] Order updated with payment details');
+  logger.info('✅ [RAZORPAY WEBHOOK] Order updated with payment details');
 }
 
 /**
@@ -303,15 +304,15 @@ async function handleRazorpayPaymentFailed(event: any): Promise<void> {
   const orderId = payment.notes?.orderId;
 
   if (!orderId) {
-    console.error('❌ [RAZORPAY WEBHOOK] Order ID not found in payment notes');
+    logger.error('❌ [RAZORPAY WEBHOOK] Order ID not found in payment notes');
     return;
   }
 
-  console.log('❌ [RAZORPAY WEBHOOK] Payment failed for order:', orderId);
+  logger.info('❌ [RAZORPAY WEBHOOK] Payment failed for order:', orderId);
 
   const order = await Order.findById(orderId).lean();
   if (!order) {
-    console.error('❌ [RAZORPAY WEBHOOK] Order not found:', orderId);
+    logger.error('❌ [RAZORPAY WEBHOOK] Order not found:', orderId);
     return;
   }
 
@@ -320,7 +321,7 @@ async function handleRazorpayPaymentFailed(event: any): Promise<void> {
   // Handle payment failure
   await paymentService.handlePaymentFailure(orderId, failureReason);
 
-  console.log('✅ [RAZORPAY WEBHOOK] Payment failure processed');
+  logger.info('✅ [RAZORPAY WEBHOOK] Payment failure processed');
 }
 
 /**
@@ -331,15 +332,15 @@ async function handleRazorpayPaymentAuthorized(event: any): Promise<void> {
   const orderId = payment.notes?.orderId;
 
   if (!orderId) {
-    console.error('❌ [RAZORPAY WEBHOOK] Order ID not found in payment notes');
+    logger.error('❌ [RAZORPAY WEBHOOK] Order ID not found in payment notes');
     return;
   }
 
-  console.log('🔐 [RAZORPAY WEBHOOK] Payment authorized for order:', orderId);
+  logger.info('🔐 [RAZORPAY WEBHOOK] Payment authorized for order:', orderId);
 
   const order = await Order.findById(orderId);
   if (!order) {
-    console.error('❌ [RAZORPAY WEBHOOK] Order not found:', orderId);
+    logger.error('❌ [RAZORPAY WEBHOOK] Order not found:', orderId);
     return;
   }
 
@@ -362,15 +363,15 @@ async function handleRazorpayOrderPaid(event: any): Promise<void> {
   const orderId = razorpayOrder.notes?.orderId;
 
   if (!orderId) {
-    console.error('❌ [RAZORPAY WEBHOOK] Order ID not found in order notes');
+    logger.error('❌ [RAZORPAY WEBHOOK] Order ID not found in order notes');
     return;
   }
 
-  console.log('✅ [RAZORPAY WEBHOOK] Order paid:', orderId);
+  logger.info('✅ [RAZORPAY WEBHOOK] Order paid:', orderId);
 
   const order = await Order.findById(orderId);
   if (!order) {
-    console.error('❌ [RAZORPAY WEBHOOK] Order not found:', orderId);
+    logger.error('❌ [RAZORPAY WEBHOOK] Order not found:', orderId);
     return;
   }
 
@@ -391,12 +392,12 @@ async function handleRazorpayRefundCreated(event: any): Promise<void> {
   const refund = event.payload.refund.entity;
   const paymentId = refund.payment_id;
 
-  console.log('💰 [RAZORPAY WEBHOOK] Refund created:', refund.id);
+  logger.info('💰 [RAZORPAY WEBHOOK] Refund created:', refund.id);
 
   // Find order by payment ID
   const order = await Order.findOne({ 'payment.transactionId': paymentId });
   if (!order) {
-    console.error('❌ [RAZORPAY WEBHOOK] Order not found for payment:', paymentId);
+    logger.error('❌ [RAZORPAY WEBHOOK] Order not found for payment:', paymentId);
     return;
   }
 
@@ -413,7 +414,7 @@ async function handleRazorpayRefundCreated(event: any): Promise<void> {
 
   await order.save();
 
-  console.log('✅ [RAZORPAY WEBHOOK] Refund details updated');
+  logger.info('✅ [RAZORPAY WEBHOOK] Refund details updated');
 }
 
 /**
@@ -423,11 +424,11 @@ async function handleRazorpayRefundProcessed(event: any): Promise<void> {
   const refund = event.payload.refund.entity;
   const paymentId = refund.payment_id;
 
-  console.log('✅ [RAZORPAY WEBHOOK] Refund processed:', refund.id);
+  logger.info('✅ [RAZORPAY WEBHOOK] Refund processed:', refund.id);
 
   const order = await Order.findOne({ 'payment.transactionId': paymentId });
   if (!order) {
-    console.error('❌ [RAZORPAY WEBHOOK] Order not found for payment:', paymentId);
+    logger.error('❌ [RAZORPAY WEBHOOK] Order not found for payment:', paymentId);
     return;
   }
 
@@ -448,11 +449,11 @@ async function handleRazorpayRefundFailed(event: any): Promise<void> {
   const refund = event.payload.refund.entity;
   const paymentId = refund.payment_id;
 
-  console.log('❌ [RAZORPAY WEBHOOK] Refund failed:', refund.id);
+  logger.info('❌ [RAZORPAY WEBHOOK] Refund failed:', refund.id);
 
   const order = await Order.findOne({ 'payment.transactionId': paymentId });
   if (!order) {
-    console.error('❌ [RAZORPAY WEBHOOK] Order not found for payment:', paymentId);
+    logger.error('❌ [RAZORPAY WEBHOOK] Order not found for payment:', paymentId);
     return;
   }
 
@@ -480,16 +481,16 @@ export const handleStripeWebhook = asyncHandler(async (req: Request, res: Respon
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
-    console.error('❌ [STRIPE WEBHOOK] Webhook secret not configured');
+    logger.error('❌ [STRIPE WEBHOOK] Webhook secret not configured');
     return sendBadRequest(res, 'Stripe webhook secret not configured');
   }
 
   if (!signature) {
-    console.error('❌ [STRIPE WEBHOOK] Missing signature');
+    logger.error('❌ [STRIPE WEBHOOK] Missing signature');
     return sendBadRequest(res, 'Missing webhook signature');
   }
 
-  console.log('🔔 [STRIPE WEBHOOK] Event received at:', new Date().toISOString());
+  logger.info('🔔 [STRIPE WEBHOOK] Event received at:', new Date().toISOString());
 
   try {
     // Step 1: Verify webhook signature using Stripe's constructEvent
@@ -499,7 +500,7 @@ export const handleStripeWebhook = asyncHandler(async (req: Request, res: Respon
       webhookSecret
     );
 
-    console.log('✅ [STRIPE WEBHOOK] Signature verified:', {
+    logger.info('✅ [STRIPE WEBHOOK] Signature verified:', {
       eventType: event.type,
       eventId: event.id
     });
@@ -523,7 +524,7 @@ export const handleStripeWebhook = asyncHandler(async (req: Request, res: Respon
       });
     } catch (err: any) {
       if (err.code === 11000) {
-        console.log('⚠️ [STRIPE WEBHOOK] Duplicate event detected:', event.id);
+        logger.info('⚠️ [STRIPE WEBHOOK] Duplicate event detected:', event.id);
         return res.status(200).json({
           received: true,
           status: 'duplicate',
@@ -533,7 +534,7 @@ export const handleStripeWebhook = asyncHandler(async (req: Request, res: Respon
       throw err;
     }
 
-    console.log('📝 [STRIPE WEBHOOK] Log created:', webhookLog._id);
+    logger.info('📝 [STRIPE WEBHOOK] Log created:', webhookLog._id);
 
     // Step 5: Process the webhook event
     try {
@@ -545,7 +546,7 @@ export const handleStripeWebhook = asyncHandler(async (req: Request, res: Respon
       webhookLog.status = 'success';
       await webhookLog.save();
 
-      console.log('✅ [STRIPE WEBHOOK] Event processed successfully');
+      logger.info('✅ [STRIPE WEBHOOK] Event processed successfully');
 
       return res.status(200).json({
         received: true,
@@ -554,7 +555,7 @@ export const handleStripeWebhook = asyncHandler(async (req: Request, res: Respon
       });
 
     } catch (processingError: any) {
-      console.error('❌ [STRIPE WEBHOOK] Processing error:', processingError);
+      logger.error('❌ [STRIPE WEBHOOK] Processing error:', processingError);
 
       // Update log with error
       webhookLog.status = 'failed';
@@ -571,7 +572,7 @@ export const handleStripeWebhook = asyncHandler(async (req: Request, res: Respon
     }
 
   } catch (error: any) {
-    console.error('❌ [STRIPE WEBHOOK] Signature verification failed:', error);
+    logger.error('❌ [STRIPE WEBHOOK] Signature verification failed:', error);
 
     // Log failed verification attempt
     await WebhookLog.create({
@@ -639,7 +640,7 @@ function extractStripeMetadata(event: Stripe.Event): any {
 async function processStripeEvent(event: Stripe.Event, webhookLog: any): Promise<void> {
   const eventType = event.type;
 
-  console.log(`🔄 [STRIPE WEBHOOK] Processing event type: ${eventType}`);
+  logger.info(`🔄 [STRIPE WEBHOOK] Processing event type: ${eventType}`);
 
   switch (eventType) {
     case 'payment_intent.succeeded':
@@ -675,7 +676,7 @@ async function processStripeEvent(event: Stripe.Event, webhookLog: any): Promise
       break;
 
     default:
-      console.log(`ℹ️ [STRIPE WEBHOOK] Unhandled event type: ${eventType}`);
+      logger.info(`ℹ️ [STRIPE WEBHOOK] Unhandled event type: ${eventType}`);
       // Don't throw error for unhandled events
   }
 }
@@ -688,7 +689,7 @@ async function handleStripeCheckoutSessionExpired(event: Stripe.Event): Promise<
   const session = event.data.object as Stripe.Checkout.Session;
   const metadata = session.metadata || {};
 
-  console.log('⏰ [STRIPE WEBHOOK] Checkout session expired:', session.id);
+  logger.info('⏰ [STRIPE WEBHOOK] Checkout session expired:', session.id);
 
   // Handle deal purchase expiry
   if (metadata.type === 'deal_purchase') {
@@ -700,7 +701,7 @@ async function handleStripeCheckoutSessionExpired(event: Stripe.Event): Promise<
     if (redemption) {
       redemption.status = 'cancelled';
       await redemption.save();
-      console.log(`✅ [STRIPE WEBHOOK] Pending redemption cancelled due to session expiry: ${redemption._id}`);
+      logger.info(`✅ [STRIPE WEBHOOK] Pending redemption cancelled due to session expiry: ${redemption._id}`);
     }
   }
 }
@@ -713,7 +714,7 @@ async function handleStripeCheckoutSessionAsyncPaymentFailed(event: Stripe.Event
   const session = event.data.object as Stripe.Checkout.Session;
   const metadata = session.metadata || {};
 
-  console.log('❌ [STRIPE WEBHOOK] Async payment failed:', session.id);
+  logger.info('❌ [STRIPE WEBHOOK] Async payment failed:', session.id);
 
   // Handle deal purchase async payment failure
   if (metadata.type === 'deal_purchase') {
@@ -725,7 +726,7 @@ async function handleStripeCheckoutSessionAsyncPaymentFailed(event: Stripe.Event
     if (redemption) {
       redemption.status = 'cancelled';
       await redemption.save();
-      console.log(`✅ [STRIPE WEBHOOK] Pending redemption cancelled due to payment failure: ${redemption._id}`);
+      logger.info(`✅ [STRIPE WEBHOOK] Pending redemption cancelled due to payment failure: ${redemption._id}`);
     }
   }
 }
@@ -738,7 +739,7 @@ async function handleStripePaymentIntentSucceeded(event: Stripe.Event): Promise<
   const orderId = paymentIntent.metadata?.orderId || paymentIntent.metadata?.subscriptionId;
   const bookingId = paymentIntent.metadata?.bookingId;
 
-  console.log('✅ [STRIPE WEBHOOK] Payment intent succeeded:', paymentIntent.id);
+  logger.info('✅ [STRIPE WEBHOOK] Payment intent succeeded:', paymentIntent.id);
 
   // Handle event booking payment
   if (bookingId) {
@@ -747,19 +748,19 @@ async function handleStripePaymentIntentSucceeded(event: Stripe.Event): Promise<
   }
 
   if (!orderId) {
-    console.error('❌ [STRIPE WEBHOOK] Order ID not found in metadata');
+    logger.error('❌ [STRIPE WEBHOOK] Order ID not found in metadata');
     return;
   }
 
   const order = await Order.findById(orderId);
   if (!order) {
-    console.error('❌ [STRIPE WEBHOOK] Order not found:', orderId);
+    logger.error('❌ [STRIPE WEBHOOK] Order not found:', orderId);
     return;
   }
 
   // Check if already processed
   if (order.payment.status === 'paid') {
-    console.log('⚠️ [STRIPE WEBHOOK] Payment already marked as paid');
+    logger.info('⚠️ [STRIPE WEBHOOK] Payment already marked as paid');
     return;
   }
 
@@ -787,7 +788,7 @@ async function handleStripePaymentIntentSucceeded(event: Stripe.Event): Promise<
 
   await order.save();
 
-  console.log('✅ [STRIPE WEBHOOK] Order updated with payment details');
+  logger.info('✅ [STRIPE WEBHOOK] Order updated with payment details');
 }
 
 /**
@@ -797,13 +798,13 @@ async function handleEventBookingPaymentSuccess(bookingId: string, paymentIntent
   try {
     const booking = await EventBooking.findById(bookingId);
     if (!booking) {
-      console.error('❌ [STRIPE WEBHOOK] Event booking not found:', bookingId);
+      logger.error('❌ [STRIPE WEBHOOK] Event booking not found:', bookingId);
       return;
     }
 
     // Already confirmed - idempotent
     if (booking.status === 'confirmed' || booking.status === 'completed') {
-      console.log('⚠️ [STRIPE WEBHOOK] Event booking already confirmed:', bookingId);
+      logger.info('⚠️ [STRIPE WEBHOOK] Event booking already confirmed:', bookingId);
       return;
     }
 
@@ -813,7 +814,7 @@ async function handleEventBookingPaymentSuccess(bookingId: string, paymentIntent
     booking.lockedUntil = undefined;
     await booking.save();
 
-    console.log('✅ [STRIPE WEBHOOK] Event booking confirmed:', bookingId);
+    logger.info('✅ [STRIPE WEBHOOK] Event booking confirmed:', bookingId);
 
     // Grant purchase reward for paid events
     try {
@@ -825,12 +826,12 @@ async function handleEventBookingPaymentSuccess(bookingId: string, paymentIntent
         'purchase_reward',
         { eventName: event?.title || 'Event' }
       );
-      console.log('✅ [STRIPE WEBHOOK] Purchase reward granted for booking:', bookingId);
+      logger.info('✅ [STRIPE WEBHOOK] Purchase reward granted for booking:', bookingId);
     } catch (rewardErr) {
-      console.error('[STRIPE WEBHOOK] Reward grant failed (non-blocking):', rewardErr);
+      logger.error('[STRIPE WEBHOOK] Reward grant failed (non-blocking):', rewardErr);
     }
   } catch (error) {
-    console.error('❌ [STRIPE WEBHOOK] Error handling event booking payment:', error);
+    logger.error('❌ [STRIPE WEBHOOK] Error handling event booking payment:', error);
   }
 }
 
@@ -841,16 +842,16 @@ async function handleStripePaymentIntentFailed(event: Stripe.Event): Promise<voi
   const paymentIntent = event.data.object as Stripe.PaymentIntent;
   const orderId = paymentIntent.metadata?.orderId || paymentIntent.metadata?.subscriptionId;
 
-  console.log('❌ [STRIPE WEBHOOK] Payment intent failed:', paymentIntent.id);
+  logger.info('❌ [STRIPE WEBHOOK] Payment intent failed:', paymentIntent.id);
 
   if (!orderId) {
-    console.error('❌ [STRIPE WEBHOOK] Order ID not found in metadata');
+    logger.error('❌ [STRIPE WEBHOOK] Order ID not found in metadata');
     return;
   }
 
   const order = await Order.findById(orderId).lean();
   if (!order) {
-    console.error('❌ [STRIPE WEBHOOK] Order not found:', orderId);
+    logger.error('❌ [STRIPE WEBHOOK] Order not found:', orderId);
     return;
   }
 
@@ -859,7 +860,7 @@ async function handleStripePaymentIntentFailed(event: Stripe.Event): Promise<voi
   // Handle payment failure
   await paymentService.handlePaymentFailure(orderId, failureReason);
 
-  console.log('✅ [STRIPE WEBHOOK] Payment failure processed');
+  logger.info('✅ [STRIPE WEBHOOK] Payment failure processed');
 }
 
 /**
@@ -869,12 +870,12 @@ async function handleStripeChargeRefunded(event: Stripe.Event): Promise<void> {
   const charge = event.data.object as Stripe.Charge;
   const paymentIntentId = charge.payment_intent as string;
 
-  console.log('💰 [STRIPE WEBHOOK] Charge refunded:', charge.id);
+  logger.info('💰 [STRIPE WEBHOOK] Charge refunded:', charge.id);
 
   // Find order by payment ID
   const order = await Order.findOne({ 'payment.transactionId': paymentIntentId });
   if (!order) {
-    console.error('❌ [STRIPE WEBHOOK] Order not found for payment:', paymentIntentId);
+    logger.error('❌ [STRIPE WEBHOOK] Order not found for payment:', paymentIntentId);
     return;
   }
 
@@ -891,7 +892,7 @@ async function handleStripeChargeRefunded(event: Stripe.Event): Promise<void> {
 
   await order.save();
 
-  console.log('✅ [STRIPE WEBHOOK] Refund details updated');
+  logger.info('✅ [STRIPE WEBHOOK] Refund details updated');
 }
 
 /**
@@ -901,7 +902,7 @@ async function handleStripeCheckoutSessionCompleted(event: Stripe.Event): Promis
   const session = event.data.object as Stripe.Checkout.Session;
   const metadata = session.metadata || {};
 
-  console.log('✅ [STRIPE WEBHOOK] Checkout session completed:', session.id);
+  logger.info('✅ [STRIPE WEBHOOK] Checkout session completed:', session.id);
 
   // Check if this is a deal purchase
   if (metadata.type === 'deal_purchase') {
@@ -912,14 +913,14 @@ async function handleStripeCheckoutSessionCompleted(event: Stripe.Event): Promis
   // Handle subscription payment completion
   const subscriptionId = metadata.subscriptionId;
   if (subscriptionId) {
-    console.log('✅ [STRIPE WEBHOOK] Subscription payment completed:', subscriptionId);
+    logger.info('✅ [STRIPE WEBHOOK] Subscription payment completed:', subscriptionId);
     return;
   }
 
   // Handle event booking payment completion
   const bookingId = metadata.bookingId;
   if (bookingId) {
-    console.log('✅ [STRIPE WEBHOOK] Event booking checkout completed:', bookingId);
+    logger.info('✅ [STRIPE WEBHOOK] Event booking checkout completed:', bookingId);
     await handleEventBookingPaymentSuccess(bookingId, {
       id: session.payment_intent as string,
       amount: (session.amount_total || 0),
@@ -931,7 +932,7 @@ async function handleStripeCheckoutSessionCompleted(event: Stripe.Event): Promis
   // Handle order payment completion
   const orderId = metadata.orderId;
   if (orderId) {
-    console.log('✅ [STRIPE WEBHOOK] Order payment completed:', orderId);
+    logger.info('✅ [STRIPE WEBHOOK] Order payment completed:', orderId);
     const order = await Order.findById(orderId);
     if (order && order.payment.status !== 'paid') {
       order.payment.status = 'paid';
@@ -948,7 +949,7 @@ async function handleStripeCheckoutSessionCompleted(event: Stripe.Event): Promis
     return;
   }
 
-  console.log('ℹ️ [STRIPE WEBHOOK] No recognized metadata in checkout session');
+  logger.info('ℹ️ [STRIPE WEBHOOK] No recognized metadata in checkout session');
 }
 
 /**
@@ -959,7 +960,7 @@ async function handleDealPurchaseCompleted(session: Stripe.Checkout.Session): Pr
   const metadata = session.metadata || {};
   const { campaignId, campaignSlug, dealIndex, userId, redemptionId } = metadata;
 
-  console.log('💳 [STRIPE WEBHOOK] Processing deal purchase:', {
+  logger.info('💳 [STRIPE WEBHOOK] Processing deal purchase:', {
     sessionId: session.id,
     campaignSlug,
     dealIndex,
@@ -969,13 +970,13 @@ async function handleDealPurchaseCompleted(session: Stripe.Checkout.Session): Pr
 
   // Validate required metadata
   if (!campaignId || !userId || dealIndex === undefined) {
-    console.error('❌ [STRIPE WEBHOOK] Missing required metadata:', { campaignId, userId, dealIndex });
+    logger.error('❌ [STRIPE WEBHOOK] Missing required metadata:', { campaignId, userId, dealIndex });
     return;
   }
 
   // Verify payment was successful
   if (session.payment_status !== 'paid') {
-    console.error('❌ [STRIPE WEBHOOK] Deal purchase not paid:', session.payment_status);
+    logger.error('❌ [STRIPE WEBHOOK] Deal purchase not paid:', session.payment_status);
     return;
   }
 
@@ -983,7 +984,7 @@ async function handleDealPurchaseCompleted(session: Stripe.Checkout.Session): Pr
 
   // Validate deal index bounds
   if (isNaN(dealIdx) || dealIdx < 0) {
-    console.error('❌ [STRIPE WEBHOOK] Invalid deal index:', dealIndex);
+    logger.error('❌ [STRIPE WEBHOOK] Invalid deal index:', dealIndex);
     return;
   }
 
@@ -1004,7 +1005,7 @@ async function handleDealPurchaseCompleted(session: Stripe.Checkout.Session): Pr
 
       // Check if already processed (idempotency)
       if (redemption.status === 'active' || redemption.status === 'used') {
-        console.log('⚠️ [STRIPE WEBHOOK] Redemption already processed:', redemption._id);
+        logger.info('⚠️ [STRIPE WEBHOOK] Redemption already processed:', redemption._id);
         return; // Not an error, just already done
       }
 
@@ -1032,7 +1033,7 @@ async function handleDealPurchaseCompleted(session: Stripe.Checkout.Session): Pr
         { session: mongoSession }
       );
 
-      console.log('✅ [STRIPE WEBHOOK] Deal purchase completed:', {
+      logger.info('✅ [STRIPE WEBHOOK] Deal purchase completed:', {
         redemptionId: redemption._id,
         redemptionCode: redemption.redemptionCode,
         amount: (session.amount_total || 0) / 100,
@@ -1040,7 +1041,7 @@ async function handleDealPurchaseCompleted(session: Stripe.Checkout.Session): Pr
       });
     });
   } catch (error: any) {
-    console.error('❌ [STRIPE WEBHOOK] Transaction failed for deal purchase:', error.message);
+    logger.error('❌ [STRIPE WEBHOOK] Transaction failed for deal purchase:', error.message);
     throw error; // Re-throw to mark webhook as failed for retry
   } finally {
     await mongoSession.endSession();
@@ -1052,7 +1053,7 @@ async function handleDealPurchaseCompleted(session: Stripe.Checkout.Session): Pr
  */
 async function handleStripePaymentIntentCreated(event: Stripe.Event): Promise<void> {
   const paymentIntent = event.data.object as Stripe.PaymentIntent;
-  console.log('📝 [STRIPE WEBHOOK] Payment intent created:', paymentIntent.id);
+  logger.info('📝 [STRIPE WEBHOOK] Payment intent created:', paymentIntent.id);
   // Log for audit purposes
 }
 
@@ -1063,7 +1064,7 @@ async function handleStripePaymentIntentCanceled(event: Stripe.Event): Promise<v
   const paymentIntent = event.data.object as Stripe.PaymentIntent;
   const orderId = paymentIntent.metadata?.orderId;
 
-  console.log('❌ [STRIPE WEBHOOK] Payment intent canceled:', paymentIntent.id);
+  logger.info('❌ [STRIPE WEBHOOK] Payment intent canceled:', paymentIntent.id);
 
   if (!orderId) {
     return;

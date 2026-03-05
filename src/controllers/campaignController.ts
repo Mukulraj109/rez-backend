@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
+import { logger } from '../config/logger';
 import Campaign from '../models/Campaign';
 import DealRedemption from '../models/DealRedemption';
 import ProgramMembership from '../models/ProgramMembership';
@@ -43,7 +44,7 @@ export const getActiveCampaigns = asyncHandler(async (req: Request, res: Respons
       ];
     }
 
-    console.log(`🔍 [CAMPAIGNS] Fetching active campaigns for region: ${region || 'all'}...`);
+    logger.info(`🔍 [CAMPAIGNS] Fetching active campaigns for region: ${region || 'all'}...`);
 
     let campaigns = await Campaign.find(query)
       .sort({ priority: -1 })
@@ -65,7 +66,7 @@ export const getActiveCampaigns = asyncHandler(async (req: Request, res: Respons
       campaigns = campaigns.filter((c: any) => !c.exclusiveToProgramSlug);
     }
 
-    console.log(`✅ [CAMPAIGNS] Found ${campaigns.length} active campaigns`);
+    logger.info(`✅ [CAMPAIGNS] Found ${campaigns.length} active campaigns`);
 
     sendSuccess(res, {
       campaigns,
@@ -73,7 +74,7 @@ export const getActiveCampaigns = asyncHandler(async (req: Request, res: Respons
     }, 'Active campaigns retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [CAMPAIGNS] Error fetching campaigns:', error);
+    logger.error('❌ [CAMPAIGNS] Error fetching campaigns:', error);
     throw new AppError('Failed to fetch campaigns', 500);
   }
 });
@@ -136,7 +137,7 @@ export const getCampaignsByType = asyncHandler(async (req: Request, res: Respons
     }, `Campaigns of type '${type}' retrieved successfully`);
 
   } catch (error) {
-    console.error('❌ [CAMPAIGNS] Error fetching campaigns by type:', error);
+    logger.error('❌ [CAMPAIGNS] Error fetching campaigns by type:', error);
     throw new AppError('Failed to fetch campaigns', 500);
   }
 });
@@ -171,7 +172,7 @@ export const getCampaignById = asyncHandler(async (req: Request, res: Response) 
     sendSuccess(res, transformedCampaign, 'Campaign retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [CAMPAIGNS] Error fetching campaign:', error);
+    logger.error('❌ [CAMPAIGNS] Error fetching campaign:', error);
     throw new AppError('Failed to fetch campaign', 500);
   }
 });
@@ -234,7 +235,7 @@ export const getAllCampaigns = asyncHandler(async (req: Request, res: Response) 
     }, 'Campaigns retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [CAMPAIGNS] Error fetching campaigns:', error);
+    logger.error('❌ [CAMPAIGNS] Error fetching campaigns:', error);
     throw new AppError('Failed to fetch campaigns', 500);
   }
 });
@@ -270,7 +271,7 @@ export const getExcitingDeals = asyncHandler(async (req: Request, res: Response)
       ];
     }
 
-    console.log(`🔍 [EXCITING DEALS] Fetching deals for region: ${region || 'all'}...`);
+    logger.info(`🔍 [EXCITING DEALS] Fetching deals for region: ${region || 'all'}...`);
 
     const campaigns = await Campaign.find(query)
       .sort({ priority: -1 })
@@ -337,7 +338,7 @@ export const getExcitingDeals = asyncHandler(async (req: Request, res: Response)
     }, 'Exciting deals retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [CAMPAIGNS] Error fetching exciting deals:', error);
+    logger.error('❌ [CAMPAIGNS] Error fetching exciting deals:', error);
     throw new AppError('Failed to fetch exciting deals', 500);
   }
 });
@@ -373,7 +374,7 @@ export const trackDealInteraction = asyncHandler(async (req: Request, res: Respo
     }
 
     // Log the interaction (in production, you might want to store this in a separate collection)
-    console.log(`📊 [DEAL TRACK] ${action} - Campaign: ${campaign.title}, Deal: ${campaign.deals[dealIndex].store}, User: ${userId || 'anonymous'}`);
+    logger.info(`📊 [DEAL TRACK] ${action} - Campaign: ${campaign.title}, Deal: ${campaign.deals[dealIndex].store}, User: ${userId || 'anonymous'}`);
 
     // In the future, you can store this in a DealInteraction collection:
     // await DealInteraction.create({
@@ -390,7 +391,7 @@ export const trackDealInteraction = asyncHandler(async (req: Request, res: Respo
     }, 'Interaction tracked successfully');
 
   } catch (error) {
-    console.error('❌ [CAMPAIGNS] Error tracking deal interaction:', error);
+    logger.error('❌ [CAMPAIGNS] Error tracking deal interaction:', error);
     throw new AppError('Failed to track deal interaction', 500);
   }
 });
@@ -511,7 +512,7 @@ export const redeemDeal = asyncHandler(async (req: Request, res: Response) => {
         { $inc: { [`deals.${index}.purchaseCount`]: 1 } }
       );
 
-      console.log(`✅ [DEAL REDEEM] Free deal redeemed - Campaign: ${campaign.campaignId}, Deal: ${index}, User: ${userId}`);
+      logger.info(`✅ [DEAL REDEEM] Free deal redeemed - Campaign: ${campaign.campaignId}, Deal: ${index}, User: ${userId}`);
 
       return sendSuccess(res, {
         type: 'free',
@@ -560,7 +561,7 @@ export const redeemDeal = asyncHandler(async (req: Request, res: Response) => {
     redemption.stripeSessionId = session.id;
     await redemption.save();
 
-    console.log(`💳 [DEAL PURCHASE] Stripe session created - Campaign: ${campaign.campaignId}, Deal: ${index}, User: ${userId}, Session: ${session.id}`);
+    logger.info(`💳 [DEAL PURCHASE] Stripe session created - Campaign: ${campaign.campaignId}, Deal: ${index}, User: ${userId}, Session: ${session.id}`);
 
     return sendSuccess(res, {
       type: 'paid',
@@ -572,7 +573,7 @@ export const redeemDeal = asyncHandler(async (req: Request, res: Response) => {
     }, 'Checkout session created');
 
   } catch (error: any) {
-    console.error('❌ [DEAL REDEEM] Error:', error);
+    logger.error('❌ [DEAL REDEEM] Error:', error);
 
     // Handle duplicate key error (race condition)
     if (error.code === 11000) {
@@ -604,13 +605,13 @@ export const verifyDealPayment = asyncHandler(async (req: Request, res: Response
     const verification = await stripeService.verifyDealPurchaseSession(sessionId);
 
     if (!verification.verified) {
-      console.log(`⚠️ [DEAL VERIFY] Payment not verified - Status: ${verification.paymentStatus}, Session: ${sessionId}`);
+      logger.info(`⚠️ [DEAL VERIFY] Payment not verified - Status: ${verification.paymentStatus}, Session: ${sessionId}`);
       return sendBadRequest(res, `Payment not completed. Status: ${verification.paymentStatus}`);
     }
 
     // Verify user matches
     if (verification.userId !== userId) {
-      console.error(`❌ [DEAL VERIFY] User mismatch - Expected: ${verification.userId}, Got: ${userId}`);
+      logger.error(`❌ [DEAL VERIFY] User mismatch - Expected: ${verification.userId}, Got: ${userId}`);
       return sendError(res, 'Payment verification failed: user mismatch', 403);
     }
 
@@ -621,13 +622,13 @@ export const verifyDealPayment = asyncHandler(async (req: Request, res: Response
     });
 
     if (!redemption) {
-      console.error(`❌ [DEAL VERIFY] Redemption not found for session: ${sessionId}`);
+      logger.error(`❌ [DEAL VERIFY] Redemption not found for session: ${sessionId}`);
       return sendNotFound(res, 'Redemption not found');
     }
 
     // Check if already processed
     if (redemption.status === 'active' || redemption.status === 'used') {
-      console.log(`ℹ️ [DEAL VERIFY] Redemption already processed: ${redemption._id}`);
+      logger.info(`ℹ️ [DEAL VERIFY] Redemption already processed: ${redemption._id}`);
       return sendSuccess(res, {
         redemption: {
           id: redemption._id,
@@ -656,7 +657,7 @@ export const verifyDealPayment = asyncHandler(async (req: Request, res: Response
       { $inc: { [`deals.${redemption.dealIndex}.purchaseCount`]: 1 } }
     );
 
-    console.log(`✅ [DEAL VERIFY] Payment verified - Redemption: ${redemption._id}, Code: ${redemption.redemptionCode}`);
+    logger.info(`✅ [DEAL VERIFY] Payment verified - Redemption: ${redemption._id}, Code: ${redemption.redemptionCode}`);
 
     return sendSuccess(res, {
       redemption: {
@@ -675,7 +676,7 @@ export const verifyDealPayment = asyncHandler(async (req: Request, res: Response
     }, 'Payment verified successfully');
 
   } catch (error: any) {
-    console.error('❌ [DEAL VERIFY] Error:', error);
+    logger.error('❌ [DEAL VERIFY] Error:', error);
     throw new AppError('Failed to verify payment', 500);
   }
 });
@@ -748,7 +749,7 @@ export const getUserRedemptions = asyncHandler(async (req: Request, res: Respons
     }, 'Redemptions retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [REDEMPTIONS] Error fetching user redemptions:', error);
+    logger.error('❌ [REDEMPTIONS] Error fetching user redemptions:', error);
     throw new AppError('Failed to fetch redemptions', 500);
   }
 });
@@ -791,7 +792,7 @@ export const getRedemptionByCode = asyncHandler(async (req: Request, res: Respon
     }, 'Redemption retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [REDEMPTIONS] Error fetching redemption:', error);
+    logger.error('❌ [REDEMPTIONS] Error fetching redemption:', error);
     throw new AppError('Failed to fetch redemption', 500);
   }
 });
@@ -842,7 +843,7 @@ export const useRedemption = asyncHandler(async (req: Request, res: Response) =>
     }
     await redemption.save();
 
-    console.log(`✅ [REDEMPTION USED] Code: ${code}, Order: ${orderId || 'N/A'}, User: ${userId}`);
+    logger.info(`✅ [REDEMPTION USED] Code: ${code}, Order: ${orderId || 'N/A'}, User: ${userId}`);
 
     sendSuccess(res, {
       id: redemption._id,
@@ -854,7 +855,7 @@ export const useRedemption = asyncHandler(async (req: Request, res: Response) =>
     }, 'Redemption marked as used');
 
   } catch (error) {
-    console.error('❌ [REDEMPTIONS] Error marking redemption as used:', error);
+    logger.error('❌ [REDEMPTIONS] Error marking redemption as used:', error);
     throw new AppError('Failed to mark redemption as used', 500);
   }
 });
@@ -893,12 +894,12 @@ export const cancelRedemption = asyncHandler(async (req: Request, res: Response)
     redemption.status = 'cancelled';
     await redemption.save();
 
-    console.log(`✅ [REDEMPTION CANCEL] Redemption cancelled - ID: ${id}, User: ${userId}`);
+    logger.info(`✅ [REDEMPTION CANCEL] Redemption cancelled - ID: ${id}, User: ${userId}`);
 
     sendSuccess(res, { message: 'Redemption cancelled' }, 'Redemption cancelled successfully');
 
   } catch (error) {
-    console.error('❌ [REDEMPTIONS] Error cancelling redemption:', error);
+    logger.error('❌ [REDEMPTIONS] Error cancelling redemption:', error);
     throw new AppError('Failed to cancel redemption', 500);
   }
 });

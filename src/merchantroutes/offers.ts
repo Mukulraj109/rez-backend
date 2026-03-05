@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/merchantauth';
+import { logger } from '../config/logger';
 import { validateRequest, validateQuery, validateParams } from '../middleware/merchantvalidation';
 import { Store } from '../models/Store';
 import Offer from '../models/Offer';
@@ -155,7 +156,7 @@ router.get('/', validateQuery(Joi.object({
       }
     });
   } catch (error: any) {
-    console.error('Get merchant offers error:', error);
+    logger.error('Get merchant offers error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch offers',
@@ -271,7 +272,7 @@ router.post('/', validateRequest(createOfferSchema), async (req: Request, res: R
       data: offer
     });
   } catch (error: any) {
-    console.error('Create offer error:', error);
+    logger.error('Create offer error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to create offer',
@@ -320,7 +321,7 @@ router.get('/:id', validateParams(Joi.object({
       data: offer
     });
   } catch (error: any) {
-    console.error('Get offer error:', error);
+    logger.error('Get offer error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch offer',
@@ -452,7 +453,7 @@ router.put('/:id', validateParams(Joi.object({
       data: offer
     });
   } catch (error: any) {
-    console.error('Update offer error:', error);
+    logger.error('Update offer error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to update offer',
@@ -530,7 +531,7 @@ router.delete('/:id', validateParams(Joi.object({
       message: 'Offer deleted successfully'
     });
   } catch (error: any) {
-    console.error('Delete offer error:', error);
+    logger.error('Delete offer error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to delete offer',

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { Cart } from '../models/Cart';
 import { Product } from '../models/Product';
+import { logger } from '../config/logger';
 import Event from '../models/Event';
 import { pct } from '../utils/currency';
 import {
@@ -38,23 +39,23 @@ export const getCart = asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    console.log('🛒 [GET CART] Getting cart for user:', req.userId);
+    logger.info('🛒 [GET CART] Getting cart for user:', req.userId);
 
     // Try to get from cache first
     const cacheKey = CacheKeys.cart(req.userId);
     const cachedCart = await redisService.get<any>(cacheKey);
 
     if (cachedCart) {
-      console.log('✅ [GET CART] Returning from cache');
+      logger.info('✅ [GET CART] Returning from cache');
       return sendSuccess(res, cachedCart, 'Cart retrieved successfully');
     }
 
     let cart = await Cart.getActiveCart(req.userId);
-    console.log('🛒 [GET CART] Found existing cart:', cart ? 'Yes' : 'No');
+    logger.info('🛒 [GET CART] Found existing cart:', cart ? 'Yes' : 'No');
 
     // Create empty cart if doesn't exist
     if (!cart) {
-      console.log('🛒 [GET CART] Creating new cart...');
+      logger.info('🛒 [GET CART] Creating new cart...');
       cart = new Cart({
         user: req.userId,
         items: [],
@@ -71,35 +72,35 @@ export const getCart = asyncHandler(async (req: Request, res: Response) => {
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours from now
       });
       await cart.save();
-      console.log('🛒 [GET CART] New cart created:', cart._id);
+      logger.info('🛒 [GET CART] New cart created:', cart._id);
     }
 
     // Check if cart is expired
     const isExpired = cart.expiresAt && cart.expiresAt < new Date();
     if (isExpired) {
-      console.log('🛒 [GET CART] Cart expired, clearing...');
+      logger.info('🛒 [GET CART] Cart expired, clearing...');
       await cart.clearCart();
       await cart.save();
     }
 
     // BUGFIX: Recalculate totals if total is 0 but subtotal > 0 (stale data)
     if (cart.items.length > 0 && cart.totals.subtotal > 0 && cart.totals.total === 0) {
-      console.log('🛒 [GET CART] Detected stale totals (total=0 but subtotal>0), recalculating...');
+      logger.info('🛒 [GET CART] Detected stale totals (total=0 but subtotal>0), recalculating...');
       await cart.calculateTotals();
       await cart.save();
-      console.log('🛒 [GET CART] Totals recalculated:', cart.totals);
+      logger.info('🛒 [GET CART] Totals recalculated:', cart.totals);
     }
 
     // Cache the cart data
     await redisService.set(cacheKey, cart, CacheTTL.CART_DATA);
 
-    console.log('🛒 [GET CART] Returning cart with', cart.items.length, 'items');
+    logger.info('🛒 [GET CART] Returning cart with', cart.items.length, 'items');
     sendSuccess(res, cart, 'Cart retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [GET CART] Error occurred:', error);
-    console.error('❌ [GET CART] Error message:', error instanceof Error ? error.message : 'Unknown error');
-    console.error('❌ [GET CART] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    logger.error('❌ [GET CART] Error occurred:', error);
+    logger.error('❌ [GET CART] Error message:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('❌ [GET CART] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     throw new AppError('Failed to get cart', 500);
   }
 });
@@ -113,11 +114,11 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
   const { productId, quantity, variant, metadata, itemType, serviceBookingDetails } = req.body;
 
   try {
-    console.log('🛒 [ADD TO CART] Starting add to cart for user:', req.userId);
-    console.log('🛒 [ADD TO CART] Request data:', { productId, quantity, variant, metadata, itemType, serviceBookingDetails });
+    logger.info('🛒 [ADD TO CART] Starting add to cart for user:', req.userId);
+    logger.info('🛒 [ADD TO CART] Request data:', { productId, quantity, variant, metadata, itemType, serviceBookingDetails });
 
     // Verify product exists and is available
-    console.log('🛒 [ADD TO CART] Finding product:', productId);
+    logger.info('🛒 [ADD TO CART] Finding product:', productId);
     let product = await Product.findById(productId).populate('store').lean() as any;
     let event = null;
     let isEvent = false;
@@ -125,20 +126,20 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
 
     // If product not found, check if it's an event
     if (!product) {
-      console.log('🛒 [ADD TO CART] Product not found, checking if it\'s an event:', productId);
+      logger.info('🛒 [ADD TO CART] Product not found, checking if it\'s an event:', productId);
       event = await Event.findById(productId).lean() as any;
 
       if (event) {
-        console.log('✅ [ADD TO CART] Event found:', event.title);
+        logger.info('✅ [ADD TO CART] Event found:', event.title);
         isEvent = true;
 
         // Validate event is published and available
         if (event.status !== 'published') {
-          console.log('❌ [ADD TO CART] Event not available:', event.status);
+          logger.info('❌ [ADD TO CART] Event not available:', event.status);
           return sendNotFound(res, 'Event not available');
         }
       } else {
-        console.log('❌ [ADD TO CART] Product/Event not found:', productId);
+        logger.info('❌ [ADD TO CART] Product/Event not found:', productId);
         return sendNotFound(res, 'Product not found');
       }
     }
@@ -146,20 +147,20 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
     // Check if product is a service
     if (product && product.productType === 'service') {
       isService = true;
-      console.log('✅ [ADD TO CART] Service found:', product.name);
+      logger.info('✅ [ADD TO CART] Service found:', product.name);
     }
 
     // Handle product-specific validation
     if (!isEvent && !isService && product) {
-      console.log('✅ [ADD TO CART] Product found:', product.name);
-      console.log('🛒 [ADD TO CART] Product status:', {
+      logger.info('✅ [ADD TO CART] Product found:', product.name);
+      logger.info('🛒 [ADD TO CART] Product status:', {
         isActive: product.isActive,
         inventoryAvailable: product.inventory?.isAvailable,
         stock: product.inventory?.stock
       });
 
       if (!product.isActive || !product.inventory.isAvailable) {
-        console.log('❌ [ADD TO CART] Product not available');
+        logger.info('❌ [ADD TO CART] Product not available');
         return sendNotFound(res, 'Product not available');
       }
     }
@@ -172,7 +173,7 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
       if (!serviceBookingDetails.timeSlot || !serviceBookingDetails.timeSlot.start) {
         return sendBadRequest(res, 'Time slot is required for service items');
       }
-      console.log('✅ [ADD TO CART] Service booking details validated:', serviceBookingDetails);
+      logger.info('✅ [ADD TO CART] Service booking details validated:', serviceBookingDetails);
     }
 
     // Check stock availability with comprehensive validation (only for products, not services)
@@ -181,29 +182,29 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
       const lowStockThreshold = product.inventory.lowStockThreshold || 5;
       let variantInfo = '';
 
-      console.log('🛒 [ADD TO CART] Available stock:', availableStock);
-      console.log('🛒 [ADD TO CART] Low stock threshold:', lowStockThreshold);
+      logger.info('🛒 [ADD TO CART] Available stock:', availableStock);
+      logger.info('🛒 [ADD TO CART] Low stock threshold:', lowStockThreshold);
 
       // Handle variant stock checking
       if (variant && product.inventory.variants) {
-        console.log('🛒 [ADD TO CART] Checking variant:', variant);
+        logger.info('🛒 [ADD TO CART] Checking variant:', variant);
         const variantObj = product.getVariantByType(variant.type, variant.value);
 
         if (!variantObj) {
-          console.log('❌ [ADD TO CART] Product variant not found');
+          logger.info('❌ [ADD TO CART] Product variant not found');
           return sendError(res, `Product variant "${variant.value}" is not available`, 400);
         }
 
         availableStock = variantObj.stock;
         variantInfo = ` (${variant.type}: ${variant.value})`;
-        console.log('🛒 [ADD TO CART] Variant stock:', availableStock);
+        logger.info('🛒 [ADD TO CART] Variant stock:', availableStock);
       }
 
       // Stock validation with detailed error messages
       if (!product.inventory.unlimited) {
         // Check if product is completely out of stock
         if (availableStock === 0) {
-          console.log('❌ [ADD TO CART] Product out of stock');
+          logger.info('❌ [ADD TO CART] Product out of stock');
           return sendError(
             res,
             `${product.name}${variantInfo} is currently out of stock`,
@@ -213,7 +214,7 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
 
         // Check if requested quantity exceeds available stock
         if (availableStock < quantity) {
-          console.log('❌ [ADD TO CART] Insufficient stock. Available:', availableStock, 'Requested:', quantity);
+          logger.info('❌ [ADD TO CART] Insufficient stock. Available:', availableStock, 'Requested:', quantity);
 
           // Provide helpful message about available quantity
           const message = availableStock === 1
@@ -225,18 +226,18 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
 
         // Check for low stock warning (this doesn't prevent adding to cart, just logs)
         if (availableStock <= lowStockThreshold) {
-          console.log('⚠️ [ADD TO CART] Low stock warning. Available:', availableStock, 'Threshold:', lowStockThreshold);
+          logger.info('⚠️ [ADD TO CART] Low stock warning. Available:', availableStock, 'Threshold:', lowStockThreshold);
           // Note: This is just a warning, we still allow the add to cart
         }
       }
     }
 
     // Get or create cart
-    console.log('🛒 [ADD TO CART] Getting user cart...');
+    logger.info('🛒 [ADD TO CART] Getting user cart...');
     let cart = await Cart.getActiveCart(req.userId);
 
     if (!cart) {
-      console.log('🛒 [ADD TO CART] Creating new cart...');
+      logger.info('🛒 [ADD TO CART] Creating new cart...');
       cart = new Cart({
         user: req.userId,
         items: [],
@@ -251,11 +252,11 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
         }
       });
     } else {
-      console.log('✅ [ADD TO CART] Using existing cart:', cart._id);
+      logger.info('✅ [ADD TO CART] Using existing cart:', cart._id);
     }
 
     // Add item to cart
-    console.log('🛒 [ADD TO CART] Adding item to cart...');
+    logger.info('🛒 [ADD TO CART] Adding item to cart...');
     
     if (isEvent && event) {
       // Handle events - add directly to cart items
@@ -288,7 +289,7 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
       }
     } else if (isService && product) {
       // Handle services - add with booking details
-      console.log('🛒 [ADD TO CART] Adding service to cart');
+      logger.info('🛒 [ADD TO CART] Adding service to cart');
       const servicePrice = product.pricing?.selling || product.price?.current || 0;
       const serviceOriginalPrice = product.pricing?.original || product.price?.original || servicePrice;
 
@@ -307,7 +308,7 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
       });
 
       if (existingServiceIndex >= 0) {
-        console.log('❌ [ADD TO CART] Service already booked for this date/time');
+        logger.info('❌ [ADD TO CART] Service already booked for this date/time');
         return sendBadRequest(res, 'This service is already in your cart for the selected date and time');
       }
 
@@ -338,7 +339,7 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
         }
       };
 
-      console.log('🛒 [ADD TO CART] Service cart item:', cartItem);
+      logger.info('🛒 [ADD TO CART] Service cart item:', cartItem);
       cart.items.push(cartItem);
     } else if (product) {
       // Handle products - use existing addItem method
@@ -346,15 +347,15 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
     }
 
     // Recalculate totals
-    console.log('🛒 [ADD TO CART] Calculating totals...');
+    logger.info('🛒 [ADD TO CART] Calculating totals...');
     await cart.calculateTotals();
 
-    console.log('🛒 [ADD TO CART] Saving cart...');
+    logger.info('🛒 [ADD TO CART] Saving cart...');
     await cart.save();
 
     // Reserve stock for the added item (only for products, not services or events)
     if (!isEvent && !isService && product) {
-      console.log('🔒 [ADD TO CART] Reserving stock...');
+      logger.info('🔒 [ADD TO CART] Reserving stock...');
       const reservationResult = await reservationService.reserveStock(
         (cart as any)._id.toString(),
         productId,
@@ -363,24 +364,24 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
       );
 
       if (!reservationResult.success) {
-        console.error('❌ [ADD TO CART] Stock reservation failed:', reservationResult.message);
+        logger.error('❌ [ADD TO CART] Stock reservation failed:', reservationResult.message);
         // Note: We don't fail the cart operation, but log the issue
         // The stock validation will catch this at checkout
       } else {
-        console.log('✅ [ADD TO CART] Stock reserved successfully');
+        logger.info('✅ [ADD TO CART] Stock reserved successfully');
       }
     }
 
     // Invalidate cart cache after update
     await CacheInvalidator.invalidateCart(req.userId);
 
-    console.log('✅ [ADD TO CART] Item added successfully. Cart now has', cart.items.length, 'items');
+    logger.info('✅ [ADD TO CART] Item added successfully. Cart now has', cart.items.length, 'items');
     sendSuccess(res, cart, 'Item added to cart successfully');
 
   } catch (error) {
-    console.error('❌ [ADD TO CART] Error occurred:', error);
-    console.error('❌ [ADD TO CART] Error message:', error instanceof Error ? error.message : 'Unknown error');
-    console.error('❌ [ADD TO CART] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    logger.error('❌ [ADD TO CART] Error occurred:', error);
+    logger.error('❌ [ADD TO CART] Error message:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('❌ [ADD TO CART] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     if (error instanceof AppError) {
       throw error;
     }
@@ -398,27 +399,27 @@ export const updateCartItem = asyncHandler(async (req: Request, res: Response) =
   const { quantity } = req.body;
 
   try {
-    console.log('🛒 [UPDATE CART] Starting update for user:', req.userId);
-    console.log('🛒 [UPDATE CART] Request params:', { productId, variant });
-    console.log('🛒 [UPDATE CART] Request body:', { quantity });
+    logger.info('🛒 [UPDATE CART] Starting update for user:', req.userId);
+    logger.info('🛒 [UPDATE CART] Request params:', { productId, variant });
+    logger.info('🛒 [UPDATE CART] Request body:', { quantity });
 
     const cart = await Cart.getActiveCart(req.userId);
 
     if (!cart) {
-      console.log('❌ [UPDATE CART] Cart not found');
+      logger.info('❌ [UPDATE CART] Cart not found');
       return sendNotFound(res, 'Cart not found');
     }
 
-    console.log('✅ [UPDATE CART] Cart found with', cart.items.length, 'items');
+    logger.info('✅ [UPDATE CART] Cart found with', cart.items.length, 'items');
 
     // Parse variant from query params
     let variantObj;
     if (variant && variant !== 'null') {
       try {
         variantObj = JSON.parse(variant);
-        console.log('🛒 [UPDATE CART] Parsed variant:', variantObj);
+        logger.info('🛒 [UPDATE CART] Parsed variant:', variantObj);
       } catch (e) {
-        console.log('❌ [UPDATE CART] Invalid variant format');
+        logger.info('❌ [UPDATE CART] Invalid variant format');
         return sendError(res, 'Invalid variant format', 400);
       }
     }
@@ -428,12 +429,12 @@ export const updateCartItem = asyncHandler(async (req: Request, res: Response) =
       const product = await Product.findById(productId).lean() as any;
 
       if (!product) {
-        console.log('❌ [UPDATE CART] Product not found');
+        logger.info('❌ [UPDATE CART] Product not found');
         return sendNotFound(res, 'Product not found');
       }
 
       if (!product.isActive || !product.inventory.isAvailable) {
-        console.log('❌ [UPDATE CART] Product not available');
+        logger.info('❌ [UPDATE CART] Product not available');
         return sendError(res, 'Product is no longer available', 400);
       }
 
@@ -446,7 +447,7 @@ export const updateCartItem = asyncHandler(async (req: Request, res: Response) =
         const variantData = product.getVariantByType(variantObj.type, variantObj.value);
 
         if (!variantData) {
-          console.log('❌ [UPDATE CART] Product variant not found');
+          logger.info('❌ [UPDATE CART] Product variant not found');
           return sendError(res, `Product variant "${variantObj.value}" is not available`, 400);
         }
 
@@ -457,7 +458,7 @@ export const updateCartItem = asyncHandler(async (req: Request, res: Response) =
       // Stock validation
       if (!product.inventory.unlimited) {
         if (availableStock === 0) {
-          console.log('❌ [UPDATE CART] Product out of stock');
+          logger.info('❌ [UPDATE CART] Product out of stock');
           return sendError(
             res,
             `${product.name}${variantInfo} is currently out of stock`,
@@ -466,7 +467,7 @@ export const updateCartItem = asyncHandler(async (req: Request, res: Response) =
         }
 
         if (availableStock < quantity) {
-          console.log('❌ [UPDATE CART] Insufficient stock. Available:', availableStock, 'Requested:', quantity);
+          logger.info('❌ [UPDATE CART] Insufficient stock. Available:', availableStock, 'Requested:', quantity);
 
           const message = availableStock === 1
             ? `Only 1 item of ${product.name}${variantInfo} is remaining in stock`
@@ -476,23 +477,23 @@ export const updateCartItem = asyncHandler(async (req: Request, res: Response) =
         }
 
         if (availableStock <= lowStockThreshold) {
-          console.log('⚠️ [UPDATE CART] Low stock warning. Available:', availableStock, 'Threshold:', lowStockThreshold);
+          logger.info('⚠️ [UPDATE CART] Low stock warning. Available:', availableStock, 'Threshold:', lowStockThreshold);
         }
       }
     }
 
-    console.log('🛒 [UPDATE CART] Updating item quantity...');
+    logger.info('🛒 [UPDATE CART] Updating item quantity...');
     await cart.updateItemQuantity(productId, quantity, variantObj);
 
-    console.log('🛒 [UPDATE CART] Calculating totals...');
+    logger.info('🛒 [UPDATE CART] Calculating totals...');
     await cart.calculateTotals();
 
-    console.log('🛒 [UPDATE CART] Saving cart...');
+    logger.info('🛒 [UPDATE CART] Saving cart...');
     await cart.save();
 
     // Update stock reservation
     if (quantity > 0) {
-      console.log('🔒 [UPDATE CART] Updating stock reservation...');
+      logger.info('🔒 [UPDATE CART] Updating stock reservation...');
       const reservationResult = await reservationService.reserveStock(
         (cart as any)._id.toString(),
         productId,
@@ -501,25 +502,25 @@ export const updateCartItem = asyncHandler(async (req: Request, res: Response) =
       );
 
       if (!reservationResult.success) {
-        console.error('❌ [UPDATE CART] Stock reservation update failed:', reservationResult.message);
+        logger.error('❌ [UPDATE CART] Stock reservation update failed:', reservationResult.message);
       } else {
-        console.log('✅ [UPDATE CART] Stock reservation updated successfully');
+        logger.info('✅ [UPDATE CART] Stock reservation updated successfully');
       }
     } else {
       // If quantity is 0, item was removed, so release reservation
-      console.log('🔓 [UPDATE CART] Releasing stock reservation (quantity = 0)...');
+      logger.info('🔓 [UPDATE CART] Releasing stock reservation (quantity = 0)...');
       await reservationService.releaseStock((cart as any)._id.toString(), productId, variantObj);
     }
 
     // Invalidate cart cache after update
     await CacheInvalidator.invalidateCart(req.userId);
 
-    console.log('✅ [UPDATE CART] Cart item updated successfully');
+    logger.info('✅ [UPDATE CART] Cart item updated successfully');
     sendSuccess(res, cart, 'Cart item updated successfully');
 
   } catch (error) {
-    console.error('❌ [UPDATE CART] Error occurred:', error);
-    console.error('❌ [UPDATE CART] Error message:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('❌ [UPDATE CART] Error occurred:', error);
+    logger.error('❌ [UPDATE CART] Error message:', error instanceof Error ? error.message : 'Unknown error');
     if (error instanceof AppError) {
       throw error;
     }
@@ -529,29 +530,29 @@ export const updateCartItem = asyncHandler(async (req: Request, res: Response) =
 
 // Remove item from cart
 export const removeFromCart = asyncHandler(async (req: Request, res: Response) => {
-  console.log('🗑️ [REMOVE FROM CART] Starting remove item process');
-  console.log('🗑️ [REMOVE FROM CART] User ID:', req.userId);
-  console.log('🗑️ [REMOVE FROM CART] Request params:', req.params);
+  logger.info('🗑️ [REMOVE FROM CART] Starting remove item process');
+  logger.info('🗑️ [REMOVE FROM CART] User ID:', req.userId);
+  logger.info('🗑️ [REMOVE FROM CART] Request params:', req.params);
 
   if (!req.userId) {
     return sendUnauthorized(res, 'Authentication required');
   }
 
   const { productId, variant } = req.params;
-  console.log('🗑️ [REMOVE FROM CART] Product ID:', productId);
-  console.log('🗑️ [REMOVE FROM CART] Variant (raw):', variant);
+  logger.info('🗑️ [REMOVE FROM CART] Product ID:', productId);
+  logger.info('🗑️ [REMOVE FROM CART] Variant (raw):', variant);
 
   try {
     const cart = await Cart.getActiveCart(req.userId);
 
     if (!cart) {
-      console.error('❌ [REMOVE FROM CART] Cart not found for user:', req.userId);
+      logger.error('❌ [REMOVE FROM CART] Cart not found for user:', req.userId);
       return sendNotFound(res, 'Cart not found');
     }
 
-    console.log('🗑️ [REMOVE FROM CART] Cart found:', cart._id);
-    console.log('🗑️ [REMOVE FROM CART] Current cart items count:', cart.items.length);
-    console.log('🗑️ [REMOVE FROM CART] Cart items:', cart.items.map((item: any) => ({
+    logger.info('🗑️ [REMOVE FROM CART] Cart found:', cart._id);
+    logger.info('🗑️ [REMOVE FROM CART] Current cart items count:', cart.items.length);
+    logger.info('🗑️ [REMOVE FROM CART] Cart items:', cart.items.map((item: any) => ({
       id: item._id,
       product: item.product,
       hasProduct: !!item.product
@@ -562,29 +563,29 @@ export const removeFromCart = asyncHandler(async (req: Request, res: Response) =
     if (variant && variant !== 'null') {
       try {
         variantObj = JSON.parse(variant);
-        console.log('🗑️ [REMOVE FROM CART] Parsed variant:', variantObj);
+        logger.info('🗑️ [REMOVE FROM CART] Parsed variant:', variantObj);
       } catch (e) {
-        console.error('❌ [REMOVE FROM CART] Invalid variant format:', e);
+        logger.error('❌ [REMOVE FROM CART] Invalid variant format:', e);
         return sendError(res, 'Invalid variant format', 400);
       }
     }
 
-    console.log('🗑️ [REMOVE FROM CART] Calling cart.removeItem with:', { productId, variant: variantObj });
+    logger.info('🗑️ [REMOVE FROM CART] Calling cart.removeItem with:', { productId, variant: variantObj });
     await cart.removeItem(productId, variantObj);
 
-    console.log('🗑️ [REMOVE FROM CART] Item removed, items count now:', cart.items.length);
+    logger.info('🗑️ [REMOVE FROM CART] Item removed, items count now:', cart.items.length);
 
     await cart.calculateTotals();
     await cart.save();
 
-    console.log('✅ [REMOVE FROM CART] Cart saved successfully');
+    logger.info('✅ [REMOVE FROM CART] Cart saved successfully');
 
     // Release stock reservation
-    console.log('🔓 [REMOVE FROM CART] Releasing stock reservation...');
+    logger.info('🔓 [REMOVE FROM CART] Releasing stock reservation...');
     try {
       await reservationService.releaseStock((cart as any)._id.toString(), productId, variantObj);
     } catch (stockError) {
-      console.warn('⚠️ [REMOVE FROM CART] Stock release failed (non-critical):', stockError);
+      logger.warn('⚠️ [REMOVE FROM CART] Stock release failed (non-critical):', stockError);
     }
 
     // Invalidate cart cache after update
@@ -593,7 +594,7 @@ export const removeFromCart = asyncHandler(async (req: Request, res: Response) =
     sendSuccess(res, cart, 'Item removed from cart successfully');
 
   } catch (error) {
-    console.error('❌ [REMOVE FROM CART] Error:', error);
+    logger.error('❌ [REMOVE FROM CART] Error:', error);
     throw new AppError('Failed to remove item from cart', 500);
   }
 });
@@ -630,9 +631,9 @@ export const applyCoupon = asyncHandler(async (req: Request, res: Response) => {
   const { couponCode, couponId } = req.body;
 
   try {
-    console.log('🎟️ [APPLY COUPON] Starting coupon application');
-    console.log('🎟️ [APPLY COUPON] Coupon code:', couponCode);
-    console.log('🎟️ [APPLY COUPON] Coupon ID:', couponId);
+    logger.info('🎟️ [APPLY COUPON] Starting coupon application');
+    logger.info('🎟️ [APPLY COUPON] Coupon code:', couponCode);
+    logger.info('🎟️ [APPLY COUPON] Coupon ID:', couponId);
 
     const cart = await Cart.getActiveCart(req.userId);
 
@@ -658,7 +659,7 @@ export const applyCoupon = asyncHandler(async (req: Request, res: Response) => {
       return sendError(res, 'Coupon not found', 400);
     }
 
-    console.log('✅ [APPLY COUPON] Coupon found:', coupon.title);
+    logger.info('✅ [APPLY COUPON] Coupon found:', coupon.title);
 
     // Build validation context from cart items
     const cartItems = await Promise.all(cart.items.map(async (item: any) => {
@@ -681,10 +682,10 @@ export const applyCoupon = asyncHandler(async (req: Request, res: Response) => {
       }
     );
 
-    console.log('🎟️ [APPLY COUPON] Validation result:', validationResult);
+    logger.info('🎟️ [APPLY COUPON] Validation result:', validationResult);
 
     if (!validationResult.isValid) {
-      console.log('❌ [APPLY COUPON] Validation failed:', validationResult.error);
+      logger.info('❌ [APPLY COUPON] Validation failed:', validationResult.error);
       return sendError(res, validationResult.error || 'Coupon is not valid', 400);
     }
 
@@ -701,7 +702,7 @@ export const applyCoupon = asyncHandler(async (req: Request, res: Response) => {
     // Invalidate cart cache
     await CacheInvalidator.invalidateCart(req.userId);
 
-    console.log('✅ [APPLY COUPON] Coupon applied successfully');
+    logger.info('✅ [APPLY COUPON] Coupon applied successfully');
     sendSuccess(res, {
       cart,
       couponDetails: {
@@ -714,7 +715,7 @@ export const applyCoupon = asyncHandler(async (req: Request, res: Response) => {
     }, 'Coupon applied successfully');
 
   } catch (error) {
-    console.error('❌ [APPLY COUPON] Error:', error);
+    logger.error('❌ [APPLY COUPON] Error:', error);
     if (error instanceof AppError) {
       return sendError(res, error.message, 400);
     }
@@ -804,10 +805,10 @@ export const validateCart = asyncHandler(async (req: Request, res: Response) => 
 
     // BUGFIX: Recalculate totals if total is 0 but subtotal > 0 (stale data)
     if (cart.items.length > 0 && cart.totals.subtotal > 0 && cart.totals.total === 0) {
-      console.log('✅ [VALIDATE CART] Detected stale totals, recalculating...');
+      logger.info('✅ [VALIDATE CART] Detected stale totals, recalculating...');
       await cart.calculateTotals();
       await cart.save();
-      console.log('✅ [VALIDATE CART] Totals recalculated:', cart.totals);
+      logger.info('✅ [VALIDATE CART] Totals recalculated:', cart.totals);
     }
 
     const validationErrors: string[] = [];
@@ -938,28 +939,28 @@ export const validateCart = asyncHandler(async (req: Request, res: Response) => 
 
 // Lock item at current price
 export const lockItem = asyncHandler(async (req: Request, res: Response) => {
-  console.log('🔒 [LOCK ITEM] Starting lock process');
-  console.log('🔒 [LOCK ITEM] User ID:', req.userId);
-  console.log('🔒 [LOCK ITEM] Request body:', req.body);
+  logger.info('🔒 [LOCK ITEM] Starting lock process');
+  logger.info('🔒 [LOCK ITEM] User ID:', req.userId);
+  logger.info('🔒 [LOCK ITEM] Request body:', req.body);
 
   if (!req.userId) {
-    console.error('❌ [LOCK ITEM] No user ID provided');
+    logger.error('❌ [LOCK ITEM] No user ID provided');
     return sendUnauthorized(res, 'Authentication required');
   }
 
   const { productId, quantity = 1, variant, lockDurationHours = 24 } = req.body;
 
   if (!productId) {
-    console.error('❌ [LOCK ITEM] No product ID provided');
+    logger.error('❌ [LOCK ITEM] No product ID provided');
     return sendBadRequest(res, 'Product ID is required');
   }
 
   try {
-    console.log('🔒 [LOCK ITEM] Finding cart for user:', req.userId);
+    logger.info('🔒 [LOCK ITEM] Finding cart for user:', req.userId);
     let cart = await Cart.getActiveCart(req.userId);
 
     if (!cart) {
-      console.log('🔒 [LOCK ITEM] No cart found, creating new cart');
+      logger.info('🔒 [LOCK ITEM] No cart found, creating new cart');
       // Create new cart if not exists
       cart = await Cart.create({
         user: req.userId,
@@ -977,17 +978,17 @@ export const lockItem = asyncHandler(async (req: Request, res: Response) => {
         isActive: true,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
       });
-      console.log('🔒 [LOCK ITEM] New cart created:', cart._id);
+      logger.info('🔒 [LOCK ITEM] New cart created:', cart._id);
     } else {
-      console.log('🔒 [LOCK ITEM] Found existing cart:', cart._id);
-      console.log('🔒 [LOCK ITEM] Current locked items count:', cart.lockedItems?.length || 0);
+      logger.info('🔒 [LOCK ITEM] Found existing cart:', cart._id);
+      logger.info('🔒 [LOCK ITEM] Current locked items count:', cart.lockedItems?.length || 0);
     }
 
-    console.log('🔒 [LOCK ITEM] Locking product:', productId, 'with quantity:', quantity);
+    logger.info('🔒 [LOCK ITEM] Locking product:', productId, 'with quantity:', quantity);
     await cart.lockItem(productId, quantity, variant, lockDurationHours);
 
-    console.log('🔒 [LOCK ITEM] Item locked successfully');
-    console.log('🔒 [LOCK ITEM] New locked items count:', cart.lockedItems?.length || 0);
+    logger.info('🔒 [LOCK ITEM] Item locked successfully');
+    logger.info('🔒 [LOCK ITEM] New locked items count:', cart.lockedItems?.length || 0);
 
     // Reload cart with populated fields
     const populatedCart = await Cart.findById(cart._id)
@@ -1003,20 +1004,20 @@ export const lockItem = asyncHandler(async (req: Request, res: Response) => {
     sendSuccess(res, { cart: populatedCart, message: 'Item locked successfully' }, 'Item locked successfully');
 
   } catch (error) {
-    console.error('❌ [LOCK ITEM] Error:', error);
+    logger.error('❌ [LOCK ITEM] Error:', error);
     throw new AppError(error instanceof Error ? error.message : 'Failed to lock item', 500);
   }
 });
 
 // Unlock item
 export const unlockItem = asyncHandler(async (req: Request, res: Response) => {
-  console.log('🔓 [UNLOCK ITEM] Starting unlock process');
-  console.log('🔓 [UNLOCK ITEM] User ID:', req.userId);
-  console.log('🔓 [UNLOCK ITEM] Product ID:', req.params.productId);
-  console.log('🔓 [UNLOCK ITEM] Request body:', req.body);
+  logger.info('🔓 [UNLOCK ITEM] Starting unlock process');
+  logger.info('🔓 [UNLOCK ITEM] User ID:', req.userId);
+  logger.info('🔓 [UNLOCK ITEM] Product ID:', req.params.productId);
+  logger.info('🔓 [UNLOCK ITEM] Request body:', req.body);
 
   if (!req.userId) {
-    console.error('❌ [UNLOCK ITEM] No user ID provided');
+    logger.error('❌ [UNLOCK ITEM] No user ID provided');
     return sendUnauthorized(res, 'Authentication required');
   }
 
@@ -1024,7 +1025,7 @@ export const unlockItem = asyncHandler(async (req: Request, res: Response) => {
   const { variant } = req.body || {}; // Handle undefined body for DELETE requests
 
   if (!productId) {
-    console.error('❌ [UNLOCK ITEM] No product ID provided');
+    logger.error('❌ [UNLOCK ITEM] No product ID provided');
     return sendBadRequest(res, 'Product ID is required');
   }
 
@@ -1032,11 +1033,11 @@ export const unlockItem = asyncHandler(async (req: Request, res: Response) => {
     const cart = await Cart.getActiveCart(req.userId);
 
     if (!cart) {
-      console.error('❌ [UNLOCK ITEM] Cart not found for user:', req.userId);
+      logger.error('❌ [UNLOCK ITEM] Cart not found for user:', req.userId);
       return sendNotFound(res, 'Cart not found');
     }
 
-    console.log('🔓 [UNLOCK ITEM] Cart found, locked items count:', cart.lockedItems?.length || 0);
+    logger.info('🔓 [UNLOCK ITEM] Cart found, locked items count:', cart.lockedItems?.length || 0);
 
     // Find the locked item BEFORE removing it (to check if it's a paid lock)
     const lockedItem = cart.lockedItems.find((item: any) => {
@@ -1050,7 +1051,7 @@ export const unlockItem = asyncHandler(async (req: Request, res: Response) => {
 
     // Refund lock fee for paid locks
     if (lockedItem?.isPaidLock && lockedItem?.lockFee && lockedItem.lockFee > 0) {
-      console.log('🔓💰 [UNLOCK ITEM] Refunding paid lock fee:', lockedItem.lockFee);
+      logger.info('🔓💰 [UNLOCK ITEM] Refunding paid lock fee:', lockedItem.lockFee);
 
       const { Wallet } = await import('../models/Wallet');
       const { Transaction } = await import('../models/Transaction');
@@ -1080,7 +1081,7 @@ export const unlockItem = asyncHandler(async (req: Request, res: Response) => {
             { productId }
           );
         } catch (coinTxError) {
-          console.error('⚠️ [UNLOCK ITEM] CoinTransaction refund failed (non-blocking):', coinTxError);
+          logger.error('⚠️ [UNLOCK ITEM] CoinTransaction refund failed (non-blocking):', coinTxError);
         }
 
         // Create refund transaction record
@@ -1107,14 +1108,14 @@ export const unlockItem = asyncHandler(async (req: Request, res: Response) => {
         lockedItem.lockPaymentStatus = 'refunded';
         await cart.save();
 
-        console.log('✅ [UNLOCK ITEM] Lock fee refunded:', lockedItem.lockFee);
+        logger.info('✅ [UNLOCK ITEM] Lock fee refunded:', lockedItem.lockFee);
       }
     }
 
     await cart.unlockItem(productId, variant);
 
-    console.log('✅ [UNLOCK ITEM] Item unlocked successfully');
-    console.log('✅ [UNLOCK ITEM] Remaining locked items:', cart.lockedItems?.length || 0);
+    logger.info('✅ [UNLOCK ITEM] Item unlocked successfully');
+    logger.info('✅ [UNLOCK ITEM] Remaining locked items:', cart.lockedItems?.length || 0);
 
     sendSuccess(res, cart, lockedItem?.isPaidLock
       ? `Item unlocked. Lock fee of ₹${lockedItem.lockFee} has been refunded to your wallet.`
@@ -1122,18 +1123,18 @@ export const unlockItem = asyncHandler(async (req: Request, res: Response) => {
     );
 
   } catch (error) {
-    console.error('❌ [UNLOCK ITEM] Error:', error);
-    console.error('❌ [UNLOCK ITEM] Error stack:', error instanceof Error ? error.stack : 'No stack');
+    logger.error('❌ [UNLOCK ITEM] Error:', error);
+    logger.error('❌ [UNLOCK ITEM] Error stack:', error instanceof Error ? error.stack : 'No stack');
     throw new AppError('Failed to unlock item', 500);
   }
 });
 
 // Move locked item to cart
 export const moveLockedToCart = asyncHandler(async (req: Request, res: Response) => {
-  console.log('➡️ [MOVE TO CART] Starting move locked to cart');
-  console.log('➡️ [MOVE TO CART] User ID:', req.userId);
-  console.log('➡️ [MOVE TO CART] Product ID:', req.params.productId);
-  console.log('➡️ [MOVE TO CART] Request body:', req.body);
+  logger.info('➡️ [MOVE TO CART] Starting move locked to cart');
+  logger.info('➡️ [MOVE TO CART] User ID:', req.userId);
+  logger.info('➡️ [MOVE TO CART] Product ID:', req.params.productId);
+  logger.info('➡️ [MOVE TO CART] Request body:', req.body);
 
   if (!req.userId) {
     return sendUnauthorized(res, 'Authentication required');
@@ -1150,12 +1151,12 @@ export const moveLockedToCart = asyncHandler(async (req: Request, res: Response)
     const cart = await Cart.getActiveCart(req.userId);
 
     if (!cart) {
-      console.error('❌ [MOVE TO CART] Cart not found');
+      logger.error('❌ [MOVE TO CART] Cart not found');
       return sendNotFound(res, 'Cart not found');
     }
 
-    console.log('➡️ [MOVE TO CART] Cart found with locked items:', cart.lockedItems?.length || 0);
-    console.log('➡️ [MOVE TO CART] Locked items:', cart.lockedItems?.map((item: any) => ({
+    logger.info('➡️ [MOVE TO CART] Cart found with locked items:', cart.lockedItems?.length || 0);
+    logger.info('➡️ [MOVE TO CART] Locked items:', cart.lockedItems?.map((item: any) => ({
       itemId: item._id,
       productId: typeof item.product === 'object' ? item.product._id : item.product,
       productString: item.product?.toString()
@@ -1169,20 +1170,20 @@ export const moveLockedToCart = asyncHandler(async (req: Request, res: Response)
     // Re-fetch cart with populated data to ensure lockedQuantity is included
     const updatedCart = await Cart.getActiveCart(req.userId);
 
-    console.log('✅ [MOVE TO CART] Item moved successfully');
+    logger.info('✅ [MOVE TO CART] Item moved successfully');
     sendSuccess(res, updatedCart || cart, 'Item moved to cart successfully');
 
   } catch (error) {
-    console.error('❌ [MOVE TO CART] Error:', error);
-    console.error('❌ [MOVE TO CART] Error message:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('❌ [MOVE TO CART] Error:', error);
+    logger.error('❌ [MOVE TO CART] Error message:', error instanceof Error ? error.message : 'Unknown error');
     throw new AppError(error instanceof Error ? error.message : 'Failed to move item to cart', 500);
   }
 });
 
 // Get locked items
 export const getLockedItems = asyncHandler(async (req: Request, res: Response) => {
-  console.log('🔒 [GET LOCKED] Starting get locked items');
-  console.log('🔒 [GET LOCKED] User ID:', req.userId);
+  logger.info('🔒 [GET LOCKED] Starting get locked items');
+  logger.info('🔒 [GET LOCKED] User ID:', req.userId);
 
   if (!req.userId) {
     return sendUnauthorized(res, 'Authentication required');
@@ -1199,19 +1200,19 @@ export const getLockedItems = asyncHandler(async (req: Request, res: Response) =
         select: 'name logo location'
       }).lean();
 
-    console.log('🔒 [GET LOCKED] Cart found:', !!cart);
-    console.log('🔒 [GET LOCKED] Total locked items in cart:', cart?.lockedItems?.length || 0);
+    logger.info('🔒 [GET LOCKED] Cart found:', !!cart);
+    logger.info('🔒 [GET LOCKED] Total locked items in cart:', cart?.lockedItems?.length || 0);
 
     if (!cart) {
-      console.log('🔒 [GET LOCKED] No cart found, returning empty array');
+      logger.info('🔒 [GET LOCKED] No cart found, returning empty array');
       return sendSuccess(res, { lockedItems: [] }, 'No locked items found');
     }
 
     // Log all locked items with their expiration
     const now = new Date();
-    console.log('🔒 [GET LOCKED] Current time:', now.toISOString());
+    logger.info('🔒 [GET LOCKED] Current time:', now.toISOString());
     cart.lockedItems.forEach((item: any, index: number) => {
-      console.log(`🔒 [GET LOCKED] Item ${index + 1}:`, {
+      logger.info(`🔒 [GET LOCKED] Item ${index + 1}:`, {
         id: item._id,
         productId: item.product?._id || item.product,
         expiresAt: item.expiresAt,
@@ -1226,10 +1227,10 @@ export const getLockedItems = asyncHandler(async (req: Request, res: Response) =
       item.expiresAt > now
     );
 
-    console.log('🔒 [GET LOCKED] Found', validLockedItems.length, 'valid locked items out of', cart.lockedItems.length, 'total');
+    logger.info('🔒 [GET LOCKED] Found', validLockedItems.length, 'valid locked items out of', cart.lockedItems.length, 'total');
     if (validLockedItems.length > 0) {
       const firstItem = validLockedItems[0] as any;
-      console.log('🔒 [GET LOCKED] First valid item:', {
+      logger.info('🔒 [GET LOCKED] First valid item:', {
         id: firstItem._id,
         productId: firstItem.product?._id || firstItem.product,
         productName: firstItem.product?.name || 'N/A'
@@ -1239,7 +1240,7 @@ export const getLockedItems = asyncHandler(async (req: Request, res: Response) =
     sendSuccess(res, { lockedItems: validLockedItems }, 'Locked items retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [GET LOCKED] Error:', error);
+    logger.error('❌ [GET LOCKED] Error:', error);
     throw new AppError('Failed to get locked items', 500);
   }
 });
@@ -1263,12 +1264,12 @@ const calculateLockFee = (productPrice: number, durationHours: number): { fee: n
 
 // Lock item with payment (MakeMyTrip style)
 export const lockItemWithPayment = asyncHandler(async (req: Request, res: Response) => {
-  console.log('🔒💰 [LOCK WITH PAYMENT] Starting paid lock process');
-  console.log('🔒💰 [LOCK WITH PAYMENT] User ID:', req.userId);
-  console.log('🔒💰 [LOCK WITH PAYMENT] Request body:', req.body);
+  logger.info('🔒💰 [LOCK WITH PAYMENT] Starting paid lock process');
+  logger.info('🔒💰 [LOCK WITH PAYMENT] User ID:', req.userId);
+  logger.info('🔒💰 [LOCK WITH PAYMENT] Request body:', req.body);
 
   if (!req.userId) {
-    console.error('❌ [LOCK WITH PAYMENT] No user ID provided');
+    logger.error('❌ [LOCK WITH PAYMENT] No user ID provided');
     return sendUnauthorized(res, 'Authentication required');
   }
 
@@ -1281,7 +1282,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
   } = req.body;
 
   if (!productId) {
-    console.error('❌ [LOCK WITH PAYMENT] No product ID provided');
+    logger.error('❌ [LOCK WITH PAYMENT] No product ID provided');
     return sendBadRequest(res, 'Product ID is required');
   }
 
@@ -1292,7 +1293,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
 
   try {
     // 1. Get product details
-    console.log('🔒💰 [LOCK WITH PAYMENT] Finding product:', productId);
+    logger.info('🔒💰 [LOCK WITH PAYMENT] Finding product:', productId);
     const product = await Product.findById(productId).populate('store').lean() as any;
 
     if (!product) {
@@ -1324,7 +1325,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
       });
 
       if (alreadyLocked) {
-        console.log('🔒💰 [LOCK WITH PAYMENT] Product already locked (non-expired), rejecting duplicate lock');
+        logger.info('🔒💰 [LOCK WITH PAYMENT] Product already locked (non-expired), rejecting duplicate lock');
         return sendBadRequest(res, 'This product is already locked. Go to your cart to view or modify your locked items.');
       }
 
@@ -1338,7 +1339,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
       }).length;
 
       if (expiredLocksCount > 0) {
-        console.log(`🔒💰 [LOCK WITH PAYMENT] Found ${expiredLocksCount} expired locks for this product, cleaning up...`);
+        logger.info(`🔒💰 [LOCK WITH PAYMENT] Found ${expiredLocksCount} expired locks for this product, cleaning up...`);
         existingCart.lockedItems = existingCart.lockedItems.filter((item: any) => {
           const itemProductId = item.product?._id?.toString() || item.product?.toString();
           const productMatch = itemProductId === productId;
@@ -1348,7 +1349,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
           return !(productMatch && variantMatch && isExpired);
         });
         await existingCart.save();
-        console.log('🔒💰 [LOCK WITH PAYMENT] Expired locks cleaned up');
+        logger.info('🔒💰 [LOCK WITH PAYMENT] Expired locks cleaned up');
       }
     }
 
@@ -1359,7 +1360,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
     }
 
     const { fee: lockFee, percentage: lockFeePercentage } = calculateLockFee(productPrice * quantity, duration);
-    console.log('🔒💰 [LOCK WITH PAYMENT] Lock fee calculated:', { productPrice, lockFee, lockFeePercentage, duration });
+    logger.info('🔒💰 [LOCK WITH PAYMENT] Lock fee calculated:', { productPrice, lockFee, lockFeePercentage, duration });
 
     // 3. Process payment
     const { Wallet } = await import('../models/Wallet');
@@ -1370,7 +1371,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
       return sendBadRequest(res, 'Wallet not found. Please set up your wallet first.');
     }
 
-    console.log('🔒💰 [LOCK WITH PAYMENT] Wallet found:', {
+    logger.info('🔒💰 [LOCK WITH PAYMENT] Wallet found:', {
       available: wallet.balance.available,
       total: wallet.balance.total
     });
@@ -1424,14 +1425,14 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
         `Lock fee for ${product.name} (${duration}h lock)`,
         { productId: product._id, lockDuration: duration }
       );
-      console.log('🔒💰 [LOCK WITH PAYMENT] CoinTransaction created for lock fee');
+      logger.info('🔒💰 [LOCK WITH PAYMENT] CoinTransaction created for lock fee');
     } catch (coinTxError) {
-      console.error('⚠️ [LOCK WITH PAYMENT] CoinTransaction creation failed (non-blocking):', coinTxError);
+      logger.error('⚠️ [LOCK WITH PAYMENT] CoinTransaction creation failed (non-blocking):', coinTxError);
       // Non-blocking: wallet already deducted, transaction record will be created below
     }
 
     const balanceAfter = wallet.balance.total;
-    console.log('🔒💰 [LOCK WITH PAYMENT] Payment deducted:', { balanceBefore, balanceAfter, lockFee });
+    logger.info('🔒💰 [LOCK WITH PAYMENT] Payment deducted:', { balanceBefore, balanceAfter, lockFee });
 
     // 5. Create transaction record
     const transaction = await Transaction.create({
@@ -1466,7 +1467,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
       notes: `Lock duration: ${duration} hours, Payment method: wallet`
     });
 
-    console.log('🔒💰 [LOCK WITH PAYMENT] Transaction created:', transaction.transactionId);
+    logger.info('🔒💰 [LOCK WITH PAYMENT] Transaction created:', transaction.transactionId);
 
     // 6. Add to cart locked items
     let cart = await Cart.getActiveCart(req.userId);
@@ -1513,11 +1514,11 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
 
       if (cartQty <= quantity) {
         // Lock quantity >= cart quantity: Remove entire item from cart
-        console.log(`🔒💰 [LOCK WITH PAYMENT] Removing item from cart (cart qty: ${cartQty}, lock qty: ${quantity})`);
+        logger.info(`🔒💰 [LOCK WITH PAYMENT] Removing item from cart (cart qty: ${cartQty}, lock qty: ${quantity})`);
         cart.items.splice(existingCartItemIndex, 1);
       } else {
         // Cart has more than we're locking: Reduce cart quantity
-        console.log(`🔒💰 [LOCK WITH PAYMENT] Reducing cart qty from ${cartQty} to ${cartQty - quantity}`);
+        logger.info(`🔒💰 [LOCK WITH PAYMENT] Reducing cart qty from ${cartQty} to ${cartQty - quantity}`);
         cart.items[existingCartItemIndex].quantity = cartQty - quantity;
       }
     }
@@ -1544,7 +1545,7 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
     } as any);
 
     await cart.save();
-    console.log('🔒💰 [LOCK WITH PAYMENT] Lock saved successfully');
+    logger.info('🔒💰 [LOCK WITH PAYMENT] Lock saved successfully');
 
     // 7. Reload with populated fields
     const populatedCart = await Cart.findById(cart._id)
@@ -1571,14 +1572,14 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
     }, 'Item locked successfully with payment');
 
   } catch (error) {
-    console.error('❌ [LOCK WITH PAYMENT] Error:', error);
+    logger.error('❌ [LOCK WITH PAYMENT] Error:', error);
     throw new AppError(error instanceof Error ? error.message : 'Failed to lock item with payment', 500);
   }
 });
 
 // Get lock fee options for a product
 export const getLockFeeOptions = asyncHandler(async (req: Request, res: Response) => {
-  console.log('💰 [GET LOCK OPTIONS] Getting lock fee options');
+  logger.info('💰 [GET LOCK OPTIONS] Getting lock fee options');
 
   const { productId, quantity = 1 } = req.query;
 
@@ -1619,7 +1620,7 @@ export const getLockFeeOptions = asyncHandler(async (req: Request, res: Response
     }, 'Lock fee options retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [GET LOCK OPTIONS] Error:', error);
+    logger.error('❌ [GET LOCK OPTIONS] Error:', error);
     throw new AppError('Failed to get lock fee options', 500);
   }
 });

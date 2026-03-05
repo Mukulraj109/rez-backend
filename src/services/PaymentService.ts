@@ -13,6 +13,7 @@ import { razorpayCircuit } from '../utils/circuitBreaker';
 import merchantWalletService from './merchantWalletService';
 import mongoose, { Types } from 'mongoose';
 import stockSocketService from './stockSocketService';
+import { logger } from '../config/logger';
 import { SMSService } from './SMSService';
 import EmailService from './EmailService';
 import {
@@ -49,17 +50,17 @@ if (configValidation.isValid) {
     key_id: process.env.RAZORPAY_KEY_ID!,
     key_secret: process.env.RAZORPAY_KEY_SECRET!
   });
-  console.log('✅ [PAYMENT SERVICE] Razorpay initialized successfully');
+  logger.info('✅ [PAYMENT SERVICE] Razorpay initialized successfully');
 
   // Log warnings if any
   if (configValidation.warnings.length > 0) {
     configValidation.warnings.forEach(warning => {
-      console.warn(`⚠️ [PAYMENT SERVICE] ${warning}`);
+      logger.warn(`⚠️ [PAYMENT SERVICE] ${warning}`);
     });
   }
 } else {
-  console.error('❌ [PAYMENT SERVICE] Razorpay configuration invalid. Missing:', configValidation.missingVars.join(', '));
-  console.warn('⚠️ [PAYMENT SERVICE] Payment features will be disabled');
+  logger.error('❌ [PAYMENT SERVICE] Razorpay configuration invalid. Missing:', configValidation.missingVars.join(', '));
+  logger.warn('⚠️ [PAYMENT SERVICE] Payment features will be disabled');
 }
 
 class PaymentService {
@@ -76,7 +77,7 @@ class PaymentService {
     currency: string = 'INR'
   ): Promise<IRazorpayOrder> {
     try {
-      console.log('💳 [PAYMENT SERVICE] Creating Razorpay order:', {
+      logger.info('💳 [PAYMENT SERVICE] Creating Razorpay order:', {
         orderId,
         amount,
         currency
@@ -96,7 +97,7 @@ class PaymentService {
       // Validate payment amount matches order total (prevent underpayment/overpayment)
       const orderTotal = order.totals?.total ?? 0;
       if (Math.abs(amount - orderTotal) > 1) {
-        console.error('❌ [PAYMENT SERVICE] Amount mismatch:', { requested: amount, orderTotal });
+        logger.error('❌ [PAYMENT SERVICE] Amount mismatch:', { requested: amount, orderTotal });
         throw new Error(`Payment amount ₹${amount} does not match order total ₹${orderTotal}`);
       }
 
@@ -120,7 +121,7 @@ class PaymentService {
         razorpayInstance!.orders.create(orderOptions)
       );
 
-      console.log('✅ [PAYMENT SERVICE] Razorpay order created:', razorpayOrder.id);
+      logger.info('✅ [PAYMENT SERVICE] Razorpay order created:', razorpayOrder.id);
 
       // Update order with gateway details
       order.payment.paymentGateway = 'razorpay';
@@ -128,7 +129,7 @@ class PaymentService {
 
       return razorpayOrder as IRazorpayOrder;
     } catch (error: any) {
-      console.error('❌ [PAYMENT SERVICE] Error creating Razorpay order:', error);
+      logger.error('❌ [PAYMENT SERVICE] Error creating Razorpay order:', error);
       throw new Error(`Failed to create payment order: ${error.message}`);
     }
   }
@@ -146,7 +147,7 @@ class PaymentService {
     signature: string
   ): boolean {
     try {
-      console.log('🔐 [PAYMENT SERVICE] Verifying payment signature:', {
+      logger.info('🔐 [PAYMENT SERVICE] Verifying payment signature:', {
         orderId,
         paymentId,
         timestamp: new Date().toISOString()
@@ -155,7 +156,7 @@ class PaymentService {
       // Validate that Razorpay is configured
       const secret = process.env.RAZORPAY_KEY_SECRET || '';
       if (!secret || secret === 'your_razorpay_key_secret_here') {
-        console.error('❌ [PAYMENT SERVICE] Razorpay secret not configured');
+        logger.error('❌ [PAYMENT SERVICE] Razorpay secret not configured');
         PaymentLogger.logPaymentFailure(paymentId, 'unknown', 0, new Error('Razorpay not configured'), 'Configuration error');
         return false;
       }
@@ -169,10 +170,10 @@ class PaymentService {
       );
 
       if (validationResult.isValid) {
-        console.log('✅ [PAYMENT SERVICE] Signature verified successfully');
+        logger.info('✅ [PAYMENT SERVICE] Signature verified successfully');
         PaymentLogger.logPaymentProcessing(paymentId, 'system', 0);
       } else {
-        console.error('❌ [PAYMENT SERVICE] Signature verification failed:', validationResult.error);
+        logger.error('❌ [PAYMENT SERVICE] Signature verification failed:', validationResult.error);
         PaymentLogger.logPaymentFailure(
           paymentId,
           'unknown',
@@ -184,7 +185,7 @@ class PaymentService {
 
       return validationResult.isValid;
     } catch (error: any) {
-      console.error('❌ [PAYMENT SERVICE] Error verifying signature:', error);
+      logger.error('❌ [PAYMENT SERVICE] Error verifying signature:', error);
       PaymentLogger.logPaymentFailure(paymentId, 'unknown', 0, error, 'Signature verification exception');
       return false;
     }
@@ -211,7 +212,7 @@ class PaymentService {
       // Either not found or already paid/processing by another webhook
       const existing = await Order.findById(orderId).lean();
       if (existing && (existing.payment.status === 'paid' || existing.payment.status === 'processing')) {
-        console.log('⚠️ [PAYMENT SERVICE] Payment already processed/processing for order:', orderId);
+        logger.info('⚠️ [PAYMENT SERVICE] Payment already processed/processing for order:', orderId);
         return existing;
       }
       throw new Error('Order not found');
@@ -221,7 +222,7 @@ class PaymentService {
     session.startTransaction();
 
     try {
-      console.log('✅ [PAYMENT SERVICE] Processing successful payment for order:', orderId);
+      logger.info('✅ [PAYMENT SERVICE] Processing successful payment for order:', orderId);
 
       // Log payment processing start
       PaymentLogger.logPaymentProcessing(
@@ -261,7 +262,7 @@ class PaymentService {
         timestamp: new Date()
       });
 
-      console.log('📦 [PAYMENT SERVICE] Deducting stock for order items...');
+      logger.info('📦 [PAYMENT SERVICE] Deducting stock for order items...');
 
       // Deduct stock for each item (this is where stock deduction happens)
       const stockEmissions: Array<{
@@ -276,7 +277,7 @@ class PaymentService {
         const quantity = orderItem.quantity;
         const variant = orderItem.variant;
 
-        console.log('📦 [PAYMENT SERVICE] Deducting stock for:', {
+        logger.info('📦 [PAYMENT SERVICE] Deducting stock for:', {
           productId,
           quantity,
           variant
@@ -330,7 +331,7 @@ class PaymentService {
             productName: updatedProduct.name || 'Unknown Product'
           });
 
-          console.log('✅ [PAYMENT SERVICE] Variant stock deducted');
+          logger.info('✅ [PAYMENT SERVICE] Variant stock deducted');
         } else {
           // Main product stock deduction
           stockCheckQuery['inventory.stock'] = { $gte: quantity };
@@ -368,7 +369,7 @@ class PaymentService {
             productName: updatedProduct.name || 'Unknown Product'
           });
 
-          console.log('✅ [PAYMENT SERVICE] Product stock deducted');
+          logger.info('✅ [PAYMENT SERVICE] Product stock deducted');
         }
       }
 
@@ -384,7 +385,7 @@ class PaymentService {
 
       // Clear user's cart after successful payment
       // Deduct coins if they were used in this order
-      console.log('💰 [PAYMENT SERVICE] Checking coinsUsed on order:', JSON.stringify(order.payment.coinsUsed));
+      logger.info('💰 [PAYMENT SERVICE] Checking coinsUsed on order:', JSON.stringify(order.payment.coinsUsed));
       if (order.payment.coinsUsed) {
         // Support both rezCoins (new) and wasilCoins (legacy) field names
         const rezCoins = (order.payment.coinsUsed as any).rezCoins || (order.payment.coinsUsed as any).wasilCoins || 0;
@@ -395,7 +396,7 @@ class PaymentService {
         // Deduct REZ coins from both Wallet model and CoinTransaction
         if (rezCoins && rezCoins > 0) {
           try {
-            console.log('💰 [PAYMENT SERVICE] Deducting REZ coins:', rezCoins);
+            logger.info('💰 [PAYMENT SERVICE] Deducting REZ coins:', rezCoins);
 
             // Atomic update: decrement coins array + balance in one operation
             const updatedWallet = await Wallet.findOneAndUpdate(
@@ -420,9 +421,9 @@ class PaymentService {
             );
 
             if (updatedWallet) {
-              console.log('✅ [PAYMENT SERVICE] Wallet rez coins updated:', rezCoins);
+              logger.info('✅ [PAYMENT SERVICE] Wallet rez coins updated:', rezCoins);
             } else {
-              console.warn('⚠️ [PAYMENT SERVICE] REZ coin deduction skipped — insufficient balance');
+              logger.warn('⚠️ [PAYMENT SERVICE] REZ coin deduction skipped — insufficient balance');
             }
 
             // Also create transaction record
@@ -432,9 +433,9 @@ class PaymentService {
               'purchase',
               `Order payment: ${order.orderNumber}`
             );
-            console.log('✅ [PAYMENT SERVICE] REZ coins deducted successfully:', rezCoins);
+            logger.info('✅ [PAYMENT SERVICE] REZ coins deducted successfully:', rezCoins);
           } catch (coinError) {
-            console.error('❌ [PAYMENT SERVICE] Failed to deduct REZ coins:', coinError);
+            logger.error('❌ [PAYMENT SERVICE] Failed to deduct REZ coins:', coinError);
             // Don't fail payment if coin deduction fails - coins already validated
           }
         }
@@ -442,7 +443,7 @@ class PaymentService {
         // Deduct promo coins
         if (promoCoins && promoCoins > 0) {
           try {
-            console.log('💰 [PAYMENT SERVICE] Deducting promo coins:', promoCoins);
+            logger.info('💰 [PAYMENT SERVICE] Deducting promo coins:', promoCoins);
 
             // Atomic update: decrement promo coins in one operation
             const updatedWallet = await Wallet.findOneAndUpdate(
@@ -461,12 +462,12 @@ class PaymentService {
             );
 
             if (updatedWallet) {
-              console.log('✅ [PAYMENT SERVICE] Promo coins deducted:', promoCoins);
+              logger.info('✅ [PAYMENT SERVICE] Promo coins deducted:', promoCoins);
             } else {
-              console.warn('⚠️ [PAYMENT SERVICE] Promo coin deduction skipped — insufficient balance');
+              logger.warn('⚠️ [PAYMENT SERVICE] Promo coin deduction skipped — insufficient balance');
             }
           } catch (coinError) {
-            console.error('❌ [PAYMENT SERVICE] Failed to deduct promo coins:', coinError);
+            logger.error('❌ [PAYMENT SERVICE] Failed to deduct promo coins:', coinError);
           }
         }
 
@@ -480,7 +481,7 @@ class PaymentService {
               : firstItem.store;
 
             if (storeId) {
-              console.log('💰 [PAYMENT SERVICE] Deducting branded coins:', storePromoCoins);
+              logger.info('💰 [PAYMENT SERVICE] Deducting branded coins:', storePromoCoins);
               // Use branded coins from wallet
               const wallet = await Wallet.findOne({ user: userId }).lean();
               if (wallet) {
@@ -488,11 +489,11 @@ class PaymentService {
                   new Types.ObjectId(storeId.toString()),
                   storePromoCoins
                 );
-                console.log('✅ [PAYMENT SERVICE] Branded coins deducted successfully:', storePromoCoins);
+                logger.info('✅ [PAYMENT SERVICE] Branded coins deducted successfully:', storePromoCoins);
               }
             }
           } catch (coinError) {
-            console.error('❌ [PAYMENT SERVICE] Failed to deduct branded coins:', coinError);
+            logger.error('❌ [PAYMENT SERVICE] Failed to deduct branded coins:', coinError);
             // Don't fail payment if coin deduction fails - coins already validated
           }
         }
@@ -516,9 +517,9 @@ class PaymentService {
                 idempotencyKey: `order_coin_${order._id}`,
               },
             });
-            console.log(`✅ [ORDER:LEDGER] Ledger entry for coin deduction: ${totalCoinsUsed} coins, order ${order.orderNumber}`);
+            logger.info(`✅ [ORDER:LEDGER] Ledger entry for coin deduction: ${totalCoinsUsed} coins, order ${order.orderNumber}`);
           } catch (ledgerErr) {
-            console.error('[ORDER:LEDGER] Failed to create ledger entry for coin deduction (non-blocking):', ledgerErr);
+            logger.error('[ORDER:LEDGER] Failed to create ledger entry for coin deduction (non-blocking):', ledgerErr);
           }
         }
       }
@@ -536,7 +537,7 @@ class PaymentService {
           savings: 0
         };
         await cart.save({ session });
-        console.log('🛒 [PAYMENT SERVICE] Cart cleared after successful payment');
+        logger.info('🛒 [PAYMENT SERVICE] Cart cleared after successful payment');
       }
 
       // Create ServiceBooking records for service items in the order
@@ -544,7 +545,7 @@ class PaymentService {
       for (const orderItem of order.items) {
         if ((orderItem as any).itemType === 'service' && (orderItem as any).serviceBookingDetails) {
           try {
-            console.log('📅 [PAYMENT SERVICE] Creating ServiceBooking for service item:', orderItem.name);
+            logger.info('📅 [PAYMENT SERVICE] Creating ServiceBooking for service item:', orderItem.name);
 
             const { ServiceBooking } = require('../models/ServiceBooking');
             const serviceBookingDetails = (orderItem as any).serviceBookingDetails;
@@ -594,9 +595,9 @@ class PaymentService {
             (orderItem as any).serviceBookingId = booking._id;
 
             serviceBookings.push(booking);
-            console.log('✅ [PAYMENT SERVICE] ServiceBooking created:', booking.bookingNumber);
+            logger.info('✅ [PAYMENT SERVICE] ServiceBooking created:', booking.bookingNumber);
           } catch (bookingError) {
-            console.error('❌ [PAYMENT SERVICE] Error creating ServiceBooking:', bookingError);
+            logger.error('❌ [PAYMENT SERVICE] Error creating ServiceBooking:', bookingError);
             // Don't fail payment if booking creation fails - log and continue
           }
         }
@@ -605,14 +606,14 @@ class PaymentService {
       // Save order with updated serviceBookingIds
       if (serviceBookings.length > 0) {
         await order.save({ session });
-        console.log('📅 [PAYMENT SERVICE] Created', serviceBookings.length, 'service booking(s)');
+        logger.info('📅 [PAYMENT SERVICE] Created', serviceBookings.length, 'service booking(s)');
       }
 
       // Commit transaction
       await session.commitTransaction();
       session.endSession();
 
-      console.log('✅ [PAYMENT SERVICE] Payment processed and stock deducted successfully');
+      logger.info('✅ [PAYMENT SERVICE] Payment processed and stock deducted successfully');
 
       // Log successful payment completion
       PaymentLogger.logPaymentSuccess(
@@ -626,19 +627,19 @@ class PaymentService {
       // Emit socket events for stock updates
       for (const emission of stockEmissions) {
         try {
-          console.log('🔌 [PAYMENT SERVICE] Emitting stock update via Socket.IO:', emission);
+          logger.info('🔌 [PAYMENT SERVICE] Emitting stock update via Socket.IO:', emission);
           stockSocketService.emitStockUpdate(emission.productId, emission.newStock, {
             storeId: emission.storeId,
             reason: 'purchase'
           });
         } catch (socketError) {
-          console.error('❌ [PAYMENT SERVICE] Socket emission failed:', socketError);
+          logger.error('❌ [PAYMENT SERVICE] Socket emission failed:', socketError);
         }
       }
 
       // Send payment received SMS notification
       try {
-        console.log('📱 [PAYMENT SERVICE] Sending payment received notification...');
+        logger.info('📱 [PAYMENT SERVICE] Sending payment received notification...');
 
         // Get user details
         let user = order.user as any;
@@ -652,10 +653,10 @@ class PaymentService {
 
         if (userPhone) {
           await SMSService.sendPaymentReceived(userPhone, orderNumber, amount);
-          console.log('✅ [PAYMENT SERVICE] Payment received SMS sent successfully');
+          logger.info('✅ [PAYMENT SERVICE] Payment received SMS sent successfully');
         }
       } catch (notificationError) {
-        console.error('❌ [PAYMENT SERVICE] Error sending payment notification:', notificationError);
+        logger.error('❌ [PAYMENT SERVICE] Error sending payment notification:', notificationError);
         // Don't fail the payment if notification fails
       }
 
@@ -670,7 +671,7 @@ class PaymentService {
     } catch (error: any) {
       await session.abortTransaction();
       session.endSession();
-      console.error('❌ [PAYMENT SERVICE] Error processing payment success:', error);
+      logger.error('❌ [PAYMENT SERVICE] Error processing payment success:', error);
 
       // Reset payment status from 'processing' back to 'pending_payment' so it can be retried
       try {
@@ -678,7 +679,7 @@ class PaymentService {
           $set: { 'payment.status': 'pending_payment' }
         });
       } catch (resetError) {
-        console.error('❌ [PAYMENT SERVICE] Failed to reset payment status:', resetError);
+        logger.error('❌ [PAYMENT SERVICE] Failed to reset payment status:', resetError);
       }
 
       // Log payment failure
@@ -704,7 +705,7 @@ class PaymentService {
     session.startTransaction();
 
     try {
-      console.log('❌ [PAYMENT SERVICE] Processing payment failure for order:', orderId);
+      logger.info('❌ [PAYMENT SERVICE] Processing payment failure for order:', orderId);
 
       const order = await Order.findById(orderId).session(session);
       if (!order) {
@@ -726,7 +727,7 @@ class PaymentService {
 
       // Reverse offer redemption cashback if applied
       if ((order as any).offerRedemption?.code) {
-        console.log('🎟️ [PAYMENT SERVICE] Reversing offer redemption cashback for failed payment...');
+        logger.info('🎟️ [PAYMENT SERVICE] Reversing offer redemption cashback for failed payment...');
         const OfferRedemption = require('../models/OfferRedemption').default;
         const { Transaction } = require('../models/Transaction');
 
@@ -756,7 +757,7 @@ class PaymentService {
           );
 
           if (offerRedemption) {
-            console.log('✅ [PAYMENT SERVICE] Offer redemption restored to active:', redemptionCode);
+            logger.info('✅ [PAYMENT SERVICE] Offer redemption restored to active:', redemptionCode);
 
             // Deduct cashback from user's wallet if it was credited
             if (cashbackAmount > 0) {
@@ -808,7 +809,7 @@ class PaymentService {
                 });
 
                 await reversalTransaction.save({ session });
-                console.log(`✅ [PAYMENT SERVICE] Cashback of ₹${cashbackAmount} reversed from wallet`);
+                logger.info(`✅ [PAYMENT SERVICE] Cashback of ₹${cashbackAmount} reversed from wallet`);
 
                 // Send notification about reversal
                 try {
@@ -822,17 +823,17 @@ class PaymentService {
                       orderId: (order as any)._id?.toString() || '',
                       orderNumber: order.orderNumber,
                     }
-                  }).catch((err: any) => console.error('Failed to send reversal notification:', err));
+                  }).catch((err: any) => logger.error('Failed to send reversal notification:', err));
                 } catch (notifError) {
-                  console.error('Failed to send reversal notification:', notifError);
+                  logger.error('Failed to send reversal notification:', notifError);
                 }
               }
             }
           } else {
-            console.warn('⚠️ [PAYMENT SERVICE] Offer redemption not found or already reverted:', redemptionCode);
+            logger.warn('⚠️ [PAYMENT SERVICE] Offer redemption not found or already reverted:', redemptionCode);
           }
         } catch (redemptionError) {
-          console.error('❌ [PAYMENT SERVICE] Failed to reverse offer redemption:', redemptionError);
+          logger.error('❌ [PAYMENT SERVICE] Failed to reverse offer redemption:', redemptionError);
           // Continue with payment failure processing even if redemption reversal fails
         }
       }
@@ -847,13 +848,13 @@ class PaymentService {
       await session.commitTransaction();
       session.endSession();
 
-      console.log('✅ [PAYMENT SERVICE] Payment failure processed');
+      logger.info('✅ [PAYMENT SERVICE] Payment failure processed');
 
       return order;
     } catch (error: any) {
       await session.abortTransaction();
       session.endSession();
-      console.error('❌ [PAYMENT SERVICE] Error processing payment failure:', error);
+      logger.error('❌ [PAYMENT SERVICE] Error processing payment failure:', error);
       throw error;
     }
   }
@@ -869,7 +870,7 @@ class PaymentService {
     amount?: number
   ): Promise<IRefundResponse> {
     try {
-      console.log('💸 [PAYMENT SERVICE] Processing refund for order:', orderId);
+      logger.info('💸 [PAYMENT SERVICE] Processing refund for order:', orderId);
 
       const order = await Order.findById(orderId).lean();
       if (!order) {
@@ -913,7 +914,7 @@ class PaymentService {
 
           refundId = refund.id;
           refundStatus = refund.status;
-          console.log('✅ [PAYMENT SERVICE] Razorpay refund created:', refundId);
+          logger.info('✅ [PAYMENT SERVICE] Razorpay refund created:', refundId);
           break;
         }
 
@@ -941,7 +942,7 @@ class PaymentService {
 
           refundId = refund.id;
           refundStatus = refund.status || 'pending';
-          console.log('✅ [PAYMENT SERVICE] Stripe refund created:', refundId);
+          logger.info('✅ [PAYMENT SERVICE] Stripe refund created:', refundId);
           break;
         }
 
@@ -975,7 +976,7 @@ class PaymentService {
 
           refundId = `wallet_refund_${Date.now()}`;
           refundStatus = 'completed';
-          console.log('✅ [PAYMENT SERVICE] Wallet refund completed:', refundId);
+          logger.info('✅ [PAYMENT SERVICE] Wallet refund completed:', refundId);
           break;
         }
 
@@ -983,7 +984,7 @@ class PaymentService {
           // COD refund - mark for manual processing
           refundId = `cod_refund_${Date.now()}`;
           refundStatus = 'pending_manual_processing';
-          console.log('⚠️ [PAYMENT SERVICE] COD refund requires manual processing:', refundId);
+          logger.info('⚠️ [PAYMENT SERVICE] COD refund requires manual processing:', refundId);
           break;
         }
 
@@ -1014,7 +1015,7 @@ class PaymentService {
         refundStatus: refundStatus
       };
     } catch (error: any) {
-      console.error('❌ [PAYMENT SERVICE] Error processing refund:', error);
+      logger.error('❌ [PAYMENT SERVICE] Error processing refund:', error);
       return {
         success: false,
         message: `Failed to process refund: ${error.message}`
@@ -1034,7 +1035,7 @@ class PaymentService {
 
       // Check if webhook secret is configured
       if (!secret || secret === 'your_webhook_secret_here') {
-        console.error('❌ [PAYMENT SERVICE] Razorpay webhook secret not configured. Rejecting webhook.');
+        logger.error('❌ [PAYMENT SERVICE] Razorpay webhook secret not configured. Rejecting webhook.');
         return false;
       }
 
@@ -1046,14 +1047,14 @@ class PaymentService {
       );
 
       if (validationResult.isValid) {
-        console.log('✅ [PAYMENT SERVICE] Webhook signature verified:', validationResult.eventType);
+        logger.info('✅ [PAYMENT SERVICE] Webhook signature verified:', validationResult.eventType);
       } else {
-        console.error('❌ [PAYMENT SERVICE] Webhook signature verification failed:', validationResult.error);
+        logger.error('❌ [PAYMENT SERVICE] Webhook signature verification failed:', validationResult.error);
       }
 
       return validationResult.isValid;
     } catch (error: any) {
-      console.error('❌ [PAYMENT SERVICE] Error verifying webhook signature:', error);
+      logger.error('❌ [PAYMENT SERVICE] Error verifying webhook signature:', error);
       return false;
     }
   }
@@ -1088,7 +1089,7 @@ class PaymentService {
     try {
       // Check if Razorpay is configured
       if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-        console.error('❌ [PAYMENT SERVICE] Payout failed — Razorpay not configured');
+        logger.error('❌ [PAYMENT SERVICE] Payout failed — Razorpay not configured');
         return {
           success: false,
           error: 'Payment gateway not configured. Cannot process payout.',
@@ -1126,7 +1127,7 @@ class PaymentService {
         reference_id: options.reference,
       });
 
-      console.log(`✅ [PAYMENT SERVICE] Payout created successfully: ${payout.id}`);
+      logger.info(`✅ [PAYMENT SERVICE] Payout created successfully: ${payout.id}`);
 
       return {
         success: true,
@@ -1135,7 +1136,7 @@ class PaymentService {
         amount: payout.amount,
       };
     } catch (error: any) {
-      console.error('❌ [PAYMENT SERVICE] Payout creation error:', error);
+      logger.error('❌ [PAYMENT SERVICE] Payout creation error:', error);
       return {
         success: false,
         error: error.message,
@@ -1193,7 +1194,7 @@ class PaymentService {
         createdAt: payout.created_at,
       };
     } catch (error: any) {
-      console.error('❌ [PAYMENT SERVICE] Error fetching payout status:', error);
+      logger.error('❌ [PAYMENT SERVICE] Error fetching payout status:', error);
       return {
         success: false,
         error: error.message,
@@ -1215,14 +1216,14 @@ class PaymentService {
 
       const payout = await (razorpayInstance as any).payouts.cancel(payoutId);
 
-      console.log(`✅ [PAYMENT SERVICE] Payout cancelled: ${payout.id}`);
+      logger.info(`✅ [PAYMENT SERVICE] Payout cancelled: ${payout.id}`);
 
       return {
         success: true,
         status: payout.status,
       };
     } catch (error: any) {
-      console.error('❌ [PAYMENT SERVICE] Error cancelling payout:', error);
+      logger.error('❌ [PAYMENT SERVICE] Error cancelling payout:', error);
       return {
         success: false,
         error: error.message,
@@ -1254,7 +1255,7 @@ class PaymentService {
         currency: balance.currency,
       };
     } catch (error: any) {
-      console.error('❌ [PAYMENT SERVICE] Error fetching balance:', error);
+      logger.error('❌ [PAYMENT SERVICE] Error fetching balance:', error);
       return {
         success: false,
         error: error.message,

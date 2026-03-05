@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { Subscription, ISubscription } from '../models/Subscription';
+import { logger } from '../config/logger';
 import { Payment } from '../models/Payment';
 import { Types } from 'mongoose';
 import { PDFService } from '../services/pdfService';
@@ -145,7 +146,7 @@ export const getBillingHistory = async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('Error fetching billing history:', error);
+    logger.error('Error fetching billing history:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch billing history',
@@ -298,7 +299,7 @@ export const getInvoice = async (req: Request, res: Response) => {
       data: invoice
     });
   } catch (error: any) {
-    console.error('Error fetching invoice:', error);
+    logger.error('Error fetching invoice:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch invoice',
@@ -360,7 +361,7 @@ export const downloadInvoice = async (req: Request, res: Response) => {
     // Generate and stream PDF
     await PDFService.generateInvoicePDF(res, invoiceData, userInfo);
   } catch (error: any) {
-    console.error('Error downloading invoice:', error);
+    logger.error('Error downloading invoice:', error);
     // Only send JSON error if headers haven't been sent yet
     if (!res.headersSent) {
       res.status(500).json({
@@ -431,7 +432,7 @@ export const getBillingSummary = async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('Error fetching billing summary:', error);
+    logger.error('Error fetching billing summary:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch billing summary',

@@ -4,6 +4,7 @@ import { DocumentVerificationService } from '../merchantservices/DocumentVerific
 import { authMiddleware as authenticateMerchant } from '../middleware/merchantauth';
 import multer from 'multer';
 import path from 'path';
+import { logger } from '../config/logger';
 
 const router = express.Router();
 
@@ -69,7 +70,7 @@ router.get('/status', authenticateMerchant, async (req: Request, res: Response) 
       }
     });
   } catch (error: any) {
-    console.error('Get onboarding status error:', error);
+    logger.error('Get onboarding status error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to get onboarding status',
@@ -118,9 +119,9 @@ router.post('/step/:stepNumber', authenticateMerchant, async (req: Request, res:
       data: result.stepData || {}
     });
   } catch (error: any) {
-    console.error('Save step data error:', error);
-    console.error('Step number:', req.params.stepNumber);
-    console.error('Step data received:', JSON.stringify(req.body, null, 2));
+    logger.error('Save step data error:', error);
+    logger.error('Step number:', req.params.stepNumber);
+    logger.error('Step data received:', JSON.stringify(req.body, null, 2));
     
     // Return 400 for validation errors, 500 for server errors
     const statusCode = error.message?.includes('required') || 
@@ -168,7 +169,7 @@ router.post('/step/:stepNumber/complete', authenticateMerchant, async (req: Requ
       }
     });
   } catch (error: any) {
-    console.error('Complete step error:', error);
+    logger.error('Complete step error:', error);
     res.status(400).json({
       success: false,
       message: error.message || 'Failed to complete step'
@@ -202,7 +203,7 @@ router.post('/step/:stepNumber/previous', authenticateMerchant, async (req: Requ
       }
     });
   } catch (error: any) {
-    console.error('Previous step error:', error);
+    logger.error('Previous step error:', error);
     res.status(400).json({
       success: false,
       message: error.message || 'Failed to go to previous step'
@@ -229,7 +230,7 @@ router.post('/submit', authenticateMerchant, async (req: Request, res: Response)
 
     // Validate that OnboardingService exists
     if (!OnboardingService || typeof OnboardingService.submitForVerification !== 'function') {
-      console.error('OnboardingService.submitForVerification not available');
+      logger.error('OnboardingService.submitForVerification not available');
       return res.status(500).json({
         success: false,
         message: 'Onboarding service is not available',
@@ -249,8 +250,8 @@ router.post('/submit', authenticateMerchant, async (req: Request, res: Response)
       }
     });
   } catch (error: any) {
-    console.error('Submit onboarding error:', error);
-    console.error('Error stack:', error.stack);
+    logger.error('Submit onboarding error:', error);
+    logger.error('Error stack:', error.stack);
     
     // Return 400 for validation errors, 500 for server errors
     const isValidationError = error.message?.includes('required') || 
@@ -331,7 +332,7 @@ router.post('/documents/upload', authenticateMerchant, upload.single('document')
       }
     });
   } catch (error: any) {
-    console.error('Document upload error:', error);
+    logger.error('Document upload error:', error);
     res.status(400).json({
       success: false,
       message: error.message || 'Failed to upload document'
@@ -362,7 +363,7 @@ router.get('/documents', authenticateMerchant, async (req: Request, res: Respons
       data: result
     });
   } catch (error: any) {
-    console.error('Get documents error:', error);
+    logger.error('Get documents error:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to get documents'
@@ -394,7 +395,7 @@ router.delete('/documents/:documentIndex', authenticateMerchant, async (req: Req
       message: result.message
     });
   } catch (error: any) {
-    console.error('Delete document error:', error);
+    logger.error('Delete document error:', error);
     res.status(400).json({
       success: false,
       message: error.message || 'Failed to delete document'
@@ -429,7 +430,7 @@ router.post('/:merchantId/approve', authenticateMerchant, async (req: Request, r
       }
     });
   } catch (error: any) {
-    console.error('Approve onboarding error:', error);
+    logger.error('Approve onboarding error:', error);
     res.status(400).json({
       success: false,
       message: error.message || 'Failed to approve onboarding'
@@ -465,7 +466,7 @@ router.post('/:merchantId/reject', authenticateMerchant, async (req: Request, re
       }
     });
   } catch (error: any) {
-    console.error('Reject onboarding error:', error);
+    logger.error('Reject onboarding error:', error);
     res.status(400).json({
       success: false,
       message: error.message || 'Failed to reject onboarding'
@@ -506,7 +507,7 @@ router.post('/:merchantId/documents/:documentIndex/verify', authenticateMerchant
       data: result
     });
   } catch (error: any) {
-    console.error('Verify document error:', error);
+    logger.error('Verify document error:', error);
     res.status(400).json({
       success: false,
       message: error.message || 'Failed to verify document'
@@ -548,7 +549,7 @@ router.post('/:merchantId/documents/verify-all', authenticateMerchant, async (re
       }
     });
   } catch (error: any) {
-    console.error('Verify all documents error:', error);
+    logger.error('Verify all documents error:', error);
     res.status(400).json({
       success: false,
       message: error.message || 'Failed to verify documents'
@@ -594,7 +595,7 @@ router.post('/:merchantId/request-documents', authenticateMerchant, async (req: 
       }
     });
   } catch (error: any) {
-    console.error('Request documents error:', error);
+    logger.error('Request documents error:', error);
     res.status(400).json({
       success: false,
       message: error.message || 'Failed to request documents'
@@ -619,7 +620,7 @@ router.get('/pending', authenticateMerchant, async (req: Request, res: Response)
       count: pendingVerifications.length
     });
   } catch (error: any) {
-    console.error('Get pending verifications error:', error);
+    logger.error('Get pending verifications error:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to get pending verifications'
@@ -641,7 +642,7 @@ router.get('/analytics', authenticateMerchant, async (req: Request, res: Respons
       data: analytics
     });
   } catch (error: any) {
-    console.error('Get onboarding analytics error:', error);
+    logger.error('Get onboarding analytics error:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to get analytics'
@@ -663,7 +664,7 @@ router.get('/documents/statistics', authenticateMerchant, async (req: Request, r
       data: statistics
     });
   } catch (error: any) {
-    console.error('Get document statistics error:', error);
+    logger.error('Get document statistics error:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to get statistics'

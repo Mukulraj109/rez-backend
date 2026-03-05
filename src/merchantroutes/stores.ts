@@ -14,6 +14,7 @@ import mongoose from 'mongoose';
 import { sendSuccess, sendNotFound, sendBadRequest } from '../utils/response';
 // P-12: Cache invalidation on store mutations
 import { CacheInvalidator } from '../utils/cacheHelper';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -306,7 +307,7 @@ router.post('/', validateRequest(createStoreSchema), async (req: Request, res: R
 
     // P-12: Invalidate store list caches so the new store appears immediately
     CacheInvalidator.invalidateStore((store._id as mongoose.Types.ObjectId).toString()).catch((err) => {
-      console.warn('[CACHE-INVALIDATION-WARN] store.created — invalidation failed:', err);
+      logger.warn('[CACHE-INVALIDATION-WARN] store.created — invalidation failed:', err);
     });
 
     // Audit log
@@ -338,7 +339,7 @@ router.post('/', validateRequest(createStoreSchema), async (req: Request, res: R
       data: store
     });
   } catch (error: any) {
-    console.error('Create store error:', error);
+    logger.error('Create store error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to create store'
@@ -392,7 +393,7 @@ router.get('/', async (req: Request, res: Response) => {
       count: stores.length
     });
   } catch (error: any) {
-    console.error('Get stores error:', error);
+    logger.error('Get stores error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to retrieve stores'
@@ -447,7 +448,7 @@ router.get('/active', async (req: Request, res: Response) => {
       data: store
     });
   } catch (error: any) {
-    console.error('Get active store error:', error);
+    logger.error('Get active store error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to retrieve active store'
@@ -492,7 +493,7 @@ router.get('/:id', validateParams(storeIdSchema), async (req: Request, res: Resp
       data: store
     });
   } catch (error: any) {
-    console.error('Get store error:', error);
+    logger.error('Get store error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to retrieve store'
@@ -759,7 +760,7 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
 
     // P-12: Invalidate caches for this store so consumers get fresh data
     CacheInvalidator.invalidateStore((store._id as mongoose.Types.ObjectId).toString()).catch((err) => {
-      console.warn('[CACHE-INVALIDATION-WARN] store.updated — invalidation failed:', err);
+      logger.warn('[CACHE-INVALIDATION-WARN] store.updated — invalidation failed:', err);
     });
 
     // Audit log
@@ -792,7 +793,7 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
       data: responseStore
     });
   } catch (error: any) {
-    console.error('Update store error:', error);
+    logger.error('Update store error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to update store'
@@ -860,7 +861,7 @@ router.delete('/:id', validateParams(storeIdSchema), async (req: Request, res: R
 
     // P-12: Invalidate caches for this store so deactivation is reflected immediately
     CacheInvalidator.invalidateStore((deactivatedStore._id as mongoose.Types.ObjectId).toString()).catch((err) => {
-      console.warn('[CACHE-INVALIDATION-WARN] store.deleted — invalidation failed:', err);
+      logger.warn('[CACHE-INVALIDATION-WARN] store.deleted — invalidation failed:', err);
     });
 
     // Audit log
@@ -892,7 +893,7 @@ router.delete('/:id', validateParams(storeIdSchema), async (req: Request, res: R
       data: deactivatedStore
     });
   } catch (error: any) {
-    console.error('Delete store error:', error);
+    logger.error('Delete store error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to delete store'
@@ -948,7 +949,7 @@ router.post('/:id/activate', validateParams(storeIdSchema), async (req: Request,
 
     // P-12: Invalidate caches for this store so activation is reflected immediately
     CacheInvalidator.invalidateStore((updatedStore._id as mongoose.Types.ObjectId).toString()).catch((err) => {
-      console.warn('[CACHE-INVALIDATION-WARN] store.activated — invalidation failed:', err);
+      logger.warn('[CACHE-INVALIDATION-WARN] store.activated — invalidation failed:', err);
     });
 
     // Audit log
@@ -980,7 +981,7 @@ router.post('/:id/activate', validateParams(storeIdSchema), async (req: Request,
       data: updatedStore
     });
   } catch (error: any) {
-    console.error('Activate store error:', error);
+    logger.error('Activate store error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to activate store'
@@ -1034,7 +1035,7 @@ router.post('/:id/deactivate', validateParams(storeIdSchema), async (req: Reques
 
     // P-12: Invalidate caches for this store so deactivation is reflected immediately
     CacheInvalidator.invalidateStore((updatedStore._id as mongoose.Types.ObjectId).toString()).catch((err) => {
-      console.warn('[CACHE-INVALIDATION-WARN] store.deactivated — invalidation failed:', err);
+      logger.warn('[CACHE-INVALIDATION-WARN] store.deactivated — invalidation failed:', err);
     });
 
     // Audit log
@@ -1066,7 +1067,7 @@ router.post('/:id/deactivate', validateParams(storeIdSchema), async (req: Reques
       data: updatedStore
     });
   } catch (error: any) {
-    console.error('Deactivate store error:', error);
+    logger.error('Deactivate store error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to deactivate store'
@@ -1230,7 +1231,7 @@ router.get('/:id/reviews', validateParams(storeIdSchema), validateQuery(Joi.obje
     }, 'Store reviews retrieved successfully');
 
   } catch (error: any) {
-    console.error('Get store reviews error:', error);
+    logger.error('Get store reviews error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch store reviews'
@@ -1334,7 +1335,7 @@ router.get('/:id/ugc', validateParams(storeIdSchema), validateQuery(Joi.object({
     }, 'UGC content retrieved successfully');
 
   } catch (error: any) {
-    console.error('Get store UGC error:', error);
+    logger.error('Get store UGC error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch store UGC content'
@@ -1449,7 +1450,7 @@ router.post('/:id/reviews/:reviewId/approve', validateParams(Joi.object({
         await transaction.save();
       }
     } catch (walletError) {
-      console.error('Error rewarding user for review approval:', walletError);
+      logger.error('Error rewarding user for review approval:', walletError);
       // Don't fail the approval if wallet operation fails, but log it
     }
 
@@ -1481,7 +1482,7 @@ router.post('/:id/reviews/:reviewId/approve', validateParams(Joi.object({
     }, 'Review approved successfully. User has been rewarded with 10 rezcoins.');
 
   } catch (error: any) {
-    console.error('Approve review error:', error);
+    logger.error('Approve review error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to approve review'
@@ -1581,7 +1582,7 @@ router.post('/:id/reviews/:reviewId/reject', validateParams(Joi.object({
     }, 'Review rejected successfully');
 
   } catch (error: any) {
-    console.error('Reject review error:', error);
+    logger.error('Reject review error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to reject review'

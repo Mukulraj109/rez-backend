@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/merchantauth';
+import { logger } from '../config/logger';
 import { validateParams, validateRequest } from '../middleware/merchantvalidation';
 import { Product } from '../models/Product';
 import { Store } from '../models/Store';
@@ -93,7 +94,7 @@ router.get('/:id/variants', validateParams(productIdSchema), async (req: Request
     });
 
   } catch (error: any) {
-    console.error('Get variants error:', error);
+    logger.error('Get variants error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch variants',
@@ -202,7 +203,7 @@ router.post(
       });
 
     } catch (error: any) {
-      console.error('Create variant error:', error);
+      logger.error('Create variant error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to create variant',
@@ -306,7 +307,7 @@ router.put(
       });
 
     } catch (error: any) {
-      console.error('Update variant error:', error);
+      logger.error('Update variant error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to update variant',
@@ -384,7 +385,7 @@ router.delete(
       });
 
     } catch (error: any) {
-      console.error('Delete variant error:', error);
+      logger.error('Delete variant error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to delete variant',
@@ -457,7 +458,7 @@ router.get(
       });
 
     } catch (error: any) {
-      console.error('Get variant error:', error);
+      logger.error('Get variant error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to fetch variant',
@@ -585,7 +586,7 @@ router.post(
       });
 
     } catch (error: any) {
-      console.error('Generate variants error:', error);
+      logger.error('Generate variants error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to generate variants',

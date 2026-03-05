@@ -1,6 +1,7 @@
 import * as cron from 'node-cron';
 import GameSession from '../models/GameSession';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 /**
  * Session Cleanup Job
@@ -54,8 +55,8 @@ async function performCleanup(): Promise<CleanupStats> {
     const deleteDate = new Date();
     deleteDate.setDate(deleteDate.getDate() - DELETE_DAYS);
 
-    console.log(`📅 [SESSION CLEANUP] Expiry cutoff: ${expiryDate.toISOString()}`);
-    console.log(`📅 [SESSION CLEANUP] Delete cutoff: ${deleteDate.toISOString()}`);
+    logger.info(`📅 [SESSION CLEANUP] Expiry cutoff: ${expiryDate.toISOString()}`);
+    logger.info(`📅 [SESSION CLEANUP] Delete cutoff: ${deleteDate.toISOString()}`);
 
     // Step 1: Mark old sessions as expired
     const expireResult = await GameSession.updateMany(
@@ -69,7 +70,7 @@ async function performCleanup(): Promise<CleanupStats> {
     );
 
     stats.expiredCount = expireResult.modifiedCount;
-    console.log(`⏰ [SESSION CLEANUP] Marked ${stats.expiredCount} sessions as expired`);
+    logger.info(`⏰ [SESSION CLEANUP] Marked ${stats.expiredCount} sessions as expired`);
 
     // Step 2: Get sessions to delete (for logging before deletion)
     const sessionsToDelete = await GameSession.find({
@@ -84,14 +85,14 @@ async function performCleanup(): Promise<CleanupStats> {
     });
 
     stats.deletedCount = deleteResult.deletedCount || 0;
-    console.log(`🗑️ [SESSION CLEANUP] Deleted ${stats.deletedCount} old sessions`);
+    logger.info(`🗑️ [SESSION CLEANUP] Deleted ${stats.deletedCount} old sessions`);
 
     // Log sample of deleted sessions
     if (sessionsToDelete.length > 0) {
       const sampleSize = Math.min(5, sessionsToDelete.length);
-      console.log(`📋 [SESSION CLEANUP] Sample of deleted sessions (${sampleSize}/${sessionsToDelete.length}):`);
+      logger.info(`📋 [SESSION CLEANUP] Sample of deleted sessions (${sampleSize}/${sessionsToDelete.length}):`);
       sessionsToDelete.slice(0, sampleSize).forEach((session, index) => {
-        console.log(`   ${index + 1}. ID: ${session.sessionId}, Type: ${session.gameType}, Age: ${Math.floor((Date.now() - session.createdAt.getTime()) / (1000 * 60 * 60 * 24))} days`);
+        logger.info(`   ${index + 1}. ID: ${session.sessionId}, Type: ${session.gameType}, Age: ${Math.floor((Date.now() - session.createdAt.getTime()) / (1000 * 60 * 60 * 24))} days`);
       });
     }
 
@@ -110,9 +111,9 @@ async function performCleanup(): Promise<CleanupStats> {
       }
     ]);
 
-    console.log('📊 [SESSION CLEANUP] Current session counts by status:');
+    logger.info('📊 [SESSION CLEANUP] Current session counts by status:');
     statusCounts.forEach(stat => {
-      console.log(`   - ${stat._id}: ${stat.count}`);
+      logger.info(`   - ${stat._id}: ${stat.count}`);
     });
 
     // Game type distribution
@@ -131,13 +132,13 @@ async function performCleanup(): Promise<CleanupStats> {
       }
     ]);
 
-    console.log('🎮 [SESSION CLEANUP] Active sessions by game type:');
+    logger.info('🎮 [SESSION CLEANUP] Active sessions by game type:');
     gameTypeCounts.forEach(stat => {
-      console.log(`   - ${stat._id}: ${stat.count}`);
+      logger.info(`   - ${stat._id}: ${stat.count}`);
     });
 
   } catch (error: any) {
-    console.error('❌ [SESSION CLEANUP] Error during cleanup:', error);
+    logger.error('❌ [SESSION CLEANUP] Error during cleanup:', error);
     stats.errors.push({
       sessionId: 'N/A',
       error: error.message || 'Unknown error'
@@ -152,17 +153,17 @@ async function performCleanup(): Promise<CleanupStats> {
  */
 export function startSessionCleanup(): void {
   if (cleanupJob) {
-    console.log('⚠️ [SESSION CLEANUP] Job already running');
+    logger.info('⚠️ [SESSION CLEANUP] Job already running');
     return;
   }
 
-  console.log(`🧹 [SESSION CLEANUP] Starting session cleanup job (runs daily at midnight)`);
-  console.log(`⚙️ [SESSION CLEANUP] Configuration: Expire after ${EXPIRY_HOURS}h, Delete after ${DELETE_DAYS} days`);
+  logger.info(`🧹 [SESSION CLEANUP] Starting session cleanup job (runs daily at midnight)`);
+  logger.info(`⚙️ [SESSION CLEANUP] Configuration: Expire after ${EXPIRY_HOURS}h, Delete after ${DELETE_DAYS} days`);
 
   cleanupJob = cron.schedule(CRON_SCHEDULE, async () => {
     // Prevent concurrent executions
     if (isRunning) {
-      console.log('⏭️ [SESSION CLEANUP] Previous cleanup still running, skipping this execution');
+      logger.info('⏭️ [SESSION CLEANUP] Previous cleanup still running, skipping this execution');
       return;
     }
 
@@ -170,7 +171,7 @@ export function startSessionCleanup(): void {
     const lockKey = 'job:session-cleanup';
     const lockToken = await redisService.acquireLock(lockKey, 300);
     if (!lockToken) {
-      console.log('session-cleanup skipped — lock held by another instance');
+      logger.info('session-cleanup skipped — lock held by another instance');
       return;
     }
 
@@ -178,13 +179,13 @@ export function startSessionCleanup(): void {
     const startTime = Date.now();
 
     try {
-      console.log('🧹 [SESSION CLEANUP] Running expired session cleanup...');
+      logger.info('🧹 [SESSION CLEANUP] Running expired session cleanup...');
 
       const stats = await performCleanup();
 
       const duration = Date.now() - startTime;
 
-      console.log('✅ [SESSION CLEANUP] Cleanup completed:', {
+      logger.info('✅ [SESSION CLEANUP] Cleanup completed:', {
         duration: `${duration}ms`,
         expiredCount: stats.expiredCount,
         deletedCount: stats.deletedCount,
@@ -194,22 +195,22 @@ export function startSessionCleanup(): void {
       });
 
       if (stats.errors.length > 0) {
-        console.error('❌ [SESSION CLEANUP] Errors during cleanup:');
+        logger.error('❌ [SESSION CLEANUP] Errors during cleanup:');
         stats.errors.forEach((error, index) => {
-          console.error(`   ${index + 1}. Session: ${error.sessionId}, Error: ${error.error}`);
+          logger.error(`   ${index + 1}. Session: ${error.sessionId}, Error: ${error.error}`);
         });
       }
 
       // Log summary message
       if (stats.totalProcessed > 0) {
-        console.log(`📈 [SESSION CLEANUP] Processed ${stats.totalProcessed} sessions (${stats.expiredCount} expired, ${stats.deletedCount} deleted)`);
+        logger.info(`📈 [SESSION CLEANUP] Processed ${stats.totalProcessed} sessions (${stats.expiredCount} expired, ${stats.deletedCount} deleted)`);
       } else {
-        console.log('✨ [SESSION CLEANUP] No sessions needed cleanup');
+        logger.info('✨ [SESSION CLEANUP] No sessions needed cleanup');
       }
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error('❌ [SESSION CLEANUP] Cleanup failed:', {
+      logger.error('❌ [SESSION CLEANUP] Cleanup failed:', {
         duration: `${duration}ms`,
         error: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString()
@@ -220,7 +221,7 @@ export function startSessionCleanup(): void {
     }
   });
 
-  console.log('✅ [SESSION CLEANUP] Session cleanup job started successfully');
+  logger.info('✅ [SESSION CLEANUP] Session cleanup job started successfully');
 }
 
 /**
@@ -230,9 +231,9 @@ export function stopSessionCleanup(): void {
   if (cleanupJob) {
     cleanupJob.stop();
     cleanupJob = null;
-    console.log('🛑 [SESSION CLEANUP] Session cleanup job stopped');
+    logger.info('🛑 [SESSION CLEANUP] Session cleanup job stopped');
   } else {
-    console.log('⚠️ [SESSION CLEANUP] No job running to stop');
+    logger.info('⚠️ [SESSION CLEANUP] No job running to stop');
   }
 }
 
@@ -264,11 +265,11 @@ export function getSessionCleanupStatus(): {
  */
 export async function triggerManualSessionCleanup(): Promise<CleanupStats> {
   if (isRunning) {
-    console.log('⚠️ [SESSION CLEANUP] Cleanup already running, please wait');
+    logger.info('⚠️ [SESSION CLEANUP] Cleanup already running, please wait');
     throw new Error('Cleanup already in progress');
   }
 
-  console.log('🧹 [SESSION CLEANUP] Manual cleanup triggered');
+  logger.info('🧹 [SESSION CLEANUP] Manual cleanup triggered');
 
   isRunning = true;
   const startTime = Date.now();
@@ -277,7 +278,7 @@ export async function triggerManualSessionCleanup(): Promise<CleanupStats> {
     const stats = await performCleanup();
     const duration = Date.now() - startTime;
 
-    console.log('✅ [SESSION CLEANUP] Manual cleanup completed:', {
+    logger.info('✅ [SESSION CLEANUP] Manual cleanup completed:', {
       duration: `${duration}ms`,
       expiredCount: stats.expiredCount,
       deletedCount: stats.deletedCount,
@@ -286,7 +287,7 @@ export async function triggerManualSessionCleanup(): Promise<CleanupStats> {
 
     return stats;
   } catch (error) {
-    console.error('❌ [SESSION CLEANUP] Manual cleanup failed:', error);
+    logger.error('❌ [SESSION CLEANUP] Manual cleanup failed:', error);
     throw error;
   } finally {
     isRunning = false;

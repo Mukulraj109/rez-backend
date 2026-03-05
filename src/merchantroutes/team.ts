@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
 import bcrypt from 'bcryptjs';
+import { logger } from '../config/logger';
 import { MerchantUser, MerchantUserRole } from '../models/MerchantUser';
 import { authMiddleware } from '../middleware/merchantauth';
 import { validateRequest } from '../middleware/merchantvalidation';
@@ -52,7 +53,7 @@ router.get('/', checkPermission('team:view'), async (req: Request, res: Response
       }
     });
   } catch (error: any) {
-    console.error('Error fetching team members:', error);
+    logger.error('Error fetching team members:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch team members',
@@ -116,7 +117,7 @@ router.post('/invite', checkPermission('team:invite'), validateRequest(inviteSch
       }
     });
   } catch (error: any) {
-    console.error('Error inviting team member:', error);
+    logger.error('Error inviting team member:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to invite team member',
@@ -169,7 +170,7 @@ router.post('/:userId/resend-invite', checkPermission('team:invite'), async (req
       }
     });
   } catch (error: any) {
-    console.error('Error resending invitation:', error);
+    logger.error('Error resending invitation:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to resend invitation',
@@ -248,7 +249,7 @@ router.put('/:userId/role', checkPermission('team:change_role'), validateRequest
       }
     });
   } catch (error: any) {
-    console.error('Error updating team member role:', error);
+    logger.error('Error updating team member role:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to update role',
@@ -332,7 +333,7 @@ router.put('/:userId/status', checkPermission('team:change_status'), validateReq
       }
     });
   } catch (error: any) {
-    console.error('Error updating team member status:', error);
+    logger.error('Error updating team member status:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to update status',
@@ -412,7 +413,7 @@ router.delete('/:userId', checkPermission('team:remove'), async (req: Request, r
       }
     });
   } catch (error: any) {
-    console.error('Error removing team member:', error);
+    logger.error('Error removing team member:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to remove team member',
@@ -441,7 +442,7 @@ router.get('/me/permissions', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('Error fetching permissions:', error);
+    logger.error('Error fetching permissions:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch permissions',
@@ -520,7 +521,7 @@ router.get('/activity', checkPermission('team:view'), async (req: Request, res: 
       }
     });
   } catch (error: any) {
-    console.error('Error fetching team activity:', error);
+    logger.error('Error fetching team activity:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch team activity',
@@ -563,7 +564,7 @@ router.get('/:userId', checkPermission('team:view'), async (req: Request, res: R
       }
     });
   } catch (error: any) {
-    console.error('Error fetching team member:', error);
+    logger.error('Error fetching team member:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch team member',

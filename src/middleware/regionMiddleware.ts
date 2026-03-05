@@ -16,6 +16,7 @@ import {
 } from '../services/regionService';
 import { sendBadRequest } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
+import { logger } from '../config/logger';
 
 /**
  * Extended Request interface with region info
@@ -102,14 +103,14 @@ export const validateStoreRegionAccess = asyncHandler(async (
       const suggestedRegion = regionService.getSuggestedRegion(storeCity);
       const suggestedConfig = getRegionConfig(suggestedRegion);
 
-      console.log('🚫 [REGION MIDDLEWARE] Access denied - Store:', store.name, 'City:', storeCity, 'User region:', regionHeader);
+      logger.info('🚫 [REGION MIDDLEWARE] Access denied - Store:', store.name, 'City:', storeCity, 'User region:', regionHeader);
 
       return sendBadRequest(res, `This store is not available in your region. It's located in ${suggestedConfig.displayName}.`);
     }
 
     next();
   } catch (error) {
-    console.error('❌ [REGION MIDDLEWARE] Error validating store access:', error);
+    logger.error('❌ [REGION MIDDLEWARE] Error validating store access:', error);
     next();
   }
 });
@@ -154,14 +155,14 @@ export const validateProductRegionAccess = asyncHandler(async (
       const suggestedRegion = regionService.getSuggestedRegion(storeCity);
       const suggestedConfig = getRegionConfig(suggestedRegion);
 
-      console.log('🚫 [REGION MIDDLEWARE] Access denied - Product:', product.name, 'Store:', store.name, 'User region:', regionHeader);
+      logger.info('🚫 [REGION MIDDLEWARE] Access denied - Product:', product.name, 'Store:', store.name, 'User region:', regionHeader);
 
       return sendBadRequest(res, `This product is not available in your region. It belongs to a store in ${suggestedConfig.displayName}.`);
     }
 
     next();
   } catch (error) {
-    console.error('❌ [REGION MIDDLEWARE] Error validating product access:', error);
+    logger.error('❌ [REGION MIDDLEWARE] Error validating product access:', error);
     next();
   }
 });
@@ -201,7 +202,7 @@ export const logRegion = (req: RegionRequest, res: Response, next: NextFunction)
   const regionHeader = req.headers['x-rez-region'] as string;
 
   if (regionHeader && isValidRegion(regionHeader)) {
-    console.log(`🌍 [REGION] Request from region: ${regionHeader} - ${req.method} ${req.path}`);
+    logger.info(`🌍 [REGION] Request from region: ${regionHeader} - ${req.method} ${req.path}`);
   }
 
   next();

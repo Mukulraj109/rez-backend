@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
+import { logger } from '../config/logger';
 import { sendSuccess, sendBadRequest } from '../utils/response';
 import { AppError } from '../middleware/errorHandler';
 
@@ -22,7 +23,7 @@ export const uploadProjectFile = asyncHandler(async (req: Request, res: Response
   const fileType = req.file.mimetype.startsWith('video/') ? 'video' : 'image';
 
   try {
-    console.log(`✅ [UPLOAD] ${fileType} uploaded successfully for user: ${userId}`);
+    logger.info(`✅ [UPLOAD] ${fileType} uploaded successfully for user: ${userId}`);
 
     // When using CloudinaryStorage, req.file contains Cloudinary info
     // req.file.path is the Cloudinary URL
@@ -54,7 +55,7 @@ export const uploadProjectFile = asyncHandler(async (req: Request, res: Response
       type: fileType,
     }, `${fileType} uploaded successfully`);
   } catch (error: any) {
-    console.error(`❌ [UPLOAD] Error processing ${fileType}:`, error);
+    logger.error(`❌ [UPLOAD] Error processing ${fileType}:`, error);
     throw new AppError(`Failed to process ${fileType}: ${error.message}`, 500);
   }
 });
@@ -93,7 +94,7 @@ export const uploadMultipleProjectFiles = asyncHandler(async (req: Request, res:
   }
 
   try {
-    console.log(`✅ [UPLOAD] ${files.length} file(s) uploaded successfully for user: ${userId}`);
+    logger.info(`✅ [UPLOAD] ${files.length} file(s) uploaded successfully for user: ${userId}`);
 
     const { v2: cloudinary } = require('cloudinary');
 
@@ -133,7 +134,7 @@ export const uploadMultipleProjectFiles = asyncHandler(async (req: Request, res:
       count: results.length,
     }, `${results.length} file(s) uploaded successfully`);
   } catch (error: any) {
-    console.error('❌ [UPLOAD] Error processing files:', error);
+    logger.error('❌ [UPLOAD] Error processing files:', error);
     throw new AppError(`Failed to process files: ${error.message}`, 500);
   }
 });
@@ -156,7 +157,7 @@ export const uploadReviewImage = asyncHandler(async (req: Request, res: Response
   const userId = req.user._id;
 
   try {
-    console.log(`✅ [UPLOAD] Review image uploaded successfully for user: ${userId}`);
+    logger.info(`✅ [UPLOAD] Review image uploaded successfully for user: ${userId}`);
 
     // When using CloudinaryStorage, req.file contains Cloudinary info
     const cloudinaryUrl = (req.file as any).path || req.file.path;
@@ -171,7 +172,7 @@ export const uploadReviewImage = asyncHandler(async (req: Request, res: Response
       bytes: (req.file as any).size || req.file.size,
     }, 'Review image uploaded successfully');
   } catch (error: any) {
-    console.error('❌ [UPLOAD] Error processing review image:', error);
+    logger.error('❌ [UPLOAD] Error processing review image:', error);
     throw new AppError(`Failed to process image: ${error.message}`, 500);
   }
 });

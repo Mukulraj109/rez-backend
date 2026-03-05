@@ -2,6 +2,7 @@ import * as cron from 'node-cron';
 import redisService from '../services/redisService';
 import leaderboardService from '../services/leaderboardService';
 import LeaderboardConfig, { ILeaderboardConfig } from '../models/LeaderboardConfig';
+import { logger } from '../config/logger';
 
 /**
  * Leaderboard Refresh Background Job (Config-Driven)
@@ -99,17 +100,17 @@ async function refreshLeaderboardForConfig(config: ILeaderboardConfig): Promise<
 async function runLeaderboardRefresh(): Promise<void> {
   const startTime = Date.now();
 
-  console.log('[LEADERBOARD JOB] Running config-driven leaderboard refresh...');
+  logger.info('[LEADERBOARD JOB] Running config-driven leaderboard refresh...');
 
   // Load all active configs
   const activeConfigs = await LeaderboardConfig.find({ status: 'active' });
 
   if (activeConfigs.length === 0) {
-    console.log('[LEADERBOARD JOB] No active leaderboard configs found, skipping refresh');
+    logger.info('[LEADERBOARD JOB] No active leaderboard configs found, skipping refresh');
     return;
   }
 
-  console.log(`[LEADERBOARD JOB] Found ${activeConfigs.length} active configs to refresh`);
+  logger.info(`[LEADERBOARD JOB] Found ${activeConfigs.length} active configs to refresh`);
 
   // Refresh all configs in parallel
   const results = await Promise.allSettled(
@@ -129,7 +130,7 @@ async function runLeaderboardRefresh(): Promise<void> {
 
   const totalDuration = Date.now() - startTime;
 
-  console.log('[LEADERBOARD JOB] Refresh completed:', {
+  logger.info('[LEADERBOARD JOB] Refresh completed:', {
     succeeded: succeeded.map(r => `${r.slug}(${r.entriesCount} entries, ${r.duration}ms)`),
     failed: failed.length > 0 ? failed : 'none',
     totalDuration: `${totalDuration}ms`,
@@ -142,24 +143,24 @@ async function runLeaderboardRefresh(): Promise<void> {
  */
 export function startLeaderboardRefreshJob(): void {
   if (leaderboardRefreshJob) {
-    console.log('[LEADERBOARD JOB] Leaderboard refresh job already running');
+    logger.info('[LEADERBOARD JOB] Leaderboard refresh job already running');
     return;
   }
 
-  console.log('[LEADERBOARD JOB] Starting config-driven leaderboard refresh job (runs every 15 minutes)');
+  logger.info('[LEADERBOARD JOB] Starting config-driven leaderboard refresh job (runs every 15 minutes)');
 
   leaderboardRefreshJob = cron.schedule(LEADERBOARD_REFRESH_SCHEDULE, async () => {
     // Acquire distributed lock with owner token -- only one instance runs the job
     const lockToken = await redisService.acquireLock('leaderboard_refresh_job', LEADERBOARD_LOCK_TTL);
     if (!lockToken) {
-      console.log('[LEADERBOARD JOB] Another instance is running the refresh job, skipping');
+      logger.info('[LEADERBOARD JOB] Another instance is running the refresh job, skipping');
       return;
     }
 
     try {
       await runLeaderboardRefresh();
     } catch (error: any) {
-      console.error('[LEADERBOARD JOB] Error:', {
+      logger.error('[LEADERBOARD JOB] Error:', {
         error: error.message,
         timestamp: new Date().toISOString()
       });
@@ -168,7 +169,7 @@ export function startLeaderboardRefreshJob(): void {
     }
   });
 
-  console.log('[LEADERBOARD JOB] Leaderboard refresh job started');
+  logger.info('[LEADERBOARD JOB] Leaderboard refresh job started');
 }
 
 /**
@@ -178,7 +179,7 @@ export function stopLeaderboardRefreshJob(): void {
   if (leaderboardRefreshJob) {
     leaderboardRefreshJob.stop();
     leaderboardRefreshJob = null;
-    console.log('[LEADERBOARD JOB] Leaderboard refresh job stopped');
+    logger.info('[LEADERBOARD JOB] Leaderboard refresh job stopped');
   }
 }
 
@@ -191,7 +192,7 @@ export async function triggerManualLeaderboardRefresh(): Promise<void> {
     throw new Error('Leaderboard refresh already in progress (locked by another instance)');
   }
 
-  console.log('[LEADERBOARD JOB] Manual leaderboard refresh triggered');
+  logger.info('[LEADERBOARD JOB] Manual leaderboard refresh triggered');
 
   try {
     await runLeaderboardRefresh();

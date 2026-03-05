@@ -6,6 +6,7 @@ import { Wallet } from '../models/Wallet';
 import { Order } from '../models/Order';
 import { MerchantWallet } from '../models/MerchantWallet';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 /**
  * Daily Reconciliation Job
@@ -64,7 +65,7 @@ async function runReconciliation(): Promise<ReconciliationResult> {
   const startTime = Date.now();
   const discrepancies: DiscrepancyRecord[] = [];
 
-  console.log('🔍 [RECONCILIATION] Starting daily reconciliation...');
+  logger.info('🔍 [RECONCILIATION] Starting daily reconciliation...');
 
   try {
     // Step 1: Compare MallPurchase credited amounts vs UserCashback amounts per user
@@ -260,7 +261,7 @@ async function runReconciliation(): Promise<ReconciliationResult> {
 
     // Structured alerting based on severity
     if (criticalCount > 0) {
-      console.error(`🚨 [RECONCILIATION] CRITICAL: ${criticalCount} critical discrepancies found (total ₹${totalDifferenceAmount.toFixed(2)}). Immediate investigation required.`, {
+      logger.error(`🚨 [RECONCILIATION] CRITICAL: ${criticalCount} critical discrepancies found (total ₹${totalDifferenceAmount.toFixed(2)}). Immediate investigation required.`, {
         event: 'reconciliation_critical',
         criticalCount,
         highCount,
@@ -268,21 +269,21 @@ async function runReconciliation(): Promise<ReconciliationResult> {
         discrepancies: discrepancies.filter(d => d.severity === 'critical'),
       });
     } else if (highCount > 0) {
-      console.warn(`⚠️ [RECONCILIATION] HIGH: ${highCount} high-severity discrepancies found (total ₹${totalDifferenceAmount.toFixed(2)}).`, {
+      logger.warn(`⚠️ [RECONCILIATION] HIGH: ${highCount} high-severity discrepancies found (total ₹${totalDifferenceAmount.toFixed(2)}).`, {
         event: 'reconciliation_high',
         highCount,
         totalDifferenceAmount,
         discrepancies: discrepancies.filter(d => d.severity === 'high'),
       });
     } else if (discrepancies.length > 0) {
-      console.warn(`⚠️ [RECONCILIATION] Found ${discrepancies.length} minor discrepancies (total ₹${totalDifferenceAmount.toFixed(2)}).`);
+      logger.warn(`⚠️ [RECONCILIATION] Found ${discrepancies.length} minor discrepancies (total ₹${totalDifferenceAmount.toFixed(2)}).`);
     } else {
-      console.log(`✅ [RECONCILIATION] No discrepancies found. Checked ${result.usersChecked} user records in ${duration}ms`);
+      logger.info(`✅ [RECONCILIATION] No discrepancies found. Checked ${result.usersChecked} user records in ${duration}ms`);
     }
 
     return result;
   } catch (error) {
-    console.error('❌ [RECONCILIATION] Job failed:', error);
+    logger.error('❌ [RECONCILIATION] Job failed:', error);
     throw error;
   }
 }
@@ -292,16 +293,16 @@ async function runReconciliation(): Promise<ReconciliationResult> {
  */
 export function startReconciliationJob(): void {
   if (reconciliationJob) {
-    console.log('⚠️ [RECONCILIATION] Job already scheduled');
+    logger.info('⚠️ [RECONCILIATION] Job already scheduled');
     return;
   }
 
-  console.log('🔍 [RECONCILIATION] Starting daily reconciliation job (runs at 3:00 AM)');
+  logger.info('🔍 [RECONCILIATION] Starting daily reconciliation job (runs at 3:00 AM)');
 
   reconciliationJob = cron.schedule(RECONCILIATION_SCHEDULE, async () => {
     const lockToken = await redisService.acquireLock('reconciliation_job', LOCK_TTL);
     if (!lockToken) {
-      console.log('⏭️ [RECONCILIATION] Another instance is running, skipping');
+      logger.info('⏭️ [RECONCILIATION] Another instance is running, skipping');
       return;
     }
 
@@ -314,7 +315,7 @@ export function startReconciliationJob(): void {
     }
   });
 
-  console.log('✅ [RECONCILIATION] Job started');
+  logger.info('✅ [RECONCILIATION] Job started');
 }
 
 /**
@@ -324,7 +325,7 @@ export function stopReconciliationJob(): void {
   if (reconciliationJob) {
     reconciliationJob.stop();
     reconciliationJob = null;
-    console.log('🛑 [RECONCILIATION] Job stopped');
+    logger.info('🛑 [RECONCILIATION] Job stopped');
   }
 }
 

@@ -8,6 +8,8 @@ import { Request, Response, NextFunction } from 'express';
 import redisService from '../services/redisService';
 import { CacheTTL } from '../config/redis';
 import { generateQueryCacheKey } from '../utils/cacheHelper';
+import { cacheCounter } from '../config/prometheus';
+import { logger } from '../config/logger';
 
 /**
  * Cache middleware configuration options
@@ -67,7 +69,8 @@ export function cacheMiddleware(options: CacheOptions = {}) {
       const cachedResponse = await redisService.get<any>(cacheKey);
 
       if (cachedResponse) {
-        console.log(`📦 Cache HIT (middleware): ${cacheKey}`);
+        cacheCounter.inc({ operation: 'get', result: 'hit' });
+        logger.info(`📦 Cache HIT (middleware): ${cacheKey}`);
 
         // Add cache headers
         if (addCacheHeaders) {
@@ -79,7 +82,8 @@ export function cacheMiddleware(options: CacheOptions = {}) {
         return res.status(200).json(cachedResponse);
       }
 
-      console.log(`📦 Cache MISS (middleware): ${cacheKey}`);
+      cacheCounter.inc({ operation: 'get', result: 'miss' });
+      logger.info(`📦 Cache MISS (middleware): ${cacheKey}`);
 
       // Store original json method
       const originalJson = res.json.bind(res);
@@ -91,7 +95,7 @@ export function cacheMiddleware(options: CacheOptions = {}) {
           // Cache the response asynchronously (don't block the response)
           // P-13: Log as warning — cache write failures are non-critical
           redisService.set(cacheKey, data, ttl).catch((err) => {
-            console.warn(`[CACHE-WRITE-WARN] Failed to cache response for key ${cacheKey}:`, err);
+            logger.warn(`[CACHE-WRITE-WARN] Failed to cache response for key ${cacheKey}:`, err);
           });
         }
 
@@ -107,7 +111,7 @@ export function cacheMiddleware(options: CacheOptions = {}) {
 
       next();
     } catch (error) {
-      console.error('Cache middleware error:', error);
+      logger.error('Cache middleware error:', error);
       // Continue without caching on error
       next();
     }
@@ -202,7 +206,7 @@ export function cacheInvalidationMiddleware(
         Promise.all(
           patternArray.map((pattern) => redisService.delPattern(pattern))
         ).catch((err) => {
-          console.warn('[CACHE-INVALIDATION-WARN] cacheInvalidationMiddleware — pattern invalidation failed:', err);
+          logger.warn('[CACHE-INVALIDATION-WARN] cacheInvalidationMiddleware — pattern invalidation failed:', err);
         });
       }
 

@@ -9,6 +9,7 @@ import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { MallBrand } from '../models/MallBrand';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 // Environment variable for master webhook key
 // SECURITY: Master key MUST always come from environment variable.
@@ -46,7 +47,7 @@ export const webhookAuth = async (
     // Check master key first (for testing/demo)
     // SECURITY: Master key only works if explicitly set (not in production without env var)
     if (MASTER_WEBHOOK_KEY && apiKey === MASTER_WEBHOOK_KEY) {
-      console.log('🔑 [WEBHOOK] Authenticated with master key');
+      logger.info('🔑 [WEBHOOK] Authenticated with master key');
       (req as any).webhookAuth = {
         type: 'master',
         brandId: null,
@@ -88,7 +89,7 @@ export const webhookAuth = async (
 
       // S-14: Validate HMAC signature — mandatory in ALL environments (no dev bypass)
       if (!webhookConfig.secretKey) {
-        console.error(`⚠️ [WEBHOOK] Brand ${brand.name} has no secret key configured`);
+        logger.error(`⚠️ [WEBHOOK] Brand ${brand.name} has no secret key configured`);
         res.status(401).json({
           success: false,
           message: 'Brand webhook signature not configured',
@@ -117,7 +118,7 @@ export const webhookAuth = async (
         return;
       }
 
-      console.log(`🔑 [WEBHOOK] Authenticated for brand: ${brand.name}`);
+      logger.info(`🔑 [WEBHOOK] Authenticated for brand: ${brand.name}`);
       (req as any).webhookAuth = {
         type: 'brand',
         brandId: brand._id,
@@ -138,7 +139,7 @@ export const webhookAuth = async (
 
       // S-14: Validate HMAC signature — mandatory in ALL environments (no dev bypass)
       if (!webhookConfig.secretKey) {
-        console.error(`⚠️ [WEBHOOK] Brand ${brand.name} has no secret key configured`);
+        logger.error(`⚠️ [WEBHOOK] Brand ${brand.name} has no secret key configured`);
         res.status(401).json({
           success: false,
           message: 'Brand webhook signature not configured',
@@ -167,7 +168,7 @@ export const webhookAuth = async (
         return;
       }
 
-      console.log(`🔑 [WEBHOOK] Authenticated for brand: ${brand.name}`);
+      logger.info(`🔑 [WEBHOOK] Authenticated for brand: ${brand.name}`);
       (req as any).webhookAuth = {
         type: 'brand',
         brandId: brand._id,
@@ -183,7 +184,7 @@ export const webhookAuth = async (
       message: 'Invalid API key',
     });
   } catch (error) {
-    console.error('❌ [WEBHOOK] Authentication error:', error);
+    logger.error('❌ [WEBHOOK] Authentication error:', error);
     res.status(500).json({
       success: false,
       message: 'Authentication error',
@@ -215,7 +216,7 @@ function verifySignature(
       Buffer.from(expectedSignature)
     );
   } catch (error) {
-    console.error('Signature verification error:', error);
+    logger.error('Signature verification error:', error);
     return false;
   }
 }
@@ -253,7 +254,7 @@ export const webhookRateLimit = (
       }
     } catch (error) {
       // Redis error — allow request through (fail open for webhooks)
-      console.warn('⚠️ [WEBHOOK] Rate limit check failed, allowing request:', error);
+      logger.warn('⚠️ [WEBHOOK] Rate limit check failed, allowing request:', error);
     }
 
     next();

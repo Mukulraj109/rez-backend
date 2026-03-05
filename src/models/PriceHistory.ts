@@ -135,6 +135,8 @@ const priceHistorySchema = new Schema<IPriceHistory>(
 priceHistorySchema.index({ productId: 1, recordedAt: -1 });
 priceHistorySchema.index({ productId: 1, variantId: 1, recordedAt: -1 });
 priceHistorySchema.index({ changeType: 1, recordedAt: -1 });
+priceHistorySchema.index({ source: 1, recordedAt: -1 });
+priceHistorySchema.index({ productId: 1, changeType: 1, recordedAt: -1 });
 
 /**
  * Get price history for a product

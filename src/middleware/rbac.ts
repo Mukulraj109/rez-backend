@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { MerchantUserRole } from '../models/MerchantUser';
 import { Permission, hasPermission, hasAnyPermission, hasAllPermissions } from '../config/permissions';
+import { logger } from '../config/logger';
 
 /**
  * RBAC Middleware
@@ -22,10 +23,10 @@ export function checkPermission(permission: Permission) {
       const role: MerchantUserRole = req.merchantUser?.role || 'owner';
       const userId = req.merchantUser?._id || req.merchantId;
 
-      console.log(`🔐 [RBAC] Checking permission "${permission}" for role "${role}"`);
+      logger.info(`🔐 [RBAC] Checking permission "${permission}" for role "${role}"`);
 
       if (!userId) {
-        console.warn('⚠️ [RBAC] No authenticated user found');
+        logger.warn('⚠️ [RBAC] No authenticated user found');
         return res.status(401).json({
           success: false,
           message: 'Authentication required'
@@ -34,7 +35,7 @@ export function checkPermission(permission: Permission) {
 
       // Check if user's account is active
       if (req.merchantUser && req.merchantUser.status !== 'active') {
-        console.warn(`⚠️ [RBAC] User account is ${req.merchantUser.status}`);
+        logger.warn(`⚠️ [RBAC] User account is ${req.merchantUser.status}`);
         return res.status(403).json({
           success: false,
           message: `Account is ${req.merchantUser.status}. Please contact your administrator.`
@@ -43,7 +44,7 @@ export function checkPermission(permission: Permission) {
 
       // Check permission
       if (!hasPermission(role, permission)) {
-        console.warn(`⚠️ [RBAC] Permission denied: "${permission}" for role "${role}"`);
+        logger.warn(`⚠️ [RBAC] Permission denied: "${permission}" for role "${role}"`);
         return res.status(403).json({
           success: false,
           message: 'Forbidden: Insufficient permissions',
@@ -52,10 +53,10 @@ export function checkPermission(permission: Permission) {
         });
       }
 
-      console.log(`✅ [RBAC] Permission granted: "${permission}" for role "${role}"`);
+      logger.info(`✅ [RBAC] Permission granted: "${permission}" for role "${role}"`);
       next();
     } catch (error: any) {
-      console.error('❌ [RBAC] Error in checkPermission middleware:', error);
+      logger.error('❌ [RBAC] Error in checkPermission middleware:', error);
       return res.status(500).json({
         success: false,
         message: 'Authorization error'
@@ -76,10 +77,10 @@ export function checkAnyPermission(permissions: Permission[]) {
       const role: MerchantUserRole = req.merchantUser?.role || 'owner';
       const userId = req.merchantUser?._id || req.merchantId;
 
-      console.log(`🔐 [RBAC] Checking any of permissions [${permissions.join(', ')}] for role "${role}"`);
+      logger.info(`🔐 [RBAC] Checking any of permissions [${permissions.join(', ')}] for role "${role}"`);
 
       if (!userId) {
-        console.warn('⚠️ [RBAC] No authenticated user found');
+        logger.warn('⚠️ [RBAC] No authenticated user found');
         return res.status(401).json({
           success: false,
           message: 'Authentication required'
@@ -88,7 +89,7 @@ export function checkAnyPermission(permissions: Permission[]) {
 
       // Check if user's account is active
       if (req.merchantUser && req.merchantUser.status !== 'active') {
-        console.warn(`⚠️ [RBAC] User account is ${req.merchantUser.status}`);
+        logger.warn(`⚠️ [RBAC] User account is ${req.merchantUser.status}`);
         return res.status(403).json({
           success: false,
           message: `Account is ${req.merchantUser.status}. Please contact your administrator.`
@@ -97,7 +98,7 @@ export function checkAnyPermission(permissions: Permission[]) {
 
       // Check if user has any of the permissions
       if (!hasAnyPermission(role, permissions)) {
-        console.warn(`⚠️ [RBAC] Permission denied: User needs any of [${permissions.join(', ')}]`);
+        logger.warn(`⚠️ [RBAC] Permission denied: User needs any of [${permissions.join(', ')}]`);
         return res.status(403).json({
           success: false,
           message: 'Forbidden: Insufficient permissions',
@@ -106,10 +107,10 @@ export function checkAnyPermission(permissions: Permission[]) {
         });
       }
 
-      console.log(`✅ [RBAC] Permission granted for role "${role}"`);
+      logger.info(`✅ [RBAC] Permission granted for role "${role}"`);
       next();
     } catch (error: any) {
-      console.error('❌ [RBAC] Error in checkAnyPermission middleware:', error);
+      logger.error('❌ [RBAC] Error in checkAnyPermission middleware:', error);
       return res.status(500).json({
         success: false,
         message: 'Authorization error'
@@ -130,10 +131,10 @@ export function checkAllPermissions(permissions: Permission[]) {
       const role: MerchantUserRole = req.merchantUser?.role || 'owner';
       const userId = req.merchantUser?._id || req.merchantId;
 
-      console.log(`🔐 [RBAC] Checking all permissions [${permissions.join(', ')}] for role "${role}"`);
+      logger.info(`🔐 [RBAC] Checking all permissions [${permissions.join(', ')}] for role "${role}"`);
 
       if (!userId) {
-        console.warn('⚠️ [RBAC] No authenticated user found');
+        logger.warn('⚠️ [RBAC] No authenticated user found');
         return res.status(401).json({
           success: false,
           message: 'Authentication required'
@@ -142,7 +143,7 @@ export function checkAllPermissions(permissions: Permission[]) {
 
       // Check if user's account is active
       if (req.merchantUser && req.merchantUser.status !== 'active') {
-        console.warn(`⚠️ [RBAC] User account is ${req.merchantUser.status}`);
+        logger.warn(`⚠️ [RBAC] User account is ${req.merchantUser.status}`);
         return res.status(403).json({
           success: false,
           message: `Account is ${req.merchantUser.status}. Please contact your administrator.`
@@ -151,7 +152,7 @@ export function checkAllPermissions(permissions: Permission[]) {
 
       // Check if user has all permissions
       if (!hasAllPermissions(role, permissions)) {
-        console.warn(`⚠️ [RBAC] Permission denied: User needs all of [${permissions.join(', ')}]`);
+        logger.warn(`⚠️ [RBAC] Permission denied: User needs all of [${permissions.join(', ')}]`);
         return res.status(403).json({
           success: false,
           message: 'Forbidden: Insufficient permissions',
@@ -160,10 +161,10 @@ export function checkAllPermissions(permissions: Permission[]) {
         });
       }
 
-      console.log(`✅ [RBAC] All permissions granted for role "${role}"`);
+      logger.info(`✅ [RBAC] All permissions granted for role "${role}"`);
       next();
     } catch (error: any) {
-      console.error('❌ [RBAC] Error in checkAllPermissions middleware:', error);
+      logger.error('❌ [RBAC] Error in checkAllPermissions middleware:', error);
       return res.status(500).json({
         success: false,
         message: 'Authorization error'
@@ -184,10 +185,10 @@ export function requireRole(...roles: MerchantUserRole[]) {
       const role: MerchantUserRole = req.merchantUser?.role || 'owner';
       const userId = req.merchantUser?._id || req.merchantId;
 
-      console.log(`🔐 [RBAC] Checking if role "${role}" is in [${roles.join(', ')}]`);
+      logger.info(`🔐 [RBAC] Checking if role "${role}" is in [${roles.join(', ')}]`);
 
       if (!userId) {
-        console.warn('⚠️ [RBAC] No authenticated user found');
+        logger.warn('⚠️ [RBAC] No authenticated user found');
         return res.status(401).json({
           success: false,
           message: 'Authentication required'
@@ -196,7 +197,7 @@ export function requireRole(...roles: MerchantUserRole[]) {
 
       // Check if user's account is active
       if (req.merchantUser && req.merchantUser.status !== 'active') {
-        console.warn(`⚠️ [RBAC] User account is ${req.merchantUser.status}`);
+        logger.warn(`⚠️ [RBAC] User account is ${req.merchantUser.status}`);
         return res.status(403).json({
           success: false,
           message: `Account is ${req.merchantUser.status}. Please contact your administrator.`
@@ -205,7 +206,7 @@ export function requireRole(...roles: MerchantUserRole[]) {
 
       // Check role
       if (!roles.includes(role)) {
-        console.warn(`⚠️ [RBAC] Role denied: "${role}" not in [${roles.join(', ')}]`);
+        logger.warn(`⚠️ [RBAC] Role denied: "${role}" not in [${roles.join(', ')}]`);
         return res.status(403).json({
           success: false,
           message: 'Forbidden: Insufficient role',
@@ -214,10 +215,10 @@ export function requireRole(...roles: MerchantUserRole[]) {
         });
       }
 
-      console.log(`✅ [RBAC] Role authorized: "${role}"`);
+      logger.info(`✅ [RBAC] Role authorized: "${role}"`);
       next();
     } catch (error: any) {
-      console.error('❌ [RBAC] Error in requireRole middleware:', error);
+      logger.error('❌ [RBAC] Error in requireRole middleware:', error);
       return res.status(500).json({
         success: false,
         message: 'Authorization error'

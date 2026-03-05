@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AdminAuditLog } from '../models/AdminAuditLog';
+import { logger } from '../config/logger';
 
 /**
  * Sensitive fields to strip from request bodies before logging.
@@ -205,7 +206,7 @@ export function adminAuditMiddleware(req: Request, res: Response, next: NextFunc
             responseStatus: res.statusCode,
             timestamp: new Date(),
           }).catch((err: Error) => {
-            console.error('[ADMIN_AUDIT] Failed to write audit log:', err.message);
+            logger.error('[ADMIN_AUDIT] Failed to write audit log:', err.message);
           });
         });
       }

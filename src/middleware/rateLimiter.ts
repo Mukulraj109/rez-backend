@@ -9,6 +9,7 @@ import rateLimit from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { Request, Response, NextFunction } from 'express';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 // Extend Request interface to include rateLimit property
 declare global {
@@ -35,7 +36,7 @@ const keyGenerator = (req: Request): string => {
 const isRateLimitDisabled = process.env.DISABLE_RATE_LIMIT === 'true';
 
 if (isRateLimitDisabled) {
-  console.log('⚠️  Rate limiting is DISABLED (DISABLE_RATE_LIMIT=true)');
+  logger.info('⚠️  Rate limiting is DISABLED (DISABLE_RATE_LIMIT=true)');
 }
 
 const passthrough = (_req: Request, _res: Response, next: NextFunction) => next();
@@ -51,15 +52,32 @@ function makeStore(prefix: string) {
       const client = redisService.getClient();
       if (!client) {
         if (!redisStoreWarningLogged) {
-          console.warn('⚠️  [RateLimit] Redis not available — using MemoryStore fallback');
+          logger.warn('[RateLimit] Redis not available — falling back to MemoryStore');
           redisStoreWarningLogged = true;
         }
-        return [];
+        throw new Error('Redis not available');
       }
       return (client as any).sendCommand(args);
     },
     prefix: `rl:${prefix}:`,
   });
+}
+
+// ─── Safe rate limiter factory — catches store errors, passes request through ─
+function makeLimiter(options: Parameters<typeof rateLimit>[0]) {
+  const limiter = rateLimit(options);
+  return (req: Request, res: Response, next: NextFunction) => {
+    limiter(req, res, (err?: any) => {
+      if (err) {
+        if (!redisStoreWarningLogged) {
+          logger.warn('[RateLimit] Store error, passing request through:', err.message);
+          redisStoreWarningLogged = true;
+        }
+        return next();
+      }
+      next();
+    });
+  };
 }
 
 // ─── Error response helper ────────────────────────────────────────────────────
@@ -76,7 +94,7 @@ const rateLimitResponse = (_req: Request, res: Response) => {
 
 export const generalLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 15 * 60 * 1000,
       max: 500,
       keyGenerator,
@@ -88,7 +106,7 @@ export const generalLimiter = isRateLimitDisabled
 
 export const authLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 15 * 60 * 1000,
       max: 5,
       keyGenerator,
@@ -107,7 +125,7 @@ export const authLimiter = isRateLimitDisabled
 
 export const registrationLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 60 * 1000,
       max: 5,
       keyGenerator,
@@ -125,7 +143,7 @@ export const registrationLimiter = isRateLimitDisabled
 
 export const otpLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 30 * 1000,
       max: 3,
       keyGenerator,
@@ -143,7 +161,7 @@ export const otpLimiter = isRateLimitDisabled
 
 export const passwordResetLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 60 * 1000,
       max: 3,
       keyGenerator,
@@ -155,7 +173,7 @@ export const passwordResetLimiter = isRateLimitDisabled
 
 export const securityLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 15 * 60 * 1000,
       max: 3,
       keyGenerator,
@@ -167,7 +185,7 @@ export const securityLimiter = isRateLimitDisabled
 
 export const uploadLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 1000,
       max: 10,
       keyGenerator,
@@ -185,7 +203,7 @@ export const uploadLimiter = isRateLimitDisabled
 
 export const searchLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 1000,
       max: 30,
       keyGenerator,
@@ -197,7 +215,7 @@ export const searchLimiter = isRateLimitDisabled
 
 export const aiSearchLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 1000,
       max: 10,
       keyGenerator,
@@ -209,7 +227,7 @@ export const aiSearchLimiter = isRateLimitDisabled
 
 export const strictLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 60 * 1000,
       max: 10,
       keyGenerator,
@@ -221,7 +239,7 @@ export const strictLimiter = isRateLimitDisabled
 
 export const reviewLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 1000,
       max: 5,
       keyGenerator,
@@ -233,7 +251,7 @@ export const reviewLimiter = isRateLimitDisabled
 
 export const analyticsLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 1000,
       max: 30,
       keyGenerator,
@@ -245,7 +263,7 @@ export const analyticsLimiter = isRateLimitDisabled
 
 export const comparisonLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 1000,
       max: 10,
       keyGenerator,
@@ -257,7 +275,7 @@ export const comparisonLimiter = isRateLimitDisabled
 
 export const favoriteLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 1000,
       max: 20,
       keyGenerator,
@@ -269,7 +287,7 @@ export const favoriteLimiter = isRateLimitDisabled
 
 export const recommendationLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 1000,
       max: 15,
       keyGenerator,
@@ -281,7 +299,7 @@ export const recommendationLimiter = isRateLimitDisabled
 
 export const referralLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 60 * 1000,
       max: 50,
       keyGenerator,
@@ -293,7 +311,7 @@ export const referralLimiter = isRateLimitDisabled
 
 export const referralShareLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 1000,
       max: 5,
       keyGenerator,
@@ -309,7 +327,7 @@ export const referralShareLimiter = isRateLimitDisabled
 
 export const productGetLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 1000,
       max: 100,
       keyGenerator,
@@ -321,7 +339,7 @@ export const productGetLimiter = isRateLimitDisabled
 
 export const productWriteLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 1000,
       max: 30,
       keyGenerator,
@@ -333,7 +351,7 @@ export const productWriteLimiter = isRateLimitDisabled
 
 export const productDeleteLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 1000,
       max: 10,
       keyGenerator,
@@ -345,7 +363,7 @@ export const productDeleteLimiter = isRateLimitDisabled
 
 export const productBulkLimiter = isRateLimitDisabled
   ? passthrough
-  : rateLimit({
+  : makeLimiter({
       windowMs: 60 * 1000,
       max: 5,
       keyGenerator,
@@ -365,7 +383,7 @@ export const createProductLimiter = (method: 'GET' | 'POST' | 'PUT' | 'DELETE' |
     BULK:   { max: 5,   prefix: 'product-bulk2' },
   };
   const { max, prefix } = configs[method];
-  return rateLimit({
+  return makeLimiter({
     windowMs: 60 * 1000,
     max,
     keyGenerator,
@@ -384,7 +402,7 @@ export const createRateLimiter = (options: {
   prefix?: string;
 }) => {
   if (isRateLimitDisabled) return passthrough;
-  return rateLimit({
+  return makeLimiter({
     windowMs: options.windowMs || 15 * 60 * 1000,
     max: options.max || 100,
     keyGenerator,

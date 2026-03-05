@@ -212,6 +212,8 @@ const ReferralSchema = new Schema<IReferral>(
 ReferralSchema.index({ referrer: 1, status: 1 });
 ReferralSchema.index({ referee: 1, status: 1 });
 ReferralSchema.index({ status: 1, expiresAt: 1 });
+ReferralSchema.index({ referrer: 1, createdAt: -1 });
+ReferralSchema.index({ tier: 1, status: 1, createdAt: -1 });
 
 // Pre-save hook to set expiration date (90 days from creation)
 ReferralSchema.pre('save', function (next) {

@@ -6,12 +6,15 @@ import mongoose from 'mongoose';
 import { sendSuccess, sendBadRequest, sendNotFound } from '../../utils/response';
 import { CacheInvalidator } from '../../utils/cacheHelper';
 import { requireAuth, requireAdmin, requireSeniorAdmin } from '../../middleware/auth';
+import { cacheInvalidationMiddleware } from '../../middleware/cacheMiddleware';
 
 const router = Router();
 
 // All routes require authenticated admin
 router.use(requireAuth);
 router.use(requireAdmin);
+// Invalidate store + homepage caches on write operations
+router.use(cacheInvalidationMiddleware(() => ['stores:*', 'homepage:*']));
 
 // Validate :storeId param is a valid ObjectId
 router.param('storeId', (req: Request, res: Response, next, id: string) => {

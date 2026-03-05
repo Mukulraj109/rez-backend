@@ -15,6 +15,7 @@
 
 import { Request, Response } from 'express';
 import mallService from '../services/mallService';
+import { logger } from '../config/logger';
 import { sendSuccess, sendError } from '../utils/response';
 import { MallOffer } from '../models/MallOffer';
 
@@ -101,7 +102,7 @@ export const getCashStoreCategories = async (req: Request, res: Response) => {
 
     return sendSuccess(res, allCategories, 'Categories fetched');
   } catch (error) {
-    console.error('[CashStore] Error fetching categories:', error);
+    logger.error('[CashStore] Error fetching categories:', error);
     return sendError(res, 'Failed to fetch categories', 500);
   }
 };
@@ -166,7 +167,7 @@ export const getCashStoreBrands = async (req: Request, res: Response) => {
 
     return sendSuccess(res, responseData, 'Brands fetched');
   } catch (error) {
-    console.error('[CashStore] Error fetching brands:', error);
+    logger.error('[CashStore] Error fetching brands:', error);
     return sendError(res, 'Failed to fetch brands', 500);
   }
 };
@@ -192,7 +193,7 @@ export const searchCashStoreBrands = async (req: Request, res: Response) => {
       'Search results'
     );
   } catch (error) {
-    console.error('[CashStore] Error searching brands:', error);
+    logger.error('[CashStore] Error searching brands:', error);
     return sendError(res, 'Failed to search brands', 500);
   }
 };
@@ -243,7 +244,7 @@ export const getCashStoreHomepage = async (req: Request, res: Response) => {
 
     return sendSuccess(res, homepageData, 'Cash Store homepage data fetched');
   } catch (error) {
-    console.error('[CashStore] Error fetching homepage data:', error);
+    logger.error('[CashStore] Error fetching homepage data:', error);
     return sendError(res, 'Failed to fetch homepage data', 500);
   }
 };
@@ -278,7 +279,7 @@ export const getCashStoreGiftCards = async (req: Request, res: Response) => {
 
     return sendSuccess(res, responseData, 'Gift cards fetched');
   } catch (error) {
-    console.error('[CashStore] Error fetching gift cards:', error);
+    logger.error('[CashStore] Error fetching gift cards:', error);
     return sendError(res, 'Failed to fetch gift cards', 500);
   }
 };
@@ -328,7 +329,7 @@ export const getCashStoreTrending = async (req: Request, res: Response) => {
 
     return sendSuccess(res, trendingData, 'Trending data fetched');
   } catch (error) {
-    console.error('[CashStore] Error fetching trending data:', error);
+    logger.error('[CashStore] Error fetching trending data:', error);
     return sendError(res, 'Failed to fetch trending data', 500);
   }
 };

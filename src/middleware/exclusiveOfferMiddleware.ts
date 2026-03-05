@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { Wishlist } from '../models/Wishlist';
 import mongoose from 'mongoose';
+import { logger } from '../config/logger';
 
 /**
  * Check if user is following a store
@@ -24,7 +25,7 @@ export async function isFollowingStore(
     });
     return !!wishlist;
   } catch (error) {
-    console.error('Error checking follow status:', error);
+    logger.error('Error checking follow status:', error);
     return false;
   }
 }
@@ -54,7 +55,7 @@ export async function getUserFollowedStores(
 
     return [...new Set(storeIds)]; // Remove duplicates
   } catch (error) {
-    console.error('Error getting followed stores:', error);
+    logger.error('Error getting followed stores:', error);
     return [];
   }
 }
@@ -77,7 +78,7 @@ export async function addFollowerContext(
     }
     next();
   } catch (error) {
-    console.error('Error in addFollowerContext middleware:', error);
+    logger.error('Error in addFollowerContext middleware:', error);
     (req as any).followedStores = [];
     next();
   }
@@ -215,7 +216,7 @@ export async function checkExclusiveOfferAccess(
 
     next();
   } catch (error) {
-    console.error('Error in checkExclusiveOfferAccess:', error);
+    logger.error('Error in checkExclusiveOfferAccess:', error);
     next(); // Continue on error to avoid breaking the flow
   }
 }

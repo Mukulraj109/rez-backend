@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { Order } from '../models/Order';
+import { logger } from '../config/logger';
 import mongoose from 'mongoose';
 
 // Helper function to format time ago
@@ -289,7 +290,7 @@ export const getNearbyActivity = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('Error fetching nearby activity:', error);
+    logger.error('Error fetching nearby activity:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to fetch nearby activity',
@@ -366,7 +367,7 @@ export const getCityWideStats = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('Error fetching city-wide stats:', error);
+    logger.error('Error fetching city-wide stats:', error);
     return res.status(500).json({
       success: false,
       error: 'Failed to fetch city-wide statistics',

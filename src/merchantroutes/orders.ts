@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { logger } from '../config/logger';
 import { authMiddleware } from '../middleware/merchantauth';
 import { OrderModel } from '../models/MerchantOrder';
 import { Order as OrderType, OrderStatus, PaymentStatus } from '../types/shared';
@@ -71,7 +72,7 @@ router.post('/test-sample-data', async (req: Request, res: Response) => {
       merchantId: merchantId
     });
   } catch (error) {
-    console.error('Error creating sample orders:', error);
+    logger.error('Error creating sample orders:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to create sample orders',
@@ -100,7 +101,7 @@ router.delete('/test-clear-orders', async (req: Request, res: Response) => {
       deletedCount: result.deletedCount
     });
   } catch (error) {
-    console.error('Error clearing orders:', error);
+    logger.error('Error clearing orders:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to clear orders',
@@ -130,7 +131,7 @@ router.get('/test-analytics', async (req: Request, res: Response) => {
       };
     }
 
-    console.log("Testing analytics for merchantId:", merchantId);
+    logger.info("Testing analytics for merchantId:", merchantId);
 
     const analytics = await OrderModel.getAnalytics(merchantId, dateRange);
     return res.json({
@@ -138,7 +139,7 @@ router.get('/test-analytics', async (req: Request, res: Response) => {
       data: analytics
     });
   } catch (error) {
-    console.error('Error fetching test analytics:', error);
+    logger.error('Error fetching test analytics:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch analytics',
@@ -168,7 +169,7 @@ router.post('/test-cashback-sample', async (req: Request, res: Response) => {
       merchantId: merchantId
     });
   } catch (error) {
-    console.error('Error creating sample cashback:', error);
+    logger.error('Error creating sample cashback:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to create sample cashback',
@@ -196,7 +197,7 @@ router.get('/test-cashback-list', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error) {
-    console.error('Error fetching cashback list:', error);
+    logger.error('Error fetching cashback list:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch cashback list',
@@ -224,7 +225,7 @@ router.get('/test-cashback-metrics', async (req: Request, res: Response) => {
       data: metrics
     });
   } catch (error) {
-    console.error('Error fetching cashback metrics:', error);
+    logger.error('Error fetching cashback metrics:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch cashback metrics',
@@ -252,7 +253,7 @@ router.get('/test-dashboard-overview', async (req: Request, res: Response) => {
       message: 'Dashboard metrics retrieved successfully' 
     });
   } catch (error) {
-    console.error('Error getting dashboard metrics:', error);
+    logger.error('Error getting dashboard metrics:', error);
     return res.status(500).json({ 
       success: false, 
       message: 'Failed to get dashboard metrics',
@@ -281,7 +282,7 @@ router.get('/test-dashboard-timeseries', async (req: Request, res: Response) => 
       message: 'Dashboard timeseries data retrieved successfully' 
     });
   } catch (error) {
-    console.error('Error getting dashboard timeseries:', error);
+    logger.error('Error getting dashboard timeseries:', error);
     return res.status(500).json({ 
       success: false, 
       message: 'Failed to get dashboard timeseries',
@@ -309,7 +310,7 @@ router.get('/test-dashboard-categories', async (req: Request, res: Response) => 
       message: 'Dashboard category performance retrieved successfully' 
     });
   } catch (error) {
-    console.error('Error getting dashboard categories:', error);
+    logger.error('Error getting dashboard categories:', error);
     return res.status(500).json({ 
       success: false, 
       message: 'Failed to get dashboard categories',
@@ -337,7 +338,7 @@ router.get('/test-dashboard-customers', async (req: Request, res: Response) => {
       message: 'Dashboard customer insights retrieved successfully' 
     });
   } catch (error) {
-    console.error('Error getting dashboard customer insights:', error);
+    logger.error('Error getting dashboard customer insights:', error);
     return res.status(500).json({ 
       success: false, 
       message: 'Failed to get dashboard customer insights',
@@ -365,7 +366,7 @@ router.get('/test-dashboard-insights', async (req: Request, res: Response) => {
       message: 'Dashboard insights retrieved successfully' 
     });
   } catch (error) {
-    console.error('Error getting dashboard insights:', error);
+    logger.error('Error getting dashboard insights:', error);
     return res.status(500).json({ 
       success: false, 
       message: 'Failed to get dashboard insights',
@@ -462,7 +463,7 @@ router.get('/', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error) {
-    console.error('Error fetching orders:', error);
+    logger.error('Error fetching orders:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch orders',
@@ -511,7 +512,7 @@ router.get('/:id', async (req: Request, res: Response) => {
           }
         }
       } catch (storeError) {
-        console.warn('Failed to fetch store info for order:', storeError);
+        logger.warn('Failed to fetch store info for order:', storeError);
         // Continue without store info
       }
     }
@@ -524,7 +525,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching order:', error);
+    logger.error('Error fetching order:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch order',
@@ -602,13 +603,13 @@ router.put('/:id/status', async (req: Request, res: Response) => {
 
     // INVENTORY AUTO-DEDUCTION: When order is confirmed
     if (status === 'confirmed' && currentStatus !== 'confirmed') {
-      console.log(`Processing inventory deduction for order ${order.orderNumber}`);
+      logger.info(`Processing inventory deduction for order ${order.orderNumber}`);
 
       for (const item of order.items) {
         const product = await Product.findById(item.product).session(session);
 
         if (!product) {
-          console.warn(`Product ${item.product} not found, skipping inventory deduction`);
+          logger.warn(`Product ${item.product} not found, skipping inventory deduction`);
           continue;
         }
 
@@ -632,7 +633,7 @@ router.put('/:id/status', async (req: Request, res: Response) => {
           }
 
           await product.save({ session });
-          console.log(`Deducted ${item.quantity} units from product ${item.name}. New stock: ${product.inventory.stock}`);
+          logger.info(`Deducted ${item.quantity} units from product ${item.name}. New stock: ${product.inventory.stock}`);
         }
       }
 
@@ -641,9 +642,9 @@ router.put('/:id/status', async (req: Request, res: Response) => {
         const invoiceUrl = await InvoiceService.generateInvoice(order, merchantId);
         order.invoiceUrl = invoiceUrl;
         order.invoiceGeneratedAt = new Date();
-        console.log(`Invoice generated: ${invoiceUrl}`);
+        logger.info(`Invoice generated: ${invoiceUrl}`);
       } catch (invoiceError) {
-        console.error('Failed to generate invoice:', invoiceError);
+        logger.error('Failed to generate invoice:', invoiceError);
         // Don't fail the transaction if invoice generation fails
       }
     }
@@ -652,7 +653,7 @@ router.put('/:id/status', async (req: Request, res: Response) => {
     if (status === 'cancelled' && currentStatus !== 'cancelled') {
       // Only release inventory if it was previously reserved (not yet implemented in this version)
       // In future versions, implement inventory reservation on order placement
-      console.log(`Order ${order.orderNumber} cancelled`);
+      logger.info(`Order ${order.orderNumber} cancelled`);
     }
 
     // Update order status
@@ -665,9 +666,9 @@ router.put('/:id/status', async (req: Request, res: Response) => {
         const labelUrl = await ShippingLabelService.generateShippingLabel(order, merchantId);
         order.shippingLabelUrl = labelUrl;
         await order.save({ session });
-        console.log(`Shipping label generated: ${labelUrl}`);
+        logger.info(`Shipping label generated: ${labelUrl}`);
       } catch (labelError) {
-        console.error('Failed to generate shipping label:', labelError);
+        logger.error('Failed to generate shipping label:', labelError);
       }
     }
 
@@ -677,9 +678,9 @@ router.put('/:id/status', async (req: Request, res: Response) => {
         const packingSlipUrl = await InvoiceService.generatePackingSlip(order, merchantId);
         order.packingSlipUrl = packingSlipUrl;
         await order.save({ session });
-        console.log(`Packing slip generated: ${packingSlipUrl}`);
+        logger.info(`Packing slip generated: ${packingSlipUrl}`);
       } catch (slipError) {
-        console.error('Failed to generate packing slip:', slipError);
+        logger.error('Failed to generate packing slip:', slipError);
       }
     }
 
@@ -708,9 +709,9 @@ router.put('/:id/status', async (req: Request, res: Response) => {
             storeName
           );
         }
-        console.log(`SMS notification sent to ${customerPhone}`);
+        logger.info(`SMS notification sent to ${customerPhone}`);
       } catch (smsError) {
-        console.warn('Failed to send SMS notification:', smsError);
+        logger.warn('Failed to send SMS notification:', smsError);
       }
 
       // Send email notification
@@ -747,9 +748,9 @@ router.put('/:id/status', async (req: Request, res: Response) => {
             subject: emailSubject,
             html: emailHtml,
           });
-          console.log(`Email notification sent to ${customerEmail}`);
+          logger.info(`Email notification sent to ${customerEmail}`);
         } catch (emailError) {
-          console.warn('Failed to send email notification:', emailError);
+          logger.warn('Failed to send email notification:', emailError);
         }
       }
     }
@@ -769,7 +770,7 @@ router.put('/:id/status', async (req: Request, res: Response) => {
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    console.error('Error updating order status:', error);
+    logger.error('Error updating order status:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to update order status',
@@ -869,7 +870,7 @@ router.post('/bulk-action', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error performing bulk action:', error);
+    logger.error('Error performing bulk action:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to perform bulk action',
@@ -917,7 +918,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
       data: analyticsData
     });
   } catch (error) {
-    console.error('Error fetching order analytics:', error);
+    logger.error('Error fetching order analytics:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch order analytics',
@@ -948,7 +949,7 @@ router.post('/sample-data', async (req: Request, res: Response) => {
       merchantId: merchantId
     });
   } catch (error) {
-    console.error('Error creating sample orders:', error);
+    logger.error('Error creating sample orders:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to create sample orders',
@@ -1027,12 +1028,12 @@ router.get('/:id/invoice', async (req: Request, res: Response) => {
         .then((invoiceUrl) => {
           order.invoiceUrl = invoiceUrl;
           order.invoiceGeneratedAt = new Date();
-          order.save().catch((err) => console.error('Failed to save invoice URL:', err));
+          order.save().catch((err) => logger.error('Failed to save invoice URL:', err));
         })
-        .catch((err) => console.error('Failed to generate invoice URL:', err));
+        .catch((err) => logger.error('Failed to generate invoice URL:', err));
     }
   } catch (error) {
-    console.error('Error generating invoice:', error);
+    logger.error('Error generating invoice:', error);
     if (!res.headersSent) {
       return res.status(500).json({
         success: false,
@@ -1082,7 +1083,7 @@ router.get('/:id/shipping-label', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error generating shipping label:', error);
+    logger.error('Error generating shipping label:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to generate shipping label',
@@ -1130,7 +1131,7 @@ router.get('/:id/packing-slip', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error generating packing slip:', error);
+    logger.error('Error generating packing slip:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to generate packing slip',
@@ -1178,7 +1179,7 @@ router.post('/bulk-labels', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Error generating bulk shipping labels:', error);
+    logger.error('Error generating bulk shipping labels:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to generate bulk shipping labels',

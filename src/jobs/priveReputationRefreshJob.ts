@@ -11,6 +11,7 @@ import PriveAccess from '../models/PriveAccess';
 import { reputationService } from '../services/reputationService';
 import { PriveAuditLog } from '../models/PriveAuditLog';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 let isRunning = false;
 
@@ -18,14 +19,14 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const runPriveReputationRefresh = async (): Promise<{ processed: number; tierChanges: number }> => {
   if (isRunning) {
-    console.log('[PriveReputationRefresh] Job already running, skipping');
+    logger.info('[PriveReputationRefresh] Job already running, skipping');
     return { processed: 0, tierChanges: 0 };
   }
 
   const lockKey = 'job:prive-reputation-refresh';
   const lockToken = await redisService.acquireLock(lockKey, 300);
   if (!lockToken) {
-    console.log('prive-reputation-refresh skipped — lock held by another instance');
+    logger.info('prive-reputation-refresh skipped — lock held by another instance');
     return { processed: 0, tierChanges: 0 };
   }
 
@@ -34,7 +35,7 @@ export const runPriveReputationRefresh = async (): Promise<{ processed: number; 
   let tierChanges = 0;
 
   try {
-    console.log('[PriveReputationRefresh] Starting batch reputation recalculation...');
+    logger.info('[PriveReputationRefresh] Starting batch reputation recalculation...');
 
     // Get all active Prive member user IDs
     const activeMembers = await PriveAccess.find(
@@ -42,7 +43,7 @@ export const runPriveReputationRefresh = async (): Promise<{ processed: number; 
       { userId: 1, tierOverride: 1 }
     ).lean();
 
-    console.log(`[PriveReputationRefresh] Found ${activeMembers.length} active members`);
+    logger.info(`[PriveReputationRefresh] Found ${activeMembers.length} active members`);
 
     // Pre-fetch current tiers from UserReputation
     const userIds = activeMembers.map(m => m.userId);
@@ -83,7 +84,7 @@ export const runPriveReputationRefresh = async (): Promise<{ processed: number; 
             });
           }
         } catch (err) {
-          console.error(`[PriveReputationRefresh] Error processing user ${member.userId}:`, err);
+          logger.error(`[PriveReputationRefresh] Error processing user ${member.userId}:`, err);
         }
       }));
 
@@ -93,10 +94,10 @@ export const runPriveReputationRefresh = async (): Promise<{ processed: number; 
       }
     }
 
-    console.log(`[PriveReputationRefresh] Completed: ${processed} processed, ${tierChanges} tier changes`);
+    logger.info(`[PriveReputationRefresh] Completed: ${processed} processed, ${tierChanges} tier changes`);
     return { processed, tierChanges };
   } catch (error) {
-    console.error('[PriveReputationRefresh] Job failed:', error);
+    logger.error('[PriveReputationRefresh] Job failed:', error);
     return { processed, tierChanges };
   } finally {
     isRunning = false;
@@ -112,5 +113,5 @@ export const initializePriveReputationRefreshJob = () => {
     runPriveReputationRefresh();
   }, { timezone: 'UTC' });
 
-  console.log('✅ Privé reputation refresh job scheduled (daily at 2:00 AM UTC)');
+  logger.info('✅ Privé reputation refresh job scheduled (daily at 2:00 AM UTC)');
 };

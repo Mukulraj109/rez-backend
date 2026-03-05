@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { asyncHandler } from '../utils/asyncHandler';
+import { logger } from '../config/logger';
 import { sendSuccess, sendError, sendBadRequest, sendNotFound } from '../utils/response';
 import BonusCampaign from '../models/BonusCampaign';
 import BonusClaim from '../models/BonusClaim';
@@ -823,7 +824,7 @@ export const adminRejectClaim = asyncHandler(async (req: Request, res: Response)
         await wallet.save();
       }
     } catch (reverseErr) {
-      console.error('[BONUS ADMIN] Failed to reverse coins for rejected claim:', reverseErr);
+      logger.error('[BONUS ADMIN] Failed to reverse coins for rejected claim:', reverseErr);
     }
   }
 

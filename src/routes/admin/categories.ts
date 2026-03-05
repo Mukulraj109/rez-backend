@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { requireAuth, requireAdmin, requireSeniorAdmin } from '../../middleware/auth';
+import { cacheInvalidationMiddleware } from '../../middleware/cacheMiddleware';
 import { Category } from '../../models/Category';
 import { Store } from '../../models/Store';
 import Joi from 'joi';
@@ -20,6 +21,8 @@ const SECTION_TYPES = [
 // All routes require authenticated admin (role >= support/60)
 router.use(requireAuth);
 router.use(requireAdmin);
+// Invalidate category + homepage caches on write operations
+router.use(cacheInvalidationMiddleware(() => ['categories:*', 'homepage:*']));
 
 // Validate :id param is a valid ObjectId
 router.param('id', (req: Request, res: Response, next, id: string) => {

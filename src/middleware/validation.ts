@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import Joi from 'joi';
+import { logger } from '../config/logger';
 
 // S-11: Helper to strip HTML tags from strings to prevent stored XSS
 const stripHtmlTags = (value: string): string => {
@@ -32,7 +33,7 @@ export const validate = (schema: Joi.ObjectSchema) => {
         message: detail.message
       }));
 
-      console.log('[VALIDATION ERROR]', JSON.stringify({ body: req.body, errors }, null, 2));
+      logger.info('[VALIDATION ERROR]', JSON.stringify({ body: req.body, errors }, null, 2));
 
       return res.status(400).json({
         success: false,

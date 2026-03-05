@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
+import { logger } from '../config/logger';
 
 /**
  * Razorpay IP Ranges - Verified from official Razorpay documentation
@@ -41,7 +42,7 @@ function isIPInRange(ip: string, cidr: string): boolean {
 
     return (ipInt & mask) === (rangeInt & mask);
   } catch (error) {
-    console.error(`Error checking IP range: ${error}`);
+    logger.error(`Error checking IP range: ${error}`);
     return false;
   }
 }
@@ -69,7 +70,7 @@ export const razorpayIPWhitelist = (
   );
 
   if (!isAuthorized) {
-    console.error(
+    logger.error(
       `[WEBHOOK-SECURITY] Unauthorized webhook attempt from IP: ${clientIP}`,
       {
         timestamp: new Date().toISOString(),
@@ -90,7 +91,7 @@ export const razorpayIPWhitelist = (
     return;
   }
 
-  console.log(
+  logger.info(
     `[WEBHOOK-SECURITY] Authorized IP: ${clientIP}`,
     {
       timestamp: new Date().toISOString(),
@@ -115,7 +116,7 @@ export const webhookRateLimiter = rateLimit({
     return !req.path.includes('/webhook');
   },
   handler: (req: Request, res: Response) => {
-    console.warn('[WEBHOOK-SECURITY] Rate limit exceeded', {
+    logger.warn('[WEBHOOK-SECURITY] Rate limit exceeded', {
       ip: req.ip,
       path: req.path,
       timestamp: new Date().toISOString(),
@@ -147,7 +148,7 @@ export const validateWebhookPayload = (
     const missingFields = requiredFields.filter(field => !webhookBody[field]);
 
     if (missingFields.length > 0) {
-      console.error(
+      logger.error(
         `[WEBHOOK-SECURITY] Missing required fields: ${missingFields.join(', ')}`,
         {
           receivedFields: Object.keys(webhookBody),
@@ -180,7 +181,7 @@ export const validateWebhookPayload = (
     ];
 
     if (!validEventTypes.includes(webhookBody.event)) {
-      console.error(
+      logger.error(
         `[WEBHOOK-SECURITY] Invalid event type: ${webhookBody.event}`,
         {
           timestamp: new Date().toISOString(),
@@ -202,7 +203,7 @@ export const validateWebhookPayload = (
     const webhookAge = currentTimestamp - eventTimestamp;
 
     if (webhookAge > WEBHOOK_MAX_AGE_SECONDS) {
-      console.error(
+      logger.error(
         `[WEBHOOK-SECURITY] Webhook too old: ${webhookBody.id}`,
         {
           eventId: webhookBody.id,
@@ -226,7 +227,7 @@ export const validateWebhookPayload = (
 
     next();
   } catch (error: any) {
-    console.error(`[WEBHOOK-SECURITY] Payload validation error: ${error.message}`, {
+    logger.error(`[WEBHOOK-SECURITY] Payload validation error: ${error.message}`, {
       error: error.message,
       timestamp: new Date().toISOString(),
     });
@@ -250,7 +251,7 @@ export const logWebhookSecurityEvent = (
 ): void => {
   const webhookBody = (req as any).webhookPayload || req.body;
 
-  console.log('[WEBHOOK-SECURITY] Webhook received', {
+  logger.info('[WEBHOOK-SECURITY] Webhook received', {
     eventId: webhookBody.id,
     eventType: webhookBody.event,
     ip: req.ip || req.socket.remoteAddress,
@@ -271,7 +272,7 @@ export const sendSecureWebhookError = (
   message: string,
   eventId?: string
 ): void => {
-  console.error(`[WEBHOOK-SECURITY] ${errorType}`, {
+  logger.error(`[WEBHOOK-SECURITY] ${errorType}`, {
     eventId,
     message,
     timestamp: new Date().toISOString(),
@@ -292,7 +293,7 @@ export const sendSecureWebhookSuccess = (
   message: string,
   eventId: string
 ): void => {
-  console.log('[WEBHOOK-SECURITY] Webhook processed successfully', {
+  logger.info('[WEBHOOK-SECURITY] Webhook processed successfully', {
     eventId,
     message,
     timestamp: new Date().toISOString(),

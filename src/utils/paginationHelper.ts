@@ -8,6 +8,7 @@
  */
 
 import { Document, Model, FilterQuery, QueryOptions } from 'mongoose';
+import { logger } from '../config/logger';
 
 export interface OffsetPaginationOptions {
   page?: number;
@@ -115,7 +116,7 @@ export async function paginateCursor<T extends Document>(
       const operator = sortDirection === 1 ? '$gt' : '$lt';
       (query as any)[sortField] = { [operator]: cursorValue };
     } catch (error) {
-      console.error('Invalid cursor:', error);
+      logger.error('Invalid cursor:', error);
     }
   }
 

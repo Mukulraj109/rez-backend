@@ -33,7 +33,7 @@ export function logWebhookReceived(details: WebhookEventDetails): void {
 
   logger.info(`[${details.provider.toUpperCase()} WEBHOOK] Event received`, logData);
 
-  console.log(`🔔 [${details.provider.toUpperCase()} WEBHOOK] Event received:`, {
+  logger.info(`🔔 [${details.provider.toUpperCase()} WEBHOOK] Event received:`, {
     eventType: details.eventType,
     eventId: details.eventId,
     orderId: details.orderId || 'N/A',
@@ -56,7 +56,7 @@ export function logWebhookSuccess(details: WebhookEventDetails): void {
 
   logger.info(`[${details.provider.toUpperCase()} WEBHOOK] Event processed successfully`, logData);
 
-  console.log(`✅ [${details.provider.toUpperCase()} WEBHOOK] Event processed successfully:`, {
+  logger.info(`✅ [${details.provider.toUpperCase()} WEBHOOK] Event processed successfully:`, {
     eventType: details.eventType,
     eventId: details.eventId,
     orderId: details.orderId || 'N/A'
@@ -79,7 +79,7 @@ export function logWebhookError(details: WebhookEventDetails): void {
 
   logger.error(`[${details.provider.toUpperCase()} WEBHOOK] Event processing failed`, logData);
 
-  console.error(`❌ [${details.provider.toUpperCase()} WEBHOOK] Event processing failed:`, {
+  logger.error(`❌ [${details.provider.toUpperCase()} WEBHOOK] Event processing failed:`, {
     eventType: details.eventType,
     eventId: details.eventId,
     orderId: details.orderId || 'N/A',
@@ -101,7 +101,7 @@ export function logWebhookDuplicate(details: WebhookEventDetails): void {
 
   logger.warn(`[${details.provider.toUpperCase()} WEBHOOK] Duplicate event detected`, logData);
 
-  console.log(`⚠️ [${details.provider.toUpperCase()} WEBHOOK] Duplicate event detected:`, {
+  logger.info(`⚠️ [${details.provider.toUpperCase()} WEBHOOK] Duplicate event detected:`, {
     eventType: details.eventType,
     eventId: details.eventId
   });
@@ -121,7 +121,7 @@ export function logWebhookSignatureFailure(provider: 'razorpay' | 'stripe', even
 
   logger.error(`[${provider.toUpperCase()} WEBHOOK] Signature verification failed`, logData);
 
-  console.error(`❌ [${provider.toUpperCase()} WEBHOOK] Signature verification failed for event:`, eventType || 'unknown');
+  logger.error(`❌ [${provider.toUpperCase()} WEBHOOK] Signature verification failed for event:`, eventType || 'unknown');
 }
 
 /**
@@ -145,7 +145,7 @@ export function logPaymentStateChange(
 
   logger.info(`[${provider.toUpperCase()} WEBHOOK] Payment state changed`, logData);
 
-  console.log(`🔄 [${provider.toUpperCase()} WEBHOOK] Payment state changed:`, {
+  logger.info(`🔄 [${provider.toUpperCase()} WEBHOOK] Payment state changed:`, {
     orderId,
     oldState,
     newState,

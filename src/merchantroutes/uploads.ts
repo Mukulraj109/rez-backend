@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
+import { logger } from '../config/logger';
 import * as path from 'path';
 import * as fs from 'fs';
 import { authMiddleware } from '../middleware/merchantauth';
@@ -93,7 +94,7 @@ router.post(
         fs.unlinkSync(req.file.path);
       }
 
-      console.error('Upload error:', error);
+      logger.error('Upload error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to upload image',
@@ -156,7 +157,7 @@ router.post(
         });
       }
 
-      console.error('Multi-upload error:', error);
+      logger.error('Multi-upload error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to upload images',
@@ -216,7 +217,7 @@ router.post(
         fs.unlinkSync(req.file.path);
       }
 
-      console.error('Image upload error:', error);
+      logger.error('Image upload error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to upload image',
@@ -262,7 +263,7 @@ router.post(
         fs.unlinkSync(req.file.path);
       }
 
-      console.error('Logo upload error:', error);
+      logger.error('Logo upload error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to upload logo',
@@ -308,7 +309,7 @@ router.post(
         fs.unlinkSync(req.file.path);
       }
 
-      console.error('Banner upload error:', error);
+      logger.error('Banner upload error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to upload banner',
@@ -361,7 +362,7 @@ router.post(
         fs.unlinkSync(req.file.path);
       }
 
-      console.error('Video upload error:', error);
+      logger.error('Video upload error:', error);
       return res.status(500).json({
         success: false,
         message: 'Failed to upload video',
@@ -392,7 +393,7 @@ router.delete('/delete/:publicId', authMiddleware, async (req, res) => {
       message: 'File deleted successfully',
     });
   } catch (error: any) {
-    console.error('Delete error:', error);
+    logger.error('Delete error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to delete file',

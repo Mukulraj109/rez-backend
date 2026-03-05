@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { logger } from '../config/logger';
 
 /**
  * Execute a callback within a MongoDB transaction.
@@ -29,7 +30,7 @@ export async function withTransaction<T>(
       err.code === 263 ||
       err.code === 20
     ) {
-      console.warn('⚠️ [TRANSACTION] MongoDB transactions not available (no replica set?). Running without transaction.');
+      logger.warn('⚠️ [TRANSACTION] MongoDB transactions not available (no replica set?). Running without transaction.');
       return callback(null);
     }
     throw err;

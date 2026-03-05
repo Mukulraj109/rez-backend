@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 import { User } from '../models/User';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 // Token blacklist helpers (Redis-backed)
 const TOKEN_BLACKLIST_PREFIX = 'blacklist:token:';
@@ -10,19 +11,19 @@ export async function blacklistToken(token: string, ttlSeconds: number): Promise
   try {
     await redisService.set(`${TOKEN_BLACKLIST_PREFIX}${token}`, '1', ttlSeconds);
   } catch {
-    console.error('[AUTH] Failed to blacklist token (Redis unavailable)');
+    logger.error('[AUTH] Failed to blacklist token (Redis unavailable)');
   }
 }
 
 export async function isTokenBlacklisted(token: string, failClosed = false): Promise<boolean> {
   try {
     if (!redisService.isReady()) {
-      console.warn(`[AUTH] Redis unavailable for blacklist check — failing ${failClosed ? 'closed' : 'open'}`);
+      logger.warn(`[AUTH] Redis unavailable for blacklist check — failing ${failClosed ? 'closed' : 'open'}`);
       return failClosed;
     }
     return await redisService.exists(`${TOKEN_BLACKLIST_PREFIX}${token}`);
   } catch {
-    console.warn(`[AUTH] Redis error during blacklist check — failing ${failClosed ? 'closed' : 'open'}`);
+    logger.warn(`[AUTH] Redis error during blacklist check — failing ${failClosed ? 'closed' : 'open'}`);
     return failClosed;
   }
 }
@@ -102,14 +103,14 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
   try {
     const token = extractTokenFromHeader(req.headers.authorization);
 
-    console.log('🔐 [AUTH] Authenticating request:', {
+    logger.info('🔐 [AUTH] Authenticating request:', {
       path: req.path,
       method: req.method,
       hasToken: !!token
     });
 
     if (!token) {
-      console.warn('⚠️ [AUTH] No token provided');
+      logger.warn('⚠️ [AUTH] No token provided');
       return res.status(401).json({
         success: false,
         message: 'Access token is required'
@@ -129,7 +130,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       const user = await User.findById(decoded.userId).select('-auth.refreshToken');
 
       if (!user) {
-        console.warn('⚠️ [AUTH] User not found:', decoded.userId);
+        logger.warn('⚠️ [AUTH] User not found:', decoded.userId);
         return res.status(401).json({
           success: false,
           message: 'User not found'
@@ -137,7 +138,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       }
 
       if (!user.isActive) {
-        console.warn('⚠️ [AUTH] Account deactivated:', user._id);
+        logger.warn('⚠️ [AUTH] Account deactivated:', user._id);
         return res.status(401).json({
           success: false,
           message: 'Account is deactivated'
@@ -145,7 +146,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       }
 
       if (user.isAccountLocked()) {
-        console.warn('⚠️ [AUTH] Account locked:', user._id);
+        logger.warn('⚠️ [AUTH] Account locked:', user._id);
         return res.status(423).json({
           success: false,
           message: 'Account is temporarily locked. Please try again later.'
@@ -158,7 +159,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 
       next();
     } catch (tokenError: any) {
-      console.error('❌ [AUTH] Token verification failed:', {
+      logger.error('❌ [AUTH] Token verification failed:', {
         error: tokenError.message,
         name: tokenError.name,
         expiredAt: tokenError.expiredAt
@@ -170,7 +171,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       });
     }
   } catch (error: any) {
-    console.error('❌ [AUTH] Authentication error:', error);
+    logger.error('❌ [AUTH] Authentication error:', error);
     return res.status(500).json({
       success: false,
       message: 'Internal server error during authentication'
@@ -194,7 +195,7 @@ export const optionalAuth = async (req: Request, res: Response, next: NextFuncti
         }
       } catch (tokenError) {
         // Log invalid tokens for monitoring (don't fail the request)
-        console.warn(`[AUTH] optionalAuth invalid token on ${req.method} ${req.path}:`, (tokenError as Error).message);
+        logger.warn(`[AUTH] optionalAuth invalid token on ${req.method} ${req.path}:`, (tokenError as Error).message);
       }
     }
     

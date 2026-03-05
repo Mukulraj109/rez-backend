@@ -5,6 +5,8 @@
  * No external dependency — lightweight implementation for wrapping external API calls.
  */
 
+import { logger } from '../config/logger';
+
 type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
 interface CircuitBreakerOptions {
@@ -50,7 +52,7 @@ export class CircuitBreaker {
   private onSuccess(): void {
     this.failureCount = 0;
     if (this.state === 'HALF_OPEN') {
-      console.log(`[CircuitBreaker:${this.name}] Recovery confirmed — circuit CLOSED`);
+      logger.info(`[CircuitBreaker:${this.name}] Recovery confirmed — circuit CLOSED`);
     }
     this.state = 'CLOSED';
   }
@@ -61,7 +63,7 @@ export class CircuitBreaker {
 
     if (this.failureCount >= this.failureThreshold) {
       this.state = 'OPEN';
-      console.error(`[CircuitBreaker:${this.name}] Threshold reached (${this.failureCount}) — circuit OPEN`);
+      logger.error(`[CircuitBreaker:${this.name}] Threshold reached (${this.failureCount}) — circuit OPEN`);
     }
   }
 

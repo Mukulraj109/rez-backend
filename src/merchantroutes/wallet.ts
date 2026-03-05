@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { logger } from '../config/logger';
 import { authMiddleware } from '../middleware/merchantauth';
 import merchantWalletService from '../services/merchantWalletService';
 
@@ -41,7 +42,7 @@ router.get('/', async (req: Request, res: Response) => {
       data: summary
     });
   } catch (error: any) {
-    console.error('❌ [MERCHANT WALLET] Error fetching wallet summary:', error);
+    logger.error('❌ [MERCHANT WALLET] Error fetching wallet summary:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch wallet summary'
@@ -81,7 +82,7 @@ router.get('/transactions', async (req: Request, res: Response) => {
       pagination: result.pagination
     });
   } catch (error: any) {
-    console.error('❌ [MERCHANT WALLET] Error fetching transactions:', error);
+    logger.error('❌ [MERCHANT WALLET] Error fetching transactions:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch transaction history'
@@ -121,7 +122,7 @@ router.post('/withdraw', async (req: Request, res: Response) => {
       data: transaction
     });
   } catch (error: any) {
-    console.error('❌ [MERCHANT WALLET] Error requesting withdrawal:', error);
+    logger.error('❌ [MERCHANT WALLET] Error requesting withdrawal:', error);
     res.status(400).json({
       success: false,
       message: error.message || 'Failed to process withdrawal request'
@@ -176,7 +177,7 @@ router.put('/bank-details', async (req: Request, res: Response) => {
       message: 'Bank details updated successfully. Verification pending.'
     });
   } catch (error: any) {
-    console.error('❌ [MERCHANT WALLET] Error updating bank details:', error);
+    logger.error('❌ [MERCHANT WALLET] Error updating bank details:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to update bank details'
@@ -230,7 +231,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       data: stats
     });
   } catch (error: any) {
-    console.error('❌ [MERCHANT WALLET] Error fetching stats:', error);
+    logger.error('❌ [MERCHANT WALLET] Error fetching stats:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch wallet statistics'

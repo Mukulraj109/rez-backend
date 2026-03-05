@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/merchantauth';
+import { logger } from '../config/logger';
 import OfferRedemption from '../models/OfferRedemption';
 import { Store } from '../models/Store';
 import { Wallet } from '../models/Wallet';
@@ -190,7 +191,7 @@ router.get('/verify/:code', async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    console.error('[MERCHANT VOUCHER VERIFY] Error:', error);
+    logger.error('[MERCHANT VOUCHER VERIFY] Error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to verify voucher',
@@ -383,7 +384,7 @@ router.post('/:code/use', async (req: Request, res: Response) => {
 
     // Create wallet if it doesn't exist
     if (!wallet && cashbackAmount > 0) {
-      console.log('🎟️ [MERCHANT VOUCHER] Creating wallet for user:', userId);
+      logger.info('🎟️ [MERCHANT VOUCHER] Creating wallet for user:', userId);
       wallet = new Wallet({
         user: userId,
         balance: { total: 0, available: 0, pending: 0 },
@@ -488,12 +489,12 @@ router.post('/:code/use', async (req: Request, res: Response) => {
           redemptionId: (redemption as any)._id?.toString() || code,
           storeName: store.name,
         }
-      }).catch((err: any) => console.error('Failed to send cashback notification:', err));
+      }).catch((err: any) => logger.error('Failed to send cashback notification:', err));
     } catch (notifError) {
-      console.error('Failed to send cashback notification:', notifError);
+      logger.error('Failed to send cashback notification:', notifError);
     }
 
-    console.log(`✅ [MERCHANT VOUCHER USE] Code ${code} marked as used by merchant ${merchantId} at store ${storeId}. Cashback: ₹${cashbackAmount}`);
+    logger.info(`✅ [MERCHANT VOUCHER USE] Code ${code} marked as used by merchant ${merchantId} at store ${storeId}. Cashback: ₹${cashbackAmount}`);
 
     return res.json({
       success: true,
@@ -517,7 +518,7 @@ router.post('/:code/use', async (req: Request, res: Response) => {
     // Rollback transaction on error
     await session.abortTransaction();
     session.endSession();
-    console.error('[MERCHANT VOUCHER USE] Error:', error);
+    logger.error('[MERCHANT VOUCHER USE] Error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to redeem voucher',
@@ -667,7 +668,7 @@ router.get('/', async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    console.error('[MERCHANT VOUCHER LIST] Error:', error);
+    logger.error('[MERCHANT VOUCHER LIST] Error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch redemptions',
@@ -791,7 +792,7 @@ router.get('/stats', async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    console.error('[MERCHANT VOUCHER STATS] Error:', error);
+    logger.error('[MERCHANT VOUCHER STATS] Error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch stats',

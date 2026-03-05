@@ -2,6 +2,7 @@ import type GamificationEventBus from '../gamificationEventBus';
 import type { ActivityEvent } from '../gamificationEventBus';
 import achievementEngine from '../../services/achievementEngine';
 import { EVENT_TO_METRICS } from '../../config/achievementMetrics';
+import { logger } from '../../config/logger';
 
 /**
  * Achievement Progress Handler
@@ -34,12 +35,12 @@ export function registerAchievementHandler(eventBus: any): void {
       );
 
       if (result.unlocked.length > 0) {
-        console.log(`[ACHIEVEMENT HANDLER] User ${event.userId} unlocked: ${result.unlocked.join(', ')}`);
+        logger.info(`[ACHIEVEMENT HANDLER] User ${event.userId} unlocked: ${result.unlocked.join(', ')}`);
       }
     } catch (error) {
-      console.error(`[ACHIEVEMENT HANDLER] Error processing ${event.type} for user ${event.userId}:`, error);
+      logger.error(`[ACHIEVEMENT HANDLER] Error processing ${event.type} for user ${event.userId}:`, error);
     }
   });
 
-  console.log('[ACHIEVEMENT HANDLER] Registered achievement progress handler');
+  logger.info('[ACHIEVEMENT HANDLER] Registered achievement progress handler');
 }

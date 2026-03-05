@@ -2,6 +2,7 @@
 // Handles coupon-related API endpoints
 
 import { Request, Response } from 'express';
+import { logger } from '../config/logger';
 import { Types } from 'mongoose';
 import { Coupon } from '../models/Coupon';
 import { UserCoupon } from '../models/UserCoupon';
@@ -60,7 +61,7 @@ export const getAvailableCoupons = async (req: Request, res: Response): Promise<
       },
     });
   } catch (error: any) {
-    console.error('❌ [COUPON CONTROLLER] Error getting coupons:', error);
+    logger.error('❌ [COUPON CONTROLLER] Error getting coupons:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get coupons',
@@ -106,7 +107,7 @@ export const getFeaturedCoupons = async (req: Request, res: Response): Promise<v
       },
     });
   } catch (error: any) {
-    console.error('❌ [COUPON CONTROLLER] Error getting featured coupons:', error);
+    logger.error('❌ [COUPON CONTROLLER] Error getting featured coupons:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get featured coupons',
@@ -186,7 +187,7 @@ export const getMyCoupons = async (req: Request, res: Response): Promise<void> =
       },
     });
   } catch (error: any) {
-    console.error('❌ [COUPON CONTROLLER] Error getting user coupons:', error);
+    logger.error('❌ [COUPON CONTROLLER] Error getting user coupons:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get your coupons',
@@ -231,7 +232,7 @@ export const claimCoupon = async (req: Request, res: Response): Promise<void> =>
       data: result.userCoupon,
     });
   } catch (error: any) {
-    console.error('❌ [COUPON CONTROLLER] Error claiming coupon:', error);
+    logger.error('❌ [COUPON CONTROLLER] Error claiming coupon:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to claim coupon',
@@ -296,7 +297,7 @@ export const validateCoupon = async (req: Request, res: Response): Promise<void>
       },
     });
   } catch (error: any) {
-    console.error('❌ [COUPON CONTROLLER] Error validating coupon:', error);
+    logger.error('❌ [COUPON CONTROLLER] Error validating coupon:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to validate coupon',
@@ -360,7 +361,7 @@ export const getBestOffer = async (req: Request, res: Response): Promise<void> =
       },
     });
   } catch (error: any) {
-    console.error('❌ [COUPON CONTROLLER] Error getting best offer:', error);
+    logger.error('❌ [COUPON CONTROLLER] Error getting best offer:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get best offer',
@@ -414,7 +415,7 @@ export const removeCoupon = async (req: Request, res: Response): Promise<void> =
       message: 'Coupon removed successfully',
     });
   } catch (error: any) {
-    console.error('❌ [COUPON CONTROLLER] Error removing coupon:', error);
+    logger.error('❌ [COUPON CONTROLLER] Error removing coupon:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to remove coupon',
@@ -459,7 +460,7 @@ export const searchCoupons = async (req: Request, res: Response): Promise<void> 
       },
     });
   } catch (error: any) {
-    console.error('❌ [COUPON CONTROLLER] Error searching coupons:', error);
+    logger.error('❌ [COUPON CONTROLLER] Error searching coupons:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to search coupons',
@@ -494,7 +495,7 @@ export const getCouponDetails = async (req: Request, res: Response): Promise<voi
       data: coupon,
     });
   } catch (error: any) {
-    console.error('❌ [COUPON CONTROLLER] Error getting coupon details:', error);
+    logger.error('❌ [COUPON CONTROLLER] Error getting coupon details:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get coupon details',

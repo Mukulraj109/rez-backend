@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
+import { logger } from '../config/logger';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess, sendError, sendNotFound, sendBadRequest } from '../utils/response';
 import { AppError } from '../middleware/errorHandler';
@@ -530,32 +531,32 @@ export const spinWheel = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const userId = (req.user._id as Types.ObjectId).toString();
-  console.log('🎰 [SPIN_WHEEL] Spin request from user:', userId);
+  logger.info('🎰 [SPIN_WHEEL] Spin request from user:', userId);
 
   // Check daily spin limit using eligibility service
   const eligibility = await spinWheelService.checkEligibility(userId);
   if (!eligibility.canSpin) {
-    console.log(`❌ [SPIN_WHEEL] Daily limit reached: ${eligibility.spinsUsedToday}/${eligibility.maxDailySpins} spins used today`);
+    logger.info(`❌ [SPIN_WHEEL] Daily limit reached: ${eligibility.spinsUsedToday}/${eligibility.maxDailySpins} spins used today`);
     return sendBadRequest(res, `Daily spin limit reached (${eligibility.maxDailySpins} spins per day). Next spin available at ${eligibility.nextResetAt}`);
   }
 
-  console.log(`✅ [SPIN_WHEEL] User eligible: ${eligibility.spinsUsedToday}/${eligibility.maxDailySpins} spins used today`);
+  logger.info(`✅ [SPIN_WHEEL] User eligible: ${eligibility.spinsUsedToday}/${eligibility.maxDailySpins} spins used today`);
 
   const { MiniGame } = await import('../models/MiniGame');
 
   // Create a session and immediately spin
   const session = await spinWheelService.createSpinSession(userId);
-  console.log('✅ [SPIN_WHEEL] Session created:', session.sessionId);
+  logger.info('✅ [SPIN_WHEEL] Session created:', session.sessionId);
 
   const spinResult = await spinWheelService.spin(session.sessionId);
-  console.log('🎉 [SPIN_WHEEL] Spin result:', spinResult);
+  logger.info('🎉 [SPIN_WHEEL] Spin result:', spinResult);
 
   // SECURITY: Post-spin race condition check
   // After the spin is completed, verify we haven't exceeded the limit
   const postSpinEligibility = await spinWheelService.checkEligibility(userId);
   // If spinsUsedToday > maxDailySpins, a race condition allowed an extra spin
   if (postSpinEligibility.spinsUsedToday > postSpinEligibility.maxDailySpins) {
-    console.warn(`⚠️ [SPIN_WHEEL] Race condition detected for user ${userId}: ${postSpinEligibility.spinsUsedToday} spins today, rolling back`);
+    logger.warn(`⚠️ [SPIN_WHEEL] Race condition detected for user ${userId}: ${postSpinEligibility.spinsUsedToday} spins today, rolling back`);
     await MiniGame.findByIdAndUpdate(session.sessionId, { status: 'expired' });
     return sendBadRequest(res, `Daily spin limit reached. This spin has been voided.`);
   }
@@ -568,9 +569,9 @@ export const spinWheel = asyncHandler(async (req: Request, res: Response) => {
   let actualBalance = 0;
   if (wallet) {
     actualBalance = wallet.balance.total;
-    console.log(`💰 [SPIN_WHEEL] User balance after spin: ${actualBalance}`);
+    logger.info(`💰 [SPIN_WHEEL] User balance after spin: ${actualBalance}`);
   } else {
-    console.warn(`⚠️ [SPIN_WHEEL] Wallet not found for user ${userId}`);
+    logger.warn(`⚠️ [SPIN_WHEEL] Wallet not found for user ${userId}`);
   }
 
   // Format response to match frontend expectations
@@ -630,11 +631,11 @@ export const spinWheel = asyncHandler(async (req: Request, res: Response) => {
             response.tournamentUpdate = { tournamentName: t.name, pointsAdded: spinResult.value, newRank: newRank || 1 };
           }
         } catch (err: any) {
-          console.error(`[SPIN_WHEEL] Tournament score update failed for ${t.name}:`, err.message);
+          logger.error(`[SPIN_WHEEL] Tournament score update failed for ${t.name}:`, err.message);
         }
       }
     } catch (err: any) {
-      console.error('[SPIN_WHEEL] Tournament lookup failed:', err.message);
+      logger.error('[SPIN_WHEEL] Tournament lookup failed:', err.message);
     }
   }
 
@@ -643,7 +644,7 @@ export const spinWheel = asyncHandler(async (req: Request, res: Response) => {
     delete response.tournamentUpdate;
   }
 
-  console.log('💰 [SPIN_WHEEL] User balance after spin:', actualBalance);
+  logger.info('💰 [SPIN_WHEEL] User balance after spin:', actualBalance);
   sendSuccess(res, response, 'Spin completed successfully');
 });
 
@@ -663,7 +664,7 @@ export const getSpinWheelData = asyncHandler(async (req: Request, res: Response)
   }
 
   const userId = (req.user._id as Types.ObjectId).toString();
-  console.log('📊 [SPIN_WHEEL] Getting spin wheel data for user:', userId);
+  logger.info('📊 [SPIN_WHEEL] Getting spin wheel data for user:', userId);
 
   // Get segments from constant (no session creation needed)
   const segments = spinWheelService.getSpinWheelSegments();
@@ -694,7 +695,7 @@ export const getSpinWheelData = asyncHandler(async (req: Request, res: Response)
     stats,
   };
 
-  console.log(`📊 [SPIN_WHEEL] User ${userId}: ${eligibility.spinsUsedToday} used, ${eligibility.spinsRemaining} remaining`);
+  logger.info(`📊 [SPIN_WHEEL] User ${userId}: ${eligibility.spinsUsedToday} used, ${eligibility.spinsRemaining} remaining`);
   sendSuccess(res, data, 'Spin wheel data retrieved successfully');
 });
 
@@ -711,11 +712,11 @@ export const getSpinWheelHistory = asyncHandler(async (req: Request, res: Respon
   const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
   const page = Math.max(1, parseInt(req.query.page as string) || 1);
 
-  console.log('📜 [SPIN_WHEEL] Getting spin history for user:', userId, 'page:', page, 'limit:', limit);
+  logger.info('📜 [SPIN_WHEEL] Getting spin history for user:', userId, 'page:', page, 'limit:', limit);
 
   const result = await spinWheelService.getSpinHistory(userId, limit, page);
 
-  console.log('✅ [SPIN_WHEEL] Found', result.history.length, 'spin records (page', page, 'of', result.pagination.pages, ')');
+  logger.info('✅ [SPIN_WHEEL] Found', result.history.length, 'spin records (page', page, 'of', result.pagination.pages, ')');
 
   sendSuccess(res, result, 'Spin wheel history retrieved successfully');
 });
@@ -808,11 +809,11 @@ export const submitQuizAnswer = asyncHandler(async (req: Request, res: Response)
             tournamentUpdate = { tournamentName: t.name, pointsAdded: result.currentScore, newRank: newRank || 1 };
           }
         } catch (err: any) {
-          console.error(`[QUIZ] Tournament score update failed for ${t.name}:`, err.message);
+          logger.error(`[QUIZ] Tournament score update failed for ${t.name}:`, err.message);
         }
       }
     } catch (err: any) {
-      console.error('[QUIZ] Tournament lookup failed:', err.message);
+      logger.error('[QUIZ] Tournament lookup failed:', err.message);
     }
   }
 
@@ -858,11 +859,11 @@ export const completeQuiz = asyncHandler(async (req: Request, res: Response) => 
             tournamentUpdate = { tournamentName: t.name, pointsAdded: coinsEarned, newRank: newRank || 1 };
           }
         } catch (err: any) {
-          console.error(`[QUIZ] Tournament score update failed for ${t.name}:`, err.message);
+          logger.error(`[QUIZ] Tournament score update failed for ${t.name}:`, err.message);
         }
       }
     } catch (err: any) {
-      console.error('[QUIZ] Tournament lookup failed:', err.message);
+      logger.error('[QUIZ] Tournament lookup failed:', err.message);
     }
   }
 
@@ -1351,7 +1352,7 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
         { upsert: true, new: true }
       );
     } catch (checkInError) {
-      console.error('[STREAK CHECKIN] Error creating DailyCheckIn record:', checkInError);
+      logger.error('[STREAK CHECKIN] Error creating DailyCheckIn record:', checkInError);
     }
 
     // Emit daily_checkin event for mission progress tracking
@@ -1475,7 +1476,7 @@ export const streakCheckin = asyncHandler(async (req: Request, res: Response) =>
       { upsert: true, new: true }
     );
   } catch (checkInError) {
-    console.error('[STREAK CHECKIN] Error creating DailyCheckIn record:', checkInError);
+    logger.error('[STREAK CHECKIN] Error creating DailyCheckIn record:', checkInError);
   }
 
   // Emit daily_checkin event for mission progress tracking
@@ -2107,7 +2108,7 @@ export const getBonusOpportunities = asyncHandler(async (req: Request, res: Resp
       total: opportunities.length
     }, 'Bonus opportunities retrieved successfully');
   } catch (error: any) {
-    console.error('[GAMIFICATION] Error fetching bonus opportunities:', error);
+    logger.error('[GAMIFICATION] Error fetching bonus opportunities:', error);
     sendError(res, error.message || 'Failed to fetch bonus opportunities', 500);
   }
 });

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import Joi from 'joi';
+import { logger } from '../config/logger';
 import { validateRequest } from '../middleware/merchantvalidation';
 import TeamInvitationService from '../services/TeamInvitationService';
 import { Merchant } from '../models/Merchant';
@@ -49,7 +50,7 @@ router.get('/validate-invitation/:token', async (req: Request, res: Response) =>
       }
     });
   } catch (error: any) {
-    console.error('Error validating invitation:', error);
+    logger.error('Error validating invitation:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to validate invitation',
@@ -87,7 +88,7 @@ router.post('/accept-invitation/:token', validateRequest(acceptInvitationSchema)
       }
     });
   } catch (error: any) {
-    console.error('Error accepting invitation:', error);
+    logger.error('Error accepting invitation:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to accept invitation',

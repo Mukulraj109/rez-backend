@@ -11,6 +11,7 @@ import { CoinTransaction } from '../models/CoinTransaction';
 import { LedgerEntry } from '../models/LedgerEntry';
 import orderSocketService from '../services/orderSocketService';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 interface Discrepancy {
   orderId: string;
@@ -30,7 +31,7 @@ async function runOrderReconciliation(): Promise<void> {
   try {
     lockToken = await redisService.acquireLock(lockKey, 600);
     if (!lockToken) {
-      console.log('order-reconciliation skipped — lock held by another instance');
+      logger.info('order-reconciliation skipped — lock held by another instance');
       return;
     }
 
@@ -45,7 +46,7 @@ async function runOrderReconciliation(): Promise<void> {
       .lean();
 
     if (deliveredOrders.length === 0) {
-      console.log('[ORDER RECONCILIATION] No delivered orders in last 24h');
+      logger.info('[ORDER RECONCILIATION] No delivered orders in last 24h');
       return;
     }
 
@@ -113,7 +114,7 @@ async function runOrderReconciliation(): Promise<void> {
     }
 
     // Log results
-    console.log(`[ORDER RECONCILIATION] Checked ${deliveredOrders.length} delivered orders, found ${discrepancies.length} discrepancies`);
+    logger.info(`[ORDER RECONCILIATION] Checked ${deliveredOrders.length} delivered orders, found ${discrepancies.length} discrepancies`);
 
     // Alert admin if discrepancies found
     if (discrepancies.length > 0) {
@@ -127,7 +128,7 @@ async function runOrderReconciliation(): Promise<void> {
 
       // Log each discrepancy
       for (const d of discrepancies) {
-        console.warn(`[ORDER RECONCILIATION] ${d.type}: ${d.orderNumber} - ${d.details}`);
+        logger.warn(`[ORDER RECONCILIATION] ${d.type}: ${d.orderNumber} - ${d.details}`);
       }
 
       // Create AdminAction entries for manual review
@@ -156,11 +157,11 @@ async function runOrderReconciliation(): Promise<void> {
           }
         }
       } catch (adminErr) {
-        console.error('[ORDER RECONCILIATION] Failed to create AdminAction entries:', adminErr);
+        logger.error('[ORDER RECONCILIATION] Failed to create AdminAction entries:', adminErr);
       }
     }
   } catch (error) {
-    console.error('[ORDER RECONCILIATION] Job failed:', error);
+    logger.error('[ORDER RECONCILIATION] Job failed:', error);
   } finally {
     if (lockToken) {
       await redisService.releaseLock(lockKey, lockToken);
@@ -175,7 +176,7 @@ export function initializeOrderReconciliationJob(): void {
   cron.schedule('0 3 * * *', () => {
     runOrderReconciliation().catch(console.error);
   });
-  console.log('  Order reconciliation job started (runs daily at 3 AM)');
+  logger.info('  Order reconciliation job started (runs daily at 3 AM)');
 }
 
 export { runOrderReconciliation };

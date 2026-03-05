@@ -1,3 +1,5 @@
+import { logger } from './logger';
+
 /**
  * Environment Variable Validation Utility
  * Ensures all required environment variables are present and valid
@@ -129,16 +131,16 @@ export function validateEnvironment(): EnvConfig {
 
   // Log warnings
   if (warnings.length > 0) {
-    console.warn('\n⚠️  Environment Configuration Warnings:');
-    warnings.forEach(warning => console.warn(`   - ${warning}`));
-    console.warn('');
+    logger.warn('\n⚠️  Environment Configuration Warnings:');
+    warnings.forEach(warning => logger.warn(`   - ${warning}`));
+    logger.warn('');
   }
 
   // Throw if any errors
   if (errors.length > 0) {
-    console.error('\n❌ Environment Configuration Errors:');
-    errors.forEach(error => console.error(`   - ${error}`));
-    console.error('\nPlease fix the above errors before starting the server.\n');
+    logger.error('\n❌ Environment Configuration Errors:');
+    errors.forEach(error => logger.error(`   - ${error}`));
+    logger.error('\nPlease fix the above errors before starting the server.\n');
     throw new Error('Environment validation failed');
   }
 
@@ -154,10 +156,10 @@ export function validateEnvironment(): EnvConfig {
     BCRYPT_ROUNDS: bcryptRounds
   };
 
-  console.log('✅ Environment validation passed');
-  console.log(`   Environment: ${config.NODE_ENV}`);
-  console.log(`   Port: ${config.PORT}`);
-  console.log(`   Database: ${config.MONGODB_URI.includes('mongodb+srv') ? 'MongoDB Atlas' : 'Local MongoDB'}`);
+  logger.info('✅ Environment validation passed');
+  logger.info(`   Environment: ${config.NODE_ENV}`);
+  logger.info(`   Port: ${config.PORT}`);
+  logger.info(`   Database: ${config.MONGODB_URI.includes('mongodb+srv') ? 'MongoDB Atlas' : 'Local MongoDB'}`);
 
   return config;
 }
@@ -179,12 +181,12 @@ export function checkForExposedSecrets(): void {
 
   // In production, block DEBUG_MODE — it exposes stack traces and secrets
   if (process.env.NODE_ENV === 'production' && process.env.DEBUG_MODE === 'true') {
-    console.error('FATAL: DEBUG_MODE cannot be enabled in production. Shutting down.');
+    logger.error('FATAL: DEBUG_MODE cannot be enabled in production. Shutting down.');
     process.exit(1);
   }
 
   // Check .env file is in .gitignore (runtime check not possible, rely on deployment checklist)
-  console.log('ℹ️  Ensure .env files are in .gitignore and never committed to version control');
+  logger.info('ℹ️  Ensure .env files are in .gitignore and never committed to version control');
 }
 
 /**

@@ -7,6 +7,7 @@ import { Product } from '../models/Product';
 import Joi from 'joi';
 import mongoose from 'mongoose';
 import { deleteFromCloudinary } from '../utils/cloudinaryUtils';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -88,7 +89,7 @@ router.post('/', validateRequest(createVideoSchema), async (req: Request, res: R
     const merchantId = req.merchantId;
     const { title, description, storeId, videoUrl, thumbnailUrl, products, tags, category, duration, publicId } = req.body;
 
-    console.log('📹 [MERCHANT VIDEO] Creating promotional video:', { title, storeId, merchantId });
+    logger.info('📹 [MERCHANT VIDEO] Creating promotional video:', { title, storeId, merchantId });
 
     // Validate store ownership
     const store = await Store.findOne({
@@ -117,7 +118,7 @@ router.post('/', validateRequest(createVideoSchema), async (req: Request, res: R
     }
 
     if (validProducts.length !== products.length) {
-      console.warn('⚠️ Some products were not found or do not belong to the store');
+      logger.warn('⚠️ Some products were not found or do not belong to the store');
     }
 
     // Create the video document
@@ -189,7 +190,7 @@ router.post('/', validateRequest(createVideoSchema), async (req: Request, res: R
       .populate('products', 'name images pricing')
       .populate('stores', 'name logo');
 
-    console.log('✅ [MERCHANT VIDEO] Created successfully:', video._id);
+    logger.info('✅ [MERCHANT VIDEO] Created successfully:', video._id);
 
     res.status(201).json({
       success: true,
@@ -200,7 +201,7 @@ router.post('/', validateRequest(createVideoSchema), async (req: Request, res: R
     });
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT VIDEO] Error creating video:', error);
+    logger.error('❌ [MERCHANT VIDEO] Error creating video:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to create promotional video',
@@ -220,7 +221,7 @@ router.get('/store/:storeId', validateParams(storeIdSchema), async (req: Request
     const { storeId } = req.params;
     const { page = 1, limit = 20, sortBy = 'newest' } = req.query;
 
-    console.log('📹 [MERCHANT VIDEO] Fetching videos for store:', storeId);
+    logger.info('📹 [MERCHANT VIDEO] Fetching videos for store:', storeId);
 
     // Validate store ownership
     const store = await Store.findOne({
@@ -264,7 +265,7 @@ router.get('/store/:storeId', validateParams(storeIdSchema), async (req: Request
       })
     ]);
 
-    console.log('✅ [MERCHANT VIDEO] Found', videos.length, 'videos');
+    logger.info('✅ [MERCHANT VIDEO] Found', videos.length, 'videos');
 
     res.json({
       success: true,
@@ -299,7 +300,7 @@ router.get('/store/:storeId', validateParams(storeIdSchema), async (req: Request
     });
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT VIDEO] Error fetching videos:', error);
+    logger.error('❌ [MERCHANT VIDEO] Error fetching videos:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch promotional videos',
@@ -318,7 +319,7 @@ router.get('/analytics/:storeId', validateParams(storeIdSchema), async (req: Req
     const merchantId = req.merchantId;
     const { storeId } = req.params;
 
-    console.log('📊 [MERCHANT VIDEO] Fetching analytics for store:', storeId);
+    logger.info('📊 [MERCHANT VIDEO] Fetching analytics for store:', storeId);
 
     // Validate store ownership
     const store = await Store.findOne({
@@ -397,7 +398,7 @@ router.get('/analytics/:storeId', validateParams(storeIdSchema), async (req: Req
       totalComments: 0
     };
 
-    console.log('✅ [MERCHANT VIDEO] Analytics fetched successfully');
+    logger.info('✅ [MERCHANT VIDEO] Analytics fetched successfully');
 
     res.json({
       success: true,
@@ -421,7 +422,7 @@ router.get('/analytics/:storeId', validateParams(storeIdSchema), async (req: Req
     });
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT VIDEO] Error fetching analytics:', error);
+    logger.error('❌ [MERCHANT VIDEO] Error fetching analytics:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch video analytics',
@@ -441,7 +442,7 @@ router.put('/:videoId', validateParams(videoIdSchema), validateRequest(updateVid
     const { videoId } = req.params;
     const updateData = req.body;
 
-    console.log('📹 [MERCHANT VIDEO] Updating video:', videoId);
+    logger.info('📹 [MERCHANT VIDEO] Updating video:', videoId);
 
     // Find video and validate ownership
     const video = await Video.findById(videoId);
@@ -493,7 +494,7 @@ router.put('/:videoId', validateParams(videoIdSchema), validateRequest(updateVid
       .populate('products', 'name images pricing')
       .populate('stores', 'name logo');
 
-    console.log('✅ [MERCHANT VIDEO] Updated successfully:', videoId);
+    logger.info('✅ [MERCHANT VIDEO] Updated successfully:', videoId);
 
     res.json({
       success: true,
@@ -504,7 +505,7 @@ router.put('/:videoId', validateParams(videoIdSchema), validateRequest(updateVid
     });
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT VIDEO] Error updating video:', error);
+    logger.error('❌ [MERCHANT VIDEO] Error updating video:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update promotional video',
@@ -523,7 +524,7 @@ router.delete('/:videoId', validateParams(videoIdSchema), async (req: Request, r
     const merchantId = req.merchantId;
     const { videoId } = req.params;
 
-    console.log('🗑️ [MERCHANT VIDEO] Deleting video:', videoId);
+    logger.info('🗑️ [MERCHANT VIDEO] Deleting video:', videoId);
 
     // Find video
     const video = await Video.findById(videoId);
@@ -554,9 +555,9 @@ router.delete('/:videoId', validateParams(videoIdSchema), async (req: Request, r
     if (cloudinaryPublicId) {
       try {
         await deleteFromCloudinary(cloudinaryPublicId);
-        console.log('✅ Deleted from Cloudinary:', cloudinaryPublicId);
+        logger.info('✅ Deleted from Cloudinary:', cloudinaryPublicId);
       } catch (cloudinaryError) {
-        console.warn('⚠️ Failed to delete from Cloudinary:', cloudinaryError);
+        logger.warn('⚠️ Failed to delete from Cloudinary:', cloudinaryError);
         // Continue with database deletion even if Cloudinary fails
       }
     }
@@ -564,7 +565,7 @@ router.delete('/:videoId', validateParams(videoIdSchema), async (req: Request, r
     // Delete from database
     await Video.findByIdAndDelete(videoId);
 
-    console.log('✅ [MERCHANT VIDEO] Deleted successfully:', videoId);
+    logger.info('✅ [MERCHANT VIDEO] Deleted successfully:', videoId);
 
     res.json({
       success: true,
@@ -572,7 +573,7 @@ router.delete('/:videoId', validateParams(videoIdSchema), async (req: Request, r
     });
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT VIDEO] Error deleting video:', error);
+    logger.error('❌ [MERCHANT VIDEO] Error deleting video:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete video',
@@ -624,7 +625,7 @@ router.get('/:videoId', validateParams(videoIdSchema), async (req: Request, res:
     });
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT VIDEO] Error fetching video:', error);
+    logger.error('❌ [MERCHANT VIDEO] Error fetching video:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch video',

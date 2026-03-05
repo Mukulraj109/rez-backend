@@ -9,6 +9,7 @@ import AuditService from '../services/AuditService';
 import mongoose from 'mongoose';
 import { sendSuccess, sendNotFound, sendBadRequest } from '../utils/response';
 import { escapeRegex } from '../utils/sanitize';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -211,7 +212,7 @@ router.post('/', validateRequest(createEventSchema), async (req: Request, res: R
       data: event
     });
   } catch (error: any) {
-    console.error('Create event error:', error);
+    logger.error('Create event error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to create event'
@@ -312,7 +313,7 @@ router.get('/', validateQuery(listEventsQuerySchema), async (req: Request, res: 
       }
     });
   } catch (error: any) {
-    console.error('Get events error:', error);
+    logger.error('Get events error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to retrieve events'
@@ -355,7 +356,7 @@ router.get('/:id', validateParams(eventIdSchema), async (req: Request, res: Resp
       data: event
     });
   } catch (error: any) {
-    console.error('Get event error:', error);
+    logger.error('Get event error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to retrieve event'
@@ -456,7 +457,7 @@ router.put('/:id', validateParams(eventIdSchema), validateRequest(updateEventSch
       data: event
     });
   } catch (error: any) {
-    console.error('Update event error:', error);
+    logger.error('Update event error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to update event'
@@ -541,7 +542,7 @@ router.delete('/:id', validateParams(eventIdSchema), async (req: Request, res: R
       message: 'Event deleted successfully'
     });
   } catch (error: any) {
-    console.error('Delete event error:', error);
+    logger.error('Delete event error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to delete event'
@@ -635,7 +636,7 @@ router.post('/:id/publish', validateParams(eventIdSchema), async (req: Request, 
       data: event
     });
   } catch (error: any) {
-    console.error('Publish event error:', error);
+    logger.error('Publish event error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to publish event'
@@ -761,7 +762,7 @@ router.post('/:id/cancel', validateParams(eventIdSchema), validateRequest(Joi.ob
       }
     });
   } catch (error: any) {
-    console.error('Cancel event error:', error);
+    logger.error('Cancel event error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to cancel event'
@@ -885,7 +886,7 @@ router.get('/:id/bookings', validateParams(eventIdSchema), validateQuery(booking
       }
     }, 'Event bookings retrieved successfully');
   } catch (error: any) {
-    console.error('Get event bookings error:', error);
+    logger.error('Get event bookings error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch event bookings'
@@ -974,7 +975,7 @@ router.get('/:id/analytics', validateParams(eventIdSchema), async (req: Request,
 
     return sendSuccess(res, analytics, 'Event analytics retrieved successfully');
   } catch (error: any) {
-    console.error('Get event analytics error:', error);
+    logger.error('Get event analytics error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch event analytics'
@@ -1058,7 +1059,7 @@ router.post('/:id/bookings/:bookingId/checkin', validateParams(Joi.object({
       }
     }, 'Booking checked in successfully');
   } catch (error: any) {
-    console.error('Check in booking error:', error);
+    logger.error('Check in booking error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to check in booking'

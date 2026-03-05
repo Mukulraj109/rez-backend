@@ -8,6 +8,7 @@ import LeaderboardPrizeDistribution, { ILeaderboardPrizeDistribution, IPrizeEntr
 import { CoinTransaction } from '../models/CoinTransaction';
 import { awardCoins } from '../services/coinService';
 import { invalidateWalletCache } from '../services/walletCacheService';
+import { logger } from '../config/logger';
 
 /**
  * Leaderboard Prize Distribution Job
@@ -87,7 +88,7 @@ async function distributeForConfig(config: ILeaderboardConfig): Promise<{
 
   // Skip if no prize pool defined
   if (!config.prizePool || config.prizePool.length === 0) {
-    console.log(`[PRIZE DIST] ${slug}: No prize pool configured, skipping`);
+    logger.info(`[PRIZE DIST] ${slug}: No prize pool configured, skipping`);
     return { slug, distributed: 0, flagged: 0, skipped: true };
   }
 
@@ -102,7 +103,7 @@ async function distributeForConfig(config: ILeaderboardConfig): Promise<{
   });
 
   if (existingDistribution) {
-    console.log(`[PRIZE DIST] ${slug}: Distribution already exists for cycle ${cycleStartDate.toISOString()} - ${cycleEndDate.toISOString()} (status: ${existingDistribution.status})`);
+    logger.info(`[PRIZE DIST] ${slug}: Distribution already exists for cycle ${cycleStartDate.toISOString()} - ${cycleEndDate.toISOString()} (status: ${existingDistribution.status})`);
     return { slug, distributed: 0, flagged: 0, skipped: true };
   }
 
@@ -122,13 +123,13 @@ async function distributeForConfig(config: ILeaderboardConfig): Promise<{
   } catch (error: any) {
     // Handle duplicate key error (race condition between instances)
     if (error.code === 11000) {
-      console.log(`[PRIZE DIST] ${slug}: Duplicate distribution record (another instance handled it)`);
+      logger.info(`[PRIZE DIST] ${slug}: Duplicate distribution record (another instance handled it)`);
       return { slug, distributed: 0, flagged: 0, skipped: true };
     }
     throw error;
   }
 
-  console.log(`[PRIZE DIST] ${slug}: Processing prize distribution for cycle ${cycleStartDate.toISOString()} - ${cycleEndDate.toISOString()}`);
+  logger.info(`[PRIZE DIST] ${slug}: Processing prize distribution for cycle ${cycleStartDate.toISOString()} - ${cycleEndDate.toISOString()}`);
 
   // Update status to processing
   distribution.status = 'processing';
@@ -140,7 +141,7 @@ async function distributeForConfig(config: ILeaderboardConfig): Promise<{
     const entries = await leaderboardService.runFullAggregation(config);
 
     if (entries.length === 0) {
-      console.log(`[PRIZE DIST] ${slug}: No entries in leaderboard, marking as completed`);
+      logger.info(`[PRIZE DIST] ${slug}: No entries in leaderboard, marking as completed`);
       distribution.status = 'completed';
       distribution.totalDistributed = 0;
       distribution.totalFlagged = 0;
@@ -153,9 +154,9 @@ async function distributeForConfig(config: ILeaderboardConfig): Promise<{
     try {
       const fraudResults = await leaderboardSecurityService.runAntifraudChecks(entries, config);
       flaggedUserIds = new Set(fraudResults.flaggedEntries.map(e => e.userId));
-      console.log(`[PRIZE DIST] ${slug}: Anti-fraud flagged ${flaggedUserIds.size} entries`);
+      logger.info(`[PRIZE DIST] ${slug}: Anti-fraud flagged ${flaggedUserIds.size} entries`);
     } catch (fraudError: any) {
-      console.error(`[PRIZE DIST] ${slug}: Anti-fraud check failed (proceeding with caution):`, fraudError.message);
+      logger.error(`[PRIZE DIST] ${slug}: Anti-fraud check failed (proceeding with caution):`, fraudError.message);
     }
 
     // Process each prize slot
@@ -224,10 +225,10 @@ async function distributeForConfig(config: ILeaderboardConfig): Promise<{
             break;
           } catch (awardError: any) {
             if (attempt < MAX_RETRIES) {
-              console.warn(`[PRIZE DIST] ${slug}: Retry ${attempt + 1}/${MAX_RETRIES} for user ${userId}: ${awardError.message}`);
+              logger.warn(`[PRIZE DIST] ${slug}: Retry ${attempt + 1}/${MAX_RETRIES} for user ${userId}: ${awardError.message}`);
               await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
             } else {
-              console.error(`[PRIZE DIST] ${slug}: Failed to award prize to user ${userId} after ${MAX_RETRIES + 1} attempts:`, awardError.message);
+              logger.error(`[PRIZE DIST] ${slug}: Failed to award prize to user ${userId} after ${MAX_RETRIES + 1} attempts:`, awardError.message);
               prizeEntry.status = 'failed';
               prizeEntry.flagReason = `Award failed after ${MAX_RETRIES + 1} attempts: ${awardError.message}`;
               totalFlagged++;
@@ -255,7 +256,7 @@ async function distributeForConfig(config: ILeaderboardConfig): Promise<{
 
     await distribution.save();
 
-    console.log(`[PRIZE DIST] ${slug}: Distribution complete - ${totalDistributed} distributed, ${totalFlagged} flagged`);
+    logger.info(`[PRIZE DIST] ${slug}: Distribution complete - ${totalDistributed} distributed, ${totalFlagged} flagged`);
 
     return { slug, distributed: totalDistributed, flagged: totalFlagged, skipped: false };
   } catch (error: any) {
@@ -272,13 +273,13 @@ async function distributeForConfig(config: ILeaderboardConfig): Promise<{
 async function runPrizeDistribution(): Promise<void> {
   const startTime = Date.now();
 
-  console.log('[PRIZE DIST] Running prize distribution check...');
+  logger.info('[PRIZE DIST] Running prize distribution check...');
 
   // Load all active configs
   const activeConfigs = await LeaderboardConfig.find({ status: 'active' });
 
   if (activeConfigs.length === 0) {
-    console.log('[PRIZE DIST] No active leaderboard configs found');
+    logger.info('[PRIZE DIST] No active leaderboard configs found');
     return;
   }
 
@@ -286,11 +287,11 @@ async function runPrizeDistribution(): Promise<void> {
   const configsToDistribute = activeConfigs.filter(config => shouldDistribute(config.period));
 
   if (configsToDistribute.length === 0) {
-    console.log('[PRIZE DIST] No period boundaries crossed in the last hour, nothing to distribute');
+    logger.info('[PRIZE DIST] No period boundaries crossed in the last hour, nothing to distribute');
     return;
   }
 
-  console.log(`[PRIZE DIST] ${configsToDistribute.length} configs have periods that just ended`);
+  logger.info(`[PRIZE DIST] ${configsToDistribute.length} configs have periods that just ended`);
 
   // Process each config sequentially to avoid overloading
   const results: Array<{ slug: string; distributed: number; flagged: number; skipped: boolean; error?: string }> = [];
@@ -300,7 +301,7 @@ async function runPrizeDistribution(): Promise<void> {
       const result = await distributeForConfig(config);
       results.push(result);
     } catch (error: any) {
-      console.error(`[PRIZE DIST] Error distributing for ${config.slug}:`, error.message);
+      logger.error(`[PRIZE DIST] Error distributing for ${config.slug}:`, error.message);
       results.push({
         slug: config.slug,
         distributed: 0,
@@ -313,7 +314,7 @@ async function runPrizeDistribution(): Promise<void> {
 
   const totalDuration = Date.now() - startTime;
 
-  console.log('[PRIZE DIST] Distribution check completed:', {
+  logger.info('[PRIZE DIST] Distribution check completed:', {
     results: results.map(r =>
       r.error
         ? `${r.slug}(ERROR: ${r.error})`
@@ -331,24 +332,24 @@ async function runPrizeDistribution(): Promise<void> {
  */
 export function startPrizeDistributionJob(): void {
   if (prizeDistributionJob) {
-    console.log('[PRIZE DIST] Prize distribution job already running');
+    logger.info('[PRIZE DIST] Prize distribution job already running');
     return;
   }
 
-  console.log('[PRIZE DIST] Starting prize distribution job (runs every hour)');
+  logger.info('[PRIZE DIST] Starting prize distribution job (runs every hour)');
 
   prizeDistributionJob = cron.schedule(PRIZE_DISTRIBUTION_SCHEDULE, async () => {
     // Acquire distributed lock
     const lockToken = await redisService.acquireLock('leaderboard_prize_distribution_job', PRIZE_DISTRIBUTION_LOCK_TTL);
     if (!lockToken) {
-      console.log('[PRIZE DIST] Another instance is running the distribution job, skipping');
+      logger.info('[PRIZE DIST] Another instance is running the distribution job, skipping');
       return;
     }
 
     try {
       await runPrizeDistribution();
     } catch (error: any) {
-      console.error('[PRIZE DIST] Error:', {
+      logger.error('[PRIZE DIST] Error:', {
         error: error.message,
         timestamp: new Date().toISOString()
       });
@@ -357,7 +358,7 @@ export function startPrizeDistributionJob(): void {
     }
   });
 
-  console.log('[PRIZE DIST] Prize distribution job started');
+  logger.info('[PRIZE DIST] Prize distribution job started');
 }
 
 /**
@@ -367,7 +368,7 @@ export function stopPrizeDistributionJob(): void {
   if (prizeDistributionJob) {
     prizeDistributionJob.stop();
     prizeDistributionJob = null;
-    console.log('[PRIZE DIST] Prize distribution job stopped');
+    logger.info('[PRIZE DIST] Prize distribution job stopped');
   }
 }
 
@@ -380,7 +381,7 @@ export async function triggerManualPrizeDistribution(): Promise<void> {
     throw new Error('Prize distribution already in progress (locked by another instance)');
   }
 
-  console.log('[PRIZE DIST] Manual prize distribution triggered');
+  logger.info('[PRIZE DIST] Manual prize distribution triggered');
 
   try {
     await runPrizeDistribution();

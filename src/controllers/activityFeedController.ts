@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { logger } from '../config/logger';
 import * as activityFeedService from '../services/activityFeedService';
 
 /**
@@ -23,7 +24,7 @@ export async function getFeed(req: Request, res: Response) {
       }
     });
   } catch (error: any) {
-    console.error('Error in getFeed:', error);
+    logger.error('Error in getFeed:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch activity feed'
@@ -53,7 +54,7 @@ export async function getUserActivities(req: Request, res: Response) {
       }
     });
   } catch (error: any) {
-    console.error('Error in getUserActivities:', error);
+    logger.error('Error in getUserActivities:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch user activities'
@@ -104,11 +105,11 @@ export async function createActivity(req: Request, res: Response) {
             }
             
             await partner.save();
-            console.log('✅ [SOCIAL] Partner social task updated:', socialTask.progress.current, '/', socialTask.progress.target);
+            logger.info('✅ [SOCIAL] Partner social task updated:', socialTask.progress.current, '/', socialTask.progress.target);
           }
         }
       } catch (error) {
-        console.error('❌ [SOCIAL] Error updating partner social task:', error);
+        logger.error('❌ [SOCIAL] Error updating partner social task:', error);
       }
     }
 
@@ -117,7 +118,7 @@ export async function createActivity(req: Request, res: Response) {
       data: activity
     });
   } catch (error: any) {
-    console.error('Error in createActivity:', error);
+    logger.error('Error in createActivity:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to create activity'
@@ -141,7 +142,7 @@ export async function likeActivity(req: Request, res: Response) {
       data: result
     });
   } catch (error: any) {
-    console.error('Error in likeActivity:', error);
+    logger.error('Error in likeActivity:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to like activity'
@@ -171,7 +172,7 @@ export async function getComments(req: Request, res: Response) {
       }
     });
   } catch (error: any) {
-    console.error('Error in getComments:', error);
+    logger.error('Error in getComments:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch comments'
@@ -203,7 +204,7 @@ export async function commentOnActivity(req: Request, res: Response) {
       data: interaction
     });
   } catch (error: any) {
-    console.error('Error in commentOnActivity:', error);
+    logger.error('Error in commentOnActivity:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to add comment'
@@ -234,7 +235,7 @@ export async function followUser(req: Request, res: Response) {
       data: result
     });
   } catch (error: any) {
-    console.error('Error in followUser:', error);
+    logger.error('Error in followUser:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to follow/unfollow user'
@@ -258,7 +259,7 @@ export async function checkFollowStatus(req: Request, res: Response) {
       data: { isFollowing }
     });
   } catch (error: any) {
-    console.error('Error in checkFollowStatus:', error);
+    logger.error('Error in checkFollowStatus:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to check follow status'
@@ -288,7 +289,7 @@ export async function getFollowers(req: Request, res: Response) {
       }
     });
   } catch (error: any) {
-    console.error('Error in getFollowers:', error);
+    logger.error('Error in getFollowers:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch followers'
@@ -318,7 +319,7 @@ export async function getFollowing(req: Request, res: Response) {
       }
     });
   } catch (error: any) {
-    console.error('Error in getFollowing:', error);
+    logger.error('Error in getFollowing:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch following list'
@@ -341,7 +342,7 @@ export async function getFollowCounts(req: Request, res: Response) {
       data: counts
     });
   } catch (error: any) {
-    console.error('Error in getFollowCounts:', error);
+    logger.error('Error in getFollowCounts:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch follow counts'
@@ -365,7 +366,7 @@ export async function getSuggestedUsers(req: Request, res: Response) {
       data: suggestedUsers
     });
   } catch (error: any) {
-    console.error('Error in getSuggestedUsers:', error);
+    logger.error('Error in getSuggestedUsers:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch suggested users'
@@ -389,7 +390,7 @@ export async function shareActivity(req: Request, res: Response) {
       message: 'Activity shared successfully'
     });
   } catch (error: any) {
-    console.error('Error in shareActivity:', error);
+    logger.error('Error in shareActivity:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to share activity'
@@ -412,7 +413,7 @@ export async function getActivityStats(req: Request, res: Response) {
       data: stats
     });
   } catch (error: any) {
-    console.error('Error in getActivityStats:', error);
+    logger.error('Error in getActivityStats:', error);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch activity stats'

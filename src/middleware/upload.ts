@@ -6,6 +6,7 @@ import path from 'path';
 const cloudinary = require('cloudinary').v2;
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import dotenv from 'dotenv';
+import { logger } from '../config/logger';
 
 // Allowed file extensions for security validation (checks actual extension, not just mimetype header)
 const ALLOWED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.heic', '.heif'];
@@ -38,7 +39,7 @@ cloudinary.config({
   timeout: 120000, // 120 seconds timeout (increased from 60)
 });
 
-console.log('☁️  [CLOUDINARY] Configuration loaded:', {
+logger.info('☁️  [CLOUDINARY] Configuration loaded:', {
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key_present: !!process.env.CLOUDINARY_API_KEY,
   api_secret_present: !!process.env.CLOUDINARY_API_SECRET,
@@ -47,15 +48,15 @@ console.log('☁️  [CLOUDINARY] Configuration loaded:', {
 // Test Cloudinary connection at startup
 cloudinary.api.ping()
   .then(() => {
-    console.log('✅ [CLOUDINARY] Connection successful!');
+    logger.info('✅ [CLOUDINARY] Connection successful!');
   })
   .catch((error: any) => {
-    console.error('❌ [CLOUDINARY] Connection failed:', error.message);
+    logger.error('❌ [CLOUDINARY] Connection failed:', error.message);
     if (error.message.includes('Invalid cloud_name')) {
-      console.error('   → Check CLOUDINARY_CLOUD_NAME in .env');
+      logger.error('   → Check CLOUDINARY_CLOUD_NAME in .env');
     } else if (error.message.includes('quota')) {
-      console.error('   → Your Cloudinary storage quota may be full!');
-      console.error('   → Check: https://cloudinary.com/console/usage');
+      logger.error('   → Your Cloudinary storage quota may be full!');
+      logger.error('   → Check: https://cloudinary.com/console/usage');
     }
   });
 
@@ -63,7 +64,7 @@ cloudinary.api.ping()
 const profileStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => {
-    console.log(`📤 [CLOUDINARY] Uploading avatar for user: ${req.user?._id}`);
+    logger.info(`📤 [CLOUDINARY] Uploading avatar for user: ${req.user?._id}`);
     return {
       folder: 'rez-app/profiles',
       resource_type: 'image',
@@ -78,7 +79,7 @@ const profileStorage = new CloudinaryStorage({
 const projectStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => {
-    console.log(`📤 [CLOUDINARY] Uploading project file for user: ${req.user?._id}`);
+    logger.info(`📤 [CLOUDINARY] Uploading project file for user: ${req.user?._id}`);
     const resourceType = file.mimetype.startsWith('video/') ? 'video' : 'image';
     return {
       folder: 'rez-app/projects',
@@ -107,7 +108,7 @@ export const uploadProfileImage = multer({
 const reviewStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => {
-    console.log(`📤 [CLOUDINARY] Uploading review image for user: ${req.user?._id}`);
+    logger.info(`📤 [CLOUDINARY] Uploading review image for user: ${req.user?._id}`);
     return {
       folder: 'rez-app/reviews',
       resource_type: 'image',
@@ -135,7 +136,7 @@ export const uploadProjectFile = multer({
 const socialMediaProofStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => {
-    console.log(`📤 [CLOUDINARY] Uploading social media proof for user: ${req.user?._id}`);
+    logger.info(`📤 [CLOUDINARY] Uploading social media proof for user: ${req.user?._id}`);
     const resourceType = file.mimetype.startsWith('video/') ? 'video' : 'image';
     return {
       folder: 'rez-app/social-media-proofs',
@@ -179,7 +180,7 @@ const verificationStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => {
     const zone = req.params?.zone || 'general';
-    console.log(`📤 [CLOUDINARY] Uploading verification document for user: ${(req as any).user?._id} (zone: ${zone})`);
+    logger.info(`📤 [CLOUDINARY] Uploading verification document for user: ${(req as any).user?._id} (zone: ${zone})`);
     return {
       folder: `rez-app/verifications/${zone}`,
       resource_type: 'image',

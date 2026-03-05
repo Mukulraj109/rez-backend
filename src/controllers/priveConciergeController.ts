@@ -6,6 +6,7 @@
 
 import { Request, Response } from 'express';
 import { priveConciergeService } from '../services/priveConciergeService';
+import { logger } from '../config/logger';
 import priveAccessService from '../services/priveAccessService';
 import mongoose from 'mongoose';
 
@@ -44,7 +45,7 @@ export const createTicket = async (req: Request, res: Response) => {
       data: { ticket },
     });
   } catch (error: any) {
-    console.error('[PRIVE_CONCIERGE] Error creating ticket:', error);
+    logger.error('[PRIVE_CONCIERGE] Error creating ticket:', error);
     const status = error.message?.includes('Maximum') ? 429 : 500;
     res.status(status).json({ success: false, error: error.message || 'Failed to create ticket' });
   }
@@ -66,7 +67,7 @@ export const getTickets = async (req: Request, res: Response) => {
       data: { tickets },
     });
   } catch (error: any) {
-    console.error('[PRIVE_CONCIERGE] Error fetching tickets:', error);
+    logger.error('[PRIVE_CONCIERGE] Error fetching tickets:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch tickets' });
   }
 };
@@ -95,7 +96,7 @@ export const getTicketById = async (req: Request, res: Response) => {
       data: { ticket },
     });
   } catch (error: any) {
-    console.error('[PRIVE_CONCIERGE] Error fetching ticket:', error);
+    logger.error('[PRIVE_CONCIERGE] Error fetching ticket:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch ticket' });
   }
 };
@@ -130,7 +131,7 @@ export const addMessage = async (req: Request, res: Response) => {
       data: { ticket },
     });
   } catch (error: any) {
-    console.error('[PRIVE_CONCIERGE] Error adding message:', error);
+    logger.error('[PRIVE_CONCIERGE] Error adding message:', error);
     const status = error.message?.includes('not found') ? 404 :
                    error.message?.includes('Cannot add') ? 400 : 500;
     res.status(status).json({ success: false, error: error.message || 'Failed to add message' });

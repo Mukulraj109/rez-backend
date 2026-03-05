@@ -1,5 +1,6 @@
 import cors, { CorsOptions } from 'cors';
 import { Request } from 'express';
+import { logger } from '../config/logger';
 
 /**
  * CORS Configuration with Environment-based Whitelist
@@ -11,7 +12,7 @@ const getAllowedOrigins = (): string[] => {
   const corsOrigin = process.env.CORS_ORIGIN || '';
 
   if (corsOrigin === '*') {
-    console.warn('⚠️ CORS is set to allow all origins - NOT recommended for production!');
+    logger.warn('⚠️ CORS is set to allow all origins - NOT recommended for production!');
     return ['*'];
   }
 
@@ -32,17 +33,17 @@ const getAllowedOrigins = (): string[] => {
   // In development, merge with defaults
   if (process.env.NODE_ENV === 'development') {
     const combined = [...new Set([...origins, ...defaultOrigins])];
-    console.log('🔧 CORS allowed origins (development):', combined);
+    logger.info('🔧 CORS allowed origins (development):', combined);
     return combined;
   }
 
   // In production, use only configured origins
   if (origins.length === 0) {
-    console.error('❌ No CORS origins configured for production!');
+    logger.error('❌ No CORS origins configured for production!');
     throw new Error('CORS_ORIGIN environment variable must be set in production');
   }
 
-  console.log('🔒 CORS allowed origins (production):', origins);
+  logger.info('🔒 CORS allowed origins (production):', origins);
   return origins;
 };
 
@@ -82,7 +83,7 @@ const corsOriginValidator = (origin: string | undefined, callback: (err: Error |
   }
 
   // Origin not allowed
-  console.warn(`🚫 CORS blocked request from origin: ${origin}`);
+  logger.warn(`🚫 CORS blocked request from origin: ${origin}`);
   callback(new Error('Not allowed by CORS'));
 };
 
@@ -197,17 +198,17 @@ export const dynamicCors = (customOrigins?: string[]) => {
 export const validateCorsConfiguration = (): void => {
   if (process.env.NODE_ENV === 'production') {
     if (!process.env.CORS_ORIGIN || process.env.CORS_ORIGIN === '*') {
-      console.error('❌ CRITICAL: CORS_ORIGIN not properly configured for production!');
-      console.error('   Please set CORS_ORIGIN to a comma-separated list of allowed origins');
+      logger.error('❌ CRITICAL: CORS_ORIGIN not properly configured for production!');
+      logger.error('   Please set CORS_ORIGIN to a comma-separated list of allowed origins');
       throw new Error('Invalid CORS configuration for production');
     }
 
     if (!allowedOrigins.every(origin => origin.startsWith('https://'))) {
-      console.warn('⚠️ WARNING: Some CORS origins are not using HTTPS in production');
+      logger.warn('⚠️ WARNING: Some CORS origins are not using HTTPS in production');
     }
   }
 
-  console.log('✅ CORS configuration validated');
+  logger.info('✅ CORS configuration validated');
 };
 
 export default {

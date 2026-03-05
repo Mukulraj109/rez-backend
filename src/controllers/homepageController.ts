@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { getHomepageData } from '../services/homepageService';
+import { logger } from '../config/logger';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess, sendInternalError, sendUnauthorized } from '../utils/response';
 import { modeService, ModeId } from '../services/modeService';
@@ -74,7 +75,7 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
     // Parse limit
     const limitNumber = limit ? parseInt(limit as string, 10) : undefined;
 
-    console.log('🏠 [Homepage Controller] Request params:', {
+    logger.info('🏠 [Homepage Controller] Request params:', {
       userId: userId || 'anonymous',
       mode: activeMode,
       region: region || 'none',
@@ -89,13 +90,13 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
     // Server-side Redis cache — region-based (homepage content is the same for
     // all users in the same region; personalization is done client-side)
     const homepageCacheKey = `homepage:${region || 'default'}:${activeMode}`;
-    const HOMEPAGE_TTL = 60; // 60 seconds — fast refresh, absorbs traffic spikes
+    const HOMEPAGE_TTL = 300; // 5 minutes — reduces DB load at scale, client can force-refresh via pull-to-refresh
 
     const cached = await redisService.get<any>(homepageCacheKey);
     if (cached) {
       const duration = Date.now() - startTime;
       res.set({
-        'Cache-Control': 'public, max-age=60, stale-while-revalidate=120',
+        'Cache-Control': 'public, max-age=300, stale-while-revalidate=600',
         'Vary': 'X-Rez-Region',
         'X-Response-Time': `${duration}ms`,
         'X-Cache': 'HIT',
@@ -119,15 +120,15 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
     redisService.set(homepageCacheKey, result.data, HOMEPAGE_TTL).catch(() => {});
 
     res.set({
-      'Cache-Control': 'public, max-age=60, stale-while-revalidate=120',
+      'Cache-Control': 'public, max-age=300, stale-while-revalidate=600',
       'Vary': 'X-Rez-Region',
       'X-Response-Time': `${duration}ms`,
       'X-Cache': 'MISS',
     });
 
-    console.log(`✅ [Homepage Controller] Response sent in ${duration}ms`);
-    console.log(`   Sections returned: ${Object.keys(result.data).length}`);
-    console.log(`   Total items: ${Object.values(result.data).reduce((sum: number, arr: any) => sum + (Array.isArray(arr) ? arr.length : 0), 0)}`);
+    logger.info(`✅ [Homepage Controller] Response sent in ${duration}ms`);
+    logger.info(`   Sections returned: ${Object.keys(result.data).length}`);
+    logger.info(`   Total items: ${Object.values(result.data).reduce((sum: number, arr: any) => sum + (Array.isArray(arr) ? arr.length : 0), 0)}`);
 
     // Send response with mode and region info
     sendSuccess(res, {
@@ -142,7 +143,7 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
 
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`❌ [Homepage Controller] Error after ${duration}ms:`, error);
+    logger.error(`❌ [Homepage Controller] Error after ${duration}ms:`, error);
 
     sendInternalError(res, 'Failed to fetch homepage data');
   }
@@ -271,7 +272,7 @@ export const getUserContext = asyncHandler(async (req: Request, res: Response) =
     }, 'User context retrieved');
 
   } catch (error) {
-    console.error('❌ [Homepage] Error fetching user context:', error);
+    logger.error('❌ [Homepage] Error fetching user context:', error);
     sendInternalError(res, 'Failed to fetch user context');
   }
 });

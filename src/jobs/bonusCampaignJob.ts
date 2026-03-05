@@ -1,6 +1,7 @@
 import * as cron from 'node-cron';
 import { transitionCampaignStatuses, expirePendingClaims } from '../services/bonusCampaignService';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 /**
  * Bonus Campaign Jobs
@@ -25,16 +26,16 @@ const EXPIRE_CLAIMS_SCHEDULE = '*/30 * * * *';       // Every 30 minutes
  */
 export function initBonusCampaignJobs(): void {
   if (statusTransitionJob || expireClaimsJob) {
-    console.log('⚠️ [BONUS CAMPAIGN] Jobs already running');
+    logger.info('⚠️ [BONUS CAMPAIGN] Jobs already running');
     return;
   }
 
-  console.log('🎯 [BONUS CAMPAIGN] Starting bonus campaign jobs');
+  logger.info('🎯 [BONUS CAMPAIGN] Starting bonus campaign jobs');
 
   // Job 1: Transition campaign statuses every 5 minutes
   statusTransitionJob = cron.schedule(STATUS_TRANSITION_SCHEDULE, async () => {
     if (isTransitionRunning) {
-      console.log('⏭️ [BONUS CAMPAIGN] Previous status transition still running, skipping');
+      logger.info('⏭️ [BONUS CAMPAIGN] Previous status transition still running, skipping');
       return;
     }
 
@@ -45,20 +46,20 @@ export function initBonusCampaignJobs(): void {
     try {
       lockToken = await redisService.acquireLock(lockKey, 300);
       if (!lockToken) {
-        console.log('bonus-campaign skipped — lock held by another instance');
+        logger.info('bonus-campaign skipped — lock held by another instance');
         return;
       }
 
       const startTime = Date.now();
 
       try {
-        console.log('🎯 [BONUS CAMPAIGN] Running campaign status transitions...');
+        logger.info('🎯 [BONUS CAMPAIGN] Running campaign status transitions...');
         await transitionCampaignStatuses();
         const duration = Date.now() - startTime;
-        console.log(`✅ [BONUS CAMPAIGN] Status transitions completed in ${duration}ms`);
+        logger.info(`✅ [BONUS CAMPAIGN] Status transitions completed in ${duration}ms`);
       } catch (error) {
         const duration = Date.now() - startTime;
-        console.error(`❌ [BONUS CAMPAIGN] Status transition failed after ${duration}ms:`, error);
+        logger.error(`❌ [BONUS CAMPAIGN] Status transition failed after ${duration}ms:`, error);
       }
     } finally {
       if (lockToken) {
@@ -71,7 +72,7 @@ export function initBonusCampaignJobs(): void {
   // Job 2: Expire pending claims every 30 minutes
   expireClaimsJob = cron.schedule(EXPIRE_CLAIMS_SCHEDULE, async () => {
     if (isExpireRunning) {
-      console.log('⏭️ [BONUS CAMPAIGN] Previous expire claims still running, skipping');
+      logger.info('⏭️ [BONUS CAMPAIGN] Previous expire claims still running, skipping');
       return;
     }
 
@@ -82,20 +83,20 @@ export function initBonusCampaignJobs(): void {
     try {
       expireLockToken = await redisService.acquireLock(expireLockKey, 300);
       if (!expireLockToken) {
-        console.log('bonus-campaign-expire skipped — lock held by another instance');
+        logger.info('bonus-campaign-expire skipped — lock held by another instance');
         return;
       }
 
       const startTime = Date.now();
 
       try {
-        console.log('🎯 [BONUS CAMPAIGN] Running expire pending claims...');
+        logger.info('🎯 [BONUS CAMPAIGN] Running expire pending claims...');
         await expirePendingClaims();
         const duration = Date.now() - startTime;
-        console.log(`✅ [BONUS CAMPAIGN] Expire pending claims completed in ${duration}ms`);
+        logger.info(`✅ [BONUS CAMPAIGN] Expire pending claims completed in ${duration}ms`);
       } catch (error) {
         const duration = Date.now() - startTime;
-        console.error(`❌ [BONUS CAMPAIGN] Expire pending claims failed after ${duration}ms:`, error);
+        logger.error(`❌ [BONUS CAMPAIGN] Expire pending claims failed after ${duration}ms:`, error);
       }
     } finally {
       if (expireLockToken) {
@@ -105,9 +106,9 @@ export function initBonusCampaignJobs(): void {
     }
   });
 
-  console.log('✅ [BONUS CAMPAIGN] Bonus campaign jobs started successfully');
-  console.log('   - Status transitions: every 5 minutes');
-  console.log('   - Expire pending claims: every 30 minutes');
+  logger.info('✅ [BONUS CAMPAIGN] Bonus campaign jobs started successfully');
+  logger.info('   - Status transitions: every 5 minutes');
+  logger.info('   - Expire pending claims: every 30 minutes');
 }
 
 /**
@@ -122,7 +123,7 @@ export function stopBonusCampaignJobs(): void {
     expireClaimsJob.stop();
     expireClaimsJob = null;
   }
-  console.log('🛑 [BONUS CAMPAIGN] Jobs stopped');
+  logger.info('🛑 [BONUS CAMPAIGN] Jobs stopped');
 }
 
 export default {

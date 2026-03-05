@@ -3,6 +3,7 @@
 
 import { Request, Response } from 'express';
 import mongoose, { Types } from 'mongoose';
+import { logger } from '../config/logger';
 import SocialMediaPost from '../models/SocialMediaPost';
 import { Order } from '../models/Order';
 import { StorePayment } from '../models/StorePayment';
@@ -33,11 +34,11 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
   // Log high risk submissions as warnings (don't block)
   if (fraudMetadata) {
     if (fraudMetadata.riskLevel === 'critical') {
-      console.warn('⚠️ [FRAUD] High risk submission (allowed):', { userId, riskScore: fraudMetadata.riskScore });
+      logger.warn('⚠️ [FRAUD] High risk submission (allowed):', { userId, riskScore: fraudMetadata.riskScore });
     }
 
     if (fraudMetadata.trustScore !== undefined && fraudMetadata.trustScore < 20) {
-      console.warn('⚠️ [FRAUD] Low trust score submission (allowed):', { userId, trustScore: fraudMetadata.trustScore });
+      logger.warn('⚠️ [FRAUD] Low trust score submission (allowed):', { userId, trustScore: fraudMetadata.trustScore });
     }
   }
 
@@ -60,7 +61,7 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
     // FRAUD PREVENTION CHECK 1: Check if URL already submitted
     const existingPost = await SocialMediaPost.findOne({ postUrl }).lean();
     if (existingPost) {
-      console.warn('⚠️ [FRAUD] Duplicate URL submission attempt:', { userId, postUrl });
+      logger.warn('⚠️ [FRAUD] Duplicate URL submission attempt:', { userId, postUrl });
       return sendError(res, 'This post URL has already been submitted', 409);
     }
 
@@ -71,7 +72,7 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
         ? await SocialMediaPost.findOne({ user: userId, order: orderId })
         : await SocialMediaPost.findOne({ user: userId, 'metadata.storePaymentId': orderId }).lean();
       if (existingForOrder) {
-        console.warn('⚠️ [FRAUD] User tried to submit same order/payment twice:', { userId, orderId });
+        logger.warn('⚠️ [FRAUD] User tried to submit same order/payment twice:', { userId, orderId });
         return sendError(res, 'You have already submitted a post for this order', 409);
       }
     }
@@ -83,7 +84,7 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
       submittedAt: { $gte: oneDayAgo }
     });
     if (todaySubmissions >= RATE_LIMITS.DAILY_LIMIT) {
-      console.warn('⚠️ [FRAUD] User exceeded daily limit:', { userId, submissions: todaySubmissions });
+      logger.warn('⚠️ [FRAUD] User exceeded daily limit:', { userId, submissions: todaySubmissions });
       return sendError(res, `Maximum ${RATE_LIMITS.DAILY_LIMIT} submissions per day reached. Please try again tomorrow.`, 429);
     }
 
@@ -94,7 +95,7 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
       submittedAt: { $gte: oneWeekAgo }
     });
     if (weeklySubmissions >= RATE_LIMITS.WEEKLY_LIMIT) {
-      console.warn('⚠️ [FRAUD] User exceeded weekly limit:', { userId, submissions: weeklySubmissions });
+      logger.warn('⚠️ [FRAUD] User exceeded weekly limit:', { userId, submissions: weeklySubmissions });
       return sendError(res, `Maximum ${RATE_LIMITS.WEEKLY_LIMIT} submissions per week reached. Please try again next week.`, 429);
     }
 
@@ -105,7 +106,7 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
       submittedAt: { $gte: oneMonthAgo }
     });
     if (monthlySubmissions >= RATE_LIMITS.MONTHLY_LIMIT) {
-      console.warn('⚠️ [FRAUD] User exceeded monthly limit:', { userId, submissions: monthlySubmissions });
+      logger.warn('⚠️ [FRAUD] User exceeded monthly limit:', { userId, submissions: monthlySubmissions });
       return sendError(res, `Maximum ${RATE_LIMITS.MONTHLY_LIMIT} submissions per month reached.`, 429);
     }
 
@@ -266,7 +267,7 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
     }, 'Post submitted successfully! The merchant will verify your post within 24 hours.', 201);
 
   } catch (error) {
-    console.error('❌ [SOCIAL MEDIA] Submit error:', error);
+    logger.error('❌ [SOCIAL MEDIA] Submit error:', error);
     throw new AppError('Failed to submit post', 500);
   }
 });
@@ -281,10 +282,10 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
   if (fraudMetadata) {
     const parsed = typeof fraudMetadata === 'string' ? JSON.parse(fraudMetadata) : fraudMetadata;
     if (parsed.riskLevel === 'critical') {
-      console.warn('⚠️ [FRAUD] High risk media submission (allowed):', { userId, riskScore: parsed.riskScore });
+      logger.warn('⚠️ [FRAUD] High risk media submission (allowed):', { userId, riskScore: parsed.riskScore });
     }
     if (parsed.trustScore !== undefined && parsed.trustScore < 20) {
-      console.warn('⚠️ [FRAUD] Low trust score media submission (allowed):', { userId, trustScore: parsed.trustScore });
+      logger.warn('⚠️ [FRAUD] Low trust score media submission (allowed):', { userId, trustScore: parsed.trustScore });
     }
   }
 
@@ -300,7 +301,7 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
         ? await SocialMediaPost.findOne({ user: userId, order: orderId })
         : await SocialMediaPost.findOne({ user: userId, 'metadata.storePaymentId': orderId }).lean();
       if (existingForOrder) {
-        console.warn('⚠️ [FRAUD] User tried to submit same order/payment twice:', { userId, orderId });
+        logger.warn('⚠️ [FRAUD] User tried to submit same order/payment twice:', { userId, orderId });
         return sendError(res, 'You have already submitted a post for this order', 409);
       }
     }
@@ -483,7 +484,7 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
     }, 'Post submitted successfully! The merchant will verify your post within 24 hours.', 201);
 
   } catch (error) {
-    console.error('❌ [SOCIAL MEDIA] Submit with media error:', error);
+    logger.error('❌ [SOCIAL MEDIA] Submit with media error:', error);
     throw new AppError('Failed to submit post with media', 500);
   }
 });
@@ -523,7 +524,7 @@ export const getUserPosts = asyncHandler(async (req: Request, res: Response) => 
     }, 'Posts retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [SOCIAL MEDIA] Get posts error:', error);
+    logger.error('❌ [SOCIAL MEDIA] Get posts error:', error);
     throw new AppError('Failed to fetch posts', 500);
   }
 });
@@ -538,7 +539,7 @@ export const getUserEarnings = asyncHandler(async (req: Request, res: Response) 
     sendSuccess(res, earnings, 'Earnings retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [SOCIAL MEDIA] Get earnings error:', error);
+    logger.error('❌ [SOCIAL MEDIA] Get earnings error:', error);
     throw new AppError('Failed to fetch earnings', 500);
   }
 });
@@ -560,7 +561,7 @@ export const getPostById = asyncHandler(async (req: Request, res: Response) => {
     sendSuccess(res, post, 'Post retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [SOCIAL MEDIA] Get post error:', error);
+    logger.error('❌ [SOCIAL MEDIA] Get post error:', error);
     throw new AppError('Failed to fetch post', 500);
   }
 });
@@ -668,7 +669,7 @@ export const updatePostStatus = asyncHandler(async (req: Request, res: Response)
           { postId: post._id, platform: post.platform, orderId: post.order }
         );
       } catch (coinError) {
-        console.error('Failed to credit coins via coinService:', coinError);
+        logger.error('Failed to credit coins via coinService:', coinError);
       }
 
       // Emit gamification event for social media post crediting
@@ -701,7 +702,7 @@ export const updatePostStatus = asyncHandler(async (req: Request, res: Response)
 
   } catch (error) {
     await session.abortTransaction();
-    console.error('❌ [SOCIAL MEDIA] Update status error:', error);
+    logger.error('❌ [SOCIAL MEDIA] Update status error:', error);
     throw error;
   } finally {
     session.endSession();
@@ -729,7 +730,7 @@ export const deletePost = asyncHandler(async (req: Request, res: Response) => {
     sendSuccess(res, null, 'Post deleted successfully');
 
   } catch (error) {
-    console.error('❌ [SOCIAL MEDIA] Delete error:', error);
+    logger.error('❌ [SOCIAL MEDIA] Delete error:', error);
     throw new AppError('Failed to delete post', 500);
   }
 });
@@ -769,7 +770,7 @@ export const getPlatformStats = asyncHandler(async (req: Request, res: Response)
     sendSuccess(res, { stats }, 'Platform statistics retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [SOCIAL MEDIA] Stats error:', error);
+    logger.error('❌ [SOCIAL MEDIA] Stats error:', error);
     throw new AppError('Failed to fetch statistics', 500);
   }
 });
@@ -982,7 +983,7 @@ export const verifyInstagramPost = asyncHandler(async (req: Request, res: Respon
     });
 
   } catch (error) {
-    console.error('❌ [INSTAGRAM] Verification error:', error);
+    logger.error('❌ [INSTAGRAM] Verification error:', error);
     errors.push('Failed to verify Instagram post');
     sendSuccess(res, {
       isValid: false,
@@ -1025,7 +1026,7 @@ export const verifyInstagramAccount = asyncHandler(async (req: Request, res: Res
     });
 
   } catch (error) {
-    console.error('❌ [INSTAGRAM] Account verification error:', error);
+    logger.error('❌ [INSTAGRAM] Account verification error:', error);
     errors.push('Failed to verify Instagram account');
     sendSuccess(res, {
       isValid: false,
@@ -1061,7 +1062,7 @@ export const extractInstagramPostData = asyncHandler(async (req: Request, res: R
     });
 
   } catch (error) {
-    console.error('❌ [INSTAGRAM] Extract data error:', error);
+    logger.error('❌ [INSTAGRAM] Extract data error:', error);
     sendError(res, 'Failed to extract post data', 500);
   }
 });

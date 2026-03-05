@@ -18,7 +18,7 @@ function getPackageVersion(): string {
       return packageJson.version || '1.0.0';
     }
   } catch (error) {
-    console.warn('Failed to read package.json version:', error);
+    logger.warn('Failed to read package.json version:', error);
   }
   return '1.0.0';
 }

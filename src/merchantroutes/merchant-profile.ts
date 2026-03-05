@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/merchantauth';
+import { logger } from '../config/logger';
 import { MerchantModel } from '../models/Merchant';
 import { CrossAppSyncService } from '../merchantservices/CrossAppSyncService';
 import { Review } from '../models/Review';
@@ -136,7 +137,7 @@ router.get('/customer-view', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error getting customer view profile:', error);
+    logger.error('Error getting customer view profile:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to get merchant profile',
@@ -203,7 +204,7 @@ router.put('/customer-settings', async (req, res) => {
         timestamp: new Date()
       });
     } catch (syncError) {
-      console.error('Failed to sync merchant profile update:', syncError);
+      logger.error('Failed to sync merchant profile update:', syncError);
     }
 
     return res.json({
@@ -213,7 +214,7 @@ router.put('/customer-settings', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error updating customer settings:', error);
+    logger.error('Error updating customer settings:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to update customer settings',
@@ -257,7 +258,7 @@ router.get('/visibility', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error getting visibility settings:', error);
+    logger.error('Error getting visibility settings:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to get visibility settings',
@@ -305,7 +306,7 @@ router.put('/visibility', async (req, res) => {
         timestamp: new Date()
       });
     } catch (syncError) {
-      console.error('Failed to sync visibility update:', syncError);
+      logger.error('Failed to sync visibility update:', syncError);
     }
 
     return res.json({
@@ -315,7 +316,7 @@ router.put('/visibility', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error updating visibility settings:', error);
+    logger.error('Error updating visibility settings:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to update visibility settings',
@@ -344,7 +345,7 @@ router.post('/sync-to-customer-app', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error syncing merchant profile:', error);
+    logger.error('Error syncing merchant profile:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to sync merchant profile',
@@ -443,7 +444,7 @@ router.get('/customer-reviews', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error getting customer reviews:', error);
+    logger.error('Error getting customer reviews:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get customer reviews',
@@ -473,7 +474,7 @@ function isCurrentlyOpen(businessHours: any, timezone: string = 'UTC'): boolean 
 
     return currentTime >= todayHours.open && currentTime <= todayHours.close;
   } catch (error) {
-    console.error('Error checking if store is open:', error);
+    logger.error('Error checking if store is open:', error);
     return false;
   }
 }

@@ -5,6 +5,7 @@
 
 import crypto from 'crypto';
 import { PaymentLogger } from '../services/logging/paymentLogger';
+import { logger } from '../config/logger';
 
 /**
  * Razorpay signature validation result interface
@@ -100,13 +101,13 @@ export function validateRazorpayPaymentSignature(
     // Log the validation result
     if (isValid) {
       PaymentLogger.logPaymentSuccess(paymentId, orderId, 0, 'razorpay');
-      console.log('✅ [RAZORPAY UTILS] Signature validation successful:', {
+      logger.info('✅ [RAZORPAY UTILS] Signature validation successful:', {
         orderId,
         paymentId,
         timestamp: new Date().toISOString()
       });
     } else {
-      console.error('❌ [RAZORPAY UTILS] Signature validation failed:', {
+      logger.error('❌ [RAZORPAY UTILS] Signature validation failed:', {
         orderId,
         paymentId,
         signatureProvided: signature,
@@ -125,7 +126,7 @@ export function validateRazorpayPaymentSignature(
       }
     };
   } catch (error: any) {
-    console.error('❌ [RAZORPAY UTILS] Error during signature validation:', error);
+    logger.error('❌ [RAZORPAY UTILS] Error during signature validation:', error);
     return {
       isValid: false,
       error: `Signature validation error: ${error.message}`,
@@ -163,7 +164,7 @@ export function validateRazorpayWebhookSignature(
 
     // Check if webhook secret is configured
     if (webhookSecret === 'your_webhook_secret_here' || !webhookSecret) {
-      console.warn('⚠️ [RAZORPAY UTILS] Webhook secret not configured. Set RAZORPAY_WEBHOOK_SECRET in .env');
+      logger.warn('⚠️ [RAZORPAY UTILS] Webhook secret not configured. Set RAZORPAY_WEBHOOK_SECRET in .env');
       return {
         isValid: false,
         error: 'Webhook secret not configured'
@@ -192,16 +193,16 @@ export function validateRazorpayWebhookSignature(
         PaymentLogger.logRazorpayEvent(eventType, payload.payload?.payment?.entity?.id || 'unknown', payload);
       }
     } catch (parseError) {
-      console.warn('⚠️ [RAZORPAY UTILS] Could not parse webhook body for event type');
+      logger.warn('⚠️ [RAZORPAY UTILS] Could not parse webhook body for event type');
     }
 
     if (isValid) {
-      console.log('✅ [RAZORPAY UTILS] Webhook signature validated:', {
+      logger.info('✅ [RAZORPAY UTILS] Webhook signature validated:', {
         eventType,
         timestamp: new Date().toISOString()
       });
     } else {
-      console.error('❌ [RAZORPAY UTILS] Webhook signature validation failed:', {
+      logger.error('❌ [RAZORPAY UTILS] Webhook signature validation failed:', {
         eventType,
         timestamp: new Date().toISOString()
       });
@@ -212,7 +213,7 @@ export function validateRazorpayWebhookSignature(
       eventType
     };
   } catch (error: any) {
-    console.error('❌ [RAZORPAY UTILS] Webhook validation error:', error);
+    logger.error('❌ [RAZORPAY UTILS] Webhook validation error:', error);
     return {
       isValid: false,
       error: `Webhook validation error: ${error.message}`
@@ -444,9 +445,9 @@ export function logPaymentVerificationAttempt(
   };
 
   if (isValid) {
-    console.log('✅ [AUDIT] Payment verification successful:', logData);
+    logger.info('✅ [AUDIT] Payment verification successful:', logData);
   } else {
-    console.error('❌ [AUDIT] Payment verification failed:', logData);
+    logger.error('❌ [AUDIT] Payment verification failed:', logData);
   }
 }
 

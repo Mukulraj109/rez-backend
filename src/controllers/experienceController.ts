@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import StoreExperience from '../models/StoreExperience';
+import { logger } from '../config/logger';
 import { Store } from '../models/Store';
 import { Category } from '../models/Category';
 import { Product } from '../models/Product';
@@ -66,7 +67,7 @@ export const getExperiences = asyncHandler(async (req: Request, res: Response) =
     }, 'Store experiences retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [EXPERIENCES] Error fetching experiences:', error);
+    logger.error('❌ [EXPERIENCES] Error fetching experiences:', error);
     throw new AppError('Failed to fetch experiences', 500);
   }
 });
@@ -92,7 +93,7 @@ export const getExperienceById = asyncHandler(async (req: Request, res: Response
     sendSuccess(res, experience, 'Experience retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [EXPERIENCES] Error fetching experience:', error);
+    logger.error('❌ [EXPERIENCES] Error fetching experience:', error);
     throw new AppError('Failed to fetch experience', 500);
   }
 });
@@ -350,7 +351,7 @@ export const getStoresByExperience = asyncHandler(async (req: Request, res: Resp
     }, 'Stores for experience retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [EXPERIENCES] Error fetching stores by experience:', error);
+    logger.error('❌ [EXPERIENCES] Error fetching stores by experience:', error);
     throw new AppError('Failed to fetch stores', 500);
   }
 });
@@ -404,7 +405,7 @@ export const getHomepageExperiences = asyncHandler(async (req: Request, res: Res
     }, 'Homepage experiences retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [EXPERIENCES] Error fetching homepage experiences:', error);
+    logger.error('❌ [EXPERIENCES] Error fetching homepage experiences:', error);
     throw new AppError('Failed to fetch experiences', 500);
   }
 });
@@ -511,7 +512,7 @@ export const getUniqueFinds = asyncHandler(async (req: Request, res: Response) =
 
     sendSuccess(res, formattedProducts, 'Unique finds retrieved successfully');
   } catch (error) {
-    console.error('❌ [EXPERIENCES] Error fetching unique finds:', error);
+    logger.error('❌ [EXPERIENCES] Error fetching unique finds:', error);
     throw new AppError('Failed to fetch unique finds', 500);
   }
 });

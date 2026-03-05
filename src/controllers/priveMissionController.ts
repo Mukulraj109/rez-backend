@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { priveMissionService } from '../services/priveMissionService';
+import { logger } from '../config/logger';
 import priveAccessService from '../services/priveAccessService';
 import { PriveMission } from '../models/PriveMission';
 import { UserMission } from '../models/UserMission';
@@ -27,7 +28,7 @@ export const getMissions = async (req: Request, res: Response) => {
       data: { missions },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error fetching missions:', error);
+    logger.error('[PRIVE] Error fetching missions:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch missions' });
   }
 };
@@ -53,7 +54,7 @@ export const getActiveMissions = async (req: Request, res: Response) => {
       data: { missions },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error fetching active missions:', error);
+    logger.error('[PRIVE] Error fetching active missions:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch active missions' });
   }
 };
@@ -84,7 +85,7 @@ export const claimMission = async (req: Request, res: Response) => {
       data: { userMission },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error claiming mission:', error);
+    logger.error('[PRIVE] Error claiming mission:', error);
     const status = error.message?.includes('already claimed') ? 409 :
                    error.message?.includes('full') ? 409 :
                    error.message?.includes('not found') ? 404 : 500;
@@ -118,7 +119,7 @@ export const completeMission = async (req: Request, res: Response) => {
       data: { reward: result },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error completing mission:', error);
+    logger.error('[PRIVE] Error completing mission:', error);
     const status = error.message?.includes('not found') || error.message?.includes('not completed') ? 400 :
                    error.message?.includes('already') ? 409 : 500;
     res.status(status).json({ success: false, error: error.message || 'Failed to complete mission' });
@@ -146,7 +147,7 @@ export const getCompletedMissions = async (req: Request, res: Response) => {
       data: { missions },
     });
   } catch (error: any) {
-    console.error('[PRIVE] Error fetching completed missions:', error);
+    logger.error('[PRIVE] Error fetching completed missions:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch completed missions' });
   }
 };

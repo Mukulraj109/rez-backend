@@ -1,3 +1,5 @@
+import { logger } from '../config/logger';
+
 export interface CacheEntry<T> {
   data: T;
   timestamp: Date;
@@ -51,7 +53,7 @@ export class CacheService {
       this.cleanup();
     }, this.config.cleanupInterval * 1000);
 
-    console.log('💾 Cache service initialized');
+    logger.info('💾 Cache service initialized');
   }
 
   // Get item from cache
@@ -226,7 +228,7 @@ export class CacheService {
     }
 
     if (cleaned > 0) {
-      console.log(`🧹 Cache cleanup: removed ${cleaned} expired entries`);
+      logger.info(`🧹 Cache cleanup: removed ${cleaned} expired entries`);
     }
   }
 
@@ -244,7 +246,7 @@ export class CacheService {
 
     if (lruKey) {
       this.cache.delete(lruKey);
-      console.log(`🗑️ Cache eviction: removed LRU entry ${lruKey}`);
+      logger.info(`🗑️ Cache eviction: removed LRU entry ${lruKey}`);
     }
   }
 
@@ -271,7 +273,7 @@ export class CacheService {
       this.cleanupInterval = null;
     }
     this.clear();
-    console.log('💾 Cache service shut down');
+    logger.info('💾 Cache service shut down');
   }
 }
 

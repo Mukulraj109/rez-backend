@@ -3,6 +3,8 @@ import { getHomepage, getAvailableSections, getUserContext } from '../controller
 import { optionalAuth, authenticate } from '../middleware/auth';
 import { Joi } from '../middleware/validation';
 import { validateQuery } from '../middleware/validation';
+import { cacheMiddleware } from '../middleware/cacheMiddleware';
+import { CacheTTL } from '../config/redis';
 
 const router = Router();
 
@@ -30,6 +32,7 @@ router.get('/',
     region: Joi.string().optional(),
     userId: Joi.string().optional(),
   })),
+  cacheMiddleware({ ttl: 300, keyPrefix: 'homepage:batch', condition: () => true }),
   getHomepage
 );
 
@@ -42,6 +45,7 @@ router.get('/',
  * GET /api/homepage/sections
  */
 router.get('/sections',
+  cacheMiddleware({ ttl: CacheTTL.STATIC_DATA, keyPrefix: 'homepage:sections', condition: () => true }),
   getAvailableSections
 );
 

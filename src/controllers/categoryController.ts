@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Category } from '../models/Category';
+import { logger } from '../config/logger';
 import { Order } from '../models/Order';
 import { Store } from '../models/Store';
 import { Product } from '../models/Product';
@@ -220,7 +221,7 @@ export const getCategoriesWithCounts = asyncHandler(async (req: Request, res: Re
     }, 'Categories with counts retrieved successfully');
 
   } catch (error) {
-    console.error('Error fetching categories with counts:', error);
+    logger.error('Error fetching categories with counts:', error);
     throw new AppError('Failed to fetch categories with counts', 500);
   }
 });
@@ -372,7 +373,7 @@ export const getBestDiscountCategories = asyncHandler(async (req: Request, res: 
     sendSuccess(res, categories, 'Best discount categories retrieved successfully');
 
   } catch (error) {
-    console.error('Error fetching best discount categories:', error);
+    logger.error('Error fetching best discount categories:', error);
     throw new AppError('Failed to fetch best discount categories', 500);
   }
 });
@@ -468,7 +469,7 @@ export const getBestSellerCategories = asyncHandler(async (req: Request, res: Re
     sendSuccess(res, categories, 'Best seller categories retrieved successfully');
 
   } catch (error) {
-    console.error('Error fetching best seller categories:', error);
+    logger.error('Error fetching best seller categories:', error);
     throw new AppError('Failed to fetch best seller categories', 500);
   }
 });
@@ -636,7 +637,7 @@ export const getCategoryLoyaltyStats = asyncHandler(async (req: Request, res: Re
     sendSuccess(res, result, 'Category loyalty stats retrieved successfully');
 
   } catch (error) {
-    console.error('Loyalty Stats Error:', error);
+    logger.error('Loyalty Stats Error:', error);
     throw new AppError('Failed to fetch loyalty stats', 500);
   }
 });
@@ -720,7 +721,7 @@ export const getRecentOrders = asyncHandler(async (req: Request, res: Response) 
     sendSuccess(res, { orders: formattedOrders }, 'Recent orders retrieved successfully');
 
   } catch (error) {
-    console.error('Recent Orders Error:', error);
+    logger.error('Recent Orders Error:', error);
     throw new AppError('Failed to fetch recent orders', 500);
   }
 });
@@ -829,7 +830,7 @@ export const getCategoryPageConfig = asyncHandler(async (req: Request, res: Resp
     }, 'Category page config retrieved successfully');
 
   } catch (error) {
-    console.error('Category Page Config Error:', error);
+    logger.error('Category Page Config Error:', error);
     throw new AppError('Failed to fetch category page config', 500);
   }
 });

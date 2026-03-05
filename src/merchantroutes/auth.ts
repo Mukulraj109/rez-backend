@@ -14,6 +14,7 @@ import Joi from 'joi';
 import EmailService from '../services/EmailService';
 import { getPermissionsForRole } from '../config/permissions';
 import AuditService from '../services/AuditService';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -132,7 +133,7 @@ async function sendVerificationEmail(merchant: any, verificationToken: string): 
       verificationToken
     );
   } catch (error) {
-    console.error('Failed to send verification email:', error);
+    logger.error('Failed to send verification email:', error);
     // Don't throw error - just log it so registration can continue
   }
 }
@@ -354,7 +355,7 @@ router.post('/register', /* registrationLimiter, */ validateRequest(registerSche
       }
     });
   } catch (error: any) {
-    console.error('Registration error:', error);
+    logger.error('Registration error:', error);
     return res.status(500).json({
       success: false,
       message: 'Registration failed',
@@ -441,7 +442,7 @@ router.post('/login', /* authLimiter, */ validateRequest(loginSchema), async (re
         accountToCheck.accountLockedUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
         await accountToCheck.save();
 
-        console.log(`🔒 Account locked: ${email} (${accountToCheck.failedLoginAttempts} failed attempts)`);
+        logger.info(`🔒 Account locked: ${email} (${accountToCheck.failedLoginAttempts} failed attempts)`);
 
         return res.status(423).json({
           success: false,
@@ -453,7 +454,7 @@ router.post('/login', /* authLimiter, */ validateRequest(loginSchema), async (re
       await accountToCheck.save();
 
       const remainingAttempts = 5 - accountToCheck.failedLoginAttempts;
-      console.log(`⚠️ Failed login attempt for ${email}. ${remainingAttempts} attempts remaining.`);
+      logger.info(`⚠️ Failed login attempt for ${email}. ${remainingAttempts} attempts remaining.`);
 
       return res.status(401).json({
         success: false,
@@ -558,7 +559,7 @@ router.post('/login', /* authLimiter, */ validateRequest(loginSchema), async (re
       ...(emailVerificationWarning && { warning: emailVerificationWarning })
     });
   } catch (error: any) {
-    console.error('Login error:', error);
+    logger.error('Login error:', error);
     return res.status(500).json({
       success: false,
       message: 'Login failed',
@@ -595,7 +596,7 @@ router.get('/me', authMiddleware, async (req, res) => {
       }
     });
   } catch (error: any) {
-    console.error('Get merchant error:', error);
+    logger.error('Get merchant error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to get merchant data',
@@ -640,7 +641,7 @@ router.post('/forgot-password', /* passwordResetLimiter, */ validateRequest(forg
         resetToken
       );
     } catch (error) {
-      console.error('Failed to send password reset email:', error);
+      logger.error('Failed to send password reset email:', error);
       // Don't throw error - just log it
     }
 
@@ -655,7 +656,7 @@ router.post('/forgot-password', /* passwordResetLimiter, */ validateRequest(forg
       ...(process.env.NODE_ENV === 'development' && { resetUrl })
     });
   } catch (error: any) {
-    console.error('Forgot password error:', error);
+    logger.error('Forgot password error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to process password reset request',
@@ -700,14 +701,14 @@ router.post('/reset-password/:token', /* passwordResetLimiter, */ validateReques
     merchant.accountLockedUntil = undefined; // Unlock account if locked
     await merchant.save();
 
-    console.log(`✅ Password reset successful for merchant: ${merchant.email}`);
+    logger.info(`✅ Password reset successful for merchant: ${merchant.email}`);
 
     return res.json({
       success: true,
       message: 'Password reset successful. You can now login with your new password.'
     });
   } catch (error: any) {
-    console.error('Reset password error:', error);
+    logger.error('Reset password error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to reset password',
@@ -786,14 +787,14 @@ router.post('/reset-password', validateRequest(Joi.object({
     merchant.accountLockedUntil = undefined; // Unlock account if locked
     await merchant.save();
 
-    console.log(`✅ Password reset successful for merchant: ${merchant.email}`);
+    logger.info(`✅ Password reset successful for merchant: ${merchant.email}`);
 
     return res.status(200).json({
       success: true,
       message: 'Password reset successful. You can now login with your new password.'
     });
   } catch (error: any) {
-    console.error('Reset password error:', error);
+    logger.error('Reset password error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to reset password',
@@ -853,7 +854,7 @@ router.post('/logout', authMiddleware, async (req, res) => {
         );
       } catch (auditError) {
         // Log error but don't fail logout
-        console.error('Audit log error during logout:', auditError);
+        logger.error('Audit log error during logout:', auditError);
       }
     }
 
@@ -864,7 +865,7 @@ router.post('/logout', authMiddleware, async (req, res) => {
       message: 'Logout successful'
     });
   } catch (error: any) {
-    console.error('Logout error:', error);
+    logger.error('Logout error:', error);
     // Even if there's an unexpected error, still return success for logout
     // Logout should never fail from the user's perspective
     return res.status(200).json({
@@ -1026,7 +1027,7 @@ router.post('/refresh', /* authLimiter, */ validateRequest(refreshTokenSchema), 
       { expiresIn } as jwt.SignOptions
     );
 
-    console.log(`🔄 Token refreshed for merchant: ${merchant.email}`);
+    logger.info(`🔄 Token refreshed for merchant: ${merchant.email}`);
 
     // Audit log: Token refresh
     await AuditService.logAuth(
@@ -1057,7 +1058,7 @@ router.post('/refresh', /* authLimiter, */ validateRequest(refreshTokenSchema), 
       }
     });
   } catch (error: any) {
-    console.error('Token refresh error:', error);
+    logger.error('Token refresh error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to refresh token',
@@ -1206,7 +1207,7 @@ router.put('/profile', authMiddleware, validateRequest(updateProfileSchema), asy
       req
     );
 
-    console.log(`✅ Profile updated for merchant: ${merchant.email}`);
+    logger.info(`✅ Profile updated for merchant: ${merchant.email}`);
 
     return res.json({
       success: true,
@@ -1231,7 +1232,7 @@ router.put('/profile', authMiddleware, validateRequest(updateProfileSchema), asy
       }
     });
   } catch (error: any) {
-    console.error('Update profile error:', error);
+    logger.error('Update profile error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to update profile',
@@ -1313,9 +1314,9 @@ router.post('/resend-verification', /* authLimiter, */ validateRequest(resendVer
     // Send verification email
     try {
       await sendVerificationEmail(merchant, verificationToken);
-      console.log(`📧 Verification email resent to: ${email}`);
+      logger.info(`📧 Verification email resent to: ${email}`);
     } catch (emailError) {
-      console.error('Failed to send verification email:', emailError);
+      logger.error('Failed to send verification email:', emailError);
       return res.status(500).json({
         success: false,
         message: 'Failed to send verification email. Please try again later.'
@@ -1331,7 +1332,7 @@ router.post('/resend-verification', /* authLimiter, */ validateRequest(resendVer
       })
     });
   } catch (error: any) {
-    console.error('Resend verification error:', error);
+    logger.error('Resend verification error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to resend verification email',
@@ -1431,7 +1432,7 @@ router.put('/change-password', authMiddleware, validateRequest(changePasswordSch
     // Verify current password
     const isPasswordValid = await bcrypt.compare(currentPassword, merchant.password);
     if (!isPasswordValid) {
-      console.log(`⚠️ Failed password change attempt for merchant: ${merchant.email}`);
+      logger.info(`⚠️ Failed password change attempt for merchant: ${merchant.email}`);
 
       // Audit log: Failed password change (best effort)
       try {
@@ -1445,7 +1446,7 @@ router.put('/change-password', authMiddleware, validateRequest(changePasswordSch
           req
         );
       } catch (auditError) {
-        console.error('Audit log error:', auditError);
+        logger.error('Audit log error:', auditError);
         // Don't fail the request if audit fails
       }
 
@@ -1466,7 +1467,7 @@ router.put('/change-password', authMiddleware, validateRequest(changePasswordSch
     merchant.accountLockedUntil = undefined; // Unlock account if locked
     await merchant.save();
 
-    console.log(`✅ Password changed successfully for merchant: ${merchant.email}`);
+    logger.info(`✅ Password changed successfully for merchant: ${merchant.email}`);
 
     // Audit log: Successful password change (best effort)
     try {
@@ -1479,7 +1480,7 @@ router.put('/change-password', authMiddleware, validateRequest(changePasswordSch
         req
       );
     } catch (auditError) {
-      console.error('Audit log error:', auditError);
+      logger.error('Audit log error:', auditError);
       // Don't fail the request if audit fails
     }
 
@@ -1490,7 +1491,7 @@ router.put('/change-password', authMiddleware, validateRequest(changePasswordSch
         merchant.ownerName
       );
     } catch (error) {
-      console.error('Failed to send password change confirmation email:', error);
+      logger.error('Failed to send password change confirmation email:', error);
       // Don't throw error - password was already changed successfully
     }
 
@@ -1499,7 +1500,7 @@ router.put('/change-password', authMiddleware, validateRequest(changePasswordSch
       message: 'Password changed successfully. You can now login with your new password.'
     });
   } catch (error: any) {
-    console.error('Change password error:', error);
+    logger.error('Change password error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to change password',
@@ -1605,7 +1606,7 @@ router.post('/verify-email/:token', async (req, res) => {
     merchant.emailVerificationExpiry = undefined;
     await merchant.save();
 
-    console.log(`✅ Email verified successfully for merchant: ${merchant.email}`);
+    logger.info(`✅ Email verified successfully for merchant: ${merchant.email}`);
 
     // Audit log: Email verification
     await AuditService.logAuth(
@@ -1625,7 +1626,7 @@ router.post('/verify-email/:token', async (req, res) => {
         merchant.businessName
       );
     } catch (error) {
-      console.error('Failed to send welcome email:', error);
+      logger.error('Failed to send welcome email:', error);
       // Don't throw error - verification was successful
     }
 
@@ -1637,7 +1638,7 @@ router.post('/verify-email/:token', async (req, res) => {
       }
     });
   } catch (error: any) {
-    console.error('Email verification error:', error);
+    logger.error('Email verification error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to verify email',
@@ -1713,7 +1714,7 @@ router.post('/verify-email', validateRequest(Joi.object({
     merchant.emailVerificationExpiry = undefined;
     await merchant.save();
 
-    console.log(`✅ Email verified successfully for merchant: ${merchant.email}`);
+    logger.info(`✅ Email verified successfully for merchant: ${merchant.email}`);
 
     // Audit log: Email verification
     try {
@@ -1726,7 +1727,7 @@ router.post('/verify-email', validateRequest(Joi.object({
         req
       );
     } catch (auditError) {
-      console.error('Audit log error:', auditError);
+      logger.error('Audit log error:', auditError);
       // Don't fail verification if audit fails
     }
 
@@ -1738,7 +1739,7 @@ router.post('/verify-email', validateRequest(Joi.object({
         merchant.businessName
       );
     } catch (error) {
-      console.error('Failed to send welcome email:', error);
+      logger.error('Failed to send welcome email:', error);
       // Don't throw error - verification was successful
     }
 
@@ -1750,7 +1751,7 @@ router.post('/verify-email', validateRequest(Joi.object({
       }
     });
   } catch (error: any) {
-    console.error('Email verification error:', error);
+    logger.error('Email verification error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to verify email',
@@ -1770,7 +1771,7 @@ async function createStoreForMerchant(merchant: any): Promise<void> {
     // Check if store already exists for this merchant
     const existingStore = await Store.findOne({ merchantId });
     if (existingStore) {
-      console.log(`✅ Store already exists for merchant ${merchantId}: ${existingStore.name}`);
+      logger.info(`✅ Store already exists for merchant ${merchantId}: ${existingStore.name}`);
       return;
     }
 
@@ -1858,15 +1859,15 @@ async function createStoreForMerchant(merchant: any): Promise<void> {
 
     await store.save();
     
-    console.log(`🏪 Automatically created store "${merchant.businessName}" (ID: ${store._id}) for merchant ${merchantId}`);
-    console.log(`   Store slug: ${finalSlug}`);
-    console.log(`   Store merchantId: ${store.merchantId}`);
+    logger.info(`🏪 Automatically created store "${merchant.businessName}" (ID: ${store._id}) for merchant ${merchantId}`);
+    logger.info(`   Store slug: ${finalSlug}`);
+    logger.info(`   Store merchantId: ${store.merchantId}`);
 
   } catch (error: any) {
-    console.error('❌ Error creating store for merchant:', error);
-    console.error('   Merchant ID:', merchant._id);
-    console.error('   Error details:', error.message);
-    console.error('   Stack:', error.stack);
+    logger.error('❌ Error creating store for merchant:', error);
+    logger.error('   Merchant ID:', merchant._id);
+    logger.error('   Error details:', error.message);
+    logger.error('   Stack:', error.stack);
     // Don't throw error to avoid breaking merchant registration, but log it clearly
   }
 }

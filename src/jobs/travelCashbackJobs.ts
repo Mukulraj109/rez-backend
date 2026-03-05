@@ -2,6 +2,7 @@ import * as cron from 'node-cron';
 import travelCashbackService from '../services/travelCashbackService';
 import { ServiceBooking } from '../models/ServiceBooking';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 /**
  * Travel Cashback Background Jobs
@@ -53,14 +54,14 @@ async function runCreditPendingCashback(): Promise<JobStats> {
   const stats: JobStats = { processed: 0, failed: 0, duration: 0 };
 
   try {
-    console.log('✈️ [TRAVEL CASHBACK JOB] Running credit pending cashback...');
+    logger.info('✈️ [TRAVEL CASHBACK JOB] Running credit pending cashback...');
 
     const result = await travelCashbackService.creditPendingCashback();
     stats.processed = result.credited;
     stats.failed = result.failed;
     stats.duration = Date.now() - startTime;
 
-    console.log(`✅ [TRAVEL CASHBACK JOB] Credit job completed:`, {
+    logger.info(`✅ [TRAVEL CASHBACK JOB] Credit job completed:`, {
       credited: stats.processed,
       total: result.total,
       failed: stats.failed,
@@ -70,7 +71,7 @@ async function runCreditPendingCashback(): Promise<JobStats> {
     return stats;
   } catch (error: any) {
     stats.duration = Date.now() - startTime;
-    console.error('❌ [TRAVEL CASHBACK JOB] Credit job failed:', error.message);
+    logger.error('❌ [TRAVEL CASHBACK JOB] Credit job failed:', error.message);
     throw error;
   }
 }
@@ -83,7 +84,7 @@ async function runExpireUnpaidBookings(): Promise<JobStats> {
   const stats: JobStats = { processed: 0, failed: 0, duration: 0 };
 
   try {
-    console.log('⏰ [TRAVEL CASHBACK JOB] Running expire unpaid bookings...');
+    logger.info('⏰ [TRAVEL CASHBACK JOB] Running expire unpaid bookings...');
 
     const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
 
@@ -112,13 +113,13 @@ async function runExpireUnpaidBookings(): Promise<JobStats> {
         stats.processed++;
       } catch (err: any) {
         stats.failed++;
-        console.error(`❌ [TRAVEL CASHBACK JOB] Failed to expire booking ${booking._id}:`, err.message);
+        logger.error(`❌ [TRAVEL CASHBACK JOB] Failed to expire booking ${booking._id}:`, err.message);
       }
     }
 
     stats.duration = Date.now() - startTime;
 
-    console.log(`✅ [TRAVEL CASHBACK JOB] Expire unpaid completed:`, {
+    logger.info(`✅ [TRAVEL CASHBACK JOB] Expire unpaid completed:`, {
       expired: stats.processed,
       failed: stats.failed,
       duration: `${stats.duration}ms`,
@@ -127,7 +128,7 @@ async function runExpireUnpaidBookings(): Promise<JobStats> {
     return stats;
   } catch (error: any) {
     stats.duration = Date.now() - startTime;
-    console.error('❌ [TRAVEL CASHBACK JOB] Expire unpaid failed:', error.message);
+    logger.error('❌ [TRAVEL CASHBACK JOB] Expire unpaid failed:', error.message);
     throw error;
   }
 }
@@ -140,7 +141,7 @@ async function runMarkCompletedBookings(): Promise<JobStats> {
   const stats: JobStats = { processed: 0, failed: 0, duration: 0 };
 
   try {
-    console.log('📋 [TRAVEL CASHBACK JOB] Running mark completed bookings...');
+    logger.info('📋 [TRAVEL CASHBACK JOB] Running mark completed bookings...');
 
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
@@ -170,13 +171,13 @@ async function runMarkCompletedBookings(): Promise<JobStats> {
         stats.processed++;
       } catch (err: any) {
         stats.failed++;
-        console.error(`❌ [TRAVEL CASHBACK JOB] Failed to mark booking ${booking._id} as completed:`, err.message);
+        logger.error(`❌ [TRAVEL CASHBACK JOB] Failed to mark booking ${booking._id} as completed:`, err.message);
       }
     }
 
     stats.duration = Date.now() - startTime;
 
-    console.log(`✅ [TRAVEL CASHBACK JOB] Mark completed finished:`, {
+    logger.info(`✅ [TRAVEL CASHBACK JOB] Mark completed finished:`, {
       completed: stats.processed,
       failed: stats.failed,
       duration: `${stats.duration}ms`,
@@ -185,7 +186,7 @@ async function runMarkCompletedBookings(): Promise<JobStats> {
     return stats;
   } catch (error: any) {
     stats.duration = Date.now() - startTime;
-    console.error('❌ [TRAVEL CASHBACK JOB] Mark completed failed:', error.message);
+    logger.error('❌ [TRAVEL CASHBACK JOB] Mark completed failed:', error.message);
     throw error;
   }
 }
@@ -195,16 +196,16 @@ async function runMarkCompletedBookings(): Promise<JobStats> {
  */
 export function startTravelCreditJob(): void {
   if (creditJob) {
-    console.log('⚠️ [TRAVEL CASHBACK JOB] Credit job already running');
+    logger.info('⚠️ [TRAVEL CASHBACK JOB] Credit job already running');
     return;
   }
 
-  console.log('✈️ [TRAVEL CASHBACK JOB] Starting credit job (runs every 2 hours)');
+  logger.info('✈️ [TRAVEL CASHBACK JOB] Starting credit job (runs every 2 hours)');
 
   creditJob = cron.schedule(CREDIT_SCHEDULE, async () => {
     const lockToken = await redisService.acquireLock('travel_cashback_credit', CREDIT_LOCK_TTL);
     if (!lockToken) {
-      console.log('⏭️ [TRAVEL CASHBACK JOB] Another instance running credit job, skipping');
+      logger.info('⏭️ [TRAVEL CASHBACK JOB] Another instance running credit job, skipping');
       return;
     }
 
@@ -223,16 +224,16 @@ export function startTravelCreditJob(): void {
  */
 export function startExpireUnpaidJob(): void {
   if (expireUnpaidJob) {
-    console.log('⚠️ [TRAVEL CASHBACK JOB] Expire unpaid job already running');
+    logger.info('⚠️ [TRAVEL CASHBACK JOB] Expire unpaid job already running');
     return;
   }
 
-  console.log('⏰ [TRAVEL CASHBACK JOB] Starting expire unpaid job (runs every 15 min)');
+  logger.info('⏰ [TRAVEL CASHBACK JOB] Starting expire unpaid job (runs every 15 min)');
 
   expireUnpaidJob = cron.schedule(EXPIRE_UNPAID_SCHEDULE, async () => {
     const lockToken = await redisService.acquireLock('travel_expire_unpaid', EXPIRE_UNPAID_LOCK_TTL);
     if (!lockToken) {
-      console.log('⏭️ [TRAVEL CASHBACK JOB] Another instance running expire job, skipping');
+      logger.info('⏭️ [TRAVEL CASHBACK JOB] Another instance running expire job, skipping');
       return;
     }
 
@@ -251,16 +252,16 @@ export function startExpireUnpaidJob(): void {
  */
 export function startMarkCompletedJob(): void {
   if (markCompletedJob) {
-    console.log('⚠️ [TRAVEL CASHBACK JOB] Mark completed job already running');
+    logger.info('⚠️ [TRAVEL CASHBACK JOB] Mark completed job already running');
     return;
   }
 
-  console.log('📋 [TRAVEL CASHBACK JOB] Starting mark completed job (runs daily at 3:00 AM)');
+  logger.info('📋 [TRAVEL CASHBACK JOB] Starting mark completed job (runs daily at 3:00 AM)');
 
   markCompletedJob = cron.schedule(MARK_COMPLETED_SCHEDULE, async () => {
     const lockToken = await redisService.acquireLock('travel_mark_completed', MARK_COMPLETED_LOCK_TTL);
     if (!lockToken) {
-      console.log('⏭️ [TRAVEL CASHBACK JOB] Another instance running mark completed job, skipping');
+      logger.info('⏭️ [TRAVEL CASHBACK JOB] Another instance running mark completed job, skipping');
       return;
     }
 
@@ -281,17 +282,17 @@ export function stopTravelCashbackJobs(): void {
   if (creditJob) {
     creditJob.stop();
     creditJob = null;
-    console.log('🛑 [TRAVEL CASHBACK JOB] Credit job stopped');
+    logger.info('🛑 [TRAVEL CASHBACK JOB] Credit job stopped');
   }
   if (expireUnpaidJob) {
     expireUnpaidJob.stop();
     expireUnpaidJob = null;
-    console.log('🛑 [TRAVEL CASHBACK JOB] Expire unpaid job stopped');
+    logger.info('🛑 [TRAVEL CASHBACK JOB] Expire unpaid job stopped');
   }
   if (markCompletedJob) {
     markCompletedJob.stop();
     markCompletedJob = null;
-    console.log('🛑 [TRAVEL CASHBACK JOB] Mark completed job stopped');
+    logger.info('🛑 [TRAVEL CASHBACK JOB] Mark completed job stopped');
   }
 }
 

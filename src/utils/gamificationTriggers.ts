@@ -1,4 +1,5 @@
 import { UserAchievement, ACHIEVEMENT_DEFINITIONS, AchievementType } from '../models/Achievement';
+import { logger } from '../config/logger';
 import challengeService from '../services/challengeService';
 import streakService from '../services/streakService';
 import coinService from '../services/coinService';
@@ -19,7 +20,7 @@ export async function triggerGamificationEvent(
   metadata: any = {}
 ): Promise<void> {
   try {
-    console.log(`🎮 Gamification trigger: ${event} for user ${userId}`);
+    logger.info(`🎮 Gamification trigger: ${event} for user ${userId}`);
 
     // Define coin rewards for each event
     const coinRewards: Record<string, number> = {
@@ -44,13 +45,13 @@ export async function triggerGamificationEvent(
         `Earned ${reward} coins from ${event.replace(/_/g, ' ')}`,
         metadata
       );
-      console.log(`   ✅ Awarded ${reward} coins`);
+      logger.info(`   ✅ Awarded ${reward} coins`);
     }
 
     // Update daily streak for login events
     if (event === 'login') {
       await streakService.updateStreak(userId, 'login');
-      console.log('   ✅ Updated login streak');
+      logger.info('   ✅ Updated login streak');
     }
 
     // Check for achievement unlocks
@@ -59,9 +60,9 @@ export async function triggerGamificationEvent(
     // Update challenge progress
     await updateChallengeProgress(userId, event, metadata);
 
-    console.log(`✅ Gamification trigger completed for ${event}`);
+    logger.info(`✅ Gamification trigger completed for ${event}`);
   } catch (error) {
-    console.error('❌ Gamification trigger error:', error);
+    logger.error('❌ Gamification trigger error:', error);
     // Don't throw - gamification errors shouldn't block main operations
   }
 }
@@ -119,20 +120,20 @@ async function checkAchievements(
           } catch (err: any) {
             if (err.code === 11000) {
               // Duplicate key — reward already granted for this achievement (idempotent success)
-              console.log(`   ℹ️ Achievement reward already granted for: ${achievement.title}`);
+              logger.info(`   ℹ️ Achievement reward already granted for: ${achievement.title}`);
             } else {
               throw err;
             }
           }
         }
 
-        console.log(`   🏆 Achievement unlocked: ${achievement.title}`);
+        logger.info(`   🏆 Achievement unlocked: ${achievement.title}`);
       }
 
       await achievement.save();
     }
   } catch (error) {
-    console.error('Error checking achievements:', error);
+    logger.error('Error checking achievements:', error);
   }
 }
 
@@ -160,9 +161,9 @@ async function updateChallengeProgress(
 
     // This would typically call a method in challengeService
     // to update challenge progress
-    console.log(`   🎯 Updated challenge progress for action: ${action}`);
+    logger.info(`   🎯 Updated challenge progress for action: ${action}`);
   } catch (error) {
-    console.error('Error updating challenge progress:', error);
+    logger.error('Error updating challenge progress:', error);
   }
 }
 
@@ -248,7 +249,7 @@ async function getUserStats(userId: string, event: string): Promise<Record<strin
       (stats.totalReviews || 0);
 
   } catch (error) {
-    console.error('Error fetching user stats:', error);
+    logger.error('Error fetching user stats:', error);
   }
 
   return stats;
@@ -271,7 +272,7 @@ export async function batchTriggerGamification(
  * (Useful when importing historical data or fixing issues)
  */
 export async function recalculateUserGamification(userId: string): Promise<void> {
-  console.log(`🔄 Recalculating gamification for user ${userId}`);
+  logger.info(`🔄 Recalculating gamification for user ${userId}`);
 
   try {
     // Trigger all relevant events to recalculate
@@ -286,9 +287,9 @@ export async function recalculateUserGamification(userId: string): Promise<void>
       await triggerGamificationEvent(userId, event as any);
     }
 
-    console.log(`✅ Recalculation complete for user ${userId}`);
+    logger.info(`✅ Recalculation complete for user ${userId}`);
   } catch (error) {
-    console.error('Error recalculating gamification:', error);
+    logger.error('Error recalculating gamification:', error);
   }
 }
 

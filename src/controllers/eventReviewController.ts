@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import EventReview from '../models/EventReview';
+import { logger } from '../config/logger';
 import Event from '../models/Event';
 import EventBooking from '../models/EventBooking';
 
@@ -108,7 +109,7 @@ export const getEventReviews = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching event reviews:', error);
+    logger.error('Error fetching event reviews:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch reviews',
@@ -242,7 +243,7 @@ export const submitReview = async (req: Request, res: Response) => {
         };
       }
     } catch (rewardError) {
-      console.error('[EVENT REVIEW] Failed to award engagement coins:', rewardError);
+      logger.error('[EVENT REVIEW] Failed to award engagement coins:', rewardError);
     }
 
     res.status(201).json({
@@ -259,7 +260,7 @@ export const submitReview = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error submitting review:', error);
+    logger.error('Error submitting review:', error);
 
     // Handle duplicate key error
     if (error.code === 11000) {
@@ -365,7 +366,7 @@ export const updateReview = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error updating review:', error);
+    logger.error('Error updating review:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to update review',
@@ -434,7 +435,7 @@ export const deleteReview = async (req: Request, res: Response) => {
       message: 'Review deleted successfully',
     });
   } catch (error: any) {
-    console.error('Error deleting review:', error);
+    logger.error('Error deleting review:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to delete review',
@@ -481,7 +482,7 @@ export const markReviewHelpful = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error marking review as helpful:', error);
+    logger.error('Error marking review as helpful:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to mark review as helpful',
@@ -544,7 +545,7 @@ export const getUserReview = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching user review:', error);
+    logger.error('Error fetching user review:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch review',

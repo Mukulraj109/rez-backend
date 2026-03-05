@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/merchantauth';
+import { logger } from '../config/logger';
 import { validateRequest, validateQuery, validateParams } from '../middleware/merchantvalidation';
 import StoreVoucher from '../models/StoreVoucher';
 import UserStoreVoucher from '../models/UserStoreVoucher';
@@ -177,7 +178,7 @@ router.get('/', validateQuery(listVouchersQuerySchema), async (req: Request, res
       }
     });
   } catch (error: any) {
-    console.error('[MERCHANT STORE VOUCHERS] Error fetching vouchers:', error);
+    logger.error('[MERCHANT STORE VOUCHERS] Error fetching vouchers:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch vouchers',
@@ -253,7 +254,7 @@ router.get('/stats/:storeId', validateParams(storeIdParamSchema), async (req: Re
       }
     });
   } catch (error: any) {
-    console.error('[MERCHANT STORE VOUCHERS] Error fetching stats:', error);
+    logger.error('[MERCHANT STORE VOUCHERS] Error fetching stats:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch voucher statistics',
@@ -299,7 +300,7 @@ router.get('/:id', validateParams(voucherIdSchema), async (req: Request, res: Re
       }
     });
   } catch (error: any) {
-    console.error('[MERCHANT STORE VOUCHERS] Error fetching voucher:', error);
+    logger.error('[MERCHANT STORE VOUCHERS] Error fetching voucher:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch voucher',
@@ -379,7 +380,7 @@ router.post('/', validateRequest(createVoucherSchema), async (req: Request, res:
       data: voucher
     });
   } catch (error: any) {
-    console.error('[MERCHANT STORE VOUCHERS] Error creating voucher:', error);
+    logger.error('[MERCHANT STORE VOUCHERS] Error creating voucher:', error);
 
     if (error.code === 11000) {
       return res.status(400).json({
@@ -480,7 +481,7 @@ router.put('/:id', validateParams(voucherIdSchema), validateRequest(updateVouche
       }
     });
   } catch (error: any) {
-    console.error('[MERCHANT STORE VOUCHERS] Error updating voucher:', error);
+    logger.error('[MERCHANT STORE VOUCHERS] Error updating voucher:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update voucher',
@@ -524,7 +525,7 @@ router.delete('/:id', validateParams(voucherIdSchema), async (req: Request, res:
       message: 'Voucher deleted successfully'
     });
   } catch (error: any) {
-    console.error('[MERCHANT STORE VOUCHERS] Error deleting voucher:', error);
+    logger.error('[MERCHANT STORE VOUCHERS] Error deleting voucher:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete voucher',
@@ -573,7 +574,7 @@ router.patch('/:id/toggle-active', validateParams(voucherIdSchema), async (req: 
       }
     });
   } catch (error: any) {
-    console.error('[MERCHANT STORE VOUCHERS] Error toggling voucher status:', error);
+    logger.error('[MERCHANT STORE VOUCHERS] Error toggling voucher status:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to toggle voucher status',

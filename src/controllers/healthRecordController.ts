@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
+import { logger } from '../config/logger';
 import HealthRecord from '../models/HealthRecord';
 import { sendSuccess, sendError, sendCreated, sendNotFound } from '../utils/response';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -30,7 +31,7 @@ export const uploadHealthRecord = asyncHandler(async (req: Request, res: Respons
     originalFileName
   } = req.body;
 
-  console.log('📋 [HEALTH_RECORD] Uploading health record:', {
+  logger.info('📋 [HEALTH_RECORD] Uploading health record:', {
     userId,
     recordType,
     title,
@@ -76,7 +77,7 @@ export const uploadHealthRecord = asyncHandler(async (req: Request, res: Respons
 
     await healthRecord.save();
 
-    console.log('✅ [HEALTH_RECORD] Health record uploaded:', {
+    logger.info('✅ [HEALTH_RECORD] Health record uploaded:', {
       recordNumber: healthRecord.recordNumber,
       recordId: healthRecord._id
     });
@@ -84,7 +85,7 @@ export const uploadHealthRecord = asyncHandler(async (req: Request, res: Respons
     return sendCreated(res, healthRecord, 'Health record uploaded successfully');
 
   } catch (error: any) {
-    console.error('❌ [HEALTH_RECORD] Error uploading health record:', error);
+    logger.error('❌ [HEALTH_RECORD] Error uploading health record:', error);
     return sendError(res, error.message || 'Failed to upload health record', 500);
   }
 });
@@ -101,7 +102,7 @@ export const getUserHealthRecords = asyncHandler(async (req: Request, res: Respo
 
   const { recordType, isArchived, tags, limit = 20, offset = 0, search } = req.query;
 
-  console.log('📋 [HEALTH_RECORD] Fetching user health records:', {
+  logger.info('📋 [HEALTH_RECORD] Fetching user health records:', {
     userId,
     recordType,
     isArchived,
@@ -152,7 +153,7 @@ export const getUserHealthRecords = asyncHandler(async (req: Request, res: Respo
       { $group: { _id: '$recordType', count: { $sum: 1 } } }
     ]);
 
-    console.log('✅ [HEALTH_RECORD] Found health records:', {
+    logger.info('✅ [HEALTH_RECORD] Found health records:', {
       count: healthRecords.length,
       total
     });
@@ -170,7 +171,7 @@ export const getUserHealthRecords = asyncHandler(async (req: Request, res: Respo
     }, 'Health records retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [HEALTH_RECORD] Error fetching health records:', error);
+    logger.error('❌ [HEALTH_RECORD] Error fetching health records:', error);
     return sendError(res, error.message || 'Failed to fetch health records', 500);
   }
 });
@@ -190,7 +191,7 @@ export const getHealthRecord = asyncHandler(async (req: Request, res: Response) 
     return sendError(res, 'Invalid health record ID format', 400);
   }
 
-  console.log('📋 [HEALTH_RECORD] Fetching health record:', {
+  logger.info('📋 [HEALTH_RECORD] Fetching health record:', {
     recordId: id,
     userId
   });
@@ -206,7 +207,7 @@ export const getHealthRecord = asyncHandler(async (req: Request, res: Response) 
     }).populate('userId', 'name phoneNumber email');
 
     if (!healthRecord) {
-      console.error('❌ [HEALTH_RECORD] Health record not found:', id);
+      logger.error('❌ [HEALTH_RECORD] Health record not found:', id);
       return sendNotFound(res, 'Health record not found');
     }
 
@@ -214,14 +215,14 @@ export const getHealthRecord = asyncHandler(async (req: Request, res: Response) 
     healthRecord.metadata.lastAccessedAt = new Date();
     await healthRecord.save();
 
-    console.log('✅ [HEALTH_RECORD] Health record found:', {
+    logger.info('✅ [HEALTH_RECORD] Health record found:', {
       recordNumber: healthRecord.recordNumber
     });
 
     return sendSuccess(res, healthRecord, 'Health record retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [HEALTH_RECORD] Error fetching health record:', error);
+    logger.error('❌ [HEALTH_RECORD] Error fetching health record:', error);
     return sendError(res, error.message || 'Failed to fetch health record', 500);
   }
 });
@@ -243,7 +244,7 @@ export const updateHealthRecord = asyncHandler(async (req: Request, res: Respons
 
   const { title, description, recordType, issuedBy, issuedDate, expiryDate, tags } = req.body;
 
-  console.log('📋 [HEALTH_RECORD] Updating health record:', {
+  logger.info('📋 [HEALTH_RECORD] Updating health record:', {
     recordId: id,
     userId
   });
@@ -252,7 +253,7 @@ export const updateHealthRecord = asyncHandler(async (req: Request, res: Respons
     const healthRecord = await HealthRecord.findOne({ _id: id, userId });
 
     if (!healthRecord) {
-      console.error('❌ [HEALTH_RECORD] Health record not found:', id);
+      logger.error('❌ [HEALTH_RECORD] Health record not found:', id);
       return sendNotFound(res, 'Health record not found');
     }
 
@@ -267,14 +268,14 @@ export const updateHealthRecord = asyncHandler(async (req: Request, res: Respons
 
     await healthRecord.save();
 
-    console.log('✅ [HEALTH_RECORD] Health record updated:', {
+    logger.info('✅ [HEALTH_RECORD] Health record updated:', {
       recordNumber: healthRecord.recordNumber
     });
 
     return sendSuccess(res, healthRecord, 'Health record updated successfully');
 
   } catch (error: any) {
-    console.error('❌ [HEALTH_RECORD] Error updating health record:', error);
+    logger.error('❌ [HEALTH_RECORD] Error updating health record:', error);
     return sendError(res, error.message || 'Failed to update health record', 500);
   }
 });
@@ -294,7 +295,7 @@ export const deleteHealthRecord = asyncHandler(async (req: Request, res: Respons
     return sendError(res, 'Invalid health record ID format', 400);
   }
 
-  console.log('📋 [HEALTH_RECORD] Deleting health record:', {
+  logger.info('📋 [HEALTH_RECORD] Deleting health record:', {
     recordId: id,
     userId
   });
@@ -303,18 +304,18 @@ export const deleteHealthRecord = asyncHandler(async (req: Request, res: Respons
     const healthRecord = await HealthRecord.findOneAndDelete({ _id: id, userId });
 
     if (!healthRecord) {
-      console.error('❌ [HEALTH_RECORD] Health record not found:', id);
+      logger.error('❌ [HEALTH_RECORD] Health record not found:', id);
       return sendNotFound(res, 'Health record not found');
     }
 
-    console.log('✅ [HEALTH_RECORD] Health record deleted:', {
+    logger.info('✅ [HEALTH_RECORD] Health record deleted:', {
       recordNumber: healthRecord.recordNumber
     });
 
     return sendSuccess(res, { deleted: true }, 'Health record deleted successfully');
 
   } catch (error: any) {
-    console.error('❌ [HEALTH_RECORD] Error deleting health record:', error);
+    logger.error('❌ [HEALTH_RECORD] Error deleting health record:', error);
     return sendError(res, error.message || 'Failed to delete health record', 500);
   }
 });
@@ -343,7 +344,7 @@ export const shareHealthRecord = asyncHandler(async (req: Request, res: Response
     return sendError(res, 'Cannot share record with yourself', 400);
   }
 
-  console.log('📋 [HEALTH_RECORD] Sharing health record:', {
+  logger.info('📋 [HEALTH_RECORD] Sharing health record:', {
     recordId: id,
     userId,
     shareWithUserId,
@@ -354,7 +355,7 @@ export const shareHealthRecord = asyncHandler(async (req: Request, res: Response
     const healthRecord = await HealthRecord.findOne({ _id: id, userId }).lean();
 
     if (!healthRecord) {
-      console.error('❌ [HEALTH_RECORD] Health record not found:', id);
+      logger.error('❌ [HEALTH_RECORD] Health record not found:', id);
       return sendNotFound(res, 'Health record not found');
     }
 
@@ -372,7 +373,7 @@ export const shareHealthRecord = asyncHandler(async (req: Request, res: Response
       expiresAt
     );
 
-    console.log('✅ [HEALTH_RECORD] Health record shared:', {
+    logger.info('✅ [HEALTH_RECORD] Health record shared:', {
       recordNumber: healthRecord.recordNumber,
       sharedWith: shareWithUserId
     });
@@ -380,7 +381,7 @@ export const shareHealthRecord = asyncHandler(async (req: Request, res: Response
     return sendSuccess(res, healthRecord, 'Health record shared successfully');
 
   } catch (error: any) {
-    console.error('❌ [HEALTH_RECORD] Error sharing health record:', error);
+    logger.error('❌ [HEALTH_RECORD] Error sharing health record:', error);
     return sendError(res, error.message || 'Failed to share health record', 500);
   }
 });
@@ -400,7 +401,7 @@ export const revokeShare = asyncHandler(async (req: Request, res: Response) => {
     return sendError(res, 'Invalid ID format', 400);
   }
 
-  console.log('📋 [HEALTH_RECORD] Revoking share access:', {
+  logger.info('📋 [HEALTH_RECORD] Revoking share access:', {
     recordId: id,
     shareId,
     userId
@@ -410,13 +411,13 @@ export const revokeShare = asyncHandler(async (req: Request, res: Response) => {
     const healthRecord = await HealthRecord.findOne({ _id: id, userId }).lean();
 
     if (!healthRecord) {
-      console.error('❌ [HEALTH_RECORD] Health record not found:', id);
+      logger.error('❌ [HEALTH_RECORD] Health record not found:', id);
       return sendNotFound(res, 'Health record not found');
     }
 
     await healthRecord.removeShare(new mongoose.Types.ObjectId(shareId));
 
-    console.log('✅ [HEALTH_RECORD] Share access revoked:', {
+    logger.info('✅ [HEALTH_RECORD] Share access revoked:', {
       recordNumber: healthRecord.recordNumber,
       shareId
     });
@@ -424,7 +425,7 @@ export const revokeShare = asyncHandler(async (req: Request, res: Response) => {
     return sendSuccess(res, healthRecord, 'Share access revoked successfully');
 
   } catch (error: any) {
-    console.error('❌ [HEALTH_RECORD] Error revoking share:', error);
+    logger.error('❌ [HEALTH_RECORD] Error revoking share:', error);
     return sendError(res, error.message || 'Failed to revoke share', 500);
   }
 });
@@ -445,7 +446,7 @@ export const archiveHealthRecord = asyncHandler(async (req: Request, res: Respon
     return sendError(res, 'Invalid health record ID format', 400);
   }
 
-  console.log('📋 [HEALTH_RECORD] Archiving health record:', {
+  logger.info('📋 [HEALTH_RECORD] Archiving health record:', {
     recordId: id,
     userId,
     archive
@@ -455,7 +456,7 @@ export const archiveHealthRecord = asyncHandler(async (req: Request, res: Respon
     const healthRecord = await HealthRecord.findOne({ _id: id, userId }).lean();
 
     if (!healthRecord) {
-      console.error('❌ [HEALTH_RECORD] Health record not found:', id);
+      logger.error('❌ [HEALTH_RECORD] Health record not found:', id);
       return sendNotFound(res, 'Health record not found');
     }
 
@@ -465,7 +466,7 @@ export const archiveHealthRecord = asyncHandler(async (req: Request, res: Respon
       await healthRecord.unarchive();
     }
 
-    console.log('✅ [HEALTH_RECORD] Health record archive status updated:', {
+    logger.info('✅ [HEALTH_RECORD] Health record archive status updated:', {
       recordNumber: healthRecord.recordNumber,
       isArchived: healthRecord.isArchived
     });
@@ -473,7 +474,7 @@ export const archiveHealthRecord = asyncHandler(async (req: Request, res: Respon
     return sendSuccess(res, healthRecord, archive ? 'Health record archived successfully' : 'Health record unarchived successfully');
 
   } catch (error: any) {
-    console.error('❌ [HEALTH_RECORD] Error archiving health record:', error);
+    logger.error('❌ [HEALTH_RECORD] Error archiving health record:', error);
     return sendError(res, error.message || 'Failed to archive health record', 500);
   }
 });
@@ -490,7 +491,7 @@ export const getSharedWithMe = asyncHandler(async (req: Request, res: Response) 
 
   const { limit = 20, offset = 0 } = req.query;
 
-  console.log('📋 [HEALTH_RECORD] Fetching records shared with user:', {
+  logger.info('📋 [HEALTH_RECORD] Fetching records shared with user:', {
     userId
   });
 
@@ -520,7 +521,7 @@ export const getSharedWithMe = asyncHandler(async (req: Request, res: Response) 
       ]
     });
 
-    console.log('✅ [HEALTH_RECORD] Found shared records:', {
+    logger.info('✅ [HEALTH_RECORD] Found shared records:', {
       count: sharedRecords.length,
       total
     });
@@ -534,7 +535,7 @@ export const getSharedWithMe = asyncHandler(async (req: Request, res: Response) 
     }, 'Shared records retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [HEALTH_RECORD] Error fetching shared records:', error);
+    logger.error('❌ [HEALTH_RECORD] Error fetching shared records:', error);
     return sendError(res, error.message || 'Failed to fetch shared records', 500);
   }
 });

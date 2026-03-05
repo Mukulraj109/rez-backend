@@ -40,6 +40,8 @@ import { authenticate, optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, commonSchemas } from '../middleware/validation';
 import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
+import { cacheMiddleware } from '../middleware/cacheMiddleware';
+import { CacheTTL } from '../config/redis';
 
 const router = Router();
 router.use(generalLimiter);
@@ -69,6 +71,7 @@ router.get('/',
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),
+  cacheMiddleware({ ttl: CacheTTL.STORE_LIST, keyPrefix: 'stores:list', condition: () => true }),
   getStores
 );
 
@@ -82,6 +85,7 @@ router.get('/search',
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_SEARCH, keyPrefix: 'stores:search', condition: () => true }),
   searchStores
 );
 
@@ -103,6 +107,7 @@ router.get('/search/advanced',
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_SEARCH, keyPrefix: 'stores:advsearch', condition: () => true }),
   advancedStoreSearch
 );
 
@@ -119,6 +124,7 @@ router.get('/nearby',
     radius: Joi.number().min(0.1).max(50).default(5),
     limit: Joi.number().integer().min(1).max(50).default(10)
   }).or('lat', 'latitude').or('lng', 'longitude')),
+  cacheMiddleware({ ttl: 300, keyPrefix: 'stores:nearby', condition: () => true }),
   getNearbyStores
 );
 
@@ -129,6 +135,7 @@ router.get('/featured',
   validateQuery(Joi.object({
     limit: Joi.number().integer().min(1).max(50).default(10)
   })),
+  cacheMiddleware({ ttl: CacheTTL.STORE_LIST, keyPrefix: 'stores:featured', condition: () => true }),
   getFeaturedStores
 );
 
@@ -142,6 +149,7 @@ router.get('/trending',
     page: Joi.number().integer().min(1).default(1),
     days: Joi.number().integer().min(1).max(30).default(7)
   })),
+  cacheMiddleware({ ttl: CacheTTL.STORE_LIST, keyPrefix: 'stores:trending', condition: () => true }),
   getTrendingStores
 );
 
@@ -155,6 +163,7 @@ router.get('/new',
     latitude: Joi.number().min(-90).max(90),
     longitude: Joi.number().min(-180).max(180)
   })),
+  cacheMiddleware({ ttl: CacheTTL.STORE_LIST, keyPrefix: 'stores:new', condition: () => true }),
   getNewStores
 );
 
@@ -168,6 +177,7 @@ router.get('/top-cashback',
     limit: Joi.number().integer().min(1).max(50).default(10),
     minCashback: Joi.number().min(0).max(100).default(10)
   })),
+  cacheMiddleware({ ttl: CacheTTL.STORE_LIST, keyPrefix: 'stores:cashback', condition: () => true }),
   getTopCashbackStores
 );
 
@@ -180,6 +190,7 @@ router.get('/bnpl',
     longitude: Joi.number().min(-180).max(180),
     limit: Joi.number().integer().min(1).max(50).default(10)
   })),
+  cacheMiddleware({ ttl: CacheTTL.STORE_LIST, keyPrefix: 'stores:bnpl', condition: () => true }),
   getBNPLStores
 );
 
@@ -193,6 +204,7 @@ router.get('/nearby-homepage',
     radius: Joi.number().min(0.1).max(10).default(2),
     limit: Joi.number().integer().min(1).max(10).default(5)
   })),
+  cacheMiddleware({ ttl: 300, keyPrefix: 'stores:nearbyhp', condition: () => true }),
   getNearbyStoresForHomepage
 );
 
@@ -208,6 +220,7 @@ router.get('/category/:categoryId',
     limit: Joi.number().integer().min(1).max(50).default(20),
     sortBy: Joi.string().valid('rating', 'name', 'newest').default('rating')
   })),
+  cacheMiddleware({ ttl: CacheTTL.STORE_LIST, keyPrefix: 'stores:bycat', condition: () => true }),
   getStoresByCategory
 );
 
@@ -223,6 +236,7 @@ router.get('/by-category-slug/:slug',
     limit: Joi.number().integer().min(1).max(50).default(20),
     sortBy: Joi.string().valid('rating', 'distance', 'name', 'newest').default('rating')
   })),
+  cacheMiddleware({ ttl: CacheTTL.STORE_LIST, keyPrefix: 'stores:bycatslug', condition: () => true }),
   getStoresByCategorySlug
 );
 
@@ -237,12 +251,14 @@ router.get('/by-tag/:tag',
     limit: Joi.number().integer().min(1).max(50).default(20),
     sortBy: Joi.string().valid('rating', 'cashback', 'name', 'newest').default('rating')
   })),
+  cacheMiddleware({ ttl: CacheTTL.STORE_LIST, keyPrefix: 'stores:bytag', condition: () => true }),
   getStoresByTag
 );
 
 // Get cuisine counts (for Browse by Cuisine place counts)
 router.get('/cuisine-counts',
   optionalAuth,
+  cacheMiddleware({ ttl: CacheTTL.CATEGORY_LIST, keyPrefix: 'stores:cuisines', condition: () => true }),
   getCuisineCounts
 );
 
@@ -258,6 +274,7 @@ router.get('/by-service-type/:serviceType',
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),
+  cacheMiddleware({ ttl: CacheTTL.STORE_LIST, keyPrefix: 'stores:byservice', condition: () => true }),
   getStoresByServiceType
 );
 
@@ -268,6 +285,7 @@ router.get('/:storeId',
   validateParams(Joi.object({
     storeId: Joi.string().required()
   })),
+  cacheMiddleware({ ttl: CacheTTL.STORE_DETAIL, keyPrefix: 'stores:detail', condition: () => true }),
   getStoreById
 );
 
@@ -285,6 +303,7 @@ router.get('/:storeId/products',
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),
+  cacheMiddleware({ ttl: CacheTTL.STORE_PRODUCTS, keyPrefix: 'stores:products', condition: () => true }),
   getStoreProducts
 );
 
@@ -295,6 +314,7 @@ router.get('/:storeId/status',
   validateParams(Joi.object({
     storeId: commonSchemas.objectId().required()
   })),
+  cacheMiddleware({ ttl: CacheTTL.SHORT_CACHE, keyPrefix: 'stores:status', condition: () => true }),
   getStoreOperatingStatus
 );
 
@@ -311,6 +331,7 @@ router.get('/:storeId/reviews',
     rating: Joi.number().integer().min(1).max(5),
     sort: Joi.string().valid('newest', 'oldest', 'rating_high', 'rating_low').default('newest')
   })),
+  cacheMiddleware({ ttl: 300, keyPrefix: 'stores:reviews', condition: () => true }),
   getStoreReviews
 );
 
@@ -318,6 +339,7 @@ router.get('/:storeId/reviews',
 router.get('/categories/list',
   // generalLimiter, // Disabled for development
   optionalAuth,
+  cacheMiddleware({ ttl: CacheTTL.CATEGORY_LIST, keyPrefix: 'stores:catlist', condition: () => true }),
   getStoreCategories
 );
 
@@ -336,6 +358,7 @@ router.get('/search-by-category/:category',
     sortBy: Joi.string().valid('rating', 'distance', 'name', 'newest').default('rating'),
     nuqtaPay: Joi.boolean()
   })),
+  cacheMiddleware({ ttl: CacheTTL.STORE_LIST, keyPrefix: 'stores:searchcat', condition: () => true }),
   searchStoresByCategory
 );
 
@@ -351,6 +374,7 @@ router.get('/search-by-delivery-time',
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(50).default(20)
   })),
+  cacheMiddleware({ ttl: 300, keyPrefix: 'stores:searchdel', condition: () => true }),
   searchStoresByDeliveryTime
 );
 
@@ -424,6 +448,7 @@ router.get('/:storeId/recent-earnings',
   validateQuery(Joi.object({
     limit: Joi.number().integer().min(1).max(20).default(5)
   })),
+  cacheMiddleware({ ttl: 300, keyPrefix: 'stores:earnings', condition: () => true }),
   getRecentEarnings
 );
 
@@ -437,6 +462,7 @@ router.get('/:storeId/followers/count',
   validateParams(Joi.object({
     storeId: commonSchemas.objectId().required()
   })),
+  cacheMiddleware({ ttl: 300, keyPrefix: 'stores:followers', condition: () => true }),
   getStoreFollowerCount
 );
 

@@ -3,6 +3,7 @@ import { CoinTransaction, ICoinTransaction } from '../models/CoinTransaction';
 import { User } from '../models/User';
 import PushNotificationService from '../services/pushNotificationService';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 /**
  * Coin Expiry Job
@@ -74,7 +75,7 @@ async function sendPreExpiryNotifications(): Promise<{ notified: number; failed:
     }).sort({ user: 1, expiresAt: 1 });
 
     if (soonExpiringTransactions.length === 0) {
-      console.log('✨ [COIN EXPIRY] No coins expiring within 48h');
+      logger.info('✨ [COIN EXPIRY] No coins expiring within 48h');
       return stats;
     }
 
@@ -94,7 +95,7 @@ async function sendPreExpiryNotifications(): Promise<{ notified: number; failed:
       }
     }
 
-    console.log(`⏰ [COIN EXPIRY] Sending pre-expiry notifications to ${userExpiryMap.size} users`);
+    logger.info(`⏰ [COIN EXPIRY] Sending pre-expiry notifications to ${userExpiryMap.size} users`);
 
     // Batch fetch all users to avoid N+1 queries
     const expiryUserIds = Array.from(userExpiryMap.keys());
@@ -130,12 +131,12 @@ async function sendPreExpiryNotifications(): Promise<{ notified: number; failed:
       } catch (notifErr) {
         stats.failed++;
         if (process.env.NODE_ENV === 'development') {
-          console.log(`[COIN EXPIRY] Failed to send pre-expiry notification for user ${userId}:`, notifErr);
+          logger.info(`[COIN EXPIRY] Failed to send pre-expiry notification for user ${userId}:`, notifErr);
         }
       }
     }
   } catch (error) {
-    console.error('❌ [COIN EXPIRY] Error in pre-expiry notifications:', error);
+    logger.error('❌ [COIN EXPIRY] Error in pre-expiry notifications:', error);
   }
 
   return stats;
@@ -170,7 +171,7 @@ async function processExpiredCoins(): Promise<ExpiryStats> {
       .populate('user', 'phoneNumber email profile.firstName')
       .sort({ user: 1, expiresAt: 1 });
 
-    console.log(`💰 [COIN EXPIRY] Found ${expiredTransactions.length} expired coin transactions`);
+    logger.info(`💰 [COIN EXPIRY] Found ${expiredTransactions.length} expired coin transactions`);
 
     if (expiredTransactions.length === 0) {
       return stats;
@@ -202,7 +203,7 @@ async function processExpiredCoins(): Promise<ExpiryStats> {
       });
     }
 
-    console.log(`👥 [COIN EXPIRY] Processing expiry for ${userExpiryMap.size} users`);
+    logger.info(`👥 [COIN EXPIRY] Processing expiry for ${userExpiryMap.size} users`);
 
     // Process each user's expired coins
     for (const [userId, expiryData] of userExpiryMap.entries()) {
@@ -244,10 +245,10 @@ async function processExpiredCoins(): Promise<ExpiryStats> {
         stats.totalCoinsExpired += expiryData.expiredAmount;
         stats.transactionsCreated++;
 
-        console.log(`   ✓ User ${userId}: ${expiryData.expiredAmount} coins expired, new balance: ${expiryData.newBalance}`);
+        logger.info(`   ✓ User ${userId}: ${expiryData.expiredAmount} coins expired, new balance: ${expiryData.newBalance}`);
 
       } catch (error: any) {
-        console.error(`   ✗ Failed to process expiry for user ${userId}:`, error.message);
+        logger.error(`   ✗ Failed to process expiry for user ${userId}:`, error.message);
         stats.errors.push({
           userId,
           error: error.message || 'Unknown error'
@@ -268,7 +269,7 @@ async function processExpiredCoins(): Promise<ExpiryStats> {
     }
 
   } catch (error: any) {
-    console.error('❌ [COIN EXPIRY] Error processing expired coins:', error);
+    logger.error('❌ [COIN EXPIRY] Error processing expired coins:', error);
     stats.errors.push({
       userId: 'SYSTEM',
       error: error.message || 'Unknown error'
@@ -300,7 +301,7 @@ async function sendExpiryNotifications(
       const user = notifUserMap.get(String(userData.userId));
 
       if (!user) {
-        console.warn(`⚠️ [COIN EXPIRY] User ${userData.userId} not found for notification`);
+        logger.warn(`⚠️ [COIN EXPIRY] User ${userData.userId} not found for notification`);
         continue;
       }
 
@@ -319,14 +320,14 @@ async function sendExpiryNotifications(
           message
         );
         stats.notificationsSent++;
-        console.log(`   📧 Notification sent to user ${userData.userId}`);
+        logger.info(`   📧 Notification sent to user ${userData.userId}`);
       } catch (notifError: any) {
-        console.error(`   ✗ Failed to send notification to ${userData.userId}:`, notifError.message);
+        logger.error(`   ✗ Failed to send notification to ${userData.userId}:`, notifError.message);
         stats.notificationsFailed++;
       }
 
     } catch (error: any) {
-      console.error(`❌ [COIN EXPIRY] Error sending notification to ${userData.userId}:`, error.message);
+      logger.error(`❌ [COIN EXPIRY] Error sending notification to ${userData.userId}:`, error.message);
       stats.notificationsFailed++;
     }
   }
@@ -337,16 +338,16 @@ async function sendExpiryNotifications(
  */
 export function startCoinExpiryJob(): void {
   if (expiryJob) {
-    console.log('⚠️ [COIN EXPIRY] Job already running');
+    logger.info('⚠️ [COIN EXPIRY] Job already running');
     return;
   }
 
-  console.log(`💰 [COIN EXPIRY] Starting coin expiry job (runs daily at 1:00 AM)`);
+  logger.info(`💰 [COIN EXPIRY] Starting coin expiry job (runs daily at 1:00 AM)`);
 
   expiryJob = cron.schedule(CRON_SCHEDULE, async () => {
     // Prevent concurrent executions (local flag)
     if (isRunning) {
-      console.log('⏭️ [COIN EXPIRY] Previous expiry job still running, skipping this execution');
+      logger.info('⏭️ [COIN EXPIRY] Previous expiry job still running, skipping this execution');
       return;
     }
 
@@ -358,7 +359,7 @@ export function startCoinExpiryJob(): void {
       // Redis unavailable — fall through to local-only guard
     }
     if (!lockToken) {
-      console.log('⏭️ [COIN EXPIRY] Another instance holds the lock, skipping');
+      logger.info('⏭️ [COIN EXPIRY] Another instance holds the lock, skipping');
       return;
     }
 
@@ -366,12 +367,12 @@ export function startCoinExpiryJob(): void {
     const startTime = Date.now();
 
     try {
-      console.log('💰 [COIN EXPIRY] Running coin expiry job...');
+      logger.info('💰 [COIN EXPIRY] Running coin expiry job...');
 
       // Phase 1: Send pre-expiry notifications (48h warning)
       const preExpiryStats = await sendPreExpiryNotifications();
       if (preExpiryStats.notified > 0) {
-        console.log(`⏰ [COIN EXPIRY] Pre-expiry: ${preExpiryStats.notified} notified, ${preExpiryStats.failed} failed`);
+        logger.info(`⏰ [COIN EXPIRY] Pre-expiry: ${preExpiryStats.notified} notified, ${preExpiryStats.failed} failed`);
       }
 
       // Phase 2: Process actual expired coins
@@ -379,7 +380,7 @@ export function startCoinExpiryJob(): void {
 
       const duration = Date.now() - startTime;
 
-      console.log('✅ [COIN EXPIRY] Expiry job completed:', {
+      logger.info('✅ [COIN EXPIRY] Expiry job completed:', {
         duration: `${duration}ms`,
         usersAffected: stats.usersAffected,
         totalCoinsExpired: stats.totalCoinsExpired,
@@ -391,25 +392,25 @@ export function startCoinExpiryJob(): void {
       });
 
       if (stats.errors.length > 0) {
-        console.error('❌ [COIN EXPIRY] Errors during expiry:');
+        logger.error('❌ [COIN EXPIRY] Errors during expiry:');
         stats.errors.slice(0, 10).forEach((error, index) => {
-          console.error(`   ${index + 1}. User: ${error.userId}, Error: ${error.error}`);
+          logger.error(`   ${index + 1}. User: ${error.userId}, Error: ${error.error}`);
         });
         if (stats.errors.length > 10) {
-          console.error(`   ... and ${stats.errors.length - 10} more errors`);
+          logger.error(`   ... and ${stats.errors.length - 10} more errors`);
         }
       }
 
       // Summary message
       if (stats.usersAffected > 0) {
-        console.log(`📈 [COIN EXPIRY] ${stats.totalCoinsExpired} coins expired from ${stats.usersAffected} users, ${stats.notificationsSent} notifications sent`);
+        logger.info(`📈 [COIN EXPIRY] ${stats.totalCoinsExpired} coins expired from ${stats.usersAffected} users, ${stats.notificationsSent} notifications sent`);
       } else {
-        console.log('✨ [COIN EXPIRY] No coins expired today');
+        logger.info('✨ [COIN EXPIRY] No coins expired today');
       }
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error('❌ [COIN EXPIRY] Expiry job failed:', {
+      logger.error('❌ [COIN EXPIRY] Expiry job failed:', {
         duration: `${duration}ms`,
         error: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString()
@@ -423,7 +424,7 @@ export function startCoinExpiryJob(): void {
     }
   });
 
-  console.log('✅ [COIN EXPIRY] Coin expiry job started successfully');
+  logger.info('✅ [COIN EXPIRY] Coin expiry job started successfully');
 }
 
 /**
@@ -433,9 +434,9 @@ export function stopCoinExpiryJob(): void {
   if (expiryJob) {
     expiryJob.stop();
     expiryJob = null;
-    console.log('🛑 [COIN EXPIRY] Coin expiry job stopped');
+    logger.info('🛑 [COIN EXPIRY] Coin expiry job stopped');
   } else {
-    console.log('⚠️ [COIN EXPIRY] No job running to stop');
+    logger.info('⚠️ [COIN EXPIRY] No job running to stop');
   }
 }
 
@@ -465,11 +466,11 @@ export function getCoinExpiryJobStatus(): {
  */
 export async function triggerManualCoinExpiry(): Promise<ExpiryStats> {
   if (isRunning) {
-    console.log('⚠️ [COIN EXPIRY] Expiry already running, please wait');
+    logger.info('⚠️ [COIN EXPIRY] Expiry already running, please wait');
     throw new Error('Expiry already in progress');
   }
 
-  console.log('💰 [COIN EXPIRY] Manual expiry triggered');
+  logger.info('💰 [COIN EXPIRY] Manual expiry triggered');
 
   isRunning = true;
   const startTime = Date.now();
@@ -478,7 +479,7 @@ export async function triggerManualCoinExpiry(): Promise<ExpiryStats> {
     const stats = await processExpiredCoins();
     const duration = Date.now() - startTime;
 
-    console.log('✅ [COIN EXPIRY] Manual expiry completed:', {
+    logger.info('✅ [COIN EXPIRY] Manual expiry completed:', {
       duration: `${duration}ms`,
       usersAffected: stats.usersAffected,
       totalCoinsExpired: stats.totalCoinsExpired,
@@ -487,7 +488,7 @@ export async function triggerManualCoinExpiry(): Promise<ExpiryStats> {
 
     return stats;
   } catch (error) {
-    console.error('❌ [COIN EXPIRY] Manual expiry failed:', error);
+    logger.error('❌ [COIN EXPIRY] Manual expiry failed:', error);
     throw error;
   } finally {
     isRunning = false;

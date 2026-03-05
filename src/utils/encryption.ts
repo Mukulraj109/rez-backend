@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { logger } from '../config/logger';
 
 /**
  * Field Encryption Utility
@@ -49,7 +50,7 @@ export function encrypt(text: string): string {
 
     return JSON.stringify(encryptedData);
   } catch (error) {
-    console.error('Encryption error:', error);
+    logger.error('Encryption error:', error);
     throw new Error('Failed to encrypt data');
   }
 }
@@ -81,7 +82,7 @@ export function decrypt(encryptedString: string): string {
 
     return decrypted;
   } catch (error) {
-    console.error('Decryption error:', error);
+    logger.error('Decryption error:', error);
     throw new Error('Failed to decrypt data');
   }
 }
@@ -207,7 +208,7 @@ export function decryptObjectFields(obj: any, fieldsToDecrypt: string[]): any {
         decrypted[field] = decrypt(decrypted[field]);
       } catch (error) {
         // If decryption fails, field might not be encrypted
-        console.warn(`Failed to decrypt field: ${field}`);
+        logger.warn(`Failed to decrypt field: ${field}`);
       }
     }
   });

@@ -1,4 +1,5 @@
 import type { ActivityEvent } from '../gamificationEventBus';
+import { logger } from '../../config/logger';
 
 /**
  * Streak Handler
@@ -26,9 +27,9 @@ export function registerStreakHandler(eventBus: any): void {
         await streakService.updateStreak(event.userId, streakType as 'login' | 'order' | 'review');
       }
     } catch (error) {
-      console.error(`[STREAK HANDLER] Error processing ${event.type} for user ${event.userId}:`, error);
+      logger.error(`[STREAK HANDLER] Error processing ${event.type} for user ${event.userId}:`, error);
     }
   });
 
-  console.log('[STREAK HANDLER] Registered streak handler');
+  logger.info('[STREAK HANDLER] Registered streak handler');
 }

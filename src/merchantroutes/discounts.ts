@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/merchantauth';
+import { logger } from '../config/logger';
 import { validateRequest, validateQuery, validateParams } from '../middleware/merchantvalidation';
 import { Store } from '../models/Store';
 import Discount from '../models/Discount';
@@ -154,7 +155,7 @@ router.get('/', validateQuery(Joi.object({
       }
     });
   } catch (error: any) {
-    console.error('Error fetching merchant discounts:', error);
+    logger.error('Error fetching merchant discounts:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch discounts',
@@ -202,7 +203,7 @@ router.get('/:id', validateParams(Joi.object({
       data: discount
     });
   } catch (error: any) {
-    console.error('Error fetching discount:', error);
+    logger.error('Error fetching discount:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch discount',
@@ -298,7 +299,7 @@ router.post('/', validateRequest(createDiscountSchema), async (req: Request, res
       message: 'Discount created successfully'
     });
   } catch (error: any) {
-    console.error('Error creating discount:', error);
+    logger.error('Error creating discount:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to create discount',
@@ -392,7 +393,7 @@ router.put('/:id', validateParams(Joi.object({
       message: 'Discount updated successfully'
     });
   } catch (error: any) {
-    console.error('Error updating discount:', error);
+    logger.error('Error updating discount:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to update discount',
@@ -447,7 +448,7 @@ router.delete('/:id', validateParams(Joi.object({
       }
     });
   } catch (error: any) {
-    console.error('Error deleting discount:', error);
+    logger.error('Error deleting discount:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to delete discount',
@@ -523,7 +524,7 @@ router.get('/:id/analytics', validateParams(Joi.object({
       data: analytics
     });
   } catch (error: any) {
-    console.error('Error fetching discount analytics:', error);
+    logger.error('Error fetching discount analytics:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch discount analytics',

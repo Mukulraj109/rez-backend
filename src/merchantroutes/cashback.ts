@@ -9,6 +9,7 @@ import {
   BulkCashbackAction,
   CashbackStatus
 } from '../types/shared';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -69,7 +70,7 @@ router.get('/', async (req, res) => {
       data: result
     });
   } catch (error) {
-    console.error('Error fetching cashback requests:', error);
+    logger.error('Error fetching cashback requests:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch cashback requests',
@@ -92,7 +93,7 @@ router.get('/metrics', async (req, res) => {
       data: metrics
     });
   } catch (error) {
-    console.error('Error fetching cashback metrics:', error);
+    logger.error('Error fetching cashback metrics:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch cashback metrics',
@@ -125,7 +126,7 @@ router.get('/analytics', async (req, res) => {
       data: analytics
     });
   } catch (error) {
-    console.error('Error fetching cashback analytics:', error);
+    logger.error('Error fetching cashback analytics:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch cashback analytics',
@@ -159,7 +160,7 @@ router.get('/:id', async (req, res) => {
       data: request
     });
   } catch (error) {
-    console.error('Error fetching cashback request:', error);
+    logger.error('Error fetching cashback request:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch cashback request',
@@ -191,7 +192,7 @@ router.post('/', async (req, res) => {
       data: request
     });
   } catch (error) {
-    console.error('Error creating cashback request:', error);
+    logger.error('Error creating cashback request:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to create cashback request',
@@ -231,7 +232,7 @@ router.put('/:id/approve', async (req, res) => {
         updatedRequest.customerBankDetails.ifscCode &&
         updatedRequest.customerBankDetails.accountHolderName) {
       try {
-        console.log(`💰 [CASHBACK] Processing payout for cashback request: ${id}`);
+        logger.info(`💰 [CASHBACK] Processing payout for cashback request: ${id}`);
 
         const payoutResult = await PaymentService.processCashbackPayout(
           updatedRequest,
@@ -256,7 +257,7 @@ router.put('/:id/approve', async (req, res) => {
             });
             await cashbackDoc.save();
 
-            console.log(`✅ [CASHBACK] Cashback ${id} paid successfully`);
+            logger.info(`✅ [CASHBACK] Cashback ${id} paid successfully`);
 
             return res.json({
               success: true,
@@ -270,11 +271,11 @@ router.put('/:id/approve', async (req, res) => {
             });
           }
         } else {
-          console.error(`❌ [CASHBACK] Payment failed for cashback ${id}:`, payoutResult.error);
+          logger.error(`❌ [CASHBACK] Payment failed for cashback ${id}:`, payoutResult.error);
           // Keep status as approved but log error
         }
       } catch (paymentError) {
-        console.error('❌ [CASHBACK] Payment processing error:', paymentError);
+        logger.error('❌ [CASHBACK] Payment processing error:', paymentError);
         // Keep status as approved, merchant can manually process
       }
     }
@@ -285,7 +286,7 @@ router.put('/:id/approve', async (req, res) => {
       data: updatedRequest
     });
   } catch (error) {
-    console.error('Error approving cashback request:', error);
+    logger.error('Error approving cashback request:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to approve cashback request',
@@ -325,7 +326,7 @@ router.put('/:id/reject', async (req, res) => {
       data: updatedRequest
     });
   } catch (error) {
-    console.error('Error rejecting cashback request:', error);
+    logger.error('Error rejecting cashback request:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to reject cashback request',
@@ -367,7 +368,7 @@ router.put('/:id/mark-paid', async (req, res) => {
       data: updatedRequest
     });
   } catch (error) {
-    console.error('Error marking cashback as paid:', error);
+    logger.error('Error marking cashback as paid:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to mark cashback as paid',
@@ -438,7 +439,7 @@ router.post('/bulk-action', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error performing bulk action:', error);
+    logger.error('Error performing bulk action:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to perform bulk action',
@@ -498,7 +499,7 @@ router.post('/:id/process-payment', async (req, res) => {
     }
 
     // Process payment
-    console.log(`💰 [CASHBACK] Manually processing payout for cashback request: ${id}`);
+    logger.info(`💰 [CASHBACK] Manually processing payout for cashback request: ${id}`);
 
     const payoutResult = await PaymentService.processCashbackPayout(
       request,
@@ -526,7 +527,7 @@ router.post('/:id/process-payment', async (req, res) => {
         });
         await cashbackDoc.save();
 
-        console.log(`✅ [CASHBACK] Cashback ${id} paid successfully (manual)`);
+        logger.info(`✅ [CASHBACK] Cashback ${id} paid successfully (manual)`);
 
         return res.json({
           success: true,
@@ -545,7 +546,7 @@ router.post('/:id/process-payment', async (req, res) => {
       error: payoutResult.error
     });
   } catch (error) {
-    console.error('❌ [CASHBACK] Error processing payment:', error);
+    logger.error('❌ [CASHBACK] Error processing payment:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to process payment',
@@ -595,7 +596,7 @@ router.get('/:id/payout-status', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ [CASHBACK] Error fetching payout status:', error);
+    logger.error('❌ [CASHBACK] Error fetching payout status:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch payout status',
@@ -618,7 +619,7 @@ router.post('/generate-sample', async (req, res) => {
       message: 'Sample cashback requests generated successfully'
     });
   } catch (error) {
-    console.error('Error generating sample data:', error);
+    logger.error('Error generating sample data:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to generate sample data',
@@ -645,7 +646,7 @@ router.get('/stats', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching cashback stats:', error);
+    logger.error('Error fetching cashback stats:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch cashback stats',
@@ -680,7 +681,7 @@ router.get('/transactions', async (req, res) => {
       data: transactionsArray
     });
   } catch (error) {
-    console.error('Error fetching cashback transactions:', error);
+    logger.error('Error fetching cashback transactions:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch cashback transactions',
@@ -728,7 +729,7 @@ router.get('/summary', async (req, res) => {
       data: summary
     });
   } catch (error) {
-    console.error('Error fetching cashback summary:', error);
+    logger.error('Error fetching cashback summary:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch cashback summary',
@@ -752,7 +753,7 @@ router.get('/export', async (req, res) => {
       message: 'Export functionality coming soon'
     });
   } catch (error) {
-    console.error('Error exporting cashback data:', error);
+    logger.error('Error exporting cashback data:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to export cashback data',

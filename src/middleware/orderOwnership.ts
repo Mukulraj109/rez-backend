@@ -8,6 +8,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { Order } from '../models/Order';
 import { Store } from '../models/Store';
+import { logger } from '../config/logger';
 
 /**
  * Verify the requesting user (merchant) owns the store associated with the order.
@@ -78,7 +79,7 @@ export async function verifyOrderOwnership(
 
     next();
   } catch (error: any) {
-    console.error('[ORDER OWNERSHIP] Verification error:', error);
+    logger.error('[ORDER OWNERSHIP] Verification error:', error);
     res.status(500).json({ success: false, message: 'Failed to verify order ownership' });
   }
 }

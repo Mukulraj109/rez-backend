@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { VoucherBrand, UserVoucher } from '../models/Voucher';
+import { logger } from '../config/logger';
 import { Wallet } from '../models/Wallet';
 import { Transaction } from '../models/Transaction';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
@@ -69,7 +70,7 @@ export const getVoucherBrands = async (req: Request, res: Response) => {
 
     sendPaginated(res, brands, pageNum, limitNum, total, 'Voucher brands fetched successfully');
   } catch (error) {
-    console.error('Error fetching voucher brands:', error);
+    logger.error('Error fetching voucher brands:', error);
     sendError(res, 'Failed to fetch voucher brands', 500);
   }
 };
@@ -92,7 +93,7 @@ export const getVoucherBrandById = async (req: Request, res: Response) => {
 
     sendSuccess(res, brand, 'Voucher brand fetched successfully');
   } catch (error) {
-    console.error('Error fetching voucher brand:', error);
+    logger.error('Error fetching voucher brand:', error);
     sendError(res, 'Failed to fetch voucher brand', 500);
   }
 };
@@ -118,7 +119,7 @@ export const getFeaturedBrands = async (req: Request, res: Response) => {
 
     sendSuccess(res, brands, 'Featured brands fetched successfully');
   } catch (error) {
-    console.error('Error fetching featured brands:', error);
+    logger.error('Error fetching featured brands:', error);
     sendError(res, 'Failed to fetch featured brands', 500);
   }
 };
@@ -144,7 +145,7 @@ export const getNewlyAddedBrands = async (req: Request, res: Response) => {
 
     sendSuccess(res, brands, 'Newly added brands fetched successfully');
   } catch (error) {
-    console.error('Error fetching newly added brands:', error);
+    logger.error('Error fetching newly added brands:', error);
     sendError(res, 'Failed to fetch newly added brands', 500);
   }
 };
@@ -161,7 +162,7 @@ export const getVoucherCategories = async (req: Request, res: Response) => {
 
     sendSuccess(res, categories, 'Categories fetched successfully');
   } catch (error) {
-    console.error('Error fetching categories:', error);
+    logger.error('Error fetching categories:', error);
     sendError(res, 'Failed to fetch categories', 500);
   }
 };
@@ -339,7 +340,7 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
       201
     );
   } catch (error) {
-    console.error('Error purchasing voucher:', error);
+    logger.error('Error purchasing voucher:', error);
     sendError(res, 'Failed to purchase voucher', 500);
   }
 };
@@ -461,7 +462,7 @@ export const confirmCardPurchase = async (req: Request, res: Response) => {
       transaction,
     }, 'Voucher purchased successfully via card', 201);
   } catch (error: any) {
-    console.error('Error confirming card voucher purchase:', error);
+    logger.error('Error confirming card voucher purchase:', error);
     sendError(res, error.message || 'Failed to confirm voucher purchase', 500);
   }
 };
@@ -498,7 +499,7 @@ export const getUserVouchers = async (req: Request, res: Response) => {
 
     sendPaginated(res, vouchers, pageNum, limitNum, total, 'User vouchers fetched successfully');
   } catch (error) {
-    console.error('Error fetching user vouchers:', error);
+    logger.error('Error fetching user vouchers:', error);
     sendError(res, 'Failed to fetch vouchers', 500);
   }
 };
@@ -525,7 +526,7 @@ export const getUserVoucherById = async (req: Request, res: Response) => {
 
     sendSuccess(res, voucher, 'Voucher fetched successfully');
   } catch (error) {
-    console.error('Error fetching voucher:', error);
+    logger.error('Error fetching voucher:', error);
     sendError(res, 'Failed to fetch voucher', 500);
   }
 };
@@ -560,7 +561,7 @@ export const useVoucher = async (req: Request, res: Response) => {
 
     sendSuccess(res, voucher, 'Voucher marked as used successfully');
   } catch (error) {
-    console.error('Error using voucher:', error);
+    logger.error('Error using voucher:', error);
     sendError(res, 'Failed to use voucher', 500);
   }
 };
@@ -577,7 +578,7 @@ export const trackBrandView = async (req: Request, res: Response) => {
 
     sendSuccess(res, { success: true }, 'View tracked');
   } catch (error) {
-    console.error('Error tracking brand view:', error);
+    logger.error('Error tracking brand view:', error);
     // Don't return error for analytics
     res.status(200).json({ success: true });
   }
@@ -658,7 +659,7 @@ export const getHeroCarousel = async (req: Request, res: Response) => {
 
     sendSuccess(res, cachedCarousel, 'Hero carousel items fetched successfully');
   } catch (error) {
-    console.error('Error fetching hero carousel:', error);
+    logger.error('Error fetching hero carousel:', error);
     sendError(res, 'Failed to fetch hero carousel', 500);
   }
 };

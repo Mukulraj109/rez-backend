@@ -627,6 +627,16 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// Cache stats endpoint
+app.get('/health/cache-stats', async (req, res) => {
+  try {
+    const stats = await redisService.getStats();
+    res.json({ success: true, data: { redis: stats } });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
 // Simple test endpoint
 app.get('/test', (req, res) => {
   res.json({ message: 'Test endpoint working' });
@@ -1517,6 +1527,12 @@ async function startServer() {
     console.log('🔄 Connecting to Redis...');
     await redisService.connect();
     console.log(redisService.isReady() ? '✅ Redis connected' : '⚠️ Redis unavailable — app will continue without caching');
+
+    // Warm up public caches after Redis connects (non-blocking)
+    if (redisService.isReady()) {
+      const { warmUpPublicCaches } = await import('./utils/cacheWarmup');
+      setImmediate(() => warmUpPublicCaches().catch(err => console.warn('[CACHE-WARMUP]', err)));
+    }
 
     // Attach Socket.IO Redis adapter (needs Redis to be connected first)
     try {

@@ -1,6 +1,7 @@
 import { Merchant, IMerchant } from '../models/Merchant';
 import { Store } from '../models/Store';
 import { EmailService } from '../services/EmailService';
+import { logger } from '../config/logger';
 import mongoose from 'mongoose';
 
 /**
@@ -270,7 +271,7 @@ export class OnboardingService {
         merchant.ownerName
       );
     } catch (emailError) {
-      console.error('Failed to send onboarding confirmation email:', emailError);
+      logger.error('Failed to send onboarding confirmation email:', emailError);
       // Continue - email failure shouldn't block the submission
     }
 
@@ -278,7 +279,7 @@ export class OnboardingService {
     try {
       await this.notifyAdminNewSubmission(merchant);
     } catch (notifyError) {
-      console.error('Failed to notify admin about onboarding submission:', notifyError);
+      logger.error('Failed to notify admin about onboarding submission:', notifyError);
       // Continue - notification failure shouldn't block the submission
     }
 
@@ -499,7 +500,7 @@ export class OnboardingService {
         if (process.env.NODE_ENV === 'production') {
           throw new Error('Invalid GST number format');
         } else {
-          console.warn('GST number format validation failed, but allowing in development:', gst);
+          logger.warn('GST number format validation failed, but allowing in development:', gst);
         }
       }
     }
@@ -512,7 +513,7 @@ export class OnboardingService {
         if (process.env.NODE_ENV === 'production') {
           throw new Error('Invalid PAN number format');
         } else {
-          console.warn('PAN number format validation failed, but allowing in development:', pan);
+          logger.warn('PAN number format validation failed, but allowing in development:', pan);
         }
       }
     }
@@ -566,7 +567,7 @@ export class OnboardingService {
       if (process.env.NODE_ENV === 'production') {
         throw new Error('Valid IFSC code is required (format: AAAA0XXXXXX)');
       } else {
-        console.warn('IFSC code format validation failed, but allowing in development:', ifsc);
+        logger.warn('IFSC code format validation failed, but allowing in development:', ifsc);
       }
     }
 

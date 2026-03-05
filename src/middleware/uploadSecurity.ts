@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { fromBuffer } from 'file-type';
 import crypto from 'crypto';
+import { logger } from '../config/logger';
 
 /**
  * Enhanced File Upload Security Middleware
@@ -53,7 +54,7 @@ export async function validateFileType(
     const actualExtension = file.originalname.split('.').pop()?.toLowerCase();
 
     if (actualExtension !== expectedExtension) {
-      console.warn(`File extension mismatch: ${actualExtension} vs detected ${expectedExtension}`);
+      logger.warn(`File extension mismatch: ${actualExtension} vs detected ${expectedExtension}`);
       // Allow but log suspicious activity
     }
 
@@ -114,7 +115,7 @@ export async function basicMalwareScan(file: Express.Multer.File): Promise<boole
 
   for (const pattern of dangerousPatterns) {
     if (pattern.test(fileContent)) {
-      console.warn('⚠️ Potentially malicious content detected in file');
+      logger.warn('⚠️ Potentially malicious content detected in file');
       throw new Error('File contains potentially malicious content');
     }
   }
@@ -181,11 +182,11 @@ export const validateUploadedFile = (options: {
         req.file.filename = secureFilename;
       }
 
-      console.log(`✅ File validation passed: ${file.originalname} -> ${secureFilename}`);
+      logger.info(`✅ File validation passed: ${file.originalname} -> ${secureFilename}`);
 
       next();
     } catch (error: any) {
-      console.error('❌ File validation failed:', error.message);
+      logger.error('❌ File validation failed:', error.message);
       return res.status(400).json({
         success: false,
         message: 'File validation failed',
@@ -244,11 +245,11 @@ export const validateMultipleFiles = (options: {
         file.filename = generateSecureFilename(file.originalname);
       }
 
-      console.log(`✅ ${files.length} files validated successfully`);
+      logger.info(`✅ ${files.length} files validated successfully`);
 
       next();
     } catch (error: any) {
-      console.error('❌ File validation failed:', error.message);
+      logger.error('❌ File validation failed:', error.message);
       return res.status(400).json({
         success: false,
         message: 'File validation failed',

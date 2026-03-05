@@ -6,6 +6,7 @@
 
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
+import { logger } from '../../config/logger';
 import SmartSpendItem from '../../models/SmartSpendItem';
 import { Store } from '../../models/Store';
 import { Product } from '../../models/Product';
@@ -93,7 +94,7 @@ export const getSmartSpendItems = async (req: Request, res: Response) => {
       },
     }, 'Smart Spend items fetched');
   } catch (error) {
-    console.error('[Admin SmartSpend] Error fetching items:', error);
+    logger.error('[Admin SmartSpend] Error fetching items:', error);
     return sendError(res, 'Failed to fetch Smart Spend items', 500);
   }
 };
@@ -162,7 +163,7 @@ export const createSmartSpendItem = async (req: Request, res: Response) => {
 
     return sendSuccess(res, populated, 'Smart Spend item created', 201);
   } catch (error: any) {
-    console.error('[Admin SmartSpend] Error creating item:', error);
+    logger.error('[Admin SmartSpend] Error creating item:', error);
     if (error.name === 'ValidationError') {
       return sendError(res, error.message, 400);
     }
@@ -209,7 +210,7 @@ export const updateSmartSpendItem = async (req: Request, res: Response) => {
 
     return sendSuccess(res, item, 'Smart Spend item updated');
   } catch (error: any) {
-    console.error('[Admin SmartSpend] Error updating item:', error);
+    logger.error('[Admin SmartSpend] Error updating item:', error);
     if (error.name === 'ValidationError') {
       return sendError(res, error.message, 400);
     }
@@ -241,7 +242,7 @@ export const deleteSmartSpendItem = async (req: Request, res: Response) => {
 
     return sendSuccess(res, item, 'Smart Spend item deactivated');
   } catch (error) {
-    console.error('[Admin SmartSpend] Error deleting item:', error);
+    logger.error('[Admin SmartSpend] Error deleting item:', error);
     return sendError(res, 'Failed to delete Smart Spend item', 500);
   }
 };
@@ -271,7 +272,7 @@ export const toggleSmartSpendItemStatus = async (req: Request, res: Response) =>
       isActive: item.isActive,
     }, `Smart Spend item ${item.isActive ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin SmartSpend] Error toggling status:', error);
+    logger.error('[Admin SmartSpend] Error toggling status:', error);
     return sendError(res, 'Failed to toggle item status', 500);
   }
 };
@@ -301,7 +302,7 @@ export const reorderSmartSpendItems = async (req: Request, res: Response) => {
 
     return sendSuccess(res, { updated: items.length }, 'Smart Spend items reordered');
   } catch (error) {
-    console.error('[Admin SmartSpend] Error reordering items:', error);
+    logger.error('[Admin SmartSpend] Error reordering items:', error);
     return sendError(res, 'Failed to reorder Smart Spend items', 500);
   }
 };
@@ -360,7 +361,7 @@ export const getSmartSpendAnalytics = async (req: Request, res: Response) => {
       topItems,
     }, 'Smart Spend analytics fetched');
   } catch (error) {
-    console.error('[Admin SmartSpend] Error fetching analytics:', error);
+    logger.error('[Admin SmartSpend] Error fetching analytics:', error);
     return sendError(res, 'Failed to fetch Smart Spend analytics', 500);
   }
 };

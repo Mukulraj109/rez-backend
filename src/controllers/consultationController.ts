@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
+import { logger } from '../config/logger';
 import Consultation from '../models/Consultation';
 import { Store } from '../models/Store';
 import { sendSuccess, sendError, sendCreated, sendNotFound } from '../utils/response';
@@ -29,7 +30,7 @@ export const createConsultation = asyncHandler(async (req: Request, res: Respons
     medicalHistory
   } = req.body;
 
-  console.log('📋 [CONSULTATION] Creating consultation:', {
+  logger.info('📋 [CONSULTATION] Creating consultation:', {
     userId,
     storeId,
     consultationType,
@@ -60,7 +61,7 @@ export const createConsultation = asyncHandler(async (req: Request, res: Respons
     const store = await Store.findById(storeId).lean();
 
     if (!store) {
-      console.error('❌ [CONSULTATION] Store not found:', storeId);
+      logger.error('❌ [CONSULTATION] Store not found:', storeId);
       return sendNotFound(res, 'Store not found');
     }
 
@@ -108,7 +109,7 @@ export const createConsultation = asyncHandler(async (req: Request, res: Respons
 
     await consultation.save();
 
-    console.log('✅ [CONSULTATION] Consultation created:', {
+    logger.info('✅ [CONSULTATION] Consultation created:', {
       consultationNumber: consultation.consultationNumber,
       consultationId: consultation._id
     });
@@ -120,7 +121,7 @@ export const createConsultation = asyncHandler(async (req: Request, res: Respons
     return sendCreated(res, consultation, 'Consultation booked successfully');
 
   } catch (error: any) {
-    console.error('❌ [CONSULTATION] Error creating consultation:', error);
+    logger.error('❌ [CONSULTATION] Error creating consultation:', error);
     return sendError(res, error.message || 'Failed to create consultation', 500);
   }
 });
@@ -137,7 +138,7 @@ export const getUserConsultations = asyncHandler(async (req: Request, res: Respo
 
   const { status, limit = 20, offset = 0 } = req.query;
 
-  console.log('📋 [CONSULTATION] Fetching user consultations:', {
+  logger.info('📋 [CONSULTATION] Fetching user consultations:', {
     userId,
     status,
     limit,
@@ -160,7 +161,7 @@ export const getUserConsultations = asyncHandler(async (req: Request, res: Respo
 
     const total = await Consultation.countDocuments(query);
 
-    console.log('✅ [CONSULTATION] Found consultations:', {
+    logger.info('✅ [CONSULTATION] Found consultations:', {
       count: consultations.length,
       total
     });
@@ -174,7 +175,7 @@ export const getUserConsultations = asyncHandler(async (req: Request, res: Respo
     }, 'Consultations retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [CONSULTATION] Error fetching user consultations:', error);
+    logger.error('❌ [CONSULTATION] Error fetching user consultations:', error);
     return sendError(res, error.message || 'Failed to fetch consultations', 500);
   }
 });
@@ -194,7 +195,7 @@ export const getConsultation = asyncHandler(async (req: Request, res: Response) 
     return sendError(res, 'Invalid consultation ID format', 400);
   }
 
-  console.log('📋 [CONSULTATION] Fetching consultation:', {
+  logger.info('📋 [CONSULTATION] Fetching consultation:', {
     consultationId,
     userId
   });
@@ -208,11 +209,11 @@ export const getConsultation = asyncHandler(async (req: Request, res: Response) 
       .populate('userId', 'name phoneNumber email').lean();
 
     if (!consultation) {
-      console.error('❌ [CONSULTATION] Consultation not found:', consultationId);
+      logger.error('❌ [CONSULTATION] Consultation not found:', consultationId);
       return sendNotFound(res, 'Consultation not found');
     }
 
-    console.log('✅ [CONSULTATION] Consultation found:', {
+    logger.info('✅ [CONSULTATION] Consultation found:', {
       consultationNumber: consultation.consultationNumber,
       status: consultation.status
     });
@@ -220,7 +221,7 @@ export const getConsultation = asyncHandler(async (req: Request, res: Response) 
     return sendSuccess(res, consultation, 'Consultation retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [CONSULTATION] Error fetching consultation:', error);
+    logger.error('❌ [CONSULTATION] Error fetching consultation:', error);
     return sendError(res, error.message || 'Failed to fetch consultation', 500);
   }
 });
@@ -241,7 +242,7 @@ export const getStoreConsultations = asyncHandler(async (req: Request, res: Resp
     return sendError(res, 'Invalid store ID format', 400);
   }
 
-  console.log('📋 [CONSULTATION] Fetching store consultations:', {
+  logger.info('📋 [CONSULTATION] Fetching store consultations:', {
     storeId,
     date,
     status,
@@ -285,7 +286,7 @@ export const getStoreConsultations = asyncHandler(async (req: Request, res: Resp
 
     const total = await Consultation.countDocuments(query);
 
-    console.log('✅ [CONSULTATION] Found store consultations:', {
+    logger.info('✅ [CONSULTATION] Found store consultations:', {
       count: consultations.length,
       total
     });
@@ -299,7 +300,7 @@ export const getStoreConsultations = asyncHandler(async (req: Request, res: Resp
     }, 'Store consultations retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [CONSULTATION] Error fetching store consultations:', error);
+    logger.error('❌ [CONSULTATION] Error fetching store consultations:', error);
     return sendError(res, error.message || 'Failed to fetch store consultations', 500);
   }
 });
@@ -320,7 +321,7 @@ export const cancelConsultation = asyncHandler(async (req: Request, res: Respons
     return sendError(res, 'Invalid consultation ID format', 400);
   }
 
-  console.log('📋 [CONSULTATION] Cancelling consultation:', {
+  logger.info('📋 [CONSULTATION] Cancelling consultation:', {
     consultationId,
     userId,
     reason
@@ -333,7 +334,7 @@ export const cancelConsultation = asyncHandler(async (req: Request, res: Respons
     });
 
     if (!consultation) {
-      console.error('❌ [CONSULTATION] Consultation not found:', consultationId);
+      logger.error('❌ [CONSULTATION] Consultation not found:', consultationId);
       return sendNotFound(res, 'Consultation not found');
     }
 
@@ -353,14 +354,14 @@ export const cancelConsultation = asyncHandler(async (req: Request, res: Respons
       await consultation.save();
     }
 
-    console.log('✅ [CONSULTATION] Consultation cancelled:', {
+    logger.info('✅ [CONSULTATION] Consultation cancelled:', {
       consultationNumber: consultation.consultationNumber
     });
 
     return sendSuccess(res, consultation, 'Consultation cancelled successfully');
 
   } catch (error: any) {
-    console.error('❌ [CONSULTATION] Error cancelling consultation:', error);
+    logger.error('❌ [CONSULTATION] Error cancelling consultation:', error);
     return sendError(res, error.message || 'Failed to cancel consultation', 500);
   }
 });
@@ -380,7 +381,7 @@ export const checkAvailability = asyncHandler(async (req: Request, res: Response
     return sendError(res, 'Date parameter is required', 400);
   }
 
-  console.log('📋 [CONSULTATION] Checking availability:', {
+  logger.info('📋 [CONSULTATION] Checking availability:', {
     storeId,
     date,
     consultationType
@@ -459,7 +460,7 @@ export const checkAvailability = asyncHandler(async (req: Request, res: Response
       }
     }
 
-    console.log('✅ [CONSULTATION] Availability checked:', {
+    logger.info('✅ [CONSULTATION] Availability checked:', {
       totalSlots: availableSlots.length,
       bookedSlots: bookedSlots.length
     });
@@ -474,7 +475,7 @@ export const checkAvailability = asyncHandler(async (req: Request, res: Response
     }, 'Availability retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [CONSULTATION] Error checking availability:', error);
+    logger.error('❌ [CONSULTATION] Error checking availability:', error);
     return sendError(res, error.message || 'Failed to check availability', 500);
   }
 });

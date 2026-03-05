@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import Joi from 'joi';
+import { logger } from '../config/logger';
 
 export const validateRequest = (schema: Joi.ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
-    console.log('🔍 [Validation] Validating request body:', {
+    logger.info('🔍 [Validation] Validating request body:', {
       bodyKeys: Object.keys(req.body || {}),
       hasFile: !!req.file,
       contentType: req.headers['content-type'],
@@ -15,7 +16,7 @@ export const validateRequest = (schema: Joi.ObjectSchema) => {
     });
 
     if (error) {
-      console.error('❌ [Validation] Validation failed:', error.details);
+      logger.error('❌ [Validation] Validation failed:', error.details);
       const validationErrors = error.details.map(detail => ({
         field: detail.path.join('.'),
         message: detail.message,
@@ -29,7 +30,7 @@ export const validateRequest = (schema: Joi.ObjectSchema) => {
       });
     }
 
-    console.log('✅ [Validation] Validation passed');
+    logger.info('✅ [Validation] Validation passed');
     // Replace req.body with validated and sanitized data
     req.body = value;
    return next();

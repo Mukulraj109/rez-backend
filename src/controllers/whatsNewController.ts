@@ -2,6 +2,7 @@
 // Handles API requests for What's New stories feature
 
 import { Request, Response } from 'express';
+import { logger } from '../config/logger';
 import whatsNewService from '../services/whatsNewService';
 import { sendSuccess, sendError, sendNotFound, sendCreated } from '../utils/response';
 
@@ -21,7 +22,7 @@ export const getActiveStories = async (req: Request, res: Response): Promise<voi
 
     sendSuccess(res, stories, 'Stories fetched successfully');
   } catch (error: any) {
-    console.error('Error fetching stories:', error);
+    logger.error('Error fetching stories:', error);
     sendError(res, error.message || 'Failed to fetch stories', 500);
   }
 };
@@ -44,7 +45,7 @@ export const getStoryById = async (req: Request, res: Response): Promise<void> =
 
     sendSuccess(res, story, 'Story fetched successfully');
   } catch (error: any) {
-    console.error('Error fetching story:', error);
+    logger.error('Error fetching story:', error);
     sendError(res, error.message || 'Failed to fetch story', 500);
   }
 };
@@ -62,7 +63,7 @@ export const trackView = async (req: Request, res: Response): Promise<void> => {
 
     sendSuccess(res, null, 'View tracked successfully');
   } catch (error: any) {
-    console.error('Error tracking view:', error);
+    logger.error('Error tracking view:', error);
     sendError(res, error.message || 'Failed to track view', 500);
   }
 };
@@ -80,7 +81,7 @@ export const trackClick = async (req: Request, res: Response): Promise<void> => 
 
     sendSuccess(res, null, 'Click tracked successfully');
   } catch (error: any) {
-    console.error('Error tracking click:', error);
+    logger.error('Error tracking click:', error);
     sendError(res, error.message || 'Failed to track click', 500);
   }
 };
@@ -98,7 +99,7 @@ export const trackCompletion = async (req: Request, res: Response): Promise<void
 
     sendSuccess(res, null, 'Completion tracked successfully');
   } catch (error: any) {
-    console.error('Error tracking completion:', error);
+    logger.error('Error tracking completion:', error);
     sendError(res, error.message || 'Failed to track completion', 500);
   }
 };
@@ -122,7 +123,7 @@ export const getUnseenCount = async (req: Request, res: Response): Promise<void>
 
     sendSuccess(res, { count, hasUnseen: count > 0 }, 'Unseen count fetched');
   } catch (error: any) {
-    console.error('Error fetching unseen count:', error);
+    logger.error('Error fetching unseen count:', error);
     sendError(res, error.message || 'Failed to fetch unseen count', 500);
   }
 };
@@ -152,7 +153,7 @@ export const createStory = async (req: Request, res: Response): Promise<void> =>
 
     sendCreated(res, story, 'Story created successfully');
   } catch (error: any) {
-    console.error('Error creating story:', error);
+    logger.error('Error creating story:', error);
     sendError(res, error.message || 'Failed to create story', 500);
   }
 };
@@ -192,7 +193,7 @@ export const updateStory = async (req: Request, res: Response): Promise<void> =>
 
     sendSuccess(res, story, 'Story updated successfully');
   } catch (error: any) {
-    console.error('Error updating story:', error);
+    logger.error('Error updating story:', error);
     sendError(res, error.message || 'Failed to update story', 500);
   }
 };
@@ -222,7 +223,7 @@ export const deleteStory = async (req: Request, res: Response): Promise<void> =>
       sendSuccess(res, story, 'Story deactivated successfully');
     }
   } catch (error: any) {
-    console.error('Error deleting story:', error);
+    logger.error('Error deleting story:', error);
     sendError(res, error.message || 'Failed to delete story', 500);
   }
 };
@@ -237,7 +238,7 @@ export const getAllStories = async (req: Request, res: Response): Promise<void> 
 
     sendSuccess(res, stories, 'Stories fetched successfully');
   } catch (error: any) {
-    console.error('Error fetching all stories:', error);
+    logger.error('Error fetching all stories:', error);
     sendError(res, error.message || 'Failed to fetch stories', 500);
   }
 };
@@ -252,7 +253,7 @@ export const getAnalyticsSummary = async (req: Request, res: Response): Promise<
 
     sendSuccess(res, summary, 'Analytics summary fetched successfully');
   } catch (error: any) {
-    console.error('Error fetching analytics:', error);
+    logger.error('Error fetching analytics:', error);
     sendError(res, error.message || 'Failed to fetch analytics', 500);
   }
 };

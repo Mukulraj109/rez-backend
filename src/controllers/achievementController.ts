@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import Achievement from '../models/Achievement';
+import { logger } from '../config/logger';
 import { UserAchievement, IUserAchievement, ACHIEVEMENT_DEFINITIONS } from '../models/Achievement';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess, sendNotFound, sendBadRequest } from '../utils/response';
@@ -175,7 +176,7 @@ export const recalculateAchievements = asyncHandler(async (req: Request, res: Re
     const achievementEngine = (await import('../services/achievementEngine')).default;
     await achievementEngine.fullRecalculate(String(userId));
   } catch (err) {
-    console.error('[ACHIEVEMENT] Engine recalculate failed, falling back to legacy:', err);
+    logger.error('[ACHIEVEMENT] Engine recalculate failed, falling back to legacy:', err);
 
     // Legacy fallback: direct metric computation
     const { Order } = await import('../models/Order');

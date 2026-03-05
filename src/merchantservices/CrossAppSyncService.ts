@@ -1,5 +1,6 @@
 import { RealTimeService } from './RealTimeService';
 import { SyncService } from './SyncService';
+import { logger } from '../config/logger';
 
 export interface CrossAppUpdate {
   type: 'order_status' | 'product_update' | 'cashback_update' | 'merchant_update';
@@ -69,13 +70,13 @@ export class CrossAppSyncService {
       this.processUpdateQueue();
     }, 5000);
 
-    console.log('🔄 Cross-app sync service initialized');
+    logger.info('🔄 Cross-app sync service initialized');
   }
 
   // Register customer app webhook URL for a merchant
   static registerCustomerAppWebhook(merchantId: string, webhookUrl: string) {
     this.customerAppWebhooks.set(merchantId, webhookUrl);
-    console.log(`🔗 Registered customer app webhook for merchant ${merchantId}`);
+    logger.info(`🔗 Registered customer app webhook for merchant ${merchantId}`);
   }
 
   // Send order status update to customer app
@@ -108,7 +109,7 @@ export class CrossAppSyncService {
       });
     }
 
-    console.log(`📦 Queued order status update for order ${orderId}`);
+    logger.info(`📦 Queued order status update for order ${orderId}`);
   }
 
   // Send product availability update to customer app
@@ -138,7 +139,7 @@ export class CrossAppSyncService {
       });
     }
 
-    console.log(`📦 Queued product update for product ${productId}`);
+    logger.info(`📦 Queued product update for product ${productId}`);
   }
 
   // Send cashback status update to customer app
@@ -168,7 +169,7 @@ export class CrossAppSyncService {
       });
     }
 
-    console.log(`💰 Queued cashback update for request ${update.requestId}`);
+    logger.info(`💰 Queued cashback update for request ${update.requestId}`);
   }
 
   // Process the update queue
@@ -188,11 +189,11 @@ export class CrossAppSyncService {
       }
 
       if (batch.length > 0) {
-        console.log(`✅ Processed ${batch.length} cross-app updates`);
+        logger.info(`✅ Processed ${batch.length} cross-app updates`);
       }
 
     } catch (error) {
-      console.error('Error processing update queue:', error);
+      logger.error('Error processing update queue:', error);
     } finally {
       this.isProcessing = false;
     }
@@ -208,14 +209,14 @@ export class CrossAppSyncService {
         await this.sendToCustomerApp(webhookUrl, update);
       } else {
         // Log that no webhook is configured
-        console.log(`⚠️ No customer app webhook configured for merchant ${update.merchantId}`);
+        logger.info(`⚠️ No customer app webhook configured for merchant ${update.merchantId}`);
       }
 
       // Always trigger sync to ensure consistency
       await this.triggerSyncForUpdate(update);
 
     } catch (error) {
-      console.error(`Error processing update ${update.type}:`, error);
+      logger.error(`Error processing update ${update.type}:`, error);
       
       // Re-queue failed updates (with retry limit)
       if (!update.data._retryCount || update.data._retryCount < 3) {
@@ -243,7 +244,7 @@ export class CrossAppSyncService {
       source: update.source
     };
 
-    console.log(`📡 Simulated webhook to customer app: ${update.type} for merchant ${update.merchantId}`);
+    logger.info(`📡 Simulated webhook to customer app: ${update.type} for merchant ${update.merchantId}`);
     
     // In real implementation:
     // const response = await fetch(webhookUrl, {
@@ -290,13 +291,13 @@ export class CrossAppSyncService {
       }
 
     } catch (error) {
-      console.error('Error triggering sync for update:', error);
+      logger.error('Error triggering sync for update:', error);
     }
   }
 
   // Handle incoming updates from customer app
   static async handleCustomerAppUpdate(update: CrossAppUpdate) {
-    console.log(`📱 Received update from customer app: ${update.type}`);
+    logger.info(`📱 Received update from customer app: ${update.type}`);
 
     // Process based on update type
     switch (update.type) {
@@ -307,7 +308,7 @@ export class CrossAppSyncService {
         await this.handleCustomerCashbackUpdate(update);
         break;
       default:
-        console.log(`Unknown update type from customer app: ${update.type}`);
+        logger.info(`Unknown update type from customer app: ${update.type}`);
     }
 
     // Emit real-time event to merchant app
@@ -327,7 +328,7 @@ export class CrossAppSyncService {
     
     // Update order in merchant database
     // This would integrate with your OrderModel
-    console.log(`🔄 Processing customer order update for order ${orderId}`);
+    logger.info(`🔄 Processing customer order update for order ${orderId}`);
     
     // Example: Handle return requests, delivery confirmations, etc.
     // await OrderModel.updateStatus(orderId, data.newStatus, data.statusMessage);
@@ -337,7 +338,7 @@ export class CrossAppSyncService {
   private static async handleCustomerCashbackUpdate(update: CrossAppUpdate) {
     const { data } = update;
     
-    console.log(`💰 Processing customer cashback update for request ${data.requestId}`);
+    logger.info(`💰 Processing customer cashback update for request ${data.requestId}`);
     
     // This might be notifications about cashback usage, disputes, etc.
   }
@@ -377,7 +378,7 @@ export class CrossAppSyncService {
   static cleanup() {
     this.updateQueue.length = 0;
     this.customerAppWebhooks.clear();
-    console.log('🧹 Cross-app sync service cleaned up');
+    logger.info('🧹 Cross-app sync service cleaned up');
   }
 
   // Method needed by merchant-profile route
@@ -394,9 +395,9 @@ export class CrossAppSyncService {
       }
       
       // Log for debugging
-      console.log('Merchant update sent:', { merchantId, updateData });
+      logger.info('Merchant update sent:', { merchantId, updateData });
     } catch (error) {
-      console.error('Failed to send merchant update:', error);
+      logger.error('Failed to send merchant update:', error);
     }
   }
 }

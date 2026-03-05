@@ -1,4 +1,5 @@
 import type { ActivityEvent } from '../gamificationEventBus';
+import { logger } from '../../config/logger';
 
 /**
  * Challenge Progress Handler
@@ -33,9 +34,9 @@ export function registerChallengeHandler(eventBus: any): void {
         await challengeService.updateProgress(event.userId, action, 1);
       }
     } catch (error) {
-      console.error(`[CHALLENGE HANDLER] Error processing ${event.type} for user ${event.userId}:`, error);
+      logger.error(`[CHALLENGE HANDLER] Error processing ${event.type} for user ${event.userId}:`, error);
     }
   });
 
-  console.log('[CHALLENGE HANDLER] Registered challenge progress handler');
+  logger.info('[CHALLENGE HANDLER] Registered challenge progress handler');
 }

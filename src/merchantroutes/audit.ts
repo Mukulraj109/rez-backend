@@ -6,6 +6,7 @@ import { authMiddleware } from '../middleware/merchantauth';
 import AuditService from '../services/AuditService';
 import ActivityTimelineService from '../services/ActivityTimelineService';
 import AuditRetentionService from '../services/AuditRetentionService';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -50,7 +51,7 @@ router.get('/logs', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to get logs:', error);
+    logger.error('❌ [AUDIT API] Failed to get logs:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to retrieve audit logs',
@@ -79,7 +80,7 @@ router.get('/resource/:resourceType/:resourceId', async (req: Request, res: Resp
       }
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to get resource history:', error);
+    logger.error('❌ [AUDIT API] Failed to get resource history:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve resource history',
@@ -113,7 +114,7 @@ router.get('/user/:userId', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to get user activity:', error);
+    logger.error('❌ [AUDIT API] Failed to get user activity:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve user activity',
@@ -140,7 +141,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       data: stats
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to get stats:', error);
+    logger.error('❌ [AUDIT API] Failed to get stats:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve audit statistics',
@@ -196,7 +197,7 @@ router.get('/export', async (req: Request, res: Response) => {
 
     return res.send(buffer);
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to export logs:', error);
+    logger.error('❌ [AUDIT API] Failed to export logs:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to export audit logs',
@@ -231,7 +232,7 @@ router.get('/timeline', async (req: Request, res: Response) => {
       data: timeline
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to get timeline:', error);
+    logger.error('❌ [AUDIT API] Failed to get timeline:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve activity timeline',
@@ -259,7 +260,7 @@ router.get('/timeline/today', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to get today\'s activities:', error);
+    logger.error('❌ [AUDIT API] Failed to get today\'s activities:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve today\'s activities',
@@ -287,7 +288,7 @@ router.get('/timeline/recent', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to get recent activities:', error);
+    logger.error('❌ [AUDIT API] Failed to get recent activities:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve recent activities',
@@ -320,7 +321,7 @@ router.get('/timeline/summary', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to get activity summary:', error);
+    logger.error('❌ [AUDIT API] Failed to get activity summary:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve activity summary',
@@ -348,7 +349,7 @@ router.get('/timeline/critical', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to get critical activities:', error);
+    logger.error('❌ [AUDIT API] Failed to get critical activities:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve critical activities',
@@ -381,7 +382,7 @@ router.get('/timeline/heatmap', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to get activity heatmap:', error);
+    logger.error('❌ [AUDIT API] Failed to get activity heatmap:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve activity heatmap',
@@ -421,7 +422,7 @@ router.get('/activity', async (req: Request, res: Response) => {
       data: logsArray
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to get activity:', error);
+    logger.error('❌ [AUDIT API] Failed to get activity:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to retrieve activity',
@@ -467,7 +468,7 @@ router.get('/search', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to search activities:', error);
+    logger.error('❌ [AUDIT API] Failed to search activities:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to search activities',
@@ -491,7 +492,7 @@ router.get('/retention/stats', async (req: Request, res: Response) => {
       data: stats
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to get retention stats:', error);
+    logger.error('❌ [AUDIT API] Failed to get retention stats:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve retention statistics',
@@ -515,7 +516,7 @@ router.get('/retention/compliance', async (req: Request, res: Response) => {
       data: report
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to get compliance report:', error);
+    logger.error('❌ [AUDIT API] Failed to get compliance report:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve compliance report',
@@ -542,7 +543,7 @@ router.post('/retention/cleanup', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to cleanup logs:', error);
+    logger.error('❌ [AUDIT API] Failed to cleanup logs:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to cleanup logs',
@@ -567,7 +568,7 @@ router.get('/retention/archives', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('❌ [AUDIT API] Failed to get archive list:', error);
+    logger.error('❌ [AUDIT API] Failed to get archive list:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to retrieve archive list',

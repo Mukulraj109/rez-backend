@@ -3,10 +3,17 @@ import { Notification } from '../models/Notification';
 import { sendSuccess, sendNotFound } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+import redisService from '../services/redisService';
 
-// Get unread notification count
+// Get unread notification count (cached 30s per user — called on every screen)
 export const getUnreadCount = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
+
+  const cacheKey = `notification:unread:${userId}`;
+  const cached = await redisService.get<any>(cacheKey);
+  if (cached) {
+    return sendSuccess(res, cached);
+  }
 
   const baseQuery = {
     user: userId,
@@ -36,7 +43,10 @@ export const getUnreadCount = asyncHandler(async (req: Request, res: Response) =
     byPriority[item._id] = item.count;
   }
 
-  sendSuccess(res, { total, byType, byPriority });
+  const result = { total, byType, byPriority };
+  redisService.set(cacheKey, result, 30).catch(() => {}); // 30s cache
+
+  sendSuccess(res, result);
 });
 
 // Get user notifications
@@ -97,6 +107,9 @@ export const markAsRead = asyncHandler(async (req: Request, res: Response) => {
       readAt: new Date()
     });
 
+    // Invalidate unread count cache
+    redisService.del(`notification:unread:${userId}`).catch(() => {});
+
     const unreadCount = await Notification.countDocuments({
       user: userId,
       isRead: false,
@@ -123,6 +136,9 @@ export const deleteNotification = asyncHandler(async (req: Request, res: Respons
     if (!notification) {
       return sendNotFound(res, 'Notification not found');
     }
+
+    // Invalidate unread count cache
+    redisService.del(`notification:unread:${userId}`).catch(() => {});
 
     sendSuccess(res, null, 'Notification deleted successfully');
   } catch (error) {

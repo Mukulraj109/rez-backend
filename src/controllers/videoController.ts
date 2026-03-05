@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { logger } from '../config/logger';
 import mongoose from 'mongoose';
 import { Video } from '../models/Video';
 import { User } from '../models/User';
@@ -42,7 +43,7 @@ export const createVideo = asyncHandler(async (req: Request, res: Response) => {
   } = req.body;
 
   try {
-    console.log('🎥 [VIDEO] Creating video for user:', userId);
+    logger.info('🎥 [VIDEO] Creating video for user:', userId);
 
     // Validate required fields
     if (!title || !videoUrl) {
@@ -133,7 +134,7 @@ export const createVideo = asyncHandler(async (req: Request, res: Response) => {
     }, 'Video created successfully');
 
   } catch (error) {
-    console.error('❌ [VIDEO] Create video error:', error);
+    logger.error('❌ [VIDEO] Create video error:', error);
     throw new AppError('Failed to create video', 500);
   }
 });
@@ -385,7 +386,7 @@ export const getVideoById = asyncHandler(async (req: Request, res: Response) => 
     }, 'Video retrieved successfully');
 
   } catch (error) {
-    console.error('Error fetching video:', error);
+    logger.error('Error fetching video:', error);
     throw new AppError('Failed to fetch video', 500);
   }
 });
@@ -671,7 +672,7 @@ export const toggleVideoLike = asyncHandler(async (req: Request, res: Response) 
 
     await video.save();
 
-    console.log(`✅ [toggleVideoLike] User ${userId} ${isLiked ? 'liked' : 'unliked'} video ${videoId}. Total likes: ${totalLikes}`);
+    logger.info(`✅ [toggleVideoLike] User ${userId} ${isLiked ? 'liked' : 'unliked'} video ${videoId}. Total likes: ${totalLikes}`);
 
     sendSuccess(res, {
       videoId: video._id,
@@ -680,7 +681,7 @@ export const toggleVideoLike = asyncHandler(async (req: Request, res: Response) 
     }, isLiked ? 'Video liked successfully' : 'Video unliked successfully');
 
   } catch (error) {
-    console.error('[toggleVideoLike] Error:', error);
+    logger.error('[toggleVideoLike] Error:', error);
     throw new AppError('Failed to toggle video like', 500);
   }
 });
@@ -895,7 +896,7 @@ export const getVideosByStore = asyncHandler(async (req: Request, res: Response)
 
     // Return empty array if no videos found (not an error)
     if (videos.length === 0) {
-      console.log(`ℹ️ [VIDEO] No videos found for store ${storeId}, returning empty array`);
+      logger.info(`ℹ️ [VIDEO] No videos found for store ${storeId}, returning empty array`);
     }
 
     // Transform videos to match UGC API format
@@ -971,7 +972,7 @@ export const reportVideo = asyncHandler(async (req: Request, res: Response) => {
     // Use the reportVideo method from the model
     await video.reportVideo(userId, reason, details);
 
-    console.log(`✅ [VIDEO] Video ${videoId} reported by user ${userId} for reason: ${reason}`);
+    logger.info(`✅ [VIDEO] Video ${videoId} reported by user ${userId} for reason: ${reason}`);
 
     sendSuccess(res, {
       videoId: video._id,
@@ -980,7 +981,7 @@ export const reportVideo = asyncHandler(async (req: Request, res: Response) => {
     }, 'Video reported successfully. Thank you for helping keep our community safe.');
 
   } catch (error) {
-    console.error('❌ [VIDEO] Report video error:', error);
+    logger.error('❌ [VIDEO] Report video error:', error);
     throw new AppError('Failed to report video', 500);
   }
 });
@@ -1000,7 +1001,7 @@ export const toggleVideoBookmark = asyncHandler(async (req: Request, res: Respon
     // Use the toggleBookmark method from the model
     const isBookmarked = await video.toggleBookmark(userId);
 
-    console.log(`✅ [VIDEO] Video ${videoId} ${isBookmarked ? 'bookmarked' : 'unbookmarked'} by user ${userId}`);
+    logger.info(`✅ [VIDEO] Video ${videoId} ${isBookmarked ? 'bookmarked' : 'unbookmarked'} by user ${userId}`);
 
     sendSuccess(res, {
       videoId: video._id,
@@ -1009,7 +1010,7 @@ export const toggleVideoBookmark = asyncHandler(async (req: Request, res: Respon
     }, isBookmarked ? 'Video bookmarked successfully' : 'Bookmark removed successfully');
 
   } catch (error) {
-    console.error('❌ [VIDEO] Toggle bookmark error:', error);
+    logger.error('❌ [VIDEO] Toggle bookmark error:', error);
     throw new AppError('Failed to toggle bookmark', 500);
   }
 });
@@ -1029,7 +1030,7 @@ export const trackVideoView = asyncHandler(async (req: Request, res: Response) =
     // Use the incrementViews method from the model
     await video.incrementViews(userId || undefined);
 
-    console.log(`✅ [VIDEO] View tracked for video ${videoId}${userId ? ` by user ${userId}` : ' (anonymous)'}`);
+    logger.info(`✅ [VIDEO] View tracked for video ${videoId}${userId ? ` by user ${userId}` : ' (anonymous)'}`);
 
     sendSuccess(res, {
       videoId: video._id,
@@ -1037,7 +1038,7 @@ export const trackVideoView = asyncHandler(async (req: Request, res: Response) =
     }, 'View tracked successfully');
 
   } catch (error) {
-    console.error('❌ [VIDEO] Track view error:', error);
+    logger.error('❌ [VIDEO] Track view error:', error);
     throw new AppError('Failed to track view', 500);
   }
 });
@@ -1068,7 +1069,7 @@ export const shareVideo = asyncHandler(async (req: Request, res: Response) => {
       await video.save();
     }
 
-    console.log(`✅ [VIDEO] Video ${videoId} shared. Total shares: ${video.engagement.shares}`);
+    logger.info(`✅ [VIDEO] Video ${videoId} shared. Total shares: ${video.engagement.shares}`);
 
     sendSuccess(res, {
       videoId: video._id,
@@ -1076,7 +1077,7 @@ export const shareVideo = asyncHandler(async (req: Request, res: Response) => {
     }, 'Video shared successfully');
 
   } catch (error) {
-    console.error('❌ [VIDEO] Share video error:', error);
+    logger.error('❌ [VIDEO] Share video error:', error);
     throw new AppError('Failed to share video', 500);
   }
 });
@@ -1120,7 +1121,7 @@ export const toggleCommentLike = asyncHandler(async (req: Request, res: Response
 
     await video.save();
 
-    console.log(`✅ [VIDEO] Comment ${commentId} ${isLiked ? 'liked' : 'unliked'} by user ${userId}`);
+    logger.info(`✅ [VIDEO] Comment ${commentId} ${isLiked ? 'liked' : 'unliked'} by user ${userId}`);
 
     sendSuccess(res, {
       commentId,
@@ -1129,7 +1130,7 @@ export const toggleCommentLike = asyncHandler(async (req: Request, res: Response
     }, isLiked ? 'Comment liked' : 'Comment unliked');
 
   } catch (error) {
-    console.error('❌ [VIDEO] Toggle comment like error:', error);
+    logger.error('❌ [VIDEO] Toggle comment like error:', error);
     throw new AppError('Failed to toggle comment like', 500);
   }
 });

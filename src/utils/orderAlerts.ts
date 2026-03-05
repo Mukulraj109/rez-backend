@@ -7,6 +7,7 @@
 import orderSocketService from '../services/orderSocketService';
 import { Order } from '../models/Order';
 import { ACTIVE_STATUSES, SLA_THRESHOLDS } from '../config/orderStateMachine';
+import { logger } from '../config/logger';
 
 interface AlertRule {
   name: string;
@@ -88,10 +89,10 @@ export async function runOrderAlertChecks(): Promise<void> {
         });
 
         // Structured log for external alerting systems
-        console.warn(`[ORDER ALERT] ${rule.severity.toUpperCase()}: ${rule.name} - ${rule.message}`);
+        logger.warn(`[ORDER ALERT] ${rule.severity.toUpperCase()}: ${rule.name} - ${rule.message}`);
       }
     } catch (err) {
-      console.error(`[ORDER ALERT] Failed to check rule ${rule.name}:`, err);
+      logger.error(`[ORDER ALERT] Failed to check rule ${rule.name}:`, err);
     }
   }
 }

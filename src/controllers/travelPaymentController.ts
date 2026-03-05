@@ -7,6 +7,7 @@
  */
 
 import { Request, Response } from 'express';
+import { logger } from '../config/logger';
 import { ServiceBooking } from '../models/ServiceBooking';
 import paymentService from '../services/PaymentService';
 import stripeService from '../services/stripeService';
@@ -34,7 +35,7 @@ export const createTravelPaymentOrder = asyncHandler(async (req: Request, res: R
   const userId = req.userId!;
   const { bookingId, amount, currency = 'INR' } = req.body;
 
-  console.log('💳 [TRAVEL-PAYMENT] Creating payment order:', { bookingId, amount, currency, userId });
+  logger.info('💳 [TRAVEL-PAYMENT] Creating payment order:', { bookingId, amount, currency, userId });
 
   if (!bookingId || !amount) {
     return sendBadRequest(res, 'Booking ID and amount are required');
@@ -58,7 +59,7 @@ export const createTravelPaymentOrder = asyncHandler(async (req: Request, res: R
   const bookingTotal = booking.pricing.total;
   const discrepancy = Math.abs(amount - bookingTotal) / bookingTotal;
   if (discrepancy > 0.05) {
-    console.error(`❌ [TRAVEL-PAYMENT] Price mismatch: requested ₹${amount}, booking total ₹${bookingTotal} (${(discrepancy * 100).toFixed(1)}% discrepancy)`);
+    logger.error(`❌ [TRAVEL-PAYMENT] Price mismatch: requested ₹${amount}, booking total ₹${bookingTotal} (${(discrepancy * 100).toFixed(1)}% discrepancy)`);
     return sendBadRequest(res, 'Payment amount does not match booking total');
   }
 
@@ -78,7 +79,7 @@ export const createTravelPaymentOrder = asyncHandler(async (req: Request, res: R
     bookingNumber: booking.bookingNumber,
   };
 
-  console.log('✅ [TRAVEL-PAYMENT] Payment order created for booking:', booking.bookingNumber);
+  logger.info('✅ [TRAVEL-PAYMENT] Payment order created for booking:', booking.bookingNumber);
   sendSuccess(res, response, 'Payment order created successfully', 201);
 });
 
@@ -102,7 +103,7 @@ export const verifyTravelPayment = asyncHandler(async (req: Request, res: Respon
     razorpay_signature
   });
 
-  console.log('🔐 [TRAVEL-PAYMENT] Verifying payment:', { ...sanitizedData, userId });
+  logger.info('🔐 [TRAVEL-PAYMENT] Verifying payment:', { ...sanitizedData, userId });
 
   // Validate completeness
   const dataValidation = verifyPaymentDataCompleteness({
@@ -143,7 +144,7 @@ export const verifyTravelPayment = asyncHandler(async (req: Request, res: Respon
   );
 
   if (!isValidSignature) {
-    console.error('❌ [TRAVEL-PAYMENT] Invalid payment signature for booking:', booking.bookingNumber);
+    logger.error('❌ [TRAVEL-PAYMENT] Invalid payment signature for booking:', booking.bookingNumber);
 
     // Mark payment as failed
     booking.paymentStatus = 'failed';
@@ -175,10 +176,10 @@ export const verifyTravelPayment = asyncHandler(async (req: Request, res: Respon
     await travelCashbackService.holdCashback(bookingId);
   } catch (holdError) {
     // Non-blocking — booking is still confirmed even if cashback hold fails
-    console.error('⚠️ [TRAVEL-PAYMENT] Failed to hold cashback (non-blocking):', holdError);
+    logger.error('⚠️ [TRAVEL-PAYMENT] Failed to hold cashback (non-blocking):', holdError);
   }
 
-  console.log(`✅ [TRAVEL-PAYMENT] Payment verified for booking ${booking.bookingNumber}`);
+  logger.info(`✅ [TRAVEL-PAYMENT] Payment verified for booking ${booking.bookingNumber}`);
 
   sendSuccess(res, {
     verified: true,
@@ -196,7 +197,7 @@ export const createTravelStripeSession = asyncHandler(async (req: Request, res: 
   const userId = req.userId!;
   const { bookingId, amount, currency = 'INR', successUrl, cancelUrl } = req.body;
 
-  console.log('💳 [TRAVEL-PAYMENT] Creating Stripe checkout session:', { bookingId, amount, currency, userId });
+  logger.info('💳 [TRAVEL-PAYMENT] Creating Stripe checkout session:', { bookingId, amount, currency, userId });
 
   if (!bookingId || !amount) {
     return sendBadRequest(res, 'Booking ID and amount are required');
@@ -235,7 +236,7 @@ export const createTravelStripeSession = asyncHandler(async (req: Request, res: 
   const bookingTotal = booking.pricing.total;
   const discrepancy = Math.abs(amount - bookingTotal) / bookingTotal;
   if (discrepancy > 0.05) {
-    console.error(`❌ [TRAVEL-PAYMENT] Stripe price mismatch: requested ${amount}, booking total ${bookingTotal}`);
+    logger.error(`❌ [TRAVEL-PAYMENT] Stripe price mismatch: requested ${amount}, booking total ${bookingTotal}`);
     return sendBadRequest(res, 'Payment amount does not match booking total');
   }
 
@@ -262,7 +263,7 @@ export const createTravelStripeSession = asyncHandler(async (req: Request, res: 
     },
   });
 
-  console.log('✅ [TRAVEL-PAYMENT] Stripe checkout session created:', session.id);
+  logger.info('✅ [TRAVEL-PAYMENT] Stripe checkout session created:', session.id);
 
   sendSuccess(res, {
     sessionId: session.id,
@@ -282,7 +283,7 @@ export const verifyTravelStripeSession = asyncHandler(async (req: Request, res: 
   const userId = req.userId!;
   const { sessionId, bookingId } = req.body;
 
-  console.log('🔐 [TRAVEL-PAYMENT] Verifying Stripe session:', { sessionId, bookingId, userId });
+  logger.info('🔐 [TRAVEL-PAYMENT] Verifying Stripe session:', { sessionId, bookingId, userId });
 
   if (!sessionId) {
     return sendBadRequest(res, 'Session ID is required');
@@ -316,7 +317,7 @@ export const verifyTravelStripeSession = asyncHandler(async (req: Request, res: 
   const verification = await stripeService.verifyCheckoutSession(sessionId);
 
   if (!verification.verified) {
-    console.error('❌ [TRAVEL-PAYMENT] Stripe payment not completed:', verification.paymentStatus);
+    logger.error('❌ [TRAVEL-PAYMENT] Stripe payment not completed:', verification.paymentStatus);
 
     booking.paymentStatus = 'failed';
     booking.statusHistory.push({
@@ -346,10 +347,10 @@ export const verifyTravelStripeSession = asyncHandler(async (req: Request, res: 
   try {
     await travelCashbackService.holdCashback(bookingId);
   } catch (holdError) {
-    console.error('⚠️ [TRAVEL-PAYMENT] Failed to hold cashback (non-blocking):', holdError);
+    logger.error('⚠️ [TRAVEL-PAYMENT] Failed to hold cashback (non-blocking):', holdError);
   }
 
-  console.log(`✅ [TRAVEL-PAYMENT] Stripe payment verified for booking ${booking.bookingNumber}`);
+  logger.info(`✅ [TRAVEL-PAYMENT] Stripe payment verified for booking ${booking.bookingNumber}`);
 
   sendSuccess(res, {
     verified: true,

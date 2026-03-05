@@ -4,6 +4,7 @@
 import { Request, Response, NextFunction } from 'express';
 import AuditService from '../services/AuditService';
 import AuditAlertService from '../services/AuditAlertService';
+import { logger } from '../config/logger';
 
 /**
  * Middleware to log all API calls
@@ -28,7 +29,7 @@ export function auditMiddleware() {
       try {
         await AuditService.logApiCall(req, res, duration);
       } catch (error) {
-        console.error('❌ [AUDIT MIDDLEWARE] Failed to log API call:', error);
+        logger.error('❌ [AUDIT MIDDLEWARE] Failed to log API call:', error);
       }
     };
 
@@ -66,7 +67,7 @@ export function captureBeforeState(
       (req as any).auditBefore = before;
       next();
     } catch (error) {
-      console.error('❌ [AUDIT] Failed to capture before state:', error);
+      logger.error('❌ [AUDIT] Failed to capture before state:', error);
       next(); // Continue even if audit fails
     }
   };
@@ -113,7 +114,7 @@ export function logAfterChange(
           severity: action.includes('delete') ? 'warning' : 'info'
         });
       } catch (error) {
-        console.error('❌ [AUDIT] Failed to log change:', error);
+        logger.error('❌ [AUDIT] Failed to log change:', error);
       }
     };
 
@@ -152,7 +153,7 @@ export function checkSuspiciousActivity() {
       const result = await AuditAlertService.checkSuspiciousActivity(merchant._id);
 
       if (result.suspicious) {
-        console.warn('⚠️ [AUDIT] Suspicious activity detected:', result.reasons);
+        logger.warn('⚠️ [AUDIT] Suspicious activity detected:', result.reasons);
 
         // Log security event
         await AuditService.logSecurityEvent(
@@ -175,7 +176,7 @@ export function checkSuspiciousActivity() {
 
       next();
     } catch (error) {
-      console.error('❌ [AUDIT] Failed to check suspicious activity:', error);
+      logger.error('❌ [AUDIT] Failed to check suspicious activity:', error);
       next(); // Continue even if check fails
     }
   };
@@ -225,7 +226,7 @@ export function logAuthEvent(
           }
         }
       } catch (error) {
-        console.error('❌ [AUDIT] Failed to log auth event:', error);
+        logger.error('❌ [AUDIT] Failed to log auth event:', error);
       }
     };
 
@@ -287,7 +288,7 @@ export function logBulkOperation(
           );
         }
       } catch (error) {
-        console.error('❌ [AUDIT] Failed to log bulk operation:', error);
+        logger.error('❌ [AUDIT] Failed to log bulk operation:', error);
       }
     };
 

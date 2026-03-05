@@ -8,31 +8,32 @@
 import cron from 'node-cron';
 import { priveMissionService } from '../services/priveMissionService';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 let isRunning = false;
 
 export const runPriveMissionExpiry = async (): Promise<number> => {
   if (isRunning) {
-    console.log('[PriveMissionExpiry] Job already running, skipping');
+    logger.info('[PriveMissionExpiry] Job already running, skipping');
     return 0;
   }
 
   const lockKey = 'job:prive-mission-expiry';
   const lockToken = await redisService.acquireLock(lockKey, 300);
   if (!lockToken) {
-    console.log('prive-mission-expiry skipped — lock held by another instance');
+    logger.info('prive-mission-expiry skipped — lock held by another instance');
     return 0;
   }
 
   isRunning = true;
 
   try {
-    console.log('[PriveMissionExpiry] Starting mission expiry check...');
+    logger.info('[PriveMissionExpiry] Starting mission expiry check...');
     const expiredCount = await priveMissionService.expireOverdueMissions();
-    console.log(`[PriveMissionExpiry] Mission expiry complete: ${expiredCount} missions expired`);
+    logger.info(`[PriveMissionExpiry] Mission expiry complete: ${expiredCount} missions expired`);
     return expiredCount;
   } catch (error) {
-    console.error('[PriveMissionExpiry] Job failed:', error);
+    logger.error('[PriveMissionExpiry] Job failed:', error);
     return 0;
   } finally {
     isRunning = false;
@@ -50,5 +51,5 @@ export const initializePriveMissionExpiryJob = () => {
     timezone: 'UTC',
   });
 
-  console.log('✅ Privé mission expiry job scheduled (daily 00:15 UTC)');
+  logger.info('✅ Privé mission expiry job scheduled (daily 00:15 UTC)');
 };

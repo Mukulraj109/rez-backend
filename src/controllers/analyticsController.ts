@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { logger } from '../config/logger';
 import { StoreAnalytics } from '../models/StoreAnalytics';
 import { Store } from '../models/Store';
 import { 
@@ -47,7 +48,7 @@ export const trackEvent = asyncHandler(async (req: Request, res: Response) => {
     }, 'Event tracked successfully');
 
   } catch (error) {
-    console.error('Track event error:', error);
+    logger.error('Track event error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -93,7 +94,7 @@ export const getStoreAnalytics = asyncHandler(async (req: Request, res: Response
     });
 
   } catch (error) {
-    console.error('Get store analytics error:', error);
+    logger.error('Get store analytics error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -131,7 +132,7 @@ export const getPopularStores = asyncHandler(async (req: Request, res: Response)
     });
 
   } catch (error) {
-    console.error('Get popular stores error:', error);
+    logger.error('Get popular stores error:', error);
     throw new AppError('Failed to fetch popular stores', 500);
   }
 });
@@ -170,7 +171,7 @@ export const getUserAnalytics = asyncHandler(async (req: Request, res: Response)
     });
 
   } catch (error) {
-    console.error('Get user analytics error:', error);
+    logger.error('Get user analytics error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -236,7 +237,7 @@ export const getAnalyticsDashboard = asyncHandler(async (req: Request, res: Resp
     });
 
   } catch (error) {
-    console.error('Get analytics dashboard error:', error);
+    logger.error('Get analytics dashboard error:', error);
     throw new AppError('Failed to fetch analytics dashboard', 500);
   }
 });
@@ -288,7 +289,7 @@ export const getSearchAnalytics = asyncHandler(async (req: Request, res: Respons
     });
 
   } catch (error) {
-    console.error('Get search analytics error:', error);
+    logger.error('Get search analytics error:', error);
     throw new AppError('Failed to fetch search analytics', 500);
   }
 });
@@ -339,7 +340,7 @@ export const getCategoryAnalytics = asyncHandler(async (req: Request, res: Respo
     });
 
   } catch (error) {
-    console.error('Get category analytics error:', error);
+    logger.error('Get category analytics error:', error);
     throw new AppError('Failed to fetch category analytics', 500);
   }
 });

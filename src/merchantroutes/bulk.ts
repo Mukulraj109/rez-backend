@@ -6,6 +6,7 @@ import { authMiddleware } from '../middleware/merchantauth';
 import BulkProductService from '../services/BulkProductService';
 import { createObjectCsvWriter } from 'csv-writer';
 import * as XLSX from 'xlsx';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -83,7 +84,7 @@ router.get('/products/template', async (req: Request, res: Response) => {
 
       res.download(tempFilePath, 'product-import-template.csv', (err) => {
         if (err) {
-          console.error('Download error:', err);
+          logger.error('Download error:', err);
         }
         // Clean up temp file
         fs.unlinkSync(tempFilePath);
@@ -121,7 +122,7 @@ router.get('/products/template', async (req: Request, res: Response) => {
 
       res.download(tempFilePath, 'product-import-template.xlsx', (err) => {
         if (err) {
-          console.error('Download error:', err);
+          logger.error('Download error:', err);
         }
         // Clean up temp file
         fs.unlinkSync(tempFilePath);
@@ -135,7 +136,7 @@ router.get('/products/template', async (req: Request, res: Response) => {
     }
 
   } catch (error: any) {
-    console.error('Template download error:', error);
+    logger.error('Template download error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to generate template',
@@ -194,7 +195,7 @@ router.post('/products/validate', upload.single('file'), async (req: Request, re
     });
 
   } catch (error: any) {
-    console.error('Validation error:', error);
+    logger.error('Validation error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to validate file',
@@ -276,7 +277,7 @@ router.post('/products/import', upload.single('file'), async (req: Request, res:
     });
 
   } catch (error: any) {
-    console.error('Import error:', error);
+    logger.error('Import error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to import products',
@@ -308,7 +309,7 @@ router.get('/products/export', async (req: Request, res: Response) => {
 
       res.download(tempFilePath, `products-export-${timestamp}.csv`, (err) => {
         if (err) {
-          console.error('Download error:', err);
+          logger.error('Download error:', err);
         }
         // Clean up temp file
         if (fs.existsSync(tempFilePath)) {
@@ -323,7 +324,7 @@ router.get('/products/export', async (req: Request, res: Response) => {
 
       res.download(tempFilePath, `products-export-${timestamp}.xlsx`, (err) => {
         if (err) {
-          console.error('Download error:', err);
+          logger.error('Download error:', err);
         }
         // Clean up temp file
         if (fs.existsSync(tempFilePath)) {
@@ -339,7 +340,7 @@ router.get('/products/export', async (req: Request, res: Response) => {
     }
 
   } catch (error: any) {
-    console.error('Export error:', error);
+    logger.error('Export error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to export products',
@@ -472,7 +473,7 @@ router.post('/products/export/advanced', async (req: Request, res: Response) => 
 
       res.download(tempFilePath, `products-advanced-export-${timestamp}.csv`, (err) => {
         if (err) {
-          console.error('Download error:', err);
+          logger.error('Download error:', err);
         }
         // Clean up temp file
         if (fs.existsSync(tempFilePath)) {
@@ -502,7 +503,7 @@ router.post('/products/export/advanced', async (req: Request, res: Response) => 
 
       res.download(tempFilePath, `products-advanced-export-${timestamp}.xlsx`, (err) => {
         if (err) {
-          console.error('Download error:', err);
+          logger.error('Download error:', err);
         }
         // Clean up temp file
         if (fs.existsSync(tempFilePath)) {
@@ -518,7 +519,7 @@ router.post('/products/export/advanced', async (req: Request, res: Response) => 
     }
 
   } catch (error: any) {
-    console.error('Advanced export error:', error);
+    logger.error('Advanced export error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to export products',
@@ -620,7 +621,7 @@ router.post('/products/bulk-update', async (req: Request, res: Response) => {
     }
 
   } catch (error: any) {
-    console.error('Bulk update error:', error);
+    logger.error('Bulk update error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to bulk update products',

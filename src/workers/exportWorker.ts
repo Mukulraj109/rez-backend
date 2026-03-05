@@ -1,5 +1,6 @@
 import { exportQueue } from '../config/queue.config';
 import { ExportService } from '../services/exportService';
+import { logger } from '../config/logger';
 
 /**
  * Export worker - processes export jobs from the queue
@@ -7,7 +8,7 @@ import { ExportService } from '../services/exportService';
  */
 if (exportQueue) {
   exportQueue.process(async (job) => {
-    console.log(`Processing export job ${job.id}:`, job.data);
+    logger.info(`Processing export job ${job.id}:`, job.data);
 
     try {
       const result = await ExportService.processExport(job);
@@ -18,16 +19,16 @@ if (exportQueue) {
 
       return result;
     } catch (error: any) {
-      console.error(`Export job ${job.id} failed:`, error);
+      logger.error(`Export job ${job.id} failed:`, error);
       throw error;
     }
   });
 
-  console.log('✅ Export worker started and listening for jobs...');
+  logger.info('✅ Export worker started and listening for jobs...');
 
   // Graceful shutdown
   process.on('SIGTERM', async () => {
-    console.log('SIGTERM received, closing export worker...');
+    logger.info('SIGTERM received, closing export worker...');
     if (exportQueue) {
       await exportQueue.close();
     }
@@ -35,7 +36,7 @@ if (exportQueue) {
   });
 
   process.on('SIGINT', async () => {
-    console.log('SIGINT received, closing export worker...');
+    logger.info('SIGINT received, closing export worker...');
     if (exportQueue) {
       await exportQueue.close();
     }

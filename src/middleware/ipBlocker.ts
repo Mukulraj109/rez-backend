@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 /**
  * IP Blocker Middleware
@@ -55,7 +56,7 @@ export const blockIP = async (ip: string, reason?: string): Promise<void> => {
   const blockedSet = await getBlockedSet();
   blockedSet.add(ip);
   await saveBlockedSet(blockedSet);
-  console.log(`[IP_BLOCKER] Blocked IP: ${ip}${reason ? ` - Reason: ${reason}` : ''}`);
+  logger.info(`[IP_BLOCKER] Blocked IP: ${ip}${reason ? ` - Reason: ${reason}` : ''}`);
 };
 
 /**
@@ -65,7 +66,7 @@ export const unblockIP = async (ip: string): Promise<void> => {
   const blockedSet = await getBlockedSet();
   blockedSet.delete(ip);
   await saveBlockedSet(blockedSet);
-  console.log(`[IP_BLOCKER] Unblocked IP: ${ip}`);
+  logger.info(`[IP_BLOCKER] Unblocked IP: ${ip}`);
 };
 
 /**

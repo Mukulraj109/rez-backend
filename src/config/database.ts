@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import { logger } from './logger';
 
 // Ensure dotenv is loaded
 dotenv.config();
@@ -53,7 +54,7 @@ export class Database {
   public async connect(config: DatabaseConfig = defaultConfig): Promise<void> {
     try {
       if (this.isConnected) {
-        console.log('Database already connected');
+        logger.info('Database already connected');
         return;
       }
       
@@ -65,13 +66,13 @@ export class Database {
       await mongoose.connect(config.uri, connectOptions);
       this.isConnected = true;
       
-      console.log(`✅ MongoDB connected successfully to database: ${dbName}`);
+      logger.info(`✅ MongoDB connected successfully to database: ${dbName}`);
       
       // Set up connection event listeners
       this.setupEventListeners();
       
     } catch (error) {
-      console.error('❌ MongoDB connection error:', error);
+      logger.error('❌ MongoDB connection error:', error);
       process.exit(1);
     }
   }
@@ -80,16 +81,16 @@ export class Database {
   public async disconnect(): Promise<void> {
     try {
       if (!this.isConnected) {
-        console.log('Database not connected');
+        logger.info('Database not connected');
         return;
       }
       
       await mongoose.disconnect();
       this.isConnected = false;
-      console.log('📤 MongoDB disconnected');
+      logger.info('📤 MongoDB disconnected');
       
     } catch (error) {
-      console.error('❌ MongoDB disconnection error:', error);
+      logger.error('❌ MongoDB disconnection error:', error);
     }
   }
   
@@ -116,32 +117,32 @@ export class Database {
     const connection = mongoose.connection;
     
     connection.on('connected', () => {
-      console.log('🔗 Mongoose connected to MongoDB');
+      logger.info('🔗 Mongoose connected to MongoDB');
     });
     
     connection.on('error', (error) => {
-      console.error('❌ Mongoose connection error:', error);
+      logger.error('❌ Mongoose connection error:', error);
     });
     
     connection.on('disconnected', () => {
-      console.log('📤 Mongoose disconnected from MongoDB');
+      logger.info('📤 Mongoose disconnected from MongoDB');
       this.isConnected = false;
     });
     
     connection.on('reconnected', () => {
-      console.log('🔄 Mongoose reconnected to MongoDB');
+      logger.info('🔄 Mongoose reconnected to MongoDB');
       this.isConnected = true;
     });
     
     // Handle application termination
     process.on('SIGINT', async () => {
-      console.log('\n🛑 Received SIGINT. Gracefully closing MongoDB connection...');
+      logger.info('\n🛑 Received SIGINT. Gracefully closing MongoDB connection...');
       await this.disconnect();
       process.exit(0);
     });
     
     process.on('SIGTERM', async () => {
-      console.log('\n🛑 Received SIGTERM. Gracefully closing MongoDB connection...');
+      logger.info('\n🛑 Received SIGTERM. Gracefully closing MongoDB connection...');
       await this.disconnect();
       process.exit(0);
     });
@@ -162,7 +163,7 @@ export class Database {
   // Create database indexes (for production optimization)
   public async createIndexes(): Promise<void> {
     try {
-      console.log('🔍 Creating database indexes...');
+      logger.info('🔍 Creating database indexes...');
       
       // This would typically be done automatically by Mongoose,
       // but we can force index creation here for production deployments
@@ -171,15 +172,15 @@ export class Database {
       for (const collection of collections) {
         try {
           await collection.createIndexes([]);
-          console.log(`✅ Indexes created for ${collection.collectionName}`);
+          logger.info(`✅ Indexes created for ${collection.collectionName}`);
         } catch (indexError) {
-          console.warn(`⚠️ Index creation warning for ${collection.collectionName}:`, indexError);
+          logger.warn(`⚠️ Index creation warning for ${collection.collectionName}:`, indexError);
         }
       }
       
-      console.log('✅ Database indexes creation completed');
+      logger.info('✅ Database indexes creation completed');
     } catch (error) {
-      console.error('❌ Error creating database indexes:', error);
+      logger.error('❌ Error creating database indexes:', error);
     }
   }
   
@@ -235,12 +236,12 @@ export class Database {
       
       for (const collection of collections) {
         await collection.deleteMany({});
-        console.log(`🗑️ Cleared collection: ${collection.collectionName}`);
+        logger.info(`🗑️ Cleared collection: ${collection.collectionName}`);
       }
       
-      console.log('✅ Database cleared successfully');
+      logger.info('✅ Database cleared successfully');
     } catch (error) {
-      console.error('❌ Error clearing database:', error);
+      logger.error('❌ Error clearing database:', error);
       throw error;
     }
   }
@@ -248,7 +249,7 @@ export class Database {
   // Seed database with initial data (for development/testing)
   public async seedDatabase(): Promise<void> {
     try {
-      console.log('🌱 Seeding database with initial data...');
+      logger.info('🌱 Seeding database with initial data...');
       
       // Import models (this ensures they're registered)
       await import('../models');
@@ -256,9 +257,9 @@ export class Database {
       // Here you would add your seed data logic
       // This is just a placeholder for now
       
-      console.log('✅ Database seeded successfully');
+      logger.info('✅ Database seeded successfully');
     } catch (error) {
-      console.error('❌ Error seeding database:', error);
+      logger.error('❌ Error seeding database:', error);
       throw error;
     }
   }

@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as jwt from 'jsonwebtoken';
 import { Merchant } from '../models/Merchant';
 import { MerchantUser, IMerchantUser } from '../models/MerchantUser';
+import { logger } from '../config/logger';
 
 // Extend Request interface to include merchantId and merchantUser
 declare global {
@@ -30,7 +31,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
     // Verify token using merchant-specific secret
     const merchantSecret = process.env.JWT_MERCHANT_SECRET;
     if (!merchantSecret) {
-      console.error('[MERCHANT AUTH] CRITICAL: JWT_MERCHANT_SECRET is not configured');
+      logger.error('[MERCHANT AUTH] CRITICAL: JWT_MERCHANT_SECRET is not configured');
       return res.status(500).json({
         success: false,
         message: 'Server configuration error: JWT secret not configured'
@@ -107,7 +108,7 @@ export const authMiddleware = async (req: Request, res: Response, next: NextFunc
       });
     }
 
-    console.error('[MERCHANT AUTH] Authentication error:', error.message);
+    logger.error('[MERCHANT AUTH] Authentication error:', error.message);
     res.status(500).json({
       success: false,
       message: 'Authentication error'
@@ -125,7 +126,7 @@ export const optionalAuthMiddleware = async (req: Request, res: Response, next: 
       const merchantSecret = process.env.JWT_MERCHANT_SECRET;
       if (!merchantSecret) {
         // For optional auth, we just skip authentication if secret is not configured
-        console.warn('[MERCHANT AUTH] JWT_MERCHANT_SECRET not configured, skipping optional authentication');
+        logger.warn('[MERCHANT AUTH] JWT_MERCHANT_SECRET not configured, skipping optional authentication');
         return next();
       }
       const decoded = jwt.verify(token, merchantSecret) as any;

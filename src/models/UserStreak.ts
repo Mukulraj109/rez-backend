@@ -97,6 +97,9 @@ const UserStreakSchema: Schema = new Schema(
 
 // Compound index
 UserStreakSchema.index({ user: 1, type: 1 }, { unique: true });
+UserStreakSchema.index({ user: 1, currentStreak: -1 });
+UserStreakSchema.index({ lastActivityDate: -1 });
+UserStreakSchema.index({ frozen: 1, freezeExpiresAt: 1 });
 
 // Method to update streak
 UserStreakSchema.methods.updateStreak = async function() {

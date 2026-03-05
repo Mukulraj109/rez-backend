@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/merchantauth';
+import { logger } from '../config/logger';
 import { validateRequest, validateQuery, validateParams } from '../middleware/merchantvalidation';
 import Outlet from '../models/Outlet';
 import { Store } from '../models/Store';
@@ -179,7 +180,7 @@ router.get('/', validateQuery(listOutletsQuerySchema), async (req: Request, res:
       }
     });
   } catch (error: any) {
-    console.error('[MERCHANT OUTLETS] Error fetching outlets:', error);
+    logger.error('[MERCHANT OUTLETS] Error fetching outlets:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch outlets',
@@ -222,7 +223,7 @@ router.get('/:id', validateParams(outletIdSchema), async (req: Request, res: Res
       }
     });
   } catch (error: any) {
-    console.error('[MERCHANT OUTLETS] Error fetching outlet:', error);
+    logger.error('[MERCHANT OUTLETS] Error fetching outlet:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch outlet',
@@ -286,7 +287,7 @@ router.post('/', validateRequest(createOutletSchema), async (req: Request, res: 
       }
     });
   } catch (error: any) {
-    console.error('[MERCHANT OUTLETS] Error creating outlet:', error);
+    logger.error('[MERCHANT OUTLETS] Error creating outlet:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to create outlet',
@@ -370,7 +371,7 @@ router.put('/:id', validateParams(outletIdSchema), validateRequest(updateOutletS
       }
     });
   } catch (error: any) {
-    console.error('[MERCHANT OUTLETS] Error updating outlet:', error);
+    logger.error('[MERCHANT OUTLETS] Error updating outlet:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update outlet',
@@ -411,7 +412,7 @@ router.delete('/:id', validateParams(outletIdSchema), async (req: Request, res: 
       message: 'Outlet deleted successfully'
     });
   } catch (error: any) {
-    console.error('[MERCHANT OUTLETS] Error deleting outlet:', error);
+    logger.error('[MERCHANT OUTLETS] Error deleting outlet:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete outlet',
@@ -460,7 +461,7 @@ router.patch('/:id/toggle-active', validateParams(outletIdSchema), async (req: R
       }
     });
   } catch (error: any) {
-    console.error('[MERCHANT OUTLETS] Error toggling outlet status:', error);
+    logger.error('[MERCHANT OUTLETS] Error toggling outlet status:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to toggle outlet status',

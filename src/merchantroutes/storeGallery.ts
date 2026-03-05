@@ -10,6 +10,7 @@ import CloudinaryService from '../services/CloudinaryService';
 import Joi from 'joi';
 import mongoose from 'mongoose';
 import { sendSuccess, sendBadRequest, sendNotFound, sendError } from '../utils/response';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -234,7 +235,7 @@ router.post(
         fs.unlinkSync(req.file.path);
       }
 
-      console.error('❌ Gallery upload error:', error);
+      logger.error('❌ Gallery upload error:', error);
       return sendError(res, error.message || 'Failed to upload gallery item', 500);
     }
   }
@@ -379,7 +380,7 @@ router.post(
             uploadedAt: new Date(),
           });
           
-          console.log(`✅ [Backend] Created gallery item ${i + 1}/${files.length}:`, {
+          logger.info(`✅ [Backend] Created gallery item ${i + 1}/${files.length}:`, {
             title: itemTitle,
             category: category.toLowerCase(),
             hasDescription: !!description,
@@ -396,7 +397,7 @@ router.post(
             title: galleryItem.title,
           });
         } catch (error: any) {
-          console.error(`❌ Failed to upload file ${i + 1}:`, error);
+          logger.error(`❌ Failed to upload file ${i + 1}:`, error);
           failedItems.push({
             filename: file.originalname,
             error: error.message,
@@ -425,7 +426,7 @@ router.post(
         });
       }
 
-      console.error('❌ Bulk gallery upload error:', error);
+      logger.error('❌ Bulk gallery upload error:', error);
       return sendError(res, error.message || 'Failed to upload gallery items', 500);
     }
   }
@@ -544,7 +545,7 @@ router.get(
         offset: parseInt(offset as string),
       });
     } catch (error: any) {
-      console.error('❌ Get gallery error:', error);
+      logger.error('❌ Get gallery error:', error);
       return sendError(res, error.message || 'Failed to get gallery items', 500);
     }
   }
@@ -631,7 +632,7 @@ router.get(
         })),
       });
     } catch (error: any) {
-      console.error('❌ Get gallery categories error:', error);
+      logger.error('❌ Get gallery categories error:', error);
       return sendError(res, error.message || 'Failed to get gallery categories', 500);
     }
   }
@@ -693,7 +694,7 @@ router.get(
         updatedAt: item.updatedAt,
       });
     } catch (error: any) {
-      console.error('❌ Get gallery item error:', error);
+      logger.error('❌ Get gallery item error:', error);
       return sendError(res, error.message || 'Failed to get gallery item', 500);
     }
   }
@@ -781,7 +782,7 @@ router.put(
         updatedAt: item.updatedAt,
       }, 'Gallery item updated successfully');
     } catch (error: any) {
-      console.error('❌ Update gallery item error:', error);
+      logger.error('❌ Update gallery item error:', error);
       return sendError(res, error.message || 'Failed to update gallery item', 500);
     }
   }
@@ -828,7 +829,7 @@ router.put(
 
       return sendSuccess(res, null, 'Gallery items reordered successfully');
     } catch (error: any) {
-      console.error('❌ Reorder gallery items error:', error);
+      logger.error('❌ Reorder gallery items error:', error);
       return sendError(res, error.message || 'Failed to reorder gallery items', 500);
     }
   }
@@ -900,7 +901,7 @@ router.put(
         category: item.category,
       }, 'Cover image set successfully');
     } catch (error: any) {
-      console.error('❌ Set cover error:', error);
+      logger.error('❌ Set cover error:', error);
       return sendError(res, error.message || 'Failed to set cover image', 500);
     }
   }
@@ -972,7 +973,7 @@ router.delete(
 
       return sendSuccess(res, null, 'Gallery item deleted successfully');
     } catch (error: any) {
-      console.error('❌ Delete gallery item error:', error);
+      logger.error('❌ Delete gallery item error:', error);
       return sendError(res, error.message || 'Failed to delete gallery item', 500);
     }
   }
@@ -1054,7 +1055,7 @@ router.delete(
         deleted: result.modifiedCount,
       }, `${result.modifiedCount} items deleted successfully`);
     } catch (error: any) {
-      console.error('❌ Bulk delete gallery items error:', error);
+      logger.error('❌ Bulk delete gallery items error:', error);
       return sendError(res, error.message || 'Failed to delete gallery items', 500);
     }
   }

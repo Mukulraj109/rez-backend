@@ -1,5 +1,6 @@
 import { ExportService } from './ExportService';
 import { BusinessMetricsService } from './BusinessMetrics';
+import { logger } from '../config/logger';
 
 export interface ReportSchedule {
   id: string;
@@ -46,7 +47,7 @@ export class ReportService {
       this.processScheduledReports();
     }, 60 * 60 * 1000); // 1 hour
 
-    console.log('📊 Automated reporting service initialized');
+    logger.info('📊 Automated reporting service initialized');
   }
 
   // Create a new report schedule
@@ -63,7 +64,7 @@ export class ReportService {
     };
 
     this.schedules.set(id, schedule);
-    console.log(`📅 Created report schedule: ${schedule.name} for merchant ${schedule.merchantId}`);
+    logger.info(`📅 Created report schedule: ${schedule.name} for merchant ${schedule.merchantId}`);
     
     return schedule;
   }
@@ -141,7 +142,7 @@ export class ReportService {
     const dueSchedules = Array.from(this.schedules.values())
       .filter(schedule => schedule.isActive && schedule.nextScheduled <= now);
 
-    console.log(`📊 Processing ${dueSchedules.length} scheduled reports`);
+    logger.info(`📊 Processing ${dueSchedules.length} scheduled reports`);
 
     for (const schedule of dueSchedules) {
       try {
@@ -154,7 +155,7 @@ export class ReportService {
         this.schedules.set(schedule.id, schedule);
 
       } catch (error) {
-        console.error(`❌ Failed to generate scheduled report ${schedule.id}:`, error);
+        logger.error(`❌ Failed to generate scheduled report ${schedule.id}:`, error);
         
         // Log the failure in history
         this.addToHistory({
@@ -175,7 +176,7 @@ export class ReportService {
 
   // Generate a report for a specific schedule
   private static async generateScheduledReport(schedule: ReportSchedule) {
-    console.log(`📊 Generating ${schedule.frequency} report for merchant ${schedule.merchantId}`);
+    logger.info(`📊 Generating ${schedule.frequency} report for merchant ${schedule.merchantId}`);
 
     // Determine date range based on frequency
     const dateRange = this.getDateRangeForFrequency(schedule.frequency);
@@ -205,7 +206,7 @@ export class ReportService {
     // 2. Send email with attachment to recipients
     // 3. Update history with email status
     
-    console.log(`✅ Generated report ${historyEntry.id} for schedule ${schedule.id}`);
+    logger.info(`✅ Generated report ${historyEntry.id} for schedule ${schedule.id}`);
     
     // Simulate email sending
     await this.simulateEmailSending(historyEntry, exportResult);
@@ -251,13 +252,13 @@ export class ReportService {
       historyEntry.emailSent = true;
       this.history.set(historyEntry.id, historyEntry);
 
-      console.log(`📧 Simulated email sent for report ${historyEntry.id} to ${historyEntry.recipients.join(', ')}`);
+      logger.info(`📧 Simulated email sent for report ${historyEntry.id} to ${historyEntry.recipients.join(', ')}`);
     } catch (error) {
       historyEntry.status = 'failed';
       historyEntry.errorMessage = 'Failed to send email';
       this.history.set(historyEntry.id, historyEntry);
       
-      console.error(`❌ Failed to send email for report ${historyEntry.id}:`, error);
+      logger.error(`❌ Failed to send email for report ${historyEntry.id}:`, error);
     }
   }
 
@@ -300,7 +301,7 @@ export class ReportService {
       recipients?: string[];
     }
   ): Promise<ReportHistory> {
-    console.log(`📊 Generating ad-hoc report "${reportConfig.name}" for merchant ${merchantId}`);
+    logger.info(`📊 Generating ad-hoc report "${reportConfig.name}" for merchant ${merchantId}`);
 
     try {
       const exportResult = await ExportService.exportDashboardData(merchantId, {
@@ -326,7 +327,7 @@ export class ReportService {
         await this.simulateEmailSending(historyEntry, exportResult);
       }
 
-      console.log(`✅ Generated ad-hoc report ${historyEntry.id}`);
+      logger.info(`✅ Generated ad-hoc report ${historyEntry.id}`);
       return historyEntry;
 
     } catch (error) {
@@ -343,7 +344,7 @@ export class ReportService {
         errorMessage: error instanceof Error ? error.message : 'Unknown error'
       });
 
-      console.error(`❌ Failed to generate ad-hoc report:`, error);
+      logger.error(`❌ Failed to generate ad-hoc report:`, error);
       throw error;
     }
   }
@@ -416,7 +417,7 @@ export class ReportService {
       this.createSchedule(scheduleData);
     });
 
-    console.log(`📅 Created ${sampleSchedules.length} sample report schedules for merchant ${merchantId}`);
+    logger.info(`📅 Created ${sampleSchedules.length} sample report schedules for merchant ${merchantId}`);
   }
 
   // Cleanup method
@@ -425,7 +426,7 @@ export class ReportService {
       clearInterval(this.reportInterval);
       this.reportInterval = null;
     }
-    console.log('📊 Automated reporting service stopped');
+    logger.info('📊 Automated reporting service stopped');
   }
 
   // Manual trigger for testing

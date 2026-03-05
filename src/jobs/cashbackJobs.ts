@@ -1,6 +1,7 @@
 import * as cron from 'node-cron';
 import mallAffiliateService from '../services/mallAffiliateService';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 /**
  * Cashback Background Jobs
@@ -58,7 +59,7 @@ async function runCreditPendingCashback(): Promise<CreditStats> {
   };
 
   try {
-    console.log('💰 [CASHBACK JOB] Running credit pending cashback...');
+    logger.info('💰 [CASHBACK JOB] Running credit pending cashback...');
 
     const result = await mallAffiliateService.creditPendingCashback();
     stats.credited = result.credited;
@@ -67,7 +68,7 @@ async function runCreditPendingCashback(): Promise<CreditStats> {
 
     stats.duration = Date.now() - startTime;
 
-    console.log(`✅ [CASHBACK JOB] Credit job completed:`, {
+    logger.info(`✅ [CASHBACK JOB] Credit job completed:`, {
       credited: stats.credited,
       total: stats.total,
       failed: stats.failed,
@@ -80,7 +81,7 @@ async function runCreditPendingCashback(): Promise<CreditStats> {
     stats.duration = Date.now() - startTime;
     stats.errors.push(error.message || 'Unknown error');
 
-    console.error('❌ [CASHBACK JOB] Credit job failed:', {
+    logger.error('❌ [CASHBACK JOB] Credit job failed:', {
       error: error.message,
       duration: `${stats.duration}ms`,
       timestamp: new Date().toISOString(),
@@ -101,13 +102,13 @@ async function runExpireClicks(): Promise<ExpireStats> {
   };
 
   try {
-    console.log('⏰ [CASHBACK JOB] Running expire clicks...');
+    logger.info('⏰ [CASHBACK JOB] Running expire clicks...');
 
     stats.expired = await mallAffiliateService.markExpiredClicks();
 
     stats.duration = Date.now() - startTime;
 
-    console.log(`✅ [CASHBACK JOB] Expire clicks completed:`, {
+    logger.info(`✅ [CASHBACK JOB] Expire clicks completed:`, {
       expired: stats.expired,
       duration: `${stats.duration}ms`,
       timestamp: new Date().toISOString(),
@@ -117,7 +118,7 @@ async function runExpireClicks(): Promise<ExpireStats> {
   } catch (error: any) {
     stats.duration = Date.now() - startTime;
 
-    console.error('❌ [CASHBACK JOB] Expire clicks failed:', {
+    logger.error('❌ [CASHBACK JOB] Expire clicks failed:', {
       error: error.message,
       duration: `${stats.duration}ms`,
       timestamp: new Date().toISOString(),
@@ -132,17 +133,17 @@ async function runExpireClicks(): Promise<ExpireStats> {
  */
 export function startCreditCashbackJob(): void {
   if (creditCashbackJob) {
-    console.log('⚠️ [CASHBACK JOB] Credit cashback job already running');
+    logger.info('⚠️ [CASHBACK JOB] Credit cashback job already running');
     return;
   }
 
-  console.log(`💰 [CASHBACK JOB] Starting credit cashback job (runs every hour)`);
+  logger.info(`💰 [CASHBACK JOB] Starting credit cashback job (runs every hour)`);
 
   creditCashbackJob = cron.schedule(CREDIT_CASHBACK_SCHEDULE, async () => {
     // Acquire distributed lock with owner token — only one instance runs the job
     const lockToken = await redisService.acquireLock('cashback_credit_job', CREDIT_JOB_LOCK_TTL);
     if (!lockToken) {
-      console.log('⏭️ [CASHBACK JOB] Another instance is running the credit job, skipping');
+      logger.info('⏭️ [CASHBACK JOB] Another instance is running the credit job, skipping');
       return;
     }
 
@@ -155,7 +156,7 @@ export function startCreditCashbackJob(): void {
     }
   });
 
-  console.log('✅ [CASHBACK JOB] Credit cashback job started');
+  logger.info('✅ [CASHBACK JOB] Credit cashback job started');
 }
 
 /**
@@ -163,17 +164,17 @@ export function startCreditCashbackJob(): void {
  */
 export function startExpireClicksJob(): void {
   if (expireClicksJob) {
-    console.log('⚠️ [CASHBACK JOB] Expire clicks job already running');
+    logger.info('⚠️ [CASHBACK JOB] Expire clicks job already running');
     return;
   }
 
-  console.log(`⏰ [CASHBACK JOB] Starting expire clicks job (runs daily at 2:00 AM)`);
+  logger.info(`⏰ [CASHBACK JOB] Starting expire clicks job (runs daily at 2:00 AM)`);
 
   expireClicksJob = cron.schedule(EXPIRE_CLICKS_SCHEDULE, async () => {
     // Acquire distributed lock with owner token — only one instance runs the job
     const lockToken = await redisService.acquireLock('expire_clicks_job', EXPIRE_JOB_LOCK_TTL);
     if (!lockToken) {
-      console.log('⏭️ [CASHBACK JOB] Another instance is running the expire job, skipping');
+      logger.info('⏭️ [CASHBACK JOB] Another instance is running the expire job, skipping');
       return;
     }
 
@@ -186,7 +187,7 @@ export function startExpireClicksJob(): void {
     }
   });
 
-  console.log('✅ [CASHBACK JOB] Expire clicks job started');
+  logger.info('✅ [CASHBACK JOB] Expire clicks job started');
 }
 
 /**
@@ -196,13 +197,13 @@ export function stopCashbackJobs(): void {
   if (creditCashbackJob) {
     creditCashbackJob.stop();
     creditCashbackJob = null;
-    console.log('🛑 [CASHBACK JOB] Credit cashback job stopped');
+    logger.info('🛑 [CASHBACK JOB] Credit cashback job stopped');
   }
 
   if (expireClicksJob) {
     expireClicksJob.stop();
     expireClicksJob = null;
-    console.log('🛑 [CASHBACK JOB] Expire clicks job stopped');
+    logger.info('🛑 [CASHBACK JOB] Expire clicks job stopped');
   }
 }
 
@@ -234,7 +235,7 @@ export async function triggerManualCreditCashback(): Promise<CreditStats> {
     throw new Error('Credit job already in progress (locked by another instance)');
   }
 
-  console.log('💰 [CASHBACK JOB] Manual credit cashback triggered');
+  logger.info('💰 [CASHBACK JOB] Manual credit cashback triggered');
 
   try {
     return await runCreditPendingCashback();
@@ -252,7 +253,7 @@ export async function triggerManualExpireClicks(): Promise<ExpireStats> {
     throw new Error('Expire job already in progress (locked by another instance)');
   }
 
-  console.log('⏰ [CASHBACK JOB] Manual expire clicks triggered');
+  logger.info('⏰ [CASHBACK JOB] Manual expire clicks triggered');
 
   try {
     return await runExpireClicks();

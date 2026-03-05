@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/merchantauth';
 import { SyncService } from '../merchantservices/SyncService';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -61,7 +62,7 @@ router.post('/trigger', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error triggering sync:', error);
+    logger.error('Error triggering sync:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to trigger sync',
@@ -86,7 +87,7 @@ router.get('/status', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error getting sync status:', error);
+    logger.error('Error getting sync status:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get sync status',
@@ -113,7 +114,7 @@ router.get('/history', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error getting sync history:', error);
+    logger.error('Error getting sync history:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get sync history',
@@ -151,7 +152,7 @@ router.post('/schedule', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error scheduling auto-sync:', error);
+    logger.error('Error scheduling auto-sync:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to schedule auto-sync',
@@ -176,7 +177,7 @@ router.delete('/schedule', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error clearing auto-sync:', error);
+    logger.error('Error clearing auto-sync:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to clear auto-sync',
@@ -198,7 +199,7 @@ router.get('/statistics', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error getting sync statistics:', error);
+    logger.error('Error getting sync statistics:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get sync statistics',
@@ -229,7 +230,7 @@ router.post('/products', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error syncing products:', error);
+    logger.error('Error syncing products:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to sync products',
@@ -260,7 +261,7 @@ router.post('/orders', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error syncing orders:', error);
+    logger.error('Error syncing orders:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to sync orders',
@@ -291,7 +292,7 @@ router.post('/cashback', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error syncing cashback:', error);
+    logger.error('Error syncing cashback:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to sync cashback data',
@@ -321,7 +322,7 @@ router.post('/merchant', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error syncing merchant profile:', error);
+    logger.error('Error syncing merchant profile:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to sync merchant profile',
@@ -354,7 +355,7 @@ router.get('/health', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error checking sync health:', error);
+    logger.error('Error checking sync health:', error);
     res.status(500).json({
       success: false,
       message: 'Sync service health check failed',

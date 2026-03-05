@@ -1,5 +1,6 @@
 import { Merchant } from '../models/Merchant';
 import { EmailService } from '../services/EmailService';
+import { logger } from '../config/logger';
 import { v2 as cloudinary } from 'cloudinary';
 
 // Configure Cloudinary
@@ -67,7 +68,7 @@ export class DocumentVerificationService {
 
       // Check if Cloudinary is configured
       if (!process.env.CLOUDINARY_CLOUD_NAME) {
-        console.log('⚠️ Cloudinary not configured - using mock upload');
+        logger.info('⚠️ Cloudinary not configured - using mock upload');
         return {
           url: `https://mock-storage.com/documents/${merchantId}/${documentType}_${Date.now()}.${file.mimetype.split('/')[1]}`,
           publicId: `merchant_docs/${merchantId}/${documentType}_${Date.now()}`,
@@ -91,7 +92,7 @@ export class DocumentVerificationService {
         size: result.bytes
       };
     } catch (error: any) {
-      console.error('Document upload error:', error);
+      logger.error('Document upload error:', error);
       throw new Error(`Failed to upload document: ${error.message}`);
     }
   }
@@ -356,7 +357,7 @@ export class DocumentVerificationService {
         }
       }
     } catch (error) {
-      console.error('Error deleting from Cloudinary:', error);
+      logger.error('Error deleting from Cloudinary:', error);
       // Continue even if Cloudinary deletion fails
     }
 
@@ -393,7 +394,7 @@ export class DocumentVerificationService {
    */
   static async extractDocumentData(documentUrl: string, documentType: string): Promise<any> {
     // Placeholder for OCR integration (Tesseract, Google Vision, AWS Textract, etc.)
-    console.log('📄 OCR extraction placeholder called for:', documentType);
+    logger.info('📄 OCR extraction placeholder called for:', documentType);
 
     // Return mock data for now
     return {
@@ -412,7 +413,7 @@ export class DocumentVerificationService {
     documentNumber: string
   ): Promise<any> {
     // Placeholder for document validation APIs (GST verification, PAN verification, etc.)
-    console.log('🔍 Document validation placeholder called for:', documentType, documentNumber);
+    logger.info('🔍 Document validation placeholder called for:', documentType, documentNumber);
 
     return {
       validated: false,

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/merchantauth';
+import { logger } from '../config/logger';
 import DealRedemption from '../models/DealRedemption';
 import { Store } from '../models/Store';
 import mongoose from 'mongoose';
@@ -188,7 +189,7 @@ router.get('/verify/:code', async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    console.error('[MERCHANT DEAL VERIFY] Error:', error);
+    logger.error('[MERCHANT DEAL VERIFY] Error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to verify code',
@@ -324,7 +325,7 @@ router.post('/:code/use', async (req: Request, res: Response) => {
       });
     }
 
-    console.log(`✅ [MERCHANT DEAL USE] Code ${code} marked as used by merchant ${merchantId} at store ${storeId}`);
+    logger.info(`✅ [MERCHANT DEAL USE] Code ${code} marked as used by merchant ${merchantId} at store ${storeId}`);
 
     return res.json({
       success: true,
@@ -339,7 +340,7 @@ router.post('/:code/use', async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    console.error('[MERCHANT DEAL USE] Error:', error);
+    logger.error('[MERCHANT DEAL USE] Error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to redeem code',
@@ -482,7 +483,7 @@ router.get('/', async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    console.error('[MERCHANT DEAL LIST] Error:', error);
+    logger.error('[MERCHANT DEAL LIST] Error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch redemptions',
@@ -616,7 +617,7 @@ router.get('/stats', async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    console.error('[MERCHANT DEAL STATS] Error:', error);
+    logger.error('[MERCHANT DEAL STATS] Error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch stats',

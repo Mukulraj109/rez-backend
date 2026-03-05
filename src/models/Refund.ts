@@ -142,6 +142,7 @@ RefundSchema.index({ order: 1 });
 RefundSchema.index({ status: 1, createdAt: -1 });
 RefundSchema.index({ gatewayRefundId: 1 }, { sparse: true });
 RefundSchema.index({ paymentMethod: 1, status: 1 });
+RefundSchema.index({ user: 1, status: 1, createdAt: -1 });
 
 export const Refund = mongoose.model<IRefund>('Refund', RefundSchema);
 

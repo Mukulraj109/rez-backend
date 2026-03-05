@@ -28,6 +28,8 @@ import { optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams, productSchemas, commonSchemas } from '../middleware/validation';
 import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
+import { cacheMiddleware } from '../middleware/cacheMiddleware';
+import { CacheTTL } from '../config/redis';
 
 const router = Router();
 router.use(generalLimiter);
@@ -37,6 +39,7 @@ router.get('/',
   // generalLimiter,, // Disabled for development
   optionalAuth,
   validateQuery(productSchemas.getProducts),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_LIST, keyPrefix: 'products:list', condition: () => true }),
   getProducts
 );
 
@@ -47,6 +50,7 @@ router.get('/featured',
   validateQuery(Joi.object({
     limit: Joi.number().integer().min(1).max(20).default(10)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_FEATURED, keyPrefix: 'products:featured', condition: () => true }),
   getFeaturedProducts
 );
 
@@ -57,6 +61,7 @@ router.get('/new-arrivals',
   validateQuery(Joi.object({
     limit: Joi.number().integer().min(1).max(20).default(10)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_NEW_ARRIVALS, keyPrefix: 'products:newarrivals', condition: () => true }),
   getNewArrivals
 );
 
@@ -75,6 +80,7 @@ router.get('/search',
     inStock: Joi.boolean(),
     ...commonSchemas.pagination()
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_SEARCH, keyPrefix: 'products:search', condition: () => true }),
   searchProducts
 );
 
@@ -85,6 +91,7 @@ router.get('/suggestions',
   validateQuery(Joi.object({
     q: Joi.string().required().trim().min(1).max(100)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_SEARCH, keyPrefix: 'products:suggestions', condition: () => true }),
   getSearchSuggestions
 );
 
@@ -95,6 +102,7 @@ router.get('/popular-searches',
   validateQuery(Joi.object({
     limit: Joi.number().integer().min(1).max(20).default(10)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_LIST, keyPrefix: 'products:popsearch', condition: () => true }),
   getPopularSearches
 );
 
@@ -108,6 +116,7 @@ router.get('/trending',
     page: Joi.number().integer().min(1).default(1),
     days: Joi.number().integer().min(1).max(30).default(7)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_LIST, keyPrefix: 'products:trending', condition: () => true }),
   getTrendingProducts
 );
 
@@ -120,6 +129,7 @@ router.get('/popular',
     limit: Joi.number().integer().min(1).max(50).default(20),
     page: Joi.number().integer().min(1).default(1)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_LIST, keyPrefix: 'products:popular', condition: () => true }),
   getPopularProducts
 );
 
@@ -137,6 +147,7 @@ router.get('/nearby',
     limit: Joi.number().integer().min(1).max(50).default(20),
     page: Joi.number().integer().min(1).default(1)
   })),
+  cacheMiddleware({ ttl: 300, keyPrefix: 'products:nearby', condition: () => true }),
   getNearbyProducts
 );
 
@@ -149,6 +160,7 @@ router.get('/hot-deals',
     limit: Joi.number().integer().min(1).max(50).default(20),
     page: Joi.number().integer().min(1).default(1)
   })),
+  cacheMiddleware({ ttl: 300, keyPrefix: 'products:hotdeals', condition: () => true }),
   getHotDeals
 );
 
@@ -161,6 +173,7 @@ router.get('/similar',
     category: commonSchemas.objectId(),
     limit: Joi.number().integer().min(1).max(50).default(10)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_SEARCH, keyPrefix: 'products:similar', condition: () => true }),
   getSimilarProducts
 );
 
@@ -174,6 +187,7 @@ router.get('/category-section/:categorySlug',
   validateQuery(Joi.object({
     limit: Joi.number().integer().min(1).max(20).default(10)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_LIST, keyPrefix: 'products:catsection', condition: () => true }),
   getProductsByCategorySlugHomepage
 );
 
@@ -184,6 +198,7 @@ router.get('/:id',
   validateParams(Joi.object({
     id: commonSchemas.objectId().required()
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_DETAIL, keyPrefix: 'products:detail', condition: () => true }),
   getProductById
 );
 
@@ -197,6 +212,7 @@ router.get('/:productId/recommendations',
   validateQuery(Joi.object({
     limit: Joi.number().integer().min(1).max(20).default(6)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_RECOMMENDATIONS, keyPrefix: 'products:recs', condition: () => true }),
   getRecommendations
 );
 
@@ -218,6 +234,7 @@ router.get('/category/:categorySlug',
     limit: Joi.number().integer().min(1).max(100).default(20),
     search: Joi.string().trim().max(100),
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_LIST, keyPrefix: 'products:bycategory', condition: () => true }),
   getProductsByCategory
 );
 
@@ -231,6 +248,7 @@ router.get('/subcategory/:subcategorySlug',
   validateQuery(Joi.object({
     limit: Joi.number().integer().min(1).max(100).default(20)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_LIST, keyPrefix: 'products:bysubcat', condition: () => true }),
   getProductsBySubcategory
 );
 
@@ -249,6 +267,7 @@ router.get('/store/:storeId',
     sortBy: Joi.string().valid('price_low', 'price_high', 'rating', 'newest'),
     ...commonSchemas.pagination()
   })),
+  cacheMiddleware({ ttl: CacheTTL.STORE_PRODUCTS, keyPrefix: 'products:bystore', condition: () => true }),
   getProductsByStore
 );
 
@@ -272,6 +291,7 @@ router.get('/:id/analytics',
   validateQuery(Joi.object({
     location: Joi.string() // JSON stringified location object
   })),
+  cacheMiddleware({ ttl: 300, keyPrefix: 'products:analytics', condition: () => true }),
   getProductAnalytics
 );
 
@@ -285,6 +305,7 @@ router.get('/:id/frequently-bought',
   validateQuery(Joi.object({
     limit: Joi.number().integer().min(1).max(10).default(4)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_RECOMMENDATIONS, keyPrefix: 'products:fbt', condition: () => true }),
   getFrequentlyBoughtTogether
 );
 
@@ -295,6 +316,7 @@ router.get('/:id/bundles',
   validateParams(Joi.object({
     id: commonSchemas.objectId().required()
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_RECOMMENDATIONS, keyPrefix: 'products:bundles', condition: () => true }),
   getBundleProducts
 );
 
@@ -308,6 +330,7 @@ router.get('/:id/related',
   validateQuery(Joi.object({
     limit: Joi.number().integer().min(1).max(20).default(5)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_RECOMMENDATIONS, keyPrefix: 'products:related', condition: () => true }),
   getRelatedProducts
 );
 
@@ -322,6 +345,7 @@ router.get('/:id/availability',
     variantId: Joi.string(),
     quantity: Joi.number().integer().min(1).default(1)
   })),
+  cacheMiddleware({ ttl: CacheTTL.SHORT_CACHE, keyPrefix: 'products:avail', condition: () => true }),
   checkAvailability
 );
 

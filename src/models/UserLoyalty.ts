@@ -201,6 +201,8 @@ const UserLoyaltySchema = new Schema<IUserLoyalty>({
 
 UserLoyaltySchema.index({ userId: 1 });
 UserLoyaltySchema.index({ 'streak.current': -1 });
+UserLoyaltySchema.index({ userId: 1, 'streak.current': -1 });
+UserLoyaltySchema.index({ userId: 1, 'brandLoyalty.tier': 1 });
 
 export const UserLoyalty = mongoose.model<IUserLoyalty>('UserLoyalty', UserLoyaltySchema);
 export default UserLoyalty;

@@ -469,6 +469,8 @@ MerchantSchema.index({ 'businessAddress.city': 1 });
 MerchantSchema.index({ 'businessAddress.state': 1 });
 MerchantSchema.index({ 'onboarding.status': 1 });
 MerchantSchema.index({ 'onboarding.currentStep': 1 });
+MerchantSchema.index({ verificationStatus: 1, isActive: 1, createdAt: -1 });
+MerchantSchema.index({ phone: 1 });
 
 // Add static methods before creating the model
 MerchantSchema.statics.update = async function(id: string, updates: any) {

@@ -1,6 +1,7 @@
 import * as cron from 'node-cron';
 import streakService from '../services/streakService';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 /**
  * Streak Reset Job
@@ -25,15 +26,15 @@ const CRON_SCHEDULE = '5 0 * * *'; // Daily at 00:05 UTC
  */
 export function initializeStreakResetJob(): void {
   if (streakResetJob) {
-    console.log('⚠️ [STREAK RESET] Job already running');
+    logger.info('⚠️ [STREAK RESET] Job already running');
     return;
   }
 
-  console.log(`🔥 [STREAK RESET] Starting streak reset job (runs daily at 00:05 UTC)`);
+  logger.info(`🔥 [STREAK RESET] Starting streak reset job (runs daily at 00:05 UTC)`);
 
   streakResetJob = cron.schedule(CRON_SCHEDULE, async () => {
     if (isRunning) {
-      console.log('⏭️ [STREAK RESET] Previous job still running, skipping');
+      logger.info('⏭️ [STREAK RESET] Previous job still running, skipping');
       return;
     }
 
@@ -44,20 +45,20 @@ export function initializeStreakResetJob(): void {
     try {
       lockToken = await redisService.acquireLock(lockKey, 300);
       if (!lockToken) {
-        console.log('streak-reset skipped — lock held by another instance');
+        logger.info('streak-reset skipped — lock held by another instance');
         return;
       }
 
       const startTime = Date.now();
 
       try {
-        console.log('🔥 [STREAK RESET] Running streak reset check...');
+        logger.info('🔥 [STREAK RESET] Running streak reset check...');
         await streakService.checkBrokenStreaks();
         const duration = Date.now() - startTime;
-        console.log(`✅ [STREAK RESET] Completed in ${duration}ms`);
+        logger.info(`✅ [STREAK RESET] Completed in ${duration}ms`);
       } catch (error) {
         const duration = Date.now() - startTime;
-        console.error(`❌ [STREAK RESET] Failed after ${duration}ms:`, error);
+        logger.error(`❌ [STREAK RESET] Failed after ${duration}ms:`, error);
       }
     } finally {
       if (lockToken) {
@@ -67,7 +68,7 @@ export function initializeStreakResetJob(): void {
     }
   });
 
-  console.log('✅ [STREAK RESET] Streak reset job started successfully');
+  logger.info('✅ [STREAK RESET] Streak reset job started successfully');
 }
 
 /**
@@ -77,7 +78,7 @@ export function stopStreakResetJob(): void {
   if (streakResetJob) {
     streakResetJob.stop();
     streakResetJob = null;
-    console.log('🛑 [STREAK RESET] Job stopped');
+    logger.info('🛑 [STREAK RESET] Job stopped');
   }
 }
 

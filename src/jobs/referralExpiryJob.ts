@@ -1,6 +1,7 @@
 import * as cron from 'node-cron';
 import referralService from '../services/referralService';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 /**
  * Referral Expiry Job
@@ -17,7 +18,7 @@ const CRON_SCHEDULE = '0 3 * * *'; // Daily at 3:00 AM
 
 export async function runReferralExpiry(): Promise<void> {
   if (isRunning) {
-    console.log('⏭️ [REFERRAL_EXPIRY] Job already running, skipping');
+    logger.info('⏭️ [REFERRAL_EXPIRY] Job already running, skipping');
     return;
   }
 
@@ -28,20 +29,20 @@ export async function runReferralExpiry(): Promise<void> {
   try {
     lockToken = await redisService.acquireLock(lockKey, 300);
     if (!lockToken) {
-      console.log('referral-expiry skipped — lock held by another instance');
+      logger.info('referral-expiry skipped — lock held by another instance');
       return;
     }
 
     const startTime = Date.now();
 
-    console.log('⏰ [REFERRAL_EXPIRY] Starting referral expiry check...');
+    logger.info('⏰ [REFERRAL_EXPIRY] Starting referral expiry check...');
 
     const expiredCount = await referralService.markExpiredReferrals();
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`✅ [REFERRAL_EXPIRY] Completed in ${duration}s — ${expiredCount} referrals expired`);
+    logger.info(`✅ [REFERRAL_EXPIRY] Completed in ${duration}s — ${expiredCount} referrals expired`);
   } catch (error) {
-    console.error('❌ [REFERRAL_EXPIRY] Job failed:', error);
+    logger.error('❌ [REFERRAL_EXPIRY] Job failed:', error);
   } finally {
     if (lockToken) {
       await redisService.releaseLock(lockKey, lockToken);
@@ -59,13 +60,13 @@ export function initializeReferralExpiryJob(): void {
     runReferralExpiry().catch(console.error);
   });
 
-  console.log('🔄 [REFERRAL_EXPIRY] Scheduled: daily at 3:00 AM');
+  logger.info('🔄 [REFERRAL_EXPIRY] Scheduled: daily at 3:00 AM');
 }
 
 export function stopReferralExpiryJob(): void {
   if (expiryJob) {
     expiryJob.stop();
     expiryJob = null;
-    console.log('🛑 [REFERRAL_EXPIRY] Job stopped');
+    logger.info('🛑 [REFERRAL_EXPIRY] Job stopped');
   }
 }

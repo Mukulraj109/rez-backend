@@ -6,6 +6,7 @@
 
 import { Request, Response } from 'express';
 import mongoose, { Types } from 'mongoose';
+import { logger } from '../../config/logger';
 import PriveOffer from '../../models/PriveOffer';
 import PriveVoucher, { calculateVoucherValue, getDefaultExpiry, VoucherType } from '../../models/PriveVoucher';
 import { UserReputation, PILLAR_WEIGHTS, ELIGIBILITY_THRESHOLDS } from '../../models/UserReputation';
@@ -85,7 +86,7 @@ export const getOffers = async (req: Request, res: Response) => {
       },
     }, 'Privé offers fetched');
   } catch (error) {
-    console.error('[Admin Privé] Error fetching offers:', error);
+    logger.error('[Admin Privé] Error fetching offers:', error);
     return sendError(res, 'Failed to fetch Privé offers', 500);
   }
 };
@@ -121,7 +122,7 @@ export const createOffer = async (req: Request, res: Response) => {
 
     return sendSuccess(res, offer, 'Privé offer created', 201);
   } catch (error: any) {
-    console.error('[Admin Privé] Error creating offer:', error);
+    logger.error('[Admin Privé] Error creating offer:', error);
     if (error.name === 'ValidationError') {
       return sendError(res, error.message, 400);
     }
@@ -156,7 +157,7 @@ export const updateOffer = async (req: Request, res: Response) => {
 
     return sendSuccess(res, offer, 'Privé offer updated');
   } catch (error: any) {
-    console.error('[Admin Privé] Error updating offer:', error);
+    logger.error('[Admin Privé] Error updating offer:', error);
     if (error.name === 'ValidationError') {
       return sendError(res, error.message, 400);
     }
@@ -186,7 +187,7 @@ export const deleteOffer = async (req: Request, res: Response) => {
 
     return sendSuccess(res, offer, 'Privé offer deactivated');
   } catch (error) {
-    console.error('[Admin Privé] Error deleting offer:', error);
+    logger.error('[Admin Privé] Error deleting offer:', error);
     return sendError(res, 'Failed to delete Privé offer', 500);
   }
 };
@@ -211,7 +212,7 @@ export const toggleOfferStatus = async (req: Request, res: Response) => {
 
     return sendSuccess(res, offer, `Privé offer ${offer.isActive ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin Privé] Error toggling offer status:', error);
+    logger.error('[Admin Privé] Error toggling offer status:', error);
     return sendError(res, 'Failed to toggle offer status', 500);
   }
 };
@@ -270,7 +271,7 @@ export const getVouchers = async (req: Request, res: Response) => {
       },
     }, 'Privé vouchers fetched');
   } catch (error) {
-    console.error('[Admin Privé] Error fetching vouchers:', error);
+    logger.error('[Admin Privé] Error fetching vouchers:', error);
     return sendError(res, 'Failed to fetch Privé vouchers', 500);
   }
 };
@@ -346,7 +347,7 @@ export const invalidateVoucher = async (req: Request, res: Response) => {
       refunded: voucher.coinAmount,
     }, 'Voucher invalidated and coins refunded');
   } catch (error) {
-    console.error('[Admin Privé] Error invalidating voucher:', error);
+    logger.error('[Admin Privé] Error invalidating voucher:', error);
     return sendError(res, 'Failed to invalidate voucher', 500);
   }
 };
@@ -425,7 +426,7 @@ export const extendVoucher = async (req: Request, res: Response) => {
 
     return sendSuccess(res, voucher, 'Voucher expiry extended');
   } catch (error) {
-    console.error('[Admin Privé] Error extending voucher:', error);
+    logger.error('[Admin Privé] Error extending voucher:', error);
     return sendError(res, 'Failed to extend voucher', 500);
   }
 };
@@ -495,7 +496,7 @@ export const issueVoucher = async (req: Request, res: Response) => {
 
     return sendSuccess(res, voucher, 'Voucher issued successfully', 201);
   } catch (error: any) {
-    console.error('[Admin Privé] Error issuing voucher:', error);
+    logger.error('[Admin Privé] Error issuing voucher:', error);
     if (error.name === 'ValidationError') {
       return sendError(res, error.message, 400);
     }
@@ -540,7 +541,7 @@ export const getUserReputation = async (req: Request, res: Response) => {
       pillarWeights: PILLAR_WEIGHTS,
     }, 'User reputation fetched');
   } catch (error) {
-    console.error('[Admin Privé] Error fetching user reputation:', error);
+    logger.error('[Admin Privé] Error fetching user reputation:', error);
     return sendError(res, 'Failed to fetch user reputation', 500);
   }
 };
@@ -625,7 +626,7 @@ export const overrideUserReputation = async (req: Request, res: Response) => {
       newEligibility: result.isEligible,
     }, 'User reputation overridden');
   } catch (error) {
-    console.error('[Admin Privé] Error overriding reputation:', error);
+    logger.error('[Admin Privé] Error overriding reputation:', error);
     return sendError(res, 'Failed to override user reputation', 500);
   }
 };
@@ -663,7 +664,7 @@ export const recalculateUserReputation = async (req: Request, res: Response) => 
       lastCalculated: reputation.lastCalculated,
     }, 'Reputation recalculated from data');
   } catch (error) {
-    console.error('[Admin Privé] Error recalculating reputation:', error);
+    logger.error('[Admin Privé] Error recalculating reputation:', error);
     return sendError(res, 'Failed to recalculate reputation', 500);
   }
 };
@@ -799,7 +800,7 @@ export const getAnalytics = async (req: Request, res: Response) => {
       scoreDistribution,
     }, 'Privé analytics fetched');
   } catch (error) {
-    console.error('[Admin Privé] Error fetching analytics:', error);
+    logger.error('[Admin Privé] Error fetching analytics:', error);
     return sendError(res, 'Failed to fetch Privé analytics', 500);
   }
 };

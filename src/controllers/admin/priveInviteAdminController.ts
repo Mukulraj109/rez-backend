@@ -6,6 +6,7 @@
 
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
+import { logger } from '../../config/logger';
 import PriveAccess from '../../models/PriveAccess';
 import PriveInviteCode from '../../models/PriveInviteCode';
 import { User } from '../../models/User';
@@ -60,7 +61,7 @@ export const getAccessList = async (req: Request, res: Response) => {
 
     return sendPaginated(res, records, page, limit, total);
   } catch (error: any) {
-    console.error('[AdminPriveInvite] Error getting access list:', error);
+    logger.error('[AdminPriveInvite] Error getting access list:', error);
     return sendError(res, 'Failed to load access list');
   }
 };
@@ -110,7 +111,7 @@ export const grantAccess = async (req: Request, res: Response) => {
 
     return sendSuccess(res, { access }, 'Privé access granted successfully');
   } catch (error: any) {
-    console.error('[AdminPriveInvite] Error granting access:', error);
+    logger.error('[AdminPriveInvite] Error granting access:', error);
     return sendBadRequest(res, error.message || 'Failed to grant access');
   }
 };
@@ -144,7 +145,7 @@ export const revokeAccess = async (req: Request, res: Response) => {
       return sendSuccess(res, null, 'Privé access revoked');
     }
   } catch (error: any) {
-    console.error('[AdminPriveInvite] Error revoking access:', error);
+    logger.error('[AdminPriveInvite] Error revoking access:', error);
     return sendBadRequest(res, error.message || 'Failed to revoke access');
   }
 };
@@ -176,7 +177,7 @@ export const getInviteCodes = async (req: Request, res: Response) => {
 
     return sendPaginated(res, codes, page, limit, total);
   } catch (error: any) {
-    console.error('[AdminPriveInvite] Error getting codes:', error);
+    logger.error('[AdminPriveInvite] Error getting codes:', error);
     return sendError(res, 'Failed to load invite codes');
   }
 };
@@ -202,7 +203,7 @@ export const deactivateCode = async (req: Request, res: Response) => {
 
     return sendSuccess(res, { code }, 'Invite code deactivated');
   } catch (error: any) {
-    console.error('[AdminPriveInvite] Error deactivating code:', error);
+    logger.error('[AdminPriveInvite] Error deactivating code:', error);
     return sendError(res, 'Failed to deactivate code');
   }
 };
@@ -272,7 +273,7 @@ export const getInviteAnalytics = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[AdminPriveInvite] Error getting analytics:', error);
+    logger.error('[AdminPriveInvite] Error getting analytics:', error);
     return sendError(res, 'Failed to load analytics');
   }
 };
@@ -286,7 +287,7 @@ export const getInviteConfig = async (req: Request, res: Response) => {
     const config = await priveAccessService.getInviteConfig();
     return sendSuccess(res, config);
   } catch (error: any) {
-    console.error('[AdminPriveInvite] Error getting config:', error);
+    logger.error('[AdminPriveInvite] Error getting config:', error);
     return sendError(res, 'Failed to load configuration');
   }
 };
@@ -321,7 +322,7 @@ export const updateInviteConfig = async (req: Request, res: Response) => {
 
     return sendSuccess(res, walletConfig.priveInviteConfig, 'Configuration updated');
   } catch (error: any) {
-    console.error('[AdminPriveInvite] Error updating config:', error);
+    logger.error('[AdminPriveInvite] Error updating config:', error);
     return sendError(res, 'Failed to update configuration');
   }
 };

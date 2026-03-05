@@ -4,6 +4,7 @@ import { User } from '../models/User';
 import { Notification } from '../models/Notification';
 import mongoose from 'mongoose';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 /**
  * Trial Expiry Notification Job
@@ -73,7 +74,7 @@ const sendTrialNotification = async (payload: ITrialNotificationPayload) => {
       isRead: false,
     });
 
-    console.log(`[TRIAL NOTIFICATION] Sent to user ${userId}: ${daysRemaining} days remaining`);
+    logger.info(`[TRIAL NOTIFICATION] Sent to user ${userId}: ${daysRemaining} days remaining`);
 
     // Send push notification if user has push notifications enabled
     try {
@@ -82,10 +83,10 @@ const sendTrialNotification = async (payload: ITrialNotificationPayload) => {
       if (user?.preferences?.notifications?.push) {
         // Push notification would be sent here
         // This depends on your push notification service (Firebase, OneSignal, etc.)
-        console.log(`[TRIAL PUSH NOTIFICATION] Would be sent to user ${userId}`);
+        logger.info(`[TRIAL PUSH NOTIFICATION] Would be sent to user ${userId}`);
       }
     } catch (error) {
-      console.warn(`[TRIAL NOTIFICATION] Could not send push notification for user ${userId}:`, error);
+      logger.warn(`[TRIAL NOTIFICATION] Could not send push notification for user ${userId}:`, error);
     }
 
     // Send email notification
@@ -95,14 +96,14 @@ const sendTrialNotification = async (payload: ITrialNotificationPayload) => {
       if (user?.email && user.preferences?.notifications?.email) {
         // Email notification would be sent here
         // This depends on your email service (SendGrid, AWS SES, etc.)
-        console.log(`[TRIAL EMAIL NOTIFICATION] Would be sent to ${user.email}`);
+        logger.info(`[TRIAL EMAIL NOTIFICATION] Would be sent to ${user.email}`);
       }
     } catch (error) {
-      console.warn(`[TRIAL NOTIFICATION] Could not send email for user ${userId}:`, error);
+      logger.warn(`[TRIAL NOTIFICATION] Could not send email for user ${userId}:`, error);
     }
 
   } catch (error) {
-    console.error('[TRIAL NOTIFICATION] Error sending notification:', error);
+    logger.error('[TRIAL NOTIFICATION] Error sending notification:', error);
     throw error;
   }
 };
@@ -112,7 +113,7 @@ const sendTrialNotification = async (payload: ITrialNotificationPayload) => {
  */
 const checkExpiringTrials = async () => {
   try {
-    console.log('[TRIAL EXPIRY JOB] Starting trial expiry check...');
+    logger.info('[TRIAL EXPIRY JOB] Starting trial expiry check...');
 
     const now = new Date();
 
@@ -223,16 +224,16 @@ const checkExpiringTrials = async () => {
           { new: true }
         );
 
-        console.log(`[TRIAL EXPIRY JOB] Auto-downgraded subscription ${subscription._id} to free tier`);
+        logger.info(`[TRIAL EXPIRY JOB] Auto-downgraded subscription ${subscription._id} to free tier`);
       }
     }
 
-    console.log(
+    logger.info(
       `[TRIAL EXPIRY JOB] Completed. Processed: ${threeDaysTrials.length} (3-day), ` +
       `${oneDayTrials.length} (1-day), ${todayTrials.length} (today)`
     );
   } catch (error) {
-    console.error('[TRIAL EXPIRY JOB] Error checking expiring trials:', error);
+    logger.error('[TRIAL EXPIRY JOB] Error checking expiring trials:', error);
   }
 };
 
@@ -248,21 +249,21 @@ export const initializeTrialExpiryJob = () => {
       const lockKey = 'job:trial-expiry';
       const lockToken = await redisService.acquireLock(lockKey, 300);
       if (!lockToken) {
-        console.log('trial-expiry skipped — lock held by another instance');
+        logger.info('trial-expiry skipped — lock held by another instance');
         return;
       }
 
       try {
-        console.log('[TRIAL EXPIRY JOB] Scheduled job triggered');
+        logger.info('[TRIAL EXPIRY JOB] Scheduled job triggered');
         await checkExpiringTrials();
       } finally {
         await redisService.releaseLock(lockKey, lockToken);
       }
     });
 
-    console.log('[TRIAL EXPIRY JOB] Initialized successfully (runs daily at 9:00 AM)');
+    logger.info('[TRIAL EXPIRY JOB] Initialized successfully (runs daily at 9:00 AM)');
   } catch (error) {
-    console.error('[TRIAL EXPIRY JOB] Failed to initialize:', error);
+    logger.error('[TRIAL EXPIRY JOB] Failed to initialize:', error);
   }
 };
 
@@ -270,7 +271,7 @@ export const initializeTrialExpiryJob = () => {
  * Manual trigger for testing
  */
 export const triggerTrialExpiryCheck = async () => {
-  console.log('[TRIAL EXPIRY JOB] Manual trigger');
+  logger.info('[TRIAL EXPIRY JOB] Manual trigger');
   await checkExpiringTrials();
 };
 

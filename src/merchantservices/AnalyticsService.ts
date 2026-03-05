@@ -8,6 +8,7 @@
 import { Order } from '../models/Order';
 import { Product } from '../models/Product';
 import { Store } from '../models/Store';
+import { logger } from '../config/logger';
 import mongoose, { Types } from 'mongoose';
 
 export interface SalesOverview {
@@ -382,7 +383,7 @@ export class AnalyticsService {
     ]);
 
     // Log for debugging
-    console.log('[AnalyticsService] getTopSellingProducts result:', JSON.stringify(topProducts.slice(0, 2), null, 2));
+    logger.info('[AnalyticsService] getTopSellingProducts result:', JSON.stringify(topProducts.slice(0, 2), null, 2));
 
     return topProducts;
   }

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Video } from '../models/Video';
+import { logger } from '../config/logger';
 import engagementRewardService from '../services/engagementRewardService';
 
 /**
@@ -72,7 +73,7 @@ export const createUgcReel = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error creating UGC reel:', error);
+    logger.error('Error creating UGC reel:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to create reel' });
   }
 };
@@ -130,7 +131,7 @@ export const getMyReels = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching my reels:', error);
+    logger.error('Error fetching my reels:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch reels' });
   }
 };
@@ -191,7 +192,7 @@ export const getUgcFeed = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching UGC feed:', error);
+    logger.error('Error fetching UGC feed:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch UGC feed' });
   }
 };
@@ -250,7 +251,7 @@ export const getPendingReels = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching pending UGC reels:', error);
+    logger.error('Error fetching pending UGC reels:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch pending reels' });
   }
 };
@@ -317,7 +318,7 @@ export const moderateUgcReel = async (req: Request, res: Response) => {
         }
       }
     } catch (rewardError) {
-      console.error('[UGC MODERATION] Failed to update reward:', rewardError);
+      logger.error('[UGC MODERATION] Failed to update reward:', rewardError);
     }
 
     res.status(200).json({
@@ -330,7 +331,7 @@ export const moderateUgcReel = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error moderating UGC reel:', error);
+    logger.error('Error moderating UGC reel:', error);
     res.status(500).json({ success: false, error: 'Failed to moderate reel' });
   }
 };

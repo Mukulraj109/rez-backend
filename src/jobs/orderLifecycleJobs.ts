@@ -12,6 +12,7 @@ import { Product } from '../models/Product';
 import orderSocketService from '../services/orderSocketService';
 import { runOrderAlertChecks } from '../utils/orderAlerts';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 /**
  * Stuck Order Detection
@@ -24,7 +25,7 @@ async function runStuckOrderDetection(): Promise<void> {
   const lockKey = 'job:order-lifecycle';
   const lockToken = await redisService.acquireLock(lockKey, 300);
   if (!lockToken) {
-    console.log('order-lifecycle skipped — lock held by another instance');
+    logger.info('order-lifecycle skipped — lock held by another instance');
     return;
   }
 
@@ -64,14 +65,14 @@ async function runStuckOrderDetection(): Promise<void> {
           },
         });
 
-        console.log(`[ORDER LIFECYCLE] Auto-cancelled unpaid order: ${order.orderNumber}`);
+        logger.info(`[ORDER LIFECYCLE] Auto-cancelled unpaid order: ${order.orderNumber}`);
       } catch (err) {
-        console.error(`[ORDER LIFECYCLE] Failed to auto-cancel order ${order.orderNumber}:`, err);
+        logger.error(`[ORDER LIFECYCLE] Failed to auto-cancel order ${order.orderNumber}:`, err);
       }
     }
 
     if (unpaidOrders.length > 0) {
-      console.log(`[ORDER LIFECYCLE] Auto-cancelled ${unpaidOrders.length} unpaid orders`);
+      logger.info(`[ORDER LIFECYCLE] Auto-cancelled ${unpaidOrders.length} unpaid orders`);
     }
 
     // 2. Alert for orders stuck in confirmed/preparing for > 2 hours
@@ -93,7 +94,7 @@ async function runStuckOrderDetection(): Promise<void> {
         threshold: '2 hours',
         timestamp: now,
       });
-      console.log(`[ORDER LIFECYCLE] Alert: ${stuckPrepOrders.length} orders stuck in preparation`);
+      logger.info(`[ORDER LIFECYCLE] Alert: ${stuckPrepOrders.length} orders stuck in preparation`);
     }
 
     // 3. Alert for orders stuck in dispatched for > 3 hours
@@ -135,10 +136,10 @@ async function runStuckOrderDetection(): Promise<void> {
         }
       }
 
-      console.log(`[ORDER LIFECYCLE] Alert: ${stuckDispatchOrders.length} orders stuck in delivery`);
+      logger.info(`[ORDER LIFECYCLE] Alert: ${stuckDispatchOrders.length} orders stuck in delivery`);
     }
   } catch (error) {
-    console.error('[ORDER LIFECYCLE] Stuck order detection failed:', error);
+    logger.error('[ORDER LIFECYCLE] Stuck order detection failed:', error);
   } finally {
     await redisService.releaseLock(lockKey, lockToken);
   }
@@ -154,7 +155,7 @@ async function runPaymentVerificationRecovery(): Promise<void> {
   const lockKey = 'job:order-lifecycle';
   const lockToken = await redisService.acquireLock(lockKey, 300);
   if (!lockToken) {
-    console.log('order-lifecycle skipped — lock held by another instance');
+    logger.info('order-lifecycle skipped — lock held by another instance');
     return;
   }
 
@@ -205,13 +206,13 @@ async function runPaymentVerificationRecovery(): Promise<void> {
               },
             });
             recovered++;
-            console.log(`[ORDER LIFECYCLE] Payment recovered for order: ${order.orderNumber}`);
+            logger.info(`[ORDER LIFECYCLE] Payment recovered for order: ${order.orderNumber}`);
           }
         } catch {
           // Gateway verification failed — not an error, just couldn't verify
         }
       } catch (err) {
-        console.error(`[ORDER LIFECYCLE] Payment recovery failed for ${order.orderNumber}:`, err);
+        logger.error(`[ORDER LIFECYCLE] Payment recovery failed for ${order.orderNumber}:`, err);
       }
     }
 
@@ -254,15 +255,15 @@ async function runPaymentVerificationRecovery(): Promise<void> {
         });
         autoCancelled++;
       } catch (err) {
-        console.error(`[ORDER LIFECYCLE] Auto-cancel failed for ${order.orderNumber}:`, err);
+        logger.error(`[ORDER LIFECYCLE] Auto-cancel failed for ${order.orderNumber}:`, err);
       }
     }
 
     if (recovered > 0 || autoCancelled > 0) {
-      console.log(`[ORDER LIFECYCLE] Payment recovery: ${recovered} recovered, ${autoCancelled} auto-cancelled`);
+      logger.info(`[ORDER LIFECYCLE] Payment recovery: ${recovered} recovered, ${autoCancelled} auto-cancelled`);
     }
   } catch (error) {
-    console.error('[ORDER LIFECYCLE] Payment verification recovery failed:', error);
+    logger.error('[ORDER LIFECYCLE] Payment verification recovery failed:', error);
   } finally {
     await redisService.releaseLock(lockKey, lockToken);
   }
@@ -278,7 +279,7 @@ async function runReturnWindowCheck(): Promise<void> {
   const lockKey = 'job:order-lifecycle';
   const lockToken = await redisService.acquireLock(lockKey, 300);
   if (!lockToken) {
-    console.log('order-lifecycle skipped — lock held by another instance');
+    logger.info('order-lifecycle skipped — lock held by another instance');
     return;
   }
 
@@ -295,10 +296,10 @@ async function runReturnWindowCheck(): Promise<void> {
     });
 
     if (expiredReturnOrders > 0) {
-      console.log(`[ORDER LIFECYCLE] ${expiredReturnOrders} orders passed the 24h return window`);
+      logger.info(`[ORDER LIFECYCLE] ${expiredReturnOrders} orders passed the 24h return window`);
     }
   } catch (error) {
-    console.error('[ORDER LIFECYCLE] Return window check failed:', error);
+    logger.error('[ORDER LIFECYCLE] Return window check failed:', error);
   } finally {
     await redisService.releaseLock(lockKey, lockToken);
   }
@@ -312,25 +313,25 @@ export function initializeOrderLifecycleJobs(): void {
   cron.schedule('*/10 * * * *', () => {
     runStuckOrderDetection().catch(console.error);
   });
-  console.log('  Order stuck detection job started (runs every 10 min)');
+  logger.info('  Order stuck detection job started (runs every 10 min)');
 
   // Payment verification recovery — every 15 minutes
   cron.schedule('*/15 * * * *', () => {
     runPaymentVerificationRecovery().catch(console.error);
   });
-  console.log('  Payment verification recovery job started (runs every 15 min)');
+  logger.info('  Payment verification recovery job started (runs every 15 min)');
 
   // Return window logging — daily at midnight
   cron.schedule('0 0 * * *', () => {
     runReturnWindowCheck().catch(console.error);
   });
-  console.log('  Return window check job started (runs daily at midnight)');
+  logger.info('  Return window check job started (runs daily at midnight)');
 
   // Order alert checks — every 30 minutes
   cron.schedule('*/30 * * * *', () => {
     runOrderAlertChecks().catch(console.error);
   });
-  console.log('  Order alert checks started (runs every 30 min)');
+  logger.info('  Order alert checks started (runs every 30 min)');
 }
 
 // Export individual functions for testing

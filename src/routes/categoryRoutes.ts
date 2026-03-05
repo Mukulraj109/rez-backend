@@ -20,6 +20,8 @@ import { optionalAuth } from '../middleware/auth';
 import { validateQuery, validateParams } from '../middleware/validation';
 import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
+import { cacheMiddleware } from '../middleware/cacheMiddleware';
+import { CacheTTL } from '../config/redis';
 
 const router = Router();
 router.use(generalLimiter);
@@ -37,6 +39,7 @@ router.get('/',
       Joi.string().valid('true', 'false')
     )
   })),
+  cacheMiddleware({ ttl: CacheTTL.CATEGORY_LIST, keyPrefix: 'categories:list', condition: () => true }),
   getCategories
 );
 
@@ -47,6 +50,7 @@ router.get('/tree',
   validateQuery(Joi.object({
     type: Joi.string().valid('going_out', 'home_delivery', 'earn', 'play', 'general')
   })),
+  cacheMiddleware({ ttl: CacheTTL.CATEGORY_LIST, keyPrefix: 'categories:tree', condition: () => true }),
   getCategoryTree
 );
 
@@ -57,6 +61,7 @@ router.get('/root',
   validateQuery(Joi.object({
     type: Joi.string().valid('going_out', 'home_delivery', 'earn', 'play', 'general')
   })),
+  cacheMiddleware({ ttl: CacheTTL.CATEGORY_LIST, keyPrefix: 'categories:root', condition: () => true }),
   getRootCategories
 );
 
@@ -68,6 +73,7 @@ router.get('/featured',
     type: Joi.string().valid('going_out', 'home_delivery', 'earn', 'play', 'general'),
     limit: Joi.number().integer().min(1).max(20).default(6)
   })),
+  cacheMiddleware({ ttl: CacheTTL.CATEGORY_LIST, keyPrefix: 'categories:featured', condition: () => true }),
   getFeaturedCategories
 );
 
@@ -78,6 +84,7 @@ router.get('/with-counts',
   validateQuery(Joi.object({
     type: Joi.string().valid('going_out', 'home_delivery', 'earn', 'play', 'general').default('general')
   })),
+  cacheMiddleware({ ttl: CacheTTL.CATEGORY_LIST, keyPrefix: 'categories:counts', condition: () => true }),
   getCategoriesWithCounts
 );
 
@@ -87,6 +94,7 @@ router.get('/best-discount',
   validateQuery(Joi.object({
     limit: Joi.number().integer().min(1).max(20).default(10)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_LIST, keyPrefix: 'categories:discount', condition: () => true }),
   getBestDiscountCategories
 );
 
@@ -96,6 +104,7 @@ router.get('/best-seller',
   validateQuery(Joi.object({
     limit: Joi.number().integer().min(1).max(20).default(10)
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_LIST, keyPrefix: 'categories:bestseller', condition: () => true }),
   getBestSellerCategories
 );
 
@@ -105,6 +114,7 @@ router.get('/:slug/page-config',
   validateParams(Joi.object({
     slug: Joi.string().required()
   })),
+  cacheMiddleware({ ttl: CacheTTL.CATEGORY_DETAIL, keyPrefix: 'categories:pageconfig', condition: () => true }),
   getCategoryPageConfig
 );
 
@@ -115,6 +125,7 @@ router.get('/:slug',
   validateParams(Joi.object({
     slug: Joi.string().required()
   })),
+  cacheMiddleware({ ttl: CacheTTL.CATEGORY_DETAIL, keyPrefix: 'categories:detail', condition: () => true }),
   getCategoryBySlug
 );
 
@@ -124,6 +135,7 @@ router.get('/:slug/vibes',
   validateParams(Joi.object({
     slug: Joi.string().required()
   })),
+  cacheMiddleware({ ttl: CacheTTL.CATEGORY_DETAIL, keyPrefix: 'categories:vibes', condition: () => true }),
   getCategoryVibes
 );
 
@@ -133,6 +145,7 @@ router.get('/:slug/occasions',
   validateParams(Joi.object({
     slug: Joi.string().required()
   })),
+  cacheMiddleware({ ttl: CacheTTL.CATEGORY_DETAIL, keyPrefix: 'categories:occasions', condition: () => true }),
   getCategoryOccasions
 );
 
@@ -145,6 +158,7 @@ router.get('/:slug/hashtags',
   validateQuery(Joi.object({
     limit: Joi.number().integer().min(1).max(20).default(6)
   })),
+  cacheMiddleware({ ttl: CacheTTL.CATEGORY_DETAIL, keyPrefix: 'categories:hashtags', condition: () => true }),
   getCategoryHashtags
 );
 
@@ -154,6 +168,7 @@ router.get('/:slug/ai-suggestions',
   validateParams(Joi.object({
     slug: Joi.string().required()
   })),
+  cacheMiddleware({ ttl: CacheTTL.PRODUCT_SEARCH, keyPrefix: 'categories:ai', condition: () => true }),
   getCategoryAISuggestions
 );
 
@@ -163,6 +178,7 @@ router.get('/:slug/loyalty-stats',
   validateParams(Joi.object({
     slug: Joi.string().required()
   })),
+  cacheMiddleware({ ttl: 300, keyPrefix: 'categories:loyalty', condition: () => true }),
   getCategoryLoyaltyStats
 );
 
@@ -175,6 +191,7 @@ router.get('/:slug/recent-orders',
   validateQuery(Joi.object({
     limit: Joi.number().integer().min(1).max(10).default(5)
   })),
+  cacheMiddleware({ ttl: CacheTTL.SHORT_CACHE, keyPrefix: 'categories:recentorders', condition: () => true }),
   getRecentOrders
 );
 
