@@ -490,8 +490,6 @@ VideoSchema.index({ tags: 1, isPublished: 1 });
 VideoSchema.index({ hashtags: 1, isPublished: 1 });
 VideoSchema.index({ 'engagement.views': -1, isPublished: 1 });
 VideoSchema.index({ 'engagement.likes': -1, isPublished: 1 });
-VideoSchema.index({ moderationStatus: 1 });
-VideoSchema.index({ publishedAt: -1 });
 VideoSchema.index({ bookmarkedBy: 1 });
 VideoSchema.index({ likedBy: 1 });
 

@@ -133,7 +133,6 @@ const MallAffiliateClickSchema = new Schema<IMallAffiliateClick>({
   },
   expiresAt: {
     type: Date,
-    index: true,
     default: function () {
       const expiry = new Date();
       expiry.setDate(expiry.getDate() + 30);

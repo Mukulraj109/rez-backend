@@ -29,7 +29,7 @@ class StreakService {
     userId: string,
     type: 'login' | 'order' | 'review'
   ): Promise<IUserStreak> {
-    let streak = await UserStreak.findOne({ user: userId, type }).lean();
+    let streak = await UserStreak.findOne({ user: userId, type });
 
     if (!streak) {
       streak = await UserStreak.create({

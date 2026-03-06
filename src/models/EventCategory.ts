@@ -85,7 +85,6 @@ const EventCategorySchema = new Schema<IEventCategory>({
 });
 
 // Indexes
-EventCategorySchema.index({ slug: 1 }, { unique: true });
 EventCategorySchema.index({ isActive: 1, sortOrder: 1 });
 EventCategorySchema.index({ featured: 1, isActive: 1 });
 EventCategorySchema.index({ parentCategory: 1 });

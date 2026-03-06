@@ -236,7 +236,6 @@ ArticleSchema.index({ category: 1, isPublished: 1, publishedAt: -1 });
 ArticleSchema.index({ isFeatured: 1, isPublished: 1 });
 ArticleSchema.index({ tags: 1, isPublished: 1 });
 ArticleSchema.index({ 'analytics.totalViews': -1, isPublished: 1 });
-ArticleSchema.index({ moderationStatus: 1 });
 ArticleSchema.index({ publishedAt: -1 });
 
 // Text search index

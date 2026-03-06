@@ -57,8 +57,7 @@ const ShareSchema: Schema = new Schema(
     trackingCode: {
       type: String,
       required: true,
-      unique: true,
-      index: true
+      unique: true
     },
     clicks: {
       type: Number,
@@ -95,7 +94,6 @@ const ShareSchema: Schema = new Schema(
 
 // Compound indexes
 ShareSchema.index({ user: 1, contentType: 1, createdAt: -1 });
-ShareSchema.index({ trackingCode: 1 });
 ShareSchema.index({ status: 1, expiresAt: 1 });
 ShareSchema.index({ contentType: 1, status: 1, createdAt: -1 });
 

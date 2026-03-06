@@ -259,7 +259,6 @@ TransactionSchema.index({ user: 1, type: 1, createdAt: -1 });
 TransactionSchema.index({ user: 1, category: 1, createdAt: -1 });
 TransactionSchema.index({ 'status.current': 1, createdAt: -1 });
 TransactionSchema.index({ 'source.type': 1, 'source.reference': 1 });
-TransactionSchema.index({ expiresAt: 1 });
 TransactionSchema.index({ scheduledAt: 1 });
 TransactionSchema.index({ processedAt: -1 });
 

@@ -162,7 +162,6 @@ const HealthRecordSchema = new Schema<IHealthRecord>({
 });
 
 // Indexes
-HealthRecordSchema.index({ recordNumber: 1 }, { unique: true });
 HealthRecordSchema.index({ userId: 1, recordType: 1 });
 HealthRecordSchema.index({ userId: 1, isArchived: 1 });
 HealthRecordSchema.index({ userId: 1, createdAt: -1 });

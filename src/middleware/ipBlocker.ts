@@ -15,6 +15,11 @@ const VIOLATION_KEY_PREFIX = 'ip_blocker:violations:';
 const MAX_VIOLATIONS = 10;
 const VIOLATION_TTL = 86400; // 24 hours in seconds
 
+// In-memory cache to avoid Redis lookup on every single request
+let cachedBlockedSet: Set<string> = new Set();
+let cacheTimestamp = 0;
+const CACHE_TTL_MS = 30_000; // Refresh from Redis every 30s
+
 /**
  * IP Blocker Middleware
  * Checks if the requesting IP is blocked
@@ -22,9 +27,16 @@ const VIOLATION_TTL = 86400; // 24 hours in seconds
 export const ipBlocker = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
-    const blocked = await isIPBlocked(clientIP);
 
-    if (blocked) {
+    // Use in-memory cache; refresh from Redis periodically
+    const now = Date.now();
+    if (now - cacheTimestamp > CACHE_TTL_MS) {
+      const data = await redisService.get<string[]>(BLOCKED_IPS_KEY);
+      cachedBlockedSet = new Set(data || []);
+      cacheTimestamp = now;
+    }
+
+    if (cachedBlockedSet.has(clientIP)) {
       return res.status(403).json({
         success: false,
         error: 'Your IP has been blocked due to suspicious activity. Please contact support if you believe this is a mistake.'
@@ -56,6 +68,8 @@ export const blockIP = async (ip: string, reason?: string): Promise<void> => {
   const blockedSet = await getBlockedSet();
   blockedSet.add(ip);
   await saveBlockedSet(blockedSet);
+  cachedBlockedSet = blockedSet; // Sync in-memory cache immediately
+  cacheTimestamp = Date.now();
   logger.info(`[IP_BLOCKER] Blocked IP: ${ip}${reason ? ` - Reason: ${reason}` : ''}`);
 };
 
@@ -66,6 +80,8 @@ export const unblockIP = async (ip: string): Promise<void> => {
   const blockedSet = await getBlockedSet();
   blockedSet.delete(ip);
   await saveBlockedSet(blockedSet);
+  cachedBlockedSet = blockedSet; // Sync in-memory cache immediately
+  cacheTimestamp = Date.now();
   logger.info(`[IP_BLOCKER] Unblocked IP: ${ip}`);
 };
 
@@ -132,6 +148,8 @@ export const recordRateLimitViolation = (req: Request, res: Response, next: Next
  */
 export const clearAllBlockedIPs = async (): Promise<void> => {
   await redisService.del(BLOCKED_IPS_KEY);
+  cachedBlockedSet = new Set();
+  cacheTimestamp = Date.now();
 };
 
 /**

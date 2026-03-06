@@ -276,7 +276,7 @@ class FlashSaleService {
     flashSale?: IFlashSale;
   }> {
     try {
-      const flashSale = await FlashSale.findById(data.flashSaleId).lean();
+      const flashSale = await FlashSale.findById(data.flashSaleId);
 
       if (!flashSale) {
         return { valid: false, message: 'Flash sale not found' };

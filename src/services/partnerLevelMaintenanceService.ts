@@ -23,24 +23,24 @@ class PartnerLevelMaintenanceService {
           validUntil: { $lt: now },
           isActive: true,
           status: 'active'
-        }).lean();
-        
+        });
+
         console.log(`📊 [LEVEL MAINTENANCE] Found ${expiredPartners.length} expired levels`);
-        
+
         let upgraded = 0;
         let reset = 0;
-        
+
         for (const partner of expiredPartners) {
           const beforeLevel = partner.currentLevel.level;
           partner.handleLevelExpiry();
           const afterLevel = partner.currentLevel.level;
-          
+
           if (afterLevel > beforeLevel) {
             upgraded++;
           } else {
             reset++;
           }
-          
+
           await partner.save();
         }
         
@@ -71,7 +71,7 @@ class PartnerLevelMaintenanceService {
           validUntil: { $lte: sevenDaysFromNow, $gt: now },
           isActive: true,
           status: 'active'
-        }).populate('userId', 'email phoneNumber').lean();
+        }).populate('userId', 'email phoneNumber');
         
         console.log(`📊 [LEVEL WARNINGS] Found ${expiringPartners.length} partners expiring in next 7 days`);
         
@@ -178,10 +178,10 @@ class PartnerLevelMaintenanceService {
         validUntil: { $lt: now },
         isActive: true,
         status: 'active'
-      }).lean();
-      
+      });
+
       console.log(`📊 [MANUAL TRIGGER] Found ${expiredPartners.length} expired levels`);
-      
+
       for (const partner of expiredPartners) {
         partner.handleLevelExpiry();
         await partner.save();

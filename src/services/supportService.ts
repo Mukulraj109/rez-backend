@@ -538,7 +538,7 @@ class SupportService {
    */
   async markFAQAsHelpful(faqId: Types.ObjectId): Promise<void> {
     try {
-      const faq = await FAQ.findById(faqId).lean();
+      const faq = await FAQ.findById(faqId);
       if (faq) {
         await (faq as any).markAsHelpful();
       }
@@ -553,7 +553,7 @@ class SupportService {
    */
   async markFAQAsNotHelpful(faqId: Types.ObjectId): Promise<void> {
     try {
-      const faq = await FAQ.findById(faqId).lean();
+      const faq = await FAQ.findById(faqId);
       if (faq) {
         await (faq as any).markAsNotHelpful();
       }
@@ -568,7 +568,7 @@ class SupportService {
    */
   async incrementFAQView(faqId: Types.ObjectId): Promise<void> {
     try {
-      const faq = await FAQ.findById(faqId).lean();
+      const faq = await FAQ.findById(faqId);
       if (faq) {
         await (faq as any).incrementView();
       }

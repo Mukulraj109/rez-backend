@@ -163,8 +163,6 @@ const AffiliateWebhookLogSchema = new Schema<IAffiliateWebhookLog>({
 AffiliateWebhookLogSchema.index({ webhookType: 1, receivedAt: -1 });
 AffiliateWebhookLogSchema.index({ brandId: 1, receivedAt: -1 });
 AffiliateWebhookLogSchema.index({ status: 1, receivedAt: -1 });
-AffiliateWebhookLogSchema.index({ clickId: 1 });
-AffiliateWebhookLogSchema.index({ purchaseId: 1 });
 AffiliateWebhookLogSchema.index({ receivedAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 }); // Auto-delete after 90 days
 
 // Static method to create log entry

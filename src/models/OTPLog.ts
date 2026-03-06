@@ -26,7 +26,6 @@ const OTPLogSchema = new Schema<IOTPLog>(
     expiresAt: {
       type: Date,
       required: true,
-      index: true
     },
     attempts: {
       type: Number,

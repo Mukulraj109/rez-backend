@@ -162,7 +162,6 @@ const EventBookingSchema = new Schema<IEventBooking>({
 // Indexes
 EventBookingSchema.index({ eventId: 1, userId: 1 });
 EventBookingSchema.index({ userId: 1, status: 1 });
-EventBookingSchema.index({ bookingReference: 1 });
 EventBookingSchema.index({ status: 1, bookingDate: 1 });
 EventBookingSchema.index({ paymentStatus: 1 });
 EventBookingSchema.index({ idempotencyKey: 1 }, { unique: true, sparse: true });

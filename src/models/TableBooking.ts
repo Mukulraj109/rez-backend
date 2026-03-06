@@ -114,7 +114,6 @@ const TableBookingSchema = new Schema<ITableBooking>({
 // Indexes for performance
 TableBookingSchema.index({ storeId: 1, bookingDate: 1 });
 TableBookingSchema.index({ userId: 1, createdAt: -1 });
-TableBookingSchema.index({ bookingNumber: 1 }, { unique: true });
 TableBookingSchema.index({ status: 1, bookingDate: 1 });
 
 // Virtual for formatted booking date/time

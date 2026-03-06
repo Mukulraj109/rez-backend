@@ -145,7 +145,6 @@ StockHistorySchema.index({ product: 1, timestamp: -1 });
 StockHistorySchema.index({ store: 1, timestamp: -1 });
 StockHistorySchema.index({ changeType: 1, timestamp: -1 });
 StockHistorySchema.index({ user: 1, timestamp: -1 });
-StockHistorySchema.index({ order: 1 });
 StockHistorySchema.index({
   product: 1,
   'variant.type': 1,

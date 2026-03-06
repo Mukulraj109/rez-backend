@@ -64,7 +64,6 @@ const SocialProofStatSchema = new Schema<ISocialProofStat>({
   timestamps: true
 });
 
-SocialProofStatSchema.index({ category: 1 });
 SocialProofStatSchema.index({ updatedAt: -1 });
 
 export const SocialProofStat = mongoose.model<ISocialProofStat>('SocialProofStat', SocialProofStatSchema);

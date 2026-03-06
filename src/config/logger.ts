@@ -50,6 +50,11 @@ const maskSensitiveData = winston.format((info) => {
 // Production JSON format
 const prodFormat = json();
 
+// Increase default EventEmitter listeners to avoid MaxListenersExceeded warnings
+// when multiple DailyRotateFile transports + exception/rejection handlers are added
+import { EventEmitter } from 'events';
+EventEmitter.defaultMaxListeners = 20;
+
 // Create logger
 export const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',

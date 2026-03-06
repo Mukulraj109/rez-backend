@@ -169,7 +169,6 @@ UserLockDealSchema.index(
   }
 );
 UserLockDealSchema.index({ user: 1, status: 1 });
-UserLockDealSchema.index({ pickupCode: 1 });
 UserLockDealSchema.index({ expiresAt: 1, status: 1 });
 UserLockDealSchema.index({ lockDeal: 1, status: 1 });
 

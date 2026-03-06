@@ -115,7 +115,6 @@ const ConsultationSchema = new Schema<IConsultation>({
 });
 
 // Indexes
-ConsultationSchema.index({ consultationNumber: 1 }, { unique: true });
 ConsultationSchema.index({ storeId: 1, consultationDate: 1 });
 ConsultationSchema.index({ userId: 1, status: 1 });
 ConsultationSchema.index({ status: 1, consultationDate: 1 });

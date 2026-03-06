@@ -123,7 +123,6 @@ const PreOrderSchema = new Schema<IPreOrder>({
 // Indexes for better query performance
 PreOrderSchema.index({ storeId: 1, status: 1 });
 PreOrderSchema.index({ userId: 1, createdAt: -1 });
-PreOrderSchema.index({ orderNumber: 1 });
 PreOrderSchema.index({ createdAt: -1 });
 
 // Generate unique order number

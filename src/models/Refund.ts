@@ -138,7 +138,6 @@ const RefundSchema = new Schema<IRefund>({
 
 // Indexes for efficient queries
 RefundSchema.index({ user: 1, createdAt: -1 });
-RefundSchema.index({ order: 1 });
 RefundSchema.index({ status: 1, createdAt: -1 });
 RefundSchema.index({ gatewayRefundId: 1 }, { sparse: true });
 RefundSchema.index({ paymentMethod: 1, status: 1 });

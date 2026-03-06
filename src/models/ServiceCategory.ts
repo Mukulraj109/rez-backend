@@ -135,7 +135,6 @@ const ServiceCategorySchema = new Schema<IServiceCategory>({
 });
 
 // Indexes for performance
-ServiceCategorySchema.index({ slug: 1 });
 ServiceCategorySchema.index({ isActive: 1, sortOrder: 1 });
 ServiceCategorySchema.index({ parentCategory: 1 });
 ServiceCategorySchema.index({ cashbackPercentage: -1 });

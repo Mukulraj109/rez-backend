@@ -471,7 +471,7 @@ export class NotificationService {
       scheduledAt: { $lte: new Date() },
       sentAt: { $exists: false },
       expiresAt: { $gt: new Date() }
-    }).limit(100).lean();
+    }).limit(100);
 
     for (const notification of scheduledNotifications) {
       this.emitNotificationToUser(notification.user.toString(), notification);

@@ -258,7 +258,7 @@ export async function updateCreatorProfile(
   userId: string,
   updates: Partial<Pick<ICreatorProfile, 'displayName' | 'bio' | 'avatar' | 'coverImage' | 'tags' | 'socialLinks'>>
 ): Promise<ICreatorProfile> {
-  const profile = await CreatorProfile.findOne({ user: userId }).lean();
+  const profile = await CreatorProfile.findOne({ user: userId });
   if (!profile) throw new Error('Creator profile not found');
   if (profile.status !== 'approved') throw new Error('Only approved creators can update their profile');
 

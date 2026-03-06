@@ -77,7 +77,6 @@ const DailyCheckInSchema = new Schema<IDailyCheckIn>(
 DailyCheckInSchema.index({ userId: 1, date: -1 });
 // Unique constraint: one check-in per user per day
 DailyCheckInSchema.index({ userId: 1, date: 1 }, { unique: true });
-DailyCheckInSchema.index({ date: 1 });
 DailyCheckInSchema.index({ userId: 1, coinType: 1, date: -1 });
 
 // Helper to get start of day in UTC

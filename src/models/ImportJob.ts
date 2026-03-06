@@ -128,7 +128,8 @@ const ImportJobSchema = new Schema<IImportJob>(
     completedAt: Date
   },
   {
-    timestamps: true
+    timestamps: true,
+    suppressReservedKeysWarning: true,
   }
 );
 

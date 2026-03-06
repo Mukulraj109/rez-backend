@@ -91,7 +91,6 @@ const MallCategorySchema = new Schema<IMallCategory>({
 });
 
 // Indexes
-MallCategorySchema.index({ slug: 1 });
 MallCategorySchema.index({ isActive: 1, sortOrder: 1 });
 MallCategorySchema.index({ isFeatured: 1, isActive: 1 });
 

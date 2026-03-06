@@ -558,14 +558,14 @@ async function creditRewardToWallet(
 // ============================================
 
 export async function verifyAndCreditBillClaim(claimId: string): Promise<IBonusClaim | null> {
-  const claim = await BonusClaim.findById(claimId).lean();
+  const claim = await BonusClaim.findById(claimId);
   if (!claim) return null;
   // Already credited — return idempotently
   if (claim.status === 'credited' || claim.status === 'verified') return claim;
   // Only process pending claims
   if (claim.status !== 'pending') return claim;
 
-  const campaign = await BonusCampaign.findById(claim.campaignId).lean();
+  const campaign = await BonusCampaign.findById(claim.campaignId);
   if (!campaign) {
     claim.status = 'rejected';
     claim.rejectionReason = 'Campaign no longer exists';

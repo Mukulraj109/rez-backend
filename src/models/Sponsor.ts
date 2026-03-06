@@ -114,7 +114,6 @@ const SponsorSchema: Schema = new Schema(
 );
 
 // Indexes
-SponsorSchema.index({ slug: 1 });
 SponsorSchema.index({ isActive: 1 });
 SponsorSchema.index({ industry: 1 });
 

@@ -373,7 +373,7 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
         // Update referrer's partner referral task progress
         try {
           const Partner = require('../models/Partner').default;
-          const partner = await Partner.findOne({ userId: referrerUser._id }).lean();
+          const partner = await Partner.findOne({ userId: referrerUser._id });
           
           if (partner) {
             const referralTask = partner.tasks.find((t: any) => t.type === 'referral');

@@ -351,6 +351,12 @@ export class ScheduledJobService {
 
       this.queue = new Bull('scheduled-jobs', redisOptions);
 
+      // Increase MaxListeners to avoid EventEmitter leak warning with 18+ jobs
+      this.queue.setMaxListeners(30);
+      if ((this.queue as any).eclient) (this.queue as any).eclient.setMaxListeners(30);
+      if ((this.queue as any).bclient) (this.queue as any).bclient.setMaxListeners(30);
+      if ((this.queue.client as any)?.setMaxListeners) (this.queue.client as any).setMaxListeners(30);
+
       // ── Register named processors ──────────────────────────────────────
       for (const def of JOB_DEFINITIONS) {
         this.queue.process(def.name, 1, async (_job: Job) => {

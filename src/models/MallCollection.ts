@@ -75,7 +75,6 @@ const MallCollectionSchema = new Schema<IMallCollection>({
 });
 
 // Indexes
-MallCollectionSchema.index({ slug: 1 });
 MallCollectionSchema.index({ isActive: 1, sortOrder: 1 });
 MallCollectionSchema.index({ type: 1, isActive: 1 });
 MallCollectionSchema.index({ validFrom: 1, validUntil: 1 });

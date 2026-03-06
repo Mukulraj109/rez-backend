@@ -224,7 +224,7 @@ class ChallengeService {
     challengeId: string
   ): Promise<IUserChallengeProgress> {
     // Check if challenge exists and is active
-    const challenge = await Challenge.findById(challengeId).lean();
+    const challenge = await Challenge.findById(challengeId);
 
     if (!challenge) {
       throw new Error('Challenge not found');

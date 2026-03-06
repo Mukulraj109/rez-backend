@@ -338,7 +338,7 @@ class EventService {
 
       // Update slot availability if applicable
       if (booking.slotId) {
-        const event = await Event.findById(booking.eventId).lean();
+        const event = await Event.findById(booking.eventId);
         if (event && event.availableSlots) {
           const slot = event.availableSlots.find(s => s.id === booking.slotId);
           if (slot) {

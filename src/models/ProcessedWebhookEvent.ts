@@ -157,11 +157,8 @@ const ProcessedWebhookEventSchema = new Schema<IProcessedWebhookEventDocument>(
 /**
  * Create indexes for efficient querying and automatic cleanup
  */
-ProcessedWebhookEventSchema.index({ eventId: 1 }, { unique: true });
 ProcessedWebhookEventSchema.index({ eventType: 1, processedAt: -1 });
-ProcessedWebhookEventSchema.index({ subscriptionId: 1 });
 ProcessedWebhookEventSchema.index({ status: 1 });
-ProcessedWebhookEventSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL
 
 /**
  * Static method to check if a webhook event has already been processed

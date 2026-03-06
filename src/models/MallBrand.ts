@@ -301,7 +301,6 @@ const MallBrandSchema = new Schema<IMallBrand>({
 });
 
 // Indexes for performance
-MallBrandSchema.index({ slug: 1 });
 MallBrandSchema.index({ isActive: 1 });
 MallBrandSchema.index({ mallCategory: 1, isActive: 1 });
 MallBrandSchema.index({ tier: 1, isActive: 1 });

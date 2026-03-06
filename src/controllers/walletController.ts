@@ -27,8 +27,8 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
     return sendError(res, 'User not authenticated', 401);
   }
 
-  // Get or create wallet
-  let wallet = await Wallet.findOne({ user: userId }).lean();
+  // Get or create wallet (no .lean() — need .save() and .syncWithUser() for auto-sync)
+  let wallet = await Wallet.findOne({ user: userId });
 
   if (!wallet) {
     wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
