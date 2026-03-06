@@ -1519,6 +1519,12 @@ async function startServer() {
       process.exit(1);
     }
 
+    // Start listening on port FIRST so Render/hosting detects the port immediately
+    // (DB, Redis, and background jobs initialize in parallel below)
+    server.listen(Number(PORT), '0.0.0.0', () => {
+      console.log(`\n🚀 Server listening on port ${PORT} (initializing services...)`);
+    });
+
     // Connect to database
     console.log('🔄 Connecting to database...');
     await connectDatabase();
@@ -1733,88 +1739,11 @@ async function startServer() {
     await gamificationEventBus.initialize();
     console.log('✅ Gamification event bus initialized');
 
-    // Start HTTP server (with Socket.IO attached)
-    server.listen(Number(PORT), '0.0.0.0', () => {
-
-      const os = require('os');
-    const networkInterfaces = os.networkInterfaces();
-
-     Object.keys(networkInterfaces).forEach(interfaceName => {
-      const addresses = networkInterfaces[interfaceName];
-      addresses?.forEach((addr: any) => {
-        if (addr.family === 'IPv4' && !addr.internal) {
-          console.log(`   - http://${addr.address}:${PORT}/health`);
-        }
-      });
-    });
-
-      console.log('\n🚀 REZ App Backend Server Started');
-      console.log(`✅ Server running on port ${PORT}`);
-      console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`✅ Database: Connected`);
-      console.log(`✅ API Prefix: ${API_PREFIX}`);
-      console.log(`\n📡 Available Endpoints:`);
-      console.log(`   🔍 Health Check: http://localhost:${PORT}/health`);
-      console.log(`   📋 API Info: http://localhost:${PORT}/api-info`);
-      console.log(`   🔐 Authentication: http://localhost:${PORT}${API_PREFIX}/auth`);
-      console.log(`   🛍️  Products: http://localhost:${PORT}${API_PREFIX}/products`);
-      console.log(`   🛒 Cart: http://localhost:${PORT}${API_PREFIX}/cart`);
-      console.log(`   📂 Categories: http://localhost:${PORT}${API_PREFIX}/categories`);
-      console.log(`   🏪 Stores: http://localhost:${PORT}${API_PREFIX}/stores`);
-      console.log(`   📦 Orders: http://localhost:${PORT}${API_PREFIX}/orders`);
-      console.log(`   🎥 Videos: http://localhost:${PORT}${API_PREFIX}/videos`);
-      console.log(`   📸 UGC: http://localhost:${PORT}${API_PREFIX}/ugc`);
-      console.log(`   📋 Projects: http://localhost:${PORT}${API_PREFIX}/projects`);
-      console.log(`   🔔 Notifications: http://localhost:${PORT}${API_PREFIX}/notifications`);
-      console.log(`   ⭐ Reviews: http://localhost:${PORT}${API_PREFIX}/reviews`);
-      console.log(`   💝 Wishlist: http://localhost:${PORT}${API_PREFIX}/wishlist`);
-      console.log(`   🔄 Sync: http://localhost:${PORT}${API_PREFIX}/sync`);
-      console.log(`   💰 Wallet: http://localhost:${PORT}${API_PREFIX}/wallet`);
-      console.log(`   🎁 Offers: http://localhost:${PORT}${API_PREFIX}/offers`);
-      console.log(`   🎟️  Vouchers: http://localhost:${PORT}${API_PREFIX}/vouchers`);
-      console.log(`   📍 Addresses: http://localhost:${PORT}${API_PREFIX}/addresses`);
-      console.log(`   💳 Payment Methods: http://localhost:${PORT}${API_PREFIX}/payment-methods`);
-      console.log(`   ⚙️  User Settings: http://localhost:${PORT}${API_PREFIX}/user-settings`);
-      console.log(`   🏆 Achievements: http://localhost:${PORT}${API_PREFIX}/achievements`);
-      console.log(`   📊 Activities: http://localhost:${PORT}${API_PREFIX}/activities`);
-      console.log(`   🎫 Coupons: http://localhost:${PORT}${API_PREFIX}/coupons`);
-      console.log(`   🆘 Support: http://localhost:${PORT}${API_PREFIX}/support`);
-      console.log(`   💸 Discounts: http://localhost:${PORT}${API_PREFIX}/discounts`);
-      console.log(`   🎟️  Store Vouchers: http://localhost:${PORT}${API_PREFIX}/store-vouchers`);
-      console.log(`   📍 Outlets: http://localhost:${PORT}${API_PREFIX}/outlets`);
-      console.log(`   ⚡ Flash Sales: http://localhost:${PORT}${API_PREFIX}/flash-sales`);
-      console.log(`   🍽️  Menu & Pre-orders: http://localhost:${PORT}${API_PREFIX}/menu`);
-      console.log(`   🩺 Consultations: http://localhost:${PORT}${API_PREFIX}/consultations`);
-      console.log(`   📅 Service Appointments: http://localhost:${PORT}${API_PREFIX}/service-appointments`);
-      console.log(`   🔄 Merchant Sync: http://localhost:${PORT}/api/merchant/sync`);
-      console.log(`\n🎉 Phase 7 Complete - Product Page Features Implemented!`);
-      console.log(`   ✅ Authentication APIs (8 endpoints)`);
-      console.log(`   ✅ Product APIs (8 endpoints)`);
-      console.log(`   ✅ Cart APIs (11 endpoints)`);
-      console.log(`   ✅ Category APIs (6 endpoints)`);
-      console.log(`   ✅ Store APIs (8 endpoints)`);
-      console.log(`   ✅ Order APIs (9 endpoints)`);
-      console.log(`   ✅ Video APIs (8 endpoints)`);
-      console.log(`   ✅ Project APIs (6 endpoints)`);
-      console.log(`   ✅ Notification APIs (3 endpoints)`);
-      console.log(`   ✅ Review APIs (5 endpoints)`);
-      console.log(`   ✅ Wishlist APIs (8 endpoints)`);
-      console.log(`   ✅ Wallet APIs (9 endpoints)`);
-      console.log(`   ✅ Offer APIs (14 endpoints)`);
-      console.log(`   ✅ Voucher APIs (10 endpoints)`);
-      console.log(`   ✅ Address APIs (6 endpoints)`);
-      console.log(`   ✅ Payment Method APIs (6 endpoints)`);
-      console.log(`   ✅ User Settings APIs (8 endpoints)`);
-      console.log(`   ✅ Achievement APIs (6 endpoints)`);
-      console.log(`   ✅ Activity APIs (7 endpoints)`);
-      console.log(`   ✅ Coupon APIs (9 endpoints)`);
-      console.log(`   ✅ Support APIs (17 endpoints)`);
-      console.log(`   ✅ Discount APIs (8 endpoints)`);
-      console.log(`   ✅ Store Voucher APIs (8 endpoints)`);
-      console.log(`   ✅ Outlet APIs (9 endpoints)`);
-      console.log(`   🎯 Total Implemented: ~211 endpoints across 23 modules`);
-      console.log(`\n🚀 Phase 7 Complete - Product Page Features Ready for Frontend Integration!`);
-    });
+    // All services initialized - server is already listening from earlier
+    console.log(`\n✅ All services initialized successfully`);
+    console.log(`✅ Server running on port ${PORT}`);
+    console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`✅ Health Check: http://localhost:${PORT}/health`);
 
     // Graceful shutdown handling
     let isShuttingDown = false;
