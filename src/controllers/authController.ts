@@ -137,8 +137,8 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    // Check if user exists
-    let user = await User.findOne({ phoneNumber }).lean() as any;
+    // Check if user exists (no .lean() — we need instance methods: generateOTP, save, isAccountLocked)
+    let user = await User.findOne({ phoneNumber }) as any;
 
     // Create user if doesn't exist, or reactivate if inactive
     if (!user) {
@@ -220,10 +220,16 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
     const otp = user.generateOTP();
     await user.save();
 
-    // Send OTP via SMS
-    const otpSent = await smsService.sendOTP(phoneNumber, otp);
+    // Send OTP via SMS (skip in dev if SMS fails — OTP is returned in response)
+    let otpSent = false;
+    try {
+      otpSent = await smsService.sendOTP(phoneNumber, otp);
+    } catch (smsErr) {
+      if (!isDev) throw new AppError('Failed to send OTP. Please try again.', 500);
+      logger.warn('[SEND_OTP] SMS failed in dev mode, continuing with devOtp in response');
+    }
 
-    if (!otpSent) {
+    if (!otpSent && !isDev) {
       throw new AppError('Failed to send OTP. Please try again.', 500);
     }
 
@@ -243,7 +249,7 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
     if (error instanceof AppError) {
       throw error;
     }
-    logger.error('[SEND_OTP] Error:', error instanceof Error ? error.message : String(error));
+    logger.error('[SEND_OTP] Error:', { message: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
     throw new AppError('Failed to send OTP. Please try again.', 500);
   }
 });
@@ -260,8 +266,8 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
     logger.debug('[VERIFY_OTP]', { phone: `***${phoneNumber.slice(-4)}` });
   }
 
-  // Find user with OTP fields
-  const user = await User.findOne({ phoneNumber }).select('+auth.otpCode +auth.otpExpiry').lean();
+  // Find user with OTP fields (no .lean() — we need instance methods: isAccountLocked, verifyOTP, save)
+  const user = await User.findOne({ phoneNumber }).select('+auth.otpCode +auth.otpExpiry');
 
   if (!user) {
     return sendNotFound(res, 'User not found');

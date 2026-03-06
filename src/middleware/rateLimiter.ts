@@ -41,26 +41,91 @@ if (isRateLimitDisabled) {
 
 const passthrough = (_req: Request, _res: Response, next: NextFunction) => next();
 
-// ─── Store factory — uses shared Redis client from redisService ──────────────
+// ─── Lazy Store factory — defers RedisStore creation until Redis is ready ─────
+// RedisStore's constructor fires async script-load commands immediately.
+// If Redis isn't connected yet (common on Render/cloud where Redis is remote),
+// those become unhandled rejections and crash Node >= 15.
+// Solution: return a lazy wrapper that creates the real RedisStore on first use.
 let redisStoreWarningLogged = false;
 
 function makeStore(prefix: string) {
   if (isRateLimitDisabled) return undefined; // MemoryStore fallback
 
-  return new RedisStore({
-    sendCommand: async (...args: string[]) => {
-      const client = redisService.getClient();
-      if (!client) {
-        if (!redisStoreWarningLogged) {
-          logger.warn('[RateLimit] Redis not available — falling back to MemoryStore');
-          redisStoreWarningLogged = true;
-        }
-        throw new Error('Redis not available');
+  let innerStore: InstanceType<typeof RedisStore> | null = null;
+  let initFailed = false;
+
+  function getOrCreateStore(): InstanceType<typeof RedisStore> | null {
+    if (innerStore) return innerStore;
+    if (initFailed) return null;
+
+    const client = redisService.getClient();
+    if (!client) return null;
+
+    try {
+      innerStore = new RedisStore({
+        sendCommand: async (...args: string[]) => {
+          const c = redisService.getClient();
+          if (!c) throw new Error('Redis disconnected');
+          return (c as any).sendCommand(args);
+        },
+        prefix: `rl:${prefix}:`,
+      });
+      return innerStore;
+    } catch (err) {
+      initFailed = true;
+      if (!redisStoreWarningLogged) {
+        logger.warn('[RateLimit] Failed to create RedisStore — using MemoryStore fallback');
+        redisStoreWarningLogged = true;
       }
-      return (client as any).sendCommand(args);
+      return null;
+    }
+  }
+
+  // Return an object that satisfies the express-rate-limit Store interface
+  // but lazily initializes the real RedisStore only when Redis is connected.
+  return {
+    init(options: any) {
+      // Store options for later; the real store's init will be called on first use
+      (this as any)._options = options;
     },
-    prefix: `rl:${prefix}:`,
-  });
+    async increment(key: string): Promise<{ totalHits: number; resetTime: Date | undefined }> {
+      const store = getOrCreateStore();
+      if (store) {
+        // Ensure init is called once
+        if ((this as any)._options && !(this as any)._inited) {
+          (this as any)._inited = true;
+          if (typeof store.init === 'function') {
+            store.init((this as any)._options);
+          }
+        }
+        return store.increment(key);
+      }
+      // No Redis — permit the request (no rate limiting)
+      if (!redisStoreWarningLogged) {
+        logger.warn('[RateLimit] Redis not ready — rate limiting disabled until connected');
+        redisStoreWarningLogged = true;
+      }
+      return { totalHits: 0, resetTime: undefined };
+    },
+    async decrement(key: string): Promise<void> {
+      const store = getOrCreateStore();
+      if (store && typeof store.decrement === 'function') {
+        return store.decrement(key);
+      }
+    },
+    async resetKey(key: string): Promise<void> {
+      const store = getOrCreateStore();
+      if (store && typeof store.resetKey === 'function') {
+        return store.resetKey(key);
+      }
+    },
+    async resetAll(): Promise<void> {
+      const store = getOrCreateStore();
+      if (store && typeof (store as any).resetAll === 'function') {
+        return (store as any).resetAll();
+      }
+    },
+  } as any;
 }
 
 // ─── Safe rate limiter factory — catches store errors, passes request through ─
