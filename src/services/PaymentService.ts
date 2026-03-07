@@ -955,28 +955,22 @@ class PaymentService {
             throw new Error('User ID not found');
           }
 
-          let wallet = await Wallet.findOne({ user: userId });
-
-          if (!wallet) {
-            // Create wallet if it doesn't exist
-            wallet = await (Wallet as any).createForUser(new Types.ObjectId(userId));
-            if (!wallet) {
-              throw new Error('Failed to create wallet for refund');
-            }
-          }
-
-          // Check if wallet is frozen
-          if (wallet.isFrozen) {
-            throw new Error(`Wallet is frozen: ${wallet.frozenReason}`);
-          }
-
-          // Add refund to wallet
-          await wallet.addFunds(refundAmount, 'refund');
-          await wallet.save();
+          // Refund via walletService (atomic $inc + CoinTransaction + LedgerEntry)
+          const { walletService } = await import('./walletService');
+          await walletService.credit({
+            userId: userId.toString(),
+            amount: refundAmount,
+            source: 'order',
+            description: 'Payment refund',
+            operationType: 'refund',
+            referenceId: `payment-refund:${Date.now()}`,
+            referenceModel: 'Payment',
+            metadata: { refundReason: 'payment_refund' },
+          });
 
           refundId = `wallet_refund_${Date.now()}`;
           refundStatus = 'completed';
-          logger.info('✅ [PAYMENT SERVICE] Wallet refund completed:', refundId);
+          logger.info('Wallet refund completed via walletService:', refundId);
           break;
         }
 

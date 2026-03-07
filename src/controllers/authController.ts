@@ -14,8 +14,6 @@ import {
 } from '../middleware/auth';
 import {
   sendSuccess,
-  sendError,
-  sendCreated,
   sendUnauthorized,
   sendNotFound,
   sendConflict,
@@ -23,7 +21,7 @@ import {
   sendBadRequest
 } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
-import { AppError } from '../middleware/errorHandler';
+import { AppError } from '../utils/AppError';
 import referralService from '../services/referralService';
 import { ReferralFraudDetection } from '../services/referralFraudDetection';
 import { Wallet } from '../models/Wallet';
@@ -32,7 +30,6 @@ import { logger } from '../config/logger';
 
 const referralFraudDetection = new ReferralFraudDetection();
 import achievementService from '../services/achievementService';
-import gamificationIntegrationService from '../services/gamificationIntegrationService';
 import gamificationEventBus from '../events/gamificationEventBus';
 
 import twilio from "twilio";
@@ -125,6 +122,60 @@ const normalizePhoneNumber = (phone: string): string => {
 };
 
 // Send OTP to phone number
+/**
+ * @swagger
+ * /api/user/auth/send-otp:
+ *   post:
+ *     summary: Send OTP to phone number
+ *     description: Sends a 6-digit OTP to the provided phone number for authentication. Creates a new user if one doesn't exist.
+ *     tags: [User Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [phoneNumber]
+ *             properties:
+ *               phoneNumber:
+ *                 type: string
+ *                 example: "+919876543210"
+ *                 description: Phone number (auto-normalizes international formats)
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: Optional email for signup
+ *               referralCode:
+ *                 type: string
+ *                 description: Optional referral code
+ *     responses:
+ *       200:
+ *         description: OTP sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     message:
+ *                       type: string
+ *                       example: "OTP sent successfully"
+ *                     expiresIn:
+ *                       type: number
+ *                       example: 300
+ *       400:
+ *         description: Invalid referral code
+ *       409:
+ *         description: Email already registered
+ *       429:
+ *         description: Too many requests / account locked
+ */
 export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
   let { phoneNumber, email, referralCode } = req.body;
 
@@ -136,125 +187,151 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
     logger.debug('[SEND_OTP]', { phone: `***${phoneNumber.slice(-4)}`, hasEmail: !!email });
   }
 
-  try {
-    // Check if user exists (no .lean() — we need instance methods: generateOTP, save, isAccountLocked)
-    let user = await User.findOne({ phoneNumber }) as any;
+  // Check if user exists (no .lean() — we need instance methods: generateOTP, save, isAccountLocked)
+  let user = await User.findOne({ phoneNumber }) as any;
 
-    // Create user if doesn't exist, or reactivate if inactive
-    if (!user) {
-      // Check if email already exists (only if email is provided)
-      if (email) {
-        const emailExists = await User.findOne({ email }).lean();
-        if (emailExists) {
-          return sendConflict(res, 'Email is already registered');
-        }
-      }
-
-      // Check if referral code is valid (if provided)
-      let referrerUser = null;
-      if (referralCode) {
-        referrerUser = await User.findOne({ 'referral.referralCode': referralCode }).lean();
-        if (!referrerUser) {
-          return sendBadRequest(res, 'Invalid referral code');
-        }
-      }
-
-      user = new User({
-        phoneNumber,
-        email,
-        role: 'user',
-        auth: {
-          isVerified: false,
-          isOnboarded: false
-        },
-        referral: referralCode ? {
-          referredBy: referralCode,
-          referredUsers: [],
-          totalReferrals: 0,
-          referralEarnings: 0
-        } : undefined
-      });
-
-      // Initialize achievements for new user
-      try {
-        await achievementService.initializeUserAchievements(String(user._id));
-      } catch (error) {
-        logger.error('❌ [AUTH] Error initializing achievements for new user:', error);
-        // Don't fail user creation if achievement initialization fails
-      }
-    } else if (user && user.isActive && email) {
-      // If user exists and is active, and email is provided (signup attempt)
-      // This means someone is trying to signup with an existing number
-      return sendConflict(res, 'Phone number is already registered. Please use Sign In instead.');
-    } else if (user && user.isActive && !email) {
-      // If user exists and is active, and no email is provided (login attempt)
-      // This is normal login flow, continue with OTP generation
-      // No need to create new user or modify existing user data
-    } else if (user && !user.isActive) {
-      // Deactivated account — DON'T reactivate yet.
-      // Just generate OTP; reactivation happens in verifyOTP after successful verification.
-      // S-7: Do NOT reset loginAttempts or lockUntil here — failed login count
-      // must persist through deactivation/reactivation to prevent lockout bypass.
-
-      // S-13: Do NOT apply email changes during reactivation — email must be
-      // verified separately after the account is reactivated. Log if attempted.
-      if (email && user.email !== email) {
-        logger.info(`⚠️ [AUTH] Email change attempted during reactivation for user ${user._id} — will be ignored. User must update email after reactivation.`);
+  // Create user if doesn't exist, or reactivate if inactive
+  if (!user) {
+    // Check if email already exists (only if email is provided)
+    if (email) {
+      const emailExists = await User.findOne({ email }).lean();
+      if (emailExists) {
+        return sendConflict(res, 'Email is already registered');
       }
     }
 
-    // Safety check to ensure user exists at this point
-    if (!user) {
-      return sendError(res, 'User creation or retrieval failed', 500);
+    // Check if referral code is valid (if provided)
+    if (referralCode) {
+      const referrerUser = await User.findOne({ 'referral.referralCode': referralCode }).lean();
+      if (!referrerUser) {
+        return sendBadRequest(res, 'Invalid referral code');
+      }
     }
 
-    // Check if account is locked
-    if (user.isAccountLocked()) {
-      const lockTime = user.auth.lockUntil;
-      const minutesLeft = lockTime ? Math.ceil((lockTime.getTime() - Date.now()) / (1000 * 60)) : 0;
-      
-      return sendTooManyRequests(res, `Account locked. Try again in ${minutesLeft} minutes.`);
-    }
+    user = new User({
+      phoneNumber,
+      email,
+      role: 'user',
+      auth: {
+        isVerified: false,
+        isOnboarded: false
+      },
+      referral: referralCode ? {
+        referredBy: referralCode,
+        referredUsers: [],
+        totalReferrals: 0,
+        referralEarnings: 0
+      } : undefined
+    });
 
-    // Generate and save OTP
-    const otp = user.generateOTP();
-    await user.save();
-
-    // Send OTP via SMS (skip in dev if SMS fails — OTP is returned in response)
-    let otpSent = false;
+    // Initialize achievements for new user
     try {
-      otpSent = await smsService.sendOTP(phoneNumber, otp);
-    } catch (smsErr) {
-      if (!isDev) throw new AppError('Failed to send OTP. Please try again.', 500);
-      logger.warn('[SEND_OTP] SMS failed in dev mode, continuing with devOtp in response');
+      await achievementService.initializeUserAchievements(String(user._id));
+    } catch (error) {
+      logger.error('[AUTH] Error initializing achievements for new user:', error);
     }
-
-    if (!otpSent && !isDev) {
-      throw new AppError('Failed to send OTP. Please try again.', 500);
+  } else if (user.isActive && email) {
+    return sendConflict(res, 'Phone number is already registered. Please use Sign In instead.');
+  } else if (user.isActive && !email) {
+    // Normal login flow — continue with OTP generation
+  } else if (!user.isActive) {
+    // Deactivated account — DON'T reactivate yet.
+    // S-7: Do NOT reset loginAttempts or lockUntil here
+    // S-13: Do NOT apply email changes during reactivation
+    if (email && user.email !== email) {
+      logger.info(`[AUTH] Email change attempted during reactivation for user ${user._id} — ignored.`);
     }
-
-    const responseData: any = {
-      message: 'OTP sent successfully',
-      expiresIn: 10 * 60 // 10 minutes in seconds
-    };
-
-    // Only include OTP in response in development mode (for testing convenience)
-    if (isDev) {
-      responseData.devOtp = otp;
-    }
-
-    sendSuccess(res, responseData, 'OTP sent to your phone number');
-
-  } catch (error) {
-    if (error instanceof AppError) {
-      throw error;
-    }
-    logger.error('[SEND_OTP] Error:', { message: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined });
-    throw new AppError('Failed to send OTP. Please try again.', 500);
   }
+
+  if (!user) {
+    throw new AppError('User creation or retrieval failed', 500, 'USER_CREATION_FAILED');
+  }
+
+  // Check if account is locked
+  if (user.isAccountLocked()) {
+    const lockTime = user.auth.lockUntil;
+    const minutesLeft = lockTime ? Math.ceil((lockTime.getTime() - Date.now()) / (1000 * 60)) : 0;
+    return sendTooManyRequests(res, `Account locked. Try again in ${minutesLeft} minutes.`);
+  }
+
+  // Generate and save OTP
+  const otp = user.generateOTP();
+  await user.save();
+
+  // Send OTP via SMS
+  let otpSent = false;
+  try {
+    otpSent = await smsService.sendOTP(phoneNumber, otp);
+  } catch (smsErr) {
+    if (!isDev) throw new AppError('Failed to send OTP. Please try again.', 500, 'SMS_FAILED');
+    logger.warn('[SEND_OTP] SMS failed in dev mode, continuing with devOtp in response');
+  }
+
+  if (!otpSent && !isDev) {
+    throw new AppError('Failed to send OTP. Please try again.', 500, 'SMS_FAILED');
+  }
+
+  const responseData: any = {
+    message: 'OTP sent successfully',
+    expiresIn: 10 * 60
+  };
+
+  if (isDev) {
+    responseData.devOtp = otp;
+  }
+
+  sendSuccess(res, responseData, 'OTP sent to your phone number');
 });
 
 // Verify OTP and login
+/**
+ * @swagger
+ * /api/user/auth/verify-otp:
+ *   post:
+ *     summary: Verify OTP and authenticate
+ *     description: Verifies the OTP and returns JWT tokens. Processes referral bonus for new users. Reactivates deactivated accounts.
+ *     tags: [User Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [phoneNumber, otp]
+ *             properties:
+ *               phoneNumber:
+ *                 type: string
+ *                 example: "+919876543210"
+ *               otp:
+ *                 type: string
+ *                 example: "123456"
+ *                 description: 6-digit OTP
+ *     responses:
+ *       200:
+ *         description: Authentication successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/UserProfile'
+ *                     tokens:
+ *                       $ref: '#/components/schemas/AuthTokens'
+ *       401:
+ *         description: Invalid or expired OTP
+ *       404:
+ *         description: User not found
+ *       429:
+ *         description: Account locked due to too many failed attempts
+ */
 export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
   let { phoneNumber, otp } = req.body;
 
@@ -315,12 +392,11 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
         );
 
         if (fraudCheck.action === 'block') {
-          console.warn(`🚫 [REFERRAL] Fraud blocked for referral ${user.referral.referredBy}: ${fraudCheck.reasons.join(', ')} (score: ${fraudCheck.riskScore})`);
-          // Clear the referral code but still let user verify OTP
+          logger.warn(`[REFERRAL] Fraud blocked for referral ${user.referral.referredBy}: ${fraudCheck.reasons.join(', ')} (score: ${fraudCheck.riskScore})`);
           user.referral.referredBy = '';
         } else {
           if (fraudCheck.action === 'review') {
-            console.warn(`⚠️ [REFERRAL] Flagged for review: ${user.referral.referredBy} (score: ${fraudCheck.riskScore}, reasons: ${fraudCheck.reasons.join(', ')})`);
+            logger.warn(`[REFERRAL] Flagged for review: ${user.referral.referredBy} (score: ${fraudCheck.riskScore}, reasons: ${fraudCheck.reasons.join(', ')})`);
           }
 
         // Create referral relationship using referral service
@@ -333,28 +409,18 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
 
         // Add referee discount (₹30) to their wallet for first order
         let refereeWallet = await Wallet.findOne({ user: user._id }).lean() as any;
-        if (!refereeWallet) {
-          // Create wallet if doesn't exist
-          refereeWallet = await Wallet.create({
-            user: user._id,
-            balance: {
-              total: 30,
-              available: 30,
-              pending: 0,
-            },
-            statistics: {
-              totalEarned: 30,
-              totalSpent: 0,
-              totalCashback: 0,
-              totalRefunds: 0,
-              totalTopups: 30,
-              totalWithdrawals: 0,
-            },
-          });
-        } else {
-          // Use atomic addFunds method
-          await refereeWallet.addFunds(30, 'topup');
-        }
+        // Credit referral bonus via walletService (atomic $inc + CoinTransaction + LedgerEntry)
+        const { walletService } = await import('../services/walletService');
+        await walletService.credit({
+          userId: String(user._id),
+          amount: 30,
+          source: 'referral',
+          description: 'Referral signup bonus',
+          operationType: 'referral_bonus',
+          referenceId: `referral:${referrerUser._id}:${user._id}`,
+          referenceModel: 'User',
+          metadata: { referrerId: String(referrerUser._id) },
+        });
 
         // Update user referral stats
         referrerUser.referral.referredUsers.push(String(user._id));
@@ -454,12 +520,50 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
     tokens: {
       accessToken,
       refreshToken,
-      expiresIn: 7 * 24 * 60 * 60 // 7 days in seconds
+      expiresIn: 15 * 60 // 15 minutes in seconds
     }
   }, 'Login successful');
 });
 
 // Refresh access token
+/**
+ * @swagger
+ * /api/user/auth/refresh-token:
+ *   post:
+ *     summary: Refresh access token
+ *     description: Uses a valid refresh token to obtain new access and refresh tokens. The old refresh token is blacklisted (rotation).
+ *     tags: [User Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [refreshToken]
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 description: Valid refresh token from login
+ *     responses:
+ *       200:
+ *         description: Tokens refreshed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     tokens:
+ *                       $ref: '#/components/schemas/AuthTokens'
+ *       401:
+ *         description: Invalid or already-used refresh token
+ */
 export const refreshToken = asyncHandler(async (req: Request, res: Response) => {
   const { refreshToken } = req.body;
 
@@ -467,85 +571,116 @@ export const refreshToken = asyncHandler(async (req: Request, res: Response) => 
     return sendUnauthorized(res, 'Refresh token required');
   }
 
-  try {
-    // Verify refresh token
-    const decoded = verifyRefreshToken(refreshToken);
-    
-    // Find user and check if refresh token matches
-    const user = await User.findById(decoded.userId).select('+auth.refreshToken').lean();
-    
-    if (!user || user.auth.refreshToken !== hashRefreshToken(refreshToken)) {
-      return sendUnauthorized(res, 'Invalid refresh token');
-    }
+  const decoded = verifyRefreshToken(refreshToken);
 
-    if (!user.isActive) {
-      return sendUnauthorized(res, 'Account is deactivated');
-    }
+  const user = await User.findById(decoded.userId).select('+auth.refreshToken').lean();
 
-    // Blacklist the old refresh token (TTL = 7 days to match refresh token lifetime)
-    blacklistToken(refreshToken, 7 * 24 * 60 * 60);
-
-    // Generate new tokens
-    const newAccessToken = generateToken(String(user._id), user.role);
-    const newRefreshToken = generateRefreshToken(String(user._id));
-
-    // Update hashed refresh token in database
-    user.auth.refreshToken = hashRefreshToken(newRefreshToken);
-    await user.save();
-
-    sendSuccess(res, {
-      tokens: {
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
-        expiresIn: 7 * 24 * 60 * 60 // 7 days in seconds
-      }
-    }, 'Token refreshed successfully');
-
-  } catch (error) {
+  if (!user || user.auth.refreshToken !== hashRefreshToken(refreshToken)) {
     return sendUnauthorized(res, 'Invalid refresh token');
   }
+
+  if (!user.isActive) {
+    return sendUnauthorized(res, 'Account is deactivated');
+  }
+
+  const newAccessToken = generateToken(String(user._id), user.role);
+  const newRefreshToken = generateRefreshToken(String(user._id));
+  const newHashedToken = hashRefreshToken(newRefreshToken);
+  const oldHashedToken = hashRefreshToken(refreshToken);
+
+  // Atomic token rotation — prevents race condition
+  const rotated = await User.findOneAndUpdate(
+    { _id: decoded.userId, 'auth.refreshToken': oldHashedToken },
+    { $set: { 'auth.refreshToken': newHashedToken } },
+    { new: true }
+  );
+
+  if (!rotated) {
+    return sendUnauthorized(res, 'Refresh token already used');
+  }
+
+  blacklistToken(refreshToken, 7 * 24 * 60 * 60);
+
+  sendSuccess(res, {
+    tokens: {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+      expiresIn: 15 * 60 // 15 minutes in seconds
+    }
+  }, 'Token refreshed successfully');
 });
 
 // Logout
+/**
+ * @swagger
+ * /api/user/auth/logout:
+ *   post:
+ *     summary: Logout user
+ *     description: Blacklists the current access and refresh tokens, clears refresh token from DB.
+ *     tags: [User Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Logged out successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ */
 export const logout = asyncHandler(async (req: Request, res: Response) => {
-  try {
-    // Try to get user from token if available
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    
-    if (token) {
-      // Blacklist the access token so it can't be reused (TTL = 24h to match token lifetime)
-      blacklistToken(token, 24 * 60 * 60);
+  const token = req.headers.authorization?.replace('Bearer ', '');
 
-      try {
-        const decoded = verifyToken(token);
-        const user = await User.findById(decoded.userId);
+  if (token) {
+    blacklistToken(token, 24 * 60 * 60);
 
-        if (user) {
-          // Blacklist the refresh token too
-          if (user.auth.refreshToken) {
-            blacklistToken(user.auth.refreshToken, 7 * 24 * 60 * 60);
-          }
-          // Clear refresh token from DB
-          user.auth.refreshToken = undefined;
-          await user.save();
-          logger.info('✅ [LOGOUT] User tokens cleared:', user._id);
+    try {
+      const decoded = verifyToken(token);
+      const user = await User.findById(decoded.userId);
+
+      if (user) {
+        if (user.auth.refreshToken) {
+          blacklistToken(user.auth.refreshToken, 7 * 24 * 60 * 60);
         }
-      } catch (tokenError) {
-        // Token is invalid/expired, but that's okay for logout
-        logger.info('⚠️ [LOGOUT] Invalid token during logout (this is expected):', tokenError instanceof Error ? tokenError.message : String(tokenError));
+        user.auth.refreshToken = undefined;
+        await user.save();
+        logger.info('[LOGOUT] User tokens cleared:', user._id);
       }
+    } catch (tokenError) {
+      // Token is invalid/expired — that's okay for logout
+      logger.info('[LOGOUT] Invalid token during logout (expected):', tokenError instanceof Error ? tokenError.message : String(tokenError));
     }
-    
-    logger.info('✅ [LOGOUT] Logout successful');
-    sendSuccess(res, null, 'Logged out successfully');
-  } catch (error) {
-    // Even if there's an error, logout should succeed
-    console.warn('⚠️ [LOGOUT] Error during logout, but proceeding:', error instanceof Error ? error.message : String(error));
-    sendSuccess(res, null, 'Logged out successfully');
   }
+
+  sendSuccess(res, null, 'Logged out successfully');
 });
 
 // Get current user profile
+/**
+ * @swagger
+ * /api/user/auth/me:
+ *   get:
+ *     summary: Get current user profile
+ *     description: Returns the authenticated user's full profile including preferences and wallet reference.
+ *     tags: [User Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/UserProfile'
+ *       401:
+ *         description: Unauthorized
+ */
 export const getCurrentUser = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     return sendUnauthorized(res, 'Authentication required');
@@ -569,6 +704,62 @@ export const getCurrentUser = asyncHandler(async (req: Request, res: Response) =
 });
 
 // Update user profile
+/**
+ * @swagger
+ * /api/user/auth/profile:
+ *   put:
+ *     summary: Update user profile
+ *     description: Updates the authenticated user's profile and/or preferences. Syncs partner profile if exists.
+ *     tags: [User Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               profile:
+ *                 type: object
+ *                 properties:
+ *                   firstName:
+ *                     type: string
+ *                   lastName:
+ *                     type: string
+ *                   avatar:
+ *                     type: string
+ *                   dateOfBirth:
+ *                     type: string
+ *                     format: date
+ *                   gender:
+ *                     type: string
+ *                     enum: [male, female, other]
+ *               preferences:
+ *                 type: object
+ *                 properties:
+ *                   language:
+ *                     type: string
+ *                   notifications:
+ *                     type: boolean
+ *                   privacyLevel:
+ *                     type: string
+ *     responses:
+ *       200:
+ *         description: Profile updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/UserProfile'
+ *       401:
+ *         description: Unauthorized
+ */
 export const updateProfile = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     return sendUnauthorized(res, 'Authentication required');
@@ -576,57 +767,94 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
 
   const { profile, preferences } = req.body;
 
-  try {
-    // Update profile fields
-    if (profile) {
-      Object.keys(profile).forEach(key => {
-        if (profile[key] !== undefined) {
-          req.user!.profile[key as keyof typeof req.user.profile] = profile[key];
-        }
-      });
-    }
-
-    // Update preferences
-    if (preferences) {
-      Object.keys(preferences).forEach(key => {
-        if (preferences[key] !== undefined) {
-          req.user!.preferences[key as keyof typeof req.user.preferences] = preferences[key];
-        }
-      });
-    }
-
-    await req.user.save();
-
-    // Sync with partner profile to update completion percentage
-    try {
-      const partnerService = require('../services/partnerService').default;
-      const userId = (req.user._id as any).toString();
-      await partnerService.syncProfileCompletion(userId);
-    } catch (error) {
-      logger.error('Error syncing partner profile:', error);
-      // Don't fail the profile update if partner sync fails
-    }
-
-    const userData = {
-      id: req.user._id,
-      phoneNumber: req.user.phoneNumber,
-      email: req.user.email,
-      profile: req.user.profile,
-      preferences: req.user.preferences,
-      wallet: req.user.wallet,
-      role: req.user.role,
-      isVerified: req.user.auth.isVerified,
-      isOnboarded: req.user.auth.isOnboarded
-    };
-
-    sendSuccess(res, userData, 'Profile updated successfully');
-
-  } catch (error) {
-    throw new AppError('Failed to update profile', 500);
+  if (profile) {
+    Object.keys(profile).forEach(key => {
+      if (profile[key] !== undefined) {
+        req.user!.profile[key as keyof typeof req.user.profile] = profile[key];
+      }
+    });
   }
+
+  if (preferences) {
+    Object.keys(preferences).forEach(key => {
+      if (preferences[key] !== undefined) {
+        req.user!.preferences[key as keyof typeof req.user.preferences] = preferences[key];
+      }
+    });
+  }
+
+  await req.user.save();
+
+  // Sync with partner profile
+  try {
+    const partnerService = require('../services/partnerService').default;
+    const userId = (req.user._id as any).toString();
+    await partnerService.syncProfileCompletion(userId);
+  } catch (error) {
+    logger.error('Error syncing partner profile:', error);
+  }
+
+  const userData = {
+    id: req.user._id,
+    phoneNumber: req.user.phoneNumber,
+    email: req.user.email,
+    profile: req.user.profile,
+    preferences: req.user.preferences,
+    wallet: req.user.wallet,
+    role: req.user.role,
+    isVerified: req.user.auth.isVerified,
+    isOnboarded: req.user.auth.isOnboarded
+  };
+
+  sendSuccess(res, userData, 'Profile updated successfully');
 });
 
 // Complete onboarding
+/**
+ * @swagger
+ * /api/user/auth/complete-onboarding:
+ *   post:
+ *     summary: Complete user onboarding
+ *     description: Marks the user as onboarded after collecting profile data. Fails if already onboarded.
+ *     tags: [User Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               profile:
+ *                 type: object
+ *                 properties:
+ *                   firstName:
+ *                     type: string
+ *                   lastName:
+ *                     type: string
+ *                   dateOfBirth:
+ *                     type: string
+ *                     format: date
+ *                   gender:
+ *                     type: string
+ *               preferences:
+ *                 type: object
+ *     responses:
+ *       200:
+ *         description: Onboarding completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/UserProfile'
+ *       409:
+ *         description: User already onboarded
+ */
 export const completeOnboarding = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     return sendUnauthorized(res, 'Authentication required');
@@ -638,52 +866,76 @@ export const completeOnboarding = asyncHandler(async (req: Request, res: Respons
 
   const { profile, preferences } = req.body;
 
-  try {
-    // Update profile and preferences
-    if (profile) {
-      Object.keys(profile).forEach(key => {
-        if (profile[key] !== undefined) {
-          req.user!.profile[key as keyof typeof req.user.profile] = profile[key];
-        }
-      });
-    }
-
-    if (preferences) {
-      Object.keys(preferences).forEach(key => {
-        if (preferences[key] !== undefined) {
-          req.user!.preferences[key as keyof typeof req.user.preferences] = preferences[key];
-        }
-      });
-    }
-
-    // Mark as onboarded
-    req.user.auth.isOnboarded = true;
-    await req.user.save();
-
-    const userData = {
-      id: req.user._id,
-      phoneNumber: req.user.phoneNumber,
-      email: req.user.email,
-      profile: req.user.profile,
-      preferences: req.user.preferences,
-      wallet: req.user.wallet,
-      role: req.user.role,
-      isVerified: req.user.auth.isVerified,
-      isOnboarded: req.user.auth.isOnboarded
-    };
-
-    sendSuccess(res, userData, 'Onboarding completed successfully');
-
-  } catch (error) {
-    logger.error('❌ [COMPLETE_ONBOARDING] Error details:', error);
-    if (error instanceof AppError) {
-      throw error;
-    }
-    throw new AppError(`Failed to complete onboarding: ${error instanceof Error ? error.message : String(error)}`, 500);
+  if (profile) {
+    Object.keys(profile).forEach(key => {
+      if (profile[key] !== undefined) {
+        req.user!.profile[key as keyof typeof req.user.profile] = profile[key];
+      }
+    });
   }
+
+  if (preferences) {
+    Object.keys(preferences).forEach(key => {
+      if (preferences[key] !== undefined) {
+        req.user!.preferences[key as keyof typeof req.user.preferences] = preferences[key];
+      }
+    });
+  }
+
+  req.user.auth.isOnboarded = true;
+  await req.user.save();
+
+  const userData = {
+    id: req.user._id,
+    phoneNumber: req.user.phoneNumber,
+    email: req.user.email,
+    profile: req.user.profile,
+    preferences: req.user.preferences,
+    wallet: req.user.wallet,
+    role: req.user.role,
+    isVerified: req.user.auth.isVerified,
+    isOnboarded: req.user.auth.isOnboarded
+  };
+
+  sendSuccess(res, userData, 'Onboarding completed successfully');
 });
 
 // Change password
+/**
+ * @swagger
+ * /api/user/auth/change-password:
+ *   put:
+ *     summary: Change password
+ *     description: Changes the user's password. Requires current password. New password must contain uppercase, lowercase, and digit (min 8 chars).
+ *     tags: [User Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [currentPassword, newPassword]
+ *             properties:
+ *               currentPassword:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *                 minLength: 8
+ *                 description: Must contain uppercase, lowercase, and digit
+ *     responses:
+ *       200:
+ *         description: Password changed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Weak password
+ *       401:
+ *         description: Wrong current password
+ */
 export const changePassword = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     return sendUnauthorized(res, 'Authentication required');
@@ -696,43 +948,55 @@ export const changePassword = asyncHandler(async (req: Request, res: Response) =
   }
 
   if (newPassword.length < 8) {
-    throw new AppError('New password must be at least 8 characters long', 400);
+    throw new AppError('New password must be at least 8 characters long', 400, 'WEAK_PASSWORD');
   }
 
-  // S-10: Require at least one uppercase, one lowercase, and one digit
   if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/\d/.test(newPassword)) {
-    throw new AppError('Password must contain at least one uppercase letter, one lowercase letter, and one digit', 400);
+    throw new AppError('Password must contain at least one uppercase letter, one lowercase letter, and one digit', 400, 'WEAK_PASSWORD');
   }
 
-  try {
-    // Verify current password
-    const isCurrentPasswordValid = await req.user.comparePassword(currentPassword);
-    if (!isCurrentPasswordValid) {
-      throw new AppError('Current password is incorrect', 400);
-    }
-
-    // Update password
-    req.user.password = newPassword;
-    await req.user.save();
-
-    sendSuccess(res, null, 'Password changed successfully');
-
-  } catch (error) {
-    if (error instanceof AppError) {
-      throw error;
-    }
-    throw new AppError('Failed to change password', 500);
+  const isCurrentPasswordValid = await req.user.comparePassword(currentPassword);
+  if (!isCurrentPasswordValid) {
+    throw new AppError('Current password is incorrect', 400, 'INVALID_PASSWORD');
   }
+
+  req.user.password = newPassword;
+  await req.user.save();
+
+  sendSuccess(res, null, 'Password changed successfully');
 });
 
 // Delete account (GDPR-compliant: anonymize + cascade)
+/**
+ * @swagger
+ * /api/user/auth/account:
+ *   delete:
+ *     summary: Delete account (GDPR)
+ *     description: |
+ *       Permanently deletes the user account with full GDPR-compliant cascade:
+ *       - Anonymizes orders, reviews, transactions
+ *       - Deletes videos, wishlists, favorites, notifications
+ *       - Cancels subscriptions, freezes wallet
+ *       - Clears all tokens and push tokens
+ *     tags: [User Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Account deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Unauthorized
+ */
 export const deleteAccount = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     return sendUnauthorized(res, 'Authentication required');
   }
 
-  try {
-    const userId = req.user._id;
+  const userId = req.user._id;
     const anonymizedId = `deleted_${userId}`;
 
     // Dynamic imports to avoid circular dependencies
@@ -839,21 +1103,61 @@ export const deleteAccount = asyncHandler(async (req: Request, res: Response) =>
     (req.user as any).deviceInfo = [];
     await req.user.save();
 
-    sendSuccess(res, null, 'Account and associated data deleted successfully');
-
-  } catch (error) {
-    throw new AppError('Failed to delete account', 500);
-  }
+  sendSuccess(res, null, 'Account and associated data deleted successfully');
 });
 
 // GDPR data export — returns all user data as JSON
+/**
+ * @swagger
+ * /api/user/auth/me/data-export:
+ *   get:
+ *     summary: Export user data (GDPR)
+ *     description: Returns all user data as JSON for GDPR data portability — profile, wallet, orders, reviews, transactions, subscriptions, wishlists, favorites.
+ *     tags: [User Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User data export
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     profile:
+ *                       type: object
+ *                     wallet:
+ *                       type: object
+ *                     orders:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                     reviews:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                     transactions:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                     exportedAt:
+ *                       type: string
+ *                       format: date-time
+ *       401:
+ *         description: Unauthorized
+ */
 export const exportUserData = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     return sendUnauthorized(res, 'Authentication required');
   }
 
-  try {
-    const userId = req.user._id;
+  const userId = req.user._id;
 
     const { Order } = await import('../models/Order');
     const { Review } = await import('../models/Review');
@@ -889,23 +1193,79 @@ export const exportUserData = asyncHandler(async (req: Request, res: Response) =
       exportedAt: new Date().toISOString(),
     };
 
-    sendSuccess(res, userData, 'User data exported successfully');
-  } catch (error) {
-    throw new AppError('Failed to export user data', 500);
-  }
+  sendSuccess(res, userData, 'User data exported successfully');
 });
 
 // Get user statistics (aggregated data from all modules)
+/**
+ * @swagger
+ * /api/user/auth/statistics:
+ *   get:
+ *     summary: Get user statistics
+ *     description: Returns aggregated statistics across user's wallet, orders, videos, projects, vouchers, achievements, and more.
+ *     tags: [User Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         joinedDate:
+ *                           type: string
+ *                           format: date-time
+ *                         totalReferrals:
+ *                           type: number
+ *                         referralEarnings:
+ *                           type: number
+ *                     wallet:
+ *                       type: object
+ *                       properties:
+ *                         balance:
+ *                           type: number
+ *                         totalEarned:
+ *                           type: number
+ *                         totalSpent:
+ *                           type: number
+ *                     orders:
+ *                       type: object
+ *                       properties:
+ *                         total:
+ *                           type: number
+ *                         completed:
+ *                           type: number
+ *                         totalSpent:
+ *                           type: number
+ *                     summary:
+ *                       type: object
+ *                       properties:
+ *                         totalEarnings:
+ *                           type: number
+ *                         totalSpendings:
+ *                           type: number
+ *       401:
+ *         description: Unauthorized
+ */
 export const getUserStatistics = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     return sendUnauthorized(res, 'Authentication required');
   }
 
-  try {
-    const userId = req.user._id;
+  const userId = req.user._id;
 
-    // Import models dynamically to avoid circular dependencies
-    const { Order } = await import('../models/Order');
+  const { Order } = await import('../models/Order');
     const { Video } = await import('../models/Video');
     const { Project } = await import('../models/Project');
     const OfferRedemption = (await import('../models/OfferRedemption')).default;
@@ -1086,84 +1446,88 @@ export const getUserStatistics = asyncHandler(async (req: Request, res: Response
       }
     };
 
-    sendSuccess(res, statistics, 'User statistics retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching user statistics:', error);
-    throw new AppError('Failed to fetch user statistics', 500);
-  }
+  sendSuccess(res, statistics, 'User statistics retrieved successfully');
 });
 
 // Upload profile avatar
+/**
+ * @swagger
+ * /api/user/auth/upload-avatar:
+ *   post:
+ *     summary: Upload user avatar
+ *     description: Uploads a profile avatar image to Cloudinary. Syncs partner profile if exists.
+ *     tags: [User Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [avatar]
+ *             properties:
+ *               avatar:
+ *                 type: string
+ *                 format: binary
+ *                 description: Image file (JPEG, PNG, etc.)
+ *     responses:
+ *       200:
+ *         description: Avatar uploaded
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/UserProfile'
+ *       400:
+ *         description: No file provided
+ *       500:
+ *         description: Upload failed
+ */
 export const uploadAvatar = asyncHandler(async (req: Request, res: Response) => {
-  const startTime = Date.now();
-  logger.info('📸 [AVATAR UPLOAD] Started for user:', req.user?._id);
-  
   if (!req.user) {
     return sendUnauthorized(res, 'Authentication required');
   }
 
   if (!req.file) {
-    logger.error('❌ [AVATAR UPLOAD] No file provided');
     return sendBadRequest(res, 'No image file provided');
   }
 
-  try {
-    // Cloudinary automatically uploads the file via multer middleware
-    // The file URL is available in req.file.path
-    const avatarUrl = (req.file as any).path;
-    
-    if (!avatarUrl) {
-      logger.error('❌ [AVATAR UPLOAD] No URL returned from Cloudinary');
-      throw new AppError('Failed to upload image to Cloudinary', 500);
-    }
-    
-    logger.info('✅ [AVATAR UPLOAD] Cloudinary upload successful:', avatarUrl);
-
-    // Update user profile with new avatar URL
-    req.user.profile.avatar = avatarUrl;
-    await req.user.save();
-    logger.info('💾 [AVATAR UPLOAD] User profile updated');
-
-    // Sync with partner profile to update avatar AND completion percentage
-    try {
-      const partnerService = require('../services/partnerService').default;
-      const userId = (req.user._id as any).toString();
-      
-      // Update partner avatar
-      const Partner = require('../models/Partner').default;
-      await Partner.findOneAndUpdate(
-        { userId: userId },
-        { avatar: avatarUrl }
-      );
-      logger.info('✅ [AVATAR UPLOAD] Partner profile avatar synced');
-      
-      // Update profile completion
-      await partnerService.syncProfileCompletion(userId);
-    } catch (error) {
-      logger.error('Error syncing partner profile:', error);
-      // Don't fail the avatar upload if partner sync fails
-    }
-
-    const userData = {
-      id: req.user._id,
-      phoneNumber: req.user.phoneNumber,
-      email: req.user.email,
-      profile: req.user.profile,
-      preferences: req.user.preferences,
-      wallet: req.user.wallet,
-      role: req.user.role,
-      isVerified: req.user.auth.isVerified,
-      isOnboarded: req.user.auth.isOnboarded
-    };
-
-    const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
-    logger.info(`⏱️ [AVATAR UPLOAD] Completed in ${uploadTime} seconds`);
-
-    sendSuccess(res, userData, 'Profile picture updated successfully');
-
-  } catch (error) {
-    const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
-    logger.error(`❌ [AVATAR UPLOAD] Failed after ${uploadTime} seconds:`, error);
-    throw new AppError('Failed to upload profile picture', 500);
+  const avatarUrl = (req.file as any).path;
+  if (!avatarUrl) {
+    throw new AppError('Failed to upload image to Cloudinary', 500, 'UPLOAD_FAILED');
   }
+
+  req.user.profile.avatar = avatarUrl;
+  await req.user.save();
+
+  // Sync with partner profile
+  try {
+    const partnerService = require('../services/partnerService').default;
+    const userId = (req.user._id as any).toString();
+    const Partner = require('../models/Partner').default;
+    await Partner.findOneAndUpdate({ userId }, { avatar: avatarUrl });
+    await partnerService.syncProfileCompletion(userId);
+  } catch (error) {
+    logger.error('Error syncing partner profile:', error);
+  }
+
+  const userData = {
+    id: req.user._id,
+    phoneNumber: req.user.phoneNumber,
+    email: req.user.email,
+    profile: req.user.profile,
+    preferences: req.user.preferences,
+    wallet: req.user.wallet,
+    role: req.user.role,
+    isVerified: req.user.auth.isVerified,
+    isOnboarded: req.user.auth.isOnboarded
+  };
+
+  sendSuccess(res, userData, 'Profile picture updated successfully');
 });

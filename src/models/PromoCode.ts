@@ -266,7 +266,7 @@ PromoCodeSchema.methods.canBeUsedBy = async function(
   return userUsageCount < this.maxUsesPerUser;
 };
 
-// Instance method to increment usage
+// Instance method to increment usage — atomic with maxUses guard
 PromoCodeSchema.methods.incrementUsage = async function(
   this: IPromoCode,
   userId: Types.ObjectId | string,
@@ -276,17 +276,33 @@ PromoCodeSchema.methods.incrementUsage = async function(
 ): Promise<void> {
   const discount = originalPrice - finalPrice;
 
-  this.usedCount += 1;
-  this.usedBy.push({
-    user: new Types.ObjectId(userId.toString()),
-    usedAt: new Date(),
-    subscriptionId: new Types.ObjectId(subscriptionId.toString()),
-    discountApplied: discount,
-    originalPrice,
-    finalPrice
-  });
+  const result = await (this.constructor as any).findOneAndUpdate(
+    {
+      _id: this._id,
+      $or: [
+        { maxUses: 0 },  // 0 = unlimited
+        { $expr: { $lt: ['$usedCount', '$maxUses'] } }
+      ]
+    },
+    {
+      $inc: { usedCount: 1 },
+      $push: {
+        usedBy: {
+          user: new Types.ObjectId(userId.toString()),
+          usedAt: new Date(),
+          subscriptionId: new Types.ObjectId(subscriptionId.toString()),
+          discountApplied: discount,
+          originalPrice,
+          finalPrice
+        }
+      }
+    },
+    { new: true }
+  );
 
-  await this.save();
+  if (!result) {
+    throw new Error('Promo code usage limit exceeded');
+  }
 };
 
 // Instance method to calculate discount

@@ -5,6 +5,7 @@ import stockSocketService from './stockSocketService'; // Import socket service 
 import stripeService from './stripeService';
 import { User } from '../models/User';
 import pushNotificationService from './pushNotificationService';
+import { logger } from '../config/logger';
 
 interface CreateFlashSaleData {
   title: string;
@@ -319,24 +320,37 @@ class FlashSaleService {
    */
   async updateSoldQuantity(flashSaleId: string, quantity: number, userId: string): Promise<IFlashSale | null> {
     try {
-      const flashSale = await FlashSale.findById(flashSaleId);
+      const userObjId = new mongoose.Types.ObjectId(userId);
+
+      // Atomic increment with $gte guard — prevents overselling
+      const flashSale = await FlashSale.findOneAndUpdate(
+        {
+          _id: flashSaleId,
+          $expr: { $lte: [{ $add: ['$soldQuantity', quantity] }, '$maxQuantity'] }
+        },
+        {
+          $inc: { soldQuantity: quantity, purchaseCount: 1 },
+          $addToSet: { notifiedUsers: userObjId }
+        },
+        { new: true }
+      );
 
       if (!flashSale) {
-        throw new Error('Flash sale not found');
+        // Check if flash sale exists at all vs just sold out
+        const exists = await FlashSale.findById(flashSaleId).lean();
+        if (!exists) {
+          throw new Error('Flash sale not found');
+        }
+        throw new Error(`Flash sale sold out. Max: ${exists.maxQuantity}, Sold: ${exists.soldQuantity}, Requested: ${quantity}`);
       }
 
-      // Update quantities
-      flashSale.soldQuantity += quantity;
-      flashSale.purchaseCount += 1;
-
-      // Track unique customers
-      if (!flashSale.notifiedUsers.includes(new mongoose.Types.ObjectId(userId))) {
-        flashSale.uniqueCustomers += 1;
+      // Update uniqueCustomers count based on addToSet result (approximate)
+      // Since $addToSet only adds if not present, we can recalculate
+      if (flashSale.notifiedUsers && flashSale.uniqueCustomers !== flashSale.notifiedUsers.length) {
+        await FlashSale.findByIdAndUpdate(flashSaleId, { uniqueCustomers: flashSale.notifiedUsers.length });
       }
 
-      await flashSale.save();
-
-      console.log('✅ [FlashSaleService] Updated sold quantity:', {
+      logger.info('[FlashSaleService] Updated sold quantity', {
         flashSaleId,
         soldQuantity: flashSale.soldQuantity,
         maxQuantity: flashSale.maxQuantity,
@@ -363,10 +377,12 @@ class FlashSaleService {
           });
         }
 
-        // Check if sold out
+        // Check if sold out — atomic status transition
         if (flashSale.soldQuantity >= flashSale.maxQuantity) {
-          flashSale.status = 'sold_out';
-          await flashSale.save();
+          await FlashSale.findOneAndUpdate(
+            { _id: flashSale._id, status: { $ne: 'sold_out' } },
+            { $set: { status: 'sold_out' } }
+          );
 
           stockSocketService.getIO()?.emit('flashsale:sold_out', {
             flashSaleId: flashSale._id,

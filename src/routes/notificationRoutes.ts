@@ -3,7 +3,9 @@ import {
   getUserNotifications,
   getUnreadCount,
   markAsRead,
-  deleteNotification
+  deleteNotification,
+  registerPushToken,
+  unregisterPushToken
 } from '../controllers/notificationController';
 import { authenticate } from '../middleware/auth';
 import { validate, validateParams, validateQuery, notificationSchemas, commonSchemas } from '../middleware/validation';
@@ -39,12 +41,30 @@ router.patch('/read',
 );
 
 // Delete notification
-router.delete('/:notificationId', 
+router.delete('/:notificationId',
   // generalLimiter,, // Disabled for development
   validateParams(Joi.object({
     notificationId: commonSchemas.objectId().required()
   })),
   deleteNotification
+);
+
+// Register push token
+router.post('/register-token',
+  validate(Joi.object({
+    token: Joi.string().required(),
+    platform: Joi.string().valid('ios', 'android', 'web').default('android'),
+    deviceInfo: Joi.object().optional()
+  })),
+  registerPushToken
+);
+
+// Unregister push token
+router.post('/unregister-token',
+  validate(Joi.object({
+    token: Joi.string().required()
+  })),
+  unregisterPushToken
 );
 
 export default router;

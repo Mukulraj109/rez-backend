@@ -430,26 +430,30 @@ EventSchema.statics.findUpcoming = function() {
   });
 };
 
-// Instance methods
-EventSchema.methods.incrementViews = function() {
-  this.analytics.views += 1;
-  this.analytics.lastViewed = new Date();
-  return this.save();
+// Instance methods — use atomic $inc to avoid race conditions
+EventSchema.methods.incrementViews = async function() {
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { 'analytics.views': 1 },
+    $set: { 'analytics.lastViewed': new Date() }
+  });
 };
 
-EventSchema.methods.incrementBookings = function() {
-  this.analytics.bookings += 1;
-  return this.save();
+EventSchema.methods.incrementBookings = async function() {
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { 'analytics.bookings': 1 }
+  });
 };
 
-EventSchema.methods.incrementShares = function() {
-  this.analytics.shares += 1;
-  return this.save();
+EventSchema.methods.incrementShares = async function() {
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { 'analytics.shares': 1 }
+  });
 };
 
-EventSchema.methods.incrementFavorites = function() {
-  this.analytics.favorites += 1;
-  return this.save();
+EventSchema.methods.incrementFavorites = async function() {
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { 'analytics.favorites': 1 }
+  });
 };
 
 // Create and export the model

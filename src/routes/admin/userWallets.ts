@@ -169,26 +169,37 @@ router.post('/:userId/adjust', async (req: Request, res: Response) => {
       cashback: 0,
     };
 
-    const incAmount = type === 'credit' ? parsedAmount : -parsedAmount;
-
-    const updated = await Wallet.findOneAndUpdate(
-      {
-        _id: wallet._id,
-        ...(type === 'debit' ? { 'balance.available': { $gte: parsedAmount } } : {}),
-      },
-      {
-        $inc: {
-          'balance.available': incAmount,
-          'balance.total': incAmount,
-        },
-        $set: { lastTransactionAt: new Date() }
-      },
-      { new: true }
-    );
-
-    if (!updated) {
-      return res.status(400).json({ success: false, message: 'Insufficient balance for debit' });
+    // Use walletService for atomic mutation + CoinTransaction + LedgerEntry
+    const { walletService } = await import('../../services/walletService');
+    try {
+      if (type === 'credit') {
+        await walletService.credit({
+          userId: req.params.userId,
+          amount: parsedAmount,
+          source: 'admin',
+          description: `Admin adjustment: ${reason.trim()}`,
+          operationType: 'admin_adjustment',
+          referenceId: `admin-adjust:${req.params.userId}:${Date.now()}`,
+          referenceModel: 'AdminAction',
+          metadata: { adminUserId: String((req as any).userId), reason: reason.trim(), idempotencyKey: `admin-adjust:${req.params.userId}:${Date.now()}` },
+        });
+      } else {
+        await walletService.debit({
+          userId: req.params.userId,
+          amount: parsedAmount,
+          source: 'admin',
+          description: `Admin adjustment: ${reason.trim()}`,
+          operationType: 'admin_adjustment',
+          referenceId: `admin-adjust:${req.params.userId}:${Date.now()}`,
+          referenceModel: 'AdminAction',
+          metadata: { adminUserId: String((req as any).userId), reason: reason.trim(), idempotencyKey: `admin-adjust:${req.params.userId}:${Date.now()}` },
+        });
+      }
+    } catch (walletErr: any) {
+      return res.status(400).json({ success: false, message: walletErr.message || 'Wallet operation failed' });
     }
+
+    const updated = await Wallet.findOne({ user: req.params.userId }).lean();
 
     logTransaction({
       userId: new mongoose.Types.ObjectId(req.params.userId),
@@ -197,7 +208,7 @@ router.post('/:userId/adjust', async (req: Request, res: Response) => {
       operation: type === 'credit' ? 'credit' : 'debit',
       amount: parsedAmount,
       balanceBefore,
-      balanceAfter: { total: updated.balance.total, available: updated.balance.available, pending: 0, cashback: 0 },
+      balanceAfter: { total: updated?.balance.total || 0, available: updated?.balance.available || 0, pending: 0, cashback: 0 },
       reference: { type: 'adjustment', description: `Admin adjustment: ${reason.trim()}` },
       metadata: { source: 'admin', adminUserId: String((req as any).userId) },
     });
@@ -205,7 +216,7 @@ router.post('/:userId/adjust', async (req: Request, res: Response) => {
     res.json({
       success: true,
       message: `${type === 'credit' ? 'Credited' : 'Debited'} ${parsedAmount} NC`,
-      data: { balance: updated.balance }
+      data: { balance: updated?.balance }
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: 'Failed to adjust wallet' });

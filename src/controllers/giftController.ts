@@ -418,88 +418,116 @@ export const claimGift = asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  // Atomic claim — prevents double-claim race condition
-  // Single findOneAndUpdate transitions status 'delivered' → 'claimed' atomically
-  const gift = await CoinGift.findOneAndUpdate(
-    {
-      _id: id,
-      recipient: userId,
-      status: 'delivered',
-      expiresAt: { $gte: new Date() }
-    },
-    {
-      $set: { status: 'claimed', claimedAt: new Date() }
-    },
-    { new: true }
-  );
+  // Use a MongoDB transaction to ensure gift claim + wallet credit are atomic
+  // If wallet credit fails, the gift status rolls back to 'delivered'
+  const session = await mongoose.startSession();
+  let gift: any;
+  let creditResult: any;
+  let recipientWalletBefore: any;
 
-  if (!gift) {
-    // Check if it was expired vs already claimed vs not found
-    const existing = await CoinGift.findOne({ _id: id, recipient: userId }).lean();
-    if (!existing) return sendBadRequest(res, 'Gift not found');
-    if (existing.status === 'claimed') return sendBadRequest(res, 'Gift already claimed');
-    if (existing.expiresAt < new Date()) {
-      // Mark as expired if not already
-      if (existing.status !== 'expired') {
-        await CoinGift.updateOne({ _id: id }, { $set: { status: 'expired' } });
+  try {
+    await session.startTransaction();
+
+    // Atomic claim — prevents double-claim race condition
+    gift = await CoinGift.findOneAndUpdate(
+      {
+        _id: id,
+        recipient: userId,
+        status: 'delivered',
+        expiresAt: { $gte: new Date() }
+      },
+      {
+        $set: { status: 'claimed', claimedAt: new Date() }
+      },
+      { new: true, session }
+    );
+
+    if (!gift) {
+      await session.abortTransaction();
+      // Check if it was expired vs already claimed vs not found
+      const existing = await CoinGift.findOne({ _id: id, recipient: userId }).lean();
+      if (!existing) return sendBadRequest(res, 'Gift not found');
+      if (existing.status === 'claimed') return sendBadRequest(res, 'Gift already claimed');
+      if (existing.expiresAt < new Date()) {
+        if (existing.status !== 'expired') {
+          await CoinGift.updateOne({ _id: id }, { $set: { status: 'expired' } });
+        }
+        return sendBadRequest(res, 'Gift has expired');
       }
-      return sendBadRequest(res, 'Gift has expired');
+      return sendBadRequest(res, 'Gift not available for claiming');
     }
-    return sendBadRequest(res, 'Gift not available for claiming');
+
+    // Read wallet state BEFORE credit (for audit log) — inside transaction for consistency
+    recipientWalletBefore = await Wallet.findOne({ user: userId }).session(session).lean();
+    if (!recipientWalletBefore) {
+      await session.abortTransaction();
+      return sendError(res, 'Wallet not found', 404);
+    }
+
+    // Credit recipient wallet inside same transaction
+    creditResult = await Wallet.findOneAndUpdate(
+      { _id: recipientWalletBefore._id },
+      {
+        $inc: {
+          'balance.available': gift.amount,
+          'balance.total': gift.amount,
+          'statistics.totalEarned': gift.amount
+        },
+        $set: { lastTransactionAt: new Date() }
+      },
+      { new: true, session }
+    );
+
+    if (!creditResult) {
+      await session.abortTransaction();
+      return sendError(res, 'Failed to credit wallet', 500);
+    }
+
+    // Create CoinTransaction inside transaction (source of truth for auto-sync)
+    const recipientTx = await CoinTransaction.create([{
+      user: userId,
+      type: 'earned',
+      amount: gift.amount,
+      balance: creditResult.balance?.available || 0,
+      source: 'transfer',
+      description: `Gift received from a friend`,
+      metadata: { giftId: gift._id, senderId: gift.sender }
+    }], { session });
+
+    // Link CoinTransaction to gift
+    await CoinGift.updateOne(
+      { _id: gift._id },
+      { $set: { recipientTxId: recipientTx[0]._id } },
+      { session }
+    );
+
+    await session.commitTransaction();
+  } catch (txError) {
+    await session.abortTransaction();
+    logger.error('Gift claim transaction failed', txError, { giftId: id, userId });
+    return sendError(res, 'Failed to claim gift. Please try again.', 500);
+  } finally {
+    session.endSession();
   }
 
-  // Credit recipient wallet atomically — capture result for accurate audit log
-  const recipientWallet = await Wallet.findOne({ user: userId }).lean();
-  if (!recipientWallet) return sendError(res, 'Wallet not found', 404);
-
-  const creditResult = await Wallet.findOneAndUpdate(
-    { _id: recipientWallet._id },
-    {
-      $inc: {
-        'balance.available': gift.amount,
-        'balance.total': gift.amount,
-        'statistics.totalEarned': gift.amount
-      },
-      $set: { lastTransactionAt: new Date() }
-    },
-    { new: true }
-  );
-
-  // Audit log — use actual balances from before/after
+  // Audit log — outside transaction (non-critical)
   logTransaction({
     userId: new mongoose.Types.ObjectId(userId),
-    walletId: recipientWallet._id as mongoose.Types.ObjectId,
+    walletId: recipientWalletBefore._id as mongoose.Types.ObjectId,
     walletType: 'user',
     operation: 'credit',
     amount: gift.amount,
-    balanceBefore: { total: recipientWallet.balance.total, available: recipientWallet.balance.available, pending: 0, cashback: 0 },
+    balanceBefore: { total: recipientWalletBefore.balance.total, available: recipientWalletBefore.balance.available, pending: 0, cashback: 0 },
     balanceAfter: {
-      total: creditResult?.balance.total ?? recipientWallet.balance.total + gift.amount,
-      available: creditResult?.balance.available ?? recipientWallet.balance.available + gift.amount,
+      total: creditResult.balance.total,
+      available: creditResult.balance.available,
       pending: 0,
       cashback: 0,
     },
     reference: { type: 'other', id: String(gift._id), description: `Gift claimed from ${gift.sender}` }
   });
 
-  // Create CoinTransaction (source of truth for auto-sync) + capture ID
-  try {
-    const recipientTx = await CoinTransaction.createTransaction(
-      userId,
-      'earned',
-      gift.amount,
-      'transfer',
-      `Gift received from a friend`,
-      { giftId: gift._id, senderId: gift.sender }
-    );
-    // Populate recipientTxId on gift record
-    gift.recipientTxId = recipientTx._id as mongoose.Types.ObjectId;
-    await gift.save();
-  } catch (ctxError) {
-    logger.error('Failed to create recipient CoinTransaction', ctxError, { giftId: String(gift._id) });
-  }
-
-  // Double-entry ledger: debit platform_float → credit recipient wallet
+  // Double-entry ledger (non-critical, outside transaction)
   try {
     const platformFloatId = ledgerService.getPlatformAccountId('platform_float');
     await ledgerService.recordEntry({

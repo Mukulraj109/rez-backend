@@ -66,6 +66,18 @@ export interface ICoinRules {
   earningMethods: string[];
 }
 
+export interface ICoinExpiryRule {
+  expiryDays: number;
+  maxUsagePct: number;
+}
+
+export interface ICoinExpiryConfig {
+  rez: ICoinExpiryRule;
+  prive: ICoinExpiryRule;
+  promo: ICoinExpiryRule;
+  branded: ICoinExpiryRule;
+}
+
 export interface IRedemptionConfig {
   conversionRates: {
     gift_card: number;
@@ -176,6 +188,7 @@ export interface IWalletConfig extends Document {
   habitLoopConfig: IHabitLoopConfig;
   priveInviteConfig: IPriveInviteConfig;
   priveProgramConfig: IPriveProgramConfig;
+  coinExpiryConfig: ICoinExpiryConfig;
   coinRules: Record<string, ICoinRules>;
   createdAt: Date;
   updatedAt: Date;
@@ -404,6 +417,24 @@ const WalletConfigSchema = new Schema<IWalletConfig>({
       expiryWarningDays: { type: Number, default: 7 },
     },
   },
+  coinExpiryConfig: {
+    rez: {
+      expiryDays: { type: Number, default: 0 },
+      maxUsagePct: { type: Number, default: 100 },
+    },
+    prive: {
+      expiryDays: { type: Number, default: 365 },
+      maxUsagePct: { type: Number, default: 100 },
+    },
+    promo: {
+      expiryDays: { type: Number, default: 90 },
+      maxUsagePct: { type: Number, default: 20 },
+    },
+    branded: {
+      expiryDays: { type: Number, default: 180 },
+      maxUsagePct: { type: Number, default: 100 },
+    },
+  },
   coinRules: {
     type: Schema.Types.Mixed,
     default: {
@@ -416,7 +447,7 @@ const WalletConfigSchema = new Schema<IWalletConfig>({
         earningMethods: ['Bonus Campaigns', 'Festival Offers', 'Flash Sales', 'Category Multipliers'],
       },
       branded: {
-        usageRules: ['Use only at the issuing merchant', 'No expiry (merchant-specific)', 'Cannot transfer to others'],
+        usageRules: ['Use only at the issuing merchant', 'Expires in 180 days (configurable)', 'Cannot transfer to others'],
         earningMethods: ['Store Purchases', 'Merchant Promotions', 'Loyalty Programs'],
       },
     }

@@ -14,7 +14,7 @@ export interface IWebhookLog extends Document {
   signatureValid: boolean; // Whether signature was valid
   processed: boolean; // Whether webhook was processed
   processedAt?: Date;
-  status: 'pending' | 'processing' | 'success' | 'failed' | 'duplicate';
+  status: 'pending' | 'processing' | 'success' | 'failed' | 'duplicate' | 'pending_retry';
   errorMessage?: string;
   retryCount: number;
   metadata?: {
@@ -68,7 +68,7 @@ const WebhookLogSchema = new Schema<IWebhookLog>({
   },
   status: {
     type: String,
-    enum: ['pending', 'processing', 'success', 'failed', 'duplicate'],
+    enum: ['pending', 'processing', 'success', 'failed', 'duplicate', 'pending_retry'],
     default: 'pending',
     index: true
   },

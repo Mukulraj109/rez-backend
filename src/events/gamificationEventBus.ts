@@ -137,22 +137,37 @@ class GamificationEventBus {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    // Import and register handlers
+    // Import and register handlers (only for enabled features)
     try {
-      const { registerAchievementHandler } = await import('./handlers/achievementProgressHandler');
-      const { registerChallengeHandler } = await import('./handlers/challengeProgressHandler');
-      const { registerStreakHandler } = await import('./handlers/streakHandler');
-      const { registerLeaderboardHandler } = await import('./handlers/leaderboardHandler');
-      const { registerMissionProgressHandler } = await import('./handlers/missionProgressHandler');
+      const { isGamificationEnabled } = await import('../config/gamificationFeatureFlags');
+      let handlerCount = 0;
 
-      registerAchievementHandler(this);
-      registerChallengeHandler(this);
-      registerStreakHandler(this);
-      registerLeaderboardHandler(this);
-      registerMissionProgressHandler(this);
+      if (isGamificationEnabled('achievements')) {
+        const { registerAchievementHandler } = await import('./handlers/achievementProgressHandler');
+        registerAchievementHandler(this);
+        handlerCount++;
+      }
+      if (isGamificationEnabled('challenges')) {
+        const { registerChallengeHandler } = await import('./handlers/challengeProgressHandler');
+        registerChallengeHandler(this);
+        handlerCount++;
+        const { registerMissionProgressHandler } = await import('./handlers/missionProgressHandler');
+        registerMissionProgressHandler(this);
+        handlerCount++;
+      }
+      if (isGamificationEnabled('streaks')) {
+        const { registerStreakHandler } = await import('./handlers/streakHandler');
+        registerStreakHandler(this);
+        handlerCount++;
+      }
+      if (isGamificationEnabled('leaderboard')) {
+        const { registerLeaderboardHandler } = await import('./handlers/leaderboardHandler');
+        registerLeaderboardHandler(this);
+        handlerCount++;
+      }
 
       this.initialized = true;
-      logger.info('[EVENT BUS] Gamification event bus initialized with all handlers');
+      logger.info(`[EVENT BUS] Gamification event bus initialized with ${handlerCount} handler(s)`);
     } catch (error) {
       logger.error('[EVENT BUS] Failed to initialize handlers:', error);
     }

@@ -1,11 +1,15 @@
 import { Router } from 'express';
 import streakController from '../controllers/streakController';
 import { authenticate } from '../middleware/auth';
+import { requireGamificationFeature } from '../middleware/gamificationFeatureGate';
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+
+// PHASE 2 — disabled until core is stable
+router.use(requireGamificationFeature('streaks', { streak: null }));
 
 // Streak routes
 router.get('/status', streakController.getUserStreaks.bind(streakController));

@@ -525,39 +525,44 @@ export const verifyStripeSession = asyncHandler(async (req: Request, res: Respon
       return sendBadRequest(res, `Payment not completed. Status: ${verification.paymentStatus}`);
     }
 
-    // If orderId is provided, update the order
+    // If orderId is provided, update the order atomically
+    // Atomic status guard prevents double-payment when client retries or webhook + client both verify
     if (orderId) {
-      const order = await Order.findOne({ _id: orderId, user: userId });
+      const order = await Order.findOneAndUpdate(
+        {
+          _id: orderId,
+          user: userId,
+          'payment.status': { $ne: 'paid' }  // Only update if not already paid
+        },
+        {
+          $set: {
+            'payment.status': 'paid',
+            'payment.transactionId': verification.paymentIntentId || sessionId,
+            'payment.paidAt': new Date(),
+            'payment.paymentGateway': 'stripe',
+            'totals.paidAmount': verification.amount,
+            status: 'confirmed'
+          },
+          $push: {
+            timeline: {
+              $each: [
+                { status: 'payment_success', message: 'Stripe payment completed successfully', timestamp: new Date() },
+                { status: 'confirmed', message: 'Order confirmed after Stripe payment', timestamp: new Date() }
+              ]
+            }
+          }
+        },
+        { new: true }
+      );
 
       if (!order) {
-        return sendNotFound(res, 'Order not found');
+        // Either order not found or already paid — check which
+        const existing = await Order.findOne({ _id: orderId, user: userId }).lean();
+        if (!existing) {
+          return sendNotFound(res, 'Order not found');
+        }
+        // Already paid — still return success (idempotent)
       }
-
-      // Update order payment status
-      order.payment.status = 'paid';
-      order.payment.transactionId = verification.paymentIntentId || sessionId;
-      order.payment.paidAt = new Date();
-      order.payment.paymentGateway = 'stripe';
-      order.totals.paidAmount = verification.amount;
-
-      // Add timeline entry
-      order.timeline.push({
-        status: 'payment_success',
-        message: 'Stripe payment completed successfully',
-        timestamp: new Date()
-      });
-
-      // Update order status to confirmed
-      order.status = 'confirmed';
-      order.timeline.push({
-        status: 'confirmed',
-        message: 'Order confirmed after Stripe payment',
-        timestamp: new Date()
-      });
-
-      await order.save();
-
-      console.log('✅ [PAYMENT CONTROLLER] Order updated with Stripe payment');
     }
 
     const response = {
@@ -616,39 +621,42 @@ export const verifyStripePayment = asyncHandler(async (req: Request, res: Respon
       return sendBadRequest(res, `Payment not successful. Status: ${verification.status}`);
     }
 
-    // If orderId is provided, update the order
+    // If orderId is provided, update the order atomically
     if (orderId) {
-      const order = await Order.findOne({ _id: orderId, user: userId });
+      const order = await Order.findOneAndUpdate(
+        {
+          _id: orderId,
+          user: userId,
+          'payment.status': { $ne: 'paid' }
+        },
+        {
+          $set: {
+            'payment.status': 'paid',
+            'payment.transactionId': paymentIntentId,
+            'payment.paidAt': new Date(),
+            'payment.paymentGateway': 'stripe',
+            'totals.paidAmount': verification.amount,
+            status: 'confirmed'
+          },
+          $push: {
+            timeline: {
+              $each: [
+                { status: 'payment_success', message: 'Stripe payment completed successfully', timestamp: new Date() },
+                { status: 'confirmed', message: 'Order confirmed after Stripe payment', timestamp: new Date() }
+              ]
+            }
+          }
+        },
+        { new: true }
+      );
 
       if (!order) {
-        return sendNotFound(res, 'Order not found');
+        const existing = await Order.findOne({ _id: orderId, user: userId }).lean();
+        if (!existing) {
+          return sendNotFound(res, 'Order not found');
+        }
+        // Already paid — idempotent success
       }
-
-      // Update order payment status
-      order.payment.status = 'paid';
-      order.payment.transactionId = paymentIntentId;
-      order.payment.paidAt = new Date();
-      order.payment.paymentGateway = 'stripe';
-      order.totals.paidAmount = verification.amount;
-
-      // Add timeline entry
-      order.timeline.push({
-        status: 'payment_success',
-        message: 'Stripe payment completed successfully',
-        timestamp: new Date()
-      });
-
-      // Update order status to confirmed
-      order.status = 'confirmed';
-      order.timeline.push({
-        status: 'confirmed',
-        message: 'Order confirmed after Stripe payment',
-        timestamp: new Date()
-      });
-
-      await order.save();
-
-      console.log('✅ [PAYMENT CONTROLLER] Order updated with Stripe payment');
     }
 
     const response = {

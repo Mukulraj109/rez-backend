@@ -1,9 +1,14 @@
 import * as cron from 'node-cron';
+import mongoose from 'mongoose';
 import { CoinTransaction, ICoinTransaction } from '../models/CoinTransaction';
+import { Wallet } from '../models/Wallet';
 import { User } from '../models/User';
 import PushNotificationService from '../services/pushNotificationService';
 import redisService from '../services/redisService';
 import { logger } from '../config/logger';
+import { getCachedWalletConfig, invalidateWalletCache } from '../services/walletCacheService';
+import { CURRENCY_RULES } from '../config/currencyRules';
+import { ledgerService } from '../services/ledgerService';
 
 /**
  * Coin Expiry Job
@@ -63,9 +68,9 @@ async function sendPreExpiryNotifications(): Promise<{ notified: number; failed:
     const now = new Date();
     const fortyEightHoursFromNow = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
-    // Find earned transactions expiring within 48 hours that haven't been notified
+    // Find earned/branded transactions expiring within 48 hours that haven't been notified
     const soonExpiringTransactions = await CoinTransaction.find({
-      type: 'earned',
+      type: { $in: ['earned', 'branded_award'] },
       expiresAt: { $gt: now, $lte: fortyEightHoursFromNow },
       $or: [
         { 'metadata.isExpired': { $ne: true } },
@@ -154,13 +159,79 @@ async function processExpiredCoins(): Promise<ExpiryStats> {
     notificationsFailed: 0,
     errors: []
   };
+  const affectedUserIds = new Set<string>();
 
   try {
     const now = new Date();
 
-    // Find all earned transactions that have expired
+    // Backfill: Find branded coin transactions without expiresAt and set it based on config
+    try {
+      let brandedExpiryDays: number;
+      try {
+        const config = await getCachedWalletConfig();
+        brandedExpiryDays = config?.coinExpiryConfig?.branded?.expiryDays ?? CURRENCY_RULES.branded.expiryDays;
+      } catch {
+        brandedExpiryDays = CURRENCY_RULES.branded.expiryDays;
+      }
+
+      if (brandedExpiryDays > 0) {
+        const cutoffDate = new Date(now);
+        cutoffDate.setDate(cutoffDate.getDate() - brandedExpiryDays);
+
+        // Find branded_award transactions created before cutoff that have no expiresAt
+        const backfillResult = await CoinTransaction.updateMany(
+          {
+            type: 'branded_award',
+            expiresAt: { $exists: false },
+            createdAt: { $lte: cutoffDate },
+            $or: [
+              { 'metadata.isExpired': { $ne: true } },
+              { metadata: { $exists: false } }
+            ]
+          },
+          [
+            {
+              $set: {
+                expiresAt: {
+                  $add: ['$createdAt', brandedExpiryDays * 24 * 60 * 60 * 1000]
+                }
+              }
+            }
+          ]
+        );
+        if (backfillResult.modifiedCount > 0) {
+          logger.info(`[COIN EXPIRY] Backfilled expiresAt on ${backfillResult.modifiedCount} branded coin transactions`);
+        }
+
+        // Also backfill newer branded coins that don't have expiresAt yet (not expired but need the field)
+        await CoinTransaction.updateMany(
+          {
+            type: 'branded_award',
+            expiresAt: { $exists: false },
+            createdAt: { $gt: cutoffDate },
+            $or: [
+              { 'metadata.isExpired': { $ne: true } },
+              { metadata: { $exists: false } }
+            ]
+          },
+          [
+            {
+              $set: {
+                expiresAt: {
+                  $add: ['$createdAt', brandedExpiryDays * 24 * 60 * 60 * 1000]
+                }
+              }
+            }
+          ]
+        );
+      }
+    } catch (backfillErr) {
+      logger.error('[COIN EXPIRY] Branded coin backfill error:', backfillErr);
+    }
+
+    // Find all earned/branded_award transactions that have expired
     const expiredTransactions = await CoinTransaction.find({
-      type: 'earned',
+      type: { $in: ['earned', 'branded_award'] },
       expiresAt: { $lte: now, $ne: null },
       // Only process transactions that haven't been marked as expired yet
       $or: [
@@ -177,10 +248,65 @@ async function processExpiredCoins(): Promise<ExpiryStats> {
       return stats;
     }
 
-    // Group expired transactions by user
+    // Separate branded_award from earned/bonus transactions — branded coins don't affect ReZ balance
+    const brandedTransactions = expiredTransactions.filter(t => (t as any).type === 'branded_award');
+    const rezTransactions = expiredTransactions.filter(t => (t as any).type !== 'branded_award');
+
+    // --- Process branded coin expirations (wallet.brandedCoins only, no ReZ balance impact) ---
+    if (brandedTransactions.length > 0) {
+      const brandedByUser = new Map<string, Array<{ id: string; amount: number; merchantId?: string }>>();
+      for (const tx of brandedTransactions) {
+        const userId = tx.user.toString();
+        if (!brandedByUser.has(userId)) brandedByUser.set(userId, []);
+        brandedByUser.get(userId)!.push({
+          id: String(tx._id),
+          amount: tx.amount,
+          merchantId: (tx as any).metadata?.storeId?.toString() || (tx as any).metadata?.merchantId?.toString(),
+        });
+      }
+
+      for (const [userId, txs] of brandedByUser.entries()) {
+        try {
+          // Deduct from wallet.brandedCoins per merchant
+          const wallet = await Wallet.findOne({ user: new mongoose.Types.ObjectId(userId) });
+          if (wallet) {
+            for (const tx of txs) {
+              if (tx.merchantId && wallet.brandedCoins) {
+                const bcIdx = wallet.brandedCoins.findIndex(
+                  (bc: any) => bc.merchantId?.toString() === tx.merchantId
+                );
+                if (bcIdx >= 0) {
+                  (wallet.brandedCoins as any)[bcIdx].amount = Math.max(0, (wallet.brandedCoins as any)[bcIdx].amount - tx.amount);
+                }
+              }
+            }
+            wallet.markModified('brandedCoins');
+            await wallet.save();
+          }
+
+          // Mark as expired (no CoinTransaction 'expired' record for branded — it would corrupt ReZ balance)
+          await CoinTransaction.updateMany(
+            { _id: { $in: txs.map(t => t.id) } },
+            { $set: { 'metadata.isExpired': true, 'metadata.expiredAt': now } }
+          );
+
+          const totalBranded = txs.reduce((s, t) => s + t.amount, 0);
+          affectedUserIds.add(userId);
+          stats.totalCoinsExpired += totalBranded;
+          logger.info(`   ✓ User ${userId}: ${totalBranded} branded coins expired`);
+        } catch (err: any) {
+          logger.error(`   ✗ Failed to expire branded coins for user ${userId}:`, err.message);
+          stats.errors.push({ userId, error: err.message || 'Branded expiry error' });
+        }
+      }
+    }
+
+    // --- Process ReZ/promo coin expirations (affects ReZ balance via CoinTransaction) ---
+
+    // Group by user
     const userExpiryMap = new Map<string, UserExpiryData>();
 
-    for (const transaction of expiredTransactions) {
+    for (const transaction of rezTransactions) {
       const typedTransaction = transaction as ICoinTransaction;
       const userId = typedTransaction.user.toString();
 
@@ -203,15 +329,12 @@ async function processExpiredCoins(): Promise<ExpiryStats> {
       });
     }
 
-    logger.info(`👥 [COIN EXPIRY] Processing expiry for ${userExpiryMap.size} users`);
+    logger.info(`👥 [COIN EXPIRY] Processing expiry for ${userExpiryMap.size} users (ReZ/promo) + ${brandedTransactions.length} branded txns`);
 
-    // Process each user's expired coins
+    // Process each user's expired ReZ/promo coins
     for (const [userId, expiryData] of userExpiryMap.entries()) {
       try {
-        // Get current balance
-        const currentBalance = await CoinTransaction.getUserBalance(userId);
-
-        // Create expiry transaction (this will deduct from balance)
+        // Create expiry transaction (this will deduct from ReZ balance)
         const expiryTransaction = await CoinTransaction.createTransaction(
           userId,
           'expired',
@@ -224,6 +347,13 @@ async function processExpiredCoins(): Promise<ExpiryStats> {
             expiryDate: now
           }
         );
+
+        // Deduct expired amount from Wallet.balance.available atomically
+        await Wallet.findOneAndUpdate(
+          { user: new mongoose.Types.ObjectId(userId) },
+          { $inc: { 'balance.available': -expiryData.expiredAmount } }
+        );
+        invalidateWalletCache(userId).catch(() => {});
 
         // Mark original transactions as expired
         await CoinTransaction.updateMany(
@@ -239,9 +369,23 @@ async function processExpiredCoins(): Promise<ExpiryStats> {
           }
         );
 
+        // Create ledger entry for coin expiry (fire-and-forget)
+        const userAccountId = new mongoose.Types.ObjectId(userId);
+        const expiredPoolId = ledgerService.getPlatformAccountId('expired_pool');
+        ledgerService.recordEntry({
+          debitAccount: { type: 'user_wallet', id: userAccountId },
+          creditAccount: { type: 'expired_pool', id: expiredPoolId },
+          amount: expiryData.expiredAmount,
+          coinType: 'nuqta',
+          operationType: 'coin_expiry',
+          referenceId: String(expiryTransaction._id),
+          referenceModel: 'CoinTransaction',
+          metadata: { description: `${expiryData.expiredAmount} coins expired` },
+        }).catch((err: any) => logger.error('[COIN EXPIRY] Ledger entry failed:', err));
+
         expiryData.newBalance = expiryTransaction.balance;
 
-        stats.usersAffected++;
+        affectedUserIds.add(userId);
         stats.totalCoinsExpired += expiryData.expiredAmount;
         stats.transactionsCreated++;
 
@@ -256,17 +400,46 @@ async function processExpiredCoins(): Promise<ExpiryStats> {
       }
     }
 
+    // Build combined notification list: ReZ/promo expirations + branded expirations
+    const allExpiryData: UserExpiryData[] = Array.from(userExpiryMap.values());
+
+    // Add branded coin users to notification list
+    if (brandedTransactions.length > 0) {
+      const brandedByUserForNotif = new Map<string, number>();
+      for (const tx of brandedTransactions) {
+        const uid = tx.user.toString();
+        brandedByUserForNotif.set(uid, (brandedByUserForNotif.get(uid) || 0) + tx.amount);
+      }
+      for (const [uid, amt] of brandedByUserForNotif.entries()) {
+        // Only add if not already in the ReZ list (avoid duplicate notifications)
+        if (!userExpiryMap.has(uid)) {
+          allExpiryData.push({
+            userId: uid,
+            expiredAmount: amt,
+            newBalance: 0, // branded coins have separate balance
+            expiredTransactions: [],
+          });
+        } else {
+          // Merge branded amount into existing entry for combined notification
+          const existing = allExpiryData.find(e => e.userId === uid);
+          if (existing) existing.expiredAmount += amt;
+        }
+      }
+    }
+
     // Send notifications in batches
-    const userExpiryArray = Array.from(userExpiryMap.values());
-    for (let i = 0; i < userExpiryArray.length; i += NOTIFICATION_BATCH_SIZE) {
-      const batch = userExpiryArray.slice(i, i + NOTIFICATION_BATCH_SIZE);
+    for (let i = 0; i < allExpiryData.length; i += NOTIFICATION_BATCH_SIZE) {
+      const batch = allExpiryData.slice(i, i + NOTIFICATION_BATCH_SIZE);
       await sendExpiryNotifications(batch, stats);
 
       // Small delay between batches
-      if (i + NOTIFICATION_BATCH_SIZE < userExpiryArray.length) {
+      if (i + NOTIFICATION_BATCH_SIZE < allExpiryData.length) {
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
+
+    // Set final unique user count
+    stats.usersAffected = affectedUserIds.size;
 
   } catch (error: any) {
     logger.error('❌ [COIN EXPIRY] Error processing expired coins:', error);
@@ -514,7 +687,7 @@ export async function previewUpcomingExpirations(daysAhead: number = 7): Promise
   const upcomingExpirations = await CoinTransaction.aggregate([
     {
       $match: {
-        type: 'earned',
+        type: { $in: ['earned', 'branded_award'] },
         expiresAt: {
           $gt: now,
           $lte: futureDate

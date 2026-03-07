@@ -37,6 +37,7 @@ import { Store } from '../models/Store';
 import { Category } from '../models/Category';
 import { MainCategorySlug, CoinTransaction } from '../models/CoinTransaction';
 import { LedgerEntry } from '../models/LedgerEntry';
+import { logger } from '../config/logger';
 import redisService from '../services/redisService';
 import { CacheInvalidator } from '../utils/cacheHelper';
 
@@ -132,7 +133,87 @@ import merchantNotificationService from '../services/merchantNotificationService
 import { isValidTransition, isValidMerchantTransition, STATUS_TRANSITIONS, MERCHANT_TRANSITIONS, ACTIVE_STATUSES, PAST_STATUSES, getOrderProgress } from '../config/orderStateMachine';
 import etaService from '../services/etaService';
 
-// Create new order from cart
+/**
+ * @swagger
+ * /api/orders:
+ *   post:
+ *     summary: Create order from cart
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - deliveryAddress
+ *               - paymentMethod
+ *             properties:
+ *               deliveryAddress:
+ *                 type: object
+ *                 required: [name, phone, addressLine1, city, state, pincode]
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   phone:
+ *                     type: string
+ *                   addressLine1:
+ *                     type: string
+ *                   city:
+ *                     type: string
+ *                   state:
+ *                     type: string
+ *                   pincode:
+ *                     type: string
+ *               paymentMethod:
+ *                 type: string
+ *                 enum: [cod, wallet, razorpay, upi, card, netbanking, stripe]
+ *               specialInstructions:
+ *                 type: string
+ *               couponCode:
+ *                 type: string
+ *               voucherCode:
+ *                 type: string
+ *               coinsUsed:
+ *                 type: object
+ *                 description: Coin amounts to deduct from wallet
+ *                 properties:
+ *                   rezCoins:
+ *                     type: number
+ *                     description: REZ coins to use
+ *                   promoCoins:
+ *                     type: number
+ *                     description: Promo coins to use
+ *                   storePromoCoins:
+ *                     type: number
+ *                     description: Store promo coins to use
+ *               storeId:
+ *                 type: string
+ *               items:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *               idempotencyKey:
+ *                 type: string
+ *               fulfillmentType:
+ *                 type: string
+ *                 enum: [delivery, pickup, dine_in]
+ *               fulfillmentDetails:
+ *                 type: object
+ *     responses:
+ *       201:
+ *         description: Order created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Validation error (empty cart, invalid payment, etc.)
+ *       401:
+ *         description: Unauthorized
+ */
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
   const { deliveryAddress, paymentMethod, specialInstructions, couponCode, voucherCode, coinsUsed, storeId, items: requestItems, redemptionCode, offerRedemptionCode, lockFeeDiscount: clientLockFeeDiscount, idempotencyKey, pickId, fulfillmentType: reqFulfillmentType, fulfillmentDetails: reqFulfillmentDetails } = req.body;
@@ -308,6 +389,30 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
             available: promoBalance
           });
           return sendBadRequest(res, `Insufficient promo coin balance. Required: ${coinsUsed.promoCoins}, Available: ${promoBalance}`);
+        }
+        // Pre-checkout expiry check: reject if promo coins have expired
+        // Check legacy wallet field
+        const promoExpiryRaw = promoCoin?.promoDetails?.expiryDate || promoCoin?.expiryDate;
+        if (promoExpiryRaw) {
+          const expDate = new Date(promoExpiryRaw as string | number | Date);
+          if (expDate <= new Date()) {
+            await session.abortTransaction();
+            session.endSession();
+            return sendBadRequest(res, 'Your promo coins have expired. Please refresh your wallet balance.');
+          }
+        }
+        // Also check CoinTransaction-based expiry (new system)
+        const expiredPromoTx = await CoinTransaction.findOne({
+          user: userId,
+          type: 'earned',
+          'metadata.coinType': 'promo',
+          expiresAt: { $lte: new Date() },
+          'metadata.isExpired': { $ne: true },
+        }).session(session).lean();
+        if (expiredPromoTx) {
+          await session.abortTransaction();
+          session.endSession();
+          return sendBadRequest(res, 'Some of your promo coins have expired. Please refresh your wallet balance.');
         }
       }
 
@@ -1024,16 +1129,6 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     // Deduct coins for COD orders immediately (INSIDE TRANSACTION - ATOMIC)
     // Online payments deduct coins in PaymentService after payment confirmation
     if (paymentMethod === 'cod' && coinsUsed && coinDiscount > 0) {
-      // Get wallet with session for atomic operation
-      const wallet = await Wallet.findOne({ user: userId }).session(session).lean();
-
-      if (!wallet) {
-        await session.abortTransaction();
-        session.endSession();
-        console.error('❌ [CREATE ORDER] Wallet not found for coin deduction');
-        return sendBadRequest(res, 'Wallet not found. Cannot process coin payment.');
-      }
-
       // Determine the store's root category for category-specific coin deduction
       const firstCartItem = orderCart.items[0];
       const codStoreId = firstCartItem?.store
@@ -1041,85 +1136,106 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         : null;
       const codCategory = codStoreId ? await getStoreCategorySlug(codStoreId.toString()) : null;
 
-      // Deduct REZ coins from Wallet model
+      // Deduct REZ coins atomically with $gte guard (prevents double-spend on concurrent requests)
+      let deductedFromCategory = false;
       if (coinsUsed.rezCoins && coinsUsed.rezCoins > 0) {
         // Try category balance first, fall back to global
-        let deductedFromCategory = false;
         if (codCategory) {
-          const catBal = wallet.getCategoryBalance(codCategory);
-          if (catBal >= coinsUsed.rezCoins) {
-            await wallet.deductCategoryCoins(codCategory, coinsUsed.rezCoins);
+          const catDeductResult = await Wallet.findOneAndUpdate(
+            {
+              user: userId,
+              [`categoryBalances.${codCategory}.available`]: { $gte: coinsUsed.rezCoins }
+            },
+            {
+              $inc: {
+                [`categoryBalances.${codCategory}.available`]: -coinsUsed.rezCoins,
+                'statistics.totalSpent': coinsUsed.rezCoins
+              },
+              $set: { lastTransactionAt: new Date() }
+            },
+            { new: true, session }
+          );
+          if (catDeductResult) {
             deductedFromCategory = true;
           }
         }
 
         if (!deductedFromCategory) {
-          // Fall back to global ReZ coins
-          const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-          if (!rezCoin || rezCoin.amount < coinsUsed.rezCoins) {
+          // Fall back to global ReZ coins — atomic deduction
+          const rezDeductResult = await Wallet.findOneAndUpdate(
+            {
+              user: userId,
+              'balance.available': { $gte: coinsUsed.rezCoins },
+              'coins': { $elemMatch: { type: 'rez', amount: { $gte: coinsUsed.rezCoins } } }
+            },
+            {
+              $inc: {
+                'balance.available': -coinsUsed.rezCoins,
+                'coins.$.amount': -coinsUsed.rezCoins,
+                'statistics.totalSpent': coinsUsed.rezCoins
+              },
+              $set: { lastTransactionAt: new Date(), 'coins.$.lastUsed': new Date() }
+            },
+            { new: true, session }
+          );
+
+          if (!rezDeductResult) {
             await session.abortTransaction();
             session.endSession();
-            console.error('❌ [CREATE ORDER] Insufficient rez coins in wallet at time of deduction');
+            logger.error('Insufficient rez coins in wallet at time of deduction', { userId, requested: coinsUsed.rezCoins });
             return sendBadRequest(res, 'Insufficient REZ coins. Balance may have changed.');
           }
-
-          rezCoin.amount -= coinsUsed.rezCoins;
-          rezCoin.lastUsed = new Date();
-          wallet.markModified('coins');
-          wallet.balance.available = Math.max(0, wallet.balance.available - coinsUsed.rezCoins);
         }
 
-        // balance.total is recalculated by the pre-save hook (available + pending + cashback + categoryTotal)
-        // so we do NOT manually decrement it here — it would cause double-deduction
-        wallet.statistics.totalSpent += coinsUsed.rezCoins;
-        wallet.lastTransactionAt = new Date();
-                  const { CoinTransaction } = require('../models/CoinTransaction');
-            await CoinTransaction.createTransaction(
-               userId.toString(),
-               'spent',
-               coinsUsed.rezCoins,
-               'purchase',
-               `COD Order: ${orderNumber}`,
-               { orderId: order._id, orderNumber, paymentMethod: 'cod' },
-               deductedFromCategory ? codCategory : null
-            );
+        const { CoinTransaction } = require('../models/CoinTransaction');
+        await CoinTransaction.createTransaction(
+          userId.toString(),
+          'spent',
+          coinsUsed.rezCoins,
+          'purchase',
+          `COD Order: ${orderNumber}`,
+          { orderId: order._id, orderNumber, paymentMethod: 'cod' },
+          deductedFromCategory ? codCategory : null
+        );
+
         // Also update UserLoyalty.categoryCoins if deducted from category
         if (deductedFromCategory && codCategory) {
           try {
             const UserLoyalty = require('../models/UserLoyalty').default || require('../models/UserLoyalty').UserLoyalty;
-            const loyalty = await UserLoyalty.findOne({ userId: userId.toString() }).lean();
-            if (loyalty && loyalty.categoryCoins) {
-              const catCoins = loyalty.categoryCoins.get(codCategory);
-              if (catCoins) {
-                catCoins.available = Math.max(0, catCoins.available - coinsUsed.rezCoins);
-                loyalty.categoryCoins.set(codCategory, catCoins);
-                loyalty.markModified('categoryCoins');
-                await loyalty.save();
-              }
-            }
+            await UserLoyalty.findOneAndUpdate(
+              { userId: userId.toString(), [`categoryCoins.${codCategory}.available`]: { $gte: coinsUsed.rezCoins } },
+              { $inc: { [`categoryCoins.${codCategory}.available`]: -coinsUsed.rezCoins } },
+              { session }
+            );
           } catch (loyaltyErr) {
-            console.error('[CREATE ORDER] Failed to update UserLoyalty categoryCoins:', loyaltyErr);
+            logger.error('[CREATE ORDER] Failed to update UserLoyalty categoryCoins:', loyaltyErr);
           }
         }
       }
 
-      // Deduct promo coins
+      // Deduct promo coins atomically
       if (coinsUsed.promoCoins && coinsUsed.promoCoins > 0) {
-        const promoCoin = wallet.coins.find((c: any) => c.type === 'promo');
-        if (!promoCoin || promoCoin.amount < coinsUsed.promoCoins) {
+        const promoDeductResult = await Wallet.findOneAndUpdate(
+          {
+            user: userId,
+            'coins': { $elemMatch: { type: 'promo', amount: { $gte: coinsUsed.promoCoins } } }
+          },
+          {
+            $inc: { 'coins.$.amount': -coinsUsed.promoCoins },
+            $set: { lastTransactionAt: new Date(), 'coins.$.lastUsed': new Date() }
+          },
+          { new: true, session }
+        );
+
+        if (!promoDeductResult) {
           await session.abortTransaction();
           session.endSession();
-          console.error('❌ [CREATE ORDER] Insufficient promo coins at time of deduction');
+          logger.error('Insufficient promo coins at time of deduction', { userId, requested: coinsUsed.promoCoins });
           return sendBadRequest(res, 'Insufficient Promo coins. Balance may have changed.');
         }
-
-        promoCoin.amount -= coinsUsed.promoCoins;
-        promoCoin.lastUsed = new Date();
-        wallet.lastTransactionAt = new Date();
-
       }
 
-      // Deduct branded coins (store-specific coins)
+      // Deduct branded coins atomically (store-specific coins)
       if (coinsUsed.storePromoCoins && coinsUsed.storePromoCoins > 0) {
         const firstItem = orderCart.items[0];
         const deductStoreId = typeof firstItem.store === 'object'
@@ -1127,28 +1243,34 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
           : firstItem.store;
 
         if (deductStoreId) {
-          const brandedCoin = wallet.brandedCoins?.find(
-            (bc: any) => bc.merchantId?.toString() === deductStoreId.toString()
+          const brandedDeductResult = await Wallet.findOneAndUpdate(
+            {
+              user: userId,
+              'brandedCoins': {
+                $elemMatch: {
+                  merchantId: deductStoreId,
+                  amount: { $gte: coinsUsed.storePromoCoins }
+                }
+              }
+            },
+            {
+              $inc: {
+                'brandedCoins.$.amount': -coinsUsed.storePromoCoins,
+                'statistics.totalSpent': coinsUsed.storePromoCoins
+              },
+              $set: { lastTransactionAt: new Date(), 'brandedCoins.$.lastUsed': new Date() }
+            },
+            { new: true, session }
           );
 
-          if (!brandedCoin || brandedCoin.amount < coinsUsed.storePromoCoins) {
+          if (!brandedDeductResult) {
             await session.abortTransaction();
             session.endSession();
-            console.error('❌ [CREATE ORDER] Insufficient branded coins at time of deduction');
+            logger.error('Insufficient branded coins at time of deduction', { userId, requested: coinsUsed.storePromoCoins });
             return sendBadRequest(res, 'Insufficient store coins. Balance may have changed.');
           }
-
-          brandedCoin.amount -= coinsUsed.storePromoCoins;
-          brandedCoin.lastUsed = new Date();
-          wallet.balance.total = Math.max(0, wallet.balance.total - coinsUsed.storePromoCoins);
-          wallet.statistics.totalSpent += coinsUsed.storePromoCoins;
-          wallet.lastTransactionAt = new Date();
-
         }
       }
-
-      // Save wallet with session (atomic)
-      await wallet.save({ session });
       // Record ledger entry for coin deduction (non-blocking — don't fail order)
       try {
         const ledgerService = require('../services/ledgerService').default || require('../services/ledgerService');
@@ -1345,7 +1467,92 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   }
 });
 
-// Get user's orders
+/**
+ * @swagger
+ * /api/orders:
+ *   get:
+ *     summary: List user orders
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: statusGroup
+ *         schema:
+ *           type: string
+ *           enum: [active, past]
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 50
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: sort
+ *         schema:
+ *           type: string
+ *           enum: [newest, oldest, amount_high, amount_low]
+ *           default: newest
+ *     responses:
+ *       200:
+ *         description: Paginated list of user orders
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/SuccessResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data:
+ *                       type: object
+ *                       properties:
+ *                         orders:
+ *                           type: array
+ *                           items:
+ *                             $ref: '#/components/schemas/OrderSummary'
+ *                         nextCursor:
+ *                           type: string
+ *                         hasMore:
+ *                           type: boolean
+ *                         counts:
+ *                           type: object
+ *                           properties:
+ *                             active:
+ *                               type: integer
+ *                             past:
+ *                               type: integer
+ *                         pagination:
+ *                           type: object
+ *       401:
+ *         description: Unauthorized
+ */
 export const getUserOrders = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
   const { status, statusGroup, page = 1, limit = 20, cursor, search, dateFrom, dateTo, sort = 'newest' } = req.query;
@@ -1474,7 +1681,24 @@ export const getUserOrders = asyncHandler(async (req: Request, res: Response) =>
   }
 });
 
-// Get order counts (lightweight endpoint for header display)
+/**
+ * @swagger
+ * /api/orders/counts:
+ *   get:
+ *     summary: Quick order count by status
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Order counts grouped by status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Unauthorized
+ */
 export const getOrderCounts = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
 
@@ -1504,7 +1728,32 @@ export const getOrderCounts = asyncHandler(async (req: Request, res: Response) =
   }
 });
 
-// Get single order by ID — uses $lookup aggregation to replace 4 populate() round trips
+/**
+ * @swagger
+ * /api/orders/{orderId}:
+ *   get:
+ *     summary: Get single order with populated items, store, progress, and ETA
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Order details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Order not found
+ */
 export const getOrderById = asyncHandler(async (req: Request, res: Response) => {
   const { orderId } = req.params;
   const userId = req.userId!;
@@ -1601,7 +1850,42 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
   }
 });
 
-// Cancel order
+/**
+ * @swagger
+ * /api/orders/{orderId}/cancel:
+ *   patch:
+ *     summary: Cancel order (restores stock, refunds coins/payment)
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Order cancelled successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Order cannot be cancelled (invalid status)
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Order not found
+ */
 export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
   const { orderId } = req.params;
   const userId = req.userId!;
@@ -1822,29 +2106,28 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
         if (offerRedemption) {
           // Deduct cashback from user's wallet if it was credited
           if (cashbackAmount > 0) {
-            const wallet = await Wallet.findOne({ user: userId }).session(session).lean();
-            if (wallet) {
-              const balanceBefore = wallet.balance.total;
+            // Use walletService for atomic debit + CoinTransaction + LedgerEntry
+            const { walletService } = await import('../services/walletService');
+            await walletService.debit({
+              userId,
+              amount: cashbackAmount,
+              source: 'order',
+              description: `Cashback reversed for cancelled order #${order.orderNumber}`,
+              operationType: 'cashback_reversal',
+              referenceId: `cashback-reversal:${order._id}`,
+              referenceModel: 'Order',
+              metadata: { orderId: order._id, orderNumber: order.orderNumber },
+              session,
+            });
 
-              // Deduct from wallet balance
-              wallet.balance.total = Math.max(0, wallet.balance.total - cashbackAmount);
-              wallet.balance.available = Math.max(0, wallet.balance.available - cashbackAmount);
-
-              // Deduct from rez coins
-              const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-              if (rezCoin) {
-                rezCoin.amount = Math.max(0, rezCoin.amount - cashbackAmount);
-              }
-              wallet.markModified('coins');
-
-              await wallet.save({ session });
+            {
 
               // Create reversal transaction record
               const reversalTransaction = new Transaction({
                 user: userId,
                 type: 'debit',
                 amount: cashbackAmount,
-                currency: wallet.currency || 'INR',
+                currency: 'RC',
                 category: 'cashback_reversal',
                 description: `Cashback reversed for cancelled order #${order.orderNumber}`,
                 status: {
@@ -1865,8 +2148,8 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
                     redemptionCode: redemptionCode,
                   },
                 },
-                balanceBefore,
-                balanceAfter: wallet.balance.total,
+                balanceBefore: 0,
+                balanceAfter: 0,
               });
 
               await reversalTransaction.save({ session });
@@ -1954,7 +2237,64 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
   }
 });
 
-// Update order status (admin/store owner)
+/**
+ * @swagger
+ * /api/orders/{orderId}/status:
+ *   patch:
+ *     summary: Update order status (admin/store owner only)
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [placed, confirmed, preparing, ready, dispatched, delivered, cancelled, returned, refunded]
+ *               estimatedDeliveryTime:
+ *                 type: string
+ *                 format: date-time
+ *               trackingInfo:
+ *                 type: object
+ *                 properties:
+ *                   trackingNumber:
+ *                     type: string
+ *                   carrier:
+ *                     type: string
+ *                   estimatedDelivery:
+ *                     type: string
+ *                     format: date-time
+ *                   location:
+ *                     type: string
+ *                   notes:
+ *                     type: string
+ *                     maxLength: 500
+ *     responses:
+ *       200:
+ *         description: Order status updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Invalid status transition
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Order not found
+ */
 export const updateOrderStatus = asyncHandler(async (req: Request, res: Response) => {
   const { orderId } = req.params;
   const { status, estimatedDeliveryTime, trackingInfo } = req.body;
@@ -2355,7 +2695,32 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
   }
 });
 
-// Get order tracking info
+/**
+ * @swagger
+ * /api/orders/{orderId}/tracking:
+ *   get:
+ *     summary: Get tracking info with timeline
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Order tracking details with timeline
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Order not found
+ */
 export const getOrderTracking = asyncHandler(async (req: Request, res: Response) => {
   const { orderId } = req.params;
   const userId = req.userId!;
@@ -2426,7 +2791,50 @@ export const getOrderTracking = asyncHandler(async (req: Request, res: Response)
   }
 });
 
-// Rate and review order
+/**
+ * @swagger
+ * /api/orders/{orderId}/rate:
+ *   post:
+ *     summary: Rate and review an order
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - rating
+ *             properties:
+ *               rating:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 5
+ *               review:
+ *                 type: string
+ *                 maxLength: 1000
+ *     responses:
+ *       200:
+ *         description: Order rated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Validation error (invalid rating, already rated, etc.)
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Order not found
+ */
 export const rateOrder = asyncHandler(async (req: Request, res: Response) => {
   const { orderId } = req.params;
   const userId = req.userId!;
@@ -2490,7 +2898,24 @@ export const rateOrder = asyncHandler(async (req: Request, res: Response) => {
   }
 });
 
-// Get order statistics for user
+/**
+ * @swagger
+ * /api/orders/stats:
+ *   get:
+ *     summary: Get user order statistics (totalOrders, totalSpent, completedOrders, etc.)
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User order statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Unauthorized
+ */
 export const getOrderStats = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
 
@@ -2542,7 +2967,32 @@ export const getOrderStats = asyncHandler(async (req: Request, res: Response) =>
   }
 });
 
-// Re-order full order
+/**
+ * @swagger
+ * /api/orders/{orderId}/reorder:
+ *   post:
+ *     summary: Reorder all items from a previous order
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       201:
+ *         description: Reorder created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Original order not found
+ */
 export const reorderFullOrder = asyncHandler(async (req: Request, res: Response) => {
   const { orderId } = req.params;
   const userId = req.userId!;
@@ -2559,7 +3009,48 @@ export const reorderFullOrder = asyncHandler(async (req: Request, res: Response)
   }
 });
 
-// Re-order selected items
+/**
+ * @swagger
+ * /api/orders/{orderId}/reorder/items:
+ *   post:
+ *     summary: Reorder selected items from a previous order
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - itemIds
+ *             properties:
+ *               itemIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 minItems: 1
+ *     responses:
+ *       201:
+ *         description: Selected items reordered successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Validation error (empty itemIds, etc.)
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Original order not found
+ */
 export const reorderItems = asyncHandler(async (req: Request, res: Response) => {
   const { orderId } = req.params;
   const { itemIds } = req.body;
@@ -2581,7 +3072,41 @@ export const reorderItems = asyncHandler(async (req: Request, res: Response) => 
   }
 });
 
-// Validate reorder (check availability and prices)
+/**
+ * @swagger
+ * /api/orders/{orderId}/reorder/validate:
+ *   get:
+ *     summary: Validate items for reorder (check availability and prices)
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: itemIds
+ *         schema:
+ *           type: array
+ *           items:
+ *             type: string
+ *         style: form
+ *         explode: true
+ *         description: Item IDs to validate (pass multiple via ?itemIds=id1&itemIds=id2)
+ *     responses:
+ *       200:
+ *         description: Reorder validation result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Order not found
+ */
 export const validateReorder = asyncHandler(async (req: Request, res: Response) => {
   const { orderId } = req.params;
   const { itemIds } = req.query;
@@ -2603,7 +3128,32 @@ export const validateReorder = asyncHandler(async (req: Request, res: Response) 
   }
 });
 
-// Get frequently ordered items
+/**
+ * @swagger
+ * /api/orders/reorder/frequently-ordered:
+ *   get:
+ *     summary: Get frequently ordered items
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 10
+ *     responses:
+ *       200:
+ *         description: List of frequently ordered items
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Unauthorized
+ */
 export const getFrequentlyOrdered = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
   const { limit = 10 } = req.query;
@@ -2619,7 +3169,24 @@ export const getFrequentlyOrdered = asyncHandler(async (req: Request, res: Respo
   }
 });
 
-// Get reorder suggestions
+/**
+ * @swagger
+ * /api/orders/reorder/suggestions:
+ *   get:
+ *     summary: Personalized reorder suggestions
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Personalized reorder suggestions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Unauthorized
+ */
 export const getReorderSuggestions = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
 
@@ -2635,8 +3202,54 @@ export const getReorderSuggestions = asyncHandler(async (req: Request, res: Resp
 });
 
 /**
- * Request refund for an order (user-facing)
- * POST /api/orders/:orderId/refund-request
+ * @swagger
+ * /api/orders/{orderId}/refund-request:
+ *   post:
+ *     summary: Request refund for an order (delivered/cancelled within 7 days)
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - reason
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 minLength: 10
+ *                 maxLength: 500
+ *               refundItems:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     itemId:
+ *                       type: string
+ *                     quantity:
+ *                       type: integer
+ *     responses:
+ *       201:
+ *         description: Refund request created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Validation error (order not eligible, reason too short, etc.)
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Order not found
  */
 export const requestRefund = asyncHandler(async (req: Request, res: Response) => {
   const { orderId } = req.params;
@@ -2813,8 +3426,38 @@ export const requestRefund = asyncHandler(async (req: Request, res: Response) =>
 });
 
 /**
- * Get refund history for user
- * GET /api/orders/refunds
+ * @swagger
+ * /api/orders/refunds:
+ *   get:
+ *     summary: List user refunds
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 50
+ *     responses:
+ *       200:
+ *         description: Paginated list of user refunds
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Unauthorized
  */
 export const getUserRefunds = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
@@ -2855,8 +3498,30 @@ export const getUserRefunds = asyncHandler(async (req: Request, res: Response) =
 });
 
 /**
- * Get refund details
- * GET /api/orders/refunds/:refundId
+ * @swagger
+ * /api/orders/refunds/{refundId}:
+ *   get:
+ *     summary: Get single refund details
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: refundId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Refund details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Refund not found
  */
 export const getRefundDetails = asyncHandler(async (req: Request, res: Response) => {
   const { refundId } = req.params;
@@ -2880,7 +3545,32 @@ export const getRefundDetails = asyncHandler(async (req: Request, res: Response)
   }
 });
 
-// Get order financial details (ledger trail, coin transactions, refunds)
+/**
+ * @swagger
+ * /api/orders/{orderId}/financial:
+ *   get:
+ *     summary: Financial audit trail with ledger entries, coin transactions, and refunds
+ *     tags: [User Orders]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Order financial details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Order not found
+ */
 export const getOrderFinancialDetails = asyncHandler(async (req: Request, res: Response) => {
   const { orderId } = req.params;
   const userId = req.userId!;

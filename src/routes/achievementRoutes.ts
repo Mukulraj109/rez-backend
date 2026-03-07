@@ -8,6 +8,7 @@ import {
 } from '../controllers/achievementController';
 import { authenticate } from '../middleware/auth';
 import { createRateLimiter } from '../middleware/rateLimiter';
+import { requireGamificationFeature } from '../middleware/gamificationFeatureGate';
 
 const router = Router();
 
@@ -20,6 +21,9 @@ const recalculateLimiter = createRateLimiter({
 
 // All routes require authentication
 router.use(authenticate);
+
+// PHASE 3 — disabled until core is stable
+router.use(requireGamificationFeature('achievements', { achievements: [] }));
 
 // Achievement routes
 router.get('/', getUserAchievements);

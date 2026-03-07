@@ -78,7 +78,7 @@ const UserCouponSchema = new Schema<IUserCoupon>(
 
 // Compound indexes for efficient queries
 UserCouponSchema.index({ user: 1, status: 1 });
-UserCouponSchema.index({ user: 1, coupon: 1 });
+UserCouponSchema.index({ user: 1, coupon: 1 }, { unique: true });
 UserCouponSchema.index({ status: 1, expiryDate: 1 });
 
 // Virtual for days until expiry

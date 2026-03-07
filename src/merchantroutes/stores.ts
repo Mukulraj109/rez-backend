@@ -1402,53 +1402,19 @@ router.post('/:id/reviews/:reviewId/approve', validateParams(Joi.object({
       'ratings.distribution': ratingStats.distribution
     });
 
-    // Reward user with 10 rezcoins
+    // Reward user with 10 rezcoins via walletService
     try {
-      // Get or create user wallet
-      let wallet = await Wallet.findOne({ user: review.user });
-      if (!wallet) {
-        wallet = await (Wallet as any).createForUser(review.user);
-      }
-
-      if (wallet) {
-        const balanceBefore = wallet.balance.total;
-        const rewardAmount = 10;
-
-        // Add funds to wallet
-        await wallet.addFunds(rewardAmount, 'reward');
-
-        // Create transaction record
-        const transaction = new Transaction({
-          user: review.user,
-          type: 'credit',
-          category: 'reward',
-          amount: rewardAmount,
-          currency: wallet.currency,
-          description: 'Review approval reward - 10 rezcoins',
-          source: {
-            type: 'review_reward',
-            reference: new mongoose.Types.ObjectId(reviewId),
-            description: `Review approved for ${store.name}`,
-            metadata: {
-              reviewId: reviewId,
-              storeId: storeId,
-              storeName: store.name,
-              rewardType: 'review_approval'
-            }
-          },
-          balanceBefore: balanceBefore,
-          balanceAfter: balanceBefore + rewardAmount,
-          status: {
-            current: 'completed',
-            history: [{
-              status: 'completed',
-              timestamp: new Date()
-            }]
-          }
-        });
-
-        await transaction.save();
-      }
+      const { walletService } = await import('../services/walletService');
+      await walletService.credit({
+        userId: review.user.toString(),
+        amount: 10,
+        source: 'review',
+        description: 'Review approval reward - 10 rezcoins',
+        operationType: 'review_reward',
+        referenceId: `review-reward:${reviewId}`,
+        referenceModel: 'Review',
+        metadata: { reviewId, storeId, storeName: store.name },
+      });
     } catch (walletError) {
       logger.error('Error rewarding user for review approval:', walletError);
       // Don't fail the approval if wallet operation fails, but log it

@@ -10,6 +10,7 @@ import mongoose from 'mongoose';
 import redisService from './redisService';
 import { CacheTTL } from '../config/redis';
 import pushNotificationService from './pushNotificationService';
+import { isGamificationEnabled } from '../config/gamificationFeatureFlags';
 
 // Valid status transitions: maps current status -> allowed next statuses
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -295,6 +296,9 @@ class ChallengeService {
     amount: number = 1,
     metadata?: any
   ): Promise<IUserChallengeProgress[]> {
+    // Skip DB query entirely when challenges feature is disabled
+    if (!isGamificationEnabled('challenges')) return [];
+
     // Find all active challenges for this action
     const now = new Date();
     const challenges = await Challenge.find({

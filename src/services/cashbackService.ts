@@ -202,50 +202,26 @@ class CashbackService {
         throw createError;
       }
 
-      // Credit cashback to wallet as ReZ coins immediately
+      // Credit cashback to wallet as ReZ coins immediately via walletService
       if (amount > 0) {
         try {
-          const { Wallet } = await import('../models/Wallet');
-          const wallet = await Wallet.findOne({ user: order.user }).lean();
+          const { walletService } = await import('./walletService');
+          await walletService.credit({
+            userId: order.user.toString(),
+            amount,
+            source: 'cashback',
+            description: `${rate}% cashback on order #${order.orderNumber}`,
+            operationType: 'cashback',
+            referenceId: `cashback:${order._id}`,
+            referenceModel: 'Order',
+            metadata: { orderId: order._id, orderAmount: order.totals.total },
+          });
 
-          if (wallet) {
-            // Atomic balance update via $inc (addFunds is already atomic)
-            await wallet.addFunds(amount, 'cashback');
-
-            // Atomic coins array update — use positional $inc instead of read-modify-write
-            await Wallet.findOneAndUpdate(
-              { user: order.user, 'coins.type': 'rez' },
-              {
-                $inc: { 'coins.$.amount': amount },
-                $set: { 'coins.$.lastEarned': new Date() },
-              }
-            );
-
-            // Create CoinTransaction record for auto-sync consistency
-            try {
-              const { CoinTransaction } = await import('../models/CoinTransaction');
-              await CoinTransaction.createTransaction(
-                order.user.toString(),
-                'earned',
-                amount,
-                'cashback',
-                `${rate}% cashback on order #${order.orderNumber}`,
-                { orderId: order._id, orderAmount: order.totals.total }
-              );
-            } catch (coinTxError) {
-              console.error('⚠️ [CASHBACK SERVICE] CoinTransaction creation failed (non-blocking):', coinTxError);
-            }
-
-            // Atomic status transition — use findOneAndUpdate to avoid stale-document overwrites
-            await UserCashback.findByIdAndUpdate(cashback._id, {
-              $set: { status: 'credited', creditedDate: new Date() },
-            });
-            cashback.status = 'credited';
-
-            console.log(`✅ [CASHBACK SERVICE] Credited ₹${amount} ReZ coins to wallet for user ${order.user}`);
-          } else {
-            console.warn(`⚠️ [CASHBACK SERVICE] Wallet not found for user ${order.user}, cashback record created but not credited`);
-          }
+          // Atomic status transition — use findOneAndUpdate to avoid stale-document overwrites
+          await UserCashback.findByIdAndUpdate(cashback._id, {
+            $set: { status: 'credited', creditedDate: new Date() },
+          });
+          cashback.status = 'credited';
         } catch (walletError) {
           console.error('❌ [CASHBACK SERVICE] Error crediting cashback to wallet (non-blocking):', walletError);
           // Cashback record still exists, can be manually credited later

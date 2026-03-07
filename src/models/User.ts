@@ -74,6 +74,8 @@ export interface IUserAuth {
   otpExpiry?: Date;
   loginAttempts: number;
   lockUntil?: Date;
+  totpSecret?: string;
+  totpEnabled?: boolean;
 }
 
 // User referral interface
@@ -174,6 +176,14 @@ export interface IUser extends Document {
   location?: string; // Direct access to profile.location (city or address)
   interests?: string[]; // User interests/categories for personalization
   phone?: string; // Alias for phoneNumber (for compatibility with services)
+
+  // Push notification tokens (multiple devices)
+  pushTokens?: Array<{
+    token: string;
+    platform: 'ios' | 'android' | 'web';
+    deviceInfo?: Record<string, any>;
+    lastUsed: Date;
+  }>;
 
   // Game access control
   gameBanned?: boolean;
@@ -393,6 +403,14 @@ const UserSchema = new Schema<IUser>({
       type: Number,
       default: 0
     },
+    totpSecret: {
+      type: String,
+      select: false
+    },
+    totpEnabled: {
+      type: Boolean,
+      default: false
+    },
     lockUntil: {
       type: Date,
       select: false
@@ -578,7 +596,13 @@ const UserSchema = new Schema<IUser>({
   },
   gameBannedAt: {
     type: Date
-  }
+  },
+  pushTokens: [{
+    token: { type: String, required: true },
+    platform: { type: String, enum: ['ios', 'android', 'web'] },
+    deviceInfo: { type: Schema.Types.Mixed },
+    lastUsed: { type: Date, default: Date.now }
+  }]
 }, {
   timestamps: true,
   toJSON: {
@@ -590,6 +614,7 @@ const UserSchema = new Schema<IUser>({
         delete ret.auth.otpCode;
         delete ret.auth.otpExpiry;
         delete ret.auth.lockUntil;
+        delete ret.auth.totpSecret;
       }
       return ret;
     }

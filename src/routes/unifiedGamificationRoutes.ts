@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { createRateLimiter } from '../middleware/rateLimiter';
+import { requireGamificationFeature } from '../middleware/gamificationFeatureGate';
 
 // Rate limiters for sensitive gamification endpoints
 const checkInLimiter = createRateLimiter({
@@ -88,15 +89,16 @@ const router = express.Router();
 router.use(authenticate);
 
 // ========================================
-// CHALLENGES
+// CHALLENGES — PHASE 3
 // ========================================
-router.get('/challenges', getChallenges);
-router.get('/challenges/unified', getUnifiedChallenges);
-router.get('/challenges/active', getActiveChallenge);
-router.get('/challenges/my-progress', getMyChallengeProgress);
-router.get('/challenges/:id/leaderboard', getChallengeLeaderboard);
-router.post('/challenges/:id/claim', challengeClaimLimiter, claimChallengeReward);
-router.post('/challenges/:id/join', challengeJoinLimiter, joinChallenge);
+const gateChallenges = requireGamificationFeature('challenges', { challenges: [] });
+router.get('/challenges', gateChallenges, getChallenges);
+router.get('/challenges/unified', gateChallenges, getUnifiedChallenges);
+router.get('/challenges/active', gateChallenges, getActiveChallenge);
+router.get('/challenges/my-progress', gateChallenges, getMyChallengeProgress);
+router.get('/challenges/:id/leaderboard', gateChallenges, getChallengeLeaderboard);
+router.post('/challenges/:id/claim', gateChallenges, challengeClaimLimiter, claimChallengeReward);
+router.post('/challenges/:id/join', gateChallenges, challengeJoinLimiter, joinChallenge);
 
 // ========================================
 // ACHIEVEMENTS
@@ -108,14 +110,16 @@ router.post('/challenges/:id/join', challengeJoinLimiter, joinChallenge);
 // REMOVED: POST /achievements/unlock — achievement unlocking must be server-driven only
 
 // ========================================
-// BADGES
+// BADGES — PHASE 3
 // ========================================
-router.get('/badges', getBadges);
-router.get('/badges/user/:userId', getUserBadges);
+const gateBadges = requireGamificationFeature('badges', { badges: [] });
+router.get('/badges', gateBadges, getBadges);
+router.get('/badges/user/:userId', gateBadges, getUserBadges);
 
 // ========================================
-// LEADERBOARD
+// LEADERBOARD — PHASE 3
 // ========================================
+const gateLeaderboard = requireGamificationFeature('leaderboard', { entries: [], myRank: null });
 // Rate limiters for leaderboard (prevents cache-busting spam)
 const leaderboardLimiter = createRateLimiter({
   windowMs: 60 * 1000,
@@ -130,12 +134,12 @@ const myRankLimiter = createRateLimiter({
 // GET /api/gamification/leaderboard?type=spending&period=weekly&limit=10
 // type: spending | reviews | referrals | cashback | coins
 // period: daily | weekly | monthly | all-time
-router.get('/leaderboard', leaderboardLimiter, getLeaderboard);
-router.get('/leaderboard/my-rank', myRankLimiter, getMyRank);
-router.get('/leaderboard/rank/:userId', myRankLimiter, getUserRank);
+router.get('/leaderboard', gateLeaderboard, leaderboardLimiter, getLeaderboard);
+router.get('/leaderboard/my-rank', gateLeaderboard, myRankLimiter, getMyRank);
+router.get('/leaderboard/rank/:userId', gateLeaderboard, myRankLimiter, getUserRank);
 
 // ========================================
-// COINS (CURRENCY SYSTEM)
+// COINS (CURRENCY SYSTEM) — PHASE 1 (ALWAYS ACTIVE)
 // ========================================
 router.get('/coins/balance', getCoinBalance);
 router.get('/coins/transactions', getCoinTransactions);
@@ -144,25 +148,27 @@ router.post('/coins/award', requireAdmin, awardCoins);
 router.post('/coins/deduct', requireAdmin, deductCoins);
 
 // ========================================
-// DAILY STREAK
+// DAILY STREAK — PHASE 2
 // ========================================
+const gateStreaks = requireGamificationFeature('streaks', { streak: null });
 // Also available via standalone streakRoutes.ts (registered at /api/streak)
-router.get('/streaks', streakController.getCurrentUserStreak.bind(streakController));
-router.get('/streak/bonuses', getStreakBonuses);
-router.post('/streak/checkin', checkInLimiter, streakCheckin);
-router.post('/streak/claim-milestone', streakController.claimMilestone.bind(streakController));
-router.post('/streak/freeze', streakController.freezeStreak.bind(streakController));
+router.get('/streaks', gateStreaks, streakController.getCurrentUserStreak.bind(streakController));
+router.get('/streak/bonuses', gateStreaks, getStreakBonuses);
+router.post('/streak/checkin', gateStreaks, checkInLimiter, streakCheckin);
+router.post('/streak/claim-milestone', gateStreaks, streakController.claimMilestone.bind(streakController));
+router.post('/streak/freeze', gateStreaks, streakController.freezeStreak.bind(streakController));
 
 // ========================================
-// MINI-GAMES
+// MINI-GAMES — PHASE 3
 // ========================================
+const gateMiniGames = requireGamificationFeature('miniGames', { eligible: false });
 
 // Spin Wheel
-router.post('/spin-wheel/create', createSpinWheel);
-router.post('/spin-wheel/spin', spinWheel);
-router.get('/spin-wheel/eligibility', getSpinWheelEligibility);
-router.get('/spin-wheel/data', getSpinWheelData);
-router.get('/spin-wheel/history', getSpinWheelHistory);
+router.post('/spin-wheel/create', gateMiniGames, createSpinWheel);
+router.post('/spin-wheel/spin', gateMiniGames, spinWheel);
+router.get('/spin-wheel/eligibility', gateMiniGames, getSpinWheelEligibility);
+router.get('/spin-wheel/data', gateMiniGames, getSpinWheelData);
+router.get('/spin-wheel/history', gateMiniGames, getSpinWheelHistory);
 
 // Scratch Card
 // Moved to standalone route file: scratchCardRoutes.ts (registered at /api/scratch-cards)
@@ -172,51 +178,68 @@ router.get('/spin-wheel/history', getSpinWheelHistory);
 // router.post('/scratch-card/:id/claim', claimScratchCard);
 
 // Quiz Game
-router.post('/quiz/start', startQuiz);
-router.post('/quiz/:quizId/answer', submitQuizAnswer);
-router.get('/quiz/:quizId/progress', getQuizProgress);
-router.post('/quiz/:quizId/complete', completeQuiz);
+router.post('/quiz/start', gateMiniGames, startQuiz);
+router.post('/quiz/:quizId/answer', gateMiniGames, submitQuizAnswer);
+router.get('/quiz/:quizId/progress', gateMiniGames, getQuizProgress);
+router.post('/quiz/:quizId/complete', gateMiniGames, completeQuiz);
 
 // ========================================
-// GAMIFICATION STATS
+// GAMIFICATION STATS — PHASE 3
 // ========================================
 // Get complete user gamification statistics
-router.get('/stats', getGamificationStats);
+// Gated because it calls streakService, challengeService, leaderboardService, achievementService
+const gateStats = requireGamificationFeature('achievements', {
+  gamesPlayed: 0, gamesWon: 0, totalCoins: 0, achievements: 0,
+  streak: 0, longestStreak: 0, challengesCompleted: 0, challengesActive: 0,
+  rank: 0, allRanks: { spending: 0, reviews: 0, referrals: 0, coins: 0, cashback: 0 }
+});
+router.get('/stats', gateStats, getGamificationStats);
 
 // ========================================
-// PLAY & EARN HUB
+// PLAY & EARN HUB — PHASE 3
 // ========================================
-// Get all play & earn data in one call (spin, challenges, streak, surprise drops)
-router.get('/play-and-earn', getPlayAndEarnData);
+// Gated because it calls spinWheelService, challengeService, streakService
+const gatePlayAndEarn = requireGamificationFeature('miniGames', {
+  dailySpin: { spinsRemaining: 0, maxSpins: 3, lastSpinAt: null, canSpin: false, nextSpinAt: null },
+  challenges: { active: [], completedToday: 0, total: 0 },
+  streak: { current: 0, checkedInToday: false, nextMilestone: { day: 3, coins: 50 } },
+  surpriseDrop: null,
+  coinBalance: 0
+});
+router.get('/play-and-earn', gatePlayAndEarn, getPlayAndEarnData);
 
 // Bonus Opportunities (time-limited challenges, drops, campaigns)
-router.get('/bonus-opportunities', getBonusOpportunities);
+const gateBonusZones = requireGamificationFeature('bonusZones', { opportunities: [] });
+router.get('/bonus-opportunities', gateBonusZones, getBonusOpportunities);
 
 // Surprise Coin Drops
-router.post('/surprise-drop/claim', claimSurpriseDrop);
+router.post('/surprise-drop/claim', gateMiniGames, claimSurpriseDrop);
 
 // Daily Check-in Config (day rewards, pro tips, etc.)
-router.get('/checkin-config', getCheckinConfigEndpoint);
+const gateDailyCheckin = requireGamificationFeature('dailyCheckin', { config: null });
+router.get('/checkin-config', gateDailyCheckin, getCheckinConfigEndpoint);
 
 // Daily Streak Check-in also available via streakRoutes.ts (registered at /api/streak)
 
 // ========================================
-// AFFILIATE / SHARE
+// AFFILIATE / SHARE — PHASE 3
 // ========================================
-router.get('/affiliate/stats', getAffiliateStats);
-router.get('/affiliate/submissions', getShareSubmissions);
-router.post('/affiliate/submit', affiliateSubmitLimiter, submitSharePost);
+const gateAffiliate = requireGamificationFeature('affiliate', { stats: null, submissions: [] });
+router.get('/affiliate/stats', gateAffiliate, getAffiliateStats);
+router.get('/affiliate/submissions', gateAffiliate, getShareSubmissions);
+router.post('/affiliate/submit', gateAffiliate, affiliateSubmitLimiter, submitSharePost);
 
 // Promotional Posters (for sharing)
-router.get('/promotional-posters', getPromotionalPosters);
+router.get('/promotional-posters', gateAffiliate, getPromotionalPosters);
 
 // REVIEWABLE ITEMS
 router.get('/reviewable-items', getReviewableItems);
 
 // ========================================
-// QUICK ACTIONS (Personalized)
+// QUICK ACTIONS (Personalized) — PHASE 3
 // ========================================
-router.get('/quick-actions', async (req, res) => {
+const gateAchievements = requireGamificationFeature('achievements', { actions: [] });
+router.get('/quick-actions', gateAchievements, async (req, res) => {
   try {
     const userId = (req as any).userId;
     const quickActionService = (await import('../services/quickActionService')).default;

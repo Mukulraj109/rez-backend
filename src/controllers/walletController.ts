@@ -14,11 +14,28 @@ import redisService from '../services/redisService';
 import Stripe from 'stripe';
 import { validateAmount, sanitizeErrorMessage, validatePagination } from '../utils/walletValidation';
 import { logger } from '../config/logger';
+import { ledgerService } from '../services/ledgerService';
 
 /**
- * @desc    Get user wallet balance
- * @route   GET /api/wallet/balance
- * @access  Private
+ * @swagger
+ * /api/wallet/balance:
+ *   get:
+ *     summary: Get wallet balance
+ *     description: Returns comprehensive wallet balance with breakdown, branded coins, promo coins, limits, and status.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Wallet balance retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/WalletBalance'
+ *       401:
+ *         description: Not authenticated
+ *       429:
+ *         description: Rate limit exceeded
  */
 export const getWalletBalance = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -233,9 +250,47 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
 });
 
 /**
- * @desc    Credit loyalty points to wallet
- * @route   POST /api/wallet/credit-loyalty-points
- * @access  Private
+ * @swagger
+ * /api/wallet/credit-loyalty-points:
+ *   post:
+ *     summary: Credit loyalty coins to wallet
+ *     description: Admin-only endpoint to credit coins to a user's wallet.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *             properties:
+ *               amount:
+ *                 type: number
+ *                 description: Amount of coins to credit
+ *               source:
+ *                 type: string
+ *                 description: Source of the credit
+ *               idempotencyKey:
+ *                 type: string
+ *                 description: Unique key to prevent duplicate credits
+ *     responses:
+ *       200:
+ *         description: Coins credited successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Invalid amount or validation error
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Admin access required
+ *       429:
+ *         description: Rate limit exceeded
  */
 export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -350,7 +405,7 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
 
   // Create CoinTransaction (source of truth for auto-sync)
   try {
-    await CoinTransaction.createTransaction(
+    const coinTx = await CoinTransaction.createTransaction(
       userId,
       'earned',
       validatedAmount,
@@ -358,9 +413,23 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
       source?.description || 'Loyalty points credited',
       { loyaltySource: source?.type || 'loyalty_sync', reference: source?.reference }
     );
-    logger.info('✅ [WALLET] CoinTransaction created for loyalty points');
+    logger.info('[WALLET] CoinTransaction created for loyalty points');
+
+    // Create ledger entry (fire-and-forget)
+    const userAcctId = new mongoose.Types.ObjectId(userId);
+    const platformFloatId = ledgerService.getPlatformAccountId('platform_float');
+    ledgerService.recordEntry({
+      debitAccount: { type: 'platform_float', id: platformFloatId },
+      creditAccount: { type: 'user_wallet', id: userAcctId },
+      amount: validatedAmount,
+      coinType: 'nuqta',
+      operationType: source?.type === 'admin' ? 'admin_adjustment' : 'loyalty_credit',
+      referenceId: String(coinTx._id),
+      referenceModel: 'CoinTransaction',
+      metadata: { description: source?.description || 'Loyalty points credited' },
+    }).catch((err: any) => logger.error('[WALLET] Ledger entry failed for loyalty points:', err));
   } catch (ctxError) {
-    logger.error('❌ [WALLET] Failed to create CoinTransaction:', ctxError);
+    logger.error('[WALLET] Failed to create CoinTransaction:', ctxError);
   }
 
   // Log activity
@@ -388,9 +457,95 @@ export const creditLoyaltyPoints = asyncHandler(async (req: Request, res: Respon
 });
 
 /**
- * @desc    Get transaction history
- * @route   GET /api/wallet/transactions
- * @access  Private
+ * @swagger
+ * /api/wallet/transactions:
+ *   get:
+ *     summary: Get paginated transaction history
+ *     description: Returns a paginated list of wallet transactions with filtering options.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Items per page
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *         description: Filter by transaction type
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *         description: Filter by category
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Filter by status
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date filter
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date filter
+ *       - in: query
+ *         name: minAmount
+ *         schema:
+ *           type: number
+ *         description: Minimum amount filter
+ *       - in: query
+ *         name: maxAmount
+ *         schema:
+ *           type: number
+ *         description: Maximum amount filter
+ *     responses:
+ *       200:
+ *         description: Transactions retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     transactions:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/TransactionItem'
+ *                     currentPage:
+ *                       type: integer
+ *                     totalPages:
+ *                       type: integer
+ *                     totalItems:
+ *                       type: integer
+ *                     hasNextPage:
+ *                       type: boolean
+ *                     hasPrevPage:
+ *                       type: boolean
+ *       401:
+ *         description: Not authenticated
+ *       429:
+ *         description: Rate limit exceeded
  */
 export const getTransactions = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -457,9 +612,39 @@ export const getTransactions = asyncHandler(async (req: Request, res: Response) 
 });
 
 /**
- * @desc    Get single transaction details
- * @route   GET /api/wallet/transaction/:id
- * @access  Private
+ * @swagger
+ * /api/wallet/transaction/{id}:
+ *   get:
+ *     summary: Get single transaction details
+ *     description: Returns details of a specific transaction by ID.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Transaction ID
+ *     responses:
+ *       200:
+ *         description: Transaction details retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/TransactionItem'
+ *       401:
+ *         description: Not authenticated
+ *       404:
+ *         description: Transaction not found
+ *       429:
+ *         description: Rate limit exceeded
  */
 export const getTransactionById = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -482,9 +667,47 @@ export const getTransactionById = asyncHandler(async (req: Request, res: Respons
 });
 
 /**
- * @desc    Topup wallet
- * @route   POST /api/wallet/topup
- * @access  Private
+ * @swagger
+ * /api/wallet/topup:
+ *   post:
+ *     summary: Admin wallet topup
+ *     description: Admin-only endpoint to top up a user's wallet.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *             properties:
+ *               amount:
+ *                 type: number
+ *                 description: Amount to top up
+ *               paymentMethod:
+ *                 type: string
+ *                 description: Payment method used
+ *               paymentId:
+ *                 type: string
+ *                 description: External payment ID
+ *     responses:
+ *       200:
+ *         description: Wallet topped up successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Invalid amount
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Admin access required
+ *       429:
+ *         description: Rate limit exceeded
  */
 export const topupWallet = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -577,24 +800,22 @@ export const topupWallet = asyncHandler(async (req: Request, res: Response) => {
     await transaction.save();
     logger.info('✅ [TOPUP] Transaction saved:', transaction._id);
 
-    // Add funds to wallet
+    // Add funds via walletService (atomic $inc + CoinTransaction + LedgerEntry)
     logger.info('💰 [TOPUP] Adding funds to wallet');
-    await wallet.addFunds(topupAmount, 'topup');
-    logger.info('✅ [TOPUP] Funds added, new balance:', wallet.balance.total);
-
-    // Create CoinTransaction (source of truth for auto-sync)
-    try {
-      await CoinTransaction.createTransaction(
-        userId,
-        'earned',
-        topupAmount,
-        'recharge',
-        `Wallet topup via ${paymentMethod || 'Payment Gateway'}`,
-        { paymentId: paymentId || `PAY_${Date.now()}`, paymentMethod: paymentMethod || 'gateway' }
-      );
-    } catch (ctxError) {
-      logger.error('❌ [TOPUP] Failed to create CoinTransaction:', ctxError);
-    }
+    const { walletService } = await import('../services/walletService');
+    await walletService.credit({
+      userId,
+      amount: topupAmount,
+      source: 'recharge',
+      description: `Wallet topup via ${paymentMethod || 'Payment Gateway'}`,
+      operationType: 'topup',
+      referenceId: paymentId || `PAY_${Date.now()}`,
+      referenceModel: 'Transaction',
+      metadata: { paymentId: paymentId || `PAY_${Date.now()}`, paymentMethod: paymentMethod || 'gateway' },
+    });
+    // Refresh wallet for response
+    wallet = await Wallet.findOne({ user: userId }).lean();
+    logger.info('✅ [TOPUP] Funds added via walletService');
 
     // Create activity for wallet topup
     await activityService.wallet.onMoneyAdded(
@@ -605,8 +826,8 @@ export const topupWallet = asyncHandler(async (req: Request, res: Response) => {
     sendSuccess(res, {
       transaction,
       wallet: {
-        balance: wallet.balance,
-        currency: wallet.currency
+        balance: wallet?.balance || { total: 0, available: 0 },
+        currency: wallet?.currency || 'RC',
       }
     }, 'Wallet topup successful', 201);
   } catch (error) {
@@ -617,9 +838,49 @@ export const topupWallet = asyncHandler(async (req: Request, res: Response) => {
 });
 
 /**
- * @desc    Withdraw from wallet
- * @route   POST /api/wallet/withdraw
- * @access  Private
+ * @swagger
+ * /api/wallet/withdraw:
+ *   post:
+ *     summary: Withdraw funds from wallet
+ *     description: Withdraw funds from the wallet. Requires re-authentication and feature flag enabled.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - method
+ *               - accountDetails
+ *             properties:
+ *               amount:
+ *                 type: number
+ *                 description: Amount to withdraw
+ *               method:
+ *                 type: string
+ *                 description: Withdrawal method (e.g., bank_transfer)
+ *               accountDetails:
+ *                 type: object
+ *                 description: Account details for the withdrawal
+ *     responses:
+ *       200:
+ *         description: Withdrawal initiated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Invalid amount or insufficient balance
+ *       401:
+ *         description: Not authenticated or re-auth required
+ *       403:
+ *         description: Wallet frozen or withdrawal feature disabled
+ *       429:
+ *         description: Rate limit exceeded
  */
 export const withdrawFunds = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -718,37 +979,29 @@ export const withdrawFunds = asyncHandler(async (req: Request, res: Response) =>
 
       await transaction.save({ session });
 
-      // Deduct from wallet atomically within the same session
+      // Deduct from wallet via walletService (atomic $inc + CoinTransaction + LedgerEntry)
+      const { walletService } = await import('../services/walletService');
+      await walletService.debit({
+        userId,
+        amount: validatedAmount,
+        source: 'withdrawal',
+        description: `Withdrawal via ${method}`,
+        operationType: 'withdrawal',
+        referenceId: withdrawalId,
+        referenceModel: 'Transaction',
+        metadata: { withdrawalId, method, fees, netAmount },
+        session,
+      });
+
+      // Also update withdrawal statistics
       await Wallet.findOneAndUpdate(
-        { _id: wallet._id, 'balance.available': { $gte: validatedAmount } },
-        {
-          $inc: {
-            'balance.available': -validatedAmount,
-            'balance.total': -validatedAmount,
-            'statistics.totalWithdrawn': validatedAmount,
-            'statistics.totalSpent': validatedAmount
-          },
-          $set: { lastTransactionAt: new Date() }
-        },
-        { session }
+        { _id: wallet._id },
+        { $inc: { 'statistics.totalWithdrawn': validatedAmount } },
+        { session },
       );
 
       await session.commitTransaction();
       session.endSession();
-
-      // Create CoinTransaction (source of truth for auto-sync) — outside session (fire-and-forget)
-      try {
-        await CoinTransaction.createTransaction(
-          userId,
-          'spent',
-          validatedAmount,
-          'withdrawal',
-          `Withdrawal via ${method}`,
-          { withdrawalId, method, fees, netAmount }
-        );
-      } catch (ctxError) {
-        logger.error('❌ [WITHDRAW] Failed to create CoinTransaction:', ctxError);
-      }
 
       sendSuccess(res, {
         transaction,
@@ -772,9 +1025,58 @@ export const withdrawFunds = asyncHandler(async (req: Request, res: Response) =>
 });
 
 /**
- * @desc    Process payment (deduct from wallet)
- * @route   POST /api/wallet/payment
- * @access  Private
+ * @swagger
+ * /api/wallet/payment:
+ *   post:
+ *     summary: Process wallet payment
+ *     description: Deducts coins from the wallet to process an order payment.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *             properties:
+ *               amount:
+ *                 type: number
+ *                 description: Payment amount in coins
+ *               orderId:
+ *                 type: string
+ *                 description: Associated order ID
+ *               storeId:
+ *                 type: string
+ *                 description: Store ID
+ *               storeName:
+ *                 type: string
+ *                 description: Store display name
+ *               description:
+ *                 type: string
+ *                 description: Payment description
+ *               items:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                 description: List of items in the order
+ *     responses:
+ *       200:
+ *         description: Payment processed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Invalid amount or insufficient balance
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Wallet frozen
+ *       429:
+ *         description: Rate limit exceeded
  */
 export const processPayment = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -791,6 +1093,18 @@ export const processPayment = asyncHandler(async (req: Request, res: Response) =
 
   if (!userId) {
     return sendError(res, 'User not authenticated', 401);
+  }
+
+  // Idempotency check — prevent double-debit on retries
+  const idempotencyKey = (req.headers['x-idempotency-key'] as string) || req.body.idempotencyKey;
+  if (idempotencyKey) {
+    const idemCacheKey = `wallet:payment:idem:${idempotencyKey}`;
+    const cachedResult = await redisService.get<string>(idemCacheKey);
+    if (cachedResult) {
+      logger.info(`💳 [PAYMENT] Idempotency hit for key ${idempotencyKey}`);
+      const parsed = JSON.parse(cachedResult);
+      return sendSuccess(res, parsed.data, parsed.message, parsed.statusCode);
+    }
   }
 
   // Validate amount
@@ -879,40 +1193,28 @@ export const processPayment = asyncHandler(async (req: Request, res: Response) =
 
       await transaction.save({ session });
 
-      // Deduct funds atomically within the same session (with balance guard)
-      const deductResult = await Wallet.findOneAndUpdate(
-        { _id: wallet._id, 'balance.available': { $gte: payAmount } },
-        {
-          $inc: {
-            'balance.available': -payAmount,
-            'balance.total': -payAmount,
-            'statistics.totalSpent': payAmount
-          },
-          $set: { lastTransactionAt: new Date() }
-        },
-        { new: true, session }
-      );
+      // Deduct via walletService (atomic $inc + CoinTransaction + LedgerEntry)
+      const { walletService: ws } = await import('../services/walletService');
+      await ws.debit({
+        userId,
+        amount: payAmount,
+        source: 'order',
+        description: description || `Payment for order ${orderId || 'N/A'}`,
+        operationType: 'payment',
+        referenceId: orderId || `PAY_${Date.now()}`,
+        referenceModel: 'Transaction',
+        metadata: { orderId, storeId, storeName },
+        session,
+      });
+
+      const deductResult = await Wallet.findOne({ user: userId }).session(session).lean();
 
       if (!deductResult) {
-        throw new Error('Insufficient balance (concurrent deduction detected)');
+        throw new Error('Wallet not found after deduction');
       }
 
       await session.commitTransaction();
       session.endSession();
-
-      // Create CoinTransaction (source of truth for auto-sync) — outside session
-      try {
-        await CoinTransaction.createTransaction(
-          userId,
-          'spent',
-          payAmount,
-          'order',
-          description || `Payment for order ${orderId || 'N/A'}`,
-          { orderId, storeId, storeName }
-        );
-      } catch (ctxError) {
-        logger.error('❌ [PAYMENT] Failed to create CoinTransaction:', ctxError);
-      }
 
       // Create activity for wallet spending
       await activityService.wallet.onMoneySpent(
@@ -921,14 +1223,26 @@ export const processPayment = asyncHandler(async (req: Request, res: Response) =
         storeName || 'order'
       );
 
-      sendSuccess(res, {
+      const responseData = {
         transaction,
         wallet: {
           balance: deductResult.balance,
           currency: deductResult.currency
         },
         paymentStatus: 'success'
-      }, 'Payment processed successfully', 201);
+      };
+
+      // Cache idempotency result (24h TTL)
+      if (idempotencyKey) {
+        const idemCacheKey = `wallet:payment:idem:${idempotencyKey}`;
+        await redisService.set(idemCacheKey, JSON.stringify({
+          data: responseData,
+          message: 'Payment processed successfully',
+          statusCode: 201
+        }), 24 * 60 * 60);
+      }
+
+      sendSuccess(res, responseData, 'Payment processed successfully', 201);
     } catch (err) {
       await session.abortTransaction();
       session.endSession();
@@ -940,9 +1254,33 @@ export const processPayment = asyncHandler(async (req: Request, res: Response) =
 });
 
 /**
- * @desc    Get transaction summary/statistics
- * @route   GET /api/wallet/summary
- * @access  Private
+ * @swagger
+ * /api/wallet/summary:
+ *   get:
+ *     summary: Get transaction summary
+ *     description: Returns aggregated transaction summary statistics for the given period.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: period
+ *         schema:
+ *           type: string
+ *           enum: [day, week, month, year]
+ *           default: month
+ *         description: Time period for the summary
+ *     responses:
+ *       200:
+ *         description: Transaction summary retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Not authenticated
+ *       429:
+ *         description: Rate limit exceeded
  */
 export const getTransactionSummary = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -975,9 +1313,25 @@ export const getTransactionSummary = asyncHandler(async (req: Request, res: Resp
 });
 
 /**
- * @desc    Get transaction counts grouped by category (lightweight, no data transfer)
- * @route   GET /api/wallet/transaction-counts
- * @access  Private
+ * @swagger
+ * /api/wallet/transaction-counts:
+ *   get:
+ *     summary: Get transaction counts by category
+ *     description: Returns lightweight transaction counts grouped by category (no full data transfer).
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Transaction counts retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Not authenticated
+ *       429:
+ *         description: Rate limit exceeded
  */
 export const getTransactionCounts = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -1003,9 +1357,47 @@ export const getTransactionCounts = asyncHandler(async (req: Request, res: Respo
 });
 
 /**
- * @desc    Update wallet settings
- * @route   PUT /api/wallet/settings
- * @access  Private
+ * @swagger
+ * /api/wallet/settings:
+ *   put:
+ *     summary: Update wallet settings
+ *     description: Update user's wallet preferences such as auto-topup and low balance alerts.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               autoTopup:
+ *                 type: boolean
+ *                 description: Enable auto topup
+ *               autoTopupThreshold:
+ *                 type: number
+ *                 description: Balance threshold to trigger auto topup
+ *               autoTopupAmount:
+ *                 type: number
+ *                 description: Amount to auto topup
+ *               lowBalanceAlert:
+ *                 type: boolean
+ *                 description: Enable low balance alerts
+ *               lowBalanceThreshold:
+ *                 type: number
+ *                 description: Threshold for low balance alert
+ *     responses:
+ *       200:
+ *         description: Settings updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Not authenticated
  */
 export const updateWalletSettings = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -1049,9 +1441,25 @@ export const updateWalletSettings = asyncHandler(async (req: Request, res: Respo
 });
 
 /**
- * @desc    Get wallet transaction categories breakdown
- * @route   GET /api/wallet/categories
- * @access  Private
+ * @swagger
+ * /api/wallet/categories:
+ *   get:
+ *     summary: Get spending breakdown by category
+ *     description: Returns wallet spending aggregated by transaction category.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Categories breakdown retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Not authenticated
+ *       429:
+ *         description: Rate limit exceeded
  */
 export const getCategoriesBreakdown = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -1087,9 +1495,63 @@ export const getCategoriesBreakdown = asyncHandler(async (req: Request, res: Res
 });
 
 /**
- * @desc    Initiate payment gateway transaction
- * @route   POST /api/wallet/initiate-payment
- * @access  Private
+ * @swagger
+ * /api/wallet/initiate-payment:
+ *   post:
+ *     summary: Initiate payment via gateway
+ *     description: Initiates a payment through an external payment gateway (e.g., Stripe).
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - currency
+ *               - paymentMethod
+ *             properties:
+ *               amount:
+ *                 type: number
+ *                 description: Payment amount
+ *               currency:
+ *                 type: string
+ *                 description: Currency code (e.g., AED, INR)
+ *               paymentMethod:
+ *                 type: string
+ *                 description: Payment method identifier
+ *               paymentMethodType:
+ *                 type: string
+ *                 description: Type of payment method (card, upi, etc.)
+ *               purpose:
+ *                 type: string
+ *                 description: Purpose of payment (e.g., wallet_topup)
+ *               userDetails:
+ *                 type: object
+ *                 description: User details for the payment gateway
+ *               metadata:
+ *                 type: object
+ *                 description: Additional metadata for the payment (e.g., fiatCurrency)
+ *               returnUrl:
+ *                 type: string
+ *                 description: URL to redirect after success
+ *               cancelUrl:
+ *                 type: string
+ *                 description: URL to redirect on cancel
+ *     responses:
+ *       200:
+ *         description: Payment initiated, returns client secret or redirect URL
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Invalid payment parameters
+ *       401:
+ *         description: Not authenticated
  */
 export const initiatePayment = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -1195,10 +1657,39 @@ export const initiatePayment = asyncHandler(async (req: Request, res: Response) 
 });
 
 /**
- * @desc    Confirm payment after frontend Stripe.js confirmCardPayment succeeds
- *          Verifies with Stripe API, then credits wallet if purpose is wallet_topup
- * @route   POST /api/wallet/confirm-payment
- * @access  Private
+ * @swagger
+ * /api/wallet/confirm-payment:
+ *   post:
+ *     summary: Confirm Stripe payment
+ *     description: Confirms a Stripe payment after frontend confirmCardPayment succeeds. Verifies with Stripe API and credits wallet if purpose is wallet_topup.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - paymentIntentId
+ *             properties:
+ *               paymentIntentId:
+ *                 type: string
+ *                 description: Stripe PaymentIntent ID
+ *     responses:
+ *       200:
+ *         description: Payment confirmed and wallet credited
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Invalid or failed payment intent
+ *       401:
+ *         description: Not authenticated
+ *       404:
+ *         description: Payment not found
  */
 export const confirmPayment = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -1266,9 +1757,39 @@ export const confirmPayment = asyncHandler(async (req: Request, res: Response) =
 });
 
 /**
- * @desc    Check payment status
- * @route   GET /api/wallet/payment-status/:paymentId
- * @access  Private
+ * @swagger
+ * /api/wallet/payment-status/{paymentId}:
+ *   get:
+ *     summary: Check payment status
+ *     description: Checks the current status of a payment by its ID.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: paymentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Payment ID to check
+ *       - in: query
+ *         name: gateway
+ *         schema:
+ *           type: string
+ *         description: Payment gateway name
+ *     responses:
+ *       200:
+ *         description: Payment status retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Not authenticated
+ *       404:
+ *         description: Payment not found
+ *       429:
+ *         description: Rate limit exceeded
  */
 export const checkPaymentStatus = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -1303,9 +1824,34 @@ export const checkPaymentStatus = asyncHandler(async (req: Request, res: Respons
 });
 
 /**
- * @desc    Get available payment methods
- * @route   GET /api/wallet/payment-methods
- * @access  Private
+ * @swagger
+ * /api/wallet/payment-methods:
+ *   get:
+ *     summary: List available payment methods
+ *     description: Returns available payment methods based on currency and region.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: currency
+ *         schema:
+ *           type: string
+ *         description: Coin currency filter
+ *       - in: query
+ *         name: fiatCurrency
+ *         schema:
+ *           type: string
+ *         description: Fiat currency filter (e.g., AED, INR)
+ *     responses:
+ *       200:
+ *         description: Payment methods retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Not authenticated
  */
 export const getPaymentMethods = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -1424,9 +1970,44 @@ export const handlePaymentWebhook = asyncHandler(async (req: Request, res: Respo
 });
 
 /**
- * @desc    Add test funds to wallet (DEVELOPMENT ONLY)
- * @route   POST /api/wallet/dev-topup
- * @access  Private
+ * @swagger
+ * /api/wallet/dev-topup:
+ *   post:
+ *     summary: Dev-only wallet topup
+ *     description: Adds test funds to the wallet. Only available in development environment.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - amount
+ *               - type
+ *             properties:
+ *               amount:
+ *                 type: number
+ *                 description: Amount to add
+ *               type:
+ *                 type: string
+ *                 enum: [rez, promo, cashback]
+ *                 description: Type of coins to add
+ *     responses:
+ *       200:
+ *         description: Dev topup successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Invalid amount or type
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not available in production
  */
 export const devTopup = asyncHandler(async (req: Request, res: Response) => {
   // Only allow in development
@@ -1506,9 +2087,25 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
 });
 
 /**
- * @desc    Sync wallet balance from CoinTransaction (fixes discrepancies)
- * @route   POST /api/wallet/sync-balance
- * @access  Private
+ * @swagger
+ * /api/wallet/sync-balance:
+ *   post:
+ *     summary: Sync wallet balance
+ *     description: Recalculates wallet balance from CoinTransaction records to fix any discrepancies. Rate limited to 1 request per hour.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Balance synced successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Not authenticated
+ *       429:
+ *         description: Rate limit exceeded (1 per hour)
  */
 export const syncWalletBalance = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -1605,9 +2202,51 @@ export const syncWalletBalance = asyncHandler(async (req: Request, res: Response
 });
 
 /**
- * @desc    Refund a wallet payment (used when order creation fails after payment)
- * @route   POST /api/wallet/refund
- * @access  Private
+ * @swagger
+ * /api/wallet/refund:
+ *   post:
+ *     summary: Refund a wallet payment
+ *     description: Admin-only endpoint to refund a wallet payment, typically when order creation fails after payment.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - transactionId
+ *               - amount
+ *               - reason
+ *             properties:
+ *               transactionId:
+ *                 type: string
+ *                 description: Original transaction ID to refund
+ *               amount:
+ *                 type: number
+ *                 description: Refund amount
+ *               reason:
+ *                 type: string
+ *                 description: Reason for the refund
+ *     responses:
+ *       200:
+ *         description: Refund processed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Invalid refund parameters
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Admin access required
+ *       404:
+ *         description: Original transaction not found
+ *       429:
+ *         description: Rate limit exceeded
  */
 export const refundPayment = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -1658,7 +2297,7 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
       return sendBadRequest(res, 'Transaction has already been refunded');
     }
 
-    // Get user's wallet
+    // Get user's wallet (check existence)
     const wallet = await Wallet.findOne({ user: userId }).session(session).lean();
 
     if (!wallet) {
@@ -1667,27 +2306,35 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
       return sendNotFound(res, 'Wallet not found');
     }
 
-    // Credit the refund amount back to wallet
-    const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-    if (rezCoin) {
-      rezCoin.amount += refundAmount;
-    }
+    // Credit refund via walletService (atomic $inc + CoinTransaction + LedgerEntry)
+    const { walletService } = await import('../services/walletService');
+    await walletService.credit({
+      userId,
+      amount: refundAmount,
+      source: 'order',
+      description: `Refund for transaction ${transactionId}: ${reason || 'Order creation failed'}`,
+      operationType: 'refund',
+      referenceId: `refund:${transactionId}`,
+      referenceModel: 'Transaction',
+      metadata: { originalTransactionId: transactionId, refundReason: reason },
+      session,
+    });
 
-    wallet.balance.available += refundAmount;
-    wallet.balance.total += refundAmount;
-    wallet.statistics.totalRefunds += refundAmount;
-    wallet.lastTransactionAt = new Date();
+    // Also update refund statistics atomically
+    await Wallet.findOneAndUpdate(
+      { _id: wallet._id },
+      { $inc: { 'statistics.totalRefunds': refundAmount } },
+      { session },
+    );
 
-    await wallet.save({ session });
-
-    // Create refund transaction record
+    // Create refund Transaction display record
     const refundTransaction = await Transaction.create([{
       user: userId,
       type: 'credit',
       category: 'refund',
       amount: refundAmount,
-      balanceBefore: wallet.balance.available - refundAmount,
-      balanceAfter: wallet.balance.available,
+      balanceBefore: wallet.balance.available,
+      balanceAfter: wallet.balance.available + refundAmount,
       description: `Refund for transaction ${transactionId}: ${reason || 'Order creation failed'}`,
       source: {
         type: 'refund',
@@ -1723,17 +2370,6 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
     originalTransaction.reversalTransactionId = (refundTransaction[0] as any)._id.toString();
 
     await originalTransaction.save({ session });
-
-    // Create CoinTransaction (source of truth for auto-sync)
-    await CoinTransaction.create([{
-      user: userId,
-      type: 'refunded',
-      amount: refundAmount,
-      balance: wallet.balance.available,
-      source: 'order',
-      description: `Refund for transaction ${transactionId}: ${reason || 'Order creation failed'}`,
-      metadata: { originalTransactionId: transactionId, refundReason: reason }
-    }], { session });
 
     // Commit transaction
     await session.commitTransaction();
@@ -1771,9 +2407,23 @@ export const refundPayment = asyncHandler(async (req: Request, res: Response) =>
 });
 
 /**
- * @desc    Get expiring coins grouped by time period
- * @route   GET /api/wallet/expiring-coins
- * @access  Private
+ * @swagger
+ * /api/wallet/expiring-coins:
+ *   get:
+ *     summary: Get expiring coins
+ *     description: Returns coins grouped by expiry time period (e.g., expiring this week, this month).
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Expiring coins retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Not authenticated
  */
 export const getExpiringCoins = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -1892,9 +2542,32 @@ export const getExpiringCoins = asyncHandler(async (req: Request, res: Response)
 });
 
 /**
- * @desc    Preview recharge cashback
- * @route   GET /api/wallet/recharge/preview
- * @access  Private
+ * @swagger
+ * /api/wallet/recharge/preview:
+ *   get:
+ *     summary: Preview recharge cashback
+ *     description: Returns a preview of the cashback amount for a given recharge amount.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: amount
+ *         required: true
+ *         schema:
+ *           type: number
+ *         description: Recharge amount to preview cashback for
+ *     responses:
+ *       200:
+ *         description: Cashback preview retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Invalid amount
+ *       401:
+ *         description: Not authenticated
  */
 export const previewRechargeCashback = asyncHandler(async (req: Request, res: Response) => {
   const { amount } = req.query;
@@ -1948,9 +2621,23 @@ export const previewRechargeCashback = asyncHandler(async (req: Request, res: Re
 });
 
 /**
- * @desc    Get scheduled drops for user (CoinDrops + SurpriseCoinDrops + daily login)
- * @route   GET /api/wallet/scheduled-drops
- * @access  Private
+ * @swagger
+ * /api/wallet/scheduled-drops:
+ *   get:
+ *     summary: Get scheduled coin drops
+ *     description: Returns upcoming coin drops for the user, including CoinDrops, SurpriseCoinDrops, and daily login rewards.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Scheduled drops retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Not authenticated
  */
 export const getScheduledDrops = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
@@ -2042,12 +2729,34 @@ export const getScheduledDrops = asyncHandler(async (req: Request, res: Response
 });
 
 /**
- * @desc    Get coin rules (dynamic, admin-configurable)
- * @route   GET /api/wallet/coin-rules
- * @access  Private
+ * @swagger
+ * /api/wallet/coin-rules:
+ *   get:
+ *     summary: Get coin usage and earning rules
+ *     description: Returns dynamic, admin-configurable rules for coin usage and earning.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Coin rules retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Not authenticated
  */
 export const getCoinRules = asyncHandler(async (req: Request, res: Response) => {
   const { WalletConfig } = require('../models/WalletConfig');
   const config = await WalletConfig.getOrCreate();
-  sendSuccess(res, { coinRules: config.coinRules || {} }, 'Coin rules retrieved');
+  sendSuccess(res, {
+    coinRules: config.coinRules || {},
+    coinExpiryConfig: config.coinExpiryConfig || {
+      rez: { expiryDays: 0, maxUsagePct: 100 },
+      prive: { expiryDays: 365, maxUsagePct: 100 },
+      promo: { expiryDays: 90, maxUsagePct: 20 },
+      branded: { expiryDays: 180, maxUsagePct: 100 },
+    },
+  }, 'Coin rules retrieved');
 });

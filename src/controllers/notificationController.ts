@@ -1,9 +1,14 @@
 import { Request, Response } from 'express';
 import { Notification } from '../models/Notification';
+import { User } from '../models/User';
 import { sendSuccess, sendNotFound } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import redisService from '../services/redisService';
+import { Expo } from 'expo-server-sdk';
+import { createServiceLogger } from '../config/logger';
+
+const logger = createServiceLogger('notification-controller');
 
 // Get unread notification count (cached 30s per user — called on every screen)
 export const getUnreadCount = asyncHandler(async (req: Request, res: Response) => {
@@ -128,9 +133,9 @@ export const deleteNotification = asyncHandler(async (req: Request, res: Respons
   const userId = req.userId!;
 
   try {
-    const notification = await Notification.findOneAndDelete({ 
-      _id: notificationId, 
-      user: userId 
+    const notification = await Notification.findOneAndDelete({
+      _id: notificationId,
+      user: userId
     });
 
     if (!notification) {
@@ -144,4 +149,61 @@ export const deleteNotification = asyncHandler(async (req: Request, res: Respons
   } catch (error) {
     throw new AppError('Failed to delete notification', 500);
   }
+});
+
+// Register push token for the authenticated user
+export const registerPushToken = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.userId!;
+  const { token, platform, deviceInfo } = req.body;
+
+  if (!token || !Expo.isExpoPushToken(token)) {
+    throw new AppError('Invalid Expo push token', 400);
+  }
+
+  // Upsert: if token already exists for this user, update lastUsed; otherwise push new entry
+  const user = await User.findOneAndUpdate(
+    { _id: userId, 'pushTokens.token': token },
+    {
+      $set: {
+        'pushTokens.$.lastUsed': new Date(),
+        'pushTokens.$.platform': platform || 'android',
+        'pushTokens.$.deviceInfo': deviceInfo || {}
+      }
+    },
+    { new: true }
+  );
+
+  if (!user) {
+    // Token doesn't exist yet — add it
+    await User.findByIdAndUpdate(userId, {
+      $push: {
+        pushTokens: {
+          token,
+          platform: platform || 'android',
+          deviceInfo: deviceInfo || {},
+          lastUsed: new Date()
+        }
+      }
+    });
+  }
+
+  logger.info(`Push token registered for user ${userId}`);
+  sendSuccess(res, null, 'Push token registered successfully');
+});
+
+// Unregister push token
+export const unregisterPushToken = asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.userId!;
+  const { token } = req.body;
+
+  if (!token) {
+    throw new AppError('Token is required', 400);
+  }
+
+  await User.findByIdAndUpdate(userId, {
+    $pull: { pushTokens: { token } }
+  });
+
+  logger.info(`Push token unregistered for user ${userId}`);
+  sendSuccess(res, null, 'Push token unregistered successfully');
 });

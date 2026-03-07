@@ -268,6 +268,7 @@ export const getVideoById = asyncHandler(async (req: Request, res: Response) => 
           select: 'name slug logo'
         }
       })
+      .slice('comments', -20) // Limit embedded comments to latest 20; use dedicated endpoint for full pagination
       .lean();
 
     if (!video) {
@@ -714,13 +715,14 @@ export const addVideoComment = asyncHandler(async (req: Request, res: Response) 
 
     await video.save();
 
-    // Get the added comment with user details
+    // Get only the last added comment with user details (avoid loading all comments)
     const populatedVideo = await Video.findById(videoId)
       .populate('comments.user', 'profile.firstName profile.lastName profile.avatar')
       .select('comments')
+      .slice('comments', -1)
       .lean();
 
-    const addedComment = (populatedVideo as any).comments[(populatedVideo as any).comments.length - 1];
+    const addedComment = (populatedVideo as any).comments?.[0];
 
     sendSuccess(res, {
       comment: addedComment,
@@ -739,26 +741,40 @@ export const getVideoComments = asyncHandler(async (req: Request, res: Response)
   const userId = req.userId;
 
   try {
-    const video = await Video.findById(videoId)
-      .populate('comments.user', 'profile.firstName profile.lastName profile.avatar')
-      .select('comments')
-      .lean();
+    const pageNum = Math.max(1, Number(page));
+    const limitNum = Math.min(50, Math.max(1, Number(limit)));
+    const skip = (pageNum - 1) * limitNum;
 
-    if (!video) {
+    // Use aggregation to paginate comments server-side instead of loading all into memory
+    const result = await Video.aggregate([
+      { $match: { _id: new mongoose.Types.ObjectId(videoId) } },
+      { $project: {
+        totalComments: { $size: { $ifNull: ['$comments', []] } },
+        comments: {
+          $slice: [
+            { $sortArray: { input: { $ifNull: ['$comments', []] }, sortBy: { timestamp: -1 } } },
+            skip,
+            limitNum
+          ]
+        }
+      }}
+    ]);
+
+    if (!result || result.length === 0) {
       return sendNotFound(res, 'Video not found');
     }
 
-    // Handle case where comments array is undefined or empty
-    const allComments = (video as any).comments || [];
+    const { totalComments: total, comments: rawComments } = result[0];
 
-    // Pagination for comments
-    const skip = (Number(page) - 1) * Number(limit);
-    const paginatedComments = allComments
-      .sort((a: any, b: any) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime())
-      .slice(skip, skip + Number(limit));
+    // Populate user details on the sliced comments
+    const populated: any[] = await Video.populate(rawComments as any, {
+      path: 'user',
+      select: 'profile.firstName profile.lastName profile.avatar',
+      model: 'User'
+    }) as any;
 
     // Transform comments: convert likes array to count + isLiked boolean
-    const comments = paginatedComments.map((c: any) => {
+    const comments = populated.map((c: any) => {
       const likesArray = Array.isArray(c.likes) ? c.likes : [];
       return {
         ...c,
@@ -767,18 +783,17 @@ export const getVideoComments = asyncHandler(async (req: Request, res: Response)
       };
     });
 
-    const total = allComments.length;
-    const totalPages = Math.ceil(total / Number(limit)) || 1;
+    const totalPages = Math.ceil(total / limitNum) || 1;
 
     sendSuccess(res, {
       comments,
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
         totalPages,
-        hasNext: Number(page) < totalPages,
-        hasPrev: Number(page) > 1
+        hasNext: pageNum < totalPages,
+        hasPrev: pageNum > 1
       }
     }, 'Video comments retrieved successfully');
 

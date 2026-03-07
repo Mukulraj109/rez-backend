@@ -2,13 +2,13 @@ import { Request, Response } from 'express';
 import { GiftCard, UserGiftCard } from '../models/GiftCard';
 import { logger } from '../config/logger';
 import { Wallet } from '../models/Wallet';
-import { CoinTransaction } from '../models/CoinTransaction';
 import { sendSuccess, sendError, sendBadRequest } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { logTransaction } from '../models/TransactionAuditLog';
 import mongoose from 'mongoose';
 import { validateAmount } from '../utils/walletValidation';
 import { checkVelocity } from '../services/walletVelocityService';
+import { walletService } from '../services/walletService';
 
 /**
  * @desc    Get gift card catalog
@@ -68,33 +68,11 @@ export const purchaseGiftCard = asyncHandler(async (req: Request, res: Response)
   if (wallet.isFrozen) return sendBadRequest(res, 'Wallet is frozen');
   if (wallet.balance.available < validatedAmount) return sendBadRequest(res, 'Insufficient balance');
 
-  // Calculate cashback upfront so debit + cashback can be atomic
+  // Calculate cashback upfront
   const cashback = Math.floor(validatedAmount * giftCard.cashbackPercentage / 100);
   const netDebit = validatedAmount - cashback;
 
-  // Deduct from wallet atomically (debit + cashback in single write)
-  const debitResult = await Wallet.findOneAndUpdate(
-    {
-      _id: wallet._id,
-      isFrozen: false,
-      'balance.available': { $gte: validatedAmount }
-    },
-    {
-      $inc: {
-        'balance.available': -netDebit,
-        'balance.total': -netDebit,
-        ...(cashback > 0 ? { 'balance.cashback': cashback } : {}),
-        'statistics.totalSpent': validatedAmount,
-        ...(cashback > 0 ? { 'statistics.totalCashback': cashback } : {})
-      },
-      $set: { lastTransactionAt: new Date() }
-    },
-    { new: true }
-  );
-
-  if (!debitResult) return sendBadRequest(res, 'Insufficient balance or wallet is frozen');
-
-  // Create user gift card
+  // Create user gift card first (needed for referenceId)
   const userGiftCard = await UserGiftCard.create({
     user: userId,
     giftCard: giftCard._id,
@@ -104,34 +82,40 @@ export const purchaseGiftCard = asyncHandler(async (req: Request, res: Response)
     status: 'active'
   });
 
+  // Deduct from wallet via walletService (atomic wallet + CoinTransaction + ledger)
+  let debitResult;
+  try {
+    debitResult = await walletService.debit({
+      userId,
+      amount: netDebit,
+      source: 'purchase',
+      description: `Purchased ${giftCard.name} gift card`,
+      operationType: 'gift_card_purchase',
+      referenceId: String(userGiftCard._id),
+      referenceModel: 'UserGiftCard',
+      metadata: { giftCardId: giftCard._id, userGiftCardId: userGiftCard._id, cashback },
+    });
+  } catch (debitError: any) {
+    // Rollback the user gift card
+    await UserGiftCard.findByIdAndDelete(userGiftCard._id);
+    return sendBadRequest(res, debitError.message || 'Insufficient balance or wallet is frozen');
+  }
+
+  // Apply cashback separately if any
+  if (cashback > 0) {
+    await Wallet.findOneAndUpdate(
+      { user: userId },
+      {
+        $inc: {
+          'balance.cashback': cashback,
+          'statistics.totalCashback': cashback,
+        }
+      }
+    );
+  }
+
   // Update gift card stats
   await GiftCard.findByIdAndUpdate(giftCard._id, { $inc: { totalIssued: 1 } });
-
-  // Audit log
-  logTransaction({
-    userId: new mongoose.Types.ObjectId(userId),
-    walletId: wallet._id as mongoose.Types.ObjectId,
-    walletType: 'user',
-    operation: 'debit',
-    amount: validatedAmount,
-    balanceBefore: { total: wallet.balance.total, available: wallet.balance.available, pending: 0, cashback: 0 },
-    balanceAfter: { total: debitResult.balance.total, available: debitResult.balance.available, pending: 0, cashback: 0 },
-    reference: { type: 'other', id: String(userGiftCard._id), description: `Purchased ${giftCard.name} gift card` }
-  });
-
-  // Create CoinTransaction (source of truth for auto-sync)
-  try {
-    await CoinTransaction.createTransaction(
-      userId,
-      'spent',
-      netDebit,
-      'purchase',
-      `Purchased ${giftCard.name} gift card`,
-      { giftCardId: giftCard._id, userGiftCardId: userGiftCard._id, cashback }
-    );
-  } catch (ctxError) {
-    logger.error('❌ [GIFT-CARD] Failed to create CoinTransaction:', ctxError);
-  }
 
   sendSuccess(res, {
     userGiftCard: {

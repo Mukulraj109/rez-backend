@@ -1,12 +1,13 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 import crypto from 'crypto';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 
 export type MainCategorySlug = 'food-dining' | 'beauty-wellness' | 'grocery-essentials' | 'fitness-sports' | 'healthcare' | 'fashion' | 'education-learning' | 'home-services' | 'travel-experiences' | 'entertainment' | 'financial-lifestyle' | 'electronics';
 
 export interface ICoinTransaction extends Document {
   user: mongoose.Types.ObjectId;
-  type: 'earned' | 'spent' | 'expired' | 'refunded' | 'bonus';
+  type: 'earned' | 'spent' | 'expired' | 'refunded' | 'bonus' | 'branded_award';
   amount: number;
   balance: number; // Balance after transaction
   source: 'spin_wheel' | 'scratch_card' | 'quiz_game' | 'challenge' | 'achievement' | 'referral' | 'order' | 'review' | 'bill_upload' | 'daily_login' | 'admin' | 'purchase' | 'redemption' | 'expiry' | 'survey' | 'memory_match' | 'coin_hunt' | 'guess_price' | 'purchase_reward' | 'social_share_reward' | 'merchant_award' | 'cashback' | 'creator_pick_reward' | 'poll_vote' | 'photo_upload' | 'offer_comment' | 'event_rating' | 'ugc_reel' | 'social_impact_reward' | 'program_task_reward' | 'program_multiplier_bonus' | 'event_booking' | 'event_checkin' | 'event_participation' | 'event_sharing' | 'event_entry' | 'bonus_campaign' | 'tournament_prize' | 'tournament_entry' | 'tournament_refund' | 'challenge_reward' | 'learning_reward' | 'leaderboard_prize' | 'smart_spend_reward' | 'prive_invite_reward';
@@ -311,7 +312,13 @@ CoinTransactionSchema.statics.createTransaction = async function(
     }
 
     // Create transaction — use array form with options when session is provided
-    const txData = {
+    // Extract expiresAt from metadata if provided (set by coinService for promo/branded coins)
+    const expiresAt = metadata?.expiresAt;
+    if (metadata && expiresAt) {
+      delete metadata.expiresAt; // Don't store duplicate in metadata
+    }
+
+    const txData: any = {
       user: userId,
       type,
       amount,
@@ -319,8 +326,11 @@ CoinTransactionSchema.statics.createTransaction = async function(
       source,
       description,
       metadata,
-      category: category || null
+      category: category || null,
     };
+    if (expiresAt) {
+      txData.expiresAt = expiresAt;
+    }
     const transaction = session
       ? (await this.create([txData], { session }))[0]
       : await this.create(txData);
@@ -400,7 +410,7 @@ CoinTransactionSchema.statics.expireOldCoins = async function(userId: string, da
         // No .save() needed — deductCategoryCoins is now atomic
       }
     } catch (err) {
-      console.error('[CoinTransaction] Failed to update wallet category balances on expiry:', err);
+      logger.error('[CoinTransaction] Failed to update wallet category balances on expiry:', err);
     }
   }
 

@@ -4,47 +4,45 @@ const options: swaggerJsdoc.Options = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'REZ Merchant Backend API',
+      title: 'REZ API',
       version: '1.0.0',
       description: `
-# REZ Merchant Backend API Documentation
+# REZ API Documentation
 
-Complete API documentation for the REZ merchant backend system. This API enables merchants to manage their products, orders, analytics, team members, and more.
+Complete API documentation for the REZ platform covering **User**, **Merchant**, and **Admin** APIs.
 
-## Features
-- **Authentication & Authorization** - JWT-based authentication with role-based access control
-- **Product Management** - Complete CRUD operations for products, variants, and inventory
-- **Order Management** - Process orders, manage statuses, generate invoices
-- **Analytics & Reporting** - Real-time sales analytics, forecasting, and insights
-- **Team Management** - Invite team members, assign roles, manage permissions
-- **Audit Logging** - Complete activity tracking and audit trails
-- **Real-time Updates** - WebSocket support for live data synchronization
+## API Audiences
+- **User API** (\`/api/auth\`, \`/api/wallet\`, \`/api/orders\`, etc.) — Consumer-facing endpoints for authentication, wallet, orders, social features, and more
+- **Merchant API** (\`/api/merchants\`) — Merchant portal for product management, order processing, analytics, and team management
+- **Admin API** (\`/api/admin\`) — Administrative endpoints for platform management
 
 ## Authentication
-Most endpoints require authentication using a Bearer token. Include the token in the Authorization header:
-\`\`\`
-Authorization: Bearer <your-jwt-token>
-\`\`\`
+- **User Auth**: OTP-based (phone number + 6-digit OTP). Returns JWT access token (24h) + refresh token (7d)
+- **Merchant Auth**: Email + password. Returns JWT Bearer token
+- Include token in the Authorization header: \`Authorization: Bearer <token>\`
 
 ## Rate Limiting
-- **Authentication endpoints**: 5 requests per 15 minutes
+- **OTP endpoints**: 5 requests per 15 minutes
+- **Auth endpoints**: 10 requests per 15 minutes
 - **General endpoints**: 100 requests per minute
+- **Wallet writes**: 20 requests per minute
 - **Bulk operations**: 10 requests per hour
 
-## Error Responses
-All endpoints return errors in a consistent format:
+## Response Format
+All endpoints return responses in a consistent format:
 \`\`\`json
-{
-  "success": false,
-  "message": "Error message description",
-  "error": "ERROR_CODE"
-}
+// Success
+{ "success": true, "message": "...", "data": { ... } }
+
+// Error
+{ "success": false, "message": "Error description" }
 \`\`\`
 
 ## Pagination
-List endpoints support pagination with these query parameters:
-- \`page\` (default: 1) - Page number
-- \`limit\` (default: 20) - Items per page
+List endpoints support server-side pagination:
+- \`page\` (default: 1) — Page number
+- \`limit\` (default: 20) — Items per page
+- Some endpoints also support cursor-based pagination via \`cursor\` parameter
       `,
       contact: {
         name: 'API Support',
@@ -575,6 +573,143 @@ List endpoints support pagination with these query parameters:
           }
         },
 
+        // Success Response
+        SuccessResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            message: { type: 'string', example: 'Operation successful' },
+            data: { type: 'object' }
+          }
+        },
+
+        // User Profile
+        UserProfile: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: '507f1f77bcf86cd799439011' },
+            phoneNumber: { type: 'string', example: '+919876543210' },
+            email: { type: 'string', format: 'email' },
+            profile: {
+              type: 'object',
+              properties: {
+                firstName: { type: 'string', example: 'John' },
+                lastName: { type: 'string', example: 'Doe' },
+                avatar: { type: 'string' },
+                dateOfBirth: { type: 'string', format: 'date' },
+                gender: { type: 'string', enum: ['male', 'female', 'other'] }
+              }
+            },
+            role: { type: 'string', example: 'user' },
+            isVerified: { type: 'boolean', example: true },
+            isOnboarded: { type: 'boolean', example: true },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' }
+          }
+        },
+
+        // Auth Tokens
+        AuthTokens: {
+          type: 'object',
+          properties: {
+            accessToken: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIs...' },
+            refreshToken: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIs...' },
+            expiresIn: { type: 'number', example: 604800 }
+          }
+        },
+
+        // Wallet Balance
+        WalletBalance: {
+          type: 'object',
+          properties: {
+            totalValue: { type: 'number', example: 1250.50 },
+            breakdown: {
+              type: 'object',
+              properties: {
+                rezCoins: {
+                  type: 'object',
+                  properties: {
+                    amount: { type: 'number', example: 1000 },
+                    color: { type: 'string', example: '#00C06A' }
+                  }
+                },
+                cashbackBalance: { type: 'number', example: 150.50 },
+                pendingRewards: { type: 'number', example: 100 }
+              }
+            },
+            balance: {
+              type: 'object',
+              properties: {
+                available: { type: 'number', example: 1000 },
+                pending: { type: 'number', example: 100 },
+                cashback: { type: 'number', example: 150.50 },
+                total: { type: 'number', example: 1250.50 }
+              }
+            },
+            currency: { type: 'string', example: 'RC' },
+            status: {
+              type: 'object',
+              properties: {
+                isActive: { type: 'boolean', example: true },
+                isFrozen: { type: 'boolean', example: false }
+              }
+            }
+          }
+        },
+
+        // Transaction Item
+        TransactionItem: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            type: { type: 'string', example: 'credit' },
+            amount: { type: 'number', example: 50.00 },
+            category: { type: 'string', example: 'order_payment' },
+            status: { type: 'string', enum: ['pending', 'completed', 'failed', 'reversed'] },
+            description: { type: 'string' },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+
+        // Order Summary (list item)
+        OrderSummary: {
+          type: 'object',
+          properties: {
+            _id: { type: 'string' },
+            orderNumber: { type: 'string', example: 'ORD-2026-001' },
+            store: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                logo: { type: 'string' }
+              }
+            },
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  quantity: { type: 'number' },
+                  price: { type: 'number' }
+                }
+              }
+            },
+            status: { type: 'string', enum: ['placed', 'confirmed', 'preparing', 'ready', 'dispatched', 'delivered', 'cancelled', 'returned', 'refunded'] },
+            totals: {
+              type: 'object',
+              properties: {
+                subtotal: { type: 'number' },
+                discount: { type: 'number' },
+                tax: { type: 'number' },
+                delivery: { type: 'number' },
+                total: { type: 'number' }
+              }
+            },
+            createdAt: { type: 'string', format: 'date-time' }
+          }
+        },
+
         // Audit Log
         AuditLog: {
           type: 'object',
@@ -634,6 +769,20 @@ List endpoints support pagination with these query parameters:
       }
     ],
     tags: [
+      // User-facing API tags
+      {
+        name: 'User Auth',
+        description: 'User authentication — OTP-based login, profile management, GDPR data export/delete'
+      },
+      {
+        name: 'Wallet',
+        description: 'Wallet balance, transactions, payments, coin management, and settings'
+      },
+      {
+        name: 'User Orders',
+        description: 'Order creation, tracking, cancellation, reordering, and refunds'
+      },
+      // Merchant API tags
       {
         name: 'Authentication',
         description: 'Merchant authentication and account management'
@@ -697,6 +846,8 @@ List endpoints support pagination with these query parameters:
     ]
   },
   apis: [
+    './src/controllers/*.ts',
+    './src/routes/*.ts',
     './src/merchantroutes/*.ts',
     './src/models/*.ts'
   ]

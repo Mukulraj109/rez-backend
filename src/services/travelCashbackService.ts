@@ -173,52 +173,16 @@ class TravelCashbackService {
         isRedeemed: false,
       }], { session });
 
-      // Credit to wallet (addFunds logic with session support)
-      const wallet = await Wallet.findOne({ user: booking.user }).session(session).lean();
-      if (!wallet) {
-        throw new Error(`Wallet not found for user ${booking.user}`);
-      }
-      if (!wallet.isActive) {
-        throw new Error('Wallet is not active');
-      }
-      if (wallet.isFrozen) {
-        throw new Error('Wallet is frozen');
-      }
-      if (wallet.balance.total + cashbackAmount > wallet.limits.maxBalance) {
-        throw new Error(`Maximum wallet balance (${wallet.limits.maxBalance}) would be exceeded`);
-      }
-
-      // Record balance before credit for audit trail
-      const balanceBefore = wallet.balance.available;
-
-      // Update wallet balance (pre-save hook recalculates balance.total)
-      wallet.balance.available += cashbackAmount;
-
-      // Update statistics (matches addFunds 'cashback' type behavior)
-      wallet.statistics.totalCashback += cashbackAmount;
-      wallet.statistics.totalEarned += cashbackAmount;
-      wallet.lastTransactionAt = new Date();
-
-      // Update coins array for 'rez' type
-      if (wallet.coins && wallet.coins.length > 0) {
-        const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-        if (rezCoin) {
-          rezCoin.amount += cashbackAmount;
-          rezCoin.lastEarned = new Date();
-        }
-        wallet.markModified('coins');
-      }
-
-      await wallet.save({ session });
-
-      // Create CoinTransaction audit record
-      await CoinTransaction.create([{
-        user: booking.user.toString(),
-        type: 'earned',
+      // Credit to wallet via walletService (atomic $inc + CoinTransaction + LedgerEntry)
+      const { walletService } = await import('./walletService');
+      await walletService.credit({
+        userId: booking.user.toString(),
         amount: cashbackAmount,
-        balance: balanceBefore + cashbackAmount,
         source: 'cashback',
         description: `Travel cashback from ${categoryName} booking`,
+        operationType: 'travel_cashback',
+        referenceId: `travel-cashback:${booking._id}`,
+        referenceModel: 'ServiceBooking',
         metadata: {
           bookingId: booking._id,
           bookingNumber: booking.bookingNumber,
@@ -227,7 +191,10 @@ class TravelCashbackService {
           cashbackRate: booking.pricing.cashbackPercentage,
         },
         category: 'travel-experiences',
-      }], { session });
+        session,
+      });
+
+      const balanceBefore = 0; // Used by Transaction record below (approximate)
 
       // Create Transaction audit record (formal financial ledger)
       await Transaction.create([{
@@ -261,14 +228,7 @@ class TravelCashbackService {
 
       await session.commitTransaction();
 
-      // Sync wallet → User model (denormalized cache, outside transaction)
-      try {
-        await wallet.syncWithUser();
-      } catch (syncError) {
-        console.warn(`⚠️ [TRAVEL-CASHBACK] User wallet sync failed (non-blocking):`, syncError);
-      }
-
-      console.log(`💰 [TRAVEL-CASHBACK] Credited ₹${cashbackAmount} to user ${booking.user} for ${booking.bookingNumber} (balance: ${balanceBefore} → ${balanceBefore + cashbackAmount})`);
+      // walletService.credit already handles cache invalidation
     } catch (error) {
       await session.abortTransaction();
       console.error('❌ [TRAVEL-CASHBACK] Error crediting cashback:', error);
@@ -367,35 +327,34 @@ class TravelCashbackService {
       session.startTransaction();
 
       try {
-        // Deduct from wallet — MUST succeed for refund to complete
-        const wallet = await Wallet.findOne({ user: booking.user }).session(session).lean();
-        if (!wallet || !wallet.isActive) {
+        // Deduct from wallet atomically — $gte guard prevents double-spend on concurrent requests
+        const walletBefore = await Wallet.findOne({ user: booking.user }).session(session).lean();
+        if (!walletBefore || !walletBefore.isActive) {
           throw new Error(`Wallet not found or inactive for user ${booking.user} — cannot process refund deduction. Manual admin review required.`);
         }
 
-        if (wallet.balance.available < deductAmount) {
-          throw new Error(`Insufficient wallet balance for refund deduction. User ${booking.user}, needed ₹${deductAmount}, available ₹${wallet.balance.available}. Manual admin review required.`);
+        const balanceBefore = walletBefore.balance.available;
+
+        const deductResult = await Wallet.findOneAndUpdate(
+          {
+            user: booking.user,
+            'balance.available': { $gte: deductAmount },
+            'coins': { $elemMatch: { type: 'rez', amount: { $gte: deductAmount } } }
+          },
+          {
+            $inc: {
+              'balance.available': -deductAmount,
+              'coins.$.amount': -deductAmount,
+              'statistics.totalCashback': -deductAmount
+            },
+            $set: { lastTransactionAt: new Date() }
+          },
+          { new: true, session }
+        );
+
+        if (!deductResult) {
+          throw new Error(`Insufficient wallet balance for refund deduction. User ${booking.user}, needed ${deductAmount}, available ${balanceBefore}. Manual admin review required.`);
         }
-
-        const balanceBefore = wallet.balance.available;
-
-        // Deduct from wallet (pre-save hook recalculates balance.total)
-        wallet.balance.available -= deductAmount;
-
-        // Update statistics
-        wallet.statistics.totalCashback = Math.max(0, wallet.statistics.totalCashback - deductAmount);
-        wallet.lastTransactionAt = new Date();
-
-        // Update coins array for 'rez' type
-        if (wallet.coins && wallet.coins.length > 0) {
-          const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-          if (rezCoin) {
-            rezCoin.amount = Math.max(0, rezCoin.amount - deductAmount);
-          }
-          wallet.markModified('coins');
-        }
-
-        await wallet.save({ session });
 
         // Create CoinTransaction reversal record
         await CoinTransaction.create([{
@@ -452,7 +411,7 @@ class TravelCashbackService {
 
         // Sync wallet → User model (denormalized cache, outside transaction)
         try {
-          await wallet.syncWithUser();
+          await deductResult.syncWithUser();
         } catch (syncError) {
           console.warn(`⚠️ [TRAVEL-CASHBACK] User wallet sync failed after refund (non-blocking):`, syncError);
         }

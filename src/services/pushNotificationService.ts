@@ -1,11 +1,17 @@
 /**
  * Push Notification Service
  *
- * Handles sending push notifications for order updates using Twilio (SMS)
- * and can be extended to support FCM/APNS for mobile push notifications
+ * Handles sending push notifications via Expo Server SDK and SMS via Twilio.
+ * Supports sending to individual users (by userId) and batch sending to multiple users.
+ * Invalid/expired tokens are tracked for cleanup by the receipt processing job.
  */
 
+import Expo, { ExpoPushMessage, ExpoPushTicket, ExpoPushReceipt } from 'expo-server-sdk';
 import twilio from 'twilio';
+import { User } from '../models/User';
+import { createServiceLogger } from '../config/logger';
+
+const logger = createServiceLogger('push-notification');
 
 interface NotificationPayload {
   userId: string;
@@ -27,33 +33,44 @@ interface OrderNotificationData {
   trackingUrl?: string;
 }
 
+interface PushPayload {
+  title: string;
+  body: string;
+  data?: Record<string, any>;
+  channelId?: string;
+  sound?: 'default' | null;
+  badge?: number;
+  priority?: 'default' | 'normal' | 'high';
+}
+
 class PushNotificationService {
   private twilioClient: twilio.Twilio | null = null;
+  private expo: Expo;
   private static instance: PushNotificationService;
 
+  // Store ticket IDs for receipt checking
+  private pendingTickets: Array<{ ticketId: string; token: string; userId: string }> = [];
+
   private constructor() {
+    // Initialize Expo SDK
+    this.expo = new Expo();
+
     // Initialize Twilio client if credentials are available
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
     const authToken = process.env.TWILIO_AUTH_TOKEN;
 
-    // Validate Twilio credentials format
     if (accountSid && authToken && accountSid.startsWith('AC') && authToken.length > 10) {
       try {
         this.twilioClient = twilio(accountSid, authToken);
-        console.log('✅ Twilio SMS client initialized');
+        logger.info('Twilio SMS client initialized');
       } catch (error: any) {
-        console.error('❌ Failed to initialize Twilio client:', error.message);
-        console.warn('⚠️ SMS notifications will be disabled.');
+        logger.error('Failed to initialize Twilio client', { error: error.message });
       }
     } else {
-      console.warn('⚠️ Twilio credentials not found or invalid. SMS notifications will be disabled.');
-      console.warn('   Tip: TWILIO_ACCOUNT_SID should start with "AC" and TWILIO_AUTH_TOKEN should be set.');
+      logger.warn('Twilio credentials not found or invalid. SMS notifications disabled.');
     }
   }
 
-  /**
-   * Get singleton instance
-   */
   public static getInstance(): PushNotificationService {
     if (!PushNotificationService.instance) {
       PushNotificationService.instance = new PushNotificationService();
@@ -62,18 +79,241 @@ class PushNotificationService {
   }
 
   /**
-   * Send SMS notification via Twilio
+   * Send push notification to a single user (all their registered devices)
    */
+  public async sendPushToUser(userId: string, payload: PushPayload): Promise<boolean> {
+    try {
+      const user = await User.findById(userId).select('pushTokens').lean();
+      if (!user?.pushTokens?.length) {
+        logger.debug(`No push tokens for user ${userId}`);
+        return false;
+      }
+
+      const validTokens = user.pushTokens.filter(
+        (t: any) => t.token && Expo.isExpoPushToken(t.token)
+      );
+
+      if (validTokens.length === 0) {
+        logger.debug(`No valid Expo push tokens for user ${userId}`);
+        return false;
+      }
+
+      const messages: ExpoPushMessage[] = validTokens.map((t: any) => ({
+        to: t.token,
+        title: payload.title,
+        body: payload.body,
+        data: payload.data || {},
+        channelId: payload.channelId || 'default',
+        sound: payload.sound ?? 'default',
+        priority: payload.priority || 'high',
+      }));
+
+      const chunks = this.expo.chunkPushNotifications(messages);
+      for (const chunk of chunks) {
+        try {
+          const tickets = await this.expo.sendPushNotificationsAsync(chunk);
+          this.processTickets(tickets, validTokens, userId);
+        } catch (error: any) {
+          logger.error('Failed to send push notification chunk', { userId, error: error.message });
+        }
+      }
+
+      return true;
+    } catch (error: any) {
+      logger.error('sendPushToUser failed', { userId, error: error.message });
+      return false;
+    }
+  }
+
+  /**
+   * Send push notification to multiple users (batch)
+   */
+  public async sendPushToMultiple(userIds: string[], payload: PushPayload): Promise<number> {
+    if (!userIds.length) return 0;
+
+    try {
+      const users = await User.find(
+        { _id: { $in: userIds }, 'pushTokens.0': { $exists: true } }
+      ).select('pushTokens').lean();
+
+      const messages: ExpoPushMessage[] = [];
+      const tokenUserMap: Array<{ token: string; userId: string }> = [];
+
+      for (const user of users) {
+        for (const t of (user.pushTokens || [])) {
+          if (t.token && Expo.isExpoPushToken(t.token)) {
+            messages.push({
+              to: t.token,
+              title: payload.title,
+              body: payload.body,
+              data: payload.data || {},
+              channelId: payload.channelId || 'default',
+              sound: payload.sound ?? 'default',
+              priority: payload.priority || 'high',
+            });
+            tokenUserMap.push({ token: t.token, userId: (user as any)._id.toString() });
+          }
+        }
+      }
+
+      if (messages.length === 0) return 0;
+
+      let sent = 0;
+      const chunks = this.expo.chunkPushNotifications(messages);
+      let tokenIndex = 0;
+
+      for (const chunk of chunks) {
+        try {
+          const tickets = await this.expo.sendPushNotificationsAsync(chunk);
+          for (let i = 0; i < tickets.length; i++) {
+            const ticket = tickets[i];
+            const mapping = tokenUserMap[tokenIndex + i];
+            if (ticket.status === 'ok' && ticket.id) {
+              this.pendingTickets.push({
+                ticketId: ticket.id,
+                token: mapping.token,
+                userId: mapping.userId
+              });
+              sent++;
+            } else if (ticket.status === 'error') {
+              this.handleTicketError(ticket, mapping.token, mapping.userId);
+            }
+          }
+          tokenIndex += chunk.length;
+        } catch (error: any) {
+          logger.error('Failed to send batch push chunk', { error: error.message });
+          tokenIndex += chunk.length;
+        }
+      }
+
+      logger.info(`Batch push sent: ${sent}/${messages.length} delivered to ${users.length} users`);
+      return sent;
+    } catch (error: any) {
+      logger.error('sendPushToMultiple failed', { error: error.message });
+      return 0;
+    }
+  }
+
+  /**
+   * Check delivery receipts and remove invalid tokens
+   */
+  public async handleReceipts(): Promise<{ checked: number; invalidRemoved: number }> {
+    if (this.pendingTickets.length === 0) {
+      return { checked: 0, invalidRemoved: 0 };
+    }
+
+    // Take a snapshot and clear pending
+    const ticketsToCheck = [...this.pendingTickets];
+    this.pendingTickets = [];
+
+    const ticketIdMap = new Map<string, { token: string; userId: string }>();
+    const receiptIds = ticketsToCheck.map(t => {
+      ticketIdMap.set(t.ticketId, { token: t.token, userId: t.userId });
+      return t.ticketId;
+    });
+
+    let checked = 0;
+    let invalidRemoved = 0;
+
+    const receiptChunks = this.expo.chunkPushNotificationReceiptIds(receiptIds);
+    for (const chunk of receiptChunks) {
+      try {
+        const receipts = await this.expo.getPushNotificationReceiptsAsync(chunk);
+
+        for (const [receiptId, receipt] of Object.entries(receipts)) {
+          checked++;
+          const mapping = ticketIdMap.get(receiptId);
+          if (!mapping) continue;
+
+          if ((receipt as any).status === 'error') {
+            const details = (receipt as any).details;
+            if (details?.error === 'DeviceNotRegistered') {
+              // Remove invalid token from user
+              await User.findByIdAndUpdate(mapping.userId, {
+                $pull: { pushTokens: { token: mapping.token } }
+              });
+              invalidRemoved++;
+              logger.info(`Removed invalid push token for user ${mapping.userId}`);
+            } else {
+              logger.warn('Push receipt error', {
+                userId: mapping.userId,
+                error: details?.error,
+                message: (receipt as any).message
+              });
+            }
+          }
+        }
+      } catch (error: any) {
+        logger.error('Failed to fetch push receipts', { error: error.message });
+        // Re-queue failed tickets for next check
+        for (const id of chunk) {
+          const mapping = ticketIdMap.get(id);
+          if (mapping) {
+            this.pendingTickets.push({ ticketId: id, ...mapping });
+          }
+        }
+      }
+    }
+
+    logger.info(`Push receipts processed: ${checked} checked, ${invalidRemoved} invalid tokens removed`);
+    return { checked, invalidRemoved };
+  }
+
+  /**
+   * Process tickets from a send operation
+   */
+  private processTickets(
+    tickets: ExpoPushTicket[],
+    tokens: Array<{ token: string }>,
+    userId: string
+  ): void {
+    for (let i = 0; i < tickets.length; i++) {
+      const ticket = tickets[i];
+      const token = tokens[i]?.token;
+      if (!token) continue;
+
+      if (ticket.status === 'ok' && ticket.id) {
+        this.pendingTickets.push({ ticketId: ticket.id, token, userId });
+      } else if (ticket.status === 'error') {
+        this.handleTicketError(ticket, token, userId);
+      }
+    }
+  }
+
+  /**
+   * Handle a ticket-level error
+   */
+  private handleTicketError(ticket: ExpoPushTicket, token: string, userId: string): void {
+    if (ticket.status !== 'error') return;
+
+    const details = (ticket as any).details;
+    if (details?.error === 'DeviceNotRegistered') {
+      // Remove invalid token immediately
+      User.findByIdAndUpdate(userId, {
+        $pull: { pushTokens: { token } }
+      }).catch(err => logger.error('Failed to remove invalid token', { error: err.message }));
+      logger.info(`Removed DeviceNotRegistered token for user ${userId}`);
+    } else {
+      logger.warn('Push ticket error', {
+        userId,
+        error: details?.error,
+        message: ticket.message
+      });
+    }
+  }
+
+  // ==================== SMS Methods (Twilio) ====================
+
   private async sendSMS(to: string, message: string): Promise<boolean> {
     if (!this.twilioClient) {
-      console.log('📱 [SMS] Twilio not configured. Would send:', message);
+      logger.debug(`[SMS] Twilio not configured. Would send to ${to.slice(-4)}`);
       return false;
     }
 
     try {
       const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
       if (!twilioPhone) {
-        console.error('❌ [SMS] Twilio phone number not configured');
+        logger.error('[SMS] Twilio phone number not configured');
         return false;
       }
 
@@ -83,51 +323,27 @@ class PushNotificationService {
         from: twilioPhone,
       });
 
-      console.log(`✅ [SMS] Sent to ***${to.slice(-4)}: ${result.sid}`);
+      logger.info(`[SMS] Sent to ***${to.slice(-4)}: ${result.sid}`);
       return true;
     } catch (error: any) {
-      console.error('❌ [SMS] Failed to send:', error.message);
+      logger.error('[SMS] Failed to send', { error: error.message });
       return false;
     }
   }
 
-  /**
-   * Send push notification (to be implemented with FCM/APNS)
-   */
-  private async sendPushNotification(payload: NotificationPayload): Promise<boolean> {
-    // TODO: Implement FCM/APNS push notifications
-    console.log('📱 [Push] Would send push notification:', {
-      userId: payload.userId,
-      title: payload.title,
-      body: payload.body,
-    });
-    return true;
-  }
+  // ==================== Order SMS Methods ====================
 
-  /**
-   * Send order confirmed notification
-   */
   public async sendOrderConfirmed(data: OrderNotificationData, phone: string): Promise<void> {
-    const message = `✅ Your order #${data.orderNumber} has been confirmed! We're preparing your items. Track your order: ${data.trackingUrl || 'Open REZ app'}`;
-
+    const message = `Your order #${data.orderNumber} has been confirmed! We're preparing your items. Track your order: ${data.trackingUrl || 'Open REZ app'}`;
     await this.sendSMS(phone, message);
-
-    console.log(`📦 [Notification] Order confirmed sent for ${data.orderNumber}`);
+    logger.info(`Order confirmed notification sent for ${data.orderNumber}`);
   }
 
-  /**
-   * Send order out for delivery notification
-   */
-  public async sendOrderOutForDelivery(
-    data: OrderNotificationData,
-    phone: string
-  ): Promise<void> {
-    let message = `🚚 Your order #${data.orderNumber} is out for delivery!`;
-
+  public async sendOrderOutForDelivery(data: OrderNotificationData, phone: string): Promise<void> {
+    let message = `Your order #${data.orderNumber} is out for delivery!`;
     if (data.deliveryPartner) {
       message += ` Delivery partner: ${data.deliveryPartner.name} (${data.deliveryPartner.phone})`;
     }
-
     if (data.estimatedDelivery) {
       const time = new Date(data.estimatedDelivery).toLocaleTimeString('en-IN', {
         hour: '2-digit',
@@ -135,302 +351,134 @@ class PushNotificationService {
       });
       message += ` ETA: ${time}`;
     }
-
     message += ` Track: ${data.trackingUrl || 'Open REZ app'}`;
-
     await this.sendSMS(phone, message);
-
-    console.log(`📦 [Notification] Out for delivery sent for ${data.orderNumber}`);
+    logger.info(`Out for delivery notification sent for ${data.orderNumber}`);
   }
 
-  /**
-   * Send order delivered notification
-   */
   public async sendOrderDelivered(data: OrderNotificationData, phone: string): Promise<void> {
-    const message = `✅ Your order #${data.orderNumber} has been delivered successfully! Thank you for shopping with REZ. Rate your experience in the app.`;
-
+    const message = `Your order #${data.orderNumber} has been delivered successfully! Thank you for shopping with REZ. Rate your experience in the app.`;
     await this.sendSMS(phone, message);
-
-    console.log(`📦 [Notification] Order delivered sent for ${data.orderNumber}`);
+    logger.info(`Order delivered notification sent for ${data.orderNumber}`);
   }
 
-  /**
-   * Send order cancelled notification
-   */
-  public async sendOrderCancelled(
-    data: OrderNotificationData,
-    phone: string,
-    reason?: string
-  ): Promise<void> {
-    let message = `❌ Your order #${data.orderNumber} has been cancelled.`;
-
-    if (reason) {
-      message += ` Reason: ${reason}`;
-    }
-
+  public async sendOrderCancelled(data: OrderNotificationData, phone: string, reason?: string): Promise<void> {
+    let message = `Your order #${data.orderNumber} has been cancelled.`;
+    if (reason) message += ` Reason: ${reason}`;
     message += ` Any payment will be refunded within 5-7 business days.`;
-
     await this.sendSMS(phone, message);
-
-    console.log(`📦 [Notification] Order cancelled sent for ${data.orderNumber}`);
+    logger.info(`Order cancelled notification sent for ${data.orderNumber}`);
   }
 
-  /**
-   * Send order refunded notification
-   */
-  public async sendOrderRefunded(
-    data: OrderNotificationData,
-    phone: string,
-    refundAmount: number
-  ): Promise<void> {
-    const message = `💰 Refund processed for order #${data.orderNumber}. Amount: ₹${refundAmount} has been credited to your original payment method. It may take 5-7 business days to reflect.`;
-
+  public async sendOrderRefunded(data: OrderNotificationData, phone: string, refundAmount: number): Promise<void> {
+    const message = `Refund processed for order #${data.orderNumber}. Amount: ${refundAmount} has been credited to your original payment method. It may take 5-7 business days to reflect.`;
     await this.sendSMS(phone, message);
-
-    console.log(`📦 [Notification] Refund notification sent for ${data.orderNumber}`);
+    logger.info(`Refund notification sent for ${data.orderNumber}`);
   }
 
-  /**
-   * Send delivery partner assigned notification
-   */
-  public async sendDeliveryPartnerAssigned(
-    data: OrderNotificationData,
-    phone: string
-  ): Promise<void> {
+  public async sendDeliveryPartnerAssigned(data: OrderNotificationData, phone: string): Promise<void> {
     if (!data.deliveryPartner) return;
-
-    const message = `🚴 Delivery partner assigned for order #${data.orderNumber}! ${data.deliveryPartner.name} (${data.deliveryPartner.phone}) will deliver your order. Track in the app.`;
-
+    const message = `Delivery partner assigned for order #${data.orderNumber}! ${data.deliveryPartner.name} (${data.deliveryPartner.phone}) will deliver your order. Track in the app.`;
     await this.sendSMS(phone, message);
-
-    console.log(`📦 [Notification] Delivery partner assigned sent for ${data.orderNumber}`);
+    logger.info(`Delivery partner assigned notification sent for ${data.orderNumber}`);
   }
 
-  /**
-   * Send general order update notification
-   */
-  public async sendOrderUpdate(
-    orderNumber: string,
-    phone: string,
-    title: string,
-    message: string
-  ): Promise<void> {
+  public async sendOrderUpdate(orderNumber: string, phone: string, title: string, message: string): Promise<void> {
     const fullMessage = `${title}\nOrder #${orderNumber}: ${message}`;
-
     await this.sendSMS(phone, fullMessage);
-
-    console.log(`📦 [Notification] Order update sent for ${orderNumber}`);
+    logger.info(`Order update notification sent for ${orderNumber}`);
   }
 
-  /**
-   * Send queue number assigned notification
-   */
+  // ==================== Visit/Queue SMS Methods ====================
+
   public async sendQueueNumberAssigned(
-    storeName: string,
-    queueNumber: number,
-    visitNumber: string,
-    phone: string,
-    estimatedWaitTime?: string,
-    currentQueueSize?: number
+    storeName: string, queueNumber: number, visitNumber: string, phone: string,
+    estimatedWaitTime?: string, currentQueueSize?: number
   ): Promise<void> {
-    let message = `🎫 Queue Number Assigned!\n\nStore: ${storeName}\nYour Queue #: ${queueNumber}\nVisit #: ${visitNumber}`;
-
-    if (estimatedWaitTime) {
-      message += `\nEstimated Wait: ${estimatedWaitTime}`;
-    }
-
-    if (currentQueueSize) {
-      message += `\nCurrent Queue Size: ${currentQueueSize}`;
-    }
-
+    let message = `Queue Number Assigned!\n\nStore: ${storeName}\nYour Queue #: ${queueNumber}\nVisit #: ${visitNumber}`;
+    if (estimatedWaitTime) message += `\nEstimated Wait: ${estimatedWaitTime}`;
+    if (currentQueueSize) message += `\nCurrent Queue Size: ${currentQueueSize}`;
     message += `\n\nWe'll notify you when it's your turn. Thank you for using REZ!`;
-
     await this.sendSMS(phone, message);
-
-    console.log(`🎫 [Notification] Queue number sent for ${visitNumber}`);
+    logger.info(`Queue number sent for ${visitNumber}`);
   }
 
-  /**
-   * Send visit scheduled notification
-   */
   public async sendVisitScheduled(
-    storeName: string,
-    visitNumber: string,
-    visitDate: Date,
-    visitTime: string,
-    phone: string,
-    storeAddress?: string
+    storeName: string, visitNumber: string, visitDate: Date, visitTime: string,
+    phone: string, storeAddress?: string
   ): Promise<void> {
     const dateStr = new Date(visitDate).toLocaleDateString('en-IN', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     });
-
-    let message = `📅 Visit Scheduled Successfully!\n\nStore: ${storeName}\nVisit #: ${visitNumber}\nDate: ${dateStr}\nTime: ${visitTime}`;
-
-    if (storeAddress) {
-      message += `\nAddress: ${storeAddress}`;
-    }
-
+    let message = `Visit Scheduled Successfully!\n\nStore: ${storeName}\nVisit #: ${visitNumber}\nDate: ${dateStr}\nTime: ${visitTime}`;
+    if (storeAddress) message += `\nAddress: ${storeAddress}`;
     message += `\n\nWe look forward to seeing you! Open REZ app to manage your visit.`;
-
     await this.sendSMS(phone, message);
-
-    console.log(`📅 [Notification] Visit scheduled notification sent for ${visitNumber}`);
+    logger.info(`Visit scheduled notification sent for ${visitNumber}`);
   }
 
-  /**
-   * Send visit cancelled notification
-   */
-  public async sendVisitCancelled(
-    storeName: string,
-    visitNumber: string,
-    phone: string,
-    reason?: string
-  ): Promise<void> {
-    let message = `❌ Visit Cancelled\n\nStore: ${storeName}\nVisit #: ${visitNumber} has been cancelled.`;
-
-    if (reason) {
-      message += `\nReason: ${reason}`;
-    }
-
+  public async sendVisitCancelled(storeName: string, visitNumber: string, phone: string, reason?: string): Promise<void> {
+    let message = `Visit Cancelled\n\nStore: ${storeName}\nVisit #: ${visitNumber} has been cancelled.`;
+    if (reason) message += `\nReason: ${reason}`;
     message += `\n\nYou can reschedule anytime through the REZ app.`;
-
     await this.sendSMS(phone, message);
-
-    console.log(`❌ [Notification] Visit cancellation sent for ${visitNumber}`);
+    logger.info(`Visit cancellation notification sent for ${visitNumber}`);
   }
 
-  public async sendVisitCheckedIn(
-    storeName: string,
-    visitNumber: string,
-    phone: string
-  ): Promise<void> {
-    const message = `✅ You're Checked In!\n\nStore: ${storeName}\nVisit #: ${visitNumber}\n\nYou have been checked in. The store team is ready for you!`;
-
+  public async sendVisitCheckedIn(storeName: string, visitNumber: string, phone: string): Promise<void> {
+    const message = `You're Checked In!\n\nStore: ${storeName}\nVisit #: ${visitNumber}\n\nYou have been checked in. The store team is ready for you!`;
     await this.sendSMS(phone, message);
-
-    console.log(`✅ [Notification] Visit check-in sent for ${visitNumber}`);
+    logger.info(`Visit check-in notification sent for ${visitNumber}`);
   }
 
-  public async sendVisitCompleted(
-    storeName: string,
-    visitNumber: string,
-    phone: string
-  ): Promise<void> {
-    const message = `🎉 Visit Complete!\n\nStore: ${storeName}\nVisit #: ${visitNumber}\n\nThank you for visiting! We hope you had a great experience.`;
-
+  public async sendVisitCompleted(storeName: string, visitNumber: string, phone: string): Promise<void> {
+    const message = `Visit Complete!\n\nStore: ${storeName}\nVisit #: ${visitNumber}\n\nThank you for visiting! We hope you had a great experience.`;
     await this.sendSMS(phone, message);
-
-    console.log(`🎉 [Notification] Visit completion sent for ${visitNumber}`);
+    logger.info(`Visit completion notification sent for ${visitNumber}`);
   }
 
-  /**
-   * Send gift received notification
-   */
-  public async sendGiftReceived(
-    senderName: string,
-    amount: number,
-    themeEmoji: string,
-    phone: string
-  ): Promise<void> {
+  // ==================== Wallet/Social SMS Methods ====================
+
+  public async sendGiftReceived(senderName: string, amount: number, themeEmoji: string, phone: string): Promise<void> {
     const message = `${themeEmoji} You received a gift!\n\n${senderName} sent you ${amount} NC on Nuqta! Open the app to claim your gift before it expires.\n\nOpen REZ app to claim now!`;
-
     await this.sendSMS(phone, message);
-
-    console.log(`🎁 [Notification] Gift received sent to ***${phone.slice(-4)}`);
+    logger.info(`Gift received notification sent to ***${phone.slice(-4)}`);
   }
 
-  /**
-   * Send gift expired notification (to sender)
-   */
-  public async sendGiftExpiredRefund(
-    recipientName: string,
-    amount: number,
-    phone: string
-  ): Promise<void> {
-    const message = `💰 Gift Refund\n\nYour gift of ${amount} NC to ${recipientName} was not claimed and has expired. The coins have been returned to your wallet.`;
-
+  public async sendGiftExpiredRefund(recipientName: string, amount: number, phone: string): Promise<void> {
+    const message = `Gift Refund\n\nYour gift of ${amount} NC to ${recipientName} was not claimed and has expired. The coins have been returned to your wallet.`;
     await this.sendSMS(phone, message);
-
-    console.log(`💰 [Notification] Gift expiry refund sent to ***${phone.slice(-4)}`);
+    logger.info(`Gift expiry refund notification sent to ***${phone.slice(-4)}`);
   }
 
-  /**
-   * Send transfer received notification to recipient
-   */
-  public async sendTransferReceived(
-    recipientPhone: string,
-    senderName: string,
-    amount: number
-  ): Promise<void> {
+  public async sendTransferReceived(recipientPhone: string, senderName: string, amount: number): Promise<void> {
     const message = `You received ${amount} NC from ${senderName}! Open REZ to view your balance.`;
-
     await this.sendSMS(recipientPhone, message);
-
-    console.log(`💸 [Notification] Transfer received sent to ***${recipientPhone.slice(-4)}`);
+    logger.info(`Transfer received notification sent to ***${recipientPhone.slice(-4)}`);
   }
 
-  /**
-   * Send achievement unlocked notification
-   */
-  public async sendAchievementUnlocked(
-    userPhone: string,
-    achievementName: string,
-    reward: number
-  ): Promise<void> {
+  public async sendAchievementUnlocked(userPhone: string, achievementName: string, reward: number): Promise<void> {
     const message = `Achievement unlocked: ${achievementName}! You earned ${reward} NC. Keep going!`;
-
     await this.sendSMS(userPhone, message);
-
-    console.log(`🏅 [Notification] Achievement unlocked sent to ***${userPhone.slice(-4)}`);
+    logger.info(`Achievement unlocked notification sent to ***${userPhone.slice(-4)}`);
   }
 
-  /**
-   * Send challenge completed notification
-   */
-  public async sendChallengeCompleted(
-    userPhone: string,
-    challengeName: string,
-    reward: number
-  ): Promise<void> {
+  public async sendChallengeCompleted(userPhone: string, challengeName: string, reward: number): Promise<void> {
     const message = `Challenge complete: ${challengeName}! Claim your ${reward} NC reward.`;
-
     await this.sendSMS(userPhone, message);
-
-    console.log(`🎯 [Notification] Challenge completed sent to ***${userPhone.slice(-4)}`);
+    logger.info(`Challenge completed notification sent to ***${userPhone.slice(-4)}`);
   }
 
-  /**
-   * Send tournament ending soon notification
-   */
-  public async sendTournamentEndingSoon(
-    userPhone: string,
-    tournamentName: string,
-    hoursLeft: number
-  ): Promise<void> {
+  public async sendTournamentEndingSoon(userPhone: string, tournamentName: string, hoursLeft: number): Promise<void> {
     const message = `${tournamentName} tournament ends in ${hoursLeft}h! Check your rank now.`;
-
     await this.sendSMS(userPhone, message);
-
-    console.log(`🏆 [Notification] Tournament ending soon sent to ***${userPhone.slice(-4)}`);
+    logger.info(`Tournament ending soon notification sent to ***${userPhone.slice(-4)}`);
   }
 
-  /**
-   * Send coins expiring soon notification
-   */
-  public async sendCoinsExpiringSoon(
-    userPhone: string,
-    amount: number,
-    expiryDate: string
-  ): Promise<void> {
+  public async sendCoinsExpiringSoon(userPhone: string, amount: number, expiryDate: string): Promise<void> {
     const message = `${amount} NC expires on ${expiryDate}. Use them before they're gone!`;
-
     await this.sendSMS(userPhone, message);
-
-    console.log(`⏰ [Notification] Coins expiring soon sent to ***${userPhone.slice(-4)}`);
+    logger.info(`Coins expiring soon notification sent to ***${userPhone.slice(-4)}`);
   }
 }
 
@@ -441,6 +489,9 @@ export default pushNotificationService;
 
 // Export individual functions for easier use
 export const {
+  sendPushToUser,
+  sendPushToMultiple,
+  handleReceipts,
   sendOrderConfirmed,
   sendOrderOutForDelivery,
   sendOrderDelivered,

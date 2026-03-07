@@ -7,6 +7,7 @@ declare global {
       merchantId?: string;
       user?: IUser;
       userId?: string;
+      correlationId?: string;
     }
   }
 

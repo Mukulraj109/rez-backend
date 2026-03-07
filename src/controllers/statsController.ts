@@ -37,7 +37,7 @@ export const getSocialProofStats = asyncHandler(async (req: Request, res: Respon
       }
     } else {
       // Get global stats (aggregate across all categories)
-      const allStats = await SocialProofStat.find({}).lean();
+      const allStats = await SocialProofStat.find({}).limit(1000).lean();
       
       stats = {
         shoppedToday: allStats.reduce((sum, s) => sum + (s.shoppedToday || 0), 0),

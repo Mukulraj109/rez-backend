@@ -209,7 +209,7 @@ class GameService {
         status: 'active',
         gameType: { $in: [gameType, 'mixed'] },
         'participants.user': userId
-      }).select('_id name participants').lean();
+      }).select('_id name participants').limit(100).lean();
 
       let firstUpdate: { tournamentName: string; pointsAdded: number; newRank: number } | null = null;
 
@@ -939,6 +939,7 @@ class GameService {
       expiresAt: { $gt: now }
     })
       .sort({ createdAt: 1 })
+      .limit(100)
       .lean().exec();
   }
 
@@ -1740,7 +1741,7 @@ class GameService {
     // Try loading game configs from DB
     let dbConfigs: IGameConfig[] = [];
     try {
-      dbConfigs = await GameConfig.find({}).sort({ sortOrder: 1 }).lean() as IGameConfig[];
+      dbConfigs = await GameConfig.find({}).sort({ sortOrder: 1 }).limit(1000).lean() as IGameConfig[];
     } catch (err) {
       console.error('[GAME SERVICE] Failed to load GameConfig from DB, using defaults:', err);
     }

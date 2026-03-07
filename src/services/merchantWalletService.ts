@@ -350,15 +350,9 @@ class MerchantWalletService {
     userId: string,
     reason: string
   ): Promise<{ newBalance: { total: number; available: number } }> {
-    const wallet = await this.getOrCreateWallet(merchantId, storeId);
+    const merchantObjectId = typeof merchantId === 'string' ? new Types.ObjectId(merchantId) : merchantId;
 
-    if (wallet.balance.available < amount) {
-      throw new Error(
-        `Insufficient wallet balance. Available: ${wallet.balance.available}, Requested: ${amount}`
-      );
-    }
-
-    // Create debit transaction
+    // Atomic deduction with $gte guard — prevents double-spend on concurrent requests
     const transaction: IMerchantWalletTransaction = {
       type: 'debit',
       amount,
@@ -368,21 +362,33 @@ class MerchantWalletService {
       createdAt: new Date()
     };
 
-    // Deduct from balance
-    wallet.balance.available -= amount;
-    wallet.balance.total -= amount;
+    const result = await MerchantWallet.findOneAndUpdate(
+      {
+        merchant: merchantObjectId,
+        'balance.available': { $gte: amount }
+      },
+      {
+        $inc: {
+          'balance.available': -amount,
+          'balance.total': -amount
+        },
+        $push: { transactions: transaction }
+      },
+      { new: true }
+    );
 
-    // Add transaction
-    wallet.transactions.push(transaction);
-
-    await wallet.save();
-
-    console.log(`💸 [MERCHANT WALLET SERVICE] Debited ${amount} coins from merchant ${merchantId} for coin award to user ${userId}`);
+    if (!result) {
+      // Check if wallet exists to provide better error message
+      const wallet = await this.getOrCreateWallet(merchantId, storeId);
+      throw new Error(
+        `Insufficient wallet balance. Available: ${wallet.balance.available}, Requested: ${amount}`
+      );
+    }
 
     return {
       newBalance: {
-        total: wallet.balance.total,
-        available: wallet.balance.available
+        total: result.balance.total,
+        available: result.balance.available
       }
     };
   }

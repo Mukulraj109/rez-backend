@@ -8,6 +8,8 @@ import { CoinTransaction } from '../models/CoinTransaction';
 import * as coinService from './coinService';
 import merchantWalletService from './merchantWalletService';
 import earningsSocketService from './earningsSocketService';
+import { getCachedWalletConfig } from './walletCacheService';
+import { CURRENCY_RULES } from '../config/currencyRules';
 
 interface RewardOptions {
   type: 'rez_coins' | 'branded_coins' | 'none';
@@ -91,6 +93,14 @@ export async function merchantApprovePick(
         rewardOptions.amount
       );
 
+      // Calculate expiry for branded coins
+      let brandedExpiresAt: Date | undefined;
+      try {
+        const walletConfig = await getCachedWalletConfig();
+        const expiryDays = walletConfig?.coinExpiryConfig?.branded?.expiryDays ?? CURRENCY_RULES.branded.expiryDays;
+        if (expiryDays > 0) { brandedExpiresAt = new Date(); brandedExpiresAt.setDate(brandedExpiresAt.getDate() + expiryDays); }
+      } catch { /* fallback handled by backfill job */ }
+
       // Create CoinTransaction for audit trail
       const transaction = await CoinTransaction.createTransaction(
         creatorUserId,
@@ -98,7 +108,7 @@ export async function merchantApprovePick(
         rewardOptions.amount,
         'creator_pick_reward',
         `Branded coins from ${merchantName} for pick "${pick.title}"`,
-        { pickId: pick._id, merchantId, storeId }
+        { pickId: pick._id, merchantId, storeId, ...(brandedExpiresAt && { expiresAt: brandedExpiresAt }) }
       );
 
       rewardData = {

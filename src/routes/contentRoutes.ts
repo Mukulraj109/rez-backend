@@ -2,8 +2,12 @@ import { Router, Request, Response } from 'express';
 import ValueCard from '../models/ValueCard';
 import QuickAction from '../models/QuickAction';
 import { sendSuccess, sendError } from '../utils/response';
+import { requireGamificationFeature } from '../middleware/gamificationFeatureGate';
 
 const router = Router();
+
+// PHASE 3 — disabled until core is stable
+router.use(requireGamificationFeature('achievements', { items: [] }));
 
 /**
  * GET /api/content/value-cards

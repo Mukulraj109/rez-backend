@@ -308,64 +308,73 @@ ArticleSchema.pre('save', function(next) {
   next();
 });
 
-// Method to increment views
+// Method to increment views — uses atomic $inc to avoid race conditions
 ArticleSchema.methods.incrementViews = async function(userId?: string): Promise<void> {
-  // Update analytics
   const now = new Date();
   const date = now.toISOString().split('T')[0];
 
-  if (!this.analytics.viewsByDate) this.analytics.viewsByDate = new Map();
+  const updateOps: any = {
+    $inc: {
+      'analytics.totalViews': 1,
+      [`analytics.viewsByDate.${date}`]: 1,
+      ...(userId ? { 'analytics.uniqueViews': 1 } : {}),
+    },
+  };
 
-  this.analytics.totalViews += 1;
-  this.analytics.viewsByDate.set(date, (this.analytics.viewsByDate.get(date) || 0) + 1);
-
-  if (userId) {
-    // Track unique views (simplified - in production, use a separate collection)
-    this.analytics.uniqueViews += 1;
-  }
-
-  await this.save();
+  await (this.constructor as any).findByIdAndUpdate(this._id, updateOps);
 };
 
-// Method to toggle like
+// Method to toggle like — uses atomic $addToSet/$pull to avoid race conditions
 ArticleSchema.methods.toggleLike = async function(userId: string): Promise<boolean> {
   const userObjectId = new mongoose.Types.ObjectId(userId);
   const isLiked = this.engagement.likes.some((id: Types.ObjectId) => id.equals(userObjectId));
 
   if (isLiked) {
-    this.engagement.likes = this.engagement.likes.filter(
-      (id: Types.ObjectId) => !id.equals(userObjectId)
-    );
+    await (this.constructor as any).findByIdAndUpdate(this._id, {
+      $pull: { 'engagement.likes': userObjectId }
+    });
   } else {
-    this.engagement.likes.push(userObjectId);
+    await (this.constructor as any).findByIdAndUpdate(this._id, {
+      $addToSet: { 'engagement.likes': userObjectId }
+    });
   }
 
-  await this.save();
-  return !isLiked; // Return new like status
+  return !isLiked;
 };
 
-// Method to toggle bookmark
+// Method to toggle bookmark — uses atomic $addToSet/$pull to avoid race conditions
 ArticleSchema.methods.toggleBookmark = async function(userId: string): Promise<boolean> {
   const userObjectId = new mongoose.Types.ObjectId(userId);
   const isBookmarked = this.engagement.bookmarks.some((id: Types.ObjectId) => id.equals(userObjectId));
 
   if (isBookmarked) {
-    this.engagement.bookmarks = this.engagement.bookmarks.filter(
-      (id: Types.ObjectId) => !id.equals(userObjectId)
-    );
+    await (this.constructor as any).findByIdAndUpdate(this._id, {
+      $pull: { 'engagement.bookmarks': userObjectId }
+    });
   } else {
-    this.engagement.bookmarks.push(userObjectId);
+    await (this.constructor as any).findByIdAndUpdate(this._id, {
+      $addToSet: { 'engagement.bookmarks': userObjectId }
+    });
   }
 
-  await this.save();
-  return !isBookmarked; // Return new bookmark status
+  return !isBookmarked;
 };
 
-// Method to increment shares
+// Method to increment shares — uses atomic $inc to avoid race conditions
 ArticleSchema.methods.share = async function(): Promise<void> {
-  this.engagement.shares += 1;
-  this.analytics.shareRate = (this.engagement.shares / this.analytics.totalViews) * 100;
-  await this.save();
+  const result = await (this.constructor as any).findByIdAndUpdate(
+    this._id,
+    { $inc: { 'engagement.shares': 1 } },
+    { new: true }
+  );
+  if (result) {
+    this.engagement.shares = result.engagement.shares;
+    if (result.analytics?.totalViews > 0) {
+      await (this.constructor as any).findByIdAndUpdate(this._id, {
+        $set: { 'analytics.shareRate': (result.engagement.shares / result.analytics.totalViews) * 100 }
+      });
+    }
+  }
 };
 
 // Method to update analytics

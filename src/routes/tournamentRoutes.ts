@@ -2,8 +2,12 @@ import { Router } from 'express';
 import tournamentController from '../controllers/tournamentController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { createRateLimiter } from '../middleware/rateLimiter';
+import { requireGamificationFeature } from '../middleware/gamificationFeatureGate';
 
 const router = Router();
+
+// PHASE 3 — disabled until core is stable
+const gateTournaments = requireGamificationFeature('tournaments', { tournaments: [] });
 
 // Rate limiters for tournament actions
 const tournamentJoinLimiter = createRateLimiter({
@@ -24,6 +28,9 @@ router.get('/live', optionalAuth, tournamentController.getLiveTournaments.bind(t
 
 // All routes below require authentication
 router.use(authenticate);
+
+// Gate all authenticated tournament routes
+router.use(gateTournaments);
 
 // Tournament routes
 router.get('/', tournamentController.getTournaments.bind(tournamentController));

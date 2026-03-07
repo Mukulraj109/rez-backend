@@ -4,6 +4,9 @@ import { Wallet } from '../../models/Wallet';
 import { CoinTransaction } from '../../models/CoinTransaction';
 import { Store } from '../../models/Store';
 import mongoose from 'mongoose';
+import { getCachedWalletConfig } from '../../services/walletCacheService';
+import { CURRENCY_RULES } from '../../config/currencyRules';
+import { logger } from '../../config/logger';
 
 const router = Router();
 router.use(authMiddleware);
@@ -269,22 +272,30 @@ router.post('/stores/:storeId/branded-campaigns/award', async (req: Request, res
 
     // Create CoinTransaction record for audit trail
     try {
-      await CoinTransaction.create({
-        user: userId,
-        type: 'branded_award',
+      // Calculate expiry for branded coins
+      let brandedExpiresAt: Date | undefined;
+      try {
+        const walletConfig = await getCachedWalletConfig();
+        const expiryDays = walletConfig?.coinExpiryConfig?.branded?.expiryDays ?? CURRENCY_RULES.branded.expiryDays;
+        if (expiryDays > 0) { brandedExpiresAt = new Date(); brandedExpiresAt.setDate(brandedExpiresAt.getDate() + expiryDays); }
+      } catch { /* fallback handled by backfill job */ }
+
+      await CoinTransaction.createTransaction(
+        userId,
+        'branded_award',
         amount,
-        balance: 0, // Branded coins are tracked separately
-        source: 'merchant_award',
-        description: reason || `Branded coins awarded by ${storeName}`,
-        metadata: {
+        'merchant_award',
+        reason || `Branded coins awarded by ${storeName}`,
+        {
           storeId: new mongoose.Types.ObjectId(storeId),
           storeName,
           merchantId,
           reason: reason || 'Merchant branded coin award',
-        },
-      });
+          ...(brandedExpiresAt && { expiresAt: brandedExpiresAt }),
+        }
+      );
     } catch (txError: any) {
-      console.error('[Merchant BrandedCoins] CoinTransaction creation error:', txError.message);
+      logger.error('[Merchant BrandedCoins] CoinTransaction creation error:', (txError as any).message);
       // Don't fail the request -- the coins were already awarded
     }
 

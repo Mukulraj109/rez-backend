@@ -363,19 +363,28 @@ class CouponService {
         };
       }
 
-      // Create user coupon
-      const userCoupon = await UserCoupon.create({
-        user: userId,
-        coupon: couponId,
-        claimedDate: new Date(),
-        expiryDate: coupon.validTo,
-        status: 'available',
-      });
+      // Create user coupon — unique index { user, coupon } prevents double-claim atomically
+      let userCoupon;
+      try {
+        userCoupon = await UserCoupon.create({
+          user: userId,
+          coupon: couponId,
+          claimedDate: new Date(),
+          expiryDate: coupon.validTo,
+          status: 'available',
+        });
+      } catch (err: any) {
+        if (err.code === 11000) {
+          return {
+            success: false,
+            message: 'You have already claimed this coupon',
+          };
+        }
+        throw err;
+      }
 
       // Increment coupon claim count
       await (coupon as any).incrementClaimCount();
-
-      console.log(`✅ [COUPON SERVICE] User ${userId} claimed coupon ${coupon.couponCode}`);
 
       return {
         success: true,
@@ -383,7 +392,6 @@ class CouponService {
         message: 'Coupon claimed successfully!',
       };
     } catch (error) {
-      console.error('❌ [COUPON SERVICE] Error claiming coupon:', error);
       return {
         success: false,
         message: 'Error claiming coupon',

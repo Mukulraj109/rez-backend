@@ -250,34 +250,47 @@ export const claimReferralRewards = asyncHandler(async (req: Request, res: Respo
   }
 
   try {
-    const user = await User.findById(userId).lean();
-    if (!user) {
-      return sendNotFound(res, 'User not found');
-    }
+    // First, atomically read and zero out referralEarnings to prevent double-claim
+    // Uses findOneAndUpdate to return the OLD value (before zeroing) so we know how much to credit
+    const userBeforeClaim = await User.findOneAndUpdate(
+      {
+        _id: userId,
+        'referral.referralEarnings': { $gt: 0 }
+      },
+      {
+        $set: { 'referral.referralEarnings': 0 }
+      },
+      { new: false }  // Return the document BEFORE the update (contains the original earnings)
+    );
 
-    const pendingRewards = user.referral?.referralEarnings || 0;
-
-    if (pendingRewards <= 0) {
+    if (!userBeforeClaim) {
+      const userExists = await User.exists({ _id: userId });
+      if (!userExists) {
+        return sendNotFound(res, 'User not found');
+      }
       return sendBadRequest(res, 'No pending rewards to claim');
     }
 
-    // Add rewards to wallet
-    user.wallet = user.wallet || {};
-    user.wallet.balance = (user.wallet.balance || 0) + pendingRewards;
-    user.wallet.totalEarned = (user.wallet.totalEarned || 0) + pendingRewards;
+    const claimedAmount = userBeforeClaim.referral?.referralEarnings || 0;
 
-    // Reset referral earnings
-    user.referral = user.referral || {};
-    user.referral.referralEarnings = 0;
-
-    await user.save();
+    // Now credit the wallet atomically
+    const updatedUser = await User.findOneAndUpdate(
+      { _id: userId },
+      {
+        $inc: {
+          'wallet.balance': claimedAmount,
+          'wallet.totalEarned': claimedAmount
+        }
+      },
+      { new: true }
+    );
 
     // Create transaction record
     const transaction = new Transaction({
       user: new Types.ObjectId(userId),
       type: 'credit',
       category: 'bonus',
-      amount: pendingRewards,
+      amount: claimedAmount,
       currency: 'RC',
       description: 'Referral rewards claimed',
       source: {
@@ -285,8 +298,8 @@ export const claimReferralRewards = asyncHandler(async (req: Request, res: Respo
         reference: userId,
         description: 'Referral program rewards'
       },
-      balanceBefore: (user.wallet.balance || 0) - pendingRewards,
-      balanceAfter: user.wallet.balance,
+      balanceBefore: ((updatedUser as any)?.wallet?.balance || 0) - claimedAmount,
+      balanceAfter: (updatedUser as any)?.wallet?.balance || 0,
       status: {
         current: 'completed',
         history: [{
@@ -300,7 +313,7 @@ export const claimReferralRewards = asyncHandler(async (req: Request, res: Respo
 
     sendSuccess(res, {
       success: true,
-      totalClaimed: pendingRewards,
+      totalClaimed: claimedAmount,
       transactionId: (transaction._id as any).toString()
     }, 'Referral rewards claimed successfully');
   } catch (error) {

@@ -16,6 +16,7 @@ import LoyaltyMilestone from '../models/LoyaltyMilestone';
 import FriendRedemption from '../models/FriendRedemption';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
+import { logger } from '../config/logger';
 import { getOffersPageData as getAggregatedData } from '../services/offersPageService';
 
 /**
@@ -63,7 +64,7 @@ export const getHotspots = async (req: Request, res: Response) => {
 
     sendSuccess(res, hotspots, 'Hotspots retrieved successfully');
   } catch (error) {
-    console.error('Error fetching hotspots:', error);
+    logger.error('Error fetching hotspots:', error);
     sendError(res, 'Failed to fetch hotspots', 500);
   }
 };
@@ -102,7 +103,7 @@ export const getHotspotOffers = async (req: Request, res: Response) => {
 
     sendSuccess(res, { hotspot, offers }, 'Hotspot offers retrieved successfully');
   } catch (error) {
-    console.error('Error fetching hotspot offers:', error);
+    logger.error('Error fetching hotspot offers:', error);
     sendError(res, 'Failed to fetch hotspot offers', 500);
   }
 };
@@ -133,7 +134,7 @@ export const getBOGOOffers = async (req: Request, res: Response) => {
 
     sendSuccess(res, offers, 'BOGO offers retrieved successfully');
   } catch (error) {
-    console.error('Error fetching BOGO offers:', error);
+    logger.error('Error fetching BOGO offers:', error);
     sendError(res, 'Failed to fetch BOGO offers', 500);
   }
 };
@@ -164,7 +165,7 @@ export const getSaleOffers = async (req: Request, res: Response) => {
 
     sendSuccess(res, offers, 'Sale offers retrieved successfully');
   } catch (error) {
-    console.error('Error fetching sale offers:', error);
+    logger.error('Error fetching sale offers:', error);
     sendError(res, 'Failed to fetch sale offers', 500);
   }
 };
@@ -189,7 +190,7 @@ export const getFreeDeliveryOffers = async (req: Request, res: Response) => {
 
     sendSuccess(res, offers, 'Free delivery offers retrieved successfully');
   } catch (error) {
-    console.error('Error fetching free delivery offers:', error);
+    logger.error('Error fetching free delivery offers:', error);
     sendError(res, 'Failed to fetch free delivery offers', 500);
   }
 };
@@ -200,7 +201,9 @@ export const getFreeDeliveryOffers = async (req: Request, res: Response) => {
  */
 export const getBankOffers = async (req: Request, res: Response) => {
   try {
-    const { limit = 20, cardType } = req.query;
+    const { page = 1, limit = 10, cardType, sort } = req.query;
+    const pageNum = Math.max(1, parseInt(page as string) || 1);
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit as string) || 10));
 
     const filter: any = {
       isActive: true,
@@ -211,14 +214,25 @@ export const getBankOffers = async (req: Request, res: Response) => {
       filter.cardType = cardType;
     }
 
-    const offers = await BankOffer.find(filter)
-      .sort({ priority: -1 })
-      .limit(parseInt(limit as string))
-      .lean();
+    let sortOption: Record<string, 1 | -1> = { priority: -1 };
+    if (sort === 'highest') {
+      sortOption = { discountPercentage: -1, priority: -1 };
+    } else if (sort === 'expiring') {
+      sortOption = { validUntil: 1, priority: -1 };
+    }
 
-    sendSuccess(res, offers, 'Bank offers retrieved successfully');
+    const [offers, total] = await Promise.all([
+      BankOffer.find(filter)
+        .sort(sortOption)
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      BankOffer.countDocuments(filter),
+    ]);
+
+    sendPaginated(res, offers, pageNum, limitNum, total, 'Bank offers retrieved successfully');
   } catch (error) {
-    console.error('Error fetching bank offers:', error);
+    logger.error('Error fetching bank offers:', error);
     sendError(res, 'Failed to fetch bank offers', 500);
   }
 };
@@ -286,7 +300,7 @@ export const getExclusiveZones = async (req: Request, res: Response) => {
 
     sendSuccess(res, zonesWithEligibility, 'Exclusive zones retrieved successfully');
   } catch (error) {
-    console.error('Error fetching exclusive zones:', error);
+    logger.error('Error fetching exclusive zones:', error);
     sendError(res, 'Failed to fetch exclusive zones', 500);
   }
 };
@@ -318,7 +332,7 @@ export const getExclusiveZoneOffers = async (req: Request, res: Response) => {
 
     sendSuccess(res, { zone, offers }, 'Exclusive zone offers retrieved successfully');
   } catch (error) {
-    console.error('Error fetching exclusive zone offers:', error);
+    logger.error('Error fetching exclusive zone offers:', error);
     sendError(res, 'Failed to fetch exclusive zone offers', 500);
   }
 };
@@ -378,7 +392,7 @@ export const getSpecialProfiles = async (req: Request, res: Response) => {
 
     sendSuccess(res, profilesWithEligibility, 'Special profiles retrieved successfully');
   } catch (error) {
-    console.error('Error fetching special profiles:', error);
+    logger.error('Error fetching special profiles:', error);
     sendError(res, 'Failed to fetch special profiles', 500);
   }
 };
@@ -411,7 +425,7 @@ export const getSpecialProfileOffers = async (req: Request, res: Response) => {
 
     sendSuccess(res, { profile, offers }, 'Special profile offers retrieved successfully');
   } catch (error) {
-    console.error('Error fetching special profile offers:', error);
+    logger.error('Error fetching special profile offers:', error);
     sendError(res, 'Failed to fetch special profile offers', 500);
   }
 };
@@ -422,8 +436,13 @@ export const getSpecialProfileOffers = async (req: Request, res: Response) => {
  */
 export const getFriendsRedeemed = async (req: Request, res: Response) => {
   try {
-    const { limit = 10 } = req.query;
+    const { limit = 10, page = 1 } = req.query;
     const userId = (req as any).user?._id;
+    const parsedLimit = parseInt(limit as string);
+    const parsedPage = parseInt(page as string);
+    const skip = (parsedPage - 1) * parsedLimit;
+
+    let filter: any = { isVisible: true };
 
     // If authenticated, filter by user's followed accounts
     if (userId) {
@@ -436,18 +455,10 @@ export const getFriendsRedeemed = async (req: Request, res: Response) => {
         const followedIds = following.map((f: any) => f.following);
 
         if (followedIds.length > 0) {
-          const redemptions = await FriendRedemption.find({
-            isVisible: true,
-            friendId: { $in: followedIds },
-          })
-            .populate('offerId')
-            .populate('friendId', 'fullName avatar')
-            .sort({ redeemedAt: -1 })
-            .limit(parseInt(limit as string))
-            .lean();
-
-          if (redemptions.length > 0) {
-            return sendSuccess(res, redemptions, 'Friends redemptions retrieved successfully');
+          const friendFilter = { isVisible: true, friendId: { $in: followedIds } };
+          const friendCount = await FriendRedemption.countDocuments(friendFilter);
+          if (friendCount > 0) {
+            filter = friendFilter;
           }
         }
       } catch {
@@ -455,17 +466,31 @@ export const getFriendsRedeemed = async (req: Request, res: Response) => {
       }
     }
 
-    // Fallback: show popular recent redemptions
-    const redemptions = await FriendRedemption.find({ isVisible: true })
-      .populate('offerId')
-      .populate('friendId', 'fullName avatar')
-      .sort({ redeemedAt: -1 })
-      .limit(parseInt(limit as string))
-      .lean();
+    const [redemptions, totalItems] = await Promise.all([
+      FriendRedemption.find(filter)
+        .populate('offerId')
+        .populate('friendId', 'fullName avatar')
+        .sort({ redeemedAt: -1 })
+        .skip(skip)
+        .limit(parsedLimit)
+        .lean(),
+      FriendRedemption.countDocuments(filter),
+    ]);
 
-    sendSuccess(res, redemptions, 'Friends redemptions retrieved successfully');
+    const totalPages = Math.ceil(totalItems / parsedLimit);
+
+    sendSuccess(res, {
+      redemptions,
+      pagination: {
+        currentPage: parsedPage,
+        totalPages,
+        totalItems,
+        hasNextPage: parsedPage < totalPages,
+        hasPrevPage: parsedPage > 1,
+      },
+    }, 'Friends redemptions retrieved successfully');
   } catch (error) {
-    console.error('Error fetching friends redemptions:', error);
+    logger.error('Error fetching friends redemptions:', error);
     sendError(res, 'Failed to fetch friends redemptions', 500);
   }
 };
@@ -505,7 +530,7 @@ export const getDoubleCashbackCampaigns = async (req: Request, res: Response) =>
 
     sendSuccess(res, campaigns, 'Double cashback campaigns retrieved successfully');
   } catch (error) {
-    console.error('Error fetching double cashback campaigns:', error);
+    logger.error('Error fetching double cashback campaigns:', error);
     sendError(res, 'Failed to fetch double cashback campaigns', 500);
   }
 };
@@ -550,7 +575,7 @@ export const getCoinDrops = async (req: Request, res: Response) => {
 
     sendSuccess(res, coinDrops, 'Coin drops retrieved successfully');
   } catch (error) {
-    console.error('Error fetching coin drops:', error);
+    logger.error('Error fetching coin drops:', error);
     sendError(res, 'Failed to fetch coin drops', 500);
   }
 };
@@ -591,7 +616,7 @@ export const getUploadBillStores = async (req: Request, res: Response) => {
 
     sendSuccess(res, stores, 'Upload bill stores retrieved successfully');
   } catch (error) {
-    console.error('Error fetching upload bill stores:', error);
+    logger.error('Error fetching upload bill stores:', error);
     sendError(res, 'Failed to fetch upload bill stores', 500);
   }
 };
@@ -671,7 +696,7 @@ export const getLoyaltyProgress = async (req: Request, res: Response) => {
       sendSuccess(res, milestonesWithProgress, 'Loyalty progress retrieved successfully');
     }
   } catch (error) {
-    console.error('Error fetching loyalty progress:', error);
+    logger.error('Error fetching loyalty progress:', error);
     sendError(res, 'Failed to fetch loyalty progress', 500);
   }
 };
@@ -688,7 +713,7 @@ export const getLoyaltyMilestones = async (req: Request, res: Response) => {
 
     sendSuccess(res, milestones, 'Loyalty milestones retrieved successfully');
   } catch (error) {
-    console.error('Error fetching loyalty milestones:', error);
+    logger.error('Error fetching loyalty milestones:', error);
     sendError(res, 'Failed to fetch loyalty milestones', 500);
   }
 };
@@ -700,7 +725,7 @@ export const getLoyaltyMilestones = async (req: Request, res: Response) => {
  */
 export const getDiscountBuckets = async (req: Request, res: Response) => {
   try {
-    console.log('📊 [DISCOUNT BUCKETS] Fetching discount bucket counts');
+    logger.info('📊 [DISCOUNT BUCKETS] Fetching discount bucket counts');
 
     const now = new Date();
     const baseFilter = {
@@ -771,11 +796,11 @@ export const getDiscountBuckets = async (req: Request, res: Response) => {
       },
     ];
 
-    console.log('✅ [DISCOUNT BUCKETS] Counts:', discountBuckets.map(b => `${b.label}: ${b.count}`).join(', '));
+    logger.info('✅ [DISCOUNT BUCKETS] Counts:', discountBuckets.map(b => `${b.label}: ${b.count}`).join(', '));
 
     sendSuccess(res, discountBuckets, 'Discount buckets retrieved successfully');
   } catch (error) {
-    console.error('❌ [DISCOUNT BUCKETS] Error:', error);
+    logger.error('❌ [DISCOUNT BUCKETS] Error:', error);
     sendError(res, 'Failed to fetch discount buckets', 500);
   }
 };
@@ -795,7 +820,7 @@ export const getSuperCashbackStores = async (req: Request, res: Response) => {
       ? regionHeader as RegionId
       : undefined;
 
-    console.log('🔥 [SUPER CASHBACK] Fetching stores with high cashback', { region: region || 'all' });
+    logger.info('🔥 [SUPER CASHBACK] Fetching stores with high cashback', { region: region || 'all' });
 
     // Build store filter
     const storeFilter: any = {
@@ -834,11 +859,11 @@ export const getSuperCashbackStores = async (req: Request, res: Response) => {
       badge: store.paymentInfo?.cashback >= 20 ? 'MEGA CASHBACK' : 'SUPER CASHBACK',
     }));
 
-    console.log(`✅ [SUPER CASHBACK] Found ${superCashbackStores.length} stores with high cashback`);
+    logger.info(`✅ [SUPER CASHBACK] Found ${superCashbackStores.length} stores with high cashback`);
 
     sendSuccess(res, superCashbackStores, 'Super cashback stores retrieved successfully');
   } catch (error) {
-    console.error('❌ [SUPER CASHBACK] Error:', error);
+    logger.error('❌ [SUPER CASHBACK] Error:', error);
     sendError(res, 'Failed to fetch super cashback stores', 500);
   }
 };
@@ -874,7 +899,7 @@ export const getFlashSaleOffers = async (req: Request, res: Response) => {
       .limit(parseInt(limit as string))
       .lean();
 
-    console.log(`✅ [FLASH SALES] Found ${offers.length} flash sale offers`);
+    logger.info(`✅ [FLASH SALES] Found ${offers.length} flash sale offers`);
 
     // Transform offers to include calculated fields
     const transformedOffers = offers.map((offer: any) => ({
@@ -895,7 +920,7 @@ export const getFlashSaleOffers = async (req: Request, res: Response) => {
 
     sendSuccess(res, transformedOffers, 'Flash sale offers retrieved successfully');
   } catch (error) {
-    console.error('❌ [FLASH SALES] Error fetching flash sale offers:', error);
+    logger.error('❌ [FLASH SALES] Error fetching flash sale offers:', error);
     sendError(res, 'Failed to fetch flash sale offers', 500);
   }
 };
@@ -920,7 +945,7 @@ export const getAggregatedOffersPageData = async (req: Request, res: Response) =
 
     sendSuccess(res, response, 'Offers page data retrieved successfully');
   } catch (error) {
-    console.error('[OFFERS_PAGE] Error fetching aggregated data:', error);
+    logger.error('[OFFERS_PAGE] Error fetching aggregated data:', error);
     sendError(res, 'Failed to fetch offers page data', 500);
   }
 };

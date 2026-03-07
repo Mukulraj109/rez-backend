@@ -1584,11 +1584,11 @@ export const redeemCoins = async (req: Request, res: Response) => {
       });
     }
 
-    // Offer validation if linked to a specific offer (pre-transaction checks)
+    // Offer pre-validation (non-atomic — quick reject for obviously exceeded limits)
+    // The atomic guard inside the transaction is the real protection
     if (offerId) {
       const offer = await PriveOffer.findById(offerId).lean();
       if (offer) {
-        // Fix 1C: Query CoinTransaction instead of PriveVoucher for per-user limit
         if (offer.limitPerUser) {
           const userRedemptions = await CoinTransaction.countDocuments({
             user: userObjectId,
@@ -1602,7 +1602,6 @@ export const redeemCoins = async (req: Request, res: Response) => {
             });
           }
         }
-        // Check total limit
         if (offer.totalLimit && offer.redemptions >= offer.totalLimit) {
           return res.status(400).json({
             success: false,
@@ -1706,20 +1705,39 @@ export const redeemCoins = async (req: Request, res: Response) => {
         },
       }], { session });
 
+      // Atomically increment offer redemptions INSIDE transaction with $lt guard
+      // Prevents concurrent redemptions from exceeding totalLimit
+      if (offerId) {
+        const offerUpdate = await PriveOffer.findOneAndUpdate(
+          {
+            _id: offerId,
+            $or: [
+              { totalLimit: { $exists: false } },
+              { totalLimit: 0 },
+              { $expr: { $lt: ['$redemptions', '$totalLimit'] } }
+            ]
+          },
+          { $inc: { redemptions: 1 } },
+          { session, new: true }
+        );
+
+        if (!offerUpdate) {
+          // Offer limit exceeded — abort entire transaction (wallet deduction + voucher rolled back)
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({
+            success: false,
+            error: 'This offer has reached its redemption limit',
+          });
+        }
+      }
+
       await session.commitTransaction();
     } catch (txError) {
       await session.abortTransaction();
       throw txError;
     } finally {
       session.endSession();
-    }
-
-    // Atomically increment offer redemptions if linked (fire-and-forget, outside transaction)
-    if (offerId) {
-      PriveOffer.updateOne(
-        { _id: offerId },
-        { $inc: { redemptions: 1 } }
-      ).exec().catch(err => logger.warn('[PRIVE] Failed to increment offer redemptions:', err));
     }
 
     // Emit offer_redeemed event for mission progress tracking

@@ -938,33 +938,24 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
             throw new AppError('User ID not found', 400);
           }
 
-          let wallet = await Wallet.findOne({ user: userId }).session(session);
-
-          if (!wallet) {
-            // Create wallet if it doesn't exist
-            wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
-            if (!wallet) {
-              throw new AppError('Failed to create wallet for refund', 500);
-            }
-          }
-
-          // Check if wallet is frozen
-          if (wallet.isFrozen) {
-            throw new AppError(`Wallet is frozen: ${wallet.frozenReason}`, 403);
-          }
-
-          // Add refund to wallet
-          await wallet.addFunds(amount, 'refund');
-          await wallet.save({ session });
+          // Refund via walletService (atomic $inc + CoinTransaction + LedgerEntry)
+          const { walletService } = await import('../../services/walletService');
+          await walletService.credit({
+            userId: userId.toString(),
+            amount,
+            source: 'order',
+            description: `Refund for order`,
+            operationType: 'refund',
+            referenceId: `merchant-refund:${Date.now()}`,
+            referenceModel: 'Order',
+            metadata: { refundReason: 'merchant_refund' },
+            session,
+          });
 
           gatewayRefundId = `wallet_refund_${Date.now()}`;
           gatewayRefundStatus = 'completed';
 
-          console.log('✅ [REFUND] Wallet refund completed:', {
-            refundId: gatewayRefundId,
-            walletId: wallet._id,
-            amount
-          });
+          console.log('✅ [REFUND] Wallet refund completed via walletService:', { gatewayRefundId, amount });
           break;
         }
 
@@ -1347,19 +1338,30 @@ export const updateMerchantOrderStatus = asyncHandler(async (req: Request, res: 
           continue;
         }
 
-        if (!product.inventory.unlimited && product.inventory.stock < item.quantity) {
-          await session.abortTransaction();
-          session.endSession();
-          return sendBadRequest(res, `Insufficient stock for "${item.name}". Available: ${product.inventory.stock}, Required: ${item.quantity}`);
-        }
-
         if (!product.inventory.unlimited) {
-          product.inventory.stock -= item.quantity;
-          if (product.inventory.stock === 0) {
-            product.inventory.isAvailable = false;
+          // Atomic stock deduction with $gte guard — prevents overselling under concurrency
+          const stockResult = await Product.findOneAndUpdate(
+            {
+              _id: item.product,
+              'inventory.unlimited': false,
+              'inventory.stock': { $gte: item.quantity }
+            },
+            {
+              $inc: { 'inventory.stock': -item.quantity }
+            },
+            { new: true, session }
+          );
+
+          if (!stockResult) {
+            await session.abortTransaction();
+            session.endSession();
+            return sendBadRequest(res, `Insufficient stock for "${item.name}". Required: ${item.quantity}`);
           }
-          await product.save({ session });
-          console.log(`📦 [ORDER STATUS] Deducted ${item.quantity} from "${item.name}". New stock: ${product.inventory.stock}`);
+
+          // Mark unavailable if stock hit zero
+          if (stockResult.inventory.stock === 0) {
+            await Product.findByIdAndUpdate(item.product, { 'inventory.isAvailable': false }, { session });
+          }
         }
       }
     }

@@ -255,18 +255,21 @@ HeroBannerSchema.methods.isCurrentlyActive = function(): boolean {
 };
 
 HeroBannerSchema.methods.incrementView = async function(): Promise<void> {
-  this.analytics.views += 1;
-  await this.save();
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { 'analytics.views': 1 }
+  });
 };
 
 HeroBannerSchema.methods.incrementClick = async function(): Promise<void> {
-  this.analytics.clicks += 1;
-  await this.save();
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { 'analytics.clicks': 1 }
+  });
 };
 
 HeroBannerSchema.methods.incrementConversion = async function(): Promise<void> {
-  this.analytics.conversions += 1;
-  await this.save();
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { 'analytics.conversions': 1 }
+  });
 };
 
 HeroBannerSchema.methods.isTargetedForUser = function(userData?: any): boolean {

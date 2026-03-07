@@ -10,11 +10,15 @@ import {
   checkEligibility
 } from '../controllers/scratchCardController';
 import { authenticate } from '../middleware/auth';
+import { requireGamificationFeature } from '../middleware/gamificationFeatureGate';
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+
+// PHASE 3 — disabled until core is stable
+router.use(requireGamificationFeature('miniGames', { cards: [] }));
 
 /**
  * @route   GET /api/scratch-cards/eligibility

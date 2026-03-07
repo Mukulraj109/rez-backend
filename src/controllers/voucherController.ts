@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { VoucherBrand, UserVoucher } from '../models/Voucher';
 import { logger } from '../config/logger';
 import { Wallet } from '../models/Wallet';
@@ -238,90 +239,103 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
       return sendError(res, 'Supported payment methods: wallet, card', 400);
     }
 
-    // Use coinService.deductCoins (creates CoinTransaction — the source of truth)
-    let deductResult;
-    try {
-      deductResult = await coinService.deductCoins(
-        userId,
-        purchasePrice,
-        'purchase',
-        `Purchased ${brand.name} voucher - ₹${denomination}`,
-        { brandId: String(brandId), brandName: brand.name, denomination },
-        null // global coins, not category-specific
-      );
-    } catch (deductError: any) {
-      // deductCoins throws on insufficient balance
-      return sendError(res, deductError.message || 'Insufficient coin balance', 400);
-    }
-
-    // Generate voucher code
+    // Generate voucher code before transaction
     const brandPrefix = brandId.toString().substring(0, 6).toUpperCase();
     const random = Math.random().toString(36).substring(2, 8).toUpperCase();
     const voucherCode = `${brandPrefix}-${denomination}-${random}`;
 
-    // Calculate expiry date (365 days from now)
     const purchaseDate = new Date();
     const expiryDate = new Date(purchaseDate);
     expiryDate.setDate(expiryDate.getDate() + 365);
 
-    // Create voucher
-    const userVoucher = new UserVoucher({
-      user: userId,
-      brand: brandId,
-      voucherCode,
-      denomination: Number(denomination),
-      purchasePrice,
-      purchaseDate,
-      expiryDate,
-      validityDays: 365, // 1 year
-      status: 'active',
-      deliveryMethod: 'app',
-      deliveryStatus: 'delivered',
-      deliveredAt: new Date(),
-      paymentMethod: 'wallet',
-    });
+    // MongoDB transaction: coin deduction + voucher creation + transaction record
+    // If any step fails, everything rolls back atomically
+    const session = await mongoose.startSession();
+    let deductResult: any;
+    let userVoucher: any;
 
-    await userVoucher.save();
+    try {
+      await session.startTransaction();
 
-    // Create transaction record for order history
-    const wallet = await Wallet.findOne({ user: userId }).lean();
-    const transaction = new Transaction({
-      user: userId,
-      type: 'debit',
-      amount: purchasePrice,
-      currency: wallet?.currency || 'INR',
-      category: 'spending',
-      description: `Purchased ${brand.name} voucher - ₹${denomination}`,
-      status: {
-        current: 'completed',
-        history: [{
-          status: 'completed',
-          timestamp: new Date(),
-          reason: 'Voucher purchased successfully',
-        }],
-      },
-      source: {
-        type: 'order',
-        reference: userVoucher._id as any,
-        description: `Voucher purchase - ${brand.name}`,
-        metadata: {
-          orderNumber: `VOUCHR-${String(userVoucher._id).substring(0, 8)}`,
-          coinTransactionId: deductResult.transactionId,
-          storeInfo: brand.store ? {
-            name: brand.name,
-            id: brand.store as any,
-          } : undefined,
+      // Step 1: Deduct coins
+      try {
+        deductResult = await coinService.deductCoins(
+          userId,
+          purchasePrice,
+          'purchase',
+          `Purchased ${brand.name} voucher - ₹${denomination}`,
+          { brandId: String(brandId), brandName: brand.name, denomination },
+          null
+        );
+      } catch (deductError: any) {
+        await session.abortTransaction();
+        return sendError(res, deductError.message || 'Insufficient coin balance', 400);
+      }
+
+      // Step 2: Create voucher
+      const [createdVoucher] = await UserVoucher.create([{
+        user: userId,
+        brand: brandId,
+        voucherCode,
+        denomination: Number(denomination),
+        purchasePrice,
+        purchaseDate,
+        expiryDate,
+        validityDays: 365,
+        status: 'active',
+        deliveryMethod: 'app',
+        deliveryStatus: 'delivered',
+        deliveredAt: new Date(),
+        paymentMethod: 'wallet',
+      }], { session });
+      userVoucher = createdVoucher;
+
+      // Step 3: Create transaction record
+      const wallet = await Wallet.findOne({ user: userId }).session(session).lean();
+      const [transaction] = await Transaction.create([{
+        user: userId,
+        type: 'debit',
+        amount: purchasePrice,
+        currency: wallet?.currency || 'INR',
+        category: 'spending',
+        description: `Purchased ${brand.name} voucher - ₹${denomination}`,
+        status: {
+          current: 'completed',
+          history: [{
+            status: 'completed',
+            timestamp: new Date(),
+            reason: 'Voucher purchased successfully',
+          }],
         },
-      },
-      balanceBefore: deductResult.newBalance + purchasePrice,
-      balanceAfter: deductResult.newBalance,
-    });
+        source: {
+          type: 'order',
+          reference: userVoucher._id,
+          description: `Voucher purchase - ${brand.name}`,
+          metadata: {
+            orderNumber: `VOUCHR-${String(userVoucher._id).substring(0, 8)}`,
+            coinTransactionId: deductResult.transactionId,
+            storeInfo: brand.store ? {
+              name: brand.name,
+              id: brand.store as any,
+            } : undefined,
+          },
+        },
+        balanceBefore: deductResult.newBalance + purchasePrice,
+        balanceAfter: deductResult.newBalance,
+      }], { session });
 
-    await transaction.save();
+      await session.commitTransaction();
+    } catch (txError: any) {
+      await session.abortTransaction();
+      logger.error('[VOUCHER] Purchase transaction failed', txError);
+      return sendError(res, 'Voucher purchase failed. Your coins have not been deducted.', 500);
+    } finally {
+      session.endSession();
+    }
 
-    // Update brand purchase count
-    brand.purchaseCount += 1;
-    await brand.save();
+    // Non-critical: update brand purchase count (fire-and-forget)
+    VoucherBrand.findByIdAndUpdate(brandId, { $inc: { purchaseCount: 1 } })
+      .exec().catch(err => logger.warn('[VOUCHER] Failed to increment brand purchaseCount:', err));
 
     // Populate voucher for response
     await userVoucher.populate('brand', 'name logo backgroundColor cashbackRate');
@@ -330,7 +344,6 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
       res,
       {
         voucher: userVoucher,
-        transaction,
         wallet: {
           balance: deductResult.newBalance,
           available: deductResult.newBalance,
@@ -377,9 +390,9 @@ export const confirmCardPurchase = async (req: Request, res: Response) => {
     }
 
     // Idempotency: check if voucher already created for this payment
-    const existingVoucher = await UserVoucher.findOne({ transactionId: paymentIntentId }).lean();
+    const existingVoucher = await UserVoucher.findOne({ transactionId: paymentIntentId })
+      .populate('brand', 'name logo backgroundColor cashbackRate');
     if (existingVoucher) {
-      await existingVoucher.populate('brand', 'name logo backgroundColor cashbackRate');
       return sendSuccess(res, {
         voucher: existingVoucher,
         alreadyProcessed: true,

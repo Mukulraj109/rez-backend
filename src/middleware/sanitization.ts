@@ -26,7 +26,7 @@ function deepSanitize(input: any): any {
   if (typeof input === 'object' && input !== null) {
     const sanitized: any = {};
     for (const key in input) {
-      if (input.hasOwnProperty(key)) {
+      if (Object.prototype.hasOwnProperty.call(input, key)) {
         // Sanitize the key as well
         const sanitizedKey = validator.escape(key);
         sanitized[sanitizedKey] = deepSanitize(input[key]);
@@ -75,7 +75,10 @@ export const sanitizeBody = (req: Request, res: Response, next: NextFunction) =>
  */
 export const sanitizeQuery = (req: Request, res: Response, next: NextFunction) => {
   if (req.query && typeof req.query === 'object') {
-    req.query = deepSanitize(req.query);
+    const sanitized = deepSanitize({ ...req.query });
+    for (const key of Object.keys(req.query)) {
+      (req.query as any)[key] = sanitized[key];
+    }
   }
   next();
 };
@@ -99,14 +102,20 @@ export const sanitizeRequest = (req: Request, res: Response, next: NextFunction)
     req.body = deepSanitize(req.body);
   }
 
-  // Sanitize query
+  // Sanitize query — req.query may be read-only in Express 5+, so sanitize values in-place
   if (req.query && typeof req.query === 'object') {
-    req.query = deepSanitize(req.query);
+    const sanitizedQuery = deepSanitize({ ...req.query });
+    for (const key of Object.keys(req.query)) {
+      (req.query as any)[key] = sanitizedQuery[key];
+    }
   }
 
-  // Sanitize params
+  // Sanitize params — may also be read-only
   if (req.params && typeof req.params === 'object') {
-    req.params = deepSanitize(req.params);
+    const sanitizedParams = deepSanitize({ ...req.params });
+    for (const key of Object.keys(req.params)) {
+      (req.params as any)[key] = sanitizedParams[key];
+    }
   }
 
   next();

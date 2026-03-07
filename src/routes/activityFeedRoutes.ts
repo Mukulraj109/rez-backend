@@ -1,13 +1,15 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth';
 import * as controller from '../controllers/activityFeedController';
+import { requireGamificationFeature } from '../middleware/gamificationFeatureGate';
 
 const router = express.Router();
 
 // All routes require authentication
 router.use(authenticate);
 
-// ==================== FEED ROUTES ====================
+// ==================== FEED ROUTES — PHASE 3 ====================
+const gateActivityFeed = requireGamificationFeature('activityFeed', { activities: [] });
 
 /**
  * Get activity feed for authenticated user
@@ -16,9 +18,9 @@ router.use(authenticate);
  * @query page: number (default: 1)
  * @query limit: number (default: 20)
  */
-router.get('/feed', controller.getFeed);
+router.get('/feed', gateActivityFeed, controller.getFeed);
 
-// ==================== ACTIVITY ROUTES ====================
+// ==================== ACTIVITY ROUTES — PHASE 3 ====================
 
 /**
  * Create a new activity
@@ -26,7 +28,7 @@ router.get('/feed', controller.getFeed);
  * @access Private
  * @body { type, title, description?, amount?, icon?, color?, relatedEntity?, metadata? }
  */
-router.post('/activities', controller.createActivity);
+router.post('/activities', gateActivityFeed, controller.createActivity);
 
 /**
  * Get user's activities
@@ -35,23 +37,23 @@ router.post('/activities', controller.createActivity);
  * @query page: number (default: 1)
  * @query limit: number (default: 20)
  */
-router.get('/users/:userId/activities', controller.getUserActivities);
+router.get('/users/:userId/activities', gateActivityFeed, controller.getUserActivities);
 
 /**
  * Get activity statistics
  * @route GET /api/social/activities/:activityId/stats
  * @access Private
  */
-router.get('/activities/:activityId/stats', controller.getActivityStats);
+router.get('/activities/:activityId/stats', gateActivityFeed, controller.getActivityStats);
 
-// ==================== INTERACTION ROUTES ====================
+// ==================== INTERACTION ROUTES — PHASE 3 ====================
 
 /**
  * Like/Unlike an activity
  * @route POST /api/social/activities/:activityId/like
  * @access Private
  */
-router.post('/activities/:activityId/like', controller.likeActivity);
+router.post('/activities/:activityId/like', gateActivityFeed, controller.likeActivity);
 
 /**
  * Get comments for an activity
@@ -60,7 +62,7 @@ router.post('/activities/:activityId/like', controller.likeActivity);
  * @query page: number (default: 1)
  * @query limit: number (default: 20)
  */
-router.get('/activities/:activityId/comments', controller.getComments);
+router.get('/activities/:activityId/comments', gateActivityFeed, controller.getComments);
 
 /**
  * Comment on an activity
@@ -68,14 +70,14 @@ router.get('/activities/:activityId/comments', controller.getComments);
  * @access Private
  * @body { comment: string }
  */
-router.post('/activities/:activityId/comment', controller.commentOnActivity);
+router.post('/activities/:activityId/comment', gateActivityFeed, controller.commentOnActivity);
 
 /**
  * Share an activity
  * @route POST /api/social/activities/:activityId/share
  * @access Private
  */
-router.post('/activities/:activityId/share', controller.shareActivity);
+router.post('/activities/:activityId/share', gateActivityFeed, controller.shareActivity);
 
 // ==================== FOLLOW ROUTES ====================
 

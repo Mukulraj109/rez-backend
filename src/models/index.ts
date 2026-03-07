@@ -46,6 +46,8 @@ export { CashbackMongoModel, CashbackModel } from './Cashback';
 export { default as AuditLog } from './AuditLog';
 export { default as UserStoreVoucher } from './UserStoreVoucher';
 export { Bill } from './Bill';
+export { BillProvider } from './BillProvider';
+export { BillPayment } from './BillPayment';
 export { UserCashback } from './UserCashback';
 export { default as Challenge } from './Challenge';
 export { MiniGame } from './MiniGame';
@@ -158,6 +160,10 @@ export type { IExclusiveZone } from './ExclusiveZone';
 export type { ISpecialProfile } from './SpecialProfile';
 export type { ILoyaltyMilestone } from './LoyaltyMilestone';
 export type { IFriendRedemption } from './FriendRedemption';
+
+// Bill Payment types
+export type { IBillProvider, BillType, IRequiredField } from './BillProvider';
+export type { IBillPayment, BillPaymentStatus } from './BillPayment';
 
 // Homepage Section models
 export { default as Campaign } from './Campaign';

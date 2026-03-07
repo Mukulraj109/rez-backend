@@ -36,21 +36,34 @@ interface JWTPayload {
   exp: number;
 }
 
-// Generate JWT token
-export const generateToken = (userId: string, role: string = 'user'): string => {
-  const payload = { userId, role };
-  
-  // Validate JWT secret exists and is strong
+// Admin roles that use the separate admin JWT secret
+const ADMIN_ROLES = ['admin', 'super_admin', 'operator', 'support'];
+
+// Get the appropriate JWT secret based on role
+const getJwtSecret = (role: string): string => {
   if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET environment variable is required');
   }
   if (process.env.JWT_SECRET.length < 32) {
     throw new Error('JWT_SECRET must be at least 32 characters long for security');
   }
-  
-  const secret = process.env.JWT_SECRET;
-  const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
-  
+
+  if (ADMIN_ROLES.includes(role) && process.env.JWT_ADMIN_SECRET) {
+    if (process.env.JWT_ADMIN_SECRET.length < 32) {
+      throw new Error('JWT_ADMIN_SECRET must be at least 32 characters long for security');
+    }
+    return process.env.JWT_ADMIN_SECRET;
+  }
+
+  return process.env.JWT_SECRET;
+};
+
+// Generate JWT token
+export const generateToken = (userId: string, role: string = 'user'): string => {
+  const payload = { userId, role };
+  const secret = getJwtSecret(role);
+  const expiresIn = process.env.JWT_EXPIRES_IN || '15m';
+
   return jwt.sign(payload, secret, { expiresIn } as any);
 };
 
@@ -67,18 +80,30 @@ export const generateRefreshToken = (userId: string): string => {
   }
   
   const secret = process.env.JWT_REFRESH_SECRET;
-  const expiresIn = process.env.JWT_REFRESH_EXPIRES_IN || '30d';
+  const expiresIn = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
   
   return jwt.sign(payload, secret, { expiresIn } as any);
 };
 
-// Verify JWT token
+// Verify JWT token — tries admin secret first if available, then falls back to user secret
 export const verifyToken = (token: string): JWTPayload => {
   if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET environment variable is required');
   }
-  const secret = process.env.JWT_SECRET;
-  return jwt.verify(token, secret, { algorithms: ['HS256'] }) as JWTPayload;
+
+  // If admin secret is configured, try it first (admin tokens are signed with it)
+  if (process.env.JWT_ADMIN_SECRET) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_ADMIN_SECRET, { algorithms: ['HS256'] }) as JWTPayload;
+      if (ADMIN_ROLES.includes(decoded.role)) {
+        return decoded;
+      }
+    } catch {
+      // Not an admin token — fall through to user secret
+    }
+  }
+
+  return jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] }) as JWTPayload;
 };
 
 // Verify refresh token
@@ -89,6 +114,31 @@ export const verifyRefreshToken = (token: string): JWTPayload => {
   const secret = process.env.JWT_REFRESH_SECRET;
   return jwt.verify(token, secret, { algorithms: ['HS256'] }) as JWTPayload;
 };
+
+// Logout all devices for a user — invalidates all existing tokens
+const ALL_LOGOUT_PREFIX = 'allLogout:';
+
+export async function logoutAllDevices(userId: string): Promise<void> {
+  try {
+    // Store the timestamp — any token issued before this time is invalid
+    await redisService.set(`${ALL_LOGOUT_PREFIX}${userId}`, Date.now(), 30 * 24 * 60 * 60); // 30d TTL
+    logger.info(`[AUTH] Logout-all-devices triggered for user ${userId}`);
+  } catch {
+    logger.error(`[AUTH] Failed to set logout-all-devices for user ${userId}`);
+  }
+}
+
+async function isTokenIssuedBeforeLogoutAll(userId: string, iat: number): Promise<boolean> {
+  try {
+    const logoutTimestamp = await redisService.get<number>(`${ALL_LOGOUT_PREFIX}${userId}`);
+    if (logoutTimestamp && iat < Math.floor(logoutTimestamp / 1000)) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
 
 // Extract token from request
 const extractTokenFromHeader = (authHeader?: string): string | null => {
@@ -126,6 +176,11 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       }
 
       const decoded = verifyToken(token);
+
+      // Check if user triggered logout-all-devices after this token was issued
+      if (await isTokenIssuedBeforeLogoutAll(decoded.userId, decoded.iat)) {
+        return res.status(401).json({ success: false, message: 'Session invalidated. Please login again.' });
+      }
 
       const user = await User.findById(decoded.userId).select('-auth.refreshToken');
 

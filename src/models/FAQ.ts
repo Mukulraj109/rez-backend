@@ -133,24 +133,25 @@ FAQSchema.virtual('totalFeedback').get(function(this: IFAQ) {
   return this.helpfulCount + this.notHelpfulCount;
 });
 
-// Instance method to increment view count
+// Instance method to increment view count — uses atomic $inc to avoid race conditions
 FAQSchema.methods.incrementView = async function() {
-  this.viewCount += 1;
-  await this.save();
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { viewCount: 1 }
+  });
 };
 
-// Instance method to mark as helpful
+// Instance method to mark as helpful — uses atomic $inc to avoid race conditions
 FAQSchema.methods.markAsHelpful = async function() {
-  this.helpfulCount += 1;
-  await this.save();
-  console.log(`✅ [FAQ] FAQ ${this._id} marked as helpful`);
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { helpfulCount: 1 }
+  });
 };
 
-// Instance method to mark as not helpful
+// Instance method to mark as not helpful — uses atomic $inc to avoid race conditions
 FAQSchema.methods.markAsNotHelpful = async function() {
-  this.notHelpfulCount += 1;
-  await this.save();
-  console.log(`❌ [FAQ] FAQ ${this._id} marked as not helpful`);
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { notHelpfulCount: 1 }
+  });
 };
 
 // Static method to get FAQs by category

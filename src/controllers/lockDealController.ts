@@ -19,6 +19,8 @@ import { Wallet } from '../models/Wallet';
 import { CoinTransaction } from '../models/CoinTransaction';
 import { Transaction } from '../models/Transaction';
 import stripeService from '../services/stripeService';
+import { walletService } from '../services/walletService';
+import { logger } from '../config/logger';
 import { asyncHandler } from '../utils/asyncHandler';
 import {
   sendSuccess,
@@ -91,7 +93,7 @@ export const getLockDeals = asyncHandler(async (req: Request, res: Response) => 
 
     sendPaginated(res, deals, pageNum, limitNum, total, 'Lock deals retrieved');
   } catch (error: any) {
-    console.error('❌ [LOCK DEALS] Error fetching deals:', error);
+    logger.error('[LOCK DEALS] Error fetching deals:', error);
     throw new AppError('Failed to fetch lock deals', 500, 'LOCK_DEALS_BROWSE', error);
   }
 });
@@ -124,7 +126,7 @@ export const getLockDealById = asyncHandler(async (req: Request, res: Response) 
 
     sendSuccess(res, { deal, userLock }, 'Lock deal details retrieved');
   } catch (error: any) {
-    console.error('❌ [LOCK DEALS] Error fetching deal detail:', error);
+    logger.error('[LOCK DEALS] Error fetching deal detail:', error);
     throw new AppError('Failed to fetch deal details', 500, 'LOCK_DEAL_DETAIL', error);
   }
 });
@@ -209,7 +211,7 @@ export const initiateLock = asyncHandler(async (req: Request, res: Response) => 
       },
     }, 'Deposit payment initiated');
   } catch (error: any) {
-    console.error('❌ [LOCK DEALS] Error initiating lock:', error);
+    logger.error('[LOCK DEALS] Error initiating lock:', error);
     if (error.message?.includes('Stripe')) {
       return sendBadRequest(res, 'Payment service temporarily unavailable');
     }
@@ -315,23 +317,38 @@ export const confirmLock = asyncHandler(async (req: Request, res: Response) => {
       { session }
     );
 
-    // 8. Credit lock reward to wallet
+    // 8. Credit lock reward to wallet via walletService
     const lockRewardAmount = deal.lockReward.amount * deal.earningsMultiplier;
     if (lockRewardAmount > 0 && deal.lockReward.type === 'coins') {
-      await Wallet.findOneAndUpdate(
-        { userId },
-        { $inc: { 'balance.available': lockRewardAmount } },
-        { session, upsert: true }
-      );
+      await walletService.credit({
+        userId,
+        amount: lockRewardAmount,
+        source: 'purchase_reward',
+        description: `Lock reward for "${deal.title}" (${deal.earningsMultiplier}x)`,
+        operationType: 'lock_fee',
+        referenceId: userLockDeal._id.toString(),
+        referenceModel: 'UserLockDeal',
+        metadata: {
+          lockDealId: id,
+          userLockDealId: userLockDeal._id,
+          lockDealTitle: deal.title,
+          storeId: deal.store.toString(),
+          storeName: deal.storeName,
+          rewardType: 'lock',
+          earningsMultiplier: deal.earningsMultiplier,
+          baseAmount: deal.lockReward.amount,
+        },
+        session,
+      });
 
       // Mark reward as credited
       userLockDeal.lockRewardCredited = true;
       await userLockDeal.save({ session });
 
-      console.log(`✅ [LOCK DEALS] Lock reward credited: ${lockRewardAmount} coins to user ${userId}`);
+      logger.info(`[LOCK DEALS] Lock reward credited: ${lockRewardAmount} coins to user ${userId}`);
     }
 
-    // 9. Create Transaction record
+    // 9. Create Transaction display record
     await Transaction.create([{
       userId,
       type: 'credit',
@@ -343,28 +360,6 @@ export const confirmLock = asyncHandler(async (req: Request, res: Response) => {
     }], { session });
 
     await session.commitTransaction();
-
-    // 10. Create CoinTransaction (outside session — matches existing pattern)
-    if (lockRewardAmount > 0) {
-      await CoinTransaction.createTransaction(
-        userId,
-        'earned',
-        lockRewardAmount,
-        'purchase_reward',
-        `Lock reward for "${deal.title}" (${deal.earningsMultiplier}x)`,
-        {
-          lockDealId: id,
-          userLockDealId: userLockDeal._id,
-          lockDealTitle: deal.title,
-          storeId: deal.store.toString(),
-          storeName: deal.storeName,
-          rewardType: 'lock',
-          earningsMultiplier: deal.earningsMultiplier,
-          baseAmount: deal.lockReward.amount,
-        }
-      );
-      console.log(`✅ [LOCK DEALS] CoinTransaction created for lock reward: ${lockRewardAmount}`);
-    }
 
     sendCreated(res, {
       userLockDeal: {
@@ -381,7 +376,7 @@ export const confirmLock = asyncHandler(async (req: Request, res: Response) => {
     }, 'Deal locked successfully! Earn more when you pick up.');
   } catch (error: any) {
     await session.abortTransaction();
-    console.error('❌ [LOCK DEALS] Error confirming lock:', error);
+    logger.error('[LOCK DEALS] Error confirming lock:', error);
 
     if (error.code === 11000) {
       return sendConflict(res, 'You have already locked this deal');
@@ -440,7 +435,7 @@ export const initiateBalancePayment = asyncHandler(async (req: Request, res: Res
       dealTitle: userLock.dealSnapshot.title,
     }, 'Balance payment initiated');
   } catch (error: any) {
-    console.error('❌ [LOCK DEALS] Error initiating balance payment:', error);
+    logger.error('[LOCK DEALS] Error initiating balance payment:', error);
     throw new AppError('Failed to initiate balance payment', 500, 'BALANCE_INITIATE', error);
   }
 });
@@ -491,7 +486,7 @@ export const confirmBalancePayment = asyncHandler(async (req: Request, res: Resp
       return sendNotFound(res, 'Active lock not found or already paid');
     }
 
-    console.log(`✅ [LOCK DEALS] Balance paid for lock ${lockId} by user ${userId}`);
+    logger.info(`[LOCK DEALS] Balance paid for lock ${lockId} by user ${userId}`);
 
     sendSuccess(res, {
       userLockDeal: {
@@ -503,7 +498,7 @@ export const confirmBalancePayment = asyncHandler(async (req: Request, res: Resp
       },
     }, 'Balance paid! Show your pickup code at the store.');
   } catch (error: any) {
-    console.error('❌ [LOCK DEALS] Error confirming balance:', error);
+    logger.error('[LOCK DEALS] Error confirming balance:', error);
     throw new AppError('Failed to confirm balance payment', 500, 'BALANCE_CONFIRM', error);
   }
 });
@@ -555,17 +550,32 @@ export const verifyPickup = asyncHandler(async (req: Request, res: Response) => 
       userLock.merchantNotes = merchantNotes;
     }
 
-    // 5. Credit pickup reward
+    // 5. Credit pickup reward via walletService
     const pickupRewardAmount = userLock.pickupRewardAmount; // Already multiplied at lock time
     if (pickupRewardAmount > 0 && !userLock.pickupRewardCredited) {
-      await Wallet.findOneAndUpdate(
-        { userId: userLock.user.toString() },
-        { $inc: { 'balance.available': pickupRewardAmount } },
-        { session, upsert: true }
-      );
+      await walletService.credit({
+        userId: userLock.user.toString(),
+        amount: pickupRewardAmount,
+        source: 'purchase_reward',
+        description: `Pickup reward for "${userLock.dealSnapshot.title}" (${userLock.earningsMultiplier}x)`,
+        operationType: 'lock_fee',
+        referenceId: userLock._id.toString(),
+        referenceModel: 'UserLockDeal',
+        metadata: {
+          lockDealId: userLock.lockDeal.toString(),
+          userLockDealId: userLock._id,
+          lockDealTitle: userLock.dealSnapshot.title,
+          storeId: userLock.dealSnapshot.storeId,
+          storeName: userLock.dealSnapshot.storeName,
+          rewardType: 'pickup',
+          earningsMultiplier: userLock.earningsMultiplier,
+          baseAmount: userLock.pickupRewardAmount / userLock.earningsMultiplier,
+        },
+        session,
+      });
 
       userLock.pickupRewardCredited = true;
-      console.log(`✅ [LOCK DEALS] Pickup reward credited: ${pickupRewardAmount} coins to user ${userLock.user}`);
+      logger.info(`[LOCK DEALS] Pickup reward credited: ${pickupRewardAmount} coins to user ${userLock.user}`);
     }
 
     await userLock.save({ session });
@@ -577,7 +587,7 @@ export const verifyPickup = asyncHandler(async (req: Request, res: Response) => 
       { session }
     );
 
-    // 7. Create Transaction record
+    // 7. Create Transaction display record
     if (pickupRewardAmount > 0) {
       await Transaction.create([{
         userId: userLock.user.toString(),
@@ -591,28 +601,6 @@ export const verifyPickup = asyncHandler(async (req: Request, res: Response) => 
     }
 
     await session.commitTransaction();
-
-    // 8. Create CoinTransaction (outside session)
-    if (pickupRewardAmount > 0) {
-      await CoinTransaction.createTransaction(
-        userLock.user.toString(),
-        'earned',
-        pickupRewardAmount,
-        'purchase_reward',
-        `Pickup reward for "${userLock.dealSnapshot.title}" (${userLock.earningsMultiplier}x)`,
-        {
-          lockDealId: userLock.lockDeal.toString(),
-          userLockDealId: userLock._id,
-          lockDealTitle: userLock.dealSnapshot.title,
-          storeId: userLock.dealSnapshot.storeId,
-          storeName: userLock.dealSnapshot.storeName,
-          rewardType: 'pickup',
-          earningsMultiplier: userLock.earningsMultiplier,
-          baseAmount: userLock.pickupRewardAmount / userLock.earningsMultiplier,
-        }
-      );
-      console.log(`✅ [LOCK DEALS] CoinTransaction created for pickup reward: ${pickupRewardAmount}`);
-    }
 
     sendSuccess(res, {
       verified: true,
@@ -628,7 +616,7 @@ export const verifyPickup = asyncHandler(async (req: Request, res: Response) => 
     }, 'Pickup verified! Rewards credited to customer.');
   } catch (error: any) {
     await session.abortTransaction();
-    console.error('❌ [LOCK DEALS] Error verifying pickup:', error);
+    logger.error('[LOCK DEALS] Error verifying pickup:', error);
     throw new AppError('Failed to verify pickup', 500, 'PICKUP_VERIFY', error);
   } finally {
     session.endSession();
@@ -669,7 +657,7 @@ export const getMyLocks = asyncHandler(async (req: Request, res: Response) => {
 
     sendPaginated(res, locks, pageNum, limitNum, total, 'Your locked deals');
   } catch (error: any) {
-    console.error('❌ [LOCK DEALS] Error fetching user locks:', error);
+    logger.error('[LOCK DEALS] Error fetching user locks:', error);
     throw new AppError('Failed to fetch your locks', 500, 'MY_LOCKS', error);
   }
 });
@@ -693,7 +681,7 @@ export const getMyLockDetail = asyncHandler(async (req: Request, res: Response) 
 
     sendSuccess(res, { lock }, 'Lock detail retrieved');
   } catch (error: any) {
-    console.error('❌ [LOCK DEALS] Error fetching lock detail:', error);
+    logger.error('[LOCK DEALS] Error fetching lock detail:', error);
     throw new AppError('Failed to fetch lock detail', 500, 'LOCK_DETAIL', error);
   }
 });
@@ -751,18 +739,28 @@ export const cancelLock = asyncHandler(async (req: Request, res: Response) => {
       { session }
     );
 
-    // 6. Reverse lock reward if it was credited
+    // 6. Reverse lock reward if it was credited via walletService
     if (userLock.lockRewardCredited && userLock.lockRewardAmount > 0) {
-      await Wallet.findOneAndUpdate(
-        { userId },
-        { $inc: { 'balance.available': -userLock.lockRewardAmount } },
-        { session }
-      );
+      await walletService.debit({
+        userId,
+        amount: userLock.lockRewardAmount,
+        source: 'redemption',
+        description: `Lock reward reversed: cancelled "${userLock.dealSnapshot.title}"`,
+        operationType: 'lock_fee_refund',
+        referenceId: userLock._id.toString(),
+        referenceModel: 'UserLockDeal',
+        metadata: {
+          lockDealId: userLock.lockDeal.toString(),
+          userLockDealId: userLock._id,
+          reason: 'cancellation',
+        },
+        session,
+      });
 
-      console.log(`⚠️ [LOCK DEALS] Lock reward reversed: ${userLock.lockRewardAmount} coins from user ${userId}`);
+      logger.warn(`[LOCK DEALS] Lock reward reversed: ${userLock.lockRewardAmount} coins from user ${userId}`);
     }
 
-    // 7. Create refund transaction record
+    // 7. Create refund transaction display record
     await Transaction.create([{
       userId,
       type: 'credit',
@@ -775,30 +773,14 @@ export const cancelLock = asyncHandler(async (req: Request, res: Response) => {
 
     await session.commitTransaction();
 
-    // 8. Reverse CoinTransaction if reward was credited (outside session)
-    if (userLock.lockRewardCredited && userLock.lockRewardAmount > 0) {
-      await CoinTransaction.createTransaction(
-        userId,
-        'spent',
-        userLock.lockRewardAmount,
-        'redemption',
-        `Lock reward reversed: cancelled "${userLock.dealSnapshot.title}"`,
-        {
-          lockDealId: userLock.lockDeal.toString(),
-          userLockDealId: userLock._id,
-          reason: 'cancellation',
-        }
-      );
-    }
-
     // 9. Initiate Stripe refund for deposit
     if (userLock.depositStripePaymentIntentId && refundAmount > 0) {
       try {
         // Note: Stripe refund is best-effort; track manually if it fails
-        console.log(`💰 [LOCK DEALS] Initiating Stripe refund of ${refundAmount} for PI ${userLock.depositStripePaymentIntentId}`);
+        logger.info(`[LOCK DEALS] Initiating Stripe refund of ${refundAmount} for PI ${userLock.depositStripePaymentIntentId}`);
         // stripeService.refundPaymentIntent can be added later
       } catch (refundError) {
-        console.error('⚠️ [LOCK DEALS] Stripe refund failed, needs manual processing:', refundError);
+        logger.error('[LOCK DEALS] Stripe refund failed, needs manual processing:', refundError);
       }
     }
 
@@ -809,7 +791,7 @@ export const cancelLock = asyncHandler(async (req: Request, res: Response) => {
     }, 'Lock cancelled. Refund will be processed.');
   } catch (error: any) {
     await session.abortTransaction();
-    console.error('❌ [LOCK DEALS] Error cancelling lock:', error);
+    logger.error('[LOCK DEALS] Error cancelling lock:', error);
     throw new AppError('Failed to cancel lock', 500, 'LOCK_CANCEL', error);
   } finally {
     session.endSession();
@@ -854,32 +836,29 @@ export const processExpiredLocks = asyncHandler(async (req: Request, res: Respon
           { $inc: { currentLocks: -1 } }
         );
 
-        // Reverse lock reward if credited
+        // Reverse lock reward if credited via walletService
         if (lock.lockRewardCredited && lock.lockRewardAmount > 0) {
-          await Wallet.findOneAndUpdate(
-            { userId: lock.user.toString() },
-            { $inc: { 'balance.available': -lock.lockRewardAmount } }
-          );
-
-          await CoinTransaction.createTransaction(
-            lock.user.toString(),
-            'spent',
-            lock.lockRewardAmount,
-            'redemption',
-            `Lock reward reversed: expired "${lock.dealSnapshot.title}"`,
-            {
+          await walletService.debit({
+            userId: lock.user.toString(),
+            amount: lock.lockRewardAmount,
+            source: 'redemption',
+            description: `Lock reward reversed: expired "${lock.dealSnapshot.title}"`,
+            operationType: 'lock_fee_refund',
+            referenceId: lock._id.toString(),
+            referenceModel: 'UserLockDeal',
+            metadata: {
               lockDealId: lock.lockDeal.toString(),
               userLockDealId: lock._id,
               reason: 'expiry',
-            }
-          );
+            },
+          });
         }
 
         processedCount++;
-        console.log(`✅ [LOCK DEALS] Expired lock ${lock._id} processed`);
+        logger.info(`[LOCK DEALS] Expired lock ${lock._id} processed`);
       } catch (lockError: any) {
         errors.push(`Lock ${lock._id}: ${lockError.message}`);
-        console.error(`❌ [LOCK DEALS] Error processing expired lock ${lock._id}:`, lockError);
+        logger.error(`[LOCK DEALS] Error processing expired lock ${lock._id}:`, lockError);
       }
     }
 
@@ -889,7 +868,7 @@ export const processExpiredLocks = asyncHandler(async (req: Request, res: Respon
       errors: errors.length > 0 ? errors : undefined,
     }, `Processed ${processedCount} expired locks`);
   } catch (error: any) {
-    console.error('❌ [LOCK DEALS] Error processing expired locks:', error);
+    logger.error('[LOCK DEALS] Error processing expired locks:', error);
     throw new AppError('Failed to process expired locks', 500, 'EXPIRE_PROCESS', error);
   }
 });

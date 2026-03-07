@@ -2,8 +2,12 @@ import { Router } from 'express';
 import gameController from '../controllers/gameController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { createRateLimiter } from '../middleware/rateLimiter';
+import { requireGamificationFeature } from '../middleware/gamificationFeatureGate';
 
 const router = Router();
+
+// PHASE 3 — disabled until core is stable
+const gateMiniGames = requireGamificationFeature('miniGames', { games: [] });
 
 // Rate limiters for game actions
 const gameSessionLimiter = createRateLimiter({
@@ -24,6 +28,9 @@ router.get('/available', optionalAuth, gameController.getAvailableGames.bind(gam
 
 // All routes below require authentication
 router.use(authenticate);
+
+// Gate all authenticated game routes
+router.use(gateMiniGames);
 
 // ======== SPIN WHEEL ========
 router.post('/spin-wheel/create', gameSessionLimiter, gameController.createSpinWheel.bind(gameController));

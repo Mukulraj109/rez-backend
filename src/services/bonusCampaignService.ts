@@ -6,6 +6,8 @@ import { User } from '../models/User';
 import ProgramMembership from '../models/ProgramMembership';
 import { NotificationService } from './notificationService';
 import redisService from './redisService';
+import { getCachedWalletConfig } from './walletCacheService';
+import { CURRENCY_RULES } from '../config/currencyRules';
 
 const CACHE_TTL = 60; // 60 seconds for active campaigns list
 
@@ -525,32 +527,41 @@ async function creditRewardToWallet(
   // Determine category from campaign eligibility
   const category = campaign.eligibility.merchantCategories?.[0] || null;
 
-  // Create CoinTransaction
-  const coinTransaction = await CoinTransaction.createTransaction(
+  // Calculate expiry if campaign awards branded coins
+  const coinType = campaign.reward?.coinType || 'rez';
+  let expiresAtMeta: Date | undefined;
+  if (coinType === 'branded') {
+    try {
+      const walletConfig = await getCachedWalletConfig();
+      const expiryDays = walletConfig?.coinExpiryConfig?.branded?.expiryDays ?? CURRENCY_RULES.branded.expiryDays;
+      if (expiryDays > 0) { expiresAtMeta = new Date(); expiresAtMeta.setDate(expiresAtMeta.getDate() + expiryDays); }
+    } catch { /* fallback handled by backfill job */ }
+  }
+
+  // Use walletService for atomic CoinTransaction + Wallet $inc + LedgerEntry
+  const { walletService } = await import('./walletService');
+  const result = await walletService.credit({
     userId,
-    'bonus',
     amount,
-    'bonus_campaign',
-    `Bonus: ${campaign.title}`,
-    {
+    source: 'bonus_campaign',
+    description: `Bonus: ${campaign.title}`,
+    operationType: 'bonus_campaign',
+    referenceId: `bonus:${claimId}`,
+    referenceModel: 'BonusClaim',
+    metadata: {
       bonusCampaignId: campaign._id,
       bonusClaimId: claimId,
       campaignType: campaign.campaignType,
       campaignSlug: campaign.slug,
+      ...(coinType !== 'rez' && { coinType }),
+      ...(expiresAtMeta && { expiresAt: expiresAtMeta }),
+      idempotencyKey: `bonus-campaign:${claimId}`,
     },
-    category
-  );
+    category,
+  });
 
-  // Update Wallet balance using addFunds (atomically updates balance.available + balance.total + statistics)
-  const Wallet = mongoose.model('Wallet');
-  const userObjId = new mongoose.Types.ObjectId(userId);
-  let wallet = await Wallet.findOne({ user: userObjId });
-  if (!wallet) {
-    wallet = await Wallet.create({ user: userObjId });
-  }
-  await (wallet as any).addFunds(amount, 'bonus');
-
-  return coinTransaction;
+  // Return a compatible object for callers that read ._id
+  return { _id: result.transactionId, amount: result.amount, balance: result.newBalance };
 }
 
 // ============================================

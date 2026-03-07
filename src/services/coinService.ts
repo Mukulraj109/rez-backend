@@ -3,6 +3,34 @@ import { Wallet } from '../models/Wallet';
 import { UserLoyalty } from '../models/UserLoyalty';
 import mongoose from 'mongoose';
 import specialProgramService from './specialProgramService';
+import { walletService } from './walletService';
+import { createServiceLogger } from '../config/logger';
+import { getCachedWalletConfig } from './walletCacheService';
+import { CURRENCY_RULES } from '../config/currencyRules';
+
+const logger = createServiceLogger('coin-service');
+
+/**
+ * Calculate expiresAt date for a given coin type based on WalletConfig or fallback defaults.
+ * Returns undefined if the coin type has no expiry (expiryDays = 0).
+ */
+async function calculateExpiryDate(coinType: 'rez' | 'prive' | 'promo' | 'branded'): Promise<Date | undefined> {
+  let expiryDays: number;
+  try {
+    const config = await getCachedWalletConfig();
+    expiryDays = config?.coinExpiryConfig?.[coinType]?.expiryDays
+      ?? CURRENCY_RULES[coinType]?.expiryDays
+      ?? 0;
+  } catch {
+    expiryDays = CURRENCY_RULES[coinType]?.expiryDays ?? 0;
+  }
+
+  if (expiryDays <= 0) return undefined;
+
+  const expiry = new Date();
+  expiry.setDate(expiry.getDate() + expiryDays);
+  return expiry;
+}
 
 /**
  * Get user's current coin balance (global or category-specific)
@@ -19,7 +47,10 @@ export async function getCoinBalance(userId: string, category?: MainCategorySlug
  */
 export async function getCategoryBalance(userId: string, category: MainCategorySlug): Promise<number> {
   const wallet = await Wallet.findOne({ user: userId }).lean();
-  return wallet?.getCategoryBalance(category) || 0;
+  if (!wallet) return 0;
+  // .lean() returns plain object — use bracket notation, not instance method
+  const catBal = (wallet as any).categoryBalances?.[category];
+  return catBal?.available || 0;
 }
 
 /**
@@ -107,7 +138,8 @@ export async function awardCoins(
   source: string,
   description: string,
   metadata?: any,
-  category?: MainCategorySlug | null
+  category?: MainCategorySlug | null,
+  coinType?: 'rez' | 'prive' | 'promo' | 'branded'
 ): Promise<any> {
   if (amount <= 0) {
     throw new Error('Amount must be positive');
@@ -130,73 +162,31 @@ export async function awardCoins(
     }
     adjustedAmount = capCheck.adjustedAmount;
   } catch (capError) {
-    console.error('[COIN SERVICE] Program cap check failed (proceeding with original amount):', capError);
+    logger.error('Program cap check failed (proceeding with original amount)', capError, { userId, amount, source });
   }
 
-  const transaction = await CoinTransaction.createTransaction(
+  // Set expiresAt for promo/branded/prive coins based on admin-configurable rules
+  const effectiveCoinType = coinType || (metadata?.coinType as 'rez' | 'prive' | 'promo' | 'branded') || 'rez';
+  if (effectiveCoinType !== 'rez') {
+    const expiresAt = await calculateExpiryDate(effectiveCoinType);
+    if (expiresAt) {
+      metadata = { ...metadata, expiresAt };
+    }
+  }
+
+  // Use walletService for atomic CoinTransaction + Wallet $inc + LedgerEntry
+  const result = await walletService.credit({
     userId,
-    'earned',
-    adjustedAmount,
+    amount: adjustedAmount,
     source,
     description,
+    operationType: 'loyalty_credit',
+    referenceId: metadata?.referenceId || `coin-award:${userId}:${Date.now()}`,
+    referenceModel: metadata?.referenceModel || 'CoinTransaction',
     metadata,
-    category || null
-  );
-
-  // Also update the Wallet model to keep balances in sync (with retry)
-  const updateWallet = async (retryCount = 0): Promise<void> => {
-    try {
-      let wallet = await Wallet.findOne({ user: userId }).lean();
-
-      if (!wallet) {
-        wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
-      }
-
-      if (wallet) {
-        if (category) {
-          await Wallet.findByIdAndUpdate(wallet._id, {
-            $inc: {
-              [`categoryBalances.${category}.available`]: adjustedAmount,
-              [`categoryBalances.${category}.earned`]: adjustedAmount,
-              'statistics.totalEarned': adjustedAmount,
-              'balance.total': adjustedAmount
-            },
-            $set: { lastTransactionAt: new Date() }
-          });
-        } else {
-          await Wallet.findOneAndUpdate(
-            { _id: wallet._id, 'coins.type': 'rez' },
-            {
-              $inc: {
-                'balance.available': adjustedAmount,
-                'balance.total': adjustedAmount,
-                'statistics.totalEarned': adjustedAmount,
-                'coins.$.amount': adjustedAmount
-              },
-              $set: {
-                'coins.$.lastUsed': new Date(),
-                lastTransactionAt: new Date()
-              }
-            }
-          );
-        }
-        console.log(`✅ [COIN SERVICE] Wallet updated atomically: +${adjustedAmount} coins${category ? ` (${category})` : ''}`);
-      }
-    } catch (walletError) {
-      if (retryCount < 1) {
-        console.warn(`⚠️ [COIN SERVICE] Wallet update failed, retrying (attempt ${retryCount + 1}):`, walletError);
-        await updateWallet(retryCount + 1);
-      } else {
-        // Log structured data for reconciliation service to pick up
-        console.error('❌ [COIN SERVICE] Wallet update failed after retry — reconciliation needed:', {
-          userId, amount: adjustedAmount, source, category,
-          transactionId: transaction._id?.toString(),
-          error: (walletError as Error).message,
-        });
-      }
-    }
-  };
-  await updateWallet();
+    category,
+  });
+  logger.info(`Wallet credited: +${adjustedAmount} coins${category ? ` (${category})` : ''}`, { userId, source });
 
   // Also update UserLoyalty categoryCoins if category is provided
   if (category) {
@@ -213,7 +203,7 @@ export async function awardCoins(
         await loyalty.save();
       }
     } catch (loyaltyError) {
-      console.error('❌ [COIN SERVICE] Failed to update UserLoyalty categoryCoins:', loyaltyError);
+      logger.error('Failed to update UserLoyalty categoryCoins', loyaltyError, { userId, category });
     }
   }
 
@@ -223,52 +213,21 @@ export async function awardCoins(
     const { bonus, programSlug, programBonuses } = await specialProgramService.calculateMultiplierBonus(userId, adjustedAmount, source);
     if (bonus > 0) {
       const slugLabel = programBonuses.map(pb => pb.slug).join('+');
-      // Create separate bonus transaction for auditability
-      await CoinTransaction.createTransaction(
+      // Use walletService for bonus (creates CoinTransaction + Wallet $inc + LedgerEntry)
+      await walletService.credit({
         userId,
-        'bonus',
-        bonus,
-        'program_multiplier_bonus',
-        `${slugLabel} multiplier bonus on ${source}`,
-        { originalTransactionId: transaction._id, programSlug: slugLabel, programBonuses },
-        category || null
-      );
-
-      // Update Wallet with bonus
-      try {
-        const bonusWallet = await Wallet.findOne({ user: userId }).lean();
-        if (bonusWallet) {
-          if (category) {
-            await Wallet.findByIdAndUpdate(bonusWallet._id, {
-              $inc: {
-                [`categoryBalances.${category}.available`]: bonus,
-                [`categoryBalances.${category}.earned`]: bonus,
-                'statistics.totalEarned': bonus,
-                'balance.total': bonus,
-              },
-              $set: { lastTransactionAt: new Date() },
-            });
-          } else {
-            await Wallet.findOneAndUpdate(
-              { _id: bonusWallet._id, 'coins.type': 'rez' },
-              {
-                $inc: {
-                  'balance.available': bonus,
-                  'balance.total': bonus,
-                  'statistics.totalEarned': bonus,
-                  'coins.$.amount': bonus,
-                },
-                $set: { 'coins.$.lastUsed': new Date(), lastTransactionAt: new Date() },
-              }
-            );
-          }
-        }
-      } catch (bonusWalletErr) {
-        console.error('[COIN SERVICE] Failed to update wallet with multiplier bonus:', bonusWalletErr);
-      }
+        amount: bonus,
+        source: 'program_multiplier_bonus',
+        description: `${slugLabel} multiplier bonus on ${source}`,
+        operationType: 'loyalty_credit',
+        referenceId: `multiplier-bonus:${result.transactionId}`,
+        referenceModel: 'CoinTransaction',
+        metadata: { originalTransactionId: result.transactionId, programSlug: slugLabel, programBonuses },
+        category,
+      });
 
       multiplierBonus = bonus;
-      console.log(`✅ [COIN SERVICE] Multiplier bonus: +${bonus} coins (${slugLabel})`);
+      logger.info(`Multiplier bonus: +${bonus} coins (${slugLabel})`, { userId });
 
       // Track bonus per program in each membership
       for (const pb of programBonuses) {
@@ -279,15 +238,15 @@ export async function awardCoins(
     // Track monthly earnings for active memberships
     await specialProgramService.incrementMonthlyEarnings(userId, adjustedAmount + multiplierBonus).catch(() => {});
   } catch (multiplierError) {
-    console.error('[COIN SERVICE] Program multiplier calculation failed:', multiplierError);
+    logger.error('Program multiplier calculation failed', multiplierError, { userId, source });
   }
 
   return {
-    transactionId: transaction._id,
-    amount: transaction.amount,
-    newBalance: transaction.balance,
-    source: transaction.source,
-    description: transaction.description,
+    transactionId: result.transactionId,
+    amount: result.amount,
+    newBalance: result.newBalance,
+    source: result.source,
+    description: result.description,
     category: category || null,
     ...(multiplierBonus > 0 && { multiplierBonus }),
   };
@@ -328,68 +287,19 @@ export async function deductCoins(
     }
   }
 
-  const transaction = await CoinTransaction.createTransaction(
+  // Use walletService for atomic CoinTransaction + Wallet $inc + LedgerEntry
+  const result = await walletService.debit({
     userId,
-    'spent',
     amount,
     source,
     description,
+    operationType: 'payment',
+    referenceId: metadata?.referenceId || `coin-deduct:${userId}:${Date.now()}`,
+    referenceModel: metadata?.referenceModel || 'CoinTransaction',
     metadata,
-    category || null
-  );
-
-  // Also update the Wallet model to keep balances in sync
-  try {
-    const wallet = await Wallet.findOne({ user: userId }).lean();
-
-    if (wallet) {
-      if (category) {
-        // Category-specific: atomic $inc (negative) with balance guard
-        await Wallet.findOneAndUpdate(
-          {
-            _id: wallet._id,
-            [`categoryBalances.${category}.available`]: { $gte: amount }
-          },
-          {
-            $inc: {
-              [`categoryBalances.${category}.available`]: -amount,
-              [`categoryBalances.${category}.spent`]: amount,
-              'statistics.totalSpent': amount,
-              'balance.total': -amount
-            },
-            $set: { lastTransactionAt: new Date() }
-          }
-        );
-      } else {
-        // Global ReZ coins: atomic deduction with balance guard
-        const updated = await Wallet.findOneAndUpdate(
-          {
-            _id: wallet._id,
-            'balance.available': { $gte: amount },
-            'coins.type': 'rez'
-          },
-          {
-            $inc: {
-              'balance.available': -amount,
-              'balance.total': -amount,
-              'statistics.totalSpent': amount,
-              'coins.$.amount': -amount
-            },
-            $set: {
-              'coins.$.lastUsed': new Date(),
-              lastTransactionAt: new Date()
-            }
-          }
-        );
-        if (!updated) {
-          console.error(`❌ [COIN SERVICE] Atomic deduction failed - insufficient balance or concurrent update`);
-        }
-      }
-      console.log(`✅ [COIN SERVICE] Wallet updated atomically: -${amount} coins${category ? ` (${category})` : ''}`);
-    }
-  } catch (walletError) {
-    console.error('❌ [COIN SERVICE] Failed to update wallet:', walletError);
-  }
+    category,
+  });
+  logger.info(`Wallet debited: -${amount} coins${category ? ` (${category})` : ''}`, { userId, source });
 
   // Also update UserLoyalty categoryCoins if category is provided
   if (category) {
@@ -405,16 +315,16 @@ export async function deductCoins(
         }
       }
     } catch (loyaltyError) {
-      console.error('❌ [COIN SERVICE] Failed to update UserLoyalty categoryCoins:', loyaltyError);
+      logger.error('Failed to update UserLoyalty categoryCoins', loyaltyError, { userId, category });
     }
   }
 
   return {
-    transactionId: transaction._id,
-    amount: transaction.amount,
-    newBalance: transaction.balance,
-    source: transaction.source,
-    description: transaction.description,
+    transactionId: result.transactionId,
+    amount: result.amount,
+    newBalance: result.newBalance,
+    source: result.source,
+    description: result.description,
     category: category || null
   };
 }
@@ -484,7 +394,9 @@ export async function transferCoins(
       amount,
       'purchase',
       description || `Transferred ${amount} coins`,
-      { recipientUserId: toUserId }
+      { recipientUserId: toUserId },
+      null,
+      session
     );
 
     const toTransaction = await CoinTransaction.createTransaction(
@@ -493,10 +405,29 @@ export async function transferCoins(
       amount,
       'admin',
       description || `Received ${amount} coins`,
-      { senderUserId: fromUserId }
+      { senderUserId: fromUserId },
+      null,
+      session
     );
 
     await session.commitTransaction();
+
+    // Fire-and-forget: ledger entries for transfer (after commit, non-blocking)
+    try {
+      const { ledgerService } = await import('./ledgerService');
+      const { Types } = await import('mongoose');
+      await ledgerService.recordEntry({
+        debitAccount: { type: 'user_wallet', id: new Types.ObjectId(fromUserId) },
+        creditAccount: { type: 'user_wallet', id: new Types.ObjectId(toUserId) },
+        amount,
+        operationType: 'transfer',
+        referenceId: `transfer:${fromTransaction._id}`,
+        referenceModel: 'CoinTransaction',
+        metadata: { description: description || `Transferred ${amount} coins` },
+      });
+    } catch (ledgerErr) {
+      logger.error('Failed to record transfer ledger entry (non-blocking)', ledgerErr, { fromUserId, toUserId, amount });
+    }
 
     return {
       fromTransaction: {

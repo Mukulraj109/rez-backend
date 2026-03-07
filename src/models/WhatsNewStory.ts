@@ -215,18 +215,21 @@ WhatsNewStorySchema.methods.isCurrentlyActive = function(): boolean {
 };
 
 WhatsNewStorySchema.methods.incrementView = async function(): Promise<void> {
-  this.analytics.views += 1;
-  await this.save();
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { 'analytics.views': 1 }
+  });
 };
 
 WhatsNewStorySchema.methods.incrementClick = async function(): Promise<void> {
-  this.analytics.clicks += 1;
-  await this.save();
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { 'analytics.clicks': 1 }
+  });
 };
 
 WhatsNewStorySchema.methods.incrementCompletion = async function(): Promise<void> {
-  this.analytics.completions += 1;
-  await this.save();
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { 'analytics.completions': 1 }
+  });
 };
 
 WhatsNewStorySchema.methods.isTargetedForUser = function(userData?: any): boolean {

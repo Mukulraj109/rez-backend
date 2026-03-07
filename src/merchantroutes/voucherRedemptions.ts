@@ -379,98 +379,25 @@ router.post('/:code/use', async (req: Request, res: Response) => {
       { session }
     );
 
-    // Credit cashback to user's wallet - create wallet if it doesn't exist
-    let wallet = await Wallet.findOne({ user: userId }).session(session);
-
-    // Create wallet if it doesn't exist
-    if (!wallet && cashbackAmount > 0) {
-      logger.info('🎟️ [MERCHANT VOUCHER] Creating wallet for user:', userId);
-      wallet = new Wallet({
-        user: userId,
-        balance: { total: 0, available: 0, pending: 0 },
-        coins: [],
-        currency: 'INR',
-        isActive: true
-      });
-      await wallet.save({ session });
-    }
-
-    if (wallet && cashbackAmount > 0) {
-      const balanceBefore = wallet.balance.total;
-
-      // Update wallet balance
-      wallet.balance.total += cashbackAmount;
-      wallet.balance.available += cashbackAmount;
-
-      // Add to rez coins
-      const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-      if (rezCoin) {
-        rezCoin.amount += cashbackAmount;
-        rezCoin.lastEarned = new Date();
-      } else {
-        wallet.coins.push({
-          type: 'rez',
-          amount: cashbackAmount,
-          isActive: true,
-          color: '#FFD700',
-          lastEarned: new Date()
-        } as any);
-      }
-
-      await wallet.save({ session });
-
-      // Create transaction record
-      const transaction = new Transaction({
-        user: userId,
-        type: 'credit',
+    // Credit cashback via walletService (atomic $inc + CoinTransaction + LedgerEntry)
+    if (cashbackAmount > 0) {
+      const { walletService } = await import('../services/walletService');
+      await walletService.credit({
+        userId,
         amount: cashbackAmount,
-        currency: wallet.currency || 'INR',
-        category: 'cashback',
-        description: `Cashback from ${offer?.title || 'offer'} at ${store.name}`,
-        status: {
-          current: 'completed',
-          history: [{
-            status: 'completed',
-            timestamp: new Date(),
-            reason: 'Cashback credited for voucher redemption at store',
-          }],
-        },
-        source: {
-          type: 'cashback',
-          reference: redemption._id,
-          description: `In-store cashback - ${offer?.title || 'offer'}`,
-          metadata: {
-            offerId: offer?._id,
-            offerTitle: offer?.title,
-            orderAmount,
-            cashbackPercentage: offer?.cashbackPercentage,
-            redemptionCode: redemption.redemptionCode,
-            storeId: store._id,
-            storeName: store.name,
-            merchantId,
-          },
-        },
-        balanceBefore,
-        balanceAfter: wallet.balance.total,
-      });
-
-      await transaction.save({ session });
-
-      // Create CoinTransaction (source of truth for auto-sync)
-      await CoinTransaction.create([{
-        user: userId,
-        type: 'earned',
-        amount: cashbackAmount,
-        balance: wallet.balance.available,
         source: 'cashback',
         description: `In-store cashback from ${offer?.title || 'offer'} at ${store.name}`,
+        operationType: 'voucher_cashback',
+        referenceId: `voucher-cashback:${redemption._id}`,
+        referenceModel: 'OfferRedemption',
         metadata: {
           offerId: offer?._id,
           storeId: store._id,
           storeName: store.name,
           redemptionId: redemption._id,
-        }
-      }], { session });
+        },
+        session,
+      });
     }
 
     // Commit transaction

@@ -447,35 +447,34 @@ class MallAffiliateService {
         session.startTransaction();
 
         try {
-          // Deduct from wallet — MUST succeed for refund to complete
-          const wallet = await Wallet.findOne({ user: purchase.user }).session(session).lean();
-          if (!wallet || !wallet.isActive) {
+          // Deduct from wallet atomically — $gte guard prevents double-spend on concurrent requests
+          const walletBefore = await Wallet.findOne({ user: purchase.user }).session(session).lean();
+          if (!walletBefore || !walletBefore.isActive) {
             throw new Error(`Wallet not found or inactive for user ${purchase.user} — cannot process refund deduction. Manual admin review required.`);
           }
 
-          if (wallet.balance.available < deductAmount) {
-            throw new Error(`Insufficient wallet balance for refund deduction. User ${purchase.user}, needed ₹${deductAmount}, available ₹${wallet.balance.available}. Manual admin review required.`);
+          const balanceBefore = walletBefore.balance.available;
+
+          const deductResult = await Wallet.findOneAndUpdate(
+            {
+              user: purchase.user,
+              'balance.available': { $gte: deductAmount },
+              'coins': { $elemMatch: { type: 'rez', amount: { $gte: deductAmount } } }
+            },
+            {
+              $inc: {
+                'balance.available': -deductAmount,
+                'coins.$.amount': -deductAmount,
+                'statistics.totalCashback': -deductAmount
+              },
+              $set: { lastTransactionAt: new Date() }
+            },
+            { new: true, session }
+          );
+
+          if (!deductResult) {
+            throw new Error(`Insufficient wallet balance for refund deduction. User ${purchase.user}, needed ${deductAmount}, available ${balanceBefore}. Manual admin review required.`);
           }
-
-          const balanceBefore = wallet.balance.available;
-
-          // Deduct from wallet (pre-save hook recalculates balance.total)
-          wallet.balance.available -= deductAmount;
-
-          // Update statistics
-          wallet.statistics.totalCashback = Math.max(0, wallet.statistics.totalCashback - deductAmount);
-          wallet.lastTransactionAt = new Date();
-
-          // Update coins array for 'rez' type
-          if (wallet.coins && wallet.coins.length > 0) {
-            const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-            if (rezCoin) {
-              rezCoin.amount = Math.max(0, rezCoin.amount - deductAmount);
-            }
-            wallet.markModified('coins');
-          }
-
-          await wallet.save({ session });
 
           // Cancel the UserCashback record
           await UserCashback.findByIdAndUpdate(
@@ -529,7 +528,7 @@ class MallAffiliateService {
 
           // Sync wallet → User model (denormalized cache, outside transaction)
           try {
-            await wallet.syncWithUser();
+            await deductResult.syncWithUser();
           } catch (syncError) {
             console.warn(`⚠️ [AFFILIATE] User wallet sync failed after refund (non-blocking):`, syncError);
           }
@@ -681,60 +680,27 @@ class MallAffiliateService {
         isRedeemed: false,
       }], { session });
 
-      // Credit to wallet (addFunds logic with session support)
-      const wallet = await Wallet.findOne({ user: purchase.user }).session(session).lean();
-      if (!wallet) {
-        throw new Error(`Wallet not found for user ${purchase.user}`);
-      }
-
-      if (!wallet.isActive) {
-        throw new Error('Wallet is not active');
-      }
-      if (wallet.isFrozen) {
-        throw new Error('Wallet is frozen');
-      }
-      if (wallet.balance.total + purchase.actualCashback > wallet.limits.maxBalance) {
-        throw new Error(`Maximum wallet balance (${wallet.limits.maxBalance}) would be exceeded`);
-      }
-
-      // Record balance before credit for audit trail
-      const balanceBefore = wallet.balance.available;
-
-      // Update wallet balance (pre-save hook recalculates balance.total)
-      wallet.balance.available += purchase.actualCashback;
-
-      // Update statistics (matches addFunds 'cashback' type behavior)
-      wallet.statistics.totalCashback += purchase.actualCashback;
-      wallet.statistics.totalEarned += purchase.actualCashback;
-      wallet.lastTransactionAt = new Date();
-
-      // Update coins array for 'rez' type
-      if (wallet.coins && wallet.coins.length > 0) {
-        const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-        if (rezCoin) {
-          rezCoin.amount += purchase.actualCashback;
-          rezCoin.lastEarned = new Date();
-        }
-        wallet.markModified('coins');
-      }
-
-      await wallet.save({ session });
-
-      // Create CoinTransaction audit record
-      await CoinTransaction.create([{
-        user: purchase.user.toString(),
-        type: 'earned',
+      // Credit to wallet via walletService (atomic $inc + CoinTransaction + LedgerEntry)
+      const { walletService } = await import('./walletService');
+      await walletService.credit({
+        userId: purchase.user.toString(),
         amount: purchase.actualCashback,
-        balance: balanceBefore + purchase.actualCashback,
         source: 'cashback',
         description: `Affiliate cashback from ${brand?.name || 'Mall'} purchase`,
+        operationType: 'mall_affiliate',
+        referenceId: `mall-cashback:${purchase._id}`,
+        referenceModel: 'MallPurchase',
         metadata: {
           purchaseId: purchase._id,
           brandId: purchase.brand,
           orderAmount: purchase.orderAmount,
           cashbackRate: purchase.cashbackRate,
         },
-      }], { session });
+        session,
+      });
+
+      const balanceBefore = 0; // Approximate for Transaction record below
+      const wallet = await Wallet.findOne({ user: purchase.user }).lean();
 
       // Create Transaction audit record (formal financial ledger)
       await Transaction.create([{
@@ -770,22 +736,7 @@ class MallAffiliateService {
 
       await session.commitTransaction();
 
-      // Sync wallet → User model (denormalized cache, outside transaction)
-      try {
-        await wallet.syncWithUser();
-      } catch (syncError) {
-        console.warn(`⚠️ [AFFILIATE] User wallet sync failed (non-blocking):`, syncError);
-      }
-
-      // Invalidate wallet cache so user sees updated balance
-      try {
-        const { invalidateWalletCache } = require('./walletCacheService');
-        await invalidateWalletCache(String(purchase.user));
-      } catch (cacheError) {
-        console.warn(`⚠️ [AFFILIATE] Wallet cache invalidation failed (non-blocking):`, cacheError);
-      }
-
-      console.log(`💰 [AFFILIATE] Credited ₹${purchase.actualCashback} to user ${purchase.user} (balance: ${balanceBefore} → ${balanceBefore + purchase.actualCashback})`);
+      // walletService.credit already handles cache invalidation
     } catch (error) {
       await session.abortTransaction();
 

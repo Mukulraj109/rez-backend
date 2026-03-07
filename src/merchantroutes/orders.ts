@@ -613,27 +613,35 @@ router.put('/:id/status', async (req: Request, res: Response) => {
           continue;
         }
 
-        // Check if enough stock is available
-        if (!product.inventory.unlimited && product.inventory.stock < item.quantity) {
-          await session.abortTransaction();
-          session.endSession();
-          return res.status(400).json({
-            success: false,
-            message: `Insufficient stock for product: ${item.name}. Available: ${product.inventory.stock}, Required: ${item.quantity}`
-          });
-        }
-
-        // Deduct inventory
+        // Atomic stock deduction with $gte guard — prevents overselling under concurrency
         if (!product.inventory.unlimited) {
-          product.inventory.stock -= item.quantity;
+          const stockResult = await Product.findOneAndUpdate(
+            {
+              _id: item.product,
+              'inventory.unlimited': false,
+              'inventory.stock': { $gte: item.quantity }
+            },
+            {
+              $inc: { 'inventory.stock': -item.quantity }
+            },
+            { new: true, session }
+          );
 
-          // Update availability if stock reaches zero
-          if (product.inventory.stock === 0) {
-            product.inventory.isAvailable = false;
+          if (!stockResult) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(400).json({
+              success: false,
+              message: `Insufficient stock for product: ${item.name}. Required: ${item.quantity}`
+            });
           }
 
-          await product.save({ session });
-          logger.info(`Deducted ${item.quantity} units from product ${item.name}. New stock: ${product.inventory.stock}`);
+          // Mark unavailable if stock hit zero
+          if (stockResult.inventory.stock === 0) {
+            await Product.findByIdAndUpdate(item.product, { 'inventory.isAvailable': false }, { session });
+          }
+
+          logger.info(`Deducted ${item.quantity} units from product ${item.name}. New stock: ${stockResult.inventory.stock}`);
         }
       }
 

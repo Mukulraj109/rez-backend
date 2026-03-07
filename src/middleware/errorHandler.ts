@@ -1,259 +1,228 @@
 import { Request, Response, NextFunction } from 'express';
-import { sendError, sendInternalError } from '../utils/response';
+import { sendError } from '../utils/response';
 import { logger, sanitizeLog, createServiceLogger } from '../config/logger';
+import { AppError } from '../utils/AppError';
+
+// Re-export AppError from its canonical location for backward compatibility
+export { AppError } from '../utils/AppError';
 
 const errorLogger = createServiceLogger('ErrorHandler');
 
-// Custom error class
-export class AppError extends Error {
-  statusCode: number;
-  isOperational: boolean;
-  context?: string;
-  originalError?: any;
-
-  constructor(message: string, statusCode: number, context?: string, originalError?: any) {
-    super(message);
-    this.statusCode = statusCode;
-    this.isOperational = true;
-    this.context = context;
-    this.originalError = originalError;
-
-    Error.captureStackTrace(this, this.constructor);
-  }
+// Standard error response shape
+interface ErrorResponse {
+  success: false;
+  code: string;
+  message: string;
+  errors?: Array<{ field?: string; message: string }>;
+  requestId?: string;
+  stack?: string;
 }
 
 // Handle Mongoose validation errors
-const handleValidationError = (error: any) => {
-  const errors = Object.values(error.errors).map((err: any) => ({
+const handleMongooseValidationError = (error: any): AppError => {
+  const fieldErrors = Object.values(error.errors).map((err: any) => ({
     field: err.path,
     message: err.message
   }));
 
   errorLogger.warn('Validation error', {
-    errorCount: errors.length,
-    fields: errors.map((e: any) => e.field),
-    details: errors
+    errorCount: fieldErrors.length,
+    fields: fieldErrors.map((e: any) => e.field)
   });
 
-  const message = errors.length > 0
-    ? `Validation failed: ${errors.map((e: any) => `${e.field} - ${e.message}`).join(', ')}`
-    : 'Validation failed';
-
-  return new AppError(message, 400, 'VALIDATION_ERROR', error);
+  return new AppError(
+    `Validation failed: ${fieldErrors.map(e => `${e.field} - ${e.message}`).join(', ')}`,
+    400,
+    'VALIDATION_ERROR',
+    fieldErrors
+  );
 };
 
-// Handle Mongoose duplicate key errors
-const handleDuplicateKeyError = (error: any) => {
-  const field = Object.keys(error.keyValue)[0];
-  errorLogger.warn('Duplicate key error', { field, value: error.keyValue[field] });
-  return new AppError(`${field} already exists`, 409, 'DUPLICATE_KEY_ERROR', error);
+// Handle Mongoose duplicate key errors (E11000)
+const handleDuplicateKeyError = (error: any): AppError => {
+  const field = error.keyValue ? Object.keys(error.keyValue)[0] : 'unknown';
+  errorLogger.warn('Duplicate key error', { field });
+  return new AppError(`${field} already exists`, 409, 'DUPLICATE_KEY');
 };
 
-// Handle Mongoose cast errors
-const handleCastError = (error: any) => {
+// Handle Mongoose cast errors (invalid ObjectId, etc.)
+const handleCastError = (error: any): AppError => {
   errorLogger.warn('Cast error', { path: error.path, value: error.value });
-  return new AppError(`Invalid ${error.path}: ${error.value}`, 400, 'CAST_ERROR', error);
+  return new AppError(`Invalid value for ${error.path}`, 400, 'INVALID_ID');
 };
 
 // Handle JWT errors
-const handleJWTError = () => {
+const handleJWTError = (): AppError => {
   errorLogger.warn('Invalid JWT token');
   return new AppError('Invalid token. Please log in again', 401, 'JWT_INVALID');
 };
 
-const handleJWTExpiredError = () => {
+const handleJWTExpiredError = (): AppError => {
   errorLogger.warn('JWT token expired');
   return new AppError('Token expired. Please log in again', 401, 'JWT_EXPIRED');
 };
 
 // Handle Twilio errors
-const handleTwilioError = (error: any) => {
+const handleTwilioError = (error: any): AppError => {
   errorLogger.error('Twilio service error', error, {
     errorCode: error.code,
-    errorMessage: error.message,
     status: error.status
   });
-  return new AppError('SMS service unavailable. Please try again later', 503, 'TWILIO_ERROR', error);
+  return new AppError('SMS service unavailable. Please try again later', 503, 'TWILIO_ERROR');
 };
 
 // Handle SendGrid errors
-const handleSendGridError = (error: any) => {
+const handleSendGridError = (error: any): AppError => {
   errorLogger.error('SendGrid service error', error, {
-    errorCode: error.code,
-    errorMessage: error.message,
-    response: error.response?.body
+    errorCode: error.code
   });
-  return new AppError('Email service unavailable. Please try again later', 503, 'SENDGRID_ERROR', error);
+  return new AppError('Email service unavailable. Please try again later', 503, 'SENDGRID_ERROR');
 };
 
 // Handle Stripe errors
-const handleStripeError = (error: any) => {
-  const context = `Stripe error: ${error.code}`;
-  errorLogger.error(context, error, {
+const handleStripeError = (error: any): AppError => {
+  errorLogger.error('Stripe error', error, {
     errorCode: error.code,
-    errorType: error.type,
-    message: error.message,
-    statusCode: error.statusCode
+    errorType: error.type
   });
 
-  const statusMap: { [key: string]: number } = {
-    'card_error': 400,
-    'rate_limit_error': 429,
-    'authentication_error': 401,
-    'api_connection_error': 503,
-    'invalid_request_error': 400
+  const statusMap: Record<string, number> = {
+    card_error: 400,
+    rate_limit_error: 429,
+    authentication_error: 401,
+    api_connection_error: 503,
+    invalid_request_error: 400
   };
 
-  const statusCode = statusMap[error.type] || 500;
-  return new AppError(error.message || 'Payment processing error', statusCode, 'STRIPE_ERROR', error);
+  return new AppError(
+    error.message || 'Payment processing error',
+    statusMap[error.type] || 500,
+    'STRIPE_ERROR'
+  );
 };
 
 // Handle Razorpay errors
-const handleRazorpayError = (error: any) => {
+const handleRazorpayError = (error: any): AppError => {
   errorLogger.error('Razorpay service error', error, {
     errorCode: error.code,
-    errorDescription: error.description,
-    source: error.source
+    description: error.description
   });
-  return new AppError('Payment service error. Please try again', 503, 'RAZORPAY_ERROR', error);
+  return new AppError('Payment service error. Please try again', 503, 'RAZORPAY_ERROR');
 };
 
 // Handle database errors
-const handleDatabaseError = (error: any) => {
+const handleDatabaseError = (error: any): AppError => {
   errorLogger.error('Database error', error, {
     name: error.name,
-    message: error.message,
     code: error.code
   });
-  return new AppError('Database operation failed. Please try again', 503, 'DATABASE_ERROR', error);
+  return new AppError('Database operation failed. Please try again', 503, 'DATABASE_ERROR');
 };
 
 // Handle timeout errors
-const handleTimeoutError = (error: any) => {
+const handleTimeoutError = (error: any): AppError => {
   errorLogger.warn('Request timeout', { message: error.message });
-  return new AppError('Request timeout. Please try again', 408, 'TIMEOUT_ERROR', error);
+  return new AppError('Request timeout. Please try again', 408, 'TIMEOUT_ERROR');
 };
 
-// Global error handling middleware
+/**
+ * Classify an unknown error into an AppError.
+ * Never leaks internal details (stack traces, schema info, file paths) to the client.
+ */
+const classifyError = (error: any): AppError => {
+  // Already an AppError — pass through
+  if (error instanceof AppError) return error;
+
+  // Mongoose validation error
+  if (error.name === 'ValidationError' && error.errors) return handleMongooseValidationError(error);
+
+  // MongoDB duplicate key (E11000)
+  if (error.code === 11000) return handleDuplicateKeyError(error);
+
+  // Mongoose CastError (invalid ObjectId)
+  if (error.name === 'CastError') return handleCastError(error);
+
+  // JWT errors
+  if (error.name === 'JsonWebTokenError') return handleJWTError();
+  if (error.name === 'TokenExpiredError') return handleJWTExpiredError();
+
+  // External service errors
+  if (error.message?.includes('Twilio')) return handleTwilioError(error);
+  if (error.message?.includes('SendGrid')) return handleSendGridError(error);
+  if (error.type?.includes('Stripe') || error.type === 'card_error') return handleStripeError(error);
+  if (error.statusCode === 400 && error.description) return handleRazorpayError(error);
+
+  // MongoDB driver errors
+  if (error.name === 'MongoError' || error.name === 'MongoServerError') return handleDatabaseError(error);
+
+  // Timeout
+  if (error.code === 'ETIMEDOUT' || error.message === 'timeout') return handleTimeoutError(error);
+
+  // Unknown — generic 500, never expose raw message
+  return new AppError('Something went wrong', 500, 'INTERNAL_ERROR');
+};
+
+// Global error handling middleware — must be registered AFTER all routes
 export const globalErrorHandler = (
   error: any,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ) => {
-  const correlationId = (req as any).correlationId;
+  const requestId = (req as any).correlationId as string | undefined;
   const userId = (req as any).userId;
 
-  let err = { ...error };
-  err.message = error.message;
-
-  // Log the error with context
+  // Log the raw error with full context (server-side only)
   errorLogger.error(`${req.method} ${req.path} - Error occurred`, error, {
     method: req.method,
     path: req.path,
     query: sanitizeLog(req.query),
     body: sanitizeLog(req.body),
     userId,
-    correlationId,
+    requestId,
     errorName: error.name,
     errorMessage: error.message
-  }, correlationId);
+  }, requestId);
 
-  // Mongoose validation error
-  if (error.name === 'ValidationError') {
-    err = handleValidationError(error);
-  }
-  // Mongoose duplicate key error
-  else if (error.code === 11000) {
-    err = handleDuplicateKeyError(error);
-  }
-  // Mongoose cast error
-  else if (error.name === 'CastError') {
-    err = handleCastError(error);
-  }
-  // JWT errors
-  else if (error.name === 'JsonWebTokenError') {
-    err = handleJWTError();
-  }
-  else if (error.name === 'TokenExpiredError') {
-    err = handleJWTExpiredError();
-  }
-  // External service errors
-  else if (error.message && error.message.includes('Twilio')) {
-    err = handleTwilioError(error);
-  }
-  else if (error.message && error.message.includes('SendGrid')) {
-    err = handleSendGridError(error);
-  }
-  else if (error.type && error.type.includes('StripeInvalid')) {
-    err = handleStripeError(error);
-  }
-  else if (error.statusCode === 400 && error.description) {
-    err = handleRazorpayError(error);
-  }
-  else if (error.name === 'MongoError' || error.name === 'MongoServerError') {
-    err = handleDatabaseError(error);
-  }
-  else if (error.code === 'ETIMEDOUT' || error.message === 'timeout') {
-    err = handleTimeoutError(error);
-  }
-  else if (!(error instanceof AppError)) {
-    err = new AppError(
-      'An unexpected error occurred',
-      500,
-      'INTERNAL_SERVER_ERROR',
-      error
-    );
-  }
+  const appError = classifyError(error);
 
-  // Send error response
-  const statusCode = err.statusCode || 500;
-  const message = err.isOperational ? err.message : 'Something went wrong';
-
-  // Log the response status
-  if (statusCode >= 500) {
-    errorLogger.error(`Error response - ${statusCode}`, null, {
-      correlationId,
-      statusCode,
-      message,
-      context: err.context
-    }, correlationId);
+  // Log severity-appropriate message
+  if (appError.statusCode >= 500) {
+    errorLogger.error(`Server error ${appError.statusCode}`, null, {
+      requestId,
+      code: appError.code,
+      message: appError.message
+    }, requestId);
   } else {
-    errorLogger.warn(`Client error - ${statusCode}`, {
-      correlationId,
-      statusCode,
-      message,
-      context: err.context
-    }, correlationId);
+    errorLogger.warn(`Client error ${appError.statusCode}`, {
+      requestId,
+      code: appError.code,
+      message: appError.message
+    }, requestId);
   }
+
+  // Build response — never include stack in production
+  const response: ErrorResponse = {
+    success: false,
+    code: appError.code,
+    message: appError.isOperational ? appError.message : 'Something went wrong',
+    ...(appError.errors && { errors: appError.errors }),
+    ...(requestId && { requestId })
+  };
 
   if (process.env.NODE_ENV === 'development') {
-    return res.status(statusCode).json({
-      success: false,
-      error: {
-        message: err.message,
-        context: err.context,
-        statusCode: err.statusCode,
-        ...(err.originalError && { originalError: err.originalError.message })
-      },
-      stack: err.stack,
-      correlationId
-    });
+    response.stack = error.stack;
+    // In dev, always show the real message
+    response.message = appError.message || error.message;
   }
 
-  // Production error response
-  if (err.isOperational) {
-    return sendError(res, message, statusCode);
-  }
-
-  // Programming or other unknown error: don't leak error details
-  return sendInternalError(res, 'Something went wrong');
+  return res.status(appError.statusCode).json(response);
 };
 
 // 404 handler for undefined routes
-export const notFoundHandler = (req: Request, res: Response, next: NextFunction) => {
+export const notFoundHandler = (req: Request, _res: Response, next: NextFunction) => {
   const error = new AppError(`Route ${req.originalUrl} not found`, 404, 'NOT_FOUND');
-  errorLogger.warn('Not found error', {
+  errorLogger.warn('Route not found', {
     method: req.method,
     path: req.originalUrl
   }, (req as any).correlationId);
@@ -263,13 +232,7 @@ export const notFoundHandler = (req: Request, res: Response, next: NextFunction)
 // Async error wrapper for route handlers
 export const asyncHandler = (fn: Function) => {
   return (req: Request, res: Response, next: NextFunction) => {
-    Promise.resolve(fn(req, res, next)).catch((error) => {
-      errorLogger.error('Async handler error', error, {
-        correlationId: (req as any).correlationId,
-        userId: (req as any).userId
-      }, (req as any).correlationId);
-      next(error);
-    });
+    Promise.resolve(fn(req, res, next)).catch(next);
   };
 };
 
@@ -279,16 +242,16 @@ export const withErrorLogging = (
   operation: () => Promise<any>,
   correlationId?: string
 ) => {
-  const operationLogger = createServiceLogger(operationName);
+  const opLogger = createServiceLogger(operationName);
 
   return async () => {
     try {
-      operationLogger.info(`Starting operation: ${operationName}`, {}, correlationId);
+      opLogger.info(`Starting: ${operationName}`, {}, correlationId);
       const result = await operation();
-      operationLogger.info(`Successfully completed: ${operationName}`, {}, correlationId);
+      opLogger.info(`Completed: ${operationName}`, {}, correlationId);
       return result;
     } catch (error) {
-      operationLogger.error(`Failed operation: ${operationName}`, error, {}, correlationId);
+      opLogger.error(`Failed: ${operationName}`, error, {}, correlationId);
       throw error;
     }
   };

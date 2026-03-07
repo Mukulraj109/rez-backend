@@ -429,7 +429,9 @@ router.get('/bank-offers',
   validateQuery(Joi.object({
     category: Joi.string().trim().max(100),
     cardType: Joi.string().valid('credit', 'debit', 'wallet', 'upi', 'bnpl'),
-    limit: Joi.number().integer().min(1).max(50).default(20)
+    sort: Joi.string().valid('all', 'highest', 'expiring'),
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(50).default(10)
   })),
   getBankOffers
 );
@@ -687,7 +689,8 @@ router.get('/special-profiles/:slug/offers',
 router.get('/friends-redeemed',
   optionalAuth,
   validateQuery(Joi.object({
-    limit: Joi.number().integer().min(1).max(50).default(10)
+    limit: Joi.number().integer().min(1).max(50).default(10),
+    page: Joi.number().integer().min(1).default(1),
   })),
   getFriendsRedeemed
 );

@@ -50,6 +50,7 @@ import { initBonusCampaignJobs } from './jobs/bonusCampaignJob';
 import { initChallengeLifecycleJobs } from './jobs/challengeLifecycleJob';
 import { initializeTournamentLifecycleJobs } from './jobs/tournamentLifecycleJob';
 import { initializePrizeDistributionJob } from './jobs/leaderboardPrizeDistributionJob';
+import { isGamificationEnabled } from './config/gamificationFeatureFlags';
 import { runStuckTransactionRecovery } from './jobs/stuckTransactionRecoveryJob';
 import { runGiftDelivery } from './jobs/giftDeliveryJob';
 import { runGiftExpiry } from './jobs/giftExpiryJob';
@@ -57,6 +58,7 @@ import { runSurpriseDropExpiry } from './jobs/surpriseDropExpiryJob';
 import { runPartnerEarningsSnapshot } from './jobs/partnerEarningsSnapshotJob';
 import { initializeReferralExpiryJob, runReferralExpiry } from './jobs/referralExpiryJob';
 import { initializePriveInviteExpiryJob } from './jobs/priveInviteExpiryJob';
+import { runPushReceiptProcessing } from './jobs/pushReceiptJob';
 import { seedWalletFeatureFlags } from './services/walletFeatureService';
 
 // Import Bull-based scheduled job service (replaces node-cron with Bull repeatable jobs)
@@ -156,6 +158,7 @@ import outletRoutes from './routes/outletRoutes';
 import flashSaleRoutes from './routes/flashSaleRoutes';
 import subscriptionRoutes from './routes/subscriptionRoutes';
 import billRoutes from './routes/billRoutes';
+import billPaymentRoutes from './routes/billPaymentRoutes';
 import billingRoutes from './routes/billingRoutes';
 import activityFeedRoutes from './routes/activityFeedRoutes';
 import unifiedGamificationRoutes from './routes/unifiedGamificationRoutes';
@@ -197,6 +200,7 @@ import statsRoutes from './routes/statsRoutes';  // Social proof stats routes
 import platformRoutes from './routes/platformRoutes';  // Platform stats (public)
 import exploreRoutes from './routes/exploreRoutes';  // Explore page routes
 import testRoutes from './routes/testRoutes';  // Integration test routes (dev/test only)
+import insuranceRoutes from './routes/insuranceRoutes';  // Insurance browsing routes
 import adminExploreRoutes from './routes/adminExploreRoutes';  // Admin explore management routes
 import { adminAuditMiddleware } from './middleware/adminAuditMiddleware';  // Admin audit trail
 // Admin panel routes
@@ -262,6 +266,7 @@ import {
   adminAdminUsersRoutes,
 } from './routes/admin';
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
+import rechargeRoutes from './routes/rechargeRoutes';  // Mobile/DTH/Broadband recharge routes
 import bonusZoneRoutes from './routes/bonusZoneRoutes';  // Bonus Zone campaign routes
 import adminBonusZoneRoutes from './routes/admin/bonusZone';  // Admin Bonus Zone management
 import adminOffersSectionRoutes from './routes/admin/offersSectionConfig';  // Admin Offers Section Config
@@ -500,6 +505,25 @@ app.use((req: any, res: any, next: any) => {
 
 app.use(express.urlencoded({ extended: true, limit: '50kb' }));
 
+// Global request sanitization — XSS + NoSQL injection prevention
+// Mounted after body parsing, before routes. Webhook routes (above) are unaffected.
+import mongoSanitize from 'express-mongo-sanitize';
+import { sanitizeRequest, preventNoSQLInjection } from './middleware/sanitization';
+// Wrap mongoSanitize to avoid "Cannot set property query" error on Express 5+ / newer router
+app.use((req, res, next) => {
+  if (req.body) mongoSanitize.sanitize(req.body, { replaceWith: '_' });
+  if (req.params) mongoSanitize.sanitize(req.params, { replaceWith: '_' });
+  // req.query is read-only in Express 5+; sanitize a copy and merge back
+  if (req.query && typeof req.query === 'object') {
+    const sanitized = mongoSanitize.sanitize({ ...req.query }, { replaceWith: '_' });
+    Object.keys(req.query).forEach(k => { (req.query as any)[k] = (sanitized as any)[k]; });
+  }
+  next();
+});
+app.use(sanitizeRequest);
+app.use(preventNoSQLInjection);
+console.log('✅ Request sanitization middleware enabled (mongo-sanitize + XSS + NoSQL injection)');
+
 // Cookie parser middleware (required for CSRF protection)
 import cookieParser from 'cookie-parser';
 app.use(cookieParser());
@@ -531,20 +555,24 @@ if (process.env.NODE_ENV === 'development' && process.env.ENABLE_MORGAN === 'tru
 // Rate limiting - Production security
 app.use(generalLimiter);
 
-// Swagger UI Documentation
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-  customCss: '.swagger-ui .topbar { display: none }',
-  customSiteTitle: 'REZ Merchant API Documentation',
-  customfavIcon: '/favicon.ico'
-}));
+// Swagger UI Documentation — dev/staging only
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+    customCss: '.swagger-ui .topbar { display: none }',
+    customSiteTitle: 'REZ API Documentation',
+    customfavIcon: '/favicon.ico'
+  }));
 
-// Serve Swagger JSON
-app.get('/api-docs.json', (req, res) => {
-  res.setHeader('Content-Type', 'application/json');
-  res.send(swaggerSpec);
-});
+  app.get('/api-docs.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(swaggerSpec);
+  });
 
-console.log('✅ Swagger documentation available at /api-docs');
+  logger.info('Swagger documentation available at /api-docs');
+} else {
+  app.use('/api-docs', (_req, res) => res.status(404).json({ message: 'Not found' }));
+  app.get('/api-docs.json', (_req, res) => res.status(404).json({ message: 'Not found' }));
+}
 
 // Health check endpoint with API info
 app.get('/health', async (req, res) => {
@@ -924,6 +952,10 @@ console.log('✅ Billing routes registered at /api/billing');
 app.use(`${API_PREFIX}/bills`, billRoutes);
 console.log('✅ Bill routes registered at /api/bills');
 
+// Bill Payment Routes - Utility bill payments (electricity, water, gas, etc.)
+app.use(`${API_PREFIX}/bill-payments`, billPaymentRoutes);
+console.log('✅ Bill payment routes registered at /api/bill-payments');
+
 // Unified Gamification Routes - All gamification functionality under one endpoint
 app.use(`${API_PREFIX}/gamification`, unifiedGamificationRoutes);
 console.log('✅ Unified gamification routes registered at /api/gamification');
@@ -985,6 +1017,11 @@ console.log('✅ Travel webhook routes registered at /api/travel-webhooks');
 // Financial Services Routes - Financial services endpoints (bills, OTT, recharge, gold, insurance)
 app.use(`${API_PREFIX}/financial-services`, financialServicesRoutes);
 console.log('✅ Financial services routes registered at /api/financial-services');
+
+// Gold Savings Routes - Digital gold buy/sell/holdings
+import goldSavingsRoutes from './routes/goldSavingsRoutes';
+app.use(`${API_PREFIX}/gold`, goldSavingsRoutes);
+console.log('✅ Gold savings routes registered at /api/gold');
 
 // Service Bookings Routes - User service bookings
 app.use(`${API_PREFIX}/service-bookings`, serviceBookingRoutes);
@@ -1141,6 +1178,11 @@ console.log('✅ Admin surprise coin drops routes registered at /api/admin/surpr
 app.use(`${API_PREFIX}/admin/partner-earnings`, adminPartnerEarningsRoutes);
 console.log('✅ Admin partner earnings routes registered at /api/admin/partner-earnings');
 
+// Admin Gold Price Routes - Set/manage gold prices
+import adminGoldPriceRoutes from './routes/admin/goldPrice';
+app.use(`${API_PREFIX}/admin/gold`, adminGoldPriceRoutes);
+console.log('✅ Admin gold price routes registered at /api/admin/gold');
+
 app.use(`${API_PREFIX}/admin/referrals`, adminReferralsRoutes);
 console.log('✅ Admin referrals routes registered at /api/admin/referrals');
 
@@ -1187,6 +1229,10 @@ console.log('✅ Admin engagement config routes registered at /api/admin/engagem
 // Campaign Routes - Homepage exciting deals
 app.use(`${API_PREFIX}/campaigns`, campaignRoutes);
 console.log('✅ Campaign routes registered at /api/campaigns');
+
+// Recharge Routes - Mobile/DTH/Broadband recharge with cashback
+app.use(`${API_PREFIX}/recharge`, rechargeRoutes);
+console.log('✅ Recharge routes registered at /api/recharge');
 
 // Bonus Zone Routes - Production campaign reward engine
 app.use(`${API_PREFIX}/bonus-zone`, bonusZoneRoutes);
@@ -1236,6 +1282,10 @@ console.log('✅ Cash Store Affiliate routes registered at /api/cashstore/affili
 app.use(`${API_PREFIX}/prive`, priveRoutes);
 app.use(`${API_PREFIX}/prive`, priveInviteRoutes);
 console.log('✅ Privé routes registered at /api/prive (including invite system)');
+
+// Insurance Routes - Browse insurance plans with cashback
+app.use(`${API_PREFIX}/insurance`, insuranceRoutes);
+console.log('✅ Insurance routes registered at /api/insurance');
 
 // Store Gallery Routes - Public gallery viewing
 app.use(`${API_PREFIX}/stores`, storeGalleryRoutes);
@@ -1491,7 +1541,9 @@ stockSocketService.initialize(io);
 earningsSocketService.initialize(io);
 
 // Initialize gamification socket service (live tournament leaderboards)
-gamificationSocketService.initialize(io);
+if (isGamificationEnabled('tournaments')) {
+  gamificationSocketService.initialize(io);
+}
 
 // Initialize real-time service
 const realTimeServiceInstance = RealTimeService.getInstance(io);
@@ -1615,9 +1667,11 @@ async function startServer() {
     console.log('✅ Reservation cleanup job started (runs every 5 min)');
 
     // Initialize leaderboard refresh job (gamification Phase 5.2)
-    console.log('🔄 Initializing leaderboard refresh job...');
-    initializeLeaderboardRefreshJob();
-    console.log('✅ Leaderboard refresh job started (runs every 5 min)');
+    if (isGamificationEnabled('leaderboard')) {
+      console.log('🔄 Initializing leaderboard refresh job...');
+      initializeLeaderboardRefreshJob();
+      console.log('✅ Leaderboard refresh job started (runs every 5 min)');
+    }
 
     // Initialize bill verification job (gamification Phase 5.2)
     console.log('🔄 Initializing bill verification job...');
@@ -1630,24 +1684,32 @@ async function startServer() {
     console.log('✅ Creator jobs started (trending, stats, conversions, tiers)');
 
     // Initialize streak reset job (resets broken streaks daily at 00:05 UTC)
-    console.log('🔄 Initializing streak reset job...');
-    initializeStreakResetJob();
-    console.log('✅ Streak reset job started (runs daily at 00:05 UTC)');
+    if (isGamificationEnabled('streaks')) {
+      console.log('🔄 Initializing streak reset job...');
+      initializeStreakResetJob();
+      console.log('✅ Streak reset job started (runs daily at 00:05 UTC)');
+    }
 
     // Initialize bonus campaign jobs (status transitions every 5m, expire claims every 30m)
-    console.log('🔄 Initializing bonus campaign jobs...');
-    initBonusCampaignJobs();
-    console.log('✅ Bonus campaign jobs started (transitions: 5m, expire claims: 30m)');
+    if (isGamificationEnabled('bonusZones')) {
+      console.log('🔄 Initializing bonus campaign jobs...');
+      initBonusCampaignJobs();
+      console.log('✅ Bonus campaign jobs started (transitions: 5m, expire claims: 30m)');
+    }
 
     // Initialize challenge lifecycle jobs (status transitions every 5m, cleanup every 30m)
-    console.log('🔄 Initializing challenge lifecycle jobs...');
-    initChallengeLifecycleJobs();
-    console.log('✅ Challenge lifecycle jobs started (transitions: 5m, cleanup: 30m)');
+    if (isGamificationEnabled('challenges')) {
+      console.log('🔄 Initializing challenge lifecycle jobs...');
+      initChallengeLifecycleJobs();
+      console.log('✅ Challenge lifecycle jobs started (transitions: 5m, cleanup: 30m)');
+    }
 
     // Initialize tournament lifecycle jobs (activation + completion + prize distribution)
-    console.log('🔄 Initializing tournament lifecycle jobs...');
-    initializeTournamentLifecycleJobs();
-    console.log('✅ Tournament lifecycle jobs started (activation: 5m, completion: 5m)');
+    if (isGamificationEnabled('tournaments')) {
+      console.log('🔄 Initializing tournament lifecycle jobs...');
+      initializeTournamentLifecycleJobs();
+      console.log('✅ Tournament lifecycle jobs started (activation: 5m, completion: 5m)');
+    }
 
     // Initialize wallet production-readiness jobs with distributed locks
     console.log('🔄 Initializing wallet production jobs...');
@@ -1698,7 +1760,21 @@ async function startServer() {
       finally { await redisService.releaseLock('partner_earnings_snapshot', lock); }
     });
 
+    // Push receipt processing — every 15 min, one pod only
+    cron.schedule('*/15 * * * *', async () => {
+      const lock = await redisService.acquireLock('push_receipt_processing', 600);
+      if (!lock) return;
+      try { await runPushReceiptProcessing(); }
+      catch (e) { console.error('[JOB] pushReceiptProcessing:', e); }
+      finally { await redisService.releaseLock('push_receipt_processing', lock); }
+    });
+
     console.log('✅ Wallet production jobs started with distributed locks');
+
+    // Wallet-ledger reconciliation — daily at 4 AM
+    const { initializeLedgerReconciliationJob } = await import('./jobs/walletLedgerReconciliationJob');
+    initializeLedgerReconciliationJob();
+    console.log('✅ Wallet-ledger reconciliation job started (runs daily at 4:00 AM)');
     // Referral expiry — daily at 3 AM
     initializeReferralExpiryJob();
     console.log('✅ Referral expiry job started (runs daily at 3 AM)');
@@ -1721,9 +1797,11 @@ async function startServer() {
     console.log('✅ Audit retention service initialized');
 
     // Initialize leaderboard prize distribution job (hourly check for period-end prizes)
-    console.log('🔄 Initializing leaderboard prize distribution job...');
-    initializePrizeDistributionJob();
-    console.log('✅ Leaderboard prize distribution job started (runs hourly)');
+    if (isGamificationEnabled('leaderboard')) {
+      console.log('🔄 Initializing leaderboard prize distribution job...');
+      initializePrizeDistributionJob();
+      console.log('✅ Leaderboard prize distribution job started (runs hourly)');
+    }
 
     // Initialize order lifecycle background jobs
     console.log('🔄 Initializing order lifecycle jobs...');

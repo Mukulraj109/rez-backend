@@ -227,29 +227,34 @@ CouponSchema.methods.checkExpiry = function(): boolean {
   return false;
 };
 
-// Instance method to increment view count
+// Instance method to increment view count — uses atomic $inc to avoid race conditions
 CouponSchema.methods.incrementViewCount = async function() {
-  this.viewCount += 1;
-  await this.save();
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { viewCount: 1 }
+  });
 };
 
-// Instance method to increment claim count
+// Instance method to increment claim count — uses atomic $inc to avoid race conditions
 CouponSchema.methods.incrementClaimCount = async function() {
-  this.claimCount += 1;
-  await this.save();
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { claimCount: 1 }
+  });
 };
 
-// Instance method to increment usage count
+// Instance method to increment usage count — uses atomic $inc to avoid race conditions
 CouponSchema.methods.incrementUsageCount = async function() {
-  this.usageCount += 1;
-  this.usageLimit.usedCount += 1;
+  const result = await (this.constructor as any).findByIdAndUpdate(
+    this._id,
+    { $inc: { usageCount: 1, 'usageLimit.usedCount': 1 } },
+    { new: true }
+  );
 
-  // Check if usage limit reached
-  if (this.usageLimit.totalUsage > 0 && this.usageLimit.usedCount >= this.usageLimit.totalUsage) {
-    this.status = 'inactive';
+  // Check if usage limit reached and deactivate atomically
+  if (result && result.usageLimit.totalUsage > 0 && result.usageLimit.usedCount >= result.usageLimit.totalUsage) {
+    await (this.constructor as any).findByIdAndUpdate(this._id, {
+      $set: { status: 'inactive' }
+    });
   }
-
-  await this.save();
 };
 
 // Static method to mark expired coupons

@@ -576,66 +576,73 @@ VideoSchema.methods.incrementViews = async function(userId?: string): Promise<vo
   await (this.constructor as any).findByIdAndUpdate(this._id, updateOps);
 };
 
-// Method to toggle like
+// Method to toggle like — uses atomic $addToSet/$pull to avoid race conditions
 VideoSchema.methods.toggleLike = async function(userId: string): Promise<boolean> {
   const userObjectId = new mongoose.Types.ObjectId(userId);
-  const isLiked = this.engagement.likes.includes(userObjectId);
-  
+  const isLiked = this.engagement.likes.some((id: Types.ObjectId) => id.equals(userObjectId));
+
   if (isLiked) {
-    this.engagement.likes = this.engagement.likes.filter(
-      (id: Types.ObjectId) => !id.equals(userObjectId)
-    );
+    await (this.constructor as any).findByIdAndUpdate(this._id, {
+      $pull: { 'engagement.likes': userObjectId }
+    });
   } else {
-    this.engagement.likes.push(userObjectId);
+    await (this.constructor as any).findByIdAndUpdate(this._id, {
+      $addToSet: { 'engagement.likes': userObjectId }
+    });
   }
-  
-  await this.save();
-  return !isLiked; // Return new like status
+
+  return !isLiked;
 };
 
-// Method to toggle bookmark
+// Method to toggle bookmark — uses atomic $addToSet/$pull to avoid race conditions
 VideoSchema.methods.toggleBookmark = async function(userId: string): Promise<boolean> {
   const userObjectId = new mongoose.Types.ObjectId(userId);
-
-  // Initialize bookmarkedBy if not exists
-  if (!this.bookmarkedBy) {
-    this.bookmarkedBy = [];
-  }
-
-  // Initialize engagement if not exists
-  if (!this.engagement) {
-    this.engagement = { views: 0, likes: [], shares: 0, comments: 0, saves: 0, reports: 0 };
-  }
-
-  const isBookmarked = this.bookmarkedBy.some((id: Types.ObjectId) => id.equals(userObjectId));
+  const isBookmarked = (this.bookmarkedBy || []).some((id: Types.ObjectId) => id.equals(userObjectId));
 
   if (isBookmarked) {
-    this.bookmarkedBy = this.bookmarkedBy.filter(
-      (id: Types.ObjectId) => !id.equals(userObjectId)
-    );
+    await (this.constructor as any).findByIdAndUpdate(this._id, {
+      $pull: { bookmarkedBy: userObjectId }
+    });
   } else {
-    this.bookmarkedBy.push(userObjectId);
+    await (this.constructor as any).findByIdAndUpdate(this._id, {
+      $addToSet: { bookmarkedBy: userObjectId }
+    });
   }
 
-  // Update engagement.saves count
-  this.engagement.saves = this.bookmarkedBy.length;
+  // Recalculate engagement.saves count atomically
+  const updated = await (this.constructor as any).findById(this._id).select('bookmarkedBy');
+  if (updated) {
+    await (this.constructor as any).findByIdAndUpdate(this._id, {
+      $set: { 'engagement.saves': updated.bookmarkedBy.length }
+    });
+  }
 
-  await this.save();
-  return !isBookmarked; // Return new bookmark status
+  return !isBookmarked;
 };
 
-// Method to add comment (simplified)
+// Method to add comment (simplified) — uses atomic $inc to avoid race conditions
 VideoSchema.methods.addComment = async function(userId: string, content: string): Promise<void> {
   // In a full implementation, this would create a Comment document
-  this.engagement.comments += 1;
-  await this.save();
+  await (this.constructor as any).findByIdAndUpdate(this._id, {
+    $inc: { 'engagement.comments': 1 }
+  });
 };
 
-// Method to increment shares
+// Method to increment shares — uses atomic $inc to avoid race conditions
 VideoSchema.methods.share = async function(): Promise<void> {
-  this.engagement.shares += 1;
-  this.analytics.shareRate = (this.engagement.shares / this.engagement.views) * 100;
-  await this.save();
+  const result = await (this.constructor as any).findByIdAndUpdate(
+    this._id,
+    { $inc: { 'engagement.shares': 1 } },
+    { new: true }
+  );
+  if (result) {
+    this.engagement.shares = result.engagement.shares;
+    if (result.engagement?.views > 0) {
+      await (this.constructor as any).findByIdAndUpdate(this._id, {
+        $set: { 'analytics.shareRate': (result.engagement.shares / result.engagement.views) * 100 }
+      });
+    }
+  }
 };
 
 // Method to update analytics

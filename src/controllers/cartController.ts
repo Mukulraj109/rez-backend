@@ -1053,38 +1053,23 @@ export const unlockItem = asyncHandler(async (req: Request, res: Response) => {
     if (lockedItem?.isPaidLock && lockedItem?.lockFee && lockedItem.lockFee > 0) {
       logger.info('🔓💰 [UNLOCK ITEM] Refunding paid lock fee:', lockedItem.lockFee);
 
-      const { Wallet } = await import('../models/Wallet');
       const { Transaction } = await import('../models/Transaction');
 
-      const wallet = await Wallet.findOne({ user: req.userId }).lean() as any;
-      if (wallet) {
-        // Refund to wallet balance
-        await wallet.addFunds(lockedItem.lockFee, 'refund');
+      // Refund lock fee via walletService (atomic $inc + CoinTransaction + LedgerEntry)
+      const { walletService } = await import('../services/walletService');
+      await walletService.credit({
+        userId: req.userId,
+        amount: lockedItem.lockFee,
+        source: 'purchase',
+        description: `Lock fee refund - lock cancelled`,
+        operationType: 'lock_fee_refund',
+        referenceId: `lock-refund:${productId}`,
+        referenceModel: 'Cart',
+        metadata: { productId },
+      });
 
-        // Also update coins array
-        const rezCoin = wallet.coins?.find((c: any) => c.type === 'rez');
-        if (rezCoin) {
-          rezCoin.amount += lockedItem.lockFee;
-          rezCoin.lastUsed = new Date();
-          await wallet.save();
-        }
-
-        // Create CoinTransaction for refund
-        try {
-          const { CoinTransaction } = await import('../models/CoinTransaction');
-          await CoinTransaction.createTransaction(
-            req.userId,
-            'refunded',
-            lockedItem.lockFee,
-            'purchase',
-            `Lock fee refund - lock cancelled`,
-            { productId }
-          );
-        } catch (coinTxError) {
-          logger.error('⚠️ [UNLOCK ITEM] CoinTransaction refund failed (non-blocking):', coinTxError);
-        }
-
-        // Create refund transaction record
+      {
+        // Create refund transaction display record
         await Transaction.create({
           user: req.userId,
           type: 'credit',
@@ -1098,8 +1083,8 @@ export const unlockItem = asyncHandler(async (req: Request, res: Response) => {
             description: 'Lock fee refund',
           },
           status: { current: 'completed', history: [{ status: 'completed', timestamp: new Date() }] },
-          balanceBefore: wallet.balance.total - lockedItem.lockFee,
-          balanceAfter: wallet.balance.total,
+          balanceBefore: 0,
+          balanceAfter: lockedItem.lockFee,
           isReversible: false,
           notes: `Refund for cancelled lock on product ${productId}`
         });
@@ -1400,39 +1385,19 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
       );
     }
 
-    // 4. Deduct from wallet (balance + coins array + CoinTransaction)
-    const balanceBefore = wallet.balance.total;
-    await wallet.deductFunds(lockFee);
-
-    // Also update coins array (deductFunds only updates balance, not coins)
-    // This mirrors how orderController deducts coins at checkout
-    const rezCoin = wallet.coins?.find((c: any) => c.type === 'rez');
-    if (rezCoin) {
-      rezCoin.amount = Math.max(0, rezCoin.amount - lockFee);
-      rezCoin.lastUsed = new Date();
-      await wallet.save();
-    }
-
-    // Create CoinTransaction record so auto-sync stays consistent
-    // (GET /wallet/balance auto-syncs from CoinTransaction as source of truth)
-    try {
-      const { CoinTransaction } = await import('../models/CoinTransaction');
-      await CoinTransaction.createTransaction(
-        req.userId,
-        'spent',
-        lockFee,
-        'purchase',
-        `Lock fee for ${product.name} (${duration}h lock)`,
-        { productId: product._id, lockDuration: duration }
-      );
-      logger.info('🔒💰 [LOCK WITH PAYMENT] CoinTransaction created for lock fee');
-    } catch (coinTxError) {
-      logger.error('⚠️ [LOCK WITH PAYMENT] CoinTransaction creation failed (non-blocking):', coinTxError);
-      // Non-blocking: wallet already deducted, transaction record will be created below
-    }
-
-    const balanceAfter = wallet.balance.total;
-    logger.info('🔒💰 [LOCK WITH PAYMENT] Payment deducted:', { balanceBefore, balanceAfter, lockFee });
+    // 4. Deduct from wallet via walletService (atomic $inc + CoinTransaction + LedgerEntry)
+    const { walletService: ws } = await import('../services/walletService');
+    await ws.debit({
+      userId: req.userId,
+      amount: lockFee,
+      source: 'purchase',
+      description: `Lock fee for ${product.name} (${duration}h lock)`,
+      operationType: 'lock_fee',
+      referenceId: `lock-fee:${product._id}`,
+      referenceModel: 'Cart',
+      metadata: { productId: product._id, lockDuration: duration },
+    });
+    logger.info('Lock fee deducted via walletService:', { lockFee });
 
     // 5. Create transaction record
     const transaction = await Transaction.create({
@@ -1461,8 +1426,8 @@ export const lockItemWithPayment = asyncHandler(async (req: Request, res: Respon
           timestamp: new Date()
         }]
       },
-      balanceBefore,
-      balanceAfter,
+      balanceBefore: 0,
+      balanceAfter: 0,
       isReversible: true,
       notes: `Lock duration: ${duration} hours, Payment method: wallet`
     });

@@ -360,18 +360,25 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
     }
 
     // Create new review with pending status
-    const review = new Review({
-      store: storeId,
-      user: userId,
-      rating,
-      title,
-      comment,
-      images: images || [],
-      verified: false, // Not verified until approved
-      moderationStatus: 'pending' // Requires merchant approval
-    });
-
-    await review.save();
+    // Unique compound index { user, store } prevents duplicate reviews atomically
+    let review;
+    try {
+      review = await Review.create({
+        store: storeId,
+        user: userId,
+        rating,
+        title,
+        comment,
+        images: images || [],
+        verified: false, // Not verified until approved
+        moderationStatus: 'pending' // Requires merchant approval
+      });
+    } catch (err: any) {
+      if (err.code === 11000) {
+        throw new AppError('You have already reviewed this store', 400);
+      }
+      throw err;
+    }
 
     // Don't update store rating statistics yet - wait for approval
     // Store ratings will be updated when merchant approves the review

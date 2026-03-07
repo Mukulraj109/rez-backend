@@ -12,35 +12,45 @@ import { optionalAuth, requireAuth } from '../middleware/auth';
 import { validateQuery, validateParams, validateBody, commonSchemas } from '../middleware/validation';
 import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
+import { logger } from '../config/logger';
 
 const router = Router();
 router.use(generalLimiter);
 
-// Batch analytics events from frontend
-router.post('/batch',
-  optionalAuth,
-  validateBody(Joi.object({
-    events: Joi.array().items(
-      Joi.object({
-        name: Joi.string().required().max(100),
-        properties: Joi.object().unknown(true),
-        timestamp: Joi.date().iso(),
-        userId: Joi.string().max(50),
-        sessionId: Joi.string().max(100),
-      })
-    ).max(100).required()
-  })),
-  async (req, res) => {
-    try {
-      const { events } = req.body;
-      console.log(`[Analytics] Received batch of ${events.length} events`);
-      res.json({ success: true, message: `Received ${events.length} events` });
-    } catch (error) {
-      console.error('[Analytics] Batch processing error:', error);
-      res.status(500).json({ success: false, message: 'Failed to process analytics batch' });
-    }
+// Shared validation schema for batch event ingestion
+const batchEventsSchema = Joi.object({
+  events: Joi.array().items(
+    Joi.object({
+      name: Joi.string().required().max(100),
+      properties: Joi.object().unknown(true),
+      timestamp: Joi.number().integer().allow(null),
+      userId: Joi.string().max(50).allow(null, ''),
+      sessionId: Joi.string().max(100).allow(null, ''),
+      platform: Joi.string().max(20).allow(null, ''),
+      appVersion: Joi.string().max(20).allow(null, ''),
+    })
+  ).max(100).required(),
+  sessionId: Joi.string().max(100).allow(null, ''),
+  userId: Joi.string().max(50).allow(null, ''),
+});
+
+// Shared handler for batch event ingestion
+const handleBatchEvents = async (req: any, res: any) => {
+  try {
+    const { events } = req.body;
+    logger.info(`[Analytics] Received batch of ${events.length} events`);
+    res.json({ success: true, message: `Received ${events.length} events` });
+  } catch (error) {
+    logger.error('[Analytics] Batch processing error:', error);
+    res.status(500).json({ success: false, message: 'Failed to process analytics batch' });
   }
-);
+};
+
+// Batch analytics events from frontend
+router.post('/batch', optionalAuth, validateBody(batchEventsSchema), handleBatchEvents);
+
+// Alias for frontend CustomProvider (posts to /api/analytics/events)
+router.post('/events', optionalAuth, validateBody(batchEventsSchema), handleBatchEvents);
 
 // Track an analytics event
 router.post('/track',   // analyticsLimiter,, // Disabled for development

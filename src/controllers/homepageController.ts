@@ -92,7 +92,13 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
     const homepageCacheKey = `homepage:${region || 'default'}:${activeMode}`;
     const HOMEPAGE_TTL = 300; // 5 minutes — reduces DB load at scale, client can force-refresh via pull-to-refresh
 
-    const cached = await redisService.get<any>(homepageCacheKey);
+    // Fetch homepage sections (cached) and user context (per-user, not cached) in parallel
+    // userContext is only fetched if user is authenticated — it adds wallet, cart, voucher, etc.
+    const cachedPromise = redisService.get<any>(homepageCacheKey);
+    const userContextPromise = userId ? fetchUserContext(userId) : Promise.resolve(null);
+
+    const [cached, userContext] = await Promise.all([cachedPromise, userContextPromise]);
+
     if (cached) {
       const duration = Date.now() - startTime;
       res.set({
@@ -101,7 +107,11 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
         'X-Response-Time': `${duration}ms`,
         'X-Cache': 'HIT',
       });
-      return sendSuccess(res, cached, 'Homepage data retrieved');
+      // Merge per-user context into cached shared data
+      return sendSuccess(res, {
+        ...cached,
+        ...(userContext ? { userContext } : {}),
+      }, 'Homepage data retrieved');
     }
 
     // Cache miss — fetch from DB
@@ -117,6 +127,7 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
     const duration = Date.now() - startTime;
 
     // Store in Redis (fire and forget — don't delay response)
+    // Note: userContext is NOT cached here — it's per-user data
     redisService.set(homepageCacheKey, result.data, HOMEPAGE_TTL).catch(() => {});
 
     res.set({
@@ -130,9 +141,10 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
     logger.info(`   Sections returned: ${Object.keys(result.data).length}`);
     logger.info(`   Total items: ${Object.values(result.data).reduce((sum: number, arr: any) => sum + (Array.isArray(arr) ? arr.length : 0), 0)}`);
 
-    // Send response with mode and region info
+    // Send response with mode, region info, and user context
     sendSuccess(res, {
       ...result.data,
+      ...(userContext ? { userContext } : {}),
       _metadata: {
         ...result.metadata,
         mode: activeMode,
@@ -212,6 +224,56 @@ export const getAvailableSections = asyncHandler(async (req: Request, res: Respo
 });
 
 /**
+ * Shared helper: fetch user-specific context data (wallet, cart, vouchers, etc.)
+ * Used by both the homepage batch endpoint and the standalone user-context endpoint.
+ */
+async function fetchUserContext(userId: string): Promise<{
+  walletBalance: number;
+  totalSaved: number;
+  voucherCount: number;
+  offersCount: number;
+  cartItemCount: number;
+  subscription: { tier: string; status: string };
+} | null> {
+  try {
+    const [wallet, activeVoucherCount, activeRedemptionCount, totalOffersCount, cart, subscription] = await Promise.all([
+      Wallet.findOne({ user: userId }).select('balance coins brandedCoins statistics').lean().catch(() => null),
+      UserVoucher.countDocuments({ user: userId, status: 'active' }).catch(() => 0),
+      OfferRedemption.countDocuments({ user: userId, status: 'active' }).catch(() => 0),
+      Offer.countDocuments({
+        isActive: true,
+        startDate: { $lte: new Date() },
+        endDate: { $gte: new Date() },
+      }).catch(() => 0),
+      Cart.getActiveCart(String(userId)).then(c => c).catch(() => null),
+      subscriptionBenefitsService.getUserSubscription(userId).catch(() => null),
+    ]);
+
+    const rezCoin = wallet?.coins?.find((c: any) => c.type === 'rez');
+    const walletBalance = rezCoin?.amount || 0;
+    const totalSaved = wallet?.statistics
+      ? (wallet.statistics.totalCashback || 0) + (wallet.statistics.totalRefunds || 0)
+      : 0;
+    const cartItemCount = cart?.items?.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0) || 0;
+
+    return {
+      walletBalance,
+      totalSaved,
+      voucherCount: activeVoucherCount + activeRedemptionCount,
+      offersCount: totalOffersCount,
+      cartItemCount,
+      subscription: subscription ? {
+        tier: subscription.tier,
+        status: subscription.status,
+      } : { tier: 'free', status: 'active' },
+    };
+  } catch (error) {
+    logger.error('Error fetching user context:', error);
+    return null;
+  }
+}
+
+/**
  * @route   GET /api/homepage/user-context
  * @desc    Get all user-specific homepage data in a single request
  *          Combines: wallet balance, voucher count, offer count, cart count, subscription tier
@@ -224,55 +286,10 @@ export const getUserContext = asyncHandler(async (req: Request, res: Response) =
     return sendUnauthorized(res, 'Authentication required');
   }
 
-  try {
-    const [wallet, activeVoucherCount, activeRedemptionCount, totalOffersCount, cart, subscription] = await Promise.all([
-      // Wallet balance
-      Wallet.findOne({ user: userId }).select('balance coins brandedCoins statistics').lean().catch(() => null),
-
-      // Active vouchers count
-      UserVoucher.countDocuments({ user: userId, status: 'active' }).catch(() => 0),
-
-      // Active offer redemptions count
-      OfferRedemption.countDocuments({ user: userId, status: 'active' }).catch(() => 0),
-
-      // Total available offers count
-      Offer.countDocuments({
-        isActive: true,
-        startDate: { $lte: new Date() },
-        endDate: { $gte: new Date() },
-      }).catch(() => 0),
-
-      // Cart item count
-      Cart.getActiveCart(String(userId)).then(c => c).catch(() => null),
-
-      // Subscription tier
-      subscriptionBenefitsService.getUserSubscription(userId).catch(() => null),
-    ]);
-
-    // Extract wallet data
-    const rezCoin = wallet?.coins?.find((c: any) => c.type === 'rez');
-    const walletBalance = rezCoin?.amount || 0;
-    const totalSaved = wallet?.statistics
-      ? (wallet.statistics.totalCashback || 0) + (wallet.statistics.totalRefunds || 0)
-      : 0;
-
-    // Cart item count
-    const cartItemCount = cart?.items?.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0) || 0;
-
-    sendSuccess(res, {
-      walletBalance,
-      totalSaved,
-      voucherCount: activeVoucherCount + activeRedemptionCount,
-      offersCount: totalOffersCount,
-      cartItemCount,
-      subscription: subscription ? {
-        tier: subscription.tier,
-        status: subscription.status,
-      } : { tier: 'free', status: 'active' },
-    }, 'User context retrieved');
-
-  } catch (error) {
-    logger.error('❌ [Homepage] Error fetching user context:', error);
-    sendInternalError(res, 'Failed to fetch user context');
+  const data = await fetchUserContext(userId);
+  if (!data) {
+    return sendInternalError(res, 'Failed to fetch user context');
   }
+
+  sendSuccess(res, data, 'User context retrieved');
 });

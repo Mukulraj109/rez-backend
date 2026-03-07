@@ -244,14 +244,15 @@ CreatorPickSchema.methods.toggleLike = async function (userId: Types.ObjectId): 
   );
 
   if (isLiked) {
-    this.engagement.likes = this.engagement.likes.filter(
-      (id: Types.ObjectId) => id.toString() !== userId.toString()
-    );
+    await (this.constructor as any).findByIdAndUpdate(this._id, {
+      $pull: { 'engagement.likes': userId }
+    });
   } else {
-    this.engagement.likes.push(userId);
+    await (this.constructor as any).findByIdAndUpdate(this._id, {
+      $addToSet: { 'engagement.likes': userId }
+    });
   }
 
-  await this.save();
   return !isLiked;
 };
 
@@ -261,14 +262,15 @@ CreatorPickSchema.methods.toggleBookmark = async function (userId: Types.ObjectI
   );
 
   if (isBookmarked) {
-    this.engagement.bookmarks = this.engagement.bookmarks.filter(
-      (id: Types.ObjectId) => id.toString() !== userId.toString()
-    );
+    await (this.constructor as any).findByIdAndUpdate(this._id, {
+      $pull: { 'engagement.bookmarks': userId }
+    });
   } else {
-    this.engagement.bookmarks.push(userId);
+    await (this.constructor as any).findByIdAndUpdate(this._id, {
+      $addToSet: { 'engagement.bookmarks': userId }
+    });
   }
 
-  await this.save();
   return !isBookmarked;
 };
 

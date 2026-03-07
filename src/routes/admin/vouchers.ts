@@ -160,9 +160,19 @@ router.put('/:id', async (req: Request, res: Response) => {
       return sendError(res, 'Invalid voucher brand ID', 400);
     }
 
+    // Whitelist allowed fields — prevents mass-assignment of unexpected fields
+    const allowedFields = ['name', 'description', 'logo', 'backgroundColor', 'category', 'denominations',
+      'cashbackRate', 'terms', 'howToRedeem', 'isActive', 'featured', 'store', 'validityDays', 'tags'];
+    const updates: Record<string, any> = {};
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    }
+
     const voucher = await VoucherBrand.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body },
+      { $set: updates },
       { new: true, runValidators: true }
     );
 

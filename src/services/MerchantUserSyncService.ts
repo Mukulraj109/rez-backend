@@ -4,6 +4,7 @@ import { Category } from '../models/Category';
 import { MProduct } from '../models/MerchantProduct';
 import { Product } from '../models/Product';
 import { CacheInvalidator } from '../utils/cacheHelper';
+import { logger } from '../config/logger';
 
 // Map merchant businessType to category slug for auto-assignment
 const BUSINESS_TYPE_TO_CATEGORY_SLUG: Record<string, string> = {
@@ -48,16 +49,23 @@ export class MerchantUserSyncService {
    */
   static async syncAllMerchantsToStores(): Promise<void> {
     try {
-      console.log('🔄 Starting sync of all merchants to stores...');
-      
+      logger.info('Starting sync of all merchants to stores...');
+
       const merchants = await Merchant.find({}).lean();
+
+      // Batch query: fetch all merchantIds that already have stores
+      const merchantIds = merchants.map(m => m._id);
+      const existingStores = await Store.find(
+        { merchantId: { $in: merchantIds } },
+        { merchantId: 1 }
+      ).lean();
+      const existingMerchantIdSet = new Set(existingStores.map(s => s.merchantId?.toString()));
+
       let syncedCount = 0;
       let skippedCount = 0;
 
       for (const merchant of merchants) {
-        // Check if store already exists for this merchant
-        const existingStore = await Store.findOne({ merchantId: merchant._id }).lean();
-        if (existingStore) {
+        if (existingMerchantIdSet.has(merchant._id.toString())) {
           skippedCount++;
           continue;
         }
@@ -66,9 +74,9 @@ export class MerchantUserSyncService {
         syncedCount++;
       }
 
-      console.log(`✅ Sync complete: ${syncedCount} stores created, ${skippedCount} skipped (already exist)`);
+      logger.info(`Sync complete: ${syncedCount} stores created, ${skippedCount} skipped (already exist)`);
     } catch (error) {
-      console.error('❌ Error syncing merchants to stores:', error);
+      logger.error('Error syncing merchants to stores:', error);
     }
   }
 
@@ -77,16 +85,23 @@ export class MerchantUserSyncService {
    */
   static async syncAllMerchantProductsToUserProducts(): Promise<void> {
     try {
-      console.log('🔄 Starting sync of all merchant products to user products...');
-      
+      logger.info('Starting sync of all merchant products to user products...');
+
       const merchantProducts = await MProduct.find({}).lean();
+
+      // Batch query: fetch all SKUs that already exist in Product collection
+      const allSkus = merchantProducts.map(mp => mp.sku).filter(Boolean);
+      const existingProducts = await Product.find(
+        { sku: { $in: allSkus } },
+        { sku: 1 }
+      ).lean();
+      const existingSkuSet = new Set(existingProducts.map(p => p.sku));
+
       let syncedCount = 0;
       let skippedCount = 0;
 
       for (const merchantProduct of merchantProducts) {
-        // Check if user product already exists with this SKU
-        const existingProduct = await Product.findOne({ sku: merchantProduct.sku }).lean();
-        if (existingProduct) {
+        if (merchantProduct.sku && existingSkuSet.has(merchantProduct.sku)) {
           skippedCount++;
           continue;
         }
@@ -95,16 +110,16 @@ export class MerchantUserSyncService {
         syncedCount++;
       }
 
-      console.log(`✅ Product sync complete: ${syncedCount} products created, ${skippedCount} skipped (already exist)`);
+      logger.info(`Product sync complete: ${syncedCount} products created, ${skippedCount} skipped (already exist)`);
 
       // Invalidate product caches after bulk sync
       if (syncedCount > 0) {
         await CacheInvalidator.invalidateProductLists().catch((err) => {
-          console.warn('[CACHE-INVALIDATION-WARN] Product sync cache invalidation failed:', err);
+          logger.warn('[CACHE-INVALIDATION-WARN] Product sync cache invalidation failed:', err);
         });
       }
     } catch (error) {
-      console.error('❌ Error syncing merchant products to user products:', error);
+      logger.error('Error syncing merchant products to user products:', error);
     }
   }
 
@@ -225,10 +240,10 @@ export class MerchantUserSyncService {
 
       await store.save();
       
-      console.log(`🏪 Created store "${merchant.businessName}" for merchant ${merchant._id}`);
+      logger.info(`Created store "${merchant.businessName}" for merchant ${merchant._id}`);
 
     } catch (error) {
-      console.error('Error creating store for merchant:', error);
+      logger.error('Error creating store for merchant:', error);
       throw error;
     }
   }
@@ -241,7 +256,7 @@ export class MerchantUserSyncService {
       // Find the store associated with this merchant
       const store = await Store.findOne({ merchantId: merchantId }).lean();
       if (!store) {
-        console.error('No store found for merchant:', merchantId);
+        logger.error('No store found for merchant:', merchantId);
         return;
       }
 
@@ -345,10 +360,10 @@ export class MerchantUserSyncService {
 
       await userProduct.save();
       
-      console.log(`📦 Created user-side product "${merchantProduct.name}" for merchant ${merchantId}`);
+      logger.info(`Created user-side product "${merchantProduct.name}" for merchant ${merchantId}`);
 
     } catch (error) {
-      console.error('Error creating user-side product:', error);
+      logger.error('Error creating user-side product:', error);
       throw error;
     }
   }
@@ -392,7 +407,7 @@ export class MerchantUserSyncService {
         }
       };
     } catch (error) {
-      console.error('Error getting sync status:', error);
+      logger.error('Error getting sync status:', error);
       return null;
     }
   }
@@ -401,11 +416,11 @@ export class MerchantUserSyncService {
    * Force full sync - sync all merchants and products
    */
   static async forceFullSync(): Promise<void> {
-    console.log('🚀 Starting full sync process...');
+    logger.info('Starting full sync process...');
     
     await this.syncAllMerchantsToStores();
     await this.syncAllMerchantProductsToUserProducts();
     
-    console.log('✅ Full sync completed!');
+    logger.info('Full sync completed!');
   }
 }

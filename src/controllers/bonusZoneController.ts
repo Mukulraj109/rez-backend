@@ -804,25 +804,20 @@ export const adminRejectClaim = asyncHandler(async (req: Request, res: Response)
     },
   });
 
-  // If coins were already credited, reverse them
+  // If coins were already credited, reverse them via walletService
   if (wasCredited) {
     try {
-      await CoinTransaction.createTransaction(
-        claim.userId.toString(),
-        'spent',
-        claim.rewardAmount,
-        'admin',
-        `Bonus reversed: ${reason || 'Admin rejection'}`,
-        { bonusClaimId: claimId, reversal: true }
-      );
-
-      // Deduct from wallet
-      const Wallet = mongoose.model('Wallet');
-      const wallet = await Wallet.findOne({ user: claim.userId });
-      if (wallet) {
-        (wallet as any).balance.available = Math.max(0, (wallet as any).balance.available - claim.rewardAmount);
-        await wallet.save();
-      }
+      const { walletService } = await import('../services/walletService');
+      await walletService.debit({
+        userId: claim.userId.toString(),
+        amount: claim.rewardAmount,
+        source: 'admin',
+        description: `Bonus reversed: ${reason || 'Admin rejection'}`,
+        operationType: 'admin_adjustment',
+        referenceId: `bonus-reversal:${claimId}`,
+        referenceModel: 'BonusClaim',
+        metadata: { bonusClaimId: claimId, reversal: true, idempotencyKey: `bonus-reversal:${claimId}` },
+      });
     } catch (reverseErr) {
       logger.error('[BONUS ADMIN] Failed to reverse coins for rejected claim:', reverseErr);
     }

@@ -1,11 +1,15 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { sendSuccess, sendBadRequest, sendError } from '../utils/response';
+import { requireGamificationFeature } from '../middleware/gamificationFeatureGate';
 
 const router = Router();
 
 // All earn routes require authentication
 router.use(authenticate);
+
+// PHASE 2 — disabled until core is stable
+router.use(requireGamificationFeature('bonusZones', { stores: [] }));
 
 /**
  * GET /api/earn/nearby?lat=...&lng=...&radius=10&limit=20

@@ -6,8 +6,10 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { User } from '../../models/User';
-import { generateToken, verifyToken } from '../../middleware/auth';
+import { generateToken, verifyToken, authenticate, logoutAllDevices } from '../../middleware/auth';
 import { authLimiter } from '../../middleware/rateLimiter';
+import { generateTotpSecret, verifyTotp, enableTotp, disableTotp, isTotpEnabled } from '../../services/adminTotpService';
+import { logger } from '../../config/logger';
 
 const router = Router();
 
@@ -25,7 +27,7 @@ const ROLE_HIERARCHY: Record<string, number> = {
  */
 router.post('/login', authLimiter, async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, totpCode } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({
@@ -76,6 +78,25 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
         success: false,
         message: 'Invalid credentials'
       });
+    }
+
+    // Check TOTP 2FA if enabled for this admin
+    const totpEnabled = await isTotpEnabled(String(user._id));
+    if (totpEnabled) {
+      if (!totpCode) {
+        return res.status(403).json({
+          success: false,
+          message: 'TOTP code required',
+          requiresTotp: true
+        });
+      }
+      const totpValid = await verifyTotp(String(user._id), totpCode);
+      if (!totpValid) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid TOTP code'
+        });
+      }
     }
 
     // Generate JWT token with actual role (critical for RBAC + socket.io auth)
@@ -185,6 +206,108 @@ router.get('/me', async (req: Request, res: Response) => {
       success: false,
       message: 'Invalid token'
     });
+  }
+});
+
+/**
+ * POST /api/admin/auth/totp/setup
+ * Generate TOTP secret and QR code URI for admin 2FA setup
+ */
+router.post('/totp/setup', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const adminRoles = ['admin', 'support', 'operator', 'super_admin'];
+    if (!req.user || !adminRoles.includes(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    const result = await generateTotpSecret(userId);
+
+    res.json({
+      success: true,
+      data: {
+        secret: result.secret,
+        uri: result.uri,
+        message: 'Scan the QR code with your authenticator app, then verify with /totp/verify'
+      }
+    });
+  } catch (error: any) {
+    logger.error('[TOTP] Setup error:', error);
+    res.status(500).json({ success: false, message: 'Failed to setup TOTP' });
+  }
+});
+
+/**
+ * POST /api/admin/auth/totp/verify
+ * Verify TOTP code and enable 2FA
+ */
+router.post('/totp/verify', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { code } = req.body;
+
+    if (!code || typeof code !== 'string' || code.length !== 6) {
+      return res.status(400).json({ success: false, message: 'Valid 6-digit TOTP code required' });
+    }
+
+    const enabled = await enableTotp(userId, code);
+    if (!enabled) {
+      return res.status(401).json({ success: false, message: 'Invalid TOTP code' });
+    }
+
+    res.json({ success: true, message: 'TOTP 2FA enabled successfully' });
+  } catch (error: any) {
+    logger.error('[TOTP] Verify error:', error);
+    res.status(500).json({ success: false, message: 'Failed to verify TOTP' });
+  }
+});
+
+/**
+ * DELETE /api/admin/auth/totp
+ * Disable TOTP 2FA (requires valid code)
+ */
+router.delete('/totp', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const { code } = req.body;
+
+    if (!code || typeof code !== 'string' || code.length !== 6) {
+      return res.status(400).json({ success: false, message: 'Valid 6-digit TOTP code required to disable 2FA' });
+    }
+
+    const disabled = await disableTotp(userId, code);
+    if (!disabled) {
+      return res.status(401).json({ success: false, message: 'Invalid TOTP code' });
+    }
+
+    res.json({ success: true, message: 'TOTP 2FA disabled successfully' });
+  } catch (error: any) {
+    logger.error('[TOTP] Disable error:', error);
+    res.status(500).json({ success: false, message: 'Failed to disable TOTP' });
+  }
+});
+
+/**
+ * POST /api/admin/auth/logout-all-devices
+ * Invalidate all tokens for the current admin user
+ */
+router.post('/logout-all-devices', authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const adminRoles = ['admin', 'support', 'operator', 'super_admin'];
+    if (!req.user || !adminRoles.includes(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    await logoutAllDevices(userId);
+
+    // Clear stored refresh token
+    await User.findByIdAndUpdate(userId, { $unset: { 'auth.refreshToken': 1 } });
+
+    res.json({ success: true, message: 'All sessions invalidated. All devices must re-login.' });
+  } catch (error: any) {
+    logger.error('[AUTH] Logout all devices error:', error);
+    res.status(500).json({ success: false, message: 'Failed to invalidate sessions' });
   }
 });
 

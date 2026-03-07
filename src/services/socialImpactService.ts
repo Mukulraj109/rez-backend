@@ -7,6 +7,8 @@ import { Wallet } from '../models/Wallet';
 import { awardCoins } from './coinService';
 import mongoose from 'mongoose';
 import crypto from 'crypto';
+import { getCachedWalletConfig } from './walletCacheService';
+import { CURRENCY_RULES } from '../config/currencyRules';
 
 interface EventFilters {
   eventStatus?: 'upcoming' | 'ongoing' | 'completed';
@@ -404,23 +406,31 @@ class SocialImpactService {
             );
             actualBrandCoinsAwarded = brandCoins;
 
-            // Record branded coin transaction for audit trail
+            // Calculate expiry for branded coins
+            let brandedExpiresAt: Date | undefined;
+            try {
+              const walletConfig = await getCachedWalletConfig();
+              const expiryDays = walletConfig?.coinExpiryConfig?.branded?.expiryDays ?? CURRENCY_RULES.branded.expiryDays;
+              if (expiryDays > 0) { brandedExpiresAt = new Date(); brandedExpiresAt.setDate(brandedExpiresAt.getDate() + expiryDays); }
+            } catch { /* fallback handled by backfill job */ }
+
+            // Record branded coin transaction for audit trail (uses createTransaction to preserve running balance)
             const sponsorDoc = event.sponsor as any;
-            await CoinTransaction.create({
-              user: userId,
-              type: 'branded_award',
-              amount: brandCoins,
-              balance: 0, // Branded coins don't affect ReZ balance
-              source: 'social_impact_reward',
-              description: `${sponsorDoc.brandCoinName || sponsorDoc.name} earned from: ${event.name}`,
-              metadata: {
+            await CoinTransaction.createTransaction(
+              userId,
+              'branded_award',
+              brandCoins,
+              'social_impact_reward',
+              `${sponsorDoc.brandCoinName || sponsorDoc.name} earned from: ${event.name}`,
+              {
                 eventId: event._id,
                 sponsorId: event.sponsor._id,
                 sponsorName: sponsorDoc.name,
                 enrollmentId: (enrollment as any)._id,
-                isBrandedCoin: true
+                isBrandedCoin: true,
+                ...(brandedExpiresAt && { expiresAt: brandedExpiresAt }),
               }
-            });
+            );
 
             // Debit sponsor budget if SponsorAllocation model exists
             try {

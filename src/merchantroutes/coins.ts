@@ -8,6 +8,8 @@ import { User } from '../models/User';
 import { Order } from '../models/Order';
 import { merchantWalletService } from '../services/merchantWalletService';
 import mongoose from 'mongoose';
+import { getCachedWalletConfig } from '../services/walletCacheService';
+import { CURRENCY_RULES } from '../config/currencyRules';
 
 const router = Router();
 
@@ -119,6 +121,24 @@ router.post('/award', async (req: Request, res: Response) => {
       '#6366F1'  // Default brand color for merchant coins
     );
 
+    // Calculate expiry for branded coins from admin config
+    let brandedExpiresAt: Date | undefined;
+    try {
+      const walletConfig = await getCachedWalletConfig();
+      const expiryDays = walletConfig?.coinExpiryConfig?.branded?.expiryDays ?? CURRENCY_RULES.branded.expiryDays;
+      if (expiryDays > 0) {
+        brandedExpiresAt = new Date();
+        brandedExpiresAt.setDate(brandedExpiresAt.getDate() + expiryDays);
+      }
+    } catch {
+      // Fallback to default
+      const expiryDays = CURRENCY_RULES.branded.expiryDays;
+      if (expiryDays > 0) {
+        brandedExpiresAt = new Date();
+        brandedExpiresAt.setDate(brandedExpiresAt.getDate() + expiryDays);
+      }
+    }
+
     // Create a coin transaction record for tracking (type 'branded_award' does NOT
     // affect the running ReZ balance — branded coins are tracked in wallet.brandedCoins)
     await CoinTransaction.createTransaction(
@@ -132,7 +152,8 @@ router.post('/award', async (req: Request, res: Response) => {
         storeId,
         storeName: store.name,
         coinType: 'branded',
-        awardedBy: merchantId
+        awardedBy: merchantId,
+        ...(brandedExpiresAt && { expiresAt: brandedExpiresAt }),
       }
     );
 

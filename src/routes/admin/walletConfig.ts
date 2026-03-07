@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { WalletConfig } from '../../models/WalletConfig';
+import { invalidateWalletConfigCache } from '../../services/walletCacheService';
 
 const router = Router();
 
@@ -32,7 +33,7 @@ router.put('/', async (req: Request, res: Response) => {
     const allowedFields = [
       'transferLimits', 'giftLimits', 'rechargeConfig',
       'expiryConfig', 'commissionRate', 'coinConversion', 'fraudThresholds',
-      'redemptionConfig', 'habitLoopConfig'
+      'redemptionConfig', 'habitLoopConfig', 'coinExpiryConfig', 'coinRules'
     ];
 
     for (const field of allowedFields) {
@@ -43,6 +44,9 @@ router.put('/', async (req: Request, res: Response) => {
     }
 
     await config.save();
+
+    // Invalidate cached config so all services pick up new values immediately
+    await invalidateWalletConfigCache().catch(() => {});
 
     res.json({ success: true, data: config, message: 'Wallet config updated' });
   } catch (error: any) {

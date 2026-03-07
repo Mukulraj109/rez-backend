@@ -3,6 +3,10 @@ import { Notification, INotification, INotificationData } from '../models/Notifi
 import { UserSettings } from '../models/UserSettings';
 import { getIO } from '../config/socket';
 import { SocketRoom } from '../types/socket';
+import pushNotificationService from './pushNotificationService';
+import { createServiceLogger } from '../config/logger';
+
+const logger = createServiceLogger('notification-service');
 
 /**
  * Notification Service
@@ -75,6 +79,21 @@ export class NotificationService {
     // Emit real-time notification via Socket.IO
     if (!scheduledAt || scheduledAt <= new Date()) {
       this.emitNotificationToUser(userId.toString(), notification);
+
+      // Send push notification if channel is enabled
+      if (finalDeliveryChannels.includes('push')) {
+        pushNotificationService.sendPushToUser(userId.toString(), {
+          title,
+          body: message,
+          data: {
+            notificationId: notification._id?.toString(),
+            type: category,
+            ...data
+          },
+          channelId: category === 'order' ? 'orders' : category === 'earning' ? 'earnings' : 'default',
+          priority: priority === 'urgent' || priority === 'high' ? 'high' : 'default'
+        }).catch(err => logger.error('Push delivery failed', { userId: userId.toString(), error: err.message }));
+      }
     }
 
     return notification;

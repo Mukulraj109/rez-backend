@@ -133,11 +133,13 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
     } catch (processingError: any) {
       logger.error('❌ [RAZORPAY WEBHOOK] Processing error:', processingError);
 
-      // Update log with error
-      webhookLog.status = 'failed';
-      webhookLog.errorMessage = processingError.message;
+      // Update log with error — use pending_retry if under max retries
       webhookLog.retryCount += 1;
+      webhookLog.status = webhookLog.retryCount >= 3 ? 'failed' : 'pending_retry';
+      webhookLog.errorMessage = processingError.message;
       await webhookLog.save();
+
+      logger.info(`[RAZORPAY WEBHOOK] Event ${webhookLog.eventId} marked as ${webhookLog.status} (retryCount: ${webhookLog.retryCount})`);
 
       // Return 200 to prevent unnecessary retries for application errors
       return res.status(200).json({
@@ -216,13 +218,13 @@ async function handleRazorpayPaymentCaptured(event: any): Promise<void> {
 
   logger.info('✅ [RAZORPAY WEBHOOK] Payment captured for order:', orderId);
 
-  const order = await Order.findById(orderId).lean();
+  const order = await Order.findById(orderId);
   if (!order) {
     logger.error('❌ [RAZORPAY WEBHOOK] Order not found:', orderId);
     return;
   }
 
-  // Check if already processed
+  // Atomic idempotency check — prevents double-processing if two webhook deliveries arrive simultaneously
   if (order.payment.status === 'paid') {
     logger.info('⚠️ [RAZORPAY WEBHOOK] Payment already marked as paid');
     return;
@@ -557,11 +559,13 @@ export const handleStripeWebhook = asyncHandler(async (req: Request, res: Respon
     } catch (processingError: any) {
       logger.error('❌ [STRIPE WEBHOOK] Processing error:', processingError);
 
-      // Update log with error
-      webhookLog.status = 'failed';
-      webhookLog.errorMessage = processingError.message;
+      // Update log with error — use pending_retry if under max retries
       webhookLog.retryCount += 1;
+      webhookLog.status = webhookLog.retryCount >= 3 ? 'failed' : 'pending_retry';
+      webhookLog.errorMessage = processingError.message;
       await webhookLog.save();
+
+      logger.info(`[STRIPE WEBHOOK] Event ${webhookLog.eventId} marked as ${webhookLog.status} (retryCount: ${webhookLog.retryCount})`);
 
       // Return 200 to prevent unnecessary retries
       return res.status(200).json({
@@ -1082,4 +1086,65 @@ async function handleStripePaymentIntentCanceled(event: Stripe.Event): Promise<v
   });
 
   await order.save();
+}
+
+/**
+ * Retry failed webhook events
+ * Finds WebhookLog entries with status 'pending_retry' and retryCount < 3,
+ * then reprocesses them. Designed to be called by a cron job.
+ */
+export async function retryFailedWebhooks(): Promise<{ processed: number; succeeded: number; failed: number }> {
+  const MAX_RETRIES = 3;
+  const BATCH_SIZE = 10;
+
+  const pendingLogs = await WebhookLog.find({
+    status: 'pending_retry',
+    retryCount: { $lt: MAX_RETRIES },
+    signatureValid: true,
+  })
+    .sort({ createdAt: 1 })
+    .limit(BATCH_SIZE);
+
+  if (pendingLogs.length === 0) {
+    logger.info('[WEBHOOK RETRY] No pending retry events found');
+    return { processed: 0, succeeded: 0, failed: 0 };
+  }
+
+  logger.info(`[WEBHOOK RETRY] Found ${pendingLogs.length} events to retry`);
+
+  let succeeded = 0;
+  let failed = 0;
+
+  for (const webhookLog of pendingLogs) {
+    try {
+      webhookLog.status = 'processing';
+      await webhookLog.save();
+
+      if (webhookLog.provider === 'razorpay') {
+        await processRazorpayEvent(webhookLog.payload, webhookLog);
+      } else if (webhookLog.provider === 'stripe') {
+        await processStripeEvent(webhookLog.payload as Stripe.Event, webhookLog);
+      }
+
+      // Mark as successfully processed
+      webhookLog.processed = true;
+      webhookLog.processedAt = new Date();
+      webhookLog.status = 'success';
+      await webhookLog.save();
+
+      succeeded++;
+      logger.info(`[WEBHOOK RETRY] Successfully reprocessed event ${webhookLog.eventId}`);
+    } catch (retryError: any) {
+      webhookLog.retryCount += 1;
+      webhookLog.status = webhookLog.retryCount >= MAX_RETRIES ? 'failed' : 'pending_retry';
+      webhookLog.errorMessage = retryError.message;
+      await webhookLog.save();
+
+      failed++;
+      logger.error(`[WEBHOOK RETRY] Failed to reprocess event ${webhookLog.eventId} (retryCount: ${webhookLog.retryCount}):`, retryError.message);
+    }
+  }
+
+  logger.info(`[WEBHOOK RETRY] Completed: ${succeeded} succeeded, ${failed} failed out of ${pendingLogs.length}`);
+  return { processed: pendingLogs.length, succeeded, failed };
 }

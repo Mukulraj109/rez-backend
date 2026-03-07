@@ -8,6 +8,7 @@ import {
   getMyClaims,
   checkEligibility,
 } from '../controllers/bonusZoneController';
+import { requireGamificationFeature } from '../middleware/gamificationFeatureGate';
 
 const router = Router();
 
@@ -27,6 +28,9 @@ const eligibilityLimiter = createRateLimiter({
 
 // All routes require authentication
 router.use(requireAuth);
+
+// PHASE 2 — disabled until core is stable
+router.use(requireGamificationFeature('bonusZones', { campaigns: [] }));
 
 // Static routes first
 router.get('/campaigns', getActiveCampaigns);

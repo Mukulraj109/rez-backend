@@ -1401,98 +1401,30 @@ export const markRedemptionAsUsed = async (req: Request, res: Response) => {
     // Update redemption with amount
     await OfferRedemption.findByIdAndUpdate(id, { usedAmount: cashbackAmount }, { session });
 
-    // Credit cashback to user's wallet - create wallet if it doesn't exist
-    let wallet = await Wallet.findOne({ user: userId }).session(session);
-    let walletBalance = { total: 0, available: 0 };
+    // Credit cashback via walletService (atomic $inc + CoinTransaction + LedgerEntry)
+    const { walletService } = await import('../services/walletService');
+    await walletService.credit({
+      userId,
+      amount: cashbackAmount,
+      source: 'cashback',
+      description: `Cashback from ${offer.title}`,
+      operationType: 'offer_cashback',
+      referenceId: `offer-cashback:${redemption._id}`,
+      referenceModel: 'OfferRedemption',
+      metadata: {
+        offerId: offer._id,
+        offerTitle: offer.title,
+        orderAmount,
+        cashbackPercentage: offer.cashbackPercentage,
+        redemptionId: redemption._id,
+      },
+      session,
+    });
 
-    // Create wallet if it doesn't exist
-    if (!wallet) {
-      wallet = new Wallet({
-        user: userId,
-        balance: { total: 0, available: 0, pending: 0 },
-        coins: [],
-        currency: 'INR',
-        isActive: true
-      });
-      await wallet.save({ session });
-    }
-
-    if (wallet) {
-      const balanceBefore = wallet.balance.total;
-
-      // Update wallet balance (only update available — pre-save hook recalculates total)
-      wallet.balance.available += cashbackAmount;
-
-      // Add to rez coins
-      const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-      if (rezCoin) {
-        rezCoin.amount += cashbackAmount;
-        rezCoin.lastEarned = new Date();
-      } else {
-        wallet.coins.push({
-          type: 'rez',
-          amount: cashbackAmount,
-          isActive: true,
-          color: '#FFD700',
-          lastEarned: new Date()
-        } as any);
-      }
-
-      await wallet.save({ session });
-      walletBalance = { total: wallet.balance.total, available: wallet.balance.available };
-
-      // Create transaction record
-      const Transaction = mongoose.model('Transaction');
-      const transaction = new Transaction({
-        user: userId,
-        type: 'credit',
-        amount: cashbackAmount,
-        currency: wallet.currency || 'INR',
-        category: 'cashback',
-        description: `Cashback from ${offer.title}`,
-        status: {
-          current: 'completed',
-          history: [{
-            status: 'completed',
-            timestamp: new Date(),
-            reason: 'Cashback credited for voucher redemption',
-          }],
-        },
-        source: {
-          type: 'cashback',
-          reference: redemption._id,
-          description: `Cashback - ${offer.title}`,
-          metadata: {
-            offerId: offer._id,
-            offerTitle: offer.title,
-            orderAmount,
-            cashbackPercentage: offer.cashbackPercentage,
-            redemptionCode: redemption.redemptionCode,
-          },
-        },
-        balanceBefore,
-        balanceAfter: wallet.balance.total,
-      });
-
-      await transaction.save({ session });
-
-      // Create CoinTransaction record (source of truth for auto-sync)
-      await CoinTransaction.create([{
-        user: userId,
-        type: 'earned',
-        amount: cashbackAmount,
-        balance: wallet.balance.available,
-        source: 'cashback',
-        description: `Cashback from ${offer.title}`,
-        metadata: {
-          offerId: offer._id,
-          offerTitle: offer.title,
-          orderAmount,
-          cashbackPercentage: offer.cashbackPercentage,
-          redemptionId: redemption._id,
-        }
-      }], { session });
-    }
+    const walletAfter = await Wallet.findOne({ user: userId }).lean();
+    const walletBalance = walletAfter
+      ? { total: walletAfter.balance.total, available: walletAfter.balance.available }
+      : { total: 0, available: 0 };
 
     // Commit transaction
     await session.commitTransaction();
