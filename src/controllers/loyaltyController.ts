@@ -535,7 +535,7 @@ export const getUserLoyalty = asyncHandler(async (req: Request, res: Response) =
   }
 
   try {
-    let loyalty = await UserLoyalty.findOne({ userId }).lean() as any;
+    let loyalty = await UserLoyalty.findOne({ userId }) as any;
     let needsSave = false;
 
     if (!loyalty) {
@@ -667,7 +667,7 @@ export const checkIn = asyncHandler(async (req: Request, res: Response) => {
     const now = new Date();
     const todayStr = getDateStringInTZ(now, timezone);
 
-    let loyalty = await UserLoyalty.findOne({ userId }).lean() as any;
+    let loyalty = await UserLoyalty.findOne({ userId }) as any;
 
     if (!loyalty) {
       loyalty = await UserLoyalty.create({
@@ -778,7 +778,7 @@ export const completeMission = asyncHandler(async (req: Request, res: Response) 
   }
 
   try {
-    const loyalty = await UserLoyalty.findOne({ userId }).lean();
+    const loyalty = await UserLoyalty.findOne({ userId }) as any;
 
     if (!loyalty) {
       throw new AppError('Loyalty record not found', 404);
@@ -793,7 +793,7 @@ export const completeMission = asyncHandler(async (req: Request, res: Response) 
       }
     }
 
-    const mission = loyalty.missions.find(m => m.missionId === missionId);
+    const mission = loyalty.missions.find((m: any) => m.missionId === missionId);
 
     if (!mission) {
       throw new AppError('Mission not found', 404);
@@ -932,7 +932,7 @@ export const syncBrandLoyalty = asyncHandler(async (req: Request, res: Response)
   }
 
   try {
-    let loyalty = await UserLoyalty.findOne({ userId }).lean();
+    let loyalty = await UserLoyalty.findOne({ userId }) as any;
 
     if (!loyalty) {
       throw new AppError('Loyalty record not found', 404);

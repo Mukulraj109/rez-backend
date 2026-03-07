@@ -201,9 +201,9 @@ router.get('/stats', gateStats, getGamificationStats);
 // Gated because it calls spinWheelService, challengeService, streakService
 const gatePlayAndEarn = requireGamificationFeature('miniGames', {
   dailySpin: { spinsRemaining: 0, maxSpins: 3, lastSpinAt: null, canSpin: false, nextSpinAt: null },
-  challenges: { active: [], completedToday: 0, total: 0 },
-  streak: { current: 0, checkedInToday: false, nextMilestone: { day: 3, coins: 50 } },
-  surpriseDrop: null,
+  challenges: { active: [], totalActive: 0, completedToday: 0 },
+  streak: { type: 'app_open', currentStreak: 0, longestStreak: 0, todayCheckedIn: false, nextMilestone: { day: 3, coins: 50 } },
+  surpriseDrop: { available: false, coins: 0, message: null, expiresAt: null },
   coinBalance: 0
 });
 router.get('/play-and-earn', gatePlayAndEarn, getPlayAndEarnData);
