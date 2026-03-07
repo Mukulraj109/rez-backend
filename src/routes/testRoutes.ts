@@ -23,6 +23,9 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
+// Require authentication even in dev/staging to prevent data leaks
+router.use(authenticate as any);
+
 /**
  * @route   GET /api/test/verify-order-fee/:orderId
  * @desc    Verify 15% platform fee calculation on an order

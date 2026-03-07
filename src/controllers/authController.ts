@@ -10,7 +10,8 @@ import {
   generateRefreshToken,
   verifyRefreshToken,
   verifyToken,
-  blacklistToken
+  blacklistToken,
+  logoutAllDevices
 } from '../middleware/auth';
 import {
   sendSuccess,
@@ -768,7 +769,8 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
   const { profile, preferences } = req.body;
 
   if (profile) {
-    Object.keys(profile).forEach(key => {
+    const allowedProfileFields = ['firstName', 'lastName', 'avatar', 'dateOfBirth', 'gender', 'bio'];
+    allowedProfileFields.forEach(key => {
       if (profile[key] !== undefined) {
         req.user!.profile[key as keyof typeof req.user.profile] = profile[key];
       }
@@ -776,7 +778,8 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
   }
 
   if (preferences) {
-    Object.keys(preferences).forEach(key => {
+    const allowedPreferenceFields = ['language', 'currency', 'notifications', 'theme', 'dietaryPreferences'];
+    allowedPreferenceFields.forEach(key => {
       if (preferences[key] !== undefined) {
         req.user!.preferences[key as keyof typeof req.user.preferences] = preferences[key];
       }
@@ -867,7 +870,8 @@ export const completeOnboarding = asyncHandler(async (req: Request, res: Respons
   const { profile, preferences } = req.body;
 
   if (profile) {
-    Object.keys(profile).forEach(key => {
+    const allowedProfileFields = ['firstName', 'lastName', 'avatar', 'dateOfBirth', 'gender', 'bio'];
+    allowedProfileFields.forEach(key => {
       if (profile[key] !== undefined) {
         req.user!.profile[key as keyof typeof req.user.profile] = profile[key];
       }
@@ -875,7 +879,8 @@ export const completeOnboarding = asyncHandler(async (req: Request, res: Respons
   }
 
   if (preferences) {
-    Object.keys(preferences).forEach(key => {
+    const allowedPreferenceFields = ['language', 'currency', 'notifications', 'theme', 'dietaryPreferences'];
+    allowedPreferenceFields.forEach(key => {
       if (preferences[key] !== undefined) {
         req.user!.preferences[key as keyof typeof req.user.preferences] = preferences[key];
       }
@@ -961,9 +966,13 @@ export const changePassword = asyncHandler(async (req: Request, res: Response) =
   }
 
   req.user.password = newPassword;
+  req.user.auth.refreshToken = undefined;
   await req.user.save();
 
-  sendSuccess(res, null, 'Password changed successfully');
+  // Invalidate all existing sessions (blacklist all tokens for this user)
+  await logoutAllDevices(String(req.user._id));
+
+  sendSuccess(res, null, 'Password changed successfully. All other sessions have been logged out.');
 });
 
 // Delete account (GDPR-compliant: anonymize + cascade)
@@ -994,6 +1003,29 @@ export const changePassword = asyncHandler(async (req: Request, res: Response) =
 export const deleteAccount = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     return sendUnauthorized(res, 'Authentication required');
+  }
+
+  // Re-authentication required before account deletion
+  const { password, otp } = req.body;
+
+  if (req.user.password) {
+    // User has a password set — require password confirmation
+    if (!password) {
+      throw new AppError('Password is required to confirm account deletion', 400, 'REAUTH_REQUIRED');
+    }
+    const isValid = await req.user.comparePassword(password);
+    if (!isValid) {
+      throw new AppError('Incorrect password', 401, 'INVALID_PASSWORD');
+    }
+  } else {
+    // OTP-only user — require a fresh OTP
+    if (!otp) {
+      throw new AppError('OTP is required to confirm account deletion', 400, 'REAUTH_REQUIRED');
+    }
+    const isValidOtp = req.user.verifyOTP(otp);
+    if (!isValidOtp) {
+      throw new AppError('Invalid or expired OTP', 401, 'INVALID_OTP');
+    }
   }
 
   const userId = req.user._id;

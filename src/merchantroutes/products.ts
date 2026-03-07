@@ -962,19 +962,22 @@ router.put('/:id',
         productData.isActive = productData.status === 'active';
       }
 
-      // Update product - only assign valid fields
-      // Remove any fields that shouldn't be directly assigned
-      const fieldsToUpdate: any = {
-        ...productData,
-        updatedAt: new Date(),
-      };
+      // Update product - only assign explicitly allowed fields (prevent mass assignment)
+      const allowedFields = [
+        'name', 'description', 'shortDescription', 'brand', 'sku', 'barcode',
+        'price', 'pricing', 'images', 'category', 'subcategory', 'tags',
+        'searchKeywords', 'inventory', 'variants', 'attributes', 'specifications',
+        'isActive', 'status', 'seo', 'dimensions', 'weight', 'dietary',
+      ];
 
-      // Remove fields that shouldn't be updated directly
-      delete fieldsToUpdate._id;
-      delete fieldsToUpdate.__v;
-      delete fieldsToUpdate.createdAt;
-      
-      // Assign fields to product
+      const fieldsToUpdate: any = { updatedAt: new Date() };
+      for (const key of allowedFields) {
+        if (productData[key] !== undefined) {
+          fieldsToUpdate[key] = productData[key];
+        }
+      }
+
+      // Assign allowed fields to product
       Object.assign(product, fieldsToUpdate);
       
       logger.info('💾 [UPDATE PRODUCT] Saving product with data:', {
