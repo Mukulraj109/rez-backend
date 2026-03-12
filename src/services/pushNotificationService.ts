@@ -10,6 +10,7 @@ import Expo, { ExpoPushMessage, ExpoPushTicket, ExpoPushReceipt } from 'expo-ser
 import twilio from 'twilio';
 import { User } from '../models/User';
 import { createServiceLogger } from '../config/logger';
+import { BRAND } from '../config/brand';
 
 const logger = createServiceLogger('push-notification');
 
@@ -440,7 +441,7 @@ class PushNotificationService {
   // ==================== Wallet/Social SMS Methods ====================
 
   public async sendGiftReceived(senderName: string, amount: number, themeEmoji: string, phone: string): Promise<void> {
-    const message = `${themeEmoji} You received a gift!\n\n${senderName} sent you ${amount} NC on Nuqta! Open the app to claim your gift before it expires.\n\nOpen REZ app to claim now!`;
+    const message = `${themeEmoji} You received a gift!\n\n${senderName} sent you ${amount} ${BRAND.COIN_SHORT} on ${BRAND.APP_NAME}! Open the app to claim your gift before it expires.\n\nOpen ${BRAND.APP_NAME} app to claim now!`;
     await this.sendSMS(phone, message);
     logger.info(`Gift received notification sent to ***${phone.slice(-4)}`);
   }

@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 import { Model } from 'mongoose';
 import { mul, sub, pct, round2, add } from '../utils/currency';
+import { logger } from '../config/logger';
 
 // Service booking details for cart items
 export interface IServiceBookingDetails {
@@ -461,6 +462,9 @@ CartSchema.index({ 'items.product': 1 });
 CartSchema.index({ 'items.store': 1 });
 CartSchema.index({ updatedAt: -1 });
 
+// Compound index for fetching user's active cart sorted by most recent
+CartSchema.index({ user: 1, isActive: 1, updatedAt: -1 });
+
 // Virtual for total items count
 CartSchema.virtual('itemCount').get(function() {
   return this.items.reduce((total: number, item: ICartItem) => total + item.quantity, 0);
@@ -511,7 +515,7 @@ CartSchema.methods.addItem = async function(
   const Product = this.model('Product');
   const product = await Product.findById(productId).populate('store').lean();
   
-  console.log('🛒 [CART MODEL] Product lookup result:', {
+  logger.info('🛒 [CART MODEL] Product lookup result:', {
     productId,
     productFound: !!product,
     productName: product?.name,
@@ -583,8 +587,8 @@ CartSchema.methods.addItem = async function(
     this.items[existingItemIndex].addedAt = new Date();
   } else {
     // Add new item
-    console.log('🛒 [CART MODEL] Adding new item to cart');
-    console.log('🛒 [CART MODEL] Product price structure:', {
+    logger.info('🛒 [CART MODEL] Adding new item to cart');
+    logger.info('🛒 [CART MODEL] Product price structure:', {
       price: product.price,
       pricing: product.pricing
     });
@@ -595,7 +599,7 @@ CartSchema.methods.addItem = async function(
     // The discount field on cart items is ONLY for lock fees (paid at lock)
     // Sale discounts are shown via originalPrice vs price comparison
 
-    console.log('🛒 [CART MODEL] Extracted prices:', {
+    logger.info('🛒 [CART MODEL] Extracted prices:', {
       price: extractedPrice,
       originalPrice: extractedOriginalPrice,
       saleDiscount: extractedOriginalPrice - extractedPrice // For logging only
@@ -614,7 +618,7 @@ CartSchema.methods.addItem = async function(
       addedAt: new Date()
     };
 
-    console.log('🛒 [CART MODEL] Final cart item:', cartItem);
+    logger.info('🛒 [CART MODEL] Final cart item:', cartItem);
     this.items.push(cartItem);
   }
   
@@ -630,7 +634,7 @@ CartSchema.methods.removeItem = async function(
   this.items = this.items.filter((item: ICartItem) => {
     // Skip items with null product (corrupted data)
     if (!item.product) {
-      console.warn('⚠️ [CART] Removing item with null product during filter');
+      logger.warn('⚠️ [CART] Removing item with null product during filter');
       return false; // Remove null product items
     }
 
@@ -655,11 +659,11 @@ CartSchema.methods.updateItemQuantity = async function(
     return this.removeItem(productId, variant);
   }
   
-  console.log('🛒 [UPDATE ITEM QTY] Searching for product:', productId);
-  console.log('🛒 [UPDATE ITEM QTY] Cart has items:', this.items.map((item: ICartItem) => {
+  logger.info('🛒 [UPDATE ITEM QTY] Searching for product:', productId);
+  logger.info('🛒 [UPDATE ITEM QTY] Cart has items:', this.items.map((item: ICartItem) => {
     // Skip null product items
     if (!item.product) {
-      console.warn('⚠️ [CART] Found item with null product');
+      logger.warn('⚠️ [CART] Found item with null product');
       return { productId: null, variant: item.variant };
     }
     const productRef = item.product as any;
@@ -672,7 +676,7 @@ CartSchema.methods.updateItemQuantity = async function(
   const itemIndex = this.items.findIndex((item: ICartItem) => {
     // Skip items with null product
     if (!item.product) {
-      console.warn('⚠️ [CART] Skipping item with null product in findIndex');
+      logger.warn('⚠️ [CART] Skipping item with null product in findIndex');
       return false;
     }
     // Handle both populated and unpopulated product references
@@ -683,7 +687,7 @@ CartSchema.methods.updateItemQuantity = async function(
       ? item.variant?.type === variant.type && item.variant?.value === variant.value
       : !item.variant || (typeof item.variant === 'object' && (!item.variant.type && !item.variant.value));
 
-    console.log(`🛒 [UPDATE ITEM QTY] Comparing item ${itemProductId} with ${productId}:`, {
+    logger.info(`🛒 [UPDATE ITEM QTY] Comparing item ${itemProductId} with ${productId}:`, {
       productMatch,
       variantMatch,
       itemVariant: item.variant,
@@ -693,7 +697,7 @@ CartSchema.methods.updateItemQuantity = async function(
     return productMatch && variantMatch;
   });
 
-  console.log('🛒 [UPDATE ITEM QTY] Found item index:', itemIndex);
+  logger.info('🛒 [UPDATE ITEM QTY] Found item index:', itemIndex);
 
   if (itemIndex === -1) {
     throw new Error('Item not found in cart');
@@ -791,7 +795,7 @@ CartSchema.methods.calculateTotals = async function(): Promise<void> {
   // Apply coupon discount
   let couponDiscount = 0;
   if (this.coupon && this.coupon.discountValue) {
-    console.log('💳 [CALCULATE TOTALS] Applying coupon:', {
+    logger.info('💳 [CALCULATE TOTALS] Applying coupon:', {
       code: this.coupon.code,
       type: this.coupon.discountType,
       value: this.coupon.discountValue,
@@ -807,9 +811,9 @@ CartSchema.methods.calculateTotals = async function(): Promise<void> {
     couponDiscount = Math.max(0, couponDiscount); // Don't allow negative
     this.coupon.appliedAmount = couponDiscount || 0; // Ensure it's not NaN
     
-    console.log('💳 [CALCULATE TOTALS] Coupon discount calculated:', couponDiscount);
+    logger.info('💳 [CALCULATE TOTALS] Coupon discount calculated:', couponDiscount);
   } else if (this.coupon) {
-    console.warn('⚠️ [CALCULATE TOTALS] Coupon exists but has invalid discountValue:', this.coupon);
+    logger.warn('⚠️ [CALCULATE TOTALS] Coupon exists but has invalid discountValue:', this.coupon);
   }
   
   // Calculate cashback (simplified - this should be based on store offers)
@@ -818,7 +822,7 @@ CartSchema.methods.calculateTotals = async function(): Promise<void> {
   // Calculate total with detailed logging
   const total = subtotal + tax + delivery - couponDiscount;
   
-  console.log('💰 [CALCULATE TOTALS] Calculation breakdown:', {
+  logger.info('💰 [CALCULATE TOTALS] Calculation breakdown:', {
     subtotal,
     tax,
     delivery,
@@ -852,7 +856,7 @@ CartSchema.methods.calculateTotals = async function(): Promise<void> {
     merchantPayout: finalMerchantPayout
   };
   
-  console.log('✅ [CALCULATE TOTALS] Final totals set:', this.totals);
+  logger.info('✅ [CALCULATE TOTALS] Final totals set:', this.totals);
 };
 
 // Method to apply coupon
@@ -920,7 +924,7 @@ CartSchema.methods.lockItem = async function(
   }
 
   // Debug: Log the full product structure to understand pricing fields
-  console.log('🔒 [LOCK] Product structure:', {
+  logger.info('🔒 [LOCK] Product structure:', {
     name: product.name,
     pricing: product.pricing,
     price: product.price,
@@ -932,7 +936,7 @@ CartSchema.methods.lockItem = async function(
 
   // Debug: Log specific pricing values (access via _doc to bypass getters)
   const rawProduct = (product as any)._doc || product;
-  console.log('🔒 [LOCK] Detailed pricing values:', {
+  logger.info('🔒 [LOCK] Detailed pricing values:', {
     'pricing.selling': product.pricing?.selling,
     'pricing.original': product.pricing?.original,
     'pricing.discount': product.pricing?.discount,
@@ -944,7 +948,7 @@ CartSchema.methods.lockItem = async function(
   // First, remove any expired locked items
   const now = new Date();
   this.lockedItems = this.lockedItems.filter((item: any) => item.expiresAt > now);
-  console.log('🔒 [LOCK] After removing expired items, locked items count:', this.lockedItems.length);
+  logger.info('🔒 [LOCK] After removing expired items, locked items count:', this.lockedItems.length);
 
   // Check if item is already locked (non-expired)
   const existingLockIndex = this.lockedItems.findIndex((item: any) =>
@@ -960,10 +964,10 @@ CartSchema.methods.lockItem = async function(
                       rawProduct.price?.original ||
                       0;
 
-  console.log('🔒 [LOCK] Extracted lockedPrice:', lockedPrice);
+  logger.info('🔒 [LOCK] Extracted lockedPrice:', lockedPrice);
 
   if (!lockedPrice || lockedPrice === 0) {
-    console.error('❌ [LOCK] Failed to extract price from product:', {
+    logger.error('❌ [LOCK] Failed to extract price from product:', {
       pricing: product.pricing,
       price: rawProduct.price,
       rawProduct: rawProduct
@@ -975,14 +979,14 @@ CartSchema.methods.lockItem = async function(
 
   if (existingLockIndex > -1) {
     // Update existing locked item (extend lock)
-    console.log('🔒 [LOCK] Extending existing lock for product:', productId);
+    logger.info('🔒 [LOCK] Extending existing lock for product:', productId);
     this.lockedItems[existingLockIndex].quantity = quantity;
     this.lockedItems[existingLockIndex].lockedPrice = lockedPrice;
     this.lockedItems[existingLockIndex].expiresAt = expiresAt;
     this.lockedItems[existingLockIndex].lockedAt = new Date(); // Update lock time
   } else {
     // Add new locked item
-    console.log('🔒 [LOCK] Creating new lock for product:', productId);
+    logger.info('🔒 [LOCK] Creating new lock for product:', productId);
     // Ensure we only store the ObjectId, not the populated object
     const storeId = typeof product.store === 'object' && product.store?._id
       ? product.store._id
@@ -1007,7 +1011,7 @@ CartSchema.methods.lockItem = async function(
     });
   }
 
-  console.log('🔒 [LOCK] Total locked items after operation:', this.lockedItems.length);
+  logger.info('🔒 [LOCK] Total locked items after operation:', this.lockedItems.length);
   await this.save();
 };
 
@@ -1016,8 +1020,8 @@ CartSchema.methods.unlockItem = async function(
   productId: string,
   variant?: any
 ): Promise<void> {
-  console.log('🔓 [UNLOCK MODEL] Attempting to unlock product:', productId);
-  console.log('🔓 [UNLOCK MODEL] Current locked items:', this.lockedItems.length);
+  logger.info('🔓 [UNLOCK MODEL] Attempting to unlock product:', productId);
+  logger.info('🔓 [UNLOCK MODEL] Current locked items:', this.lockedItems.length);
 
   this.lockedItems = this.lockedItems.filter((item: any) => {
     // Handle both populated and unpopulated product references
@@ -1034,7 +1038,7 @@ CartSchema.methods.unlockItem = async function(
       itemProductId = item.product.toString();
     }
 
-    console.log('🔓 [UNLOCK MODEL] Comparing:', { itemProductId, productId, match: itemProductId === productId });
+    logger.info('🔓 [UNLOCK MODEL] Comparing:', { itemProductId, productId, match: itemProductId === productId });
 
     const productMatch = itemProductId === productId;
     const variantMatch = !variant || (item.variant?.type === variant?.type && item.variant?.value === variant?.value);
@@ -1043,7 +1047,7 @@ CartSchema.methods.unlockItem = async function(
     return !(productMatch && variantMatch);
   });
 
-  console.log('🔓 [UNLOCK MODEL] After filter, locked items:', this.lockedItems.length);
+  logger.info('🔓 [UNLOCK MODEL] After filter, locked items:', this.lockedItems.length);
   await this.save();
 };
 
@@ -1052,8 +1056,8 @@ CartSchema.methods.moveLockedToCart = async function(
   productId: string,
   variant?: any
 ): Promise<void> {
-  console.log('➡️ [MOVE MODEL] Attempting to move locked item to cart:', productId);
-  console.log('➡️ [MOVE MODEL] Current locked items:', this.lockedItems.length);
+  logger.info('➡️ [MOVE MODEL] Attempting to move locked item to cart:', productId);
+  logger.info('➡️ [MOVE MODEL] Current locked items:', this.lockedItems.length);
 
   const lockedItemIndex = this.lockedItems.findIndex((item: any) => {
     // Handle both populated and unpopulated product references
@@ -1070,7 +1074,7 @@ CartSchema.methods.moveLockedToCart = async function(
       itemProductId = item.product.toString();
     }
 
-    console.log('➡️ [MOVE MODEL] Comparing:', { itemProductId, productId, match: itemProductId === productId });
+    logger.info('➡️ [MOVE MODEL] Comparing:', { itemProductId, productId, match: itemProductId === productId });
 
     const productMatch = itemProductId === productId;
     const variantMatch = !variant || (item.variant?.type === variant?.type && item.variant?.value === variant?.value);
@@ -1078,7 +1082,7 @@ CartSchema.methods.moveLockedToCart = async function(
     return productMatch && variantMatch;
   });
 
-  console.log('➡️ [MOVE MODEL] Found locked item at index:', lockedItemIndex);
+  logger.info('➡️ [MOVE MODEL] Found locked item at index:', lockedItemIndex);
 
   if (lockedItemIndex === -1) {
     throw new Error('Locked item not found');
@@ -1088,7 +1092,7 @@ CartSchema.methods.moveLockedToCart = async function(
 
   // For paid locks, we need to apply the lock fee as a discount
   if (lockedItem.isPaidLock && lockedItem.lockFee) {
-    console.log('➡️ [MOVE MODEL] Moving paid locked item with lock fee applied:', {
+    logger.info('➡️ [MOVE MODEL] Moving paid locked item with lock fee applied:', {
       lockedPrice: lockedItem.lockedPrice,
       lockFee: lockedItem.lockFee,
       remainingPrice: lockedItem.lockedPrice - lockedItem.lockFee
@@ -1137,7 +1141,7 @@ CartSchema.methods.moveLockedToCart = async function(
         notes: `Lock fee of ₹${lockedItem.lockFee} already paid for ${lockedItem.quantity} item(s)`
       };
 
-      console.log('➡️ [MOVE MODEL] Adding cart item with lock fee discount:', cartItem);
+      logger.info('➡️ [MOVE MODEL] Adding cart item with lock fee discount:', cartItem);
       this.items.push(cartItem);
     }
   } else {
@@ -1151,7 +1155,7 @@ CartSchema.methods.moveLockedToCart = async function(
   // Extend cart expiry
   this.expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-  console.log('➡️ [MOVE MODEL] Item moved successfully, remaining locked items:', this.lockedItems.length);
+  logger.info('➡️ [MOVE MODEL] Item moved successfully, remaining locked items:', this.lockedItems.length);
   await this.save();
 };
 

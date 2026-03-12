@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import * as cron from 'node-cron';
 import OfferRedemption from '../models/OfferRedemption';
 import { UserVoucher } from '../models/Voucher';
@@ -143,7 +144,7 @@ async function runExpiryProcesses(): Promise<ExpiryStats> {
   try {
     stats.offerRedemptions = await processExpiredOfferRedemptions();
   } catch (error: any) {
-    console.error('❌ [VOUCHER EXPIRY] Error expiring offer redemptions:', error);
+    logger.error('❌ [VOUCHER EXPIRY] Error expiring offer redemptions:', error);
     stats.errors.push({ type: 'offerRedemptions', error: error.message || 'Unknown error' });
   }
 
@@ -151,7 +152,7 @@ async function runExpiryProcesses(): Promise<ExpiryStats> {
   try {
     stats.userVouchers = await processExpiredUserVouchers();
   } catch (error: any) {
-    console.error('❌ [VOUCHER EXPIRY] Error expiring user vouchers:', error);
+    logger.error('❌ [VOUCHER EXPIRY] Error expiring user vouchers:', error);
     stats.errors.push({ type: 'userVouchers', error: error.message || 'Unknown error' });
   }
 
@@ -159,14 +160,14 @@ async function runExpiryProcesses(): Promise<ExpiryStats> {
   try {
     stats.priveVouchers = await processExpiredPriveVouchers();
   } catch (error: any) {
-    console.error('❌ [VOUCHER EXPIRY] Error expiring Privé vouchers:', error);
+    logger.error('❌ [VOUCHER EXPIRY] Error expiring Privé vouchers:', error);
     stats.errors.push({ type: 'priveVouchers', error: error.message || 'Unknown error' });
   }
 
   const totalExpired = stats.offerRedemptions.totalExpired + stats.userVouchers.totalExpired + stats.priveVouchers.totalExpired;
 
   if (totalExpired > 0) {
-    console.log(`🎟️ [VOUCHER EXPIRY] Expired ${totalExpired} items:`, {
+    logger.info(`🎟️ [VOUCHER EXPIRY] Expired ${totalExpired} items:`, {
       offerRedemptions: stats.offerRedemptions.totalExpired,
       userVouchers: stats.userVouchers.totalExpired,
       priveVouchers: stats.priveVouchers.totalExpired
@@ -181,23 +182,23 @@ async function runExpiryProcesses(): Promise<ExpiryStats> {
  */
 export function startVoucherExpiryJob(): void {
   if (expiryJob) {
-    console.log('⚠️ [VOUCHER EXPIRY] Job already running');
+    logger.info('⚠️ [VOUCHER EXPIRY] Job already running');
     return;
   }
 
-  console.log(`🎟️ [VOUCHER EXPIRY] Starting voucher expiry job (runs every hour at :30)`);
+  logger.info(`🎟️ [VOUCHER EXPIRY] Starting voucher expiry job (runs every hour at :30)`);
 
   expiryJob = cron.schedule(CRON_SCHEDULE, async () => {
     // Prevent concurrent executions
     if (isRunning) {
-      console.log('⏭️ [VOUCHER EXPIRY] Previous expiry job still running, skipping');
+      logger.info('⏭️ [VOUCHER EXPIRY] Previous expiry job still running, skipping');
       return;
     }
 
     const lockKey = 'job:voucher-expiry';
     const lockToken = await redisService.acquireLock(lockKey, 300);
     if (!lockToken) {
-      console.log('voucher-expiry skipped — lock held by another instance');
+      logger.info('voucher-expiry skipped — lock held by another instance');
       return;
     }
 
@@ -211,7 +212,7 @@ export function startVoucherExpiryJob(): void {
       const totalExpired = stats.offerRedemptions.totalExpired + stats.userVouchers.totalExpired + stats.priveVouchers.totalExpired;
 
       if (totalExpired > 0 || stats.errors.length > 0) {
-        console.log('✅ [VOUCHER EXPIRY] Job completed:', {
+        logger.info('✅ [VOUCHER EXPIRY] Job completed:', {
           duration: `${duration}ms`,
           offerRedemptions: stats.offerRedemptions,
           userVouchers: stats.userVouchers,
@@ -222,15 +223,15 @@ export function startVoucherExpiryJob(): void {
       }
 
       if (stats.errors.length > 0) {
-        console.error('❌ [VOUCHER EXPIRY] Errors during expiry:');
+        logger.error('❌ [VOUCHER EXPIRY] Errors during expiry:');
         stats.errors.forEach((error, index) => {
-          console.error(`   ${index + 1}. [${error.type}] ${error.error}`);
+          logger.error(`   ${index + 1}. [${error.type}] ${error.error}`);
         });
       }
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error('❌ [VOUCHER EXPIRY] Job failed:', {
+      logger.error('❌ [VOUCHER EXPIRY] Job failed:', {
         duration: `${duration}ms`,
         error: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString()
@@ -241,7 +242,7 @@ export function startVoucherExpiryJob(): void {
     }
   });
 
-  console.log('✅ [VOUCHER EXPIRY] Voucher expiry job started successfully');
+  logger.info('✅ [VOUCHER EXPIRY] Voucher expiry job started successfully');
 }
 
 /**
@@ -251,9 +252,9 @@ export function stopVoucherExpiryJob(): void {
   if (expiryJob) {
     expiryJob.stop();
     expiryJob = null;
-    console.log('🛑 [VOUCHER EXPIRY] Voucher expiry job stopped');
+    logger.info('🛑 [VOUCHER EXPIRY] Voucher expiry job stopped');
   } else {
-    console.log('⚠️ [VOUCHER EXPIRY] No job running to stop');
+    logger.info('⚠️ [VOUCHER EXPIRY] No job running to stop');
   }
 }
 
@@ -277,11 +278,11 @@ export function getVoucherExpiryJobStatus(): {
  */
 export async function triggerManualVoucherExpiry(): Promise<ExpiryStats> {
   if (isRunning) {
-    console.log('⚠️ [VOUCHER EXPIRY] Expiry already running, please wait');
+    logger.info('⚠️ [VOUCHER EXPIRY] Expiry already running, please wait');
     throw new Error('Expiry already in progress');
   }
 
-  console.log('🎟️ [VOUCHER EXPIRY] Manual expiry triggered');
+  logger.info('🎟️ [VOUCHER EXPIRY] Manual expiry triggered');
 
   isRunning = true;
   const startTime = Date.now();
@@ -292,14 +293,14 @@ export async function triggerManualVoucherExpiry(): Promise<ExpiryStats> {
 
     const totalExpired = stats.offerRedemptions.totalExpired + stats.userVouchers.totalExpired + stats.priveVouchers.totalExpired;
 
-    console.log('✅ [VOUCHER EXPIRY] Manual expiry completed:', {
+    logger.info('✅ [VOUCHER EXPIRY] Manual expiry completed:', {
       duration: `${duration}ms`,
       totalExpired
     });
 
     return stats;
   } catch (error) {
-    console.error('❌ [VOUCHER EXPIRY] Manual expiry failed:', error);
+    logger.error('❌ [VOUCHER EXPIRY] Manual expiry failed:', error);
     throw error;
   } finally {
     isRunning = false;

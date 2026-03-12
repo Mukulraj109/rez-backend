@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { sendSuccess, sendError } from '../../utils/response';
@@ -125,7 +126,7 @@ router.get('/health', async (req: Request, res: Response) => {
 
     return sendSuccess(res, { ...health, overallStatus }, 'System health retrieved');
   } catch (error: any) {
-    console.error('[ADMIN SYSTEM] Health check error:', error);
+    logger.error('[ADMIN SYSTEM] Health check error:', error);
     return sendError(res, error.message || 'Failed to get system health', 500);
   }
 });
@@ -151,7 +152,7 @@ router.get('/reconciliation', async (req: Request, res: Response) => {
       ...result,
     }, 'Reconciliation results retrieved');
   } catch (error: any) {
-    console.error('[ADMIN SYSTEM] Reconciliation results error:', error);
+    logger.error('[ADMIN SYSTEM] Reconciliation results error:', error);
     return sendError(res, error.message || 'Failed to get reconciliation results', 500);
   }
 });
@@ -163,12 +164,12 @@ router.get('/reconciliation', async (req: Request, res: Response) => {
  */
 router.post('/reconciliation/trigger', async (req: Request, res: Response) => {
   try {
-    console.log(`[ADMIN SYSTEM] Manual reconciliation triggered by admin user`);
+    logger.info(`[ADMIN SYSTEM] Manual reconciliation triggered by admin user`);
     const result = await triggerManualReconciliation();
 
     return sendSuccess(res, result, 'Reconciliation completed successfully');
   } catch (error: any) {
-    console.error('[ADMIN SYSTEM] Manual reconciliation error:', error);
+    logger.error('[ADMIN SYSTEM] Manual reconciliation error:', error);
 
     if (error.message?.includes('already in progress')) {
       return sendError(res, 'Reconciliation job is already in progress. Please wait.', 409);
@@ -188,7 +189,7 @@ router.get('/jobs', async (req: Request, res: Response) => {
     const jobs = await getScheduledJobStatuses();
     return sendSuccess(res, { jobs }, 'Scheduled job statuses retrieved');
   } catch (error: any) {
-    console.error('[ADMIN SYSTEM] Jobs status error:', error);
+    logger.error('[ADMIN SYSTEM] Jobs status error:', error);
     return sendError(res, error.message || 'Failed to get job statuses', 500);
   }
 });

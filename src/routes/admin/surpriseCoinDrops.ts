@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Surprise Coin Drops
  * CRUD + bulk operations for SurpriseCoinDrop model
@@ -86,7 +87,7 @@ router.get('/', async (req: Request, res: Response) => {
       },
     }, 'Surprise coin drops fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching surprise coin drops:', error);
+    logger.error('[Admin] Error fetching surprise coin drops:', error);
     return sendError(res, 'Failed to fetch surprise coin drops', 500);
   }
 });
@@ -159,7 +160,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
       dailyVolume,
     }, 'Analytics fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching surprise drop analytics:', error);
+    logger.error('[Admin] Error fetching surprise drop analytics:', error);
     return sendError(res, 'Failed to fetch analytics', 500);
   }
 });
@@ -184,7 +185,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, drop, 'Surprise coin drop fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching surprise coin drop:', error);
+    logger.error('[Admin] Error fetching surprise coin drop:', error);
     return sendError(res, 'Failed to fetch surprise coin drop', 500);
   }
 });
@@ -223,7 +224,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     return sendSuccess(res, drop, 'Surprise coin drop created');
   } catch (error) {
-    console.error('[Admin] Error creating surprise coin drop:', error);
+    logger.error('[Admin] Error creating surprise coin drop:', error);
     return sendError(res, 'Failed to create surprise coin drop', 500);
   }
 });
@@ -279,7 +280,7 @@ router.post('/bulk', async (req: Request, res: Response) => {
       invalidIds: userIds.length - validUserIds.length,
     }, `${result.length} surprise coin drops created`);
   } catch (error) {
-    console.error('[Admin] Error bulk creating surprise coin drops:', error);
+    logger.error('[Admin] Error bulk creating surprise coin drops:', error);
     return sendError(res, 'Failed to bulk create surprise coin drops', 500);
   }
 });
@@ -313,7 +314,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, drop, 'Surprise coin drop updated');
   } catch (error) {
-    console.error('[Admin] Error updating surprise coin drop:', error);
+    logger.error('[Admin] Error updating surprise coin drop:', error);
     return sendError(res, 'Failed to update surprise coin drop', 500);
   }
 });
@@ -338,7 +339,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, null, 'Surprise coin drop deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting surprise coin drop:', error);
+    logger.error('[Admin] Error deleting surprise coin drop:', error);
     return sendError(res, 'Failed to delete surprise coin drop', 500);
   }
 });
@@ -363,7 +364,7 @@ router.post('/expire-old', async (req: Request, res: Response) => {
       expiredCount: result.modifiedCount,
     }, `${result.modifiedCount} drops expired`);
   } catch (error) {
-    console.error('[Admin] Error expiring old drops:', error);
+    logger.error('[Admin] Error expiring old drops:', error);
     return sendError(res, 'Failed to expire old drops', 500);
   }
 });

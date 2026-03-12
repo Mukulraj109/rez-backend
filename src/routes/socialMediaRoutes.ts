@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Social Media Routes
 // Routes for social media post submissions and cashback tracking
 
@@ -190,7 +191,7 @@ router.post('/admin/fix-missing-credits',
 
       // Find all credited posts
       const creditedPosts = await SocialMediaPost.find({ status: 'credited' }).lean();
-      console.log(`[FIX] Found ${creditedPosts.length} credited social media posts`);
+      logger.info(`[FIX] Found ${creditedPosts.length} credited social media posts`);
 
       let fixed = 0;
       let skipped = 0;
@@ -237,7 +238,7 @@ router.post('/admin/fix-missing-credits',
             amount: post.cashbackAmount,
             status: 'fixed'
           });
-          console.log(`[FIX] Credited ${post.cashbackAmount} coins to user ${post.user} for post ${post._id}`);
+          logger.info(`[FIX] Credited ${post.cashbackAmount} coins to user ${post.user} for post ${post._id}`);
         } catch (err: any) {
           failed++;
           results.push({
@@ -247,7 +248,7 @@ router.post('/admin/fix-missing-credits',
             status: 'failed',
             error: err.message
           });
-          console.error(`[FIX] Failed for post ${post._id}:`, err.message);
+          logger.error(`[FIX] Failed for post ${post._id}:`, err.message);
         }
       }
 
@@ -257,7 +258,7 @@ router.post('/admin/fix-missing-credits',
         data: { total: creditedPosts.length, fixed, skipped, failed, results }
       });
     } catch (error: any) {
-      console.error('[FIX] Error:', error);
+      logger.error('[FIX] Error:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   }

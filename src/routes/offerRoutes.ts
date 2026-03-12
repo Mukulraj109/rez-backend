@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Router, Request, Response } from 'express';
 import HomepageDealsSection from '../models/HomepageDealsSection';
 import HomepageDealsItem from '../models/HomepageDealsItem';
@@ -558,7 +559,7 @@ router.get('/homepage-deals-section', optionalAuth, async (req: Request, res: Re
       },
     });
   } catch (error: any) {
-    console.error('[OFFERS] Homepage deals section error:', error);
+    logger.error('[OFFERS] Homepage deals section error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch homepage deals section',
@@ -600,7 +601,7 @@ router.post('/homepage-deals-section/track-impression', async (req: Request, res
       message: 'Impressions tracked',
     });
   } catch (error: any) {
-    console.error('[OFFERS] Track impression error:', error);
+    logger.error('[OFFERS] Track impression error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to track impression',
@@ -641,7 +642,7 @@ router.post('/homepage-deals-section/track-click', async (req: Request, res: Res
       message: 'Click tracked',
     });
   } catch (error: any) {
-    console.error('[OFFERS] Track click error:', error);
+    logger.error('[OFFERS] Track click error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to track click',

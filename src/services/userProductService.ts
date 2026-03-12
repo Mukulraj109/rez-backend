@@ -6,6 +6,7 @@ import { UserProduct, IUserProduct } from '../models/UserProduct';
 import { ServiceRequest, IServiceRequest, ITechnician } from '../models/ServiceRequest';
 import { Order } from '../models/Order';
 import { Product } from '../models/Product';
+import { logger } from '../config/logger';
 
 interface CreateUserProductData {
   userId: Types.ObjectId;
@@ -71,11 +72,11 @@ class UserProductService {
         status: 'active',
       });
 
-      console.log(`✅ [USER PRODUCT SERVICE] Created user product: ${userProduct._id}`);
+      logger.info(`✅ [USER PRODUCT SERVICE] Created user product: ${userProduct._id}`);
 
       return userProduct;
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error creating user product:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error creating user product:', error);
       throw error;
     }
   }
@@ -88,20 +89,20 @@ class UserProductService {
       const order = await Order.findById(orderId).populate('items.product').lean();
 
       if (!order) {
-        console.log(`⚠️ [USER PRODUCT SERVICE] Order not found: ${orderId}`);
+        logger.info(`⚠️ [USER PRODUCT SERVICE] Order not found: ${orderId}`);
         return [];
       }
 
       // Only create for delivered orders
       if (order.status !== 'delivered') {
-        console.log(`⚠️ [USER PRODUCT SERVICE] Order not delivered yet: ${orderId}`);
+        logger.info(`⚠️ [USER PRODUCT SERVICE] Order not delivered yet: ${orderId}`);
         return [];
       }
 
       // Check if user products already exist for this order
       const existingProducts = await UserProduct.find({ order: orderId }).lean();
       if (existingProducts.length > 0) {
-        console.log(`⚠️ [USER PRODUCT SERVICE] User products already exist for order: ${orderId}`);
+        logger.info(`⚠️ [USER PRODUCT SERVICE] User products already exist for order: ${orderId}`);
         return existingProducts;
       }
 
@@ -141,11 +142,11 @@ class UserProductService {
         userProducts.push(userProduct);
       }
 
-      console.log(`✅ [USER PRODUCT SERVICE] Created ${userProducts.length} user products from order`);
+      logger.info(`✅ [USER PRODUCT SERVICE] Created ${userProducts.length} user products from order`);
 
       return userProducts;
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error creating user products from order:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error creating user products from order:', error);
       throw error;
     }
   }
@@ -160,7 +161,7 @@ class UserProductService {
     try {
       return await (UserProduct as any).getUserProducts(userId, filters);
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error getting user products:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error getting user products:', error);
       throw error;
     }
   }
@@ -184,7 +185,7 @@ class UserProductService {
 
       return userProduct;
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error getting product details:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error getting product details:', error);
       throw error;
     }
   }
@@ -199,7 +200,7 @@ class UserProductService {
     try {
       return await (UserProduct as any).getExpiringWarranties(userId, days);
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error getting expiring warranties:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error getting expiring warranties:', error);
       throw error;
     }
   }
@@ -214,7 +215,7 @@ class UserProductService {
     try {
       return await (UserProduct as any).getExpiringAMC(userId, days);
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error getting expiring AMC:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error getting expiring AMC:', error);
       throw error;
     }
   }
@@ -244,11 +245,11 @@ class UserProductService {
 
       await (userProduct as any).registerProduct(serialNumber, registrationNumber);
 
-      console.log(`✅ [USER PRODUCT SERVICE] Product registered successfully`);
+      logger.info(`✅ [USER PRODUCT SERVICE] Product registered successfully`);
 
       return userProduct;
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error registering product:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error registering product:', error);
       throw error;
     }
   }
@@ -279,11 +280,11 @@ class UserProductService {
 
       await (userProduct as any).scheduleInstallation(scheduledDate, technician, notes);
 
-      console.log(`✅ [USER PRODUCT SERVICE] Installation scheduled successfully`);
+      logger.info(`✅ [USER PRODUCT SERVICE] Installation scheduled successfully`);
 
       return userProduct;
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error scheduling installation:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error scheduling installation:', error);
       throw error;
     }
   }
@@ -309,11 +310,11 @@ class UserProductService {
 
       await (userProduct as any).renewAMC(duration, amount);
 
-      console.log(`✅ [USER PRODUCT SERVICE] AMC renewed successfully`);
+      logger.info(`✅ [USER PRODUCT SERVICE] AMC renewed successfully`);
 
       return userProduct;
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error renewing AMC:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error renewing AMC:', error);
       throw error;
     }
   }
@@ -367,11 +368,11 @@ class UserProductService {
       userProduct.serviceRequests.push(serviceRequest._id);
       await userProduct.save();
 
-      console.log(`✅ [USER PRODUCT SERVICE] Created service request: ${requestNumber}`);
+      logger.info(`✅ [USER PRODUCT SERVICE] Created service request: ${requestNumber}`);
 
       return serviceRequest;
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error creating service request:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error creating service request:', error);
       throw error;
     }
   }
@@ -388,7 +389,7 @@ class UserProductService {
     try {
       return await (ServiceRequest as any).getUserRequests(userId, filters, page, limit);
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error getting service requests:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error getting service requests:', error);
       throw error;
     }
   }
@@ -412,7 +413,7 @@ class UserProductService {
 
       return request;
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error getting service request details:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error getting service request details:', error);
       throw error;
     }
   }
@@ -439,11 +440,11 @@ class UserProductService {
 
       await (request as any).scheduleService(scheduledDate, timeSlot, technician);
 
-      console.log(`✅ [USER PRODUCT SERVICE] Service request scheduled successfully`);
+      logger.info(`✅ [USER PRODUCT SERVICE] Service request scheduled successfully`);
 
       return request;
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error scheduling service request:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error scheduling service request:', error);
       throw error;
     }
   }
@@ -468,11 +469,11 @@ class UserProductService {
 
       await (request as any).cancelService(reason);
 
-      console.log(`✅ [USER PRODUCT SERVICE] Service request cancelled successfully`);
+      logger.info(`✅ [USER PRODUCT SERVICE] Service request cancelled successfully`);
 
       return request;
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error cancelling service request:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error cancelling service request:', error);
       throw error;
     }
   }
@@ -498,11 +499,11 @@ class UserProductService {
 
       await (request as any).rescheduleService(newDate, newTimeSlot);
 
-      console.log(`✅ [USER PRODUCT SERVICE] Service request rescheduled successfully`);
+      logger.info(`✅ [USER PRODUCT SERVICE] Service request rescheduled successfully`);
 
       return request;
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error rescheduling service request:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error rescheduling service request:', error);
       throw error;
     }
   }
@@ -528,11 +529,11 @@ class UserProductService {
 
       await (request as any).rateService(rating, feedback);
 
-      console.log(`✅ [USER PRODUCT SERVICE] Service request rated successfully`);
+      logger.info(`✅ [USER PRODUCT SERVICE] Service request rated successfully`);
 
       return request;
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error rating service request:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error rating service request:', error);
       throw error;
     }
   }
@@ -544,7 +545,7 @@ class UserProductService {
     try {
       return await (ServiceRequest as any).getActiveRequests(userId);
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error getting active service requests:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error getting active service requests:', error);
       throw error;
     }
   }
@@ -556,7 +557,7 @@ class UserProductService {
     try {
       return await (UserProduct as any).markExpiredWarranties();
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error marking expired warranties:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error marking expired warranties:', error);
       throw error;
     }
   }
@@ -578,16 +579,16 @@ class UserProductService {
         .populate('product', 'name')
         .lean();
 
-      console.log(`📧 [USER PRODUCT SERVICE] Found ${expiringProducts.length} products with expiring warranties`);
+      logger.info(`📧 [USER PRODUCT SERVICE] Found ${expiringProducts.length} products with expiring warranties`);
 
       // TODO: Integrate with notification service to send reminders
       // For now, just logging
 
       for (const product of expiringProducts) {
-        console.log(`⚠️ Warranty expiring soon for product: ${(product.product as any).name}`);
+        logger.info(`⚠️ Warranty expiring soon for product: ${(product.product as any).name}`);
       }
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error sending warranty expiry reminders:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error sending warranty expiry reminders:', error);
       throw error;
     }
   }
@@ -609,15 +610,15 @@ class UserProductService {
         .populate('product', 'name')
         .lean();
 
-      console.log(`📧 [USER PRODUCT SERVICE] Found ${expiringAMC.length} products with expiring AMC`);
+      logger.info(`📧 [USER PRODUCT SERVICE] Found ${expiringAMC.length} products with expiring AMC`);
 
       // TODO: Integrate with notification service to send reminders
 
       for (const product of expiringAMC) {
-        console.log(`⚠️ AMC expiring soon for product: ${(product.product as any).name}`);
+        logger.info(`⚠️ AMC expiring soon for product: ${(product.product as any).name}`);
       }
     } catch (error) {
-      console.error('❌ [USER PRODUCT SERVICE] Error sending AMC renewal reminders:', error);
+      logger.error('❌ [USER PRODUCT SERVICE] Error sending AMC renewal reminders:', error);
       throw error;
     }
   }

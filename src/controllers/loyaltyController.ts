@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import UserLoyalty from '../models/UserLoyalty';
@@ -268,7 +269,7 @@ async function populateBrandLoyaltyFromOrders(userId: string): Promise<any[]> {
           if (realName) b.name = realName;
         }
       } catch (nameError) {
-        console.error('[Loyalty] Error looking up store names:', nameError);
+        logger.error('[Loyalty] Error looking up store names:', nameError);
       }
     }
 
@@ -285,7 +286,7 @@ async function populateBrandLoyaltyFromOrders(userId: string): Promise<any[]> {
       };
     });
   } catch (error) {
-    console.error('[Loyalty] Error populating brand loyalty:', error);
+    logger.error('[Loyalty] Error populating brand loyalty:', error);
     return [];
   }
 }
@@ -493,7 +494,7 @@ async function computeMissionProgress(userId: string, streakCurrent: number): Pr
       progressMap.set(missionId, progress);
     }
   } catch (error) {
-    console.error('[Loyalty] Error computing mission progress:', error);
+    logger.error('[Loyalty] Error computing mission progress:', error);
   }
 
   return progressMap;
@@ -613,7 +614,7 @@ export const getUserLoyalty = asyncHandler(async (req: Request, res: Response) =
         }
       }
     } catch (walletErr) {
-      console.error('[Loyalty] Error fetching wallet balance:', walletErr);
+      logger.error('[Loyalty] Error fetching wallet balance:', walletErr);
     }
 
     // Get category-specific coins from UserLoyalty
@@ -834,7 +835,7 @@ export const completeMission = asyncHandler(async (req: Request, res: Response) 
         validMissionCategory || null
       );
     } catch (coinErr) {
-      console.error('[Loyalty] Failed to sync mission coins via coinService:', coinErr);
+      logger.error('[Loyalty] Failed to sync mission coins via coinService:', coinErr);
     }
 
     sendSuccess(res, { 
@@ -1098,7 +1099,7 @@ export const getHomepageLoyaltySummary = asyncHandler(async (req: Request, res: 
 
     sendSuccess(res, result, 'Homepage loyalty summary retrieved successfully');
   } catch (error) {
-    console.error('Error fetching homepage loyalty summary:', error);
+    logger.error('Error fetching homepage loyalty summary:', error);
     throw new AppError('Failed to fetch homepage loyalty summary', 500);
   }
 });

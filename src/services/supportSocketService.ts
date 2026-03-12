@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Support Socket Service
 // Emits WebSocket events for real-time support chat functionality
 
@@ -9,17 +10,17 @@ class SupportSocketService {
    */
   emitToUser(userId: string, event: string, data: any): void {
     if (!isSocketInitialized()) {
-      console.warn(`[SupportSocket] Socket NOT initialized, skipping ${event} to user ${userId}`);
+      logger.warn(`[SupportSocket] Socket NOT initialized, skipping ${event} to user ${userId}`);
       return;
     }
     try {
       const io = getIO();
       const room = `user-${userId}`;
       const socketsInRoom = io.sockets.adapter.rooms.get(room);
-      console.log(`[SupportSocket] Emitting ${event} to room "${room}" (${socketsInRoom?.size || 0} sockets in room)`);
+      logger.info(`[SupportSocket] Emitting ${event} to room "${room}" (${socketsInRoom?.size || 0} sockets in room)`);
       io.to(room).emit(event, data);
     } catch (err) {
-      console.error(`[SupportSocket] Failed to emit ${event} to user ${userId}:`, err);
+      logger.error(`[SupportSocket] Failed to emit ${event} to user ${userId}:`, err);
     }
   }
 
@@ -28,16 +29,16 @@ class SupportSocketService {
    */
   emitToSupportAgents(event: string, data: any): void {
     if (!isSocketInitialized()) {
-      console.warn(`[SupportSocket] Socket NOT initialized, skipping ${event} to support-agents`);
+      logger.warn(`[SupportSocket] Socket NOT initialized, skipping ${event} to support-agents`);
       return;
     }
     try {
       const io = getIO();
       const socketsInRoom = io.sockets.adapter.rooms.get('support-agents');
-      console.log(`[SupportSocket] Emitting ${event} to room "support-agents" (${socketsInRoom?.size || 0} sockets in room)`);
+      logger.info(`[SupportSocket] Emitting ${event} to room "support-agents" (${socketsInRoom?.size || 0} sockets in room)`);
       io.to('support-agents').emit(event, data);
     } catch (err) {
-      console.error(`[SupportSocket] Failed to emit ${event} to support-agents:`, err);
+      logger.error(`[SupportSocket] Failed to emit ${event} to support-agents:`, err);
     }
   }
 
@@ -46,17 +47,17 @@ class SupportSocketService {
    */
   emitToTicketRoom(ticketId: string, event: string, data: any): void {
     if (!isSocketInitialized()) {
-      console.warn(`[SupportSocket] Socket NOT initialized, skipping ${event} to ticket ${ticketId}`);
+      logger.warn(`[SupportSocket] Socket NOT initialized, skipping ${event} to ticket ${ticketId}`);
       return;
     }
     try {
       const io = getIO();
       const room = `support-ticket-${ticketId}`;
       const socketsInRoom = io.sockets.adapter.rooms.get(room);
-      console.log(`[SupportSocket] Emitting ${event} to room "${room}" (${socketsInRoom?.size || 0} sockets in room)`);
+      logger.info(`[SupportSocket] Emitting ${event} to room "${room}" (${socketsInRoom?.size || 0} sockets in room)`);
       io.to(room).emit(event, data);
     } catch (err) {
-      console.error(`[SupportSocket] Failed to emit ${event} to ticket ${ticketId}:`, err);
+      logger.error(`[SupportSocket] Failed to emit ${event} to ticket ${ticketId}:`, err);
     }
   }
 
@@ -66,7 +67,7 @@ class SupportSocketService {
   emitAgentAssigned(userId: string, ticketId: string, agent: { id: string; name: string; status?: string }): void {
     this.emitToUser(userId, 'support_agent_assigned', { ticketId, agent });
     this.emitToTicketRoom(ticketId, 'support_agent_assigned', { ticketId, agent });
-    console.log(`[SupportSocket] Emitted agent_assigned to user ${userId} for ticket ${ticketId}`);
+    logger.info(`[SupportSocket] Emitted agent_assigned to user ${userId} for ticket ${ticketId}`);
   }
 
   /**
@@ -76,7 +77,7 @@ class SupportSocketService {
     const payload = { ticketId, message };
     this.emitToUser(userId, 'support_message_received', payload);
     this.emitToTicketRoom(ticketId, 'support_message_received', payload);
-    console.log(`[SupportSocket] Emitted message to user ${userId} and ticket room ${ticketId}`);
+    logger.info(`[SupportSocket] Emitted message to user ${userId} and ticket room ${ticketId}`);
   }
 
   /**
@@ -85,7 +86,7 @@ class SupportSocketService {
   emitStatusChanged(userId: string, ticketId: string, status: string): void {
     this.emitToUser(userId, 'support_ticket_status_changed', { ticketId, status });
     this.emitToTicketRoom(ticketId, 'support_ticket_status_changed', { ticketId, status });
-    console.log(`[SupportSocket] Emitted status_changed (${status}) to user ${userId}`);
+    logger.info(`[SupportSocket] Emitted status_changed (${status}) to user ${userId}`);
   }
 
   /**
@@ -101,7 +102,7 @@ class SupportSocketService {
       userId: ticket.user?.toString(),
       createdAt: ticket.createdAt,
     });
-    console.log(`[SupportSocket] Emitted new_ticket to support-agents`);
+    logger.info(`[SupportSocket] Emitted new_ticket to support-agents`);
   }
 
   /**

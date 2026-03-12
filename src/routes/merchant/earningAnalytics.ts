@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../../middleware/merchantauth';
 import { Store } from '../../models/Store';
@@ -303,7 +304,7 @@ router.get('/stores/:storeId/earning-analytics', async (req: Request, res: Respo
       },
     });
   } catch (error: any) {
-    console.error('[EARNING ANALYTICS] Error:', error);
+    logger.error('[EARNING ANALYTICS] Error:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch earning analytics',

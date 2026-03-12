@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 // Admin Support Ticket Routes
 // CRUD and management for support tickets
 
@@ -71,7 +72,7 @@ router.get('/tickets', async (req: Request, res: Response) => {
       pages: Math.ceil(total / Number(limit)),
     });
   } catch (error: any) {
-    console.error('[Admin Support] Error listing tickets:', error.message);
+    logger.error('[Admin Support] Error listing tickets:', error.message);
     sendError(res, 'Failed to list tickets', 500);
   }
 });
@@ -97,7 +98,7 @@ router.get('/tickets/:id', async (req: Request, res: Response) => {
 
     sendSuccess(res, { ticket });
   } catch (error: any) {
-    console.error('[Admin Support] Error fetching ticket:', error.message);
+    logger.error('[Admin Support] Error fetching ticket:', error.message);
     sendError(res, 'Failed to fetch ticket', 500);
   }
 });
@@ -147,7 +148,7 @@ router.put('/tickets/:id/assign', async (req: Request, res: Response) => {
 
     sendSuccess(res, { ticket });
   } catch (error: any) {
-    console.error('[Admin Support] Error assigning ticket:', error.message);
+    logger.error('[Admin Support] Error assigning ticket:', error.message);
     sendError(res, 'Failed to assign ticket', 500);
   }
 });
@@ -224,7 +225,7 @@ router.post('/tickets/:id/messages', async (req: Request, res: Response) => {
 
     sendSuccess(res, { ticket });
   } catch (error: any) {
-    console.error('[Admin Support] Error adding agent message:', error.message);
+    logger.error('[Admin Support] Error adding agent message:', error.message);
     sendError(res, 'Failed to add message', 500);
   }
 });
@@ -271,7 +272,7 @@ router.put('/tickets/:id/status', async (req: Request, res: Response) => {
 
     sendSuccess(res, { ticket });
   } catch (error: any) {
-    console.error('[Admin Support] Error updating status:', error.message);
+    logger.error('[Admin Support] Error updating status:', error.message);
     sendError(res, 'Failed to update status', 500);
   }
 });
@@ -303,7 +304,7 @@ router.get('/agents', async (req: Request, res: Response) => {
 
     sendSuccess(res, { agents });
   } catch (error: any) {
-    console.error('[Admin Support] Error fetching agents:', error.message);
+    logger.error('[Admin Support] Error fetching agents:', error.message);
     sendError(res, 'Failed to fetch agents', 500);
   }
 });
@@ -343,7 +344,7 @@ router.get('/statistics', async (req: Request, res: Response) => {
       inProgressCount: statusMap.in_progress || 0,
     });
   } catch (error: any) {
-    console.error('[Admin Support] Error fetching statistics:', error.message);
+    logger.error('[Admin Support] Error fetching statistics:', error.message);
     sendError(res, 'Failed to fetch statistics', 500);
   }
 });
@@ -373,7 +374,7 @@ router.post('/tickets/:id/read', requireAdmin, async (req: Request, res: Respons
 
     sendSuccess(res, { message: 'Messages marked as read' });
   } catch (error: any) {
-    console.error('[Admin Support] Error marking messages as read:', error.message);
+    logger.error('[Admin Support] Error marking messages as read:', error.message);
     sendError(res, 'Failed to mark messages as read', 500);
   }
 });

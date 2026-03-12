@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
@@ -83,7 +84,7 @@ export class InvoiceService {
       // Return public URL
       return `${this.PUBLIC_URL_BASE}/uploads/invoices/${filename}`;
     } catch (error) {
-      console.error('Error generating invoice:', error);
+      logger.error('Error generating invoice:', error);
       throw new Error(`Failed to generate invoice: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -165,7 +166,7 @@ export class InvoiceService {
         }
       });
     } catch (error) {
-      console.error('Error streaming invoice PDF:', error);
+      logger.error('Error streaming invoice PDF:', error);
       throw new Error(`Failed to stream invoice PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -538,7 +539,7 @@ export class InvoiceService {
 
       return `${this.PUBLIC_URL_BASE}/uploads/packing-slips/${filename}`;
     } catch (error) {
-      console.error('Error generating packing slip:', error);
+      logger.error('Error generating packing slip:', error);
       throw new Error(`Failed to generate packing slip: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

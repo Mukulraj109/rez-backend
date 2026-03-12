@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Exclusive Zones
  * CRUD for ExclusiveZone model
@@ -40,7 +41,7 @@ router.get('/', async (req: Request, res: Response) => {
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     }, 'Exclusive zones fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching exclusive zones:', error);
+    logger.error('[Admin] Error fetching exclusive zones:', error);
     return sendError(res, 'Failed to fetch exclusive zones', 500);
   }
 });
@@ -55,7 +56,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     if (!zone) return sendError(res, 'Exclusive zone not found', 404);
     return sendSuccess(res, zone, 'Exclusive zone fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching exclusive zone:', error);
+    logger.error('[Admin] Error fetching exclusive zone:', error);
     return sendError(res, 'Failed to fetch exclusive zone', 500);
   }
 });
@@ -73,7 +74,7 @@ router.post('/', async (req: Request, res: Response) => {
     const zone = await ExclusiveZone.create({ ...req.body });
     return sendSuccess(res, zone, 'Exclusive zone created');
   } catch (error) {
-    console.error('[Admin] Error creating exclusive zone:', error);
+    logger.error('[Admin] Error creating exclusive zone:', error);
     return sendError(res, 'Failed to create exclusive zone', 500);
   }
 });
@@ -88,7 +89,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (!zone) return sendError(res, 'Exclusive zone not found', 404);
     return sendSuccess(res, zone, 'Exclusive zone updated');
   } catch (error) {
-    console.error('[Admin] Error updating exclusive zone:', error);
+    logger.error('[Admin] Error updating exclusive zone:', error);
     return sendError(res, 'Failed to update exclusive zone', 500);
   }
 });
@@ -105,7 +106,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
     await zone.save();
     return sendSuccess(res, zone, `Exclusive zone ${zone.isActive ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling exclusive zone:', error);
+    logger.error('[Admin] Error toggling exclusive zone:', error);
     return sendError(res, 'Failed to toggle exclusive zone', 500);
   }
 });
@@ -120,7 +121,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     if (!zone) return sendError(res, 'Exclusive zone not found', 404);
     return sendSuccess(res, null, 'Exclusive zone deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting exclusive zone:', error);
+    logger.error('[Admin] Error deleting exclusive zone:', error);
     return sendError(res, 'Failed to delete exclusive zone', 500);
   }
 });

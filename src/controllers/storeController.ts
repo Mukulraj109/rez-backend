@@ -18,6 +18,7 @@ import { withCache } from '../utils/cacheHelper';
 import { CacheTTL } from '../config/redis';
 import { logStoreSearch } from '../services/searchHistoryService';
 import { regionService, isValidRegion, RegionId, getRegionConfig } from '../services/regionService';
+import { logger } from '../config/logger';
 
 // Escape user input for safe use in RegExp (prevents ReDoS / NoSQL injection)
 const escapeRegex = (str: string): string => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -52,7 +53,7 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
     if (effectiveRegion && isValidRegion(effectiveRegion)) {
       const regionFilter = regionService.getStoreFilter(effectiveRegion as RegionId);
       Object.assign(query, regionFilter);
-      console.log('🌍 [GET STORES] Region filter applied:', effectiveRegion);
+      logger.info('[GET STORES] Region filter applied:', effectiveRegion);
     }
 
     // Apply category filter (supports both ObjectId and slug)
@@ -155,8 +156,8 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    console.log('🔍 [GET STORES] Query:', JSON.stringify(query));
-    console.log('🔍 [GET STORES] Sort options:', sortOptions);
+    logger.debug('[GET STORES] Query:', { query });
+    logger.debug('[GET STORES] Sort options:', { sortOptions });
 
     const [stores, total] = await Promise.all([
       Store.find(query)
@@ -173,7 +174,7 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
       Store.countDocuments(query),
     ]);
 
-    console.log(`✅ [GET STORES] Found ${stores.length} stores`);
+    logger.info(`[GET STORES] Found ${stores.length} stores`);
 
     // Filter by open status if requested
     let filteredStores: any[] = stores;
@@ -222,7 +223,7 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
           rating: rating ? Number(rating) : undefined,
           tags: tags ? (Array.isArray(tags) ? tags : [tags]) as string[] : undefined
         }
-      ).catch(err => console.error('Failed to log store search:', err));
+      ).catch(err => logger.error('Failed to log store search:', err));
     }
 
     sendSuccess(res, {
@@ -238,7 +239,7 @@ export const getStores = asyncHandler(async (req: Request, res: Response) => {
     }, 'Stores retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [GET STORES] Error fetching stores:', error);
+    logger.error('[GET STORES] Error fetching stores:', error);
     throw new AppError('Failed to fetch stores', 500);
   }
 });
@@ -475,7 +476,7 @@ export const getNearbyStores = asyncHandler(async (req: Request, res: Response) 
     if (effectiveRegion && isValidRegion(effectiveRegion)) {
       const regionFilter = regionService.getStoreFilter(effectiveRegion as RegionId);
       Object.assign(query, regionFilter);
-      console.log('🌍 [NEARBY STORES] Region filter applied:', effectiveRegion);
+      logger.info('[NEARBY STORES] Region filter applied:', effectiveRegion);
     }
 
     const stores = await Store.find(query)
@@ -517,7 +518,7 @@ export const getNearbyStores = asyncHandler(async (req: Request, res: Response) 
     sendSuccess(res, { stores: storesWithDistance }, 'Nearby stores retrieved successfully');
 
   } catch (error) {
-    console.error('Error fetching nearby stores:', error);
+    logger.error('Error fetching nearby stores:', error);
     throw new AppError('Failed to fetch nearby stores', 500);
   }
 });
@@ -792,7 +793,7 @@ export const getStoresByCategory = asyncHandler(async (req: Request, res: Respon
     }, 'Stores by category retrieved successfully');
 
   } catch (error) {
-    console.error('Error fetching stores by category:', error);
+    logger.error('Error fetching stores by category:', error);
     throw new AppError('Failed to fetch stores by category', 500);
   }
 });
@@ -1002,12 +1003,12 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
         store.products = transformedProducts;
       }
 
-      console.log(`✅ [SEARCH BY CATEGORY] Populated ${stores.length} stores with products`);
+      logger.debug(`[SEARCH BY CATEGORY] Populated ${stores.length} stores with products`);
       if (stores.length > 0 && stores[0].products) {
-        console.log(`  First store "${stores[0].name}" has ${stores[0].products.length} products`);
+        logger.debug(`  First store "${stores[0].name}" has ${stores[0].products.length} products`);
         if (stores[0].products.length > 0) {
           const p = stores[0].products[0];
-          console.log(`  First product: "${p.name}", price: ${p.price} (type: ${typeof p.price}), rating: ${p.rating}`);
+          logger.debug(`  First product: "${p.name}", price: ${p.price} (type: ${typeof p.price}), rating: ${p.rating}`);
         }
       }
     }
@@ -1028,7 +1029,7 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
                 );
                 return { ...store, distance: Math.round(distance * 100) / 100 };
               } catch (error) {
-                console.error('Error calculating distance for store:', store._id, error);
+                logger.error('Error calculating distance for store:', store._id, error);
                 return { ...store, distance: null };
               }
             }
@@ -1060,7 +1061,7 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
     }, `Stores found for category: ${category}`);
 
   } catch (error) {
-    console.error('Search stores by category error:', error);
+    logger.error('Search stores by category error:', error);
     throw new AppError('Failed to search stores by category', 500);
   }
 });
@@ -1331,7 +1332,7 @@ export const advancedStoreSearch = asyncHandler(async (req: Request, res: Respon
     });
 
   } catch (error) {
-    console.error('Advanced store search error:', error);
+    logger.error('Advanced store search error:', error);
     throw new AppError('Failed to search stores', 500);
   }
 });
@@ -1401,7 +1402,7 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
     const regionHeader = req.headers['x-rez-region'] as string;
     const region = regionHeader && isValidRegion(regionHeader) ? regionHeader : 'all';
 
-    console.log('🔥 [TRENDING STORES] Getting trending stores:', {
+    logger.info('[TRENDING STORES] Getting trending stores:', {
       category,
       limit,
       page,
@@ -1414,7 +1415,7 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
     const cachedStores = await redisService.get<any>(cacheKey);
 
     if (cachedStores) {
-      console.log('✅ [TRENDING STORES] Returning from cache');
+      logger.info('[TRENDING STORES] Returning from cache');
       return sendSuccess(res, cachedStores, 'Trending stores retrieved successfully');
     }
 
@@ -1475,7 +1476,7 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
         }).lean();
 
         if (!categoryDoc) {
-          console.log('❌ [TRENDING STORES] Category not found:', category);
+          logger.info('[TRENDING STORES] Category not found:', category);
           // If category not found, return empty results instead of error
           const result = {
             stores: [],
@@ -1491,7 +1492,7 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
         }
 
         query.category = categoryDoc._id;
-        console.log('✅ [TRENDING STORES] Category converted to ObjectId:', categoryDoc.name, categoryDoc._id);
+        logger.info('[TRENDING STORES] Category converted to ObjectId:', categoryDoc.name, categoryDoc._id);
       } else if (mongoose.Types.ObjectId.isValid(category as string)) {
         // Already a valid ObjectId, convert to ObjectId type
         query.category = new mongoose.Types.ObjectId(category as string);
@@ -1618,11 +1619,11 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
     // Cache for 30 minutes (trending data changes frequently)
     await redisService.set(cacheKey, result, 1800); // 30 minutes in seconds
 
-    console.log('✅ [TRENDING STORES] Returning', paginatedStores.length, 'trending stores');
+    logger.info('[TRENDING STORES] Returning', paginatedStores.length, 'trending stores');
     sendSuccess(res, result, 'Trending stores retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [TRENDING STORES] Error:', error);
+    logger.error('[TRENDING STORES] Error:', error);
     throw new AppError('Failed to get trending stores', 500);
   }
 });
@@ -1645,7 +1646,7 @@ export const getStoreFollowerCount = asyncHandler(async (req: Request, res: Resp
 
     sendSuccess(res, { count }, 'Follower count retrieved successfully');
   } catch (error) {
-    console.error('❌ [GET FOLLOWER COUNT] Error:', error);
+    logger.error('[GET FOLLOWER COUNT] Error:', error);
     throw new AppError('Failed to get follower count', 500);
   }
 });
@@ -1678,7 +1679,7 @@ export const getStoreFollowers = asyncHandler(async (req: Request, res: Response
       followers: followerIds
     }, 'Followers retrieved successfully');
   } catch (error) {
-    console.error('❌ [GET FOLLOWERS] Error:', error);
+    logger.error('[GET FOLLOWERS] Error:', error);
     throw new AppError('Failed to get followers', 500);
   }
 });
@@ -1718,7 +1719,7 @@ export const sendFollowerNotification = asyncHandler(async (req: Request, res: R
 
     sendSuccess(res, result, 'Notifications sent successfully');
   } catch (error) {
-    console.error('❌ [SEND FOLLOWER NOTIFICATION] Error:', error);
+    logger.error('[SEND FOLLOWER NOTIFICATION] Error:', error);
     throw new AppError('Failed to send notifications', 500);
   }
 });
@@ -1755,7 +1756,7 @@ export const notifyNewOffer = asyncHandler(async (req: Request, res: Response) =
 
     sendSuccess(res, result, 'Offer notification sent to followers');
   } catch (error) {
-    console.error('❌ [NOTIFY NEW OFFER] Error:', error);
+    logger.error('[NOTIFY NEW OFFER] Error:', error);
     throw new AppError('Failed to send offer notification', 500);
   }
 });
@@ -1799,7 +1800,7 @@ export const notifyNewProduct = asyncHandler(async (req: Request, res: Response)
 
     sendSuccess(res, result, 'Product notification sent to followers');
   } catch (error) {
-    console.error('❌ [NOTIFY NEW PRODUCT] Error:', error);
+    logger.error('[NOTIFY NEW PRODUCT] Error:', error);
     throw new AppError('Failed to send product notification', 500);
   }
 });
@@ -1814,7 +1815,7 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
   } = req.query;
 
   try {
-    console.log(`🔍 [GET STORES BY SLUG] Searching for category: ${slug}`);
+    logger.info(`[GET STORES BY SLUG] Searching for category: ${slug}`);
 
     // Import Category model (named export)
     const { Category } = require('../models/Category');
@@ -1827,7 +1828,7 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
 
     if (!category) {
       // Category slug not in DB — return empty results instead of unfiltered cross-category search
-      console.log(`⚠️ [GET STORES BY SLUG] Category not found in DB: ${slug}`);
+      logger.info(`[GET STORES BY SLUG] Category not found in DB: ${slug}`);
 
       return sendSuccess(res, {
         stores: [],
@@ -1848,7 +1849,7 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
       }, `No category found for: ${slug}`);
     }
 
-    console.log(`✅ [GET STORES BY SLUG] Found category: ${category.name} (${category._id})`);
+    logger.info(`[GET STORES BY SLUG] Found category: ${category.name} (${category._id})`);
 
     // Determine if this is a subcategory or main category
     const isSubcategory = !!category.parentCategory;
@@ -1858,7 +1859,7 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
     if (isSubcategory) {
       // For subcategories: search ONLY by subcategory fields, NOT by parent category
       // This ensures we get stores specific to this subcategory
-      console.log(`🔍 [GET STORES BY SLUG] Searching as SUBCATEGORY: ${slug}`);
+      logger.info(`[GET STORES BY SLUG] Searching as SUBCATEGORY: ${slug}`);
       query = {
         isActive: true,
         isSuspended: { $ne: true },
@@ -1875,7 +1876,7 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
       if (category.childCategories && category.childCategories.length > 0) {
         categoryIds.push(...category.childCategories);
       }
-      console.log(`🔍 [GET STORES BY SLUG] Searching as MAIN CATEGORY: ${slug}, including ${categoryIds.length} category IDs`);
+      logger.info(`[GET STORES BY SLUG] Searching as MAIN CATEGORY: ${slug}, including ${categoryIds.length} category IDs`);
       query = {
         isActive: true,
         isSuspended: { $ne: true },
@@ -1894,7 +1895,7 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
     if (regionHeader && isValidRegion(regionHeader)) {
       const regionFilter = regionService.getStoreFilter(regionHeader as RegionId);
       Object.assign(query, regionFilter);
-      console.log(`🌍 [GET STORES BY SLUG] Region filter applied: ${regionHeader}`);
+      logger.info(`[GET STORES BY SLUG] Region filter applied: ${regionHeader}`);
     }
 
     // Sorting
@@ -1927,7 +1928,7 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
       Store.countDocuments(query)
     ]);
 
-    console.log(`📦 [GET STORES BY SLUG] Found ${stores.length} stores for category ${slug}`);
+    logger.info(`[GET STORES BY SLUG] Found ${stores.length} stores for category ${slug}`);
 
     // Fetch products for all stores in a single bulk query (avoids N+1)
     const storeIds = stores.map((s: any) => s._id);
@@ -1999,7 +2000,7 @@ export const getStoresByCategorySlug = asyncHandler(async (req: Request, res: Re
     }, `Found ${total} stores for category: ${category.name}`);
 
   } catch (error) {
-    console.error('❌ [GET STORES BY SLUG] Error:', error);
+    logger.error('[GET STORES BY SLUG] Error:', error);
     throw new AppError('Failed to get stores by category slug', 500);
   }
 });
@@ -2070,7 +2071,7 @@ export const getUserStoreVisits = asyncHandler(async (req: Request, res: Respons
     }, 'User store visits retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [GET USER STORE VISITS] Error:', error);
+    logger.error('[GET USER STORE VISITS] Error:', error);
     throw new AppError('Failed to get user store visits', 500);
   }
 });
@@ -2125,7 +2126,7 @@ export const getRecentEarnings = asyncHandler(async (req: Request, res: Response
     return sendSuccess(res, recentEarnings, 'Recent earnings retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [GET RECENT EARNINGS] Error:', error);
+    logger.error('[GET RECENT EARNINGS] Error:', error);
     throw new AppError('Failed to get recent earnings', 500);
   }
 });
@@ -2224,7 +2225,7 @@ export const getTopCashbackStores = asyncHandler(async (req: Request, res: Respo
     sendSuccess(res, { stores: formattedStores }, 'Top cashback stores retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [GET TOP CASHBACK STORES] Error:', error);
+    logger.error('[GET TOP CASHBACK STORES] Error:', error);
     throw new AppError('Failed to fetch top cashback stores', 500);
   }
 });
@@ -2304,7 +2305,7 @@ export const getBNPLStores = asyncHandler(async (req: Request, res: Response) =>
     sendSuccess(res, { stores: formattedStores }, 'BNPL stores retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [GET BNPL STORES] Error:', error);
+    logger.error('[GET BNPL STORES] Error:', error);
     throw new AppError('Failed to fetch BNPL stores', 500);
   }
 });
@@ -2468,7 +2469,7 @@ export const getNearbyStoresForHomepage = asyncHandler(async (req: Request, res:
     sendSuccess(res, { stores: validStores }, 'Nearby stores for homepage retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [GET NEARBY STORES HOMEPAGE] Error:', error);
+    logger.error('[GET NEARBY STORES HOMEPAGE] Error:', error);
     throw new AppError('Failed to fetch nearby stores for homepage', 500);
   }
 });
@@ -2481,7 +2482,7 @@ export const getNewStores = asyncHandler(async (req: Request, res: Response) => 
   const { limit = 4, days = 30, latitude, longitude } = req.query;
 
   try {
-    console.log('🔍 [GET NEW STORES] Fetching recently added stores...');
+    logger.info('[GET NEW STORES] Fetching recently added stores...');
 
     // Calculate the date threshold (stores added within the last X days)
     const dateThreshold = new Date();
@@ -2536,7 +2537,7 @@ export const getNewStores = asyncHandler(async (req: Request, res: Response) => 
       isNew: true
     }));
 
-    console.log(`✅ [GET NEW STORES] Found ${formattedStores.length} new stores`);
+    logger.info(`[GET NEW STORES] Found ${formattedStores.length} new stores`);
 
     sendSuccess(res, {
       stores: formattedStores,
@@ -2548,7 +2549,7 @@ export const getNewStores = asyncHandler(async (req: Request, res: Response) => 
     }, 'New stores retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [GET NEW STORES] Error:', error);
+    logger.error('[GET NEW STORES] Error:', error);
     throw new AppError('Failed to fetch new stores', 500);
   }
 });
@@ -2562,7 +2563,7 @@ export const getStoresByTag = asyncHandler(async (req: Request, res: Response) =
   const { page = 1, limit = 20, sortBy = 'rating' } = req.query;
 
   try {
-    console.log(`🔍 [GET STORES BY TAG] Searching for tag: ${tag}`);
+    logger.info(`[GET STORES BY TAG] Searching for tag: ${tag}`);
 
     // Build query to find stores with matching tag (case insensitive)
     const tagLower = tag.toLowerCase();
@@ -2605,7 +2606,7 @@ export const getStoresByTag = asyncHandler(async (req: Request, res: Response) =
       Store.countDocuments(query)
     ]);
 
-    console.log(`📦 [GET STORES BY TAG] Found ${stores.length} stores for tag: ${tag}`);
+    logger.info(`[GET STORES BY TAG] Found ${stores.length} stores for tag: ${tag}`);
 
     // Format response
     const formattedStores = stores.map((store: any) => ({
@@ -2640,7 +2641,7 @@ export const getStoresByTag = asyncHandler(async (req: Request, res: Response) =
     }, `Found ${total} stores for tag: ${tag}`);
 
   } catch (error) {
-    console.error('❌ [GET STORES BY TAG] Error:', error);
+    logger.error('[GET STORES BY TAG] Error:', error);
     throw new AppError('Failed to get stores by tag', 500);
   }
 });
@@ -2652,7 +2653,7 @@ export const getStoresByTag = asyncHandler(async (req: Request, res: Response) =
  */
 export const getCuisineCounts = asyncHandler(async (req: Request, res: Response) => {
   try {
-    console.log('🔍 [GET CUISINE COUNTS] Aggregating cuisine counts...');
+    logger.info('[GET CUISINE COUNTS] Aggregating cuisine counts...');
 
     // Define the cuisines we want to count
     const cuisines = [
@@ -2703,7 +2704,7 @@ export const getCuisineCounts = asyncHandler(async (req: Request, res: Response)
       .filter(c => c.count > 0)
       .sort((a, b) => b.count - a.count);
 
-    console.log(`✅ [GET CUISINE COUNTS] Found ${sortedCounts.length} cuisines with stores`);
+    logger.info(`[GET CUISINE COUNTS] Found ${sortedCounts.length} cuisines with stores`);
 
     sendSuccess(res, {
       cuisines: sortedCounts,
@@ -2711,7 +2712,7 @@ export const getCuisineCounts = asyncHandler(async (req: Request, res: Response)
     }, 'Cuisine counts retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [GET CUISINE COUNTS] Error:', error);
+    logger.error('[GET CUISINE COUNTS] Error:', error);
     throw new AppError('Failed to get cuisine counts', 500);
   }
 });
@@ -2791,7 +2792,7 @@ export const getStoresByServiceType = asyncHandler(async (req: Request, res: Res
     }, `Found ${total} stores with ${serviceType} capability`);
 
   } catch (error) {
-    console.error(`❌ [GET STORES BY SERVICE TYPE] Error for ${serviceType}:`, error);
+    logger.error(`[GET STORES BY SERVICE TYPE] Error for ${serviceType}:`, error);
     throw new AppError('Failed to get stores by service type', 500);
   }
 });

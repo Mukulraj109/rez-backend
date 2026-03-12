@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Reputation Service
  *
@@ -240,7 +241,7 @@ class ReputationService {
     // Save (pre-save hook will recalculate total again)
     await reputation.save();
 
-    console.log(`📊 [REPUTATION] Recalculated for user ${userId.toString().slice(-6)}: Score=${reputation.totalScore}, Tier=${reputation.tier}`);
+    logger.info(`📊 [REPUTATION] Recalculated for user ${userId.toString().slice(-6)}: Score=${reputation.totalScore}, Tier=${reputation.tier}`);
 
     return reputation;
   }

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose, { Schema, Document, Types } from 'mongoose';
 import { mul, round2 } from '../utils/currency';
 
@@ -851,7 +852,7 @@ OrderSchema.methods.generateInvoice = async function (): Promise<string> {
 // Method to send status update (placeholder)
 OrderSchema.methods.sendStatusUpdate = async function (): Promise<void> {
   // This would typically send push notification, SMS, or email
-  console.log(`Status update sent for order ${this.orderNumber}: ${this.status}`);
+  logger.info(`Status update sent for order ${this.orderNumber}: ${this.status}`);
 };
 
 // Static method to get user orders

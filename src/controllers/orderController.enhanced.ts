@@ -88,7 +88,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
           timestamp: new Date(),
         });
       } catch (socketError) {
-        console.error('❌ [UPDATE ORDER STATUS] Socket emission failed:', socketError);
+        logger.error('❌ [UPDATE ORDER STATUS] Socket emission failed:', socketError);
       }
     }
 
@@ -189,7 +189,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         });
       }
     } catch (socketError) {
-      console.error('❌ [UPDATE ORDER STATUS] Socket emission failed:', socketError);
+      logger.error('❌ [UPDATE ORDER STATUS] Socket emission failed:', socketError);
     }
 
     sendSuccess(res, populatedOrder, 'Order status updated successfully');
@@ -216,6 +216,6 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         items: populatedOrder.items.length,
       });
     } catch (socketError) {
-      console.error('❌ [CREATE ORDER] Socket emission failed:', socketError);
+      logger.error('❌ [CREATE ORDER] Socket emission failed:', socketError);
     }
 */

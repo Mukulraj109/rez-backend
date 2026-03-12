@@ -10,6 +10,7 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import SpecialProgramConfig from '../models/SpecialProgramConfig';
+import { BRAND } from '../config/brand';
 
 dotenv.config();
 
@@ -74,8 +75,8 @@ const PROGRAMS = [
   },
   {
     slug: 'nuqta_prive',
-    name: 'Nuqta Privé',
-    description: 'Premium reputation-based program for top Nuqta users. Unlock the highest multipliers, premium campaigns, and brand collaboration opportunities.',
+    name: `${BRAND.PRIVE_NAME}`,
+    description: `Premium reputation-based program for top ${BRAND.APP_NAME} users. Unlock the highest multipliers, premium campaigns, and brand collaboration opportunities.`,
     badge: '👑',
     icon: 'diamond',
     eligibility: {

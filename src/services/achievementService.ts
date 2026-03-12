@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Achievement Service
 // Handles automatic achievement updates and triggers
 
@@ -11,7 +12,7 @@ class AchievementService {
    */
   async recalculateUserAchievements(userId: string | Types.ObjectId): Promise<void> {
     try {
-      console.log(`🏆 [ACHIEVEMENT] Recalculating achievements for user: ${userId}`);
+      logger.info(`🏆 [ACHIEVEMENT] Recalculating achievements for user: ${userId}`);
 
       // Get user statistics
       const { Order } = await import('../models/Order');
@@ -98,7 +99,7 @@ class AchievementService {
         if (achievement.progress >= 100 && !achievement.unlocked) {
           achievement.unlocked = true;
           achievement.unlockedDate = new Date();
-          console.log(`🎉 [ACHIEVEMENT] User ${userId} unlocked achievement: ${achievement.title}`);
+          logger.info(`🎉 [ACHIEVEMENT] User ${userId} unlocked achievement: ${achievement.title}`);
 
           // Award coins for unlocking achievement (idempotent via CoinTransaction unique index)
           if (definition.reward?.coins && definition.reward.coins > 0) {
@@ -110,13 +111,13 @@ class AchievementService {
                 `Achievement unlocked: ${achievement.title}`,
                 { achievementType: achievement.type, achievementId: achievement._id }
               );
-              console.log(`💰 [ACHIEVEMENT] Awarded ${definition.reward.coins} coins for achievement: ${achievement.title}`);
+              logger.info(`💰 [ACHIEVEMENT] Awarded ${definition.reward.coins} coins for achievement: ${achievement.title}`);
             } catch (coinError: any) {
               if (coinError.code === 11000) {
                 // Duplicate key — reward already granted for this achievement (idempotent success)
-                console.log(`ℹ️ [ACHIEVEMENT] Reward already granted for: ${achievement.title}`);
+                logger.info(`ℹ️ [ACHIEVEMENT] Reward already granted for: ${achievement.title}`);
               } else {
-                console.error(`❌ [ACHIEVEMENT] Failed to award coins for ${achievement.title}:`, coinError);
+                logger.error(`❌ [ACHIEVEMENT] Failed to award coins for ${achievement.title}:`, coinError);
               }
             }
           }
@@ -126,10 +127,10 @@ class AchievementService {
       });
 
       await Promise.all(updates);
-      console.log(`✅ [ACHIEVEMENT] Successfully recalculated achievements for user: ${userId}`);
+      logger.info(`✅ [ACHIEVEMENT] Successfully recalculated achievements for user: ${userId}`);
 
     } catch (error) {
-      console.error(`❌ [ACHIEVEMENT] Error recalculating achievements for user ${userId}:`, error);
+      logger.error(`❌ [ACHIEVEMENT] Error recalculating achievements for user ${userId}:`, error);
       // Don't throw error to avoid disrupting the main flow
     }
   }
@@ -139,13 +140,13 @@ class AchievementService {
    */
   async initializeUserAchievements(userId: string | Types.ObjectId): Promise<void> {
     try {
-      console.log(`🏆 [ACHIEVEMENT] Initializing achievements for user: ${userId}`);
+      logger.info(`🏆 [ACHIEVEMENT] Initializing achievements for user: ${userId}`);
 
       // Check if achievements already exist
       const existingCount = await UserAchievement.countDocuments({ user: userId });
 
       if (existingCount > 0) {
-        console.log(`ℹ️ [ACHIEVEMENT] Achievements already exist for user: ${userId}`);
+        logger.info(`ℹ️ [ACHIEVEMENT] Achievements already exist for user: ${userId}`);
         return;
       }
 
@@ -163,10 +164,10 @@ class AchievementService {
       }));
 
       await UserAchievement.insertMany(achievements);
-      console.log(`✅ [ACHIEVEMENT] Successfully initialized ${achievements.length} achievements for user: ${userId}`);
+      logger.info(`✅ [ACHIEVEMENT] Successfully initialized ${achievements.length} achievements for user: ${userId}`);
 
     } catch (error) {
-      console.error(`❌ [ACHIEVEMENT] Error initializing achievements for user ${userId}:`, error);
+      logger.error(`❌ [ACHIEVEMENT] Error initializing achievements for user ${userId}:`, error);
       // Don't throw error to avoid disrupting the main flow
     }
   }
@@ -176,13 +177,13 @@ class AchievementService {
    */
   async triggerAchievementUpdate(userId: string | Types.ObjectId, action: string): Promise<void> {
     try {
-      console.log(`🏆 [ACHIEVEMENT] Triggering achievement update for user: ${userId}, action: ${action}`);
+      logger.info(`🏆 [ACHIEVEMENT] Triggering achievement update for user: ${userId}, action: ${action}`);
 
       // Recalculate achievements
       await this.recalculateUserAchievements(userId);
 
     } catch (error) {
-      console.error(`❌ [ACHIEVEMENT] Error triggering achievement update for user ${userId}:`, error);
+      logger.error(`❌ [ACHIEVEMENT] Error triggering achievement update for user ${userId}:`, error);
     }
   }
 
@@ -192,7 +193,7 @@ class AchievementService {
    */
   async checkAndAwardAchievements(userId: string | Types.ObjectId, type: string, data?: any): Promise<void> {
     try {
-      console.log(`🏆 [ACHIEVEMENT] Checking achievements for user: ${userId}, type: ${type}`);
+      logger.info(`🏆 [ACHIEVEMENT] Checking achievements for user: ${userId}, type: ${type}`);
 
       // Map action types to achievement types
       const achievementTypeMap: Record<string, string[]> = {
@@ -208,7 +209,7 @@ class AchievementService {
       const relevantAchievementTypes = achievementTypeMap[type] || [];
 
       if (relevantAchievementTypes.length === 0) {
-        console.log(`ℹ️ [ACHIEVEMENT] No relevant achievement types for action: ${type}`);
+        logger.info(`ℹ️ [ACHIEVEMENT] No relevant achievement types for action: ${type}`);
         // Still recalculate all achievements to be safe
         await this.recalculateUserAchievements(userId);
         return;
@@ -222,17 +223,17 @@ class AchievementService {
       }).lean();
 
       if (achievements.length === 0) {
-        console.log(`ℹ️ [ACHIEVEMENT] No unlocked achievements to check for user: ${userId}`);
+        logger.info(`ℹ️ [ACHIEVEMENT] No unlocked achievements to check for user: ${userId}`);
         return;
       }
 
       // Recalculate only if there are relevant achievements to check
       await this.recalculateUserAchievements(userId);
 
-      console.log(`✅ [ACHIEVEMENT] Successfully checked and updated achievements for user: ${userId}`);
+      logger.info(`✅ [ACHIEVEMENT] Successfully checked and updated achievements for user: ${userId}`);
 
     } catch (error) {
-      console.error(`❌ [ACHIEVEMENT] Error checking achievements for user ${userId}:`, error);
+      logger.error(`❌ [ACHIEVEMENT] Error checking achievements for user ${userId}:`, error);
       // Don't throw error to avoid disrupting the main flow
     }
   }

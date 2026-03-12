@@ -343,6 +343,7 @@ export const getSmartSpendAnalytics = async (req: Request, res: Response) => {
     ]);
 
     const topItems = await SmartSpendItem.find({ isActive: true })
+      .select('itemType store product displayTitle coinDisplayText coinRewardRate sectionLabel badgeText views clicks purchases isFeatured sortOrder isActive')
       .populate('store', 'name slug logo')
       .populate('product', 'name images')
       .sort({ purchases: -1 })

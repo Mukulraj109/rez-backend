@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Leaderboard Configuration
  * CRUD endpoints for managing LeaderboardConfig and prize distributions
@@ -56,7 +57,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
       totalParticipants: distStats.totalParticipants,
     }, 'Leaderboard stats fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching leaderboard stats:', error);
+    logger.error('[Admin] Error fetching leaderboard stats:', error);
     return sendError(res, 'Failed to fetch leaderboard stats', 500);
   }
 });
@@ -95,7 +96,7 @@ router.get('/prize-history', async (req: Request, res: Response) => {
 
     return sendPaginated(res, distributions, page, limit, total, 'Prize history fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching prize history:', error);
+    logger.error('[Admin] Error fetching prize history:', error);
     return sendError(res, 'Failed to fetch prize history', 500);
   }
 });
@@ -139,7 +140,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     return sendPaginated(res, configs, page, limit, total, 'Leaderboard configs fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching leaderboard configs:', error);
+    logger.error('[Admin] Error fetching leaderboard configs:', error);
     return sendError(res, 'Failed to fetch leaderboard configs', 500);
   }
 });
@@ -154,7 +155,7 @@ router.post('/refresh', async (_req: Request, res: Response) => {
     await triggerManualLeaderboardRefresh();
     return sendSuccess(res, null, 'Leaderboard cache refreshed successfully');
   } catch (error: any) {
-    console.error('[Admin] Error refreshing leaderboard cache:', error);
+    logger.error('[Admin] Error refreshing leaderboard cache:', error);
     return sendError(res, `Failed to refresh: ${error.message}`, 500);
   }
 });
@@ -171,7 +172,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
     return sendSuccess(res, config, 'Leaderboard config fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching leaderboard config:', error);
+    logger.error('[Admin] Error fetching leaderboard config:', error);
     return sendError(res, 'Failed to fetch leaderboard config', 500);
   }
 });
@@ -217,7 +218,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     return sendCreated(res, config, 'Leaderboard config created');
   } catch (error: any) {
-    console.error('[Admin] Error creating leaderboard config:', error);
+    logger.error('[Admin] Error creating leaderboard config:', error);
     if (error.name === 'ValidationError') {
       return sendBadRequest(res, error.message);
     }
@@ -268,7 +269,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, config, 'Leaderboard config updated');
   } catch (error: any) {
-    console.error('[Admin] Error updating leaderboard config:', error);
+    logger.error('[Admin] Error updating leaderboard config:', error);
     if (error.name === 'ValidationError') {
       return sendBadRequest(res, error.message);
     }
@@ -291,7 +292,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
     return sendSuccess(res, null, 'Leaderboard config deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting leaderboard config:', error);
+    logger.error('[Admin] Error deleting leaderboard config:', error);
     return sendError(res, 'Failed to delete leaderboard config', 500);
   }
 });
@@ -325,7 +326,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
 
     return sendSuccess(res, config, `Leaderboard config status updated to ${status}`);
   } catch (error) {
-    console.error('[Admin] Error updating leaderboard config status:', error);
+    logger.error('[Admin] Error updating leaderboard config status:', error);
     return sendError(res, 'Failed to update leaderboard config status', 500);
   }
 });
@@ -393,7 +394,7 @@ router.get('/:id/analytics', async (req: Request, res: Response) => {
       scoreDistribution,
     }, 'Leaderboard analytics fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching leaderboard analytics:', error);
+    logger.error('[Admin] Error fetching leaderboard analytics:', error);
     return sendError(res, 'Failed to fetch leaderboard analytics', 500);
   }
 });
@@ -471,7 +472,7 @@ router.post('/:id/distribute-prizes', async (req: Request, res: Response) => {
       const fraudResults = await leaderboardSecurityService.runAntifraudChecks(entries, config);
       flaggedUserIds = new Set(fraudResults.flaggedEntries.map((e: any) => e.userId));
     } catch (err: any) {
-      console.error('[Admin Prize Dist] Anti-fraud check failed:', err.message);
+      logger.error('[Admin Prize Dist] Anti-fraud check failed:', err.message);
     }
 
     // Process prize slots
@@ -554,7 +555,7 @@ router.post('/:id/distribute-prizes', async (req: Request, res: Response) => {
       cycle: { start: cycleStartDate, end: cycleEndDate },
     }, `Prize distribution complete: ${totalDistributed} distributed, ${totalFlagged} flagged`);
   } catch (error: any) {
-    console.error('[Admin] Error triggering prize distribution:', error);
+    logger.error('[Admin] Error triggering prize distribution:', error);
     return sendError(res, `Failed to trigger prize distribution: ${error.message}`, 500);
   }
 });

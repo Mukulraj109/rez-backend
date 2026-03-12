@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Order Socket Service
  *
@@ -197,7 +198,7 @@ class OrderSocketService {
   public initialize(io: SocketIOServer): void {
     this.io = io;
     this.setupSocketHandlers();
-    console.log('✅ Order Socket Service initialized');
+    logger.info('✅ Order Socket Service initialized');
   }
 
   /**
@@ -207,13 +208,13 @@ class OrderSocketService {
     if (!this.io) return;
 
     this.io.on('connection', (socket) => {
-      console.log(`📡 Client connected to order updates: ${socket.id}`);
+      logger.info(`📡 Client connected to order updates: ${socket.id}`);
 
       // Handle client subscribing to specific order
       socket.on(OrderSocketEvent.SUBSCRIBE_ORDER, (data: { orderId: string; userId?: string }) => {
         const orderRoom = SocketRoom.order(data.orderId);
         socket.join(orderRoom);
-        console.log(`👤 Client ${socket.id} subscribed to order: ${data.orderId}`);
+        logger.info(`👤 Client ${socket.id} subscribed to order: ${data.orderId}`);
 
         // Also join user room if userId provided
         if (data.userId) {
@@ -225,11 +226,11 @@ class OrderSocketService {
       socket.on(OrderSocketEvent.UNSUBSCRIBE_ORDER, (data: { orderId: string }) => {
         const orderRoom = SocketRoom.order(data.orderId);
         socket.leave(orderRoom);
-        console.log(`👤 Client ${socket.id} unsubscribed from order: ${data.orderId}`);
+        logger.info(`👤 Client ${socket.id} unsubscribed from order: ${data.orderId}`);
       });
 
       socket.on('disconnect', () => {
-        console.log(`📡 Client disconnected from order updates: ${socket.id}`);
+        logger.info(`📡 Client disconnected from order updates: ${socket.id}`);
       });
     });
   }
@@ -239,7 +240,7 @@ class OrderSocketService {
    */
   public emitOrderStatusUpdate(payload: OrderStatusUpdatePayload): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit order status update.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit order status update.');
       return;
     }
 
@@ -273,7 +274,7 @@ class OrderSocketService {
         break;
     }
 
-    console.log(`📦 Order status updated: ${payload.orderNumber} -> ${payload.status}`);
+    logger.info(`📦 Order status updated: ${payload.orderNumber} -> ${payload.status}`);
 
     // Also emit to user's order list room (if userId is in metadata)
     if (payload.metadata?.userId) {
@@ -292,14 +293,14 @@ class OrderSocketService {
    */
   public emitOrderLocationUpdate(payload: OrderLocationUpdatePayload): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit order location update.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit order location update.');
       return;
     }
 
     const orderRoom = SocketRoom.order(payload.orderId);
     this.io.to(orderRoom).emit(OrderSocketEvent.ORDER_LOCATION_UPDATED, payload);
 
-    console.log(`📍 Order location updated: ${payload.orderNumber} at (${payload.location.latitude}, ${payload.location.longitude})`);
+    logger.info(`📍 Order location updated: ${payload.orderNumber} at (${payload.location.latitude}, ${payload.location.longitude})`);
   }
 
   /**
@@ -307,14 +308,14 @@ class OrderSocketService {
    */
   public emitPartnerAssigned(payload: OrderPartnerAssignedPayload): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit partner assigned event.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit partner assigned event.');
       return;
     }
 
     const orderRoom = SocketRoom.order(payload.orderId);
     this.io.to(orderRoom).emit(OrderSocketEvent.ORDER_PARTNER_ASSIGNED, payload);
 
-    console.log(`🚴 Delivery partner assigned to order ${payload.orderNumber}: ${payload.deliveryPartner.name}`);
+    logger.info(`🚴 Delivery partner assigned to order ${payload.orderNumber}: ${payload.deliveryPartner.name}`);
   }
 
   /**
@@ -322,7 +323,7 @@ class OrderSocketService {
    */
   public emitPartnerArrived(orderId: string, orderNumber: string): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit partner arrived event.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit partner arrived event.');
       return;
     }
 
@@ -336,7 +337,7 @@ class OrderSocketService {
 
     this.io.to(orderRoom).emit(OrderSocketEvent.ORDER_PARTNER_ARRIVED, payload);
 
-    console.log(`🎯 Delivery partner arrived for order ${orderNumber}`);
+    logger.info(`🎯 Delivery partner arrived for order ${orderNumber}`);
   }
 
   /**
@@ -344,14 +345,14 @@ class OrderSocketService {
    */
   public emitTimelineUpdate(payload: OrderTimelineUpdatePayload): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit timeline update.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit timeline update.');
       return;
     }
 
     const orderRoom = SocketRoom.order(payload.orderId);
     this.io.to(orderRoom).emit(OrderSocketEvent.ORDER_TIMELINE_UPDATED, payload);
 
-    console.log(`⏱️ Order timeline updated: ${payload.orderNumber}`);
+    logger.info(`⏱️ Order timeline updated: ${payload.orderNumber}`);
   }
 
   /**
@@ -359,14 +360,14 @@ class OrderSocketService {
    */
   public emitOrderDelivered(payload: OrderDeliveredPayload): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit order delivered event.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit order delivered event.');
       return;
     }
 
     const orderRoom = SocketRoom.order(payload.orderId);
     this.io.to(orderRoom).emit(OrderSocketEvent.ORDER_DELIVERED, payload);
 
-    console.log(`✅ Order delivered: ${payload.orderNumber}`);
+    logger.info(`✅ Order delivered: ${payload.orderNumber}`);
   }
 
   /**
@@ -374,7 +375,7 @@ class OrderSocketService {
    */
   public emitOrderCreated(userId: string, orderData: any): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit order created event.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit order created event.');
       return;
     }
 
@@ -384,7 +385,7 @@ class OrderSocketService {
       timestamp: new Date(),
     });
 
-    console.log(`🆕 New order created for user ${userId}: ${orderData.orderNumber}`);
+    logger.info(`🆕 New order created for user ${userId}: ${orderData.orderNumber}`);
   }
 
   /**
@@ -399,7 +400,7 @@ class OrderSocketService {
    */
   public emitToUser(userId: string, event: string, data: any): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit to user.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit to user.');
       return;
     }
 
@@ -412,7 +413,7 @@ class OrderSocketService {
    */
   public emitToOrder(orderId: string, event: string, data: any): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit to order.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit to order.');
       return;
     }
 
@@ -425,7 +426,7 @@ class OrderSocketService {
    */
   public emitToMerchant(merchantId: string, event: string, data: any): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit to merchant.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit to merchant.');
       return;
     }
 
@@ -438,7 +439,7 @@ class OrderSocketService {
    */
   public emitToAdmin(event: string, data: any): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit to admin.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit to admin.');
       return;
     }
 
@@ -450,12 +451,12 @@ class OrderSocketService {
    */
   public emitCoinsAwarded(payload: CoinsAwardedPayload): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit coins awarded event.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit coins awarded event.');
       return;
     }
 
     this.emitToUser(payload.userId, OrderSocketEvent.COINS_AWARDED, payload);
-    console.log(`🪙 Coins awarded to user ${payload.userId}: +${payload.amount} (${payload.source})`);
+    logger.info(`🪙 Coins awarded to user ${payload.userId}: +${payload.amount} (${payload.source})`);
   }
 
   /**
@@ -463,12 +464,12 @@ class OrderSocketService {
    */
   public emitMerchantWalletUpdated(payload: MerchantWalletUpdatedPayload): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit merchant wallet update.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit merchant wallet update.');
       return;
     }
 
     this.emitToMerchant(payload.merchantId, OrderSocketEvent.MERCHANT_WALLET_UPDATED, payload);
-    console.log(`💰 Merchant wallet updated: ${payload.merchantId} (${payload.transactionType}: ${payload.amount})`);
+    logger.info(`💰 Merchant wallet updated: ${payload.merchantId} (${payload.transactionType}: ${payload.amount})`);
   }
 
   /**
@@ -484,7 +485,7 @@ class OrderSocketService {
     timestamp: Date;
   }): void {
     if (!this.io) {
-      console.warn('Socket.IO not initialized. Cannot emit order list update.');
+      logger.warn('Socket.IO not initialized. Cannot emit order list update.');
       return;
     }
 
@@ -496,13 +497,13 @@ class OrderSocketService {
    */
   public emitPendingRewardUpdate(payload: PendingRewardPayload, isNew: boolean = false): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit pending reward update.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit pending reward update.');
       return;
     }
 
     const event = isNew ? OrderSocketEvent.PENDING_REWARD_CREATED : OrderSocketEvent.PENDING_REWARD_UPDATED;
     this.emitToAdmin(event, payload);
-    console.log(`📋 Pending reward ${isNew ? 'created' : 'updated'}: ${payload.rewardId} (${payload.status})`);
+    logger.info(`📋 Pending reward ${isNew ? 'created' : 'updated'}: ${payload.rewardId} (${payload.status})`);
   }
 }
 

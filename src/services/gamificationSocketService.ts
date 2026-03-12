@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Server as SocketIOServer } from 'socket.io';
 
 interface LeaderboardEntry {
@@ -26,14 +27,14 @@ class GamificationSocketService {
 
   initialize(io: SocketIOServer) {
     this.io = io;
-    console.log('✅ [GAMIFICATION SOCKET] Gamification socket service initialized');
+    logger.info('✅ [GAMIFICATION SOCKET] Gamification socket service initialized');
 
     io.on('connection', (socket) => {
       // Join tournament room for live leaderboard
       socket.on('join-tournament', (tournamentId: string) => {
         if (!tournamentId) return;
         socket.join(`tournament-${tournamentId}`);
-        console.log(`✅ [GAMIFICATION SOCKET] Client ${socket.id} joined tournament-${tournamentId}`);
+        logger.info(`✅ [GAMIFICATION SOCKET] Client ${socket.id} joined tournament-${tournamentId}`);
       });
 
       // Leave tournament room

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * External Wallet Controller
  *
@@ -85,7 +86,7 @@ export const getExternalWalletStatus = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error getting external wallet status:', error);
+    logger.error('Error getting external wallet status:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to get wallet status',
@@ -133,7 +134,7 @@ export const initiatePaytmPayment = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error initiating Paytm payment:', error);
+    logger.error('Error initiating Paytm payment:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to initiate Paytm payment',
@@ -180,7 +181,7 @@ export const initiateAmazonPayPayment = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error initiating Amazon Pay payment:', error);
+    logger.error('Error initiating Amazon Pay payment:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to initiate Amazon Pay payment',
@@ -227,7 +228,7 @@ export const initiateMobikwikPayment = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error initiating Mobikwik payment:', error);
+    logger.error('Error initiating Mobikwik payment:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to initiate Mobikwik payment',
@@ -276,7 +277,7 @@ export const linkExternalWallet = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error linking external wallet:', error);
+    logger.error('Error linking external wallet:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to link wallet',
@@ -306,7 +307,7 @@ export const unlinkExternalWallet = async (req: Request, res: Response) => {
       message: `${provider} wallet unlinked successfully`,
     });
   } catch (error: any) {
-    console.error('Error unlinking external wallet:', error);
+    logger.error('Error unlinking external wallet:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to unlink wallet',
@@ -341,7 +342,7 @@ export const checkExternalPaymentStatus = async (req: Request, res: Response) =>
       },
     });
   } catch (error: any) {
-    console.error('Error checking external payment status:', error);
+    logger.error('Error checking external payment status:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to check payment status',

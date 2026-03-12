@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import { PaymentMethod, IPaymentMethod } from '../models/PaymentMethod';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -133,17 +134,17 @@ export const deletePaymentMethod = asyncHandler(async (req: Request, res: Respon
 
   const { id } = req.params;
 
-  console.log('[DELETE] Request to delete payment method ID:', id);
-  console.log('[DELETE] User ID:', req.user._id);
+  logger.info('[DELETE] Request to delete payment method ID:', id);
+  logger.info('[DELETE] User ID:', req.user._id);
 
   const paymentMethod = await PaymentMethod.findOne({ _id: id, user: req.user._id });
 
   if (!paymentMethod) {
-    console.log('[DELETE] Payment method not found');
+    logger.info('[DELETE] Payment method not found');
     return sendNotFound(res, 'Payment method not found');
   }
 
-  console.log('[DELETE] Found payment method:', {
+  logger.info('[DELETE] Found payment method:', {
     id: paymentMethod._id,
     type: paymentMethod.type,
     isActive: paymentMethod.isActive,
@@ -151,12 +152,12 @@ export const deletePaymentMethod = asyncHandler(async (req: Request, res: Respon
   });
 
   // Soft delete
-  console.log('[DELETE] Setting isActive to false...');
+  logger.info('[DELETE] Setting isActive to false...');
   paymentMethod.isActive = false;
   await paymentMethod.save();
 
-  console.log('[DELETE] Payment method soft-deleted successfully');
-  console.log('[DELETE] Verifying update - isActive:', paymentMethod.isActive);
+  logger.info('[DELETE] Payment method soft-deleted successfully');
+  logger.info('[DELETE] Verifying update - isActive:', paymentMethod.isActive);
 
   sendSuccess(res, { deletedId: id }, 'Payment method deleted successfully');
 });

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // ServiceRequest Model
 // Tracks service requests for user products (repair, replacement, installation, etc.)
 
@@ -329,7 +330,7 @@ ServiceRequestSchema.methods.scheduleService = async function(
 
   await this.save();
 
-  console.log(`✅ Service scheduled for: ${scheduledDate} (${timeSlot})`);
+  logger.info(`✅ Service scheduled for: ${scheduledDate} (${timeSlot})`);
   return this as unknown as IServiceRequest;
 };
 
@@ -338,7 +339,7 @@ ServiceRequestSchema.methods.startService = async function(): Promise<IServiceRe
   this.status = 'in_progress';
   await this.save();
 
-  console.log(`✅ Service started for request: ${this.requestNumber}`);
+  logger.info(`✅ Service started for request: ${this.requestNumber}`);
   return this as unknown as IServiceRequest;
 };
 
@@ -362,7 +363,7 @@ ServiceRequestSchema.methods.completeService = async function(
 
   await this.save();
 
-  console.log(`✅ Service completed for request: ${this.requestNumber}`);
+  logger.info(`✅ Service completed for request: ${this.requestNumber}`);
   return this as unknown as IServiceRequest;
 };
 
@@ -376,7 +377,7 @@ ServiceRequestSchema.methods.cancelService = async function(
 
   await this.save();
 
-  console.log(`✅ Service cancelled for request: ${this.requestNumber}`);
+  logger.info(`✅ Service cancelled for request: ${this.requestNumber}`);
   return this as unknown as IServiceRequest;
 };
 
@@ -397,7 +398,7 @@ ServiceRequestSchema.methods.rateService = async function(
 
   await this.save();
 
-  console.log(`✅ Service rated: ${rating} stars`);
+  logger.info(`✅ Service rated: ${rating} stars`);
   return this as unknown as IServiceRequest;
 };
 
@@ -415,7 +416,7 @@ ServiceRequestSchema.methods.rescheduleService = async function(
 
   await this.save();
 
-  console.log(`✅ Service rescheduled to: ${newDate} (${newTimeSlot})`);
+  logger.info(`✅ Service rescheduled to: ${newDate} (${newTimeSlot})`);
   return this as unknown as IServiceRequest;
 };
 

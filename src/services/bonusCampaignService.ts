@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose from 'mongoose';
 import BonusCampaign, { IBonusCampaign, BonusCampaignType } from '../models/BonusCampaign';
 import BonusClaim, { IBonusClaim } from '../models/BonusClaim';
@@ -492,11 +493,11 @@ export async function claimReward(
             source: 'automated',
           });
         } catch (notifError) {
-          console.error('[BONUS] Failed to send reward notification:', notifError);
+          logger.error('[BONUS] Failed to send reward notification:', notifError);
         }
       } catch (creditError: any) {
         // Full rollback: revert budget + delete the orphaned claim
-        console.error('[BONUS] creditRewardToWallet failed, rolling back claim and budget:', creditError.message);
+        logger.error('[BONUS] creditRewardToWallet failed, rolling back claim and budget:', creditError.message);
         await BonusClaim.deleteOne({ _id: claim._id });
         await BonusCampaign.findByIdAndUpdate(campaignId, {
           $inc: {
@@ -619,7 +620,7 @@ export async function verifyAndCreditBillClaim(claimId: string): Promise<IBonusC
       source: 'automated',
     });
   } catch (notifError) {
-    console.error('[BONUS] Failed to send bill bonus notification:', notifError);
+    logger.error('[BONUS] Failed to send bill bonus notification:', notifError);
   }
 
   return claim;
@@ -984,7 +985,7 @@ export async function autoClaimForTransaction(
       results.push(result);
     } catch (error: any) {
       // Skip campaigns that fail eligibility (user already claimed, budget exhausted, etc.)
-      console.log(`[BonusCampaign] Auto-claim skipped for ${campaign.slug}: ${error.message}`);
+      logger.info(`[BonusCampaign] Auto-claim skipped for ${campaign.slug}: ${error.message}`);
     }
   }
 

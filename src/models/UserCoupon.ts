@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // UserCoupon Model
 // Tracks user-claimed coupons
 
@@ -100,7 +101,7 @@ UserCouponSchema.methods.markAsUsed = async function(orderId: Types.ObjectId) {
   this.usedDate = new Date();
   this.usedInOrder = orderId;
   await this.save();
-  console.log(`✅ [USER_COUPON] Coupon ${this._id} marked as used`);
+  logger.info(`✅ [USER_COUPON] Coupon ${this._id} marked as used`);
 };
 
 // Instance method to check expiry
@@ -127,7 +128,7 @@ UserCouponSchema.statics.markExpiredCoupons = async function() {
     }
   );
 
-  console.log(`⏰ [USER_COUPON] Marked ${result.modifiedCount} user coupons as expired`);
+  logger.info(`⏰ [USER_COUPON] Marked ${result.modifiedCount} user coupons as expired`);
   return result.modifiedCount || 0;
 };
 

@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { ServiceBooking } from '../../models/ServiceBooking';
@@ -124,7 +125,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       recentBookings,
     });
   } catch (error: any) {
-    console.error('Admin travel dashboard error:', error);
+    logger.error('Admin travel dashboard error:', error);
     sendError(res, error.message || 'Failed to load dashboard', 500);
   }
 });

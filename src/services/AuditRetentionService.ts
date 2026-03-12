@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Audit Retention Service
 // Manages audit log retention, archival, and cleanup
 
@@ -28,10 +29,10 @@ export class AuditRetentionService {
     try {
       if (!fs.existsSync(this.ARCHIVE_DIR)) {
         fs.mkdirSync(this.ARCHIVE_DIR, { recursive: true });
-        console.log('✅ [RETENTION] Archive directory created:', this.ARCHIVE_DIR);
+        logger.info('✅ [RETENTION] Archive directory created:', this.ARCHIVE_DIR);
       }
     } catch (error) {
-      console.error('❌ [RETENTION] Failed to create archive directory:', error);
+      logger.error('❌ [RETENTION] Failed to create archive directory:', error);
     }
   }
 
@@ -51,7 +52,7 @@ export class AuditRetentionService {
         .lean();
 
       if (logs.length === 0) {
-        console.log('ℹ️ [RETENTION] No logs to archive for merchant:', merchantId);
+        logger.info('ℹ️ [RETENTION] No logs to archive for merchant:', merchantId);
         return null;
       }
 
@@ -84,11 +85,11 @@ export class AuditRetentionService {
       // Write file
       XLSX.writeFile(wb, filepath);
 
-      console.log(`✅ [RETENTION] Archived ${logs.length} logs to:`, filepath);
+      logger.info(`✅ [RETENTION] Archived ${logs.length} logs to:`, filepath);
 
       return filepath;
     } catch (error) {
-      console.error('❌ [RETENTION] Failed to archive logs:', error);
+      logger.error('❌ [RETENTION] Failed to archive logs:', error);
       return null;
     }
   }
@@ -106,11 +107,11 @@ export class AuditRetentionService {
         timestamp: { $lt: olderThan }
       });
 
-      console.log(`✅ [RETENTION] Deleted ${result.deletedCount} old logs for merchant:`, merchantId);
+      logger.info(`✅ [RETENTION] Deleted ${result.deletedCount} old logs for merchant:`, merchantId);
 
       return result.deletedCount || 0;
     } catch (error) {
-      console.error('❌ [RETENTION] Failed to delete old logs:', error);
+      logger.error('❌ [RETENTION] Failed to delete old logs:', error);
       return 0;
     }
   }
@@ -147,7 +148,7 @@ export class AuditRetentionService {
         deleted
       };
     } catch (error) {
-      console.error('❌ [RETENTION] Failed to cleanup logs:', error);
+      logger.error('❌ [RETENTION] Failed to cleanup logs:', error);
       return {
         archived: false,
         archivePath: null,
@@ -196,12 +197,12 @@ export class AuditRetentionService {
 
           succeeded++;
         } catch (error) {
-          console.error('❌ [RETENTION] Failed to cleanup merchant:', merchantId, error);
+          logger.error('❌ [RETENTION] Failed to cleanup merchant:', merchantId, error);
           failed++;
         }
       }
 
-      console.log(`✅ [RETENTION] Cleanup complete: ${succeeded} succeeded, ${failed} failed`);
+      logger.info(`✅ [RETENTION] Cleanup complete: ${succeeded} succeeded, ${failed} failed`);
 
       return {
         total: merchantIds.length,
@@ -210,7 +211,7 @@ export class AuditRetentionService {
         results
       };
     } catch (error) {
-      console.error('❌ [RETENTION] Failed to cleanup all merchants:', error);
+      logger.error('❌ [RETENTION] Failed to cleanup all merchants:', error);
       return {
         total: 0,
         succeeded: 0,
@@ -271,7 +272,7 @@ export class AuditRetentionService {
         }))
       };
     } catch (error) {
-      console.error('❌ [RETENTION] Failed to get storage stats:', error);
+      logger.error('❌ [RETENTION] Failed to get storage stats:', error);
       return {
         totalLogs: 0,
         oldestLog: null,
@@ -341,7 +342,7 @@ export class AuditRetentionService {
         recommendations
       };
     } catch (error) {
-      console.error('❌ [RETENTION] Failed to generate compliance report:', error);
+      logger.error('❌ [RETENTION] Failed to generate compliance report:', error);
       throw error;
     }
   }
@@ -350,11 +351,11 @@ export class AuditRetentionService {
    * Schedule automatic cleanup (call from cron job)
    */
   static async scheduleCleanup(): Promise<void> {
-    console.log('🔄 [RETENTION] Starting scheduled cleanup...');
+    logger.info('🔄 [RETENTION] Starting scheduled cleanup...');
 
     const result = await this.cleanupAllMerchants();
 
-    console.log('✅ [RETENTION] Scheduled cleanup completed:', result);
+    logger.info('✅ [RETENTION] Scheduled cleanup completed:', result);
   }
 
   /**
@@ -384,7 +385,7 @@ export class AuditRetentionService {
         })
         .sort((a, b) => b.created.getTime() - a.created.getTime());
     } catch (error) {
-      console.error('❌ [RETENTION] Failed to get archive list:', error);
+      logger.error('❌ [RETENTION] Failed to get archive list:', error);
       return [];
     }
   }

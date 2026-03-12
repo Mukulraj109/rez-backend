@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { MiniGame } from '../models/MiniGame';
 import { CoinTransaction } from '../models/CoinTransaction';
 import mongoose from 'mongoose';
@@ -272,7 +273,7 @@ export async function submitAnswer(
     }
     // Minimum 2 seconds per question to prevent bot submissions
     if (timeSpent < 2000 && timeSpent > 0) {
-      console.warn(`⚠️ [QUIZ] Suspicious fast answer: ${timeSpent}ms for question ${questionIndex} in quiz ${quizId}`);
+      logger.warn(`⚠️ [QUIZ] Suspicious fast answer: ${timeSpent}ms for question ${questionIndex} in quiz ${quizId}`);
     }
   }
   // Prevent answering the same question twice

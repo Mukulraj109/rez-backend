@@ -107,7 +107,7 @@ router.get('/stores/:storeId/branded-campaigns', async (req: Request, res: Respo
       },
     });
   } catch (error: any) {
-    console.error('[Merchant BrandedCoins] Analytics error:', error.message);
+    logger.error('[Merchant BrandedCoins] Analytics error:', error.message);
     return res.status(500).json({
       success: false,
       message: 'Failed to retrieve branded coin analytics',
@@ -196,7 +196,7 @@ router.get('/stores/:storeId/branded-campaigns/customers', async (req: Request, 
       },
     });
   } catch (error: any) {
-    console.error('[Merchant BrandedCoins] Customers error:', error.message);
+    logger.error('[Merchant BrandedCoins] Customers error:', error.message);
     return res.status(500).json({
       success: false,
       message: 'Failed to retrieve branded coin customers',
@@ -317,7 +317,7 @@ router.post('/stores/:storeId/branded-campaigns/award', async (req: Request, res
       },
     });
   } catch (error: any) {
-    console.error('[Merchant BrandedCoins] Award error:', error.message);
+    logger.error('[Merchant BrandedCoins] Award error:', error.message);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to award branded coins',

@@ -122,7 +122,7 @@ async function getStoreCategorySlug(storeId: string): Promise<MainCategorySlug |
     const rootSlug = rootMap.get(store.category.toString());
     return (rootSlug as MainCategorySlug) || null;
   } catch (err) {
-    console.error('[ORDER] Error getting store category slug:', err);
+    logger.error('[ORDER] Error getting store category slug:', err);
     return null;
   }
 }
@@ -368,7 +368,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         if (userCoinBalance < coinsUsed.rezCoins) {
           await session.abortTransaction();
           session.endSession();
-          console.error('❌ [CREATE ORDER] Insufficient REZ coin balance:', {
+          logger.error('[CREATE ORDER] Insufficient REZ coin balance:', {
             required: coinsUsed.rezCoins,
             available: userCoinBalance
           });
@@ -376,15 +376,20 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         }
       }
 
-      // Validate promo coins
+      // Load wallet ONCE for both promo and branded coin validations (avoids duplicate DB query)
+      const needsWalletValidation = coinsUsed.promoCoins > 0 || coinsUsed.storePromoCoins > 0;
+      const validationWallet = needsWalletValidation
+        ? await Wallet.findOne({ user: userId }).session(session).lean()
+        : null;
+
+      // Validate promo coins (reuses validationWallet)
       if (coinsUsed.promoCoins > 0) {
-        const wallet = await Wallet.findOne({ user: userId }).session(session).lean();
-        const promoCoin = wallet?.coins?.find((c: any) => c.type === 'promo');
+        const promoCoin = (validationWallet as any)?.coins?.find((c: any) => c.type === 'promo');
         const promoBalance = promoCoin?.amount || 0;
         if (promoBalance < coinsUsed.promoCoins) {
           await session.abortTransaction();
           session.endSession();
-          console.error('❌ [CREATE ORDER] Insufficient promo coin balance:', {
+          logger.error('[CREATE ORDER] Insufficient promo coin balance:', {
             required: coinsUsed.promoCoins,
             available: promoBalance
           });
@@ -416,7 +421,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         }
       }
 
-      // Validate store promo coins
+      // Validate store promo coins (reuses validationWallet — no extra DB query)
       if (coinsUsed.storePromoCoins > 0) {
         // Get the store from the first order item - now using branded coins
         const firstItem = orderCart.items[0];
@@ -425,17 +430,15 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
           : firstItem.store;
 
         if (orderStoreId) {
-          // Get branded coins balance from wallet
-          const wallet = await Wallet.findOne({ user: userId }).session(session).lean();
-          const brandedCoin = wallet?.brandedCoins?.find(
+          const brandedCoin = (validationWallet as any)?.brandedCoins?.find(
             (bc: any) => bc.merchantId?.toString() === orderStoreId.toString()
           );
           const brandedBalance = brandedCoin?.amount || 0;
-          
+
           if (brandedBalance < coinsUsed.storePromoCoins) {
             await session.abortTransaction();
             session.endSession();
-            console.error('❌ [CREATE ORDER] Insufficient branded coin balance:', {
+            logger.error('[CREATE ORDER] Insufficient branded coin balance:', {
               required: coinsUsed.storePromoCoins,
               available: brandedBalance
             });
@@ -456,14 +459,14 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       if (!product) {
         await session.abortTransaction();
         session.endSession();
-        console.error('❌ [CREATE ORDER] Product is null/undefined for cart item');
+        logger.error('[CREATE ORDER] Product is null/undefined for cart item');
         return sendBadRequest(res, 'Invalid product in cart');
       }
 
       if (!store) {
         await session.abortTransaction();
         session.endSession();
-        console.error('❌ [CREATE ORDER] Store is null/undefined for product:', product.name);
+        logger.error('[CREATE ORDER] Store is null/undefined for product:', product.name);
         return sendBadRequest(res, `Product "${product.name}" has no associated store`);
       }
 
@@ -822,7 +825,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     if (coinDiscount > maxAllowedCoinDiscount) {
       await session.abortTransaction();
       session.endSession();
-      console.error('❌ [CREATE ORDER] Coin discount exceeds order total:', {
+      logger.error('[CREATE ORDER] Coin discount exceeds order total:', {
         coinDiscount,
         maxAllowedCoinDiscount
       });
@@ -1073,9 +1076,9 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
             orderId: (order as any)._id?.toString() || '',
             orderNumber: order.orderNumber,
           }
-        }).catch((err: any) => console.error('Failed to send cashback notification:', err));
+        }).catch((err: any) => logger.error('Failed to send cashback notification:', err));
       } catch (notifError) {
-        console.error('Failed to send cashback notification:', notifError);
+        logger.error('Failed to send cashback notification:', notifError);
       }
 
     }
@@ -1098,7 +1101,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
             // Stock became insufficient during transaction - rollback
             await session.abortTransaction();
             session.endSession();
-            console.error('❌ [CREATE ORDER] Stock became insufficient during order creation');
+            logger.error('[CREATE ORDER] Stock became insufficient during order creation');
             return sendBadRequest(res, 'Stock became unavailable. Please try again.');
           }
 
@@ -1113,7 +1116,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
             }
           }
         } catch (stockError) {
-          console.error('❌ [CREATE ORDER] Failed to deduct stock:', stockError);
+          logger.error('[CREATE ORDER] Failed to deduct stock:', stockError);
           await session.abortTransaction();
           session.endSession();
           return sendBadRequest(res, 'Failed to process order. Please try again.');
@@ -1290,7 +1293,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
           },
         });
       } catch (ledgerErr) {
-        console.error('[ORDER:LEDGER] Failed to create ledger entry for coin deduction (non-blocking):', ledgerErr);
+        logger.error('[ORDER:LEDGER] Failed to create ledger entry for coin deduction (non-blocking):', ledgerErr);
       }
     }
 
@@ -1300,7 +1303,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
         const partnerService = require('../services/partnerService').default;
         await partnerService.markVoucherUsed(userId.toString(), voucherApplied);
       } catch (error) {
-        console.error('❌ [VOUCHER] Error marking voucher as used:', error);
+        logger.error('[VOUCHER] Error marking voucher as used:', error);
         // Don't fail order creation if voucher marking fails
       }
     }
@@ -1310,7 +1313,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     try {
       await partnerBenefitsService.checkTransactionBonus(userId.toString());
     } catch (error) {
-      console.error('❌ [PARTNER BENEFITS] Error checking transaction bonus:', error);
+      logger.error('[PARTNER BENEFITS] Error checking transaction bonus:', error);
       // Don't fail order creation if bonus check fails
     }
 
@@ -1442,7 +1445,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       await Promise.all(notifPromises);
 
     } catch (error) {
-      console.error('❌ [ORDER] Error sending notifications:', error);
+      logger.error('[ORDER] Error sending notifications:', error);
       // Don't fail order creation if notifications fail
     }
 
@@ -1453,14 +1456,14 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     await session.abortTransaction();
     session.endSession();
 
-    console.error('❌ [CREATE ORDER] Error:', error);
-    console.error('❌ [CREATE ORDER] Error message:', error.message);
-    console.error('❌ [CREATE ORDER] Error stack:', error.stack);
-    console.error('❌ [CREATE ORDER] Error name:', error.name);
+    logger.error('[CREATE ORDER] Error:', error);
+    logger.error('[CREATE ORDER] Error message:', error.message);
+    logger.error('[CREATE ORDER] Error stack:', error.stack);
+    logger.error('[CREATE ORDER] Error name:', error.name);
 
     // Log more details about the error
     if (error.name === 'TypeError') {
-      console.error('❌ [CREATE ORDER] This is a TypeError - likely null/undefined access');
+      logger.error('[CREATE ORDER] This is a TypeError - likely null/undefined access');
     }
 
     throw new AppError(`Failed to create order: ${error.message}`, 500);
@@ -1633,7 +1636,7 @@ export const getUserOrders = asyncHandler(async (req: Request, res: Response) =>
             ],
           },
         },
-      ]),
+      ]).option({ allowDiskUse: true }),
     ]);
 
     // Check if there are more results
@@ -1717,7 +1720,7 @@ export const getOrderCounts = asyncHandler(async (req: Request, res: Response) =
           ],
         },
       },
-    ]);
+    ]).option({ allowDiskUse: true });
 
     sendSuccess(res, {
       active: counts[0]?.active?.[0]?.count || 0,
@@ -1824,7 +1827,7 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
       }},
       // Remove temporary lookup arrays
       { $project: { _storeDoc: 0, _userDoc: 0, _products: 0, _itemStores: 0 } }
-    ]);
+    ]).option({ allowDiskUse: true });
 
     const order = orders[0] || null;
 
@@ -1845,7 +1848,7 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
     sendSuccess(res, enrichedOrder, 'Order retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [GET ORDER BY ID] Error:', error.message);
+    logger.error('[GET ORDER BY ID] Error:', error.message);
     throw new AppError('Failed to fetch order', 500);
   }
 });
@@ -2027,7 +2030,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
             `Refund for cancelled order: ${order.orderNumber}`
           );
         } catch (coinError) {
-          console.error('❌ [CANCEL ORDER] Failed to refund REZ coins:', coinError);
+          logger.error('[CANCEL ORDER] Failed to refund REZ coins:', coinError);
         }
       }
 
@@ -2045,7 +2048,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
             }
           }
         } catch (coinError) {
-          console.error('❌ [CANCEL ORDER] Failed to refund promo coins:', coinError);
+          logger.error('[CANCEL ORDER] Failed to refund promo coins:', coinError);
         }
       }
 
@@ -2071,7 +2074,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
             }
           }
         } catch (coinError) {
-          console.error('❌ [CANCEL ORDER] Failed to refund store promo coins:', coinError);
+          logger.error('[CANCEL ORDER] Failed to refund store promo coins:', coinError);
         }
       }
     }
@@ -2165,16 +2168,16 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
                     orderId: (order as any)._id?.toString() || '',
                     orderNumber: order.orderNumber,
                   }
-                }).catch((err: any) => console.error('Failed to send reversal notification:', err));
+                }).catch((err: any) => logger.error('Failed to send reversal notification:', err));
               } catch (notifError) {
-                console.error('Failed to send reversal notification:', notifError);
+                logger.error('Failed to send reversal notification:', notifError);
               }
             }
           }
         } else {
         }
       } catch (redemptionError) {
-        console.error('❌ [CANCEL ORDER] Failed to reverse offer redemption:', redemptionError);
+        logger.error('[CANCEL ORDER] Failed to reverse offer redemption:', redemptionError);
         // Continue with cancellation even if redemption reversal fails
       }
     }
@@ -2203,7 +2206,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
         );
       } catch (socketError) {
         // Log but don't fail the cancellation if socket emission fails
-        console.error('❌ [CANCEL ORDER] Socket emission failed:', socketError);
+        logger.error('[CANCEL ORDER] Socket emission failed:', socketError);
       }
       // Invalidate product cache after stock restoration
       CacheInvalidator.invalidateProduct(restoration.productId).catch(() => {});
@@ -2229,10 +2232,10 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
     try {
       await Order.findByIdAndUpdate(orderId, { $set: { status: originalStatus } });
     } catch (resetError) {
-      console.error('❌ [CANCEL ORDER] Failed to reset status:', resetError);
+      logger.error('[CANCEL ORDER] Failed to reset status:', resetError);
     }
 
-    console.error('❌ [CANCEL ORDER] Error:', error.message);
+    logger.error('[CANCEL ORDER] Error:', error.message);
     throw new AppError(`Failed to cancel order: ${error.message}`, 500);
   }
 });
@@ -2371,12 +2374,12 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
       challengeService.updateProgress(
         String(userIdObj), 'order_count', 1,
         { orderId: String(populatedOrder._id) }
-      ).catch(err => console.error('[ORDER] Challenge progress update failed:', err));
+      ).catch(err => logger.error('[ORDER] Challenge progress update failed:', err));
 
       challengeService.updateProgress(
         String(userIdObj), 'spend_amount', populatedOrder.totals.total,
         { orderId: String(populatedOrder._id) }
-      ).catch(err => console.error('[ORDER] Challenge spend progress update failed:', err));
+      ).catch(err => logger.error('[ORDER] Challenge spend progress update failed:', err));
 
       // Process referral rewards when order is delivered
       try {
@@ -2400,7 +2403,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
           );
         }
       } catch (error) {
-        console.error('❌ [ORDER] Error processing referral rewards:', error);
+        logger.error('[ORDER] Error processing referral rewards:', error);
         // Don't fail the order update if referral processing fails
       }
 
@@ -2472,7 +2475,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
           );
         }
       } catch (coinError) {
-        console.error('[ORDER] Failed to award purchase reward coins:', coinError);
+        logger.error('[ORDER] Failed to award purchase reward coins:', coinError);
       }
 
       // Auto-trigger matching bonus campaigns on order delivery
@@ -2512,7 +2515,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
 
         await Promise.all(bonusPromises);
       } catch (bonusErr) {
-        console.error('[ORDER] Bonus campaign auto-claim failed (non-blocking):', bonusErr);
+        logger.error('[ORDER] Bonus campaign auto-claim failed (non-blocking):', bonusErr);
       }
 
       // Credit merchant wallet on delivery (merchant gets subtotal minus 15% platform fee)
@@ -2568,7 +2571,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
           }
         }
       } catch (walletError) {
-        console.error('❌ [ORDER] Failed to credit merchant wallet:', walletError);
+        logger.error('[ORDER] Failed to credit merchant wallet:', walletError);
       }
 
       // Credit 5% admin commission to platform wallet on delivery (5% of subtotal)
@@ -2584,16 +2587,16 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
           );
         }
       } catch (adminError) {
-        console.error('❌ [ORDER] Failed to credit admin wallet:', adminError);
+        logger.error('[ORDER] Failed to credit admin wallet:', adminError);
       }
 
       // Run independent post-delivery tasks in parallel (cashback, user products, creator conversion)
       {
         const postDeliveryTasks: Promise<any>[] = [
           cashbackService.createCashbackFromOrder(populatedOrder._id as Types.ObjectId)
-            .catch((err: any) => console.error('❌ [ORDER] Error creating cashback:', err)),
+            .catch((err: any) => logger.error('[ORDER] Error creating cashback:', err)),
           userProductService.createUserProductsFromOrder(populatedOrder._id as Types.ObjectId)
-            .catch((err: any) => console.error('❌ [ORDER] Error creating user products:', err)),
+            .catch((err: any) => logger.error('[ORDER] Error creating user products:', err)),
         ];
 
         const attributionPickId = populatedOrder.analytics?.attributionPickId;
@@ -2605,7 +2608,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
               userIdObj.toString(),
               populatedOrder.totals.subtotal,
               req.ip
-            ).catch((err: any) => console.error('❌ [ORDER] Error processing creator conversion:', err))
+            ).catch((err: any) => logger.error('[ORDER] Error processing creator conversion:', err))
           );
         }
 
@@ -2657,7 +2660,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         } else {
         }
       } catch (error) {
-        console.error('❌ [ORDER] Error awarding promo coins:', error);
+        logger.error('[ORDER] Error awarding promo coins:', error);
         // Don't fail the order update if promo coin creation fails
       }
 
@@ -2672,7 +2675,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
 
       // Recalculate Privé reputation on order delivery (fire-and-forget)
       reputationService.onOrderCompleted(userIdObj as Types.ObjectId)
-        .catch(err => console.error('[ORDER] Reputation recalculation failed:', err));
+        .catch(err => logger.error('[ORDER] Reputation recalculation failed:', err));
 
       // Update partner progress for order delivery
       try {
@@ -2683,7 +2686,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
           orderId.toString()
         );
       } catch (error) {
-        console.error('❌ [ORDER] Error updating partner progress:', error);
+        logger.error('[ORDER] Error updating partner progress:', error);
         // Don't fail the order update if partner progress update fails
       }
     }
@@ -2887,7 +2890,7 @@ export const rateOrder = asyncHandler(async (req: Request, res: Response) => {
         }
       }
     } catch (error) {
-      console.error('❌ [REVIEW] Error updating partner review task:', error);
+      logger.error('[REVIEW] Error updating partner review task:', error);
       // Don't fail the review if partner update fails
     }
 
@@ -2939,7 +2942,7 @@ export const getOrderStats = asyncHandler(async (req: Request, res: Response) =>
           }
         }
       }
-    ]);
+    ]).option({ allowDiskUse: true });
 
     const userStats = stats[0] || {
       totalOrders: 0,
@@ -3004,7 +3007,7 @@ export const reorderFullOrder = asyncHandler(async (req: Request, res: Response)
     sendSuccess(res, result, 'Items added to cart successfully');
 
   } catch (error: any) {
-    console.error('❌ [REORDER] Full order reorder error:', error);
+    logger.error('[REORDER] Full order reorder error:', error);
     throw error;
   }
 });
@@ -3067,7 +3070,7 @@ export const reorderItems = asyncHandler(async (req: Request, res: Response) => 
     sendSuccess(res, result, 'Selected items added to cart successfully');
 
   } catch (error: any) {
-    console.error('❌ [REORDER] Selective reorder error:', error);
+    logger.error('[REORDER] Selective reorder error:', error);
     throw error;
   }
 });
@@ -3123,7 +3126,7 @@ export const validateReorder = asyncHandler(async (req: Request, res: Response) 
     sendSuccess(res, validation, 'Reorder validation complete');
 
   } catch (error: any) {
-    console.error('❌ [REORDER] Validation error:', error);
+    logger.error('[REORDER] Validation error:', error);
     throw error;
   }
 });
@@ -3164,7 +3167,7 @@ export const getFrequentlyOrdered = asyncHandler(async (req: Request, res: Respo
     sendSuccess(res, items, 'Frequently ordered items retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [REORDER] Frequently ordered error:', error);
+    logger.error('[REORDER] Frequently ordered error:', error);
     throw error;
   }
 });
@@ -3196,7 +3199,7 @@ export const getReorderSuggestions = asyncHandler(async (req: Request, res: Resp
     sendSuccess(res, suggestions, 'Reorder suggestions retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [REORDER] Suggestions error:', error);
+    logger.error('[REORDER] Suggestions error:', error);
     throw error;
   }
 });
@@ -3360,7 +3363,7 @@ export const requestRefund = asyncHandler(async (req: Request, res: Response) =>
                 refundType
               );
             } catch (smsError) {
-              console.error(`❌ [REFUND REQUEST] Failed to send SMS to merchant:`, smsError);
+              logger.error(`[REFUND REQUEST] Failed to send SMS to merchant:`, smsError);
             }
           }
           
@@ -3380,7 +3383,7 @@ export const requestRefund = asyncHandler(async (req: Request, res: Response) =>
                 }
               );
             } catch (emailError) {
-              console.error(`❌ [REFUND REQUEST] Failed to send email to merchant:`, emailError);
+              logger.error(`[REFUND REQUEST] Failed to send email to merchant:`, emailError);
             }
           }
         }
@@ -3402,11 +3405,11 @@ export const requestRefund = asyncHandler(async (req: Request, res: Response) =>
             }
           );
         } catch (adminError) {
-          console.error(`❌ [REFUND REQUEST] Failed to send admin notification:`, adminError);
+          logger.error(`[REFUND REQUEST] Failed to send admin notification:`, adminError);
         }
       }
     } catch (notificationError) {
-      console.error('❌ [REFUND REQUEST] Error sending notifications:', notificationError);
+      logger.error('[REFUND REQUEST] Error sending notifications:', notificationError);
       // Don't fail refund request if notifications fail
     }
 
@@ -3420,7 +3423,7 @@ export const requestRefund = asyncHandler(async (req: Request, res: Response) =>
     }, 'Refund request submitted successfully', 201);
 
   } catch (error: any) {
-    console.error('❌ [REFUND REQUEST] Error:', error);
+    logger.error('[REFUND REQUEST] Error:', error);
     throw new AppError(`Failed to request refund: ${error.message}`, 500);
   }
 });
@@ -3492,7 +3495,7 @@ export const getUserRefunds = asyncHandler(async (req: Request, res: Response) =
     }, 'Refunds retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [GET REFUNDS] Error:', error);
+    logger.error('[GET REFUNDS] Error:', error);
     throw new AppError('Failed to fetch refunds', 500);
   }
 });
@@ -3540,7 +3543,7 @@ export const getRefundDetails = asyncHandler(async (req: Request, res: Response)
     sendSuccess(res, refund, 'Refund details retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [GET REFUND DETAILS] Error:', error);
+    logger.error('[GET REFUND DETAILS] Error:', error);
     throw new AppError('Failed to fetch refund details', 500);
   }
 });
@@ -3619,7 +3622,7 @@ export const getOrderFinancialDetails = asyncHandler(async (req: Request, res: R
     }, 'Order financial details retrieved');
 
   } catch (error: any) {
-    console.error('❌ [ORDER FINANCIAL] Error:', error);
+    logger.error('[ORDER FINANCIAL] Error:', error);
     throw new AppError('Failed to fetch order financial details', 500);
   }
 });

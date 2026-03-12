@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { SearchHistory } from '../models/SearchHistory';
+import { logger } from '../config/logger';
 
 /**
  * Search History Service
@@ -11,6 +12,7 @@ interface LogSearchParams {
   query: string;
   type: 'product' | 'store' | 'general';
   resultCount: number;
+  region?: string;
   filters?: {
     category?: string;
     minPrice?: number;
@@ -26,7 +28,7 @@ interface LogSearchParams {
  * This function doesn't block - it fires and forgets
  */
 export const logSearch = async (params: LogSearchParams): Promise<void> => {
-  const { userId, query, type, resultCount, filters } = params;
+  const { userId, query, type, resultCount, filters, region } = params;
 
   try {
     // Skip if query is empty
@@ -45,8 +47,14 @@ export const logSearch = async (params: LogSearchParams): Promise<void> => {
     );
 
     if (isDuplicate) {
-      console.log('🔍 [SEARCH SERVICE] Duplicate search detected, skipping:', trimmedQuery);
+      logger.debug('[SEARCH SERVICE] Duplicate search detected, skipping', { query: trimmedQuery });
       return;
+    }
+
+    // Merge region into filters.location if provided
+    const mergedFilters = { ...(filters || {}) };
+    if (region && typeof region === 'string') {
+      mergedFilters.location = region.trim().toLowerCase();
     }
 
     // Create search history entry
@@ -55,10 +63,10 @@ export const logSearch = async (params: LogSearchParams): Promise<void> => {
       query: trimmedQuery,
       type,
       resultCount: Number(resultCount) || 0,
-      filters: filters || {}
+      filters: mergedFilters
     });
 
-    console.log('✅ [SEARCH SERVICE] Logged search:', {
+    logger.info('[SEARCH SERVICE] Logged search', {
       userId: userId.toString(),
       query: trimmedQuery,
       type,
@@ -67,11 +75,11 @@ export const logSearch = async (params: LogSearchParams): Promise<void> => {
 
     // Maintain max 50 entries per user (fire and forget)
     (SearchHistory as any).maintainUserLimit(userId, 50).catch((err: Error) => {
-      console.error('❌ [SEARCH SERVICE] Error maintaining user limit:', err.message);
+      logger.error('[SEARCH SERVICE] Error maintaining user limit', { error: err.message });
     });
   } catch (error) {
     // Log error but don't throw - we don't want to break the search API
-    console.error('❌ [SEARCH SERVICE] Error logging search:', error);
+    logger.error('[SEARCH SERVICE] Error logging search', { error });
   }
 };
 
@@ -196,7 +204,7 @@ export const getSearchSuggestions = async (
 
     return suggestions;
   } catch (error) {
-    console.error('❌ [SEARCH SERVICE] Error getting suggestions:', error);
+    logger.error('[SEARCH SERVICE] Error getting suggestions', { error });
     return [];
   }
 };
@@ -214,11 +222,11 @@ export const cleanupOldSearches = async (daysToKeep: number = 30): Promise<numbe
       createdAt: { $lt: cutoffDate }
     });
 
-    console.log(`🧹 [SEARCH SERVICE] Cleaned up ${result.deletedCount} old search entries`);
+    logger.info(`[SEARCH SERVICE] Cleaned up ${result.deletedCount} old search entries`);
 
     return result.deletedCount || 0;
   } catch (error) {
-    console.error('❌ [SEARCH SERVICE] Error cleaning up old searches:', error);
+    logger.error('[SEARCH SERVICE] Error cleaning up old searches', { error });
     return 0;
   }
 };

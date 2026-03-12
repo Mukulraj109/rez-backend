@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { PhotoUpload } from '../models/PhotoUpload';
@@ -67,7 +68,7 @@ export const uploadPhotos = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error uploading photos:', error);
+    logger.error('Error uploading photos:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to upload photos' });
   }
 };
@@ -117,7 +118,7 @@ export const getMyUploads = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching my uploads:', error);
+    logger.error('Error fetching my uploads:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch uploads' });
   }
 };
@@ -167,7 +168,7 @@ export const getStorePhotos = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching store photos:', error);
+    logger.error('Error fetching store photos:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch store photos' });
   }
 };
@@ -233,7 +234,7 @@ export const moderatePhoto = async (req: Request, res: Response) => {
           await engagementRewardService.updateRewardStatus(pendingReward._id.toString(), 'credited');
         }
       } catch (rewardError) {
-        console.error('[PHOTO MODERATION] Failed to credit coins:', rewardError);
+        logger.error('[PHOTO MODERATION] Failed to credit coins:', rewardError);
       }
     } else {
       // Rejected — update engagement reward log
@@ -251,7 +252,7 @@ export const moderatePhoto = async (req: Request, res: Response) => {
           await engagementRewardService.updateRewardStatus(pendingReward._id.toString(), 'rejected');
         }
       } catch (rewardError) {
-        console.error('[PHOTO MODERATION] Failed to update pending reward:', rewardError);
+        logger.error('[PHOTO MODERATION] Failed to update pending reward:', rewardError);
       }
     }
 
@@ -265,7 +266,7 @@ export const moderatePhoto = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error moderating photo:', error);
+    logger.error('Error moderating photo:', error);
     res.status(500).json({ success: false, error: 'Failed to moderate photo' });
   }
 };
@@ -306,7 +307,7 @@ export const getPendingPhotos = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching pending photos:', error);
+    logger.error('Error fetching pending photos:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch pending photos' });
   }
 };

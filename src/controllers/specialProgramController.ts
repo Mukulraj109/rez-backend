@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import specialProgramService from '../services/specialProgramService';
 import { SpecialProgramSlug } from '../models/SpecialProgramConfig';
@@ -26,7 +27,7 @@ export const listPrograms = async (req: Request, res: Response) => {
     const programs = await specialProgramService.listProgramsForUser(userId);
     return sendSuccess(res, programs, 'Programs retrieved');
   } catch (error: any) {
-    console.error('[SPECIAL PROGRAMS] Error listing programs:', error);
+    logger.error('[SPECIAL PROGRAMS] Error listing programs:', error);
     return sendError(res, error.message || 'Failed to list programs');
   }
 };
@@ -41,7 +42,7 @@ export const getUserMemberships = async (req: Request, res: Response) => {
     const memberships = await specialProgramService.getUserMemberships(userId);
     return sendSuccess(res, memberships, 'Memberships retrieved');
   } catch (error: any) {
-    console.error('[SPECIAL PROGRAMS] Error getting memberships:', error);
+    logger.error('[SPECIAL PROGRAMS] Error getting memberships:', error);
     return sendError(res, error.message || 'Failed to get memberships');
   }
 };
@@ -61,7 +62,7 @@ export const checkEligibility = async (req: Request, res: Response) => {
     const result = await specialProgramService.checkEligibility(userId, slug);
     return sendSuccess(res, result, 'Eligibility checked');
   } catch (error: any) {
-    console.error('[SPECIAL PROGRAMS] Error checking eligibility:', error);
+    logger.error('[SPECIAL PROGRAMS] Error checking eligibility:', error);
     return sendError(res, error.message || 'Failed to check eligibility');
   }
 };
@@ -81,7 +82,7 @@ export const activateProgram = async (req: Request, res: Response) => {
     const membership = await specialProgramService.activateProgram(userId, slug);
     return sendSuccess(res, { membership }, 'Program activated successfully');
   } catch (error: any) {
-    console.error('[SPECIAL PROGRAMS] Error activating program:', error);
+    logger.error('[SPECIAL PROGRAMS] Error activating program:', error);
     if (error.message.includes('Already an active member')) {
       return sendBadRequest(res, error.message);
     }
@@ -107,7 +108,7 @@ export const getMemberDashboard = async (req: Request, res: Response) => {
     const dashboard = await specialProgramService.getMemberDashboard(userId, slug);
     return sendSuccess(res, dashboard, 'Dashboard retrieved');
   } catch (error: any) {
-    console.error('[SPECIAL PROGRAMS] Error getting dashboard:', error);
+    logger.error('[SPECIAL PROGRAMS] Error getting dashboard:', error);
     if (error.message.includes('Not an active member')) {
       return sendBadRequest(res, error.message);
     }
@@ -126,7 +127,7 @@ export const adminListPrograms = async (req: Request, res: Response) => {
     const configs = await specialProgramService.getAllConfigsAdmin();
     return sendSuccess(res, configs, 'Program configs retrieved');
   } catch (error: any) {
-    console.error('[ADMIN SPECIAL PROGRAMS] Error listing configs:', error);
+    logger.error('[ADMIN SPECIAL PROGRAMS] Error listing configs:', error);
     return sendError(res, error.message || 'Failed to list program configs');
   }
 };
@@ -140,7 +141,7 @@ export const adminGetStats = async (req: Request, res: Response) => {
     const stats = await specialProgramService.getProgramStats();
     return sendSuccess(res, stats, 'Stats retrieved');
   } catch (error: any) {
-    console.error('[ADMIN SPECIAL PROGRAMS] Error getting stats:', error);
+    logger.error('[ADMIN SPECIAL PROGRAMS] Error getting stats:', error);
     return sendError(res, error.message || 'Failed to get stats');
   }
 };

@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { BRAND } from '../config/brand';
 
 export interface ITransferLimits {
   dailyMax: number;
@@ -439,7 +440,7 @@ const WalletConfigSchema = new Schema<IWalletConfig>({
     type: Schema.Types.Mixed,
     default: {
       rez: {
-        usageRules: ['Use anywhere on Nuqta', 'No usage cap per transaction', 'Never expires'],
+        usageRules: [`Use anywhere on ${BRAND.APP_NAME}`, 'No usage cap per transaction', 'Never expires'],
         earningMethods: ['Purchases & Orders', 'Referrals', 'Daily Check-in', 'Games & Challenges', 'Reviews & Social'],
       },
       promo: {

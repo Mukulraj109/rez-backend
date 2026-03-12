@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // UserCashback Model
 // Manages user cashback earnings and redemptions
 
@@ -216,7 +217,7 @@ UserCashbackSchema.methods.creditToWallet = async function() {
   // Invalidate earnings cache (pending→credited)
   try { await redisService.delPattern(`earnings:consolidated:${this.user.toString()}:*`); } catch (e) {}
 
-  console.log(`✅ [CASHBACK] Credited ₹${this.amount} to user wallet`);
+  logger.info(`✅ [CASHBACK] Credited ₹${this.amount} to user wallet`);
 };
 
 // Instance method to mark as expired
@@ -227,7 +228,7 @@ UserCashbackSchema.methods.markAsExpired = async function() {
   // Invalidate earnings cache (pending amount changed)
   try { await redisService.delPattern(`earnings:consolidated:${this.user.toString()}:*`); } catch (e) {}
 
-  console.log(`⏰ [CASHBACK] Cashback ₹${this.amount} marked as expired`);
+  logger.info(`⏰ [CASHBACK] Cashback ₹${this.amount} marked as expired`);
 };
 
 // Instance method to cancel cashback
@@ -242,7 +243,7 @@ UserCashbackSchema.methods.cancelCashback = async function(reason?: string) {
   // Invalidate earnings cache (pending amount changed)
   try { await redisService.delPattern(`earnings:consolidated:${this.user.toString()}:*`); } catch (e) {}
 
-  console.log(`❌ [CASHBACK] Cashback ₹${this.amount} cancelled: ${reason || 'No reason provided'}`);
+  logger.info(`❌ [CASHBACK] Cashback ₹${this.amount} cancelled: ${reason || 'No reason provided'}`);
 };
 
 // Static method to get user's cashback summary
@@ -340,7 +341,7 @@ UserCashbackSchema.statics.markExpiredCashback = async function() {
     }
   );
 
-  console.log(`⏰ [CASHBACK] Marked ${result.modifiedCount} cashback entries as expired`);
+  logger.info(`⏰ [CASHBACK] Marked ${result.modifiedCount} cashback entries as expired`);
   return result.modifiedCount;
 };
 

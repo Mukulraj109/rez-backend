@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose, { Schema, Document, Types, Model } from 'mongoose';
 import { logTransaction } from './TransactionAuditLog';
 import { div } from '../utils/currency';
@@ -239,7 +240,7 @@ MerchantWalletSchema.statics.getOrCreateForMerchant = async function(
       transactions: [],
       isActive: true
     });
-    console.log(`💰 [MERCHANT WALLET] Created new wallet for merchant: ${merchantId}`);
+    logger.info(`💰 [MERCHANT WALLET] Created new wallet for merchant: ${merchantId}`);
   }
 
   return wallet;
@@ -284,7 +285,7 @@ MerchantWalletSchema.methods.creditOrder = async function(
     (t: any) => t.orderId && t.orderId.toString() === orderId.toString() && t.type === 'credit'
   );
   if (alreadyCredited) {
-    console.log(`⚠️ [MERCHANT WALLET] Order ${orderNumber} already credited, skipping duplicate`);
+    logger.info(`⚠️ [MERCHANT WALLET] Order ${orderNumber} already credited, skipping duplicate`);
     return;
   }
 
@@ -326,7 +327,7 @@ MerchantWalletSchema.methods.creditOrder = async function(
   );
 
   if (!updated) {
-    console.log(`⚠️ [MERCHANT WALLET] Order ${orderNumber} credit skipped (concurrent duplicate)`);
+    logger.info(`⚠️ [MERCHANT WALLET] Order ${orderNumber} credit skipped (concurrent duplicate)`);
     return;
   }
 
@@ -371,7 +372,7 @@ MerchantWalletSchema.methods.creditOrder = async function(
     status: 'success',
   });
 
-  console.log(`💰 [MERCHANT WALLET] Credited order ${orderNumber}:`, {
+  logger.info(`💰 [MERCHANT WALLET] Credited order ${orderNumber}:`, {
     gross: grossAmount,
     platformFee: platformFee,
     net: netAmount,
@@ -459,7 +460,7 @@ MerchantWalletSchema.methods.requestWithdrawal = async function(
     status: 'success',
   });
 
-  console.log(`💸 [MERCHANT WALLET] Withdrawal requested: ₹${amount}`);
+  logger.info(`💸 [MERCHANT WALLET] Withdrawal requested: ₹${amount}`);
 
   return transaction;
 };

@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { Store } from '../../models/Store';
 import { Category } from '../../models/Category';
@@ -153,7 +154,7 @@ router.get('/', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('[ADMIN STORES] Error fetching stores:', error);
+    logger.error('[ADMIN STORES] Error fetching stores:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch stores'
@@ -269,7 +270,7 @@ router.get('/category/:categoryId', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('[ADMIN STORES] Error fetching stores by category:', error);
+    logger.error('[ADMIN STORES] Error fetching stores by category:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch stores by category'
@@ -327,13 +328,13 @@ router.post('/bulk-category', requireSeniorAdmin, async (req: Request, res: Resp
     // Invalidate cache for each store
     for (const storeId of storeIds) {
       CacheInvalidator.invalidateStore(storeId).catch((err) => {
-        console.error(`[ADMIN STORES] Cache invalidation error for store ${storeId}:`, err);
+        logger.error(`[ADMIN STORES] Cache invalidation error for store ${storeId}:`, err);
       });
     }
 
     return sendSuccess(res, { count: result.modifiedCount }, 'Stores reassigned successfully');
   } catch (error: any) {
-    console.error('[ADMIN STORES] Error bulk reassigning stores:', error);
+    logger.error('[ADMIN STORES] Error bulk reassigning stores:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to bulk reassign stores'
@@ -357,7 +358,7 @@ router.get('/:storeId', async (req: Request, res: Response) => {
 
     return sendSuccess(res, { store });
   } catch (error: any) {
-    console.error('[ADMIN STORES] Error fetching store:', error);
+    logger.error('[ADMIN STORES] Error fetching store:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch store'
@@ -400,12 +401,12 @@ router.put('/:storeId/category', requireSeniorAdmin, async (req: Request, res: R
 
     // Invalidate cache
     CacheInvalidator.invalidateStore(req.params.storeId).catch((err) => {
-      console.error('[ADMIN STORES] Cache invalidation error:', err);
+      logger.error('[ADMIN STORES] Cache invalidation error:', err);
     });
 
     return sendSuccess(res, { store }, 'Store category reassigned successfully');
   } catch (error: any) {
-    console.error('[ADMIN STORES] Error reassigning store category:', error);
+    logger.error('[ADMIN STORES] Error reassigning store category:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to reassign store category'
@@ -474,12 +475,12 @@ router.put('/:storeId/service-capabilities', async (req: Request, res: Response)
 
     // Invalidate cache
     CacheInvalidator.invalidateStore(req.params.storeId).catch((err) => {
-      console.error('[ADMIN STORES] Cache invalidation error:', err);
+      logger.error('[ADMIN STORES] Cache invalidation error:', err);
     });
 
     return sendSuccess(res, { store }, `${capability} ${enabled ? 'enabled' : 'disabled'} successfully`);
   } catch (error: any) {
-    console.error('[ADMIN STORES] Error updating service capability:', error);
+    logger.error('[ADMIN STORES] Error updating service capability:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to update service capability',
@@ -549,12 +550,12 @@ router.put('/:storeId/admin-actions', requireSeniorAdmin, async (req: Request, r
 
     // Invalidate cache
     CacheInvalidator.invalidateStore(req.params.storeId).catch((err) => {
-      console.error('[ADMIN STORES] Cache invalidation error:', err);
+      logger.error('[ADMIN STORES] Cache invalidation error:', err);
     });
 
     return sendSuccess(res, { store }, 'Store updated successfully');
   } catch (error: any) {
-    console.error('[ADMIN STORES] Error updating store admin actions:', error);
+    logger.error('[ADMIN STORES] Error updating store admin actions:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to update store'

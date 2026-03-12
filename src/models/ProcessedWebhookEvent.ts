@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
 /**
@@ -210,7 +211,7 @@ ProcessedWebhookEventSchema.statics.recordEvent = async function (
   } catch (error: any) {
     // If duplicate key error, the event was already recorded
     if (error.code === 11000) {
-      console.warn(
+      logger.warn(
         `[WEBHOOK] Event already recorded: ${eventId}`,
         { error: error.message }
       );

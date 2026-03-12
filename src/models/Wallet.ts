@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose, { Schema, Document, Types, Model } from 'mongoose';
 import { logTransaction } from './TransactionAuditLog';
 
@@ -399,6 +400,9 @@ WalletSchema.index({ isActive: 1, isFrozen: 1 });
 WalletSchema.index({ 'balance.available': 1 });
 WalletSchema.index({ lastTransactionAt: -1 });
 
+// Compound index for looking up active wallet by user
+WalletSchema.index({ user: 1, isActive: 1 });
+
 // Virtual for formatted balance
 WalletSchema.virtual('formattedBalance').get(function() {
   return this.getFormattedBalance();
@@ -408,15 +412,15 @@ WalletSchema.virtual('formattedBalance').get(function() {
 WalletSchema.pre('save', function(next) {
   // Warn on negative balances (indicates a bug in deduction logic)
   if (this.balance.available < 0) {
-    console.error(`⚠️ [WALLET] Negative available balance detected for wallet ${this._id}: ${this.balance.available}`);
+    logger.error(`⚠️ [WALLET] Negative available balance detected for wallet ${this._id}: ${this.balance.available}`);
     this.balance.available = 0;
   }
   if (this.balance.pending < 0) {
-    console.error(`⚠️ [WALLET] Negative pending balance detected for wallet ${this._id}: ${this.balance.pending}`);
+    logger.error(`⚠️ [WALLET] Negative pending balance detected for wallet ${this._id}: ${this.balance.pending}`);
     this.balance.pending = 0;
   }
   if (this.balance.cashback < 0) {
-    console.error(`⚠️ [WALLET] Negative cashback balance detected for wallet ${this._id}: ${this.balance.cashback}`);
+    logger.error(`⚠️ [WALLET] Negative cashback balance detected for wallet ${this._id}: ${this.balance.cashback}`);
     this.balance.cashback = 0;
   }
 
@@ -629,13 +633,13 @@ WalletSchema.methods.deductFunds = async function(amount: number, options?: { tr
   // Check low balance alert
   if (this.settings.lowBalanceAlert &&
       this.balance.available <= this.settings.lowBalanceThreshold) {
-    console.log(`Low balance alert for user ${this.user}: ${this.balance.available} RC`);
+    logger.info(`Low balance alert for user ${this.user}: ${this.balance.available} RC`);
   }
 
   // Auto-topup if enabled
   if (this.settings.autoTopup &&
       this.balance.available <= this.settings.autoTopupThreshold) {
-    console.log(`Auto-topup triggered for user ${this.user}`);
+    logger.info(`Auto-topup triggered for user ${this.user}`);
   }
 };
 

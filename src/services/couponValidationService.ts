@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Coupon Validation Service
  *
@@ -120,7 +121,7 @@ export async function validateCouponForCart(
     return validateStandardCoupon(coupon, context);
 
   } catch (error) {
-    console.error('❌ [COUPON_VALIDATION] Error validating coupon:', error);
+    logger.error('❌ [COUPON_VALIDATION] Error validating coupon:', error);
     return {
       isValid: false,
       error: 'Failed to validate coupon. Please try again.'
@@ -327,17 +328,17 @@ export async function markCouponAsUsed(
       const existingCoupon = await Coupon.findById(couponId).lean();
 
       if (!existingCoupon) {
-        console.error('❌ [COUPON_VALIDATION] Coupon not found:', couponId);
+        logger.error('❌ [COUPON_VALIDATION] Coupon not found:', couponId);
         return false;
       }
 
       if (existingCoupon.usageLimit.totalUsage > 0 &&
           existingCoupon.usageLimit.usedCount >= existingCoupon.usageLimit.totalUsage) {
-        console.error('❌ [COUPON_VALIDATION] Coupon usage limit reached:', couponId);
+        logger.error('❌ [COUPON_VALIDATION] Coupon usage limit reached:', couponId);
         return false;
       }
 
-      console.error('❌ [COUPON_VALIDATION] Coupon validation failed (inactive/expired):', couponId);
+      logger.error('❌ [COUPON_VALIDATION] Coupon validation failed (inactive/expired):', couponId);
       return false;
     }
 
@@ -348,7 +349,7 @@ export async function markCouponAsUsed(
         { _id: updatedCoupon._id },
         { $set: { status: 'inactive' } }
       );
-      console.log(`⚠️ [COUPON_VALIDATION] Coupon ${couponId} deactivated - usage limit reached`);
+      logger.info(`⚠️ [COUPON_VALIDATION] Coupon ${couponId} deactivated - usage limit reached`);
     }
 
     // Update user coupon status atomically
@@ -372,13 +373,13 @@ export async function markCouponAsUsed(
       // User coupon not found - might have been used in another concurrent request
       // or user used coupon without claiming first
       // The global counter was already incremented, which is correct behavior
-      console.warn('⚠️ [COUPON_VALIDATION] User coupon not found or already used, but global usage recorded');
+      logger.warn('⚠️ [COUPON_VALIDATION] User coupon not found or already used, but global usage recorded');
     }
 
-    console.log(`✅ [COUPON_VALIDATION] Coupon ${couponId} marked as used by user ${userId}`);
+    logger.info(`✅ [COUPON_VALIDATION] Coupon ${couponId} marked as used by user ${userId}`);
     return true;
   } catch (error) {
-    console.error('❌ [COUPON_VALIDATION] Error marking coupon as used:', error);
+    logger.error('❌ [COUPON_VALIDATION] Error marking coupon as used:', error);
     return false;
   }
 }

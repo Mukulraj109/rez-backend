@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import AuditLog from '../models/AuditLog';
 import { Types } from 'mongoose';
 
@@ -31,7 +32,7 @@ export const createAuditLog = async (params: CreateAuditLogParams): Promise<any>
   try {
     // If merchantId is not provided, log to console instead (user-backend case)
     if (!params.merchantId) {
-      console.log('[AUDIT LOG]', {
+      logger.info('[AUDIT LOG]', {
         userId: params.userId,
         action: params.action,
         resourceType: params.resourceType,
@@ -59,7 +60,7 @@ export const createAuditLog = async (params: CreateAuditLogParams): Promise<any>
       severity: params.severity,
     });
   } catch (error) {
-    console.error('Error creating audit log:', error);
+    logger.error('Error creating audit log:', error);
     // Don't throw - audit logging should never break the main flow
     return null;
   }

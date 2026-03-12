@@ -18,6 +18,7 @@ import { escapeRegex } from '../utils/sanitize';
 import pushNotificationService from '../services/pushNotificationService';
 import { ledgerService } from '../services/ledgerService';
 import { invalidateWalletCache } from '../services/walletCacheService';
+import { BRAND } from '../config/brand';
 
 /**
  * @desc    Initiate a coin transfer
@@ -152,7 +153,7 @@ export const initiateTransfer = asyncHandler(async (req: Request, res: Response)
     // Check balance based on coin type
     if (coinType === 'nuqta') {
       if (senderWallet.balance.available < validatedAmount) {
-        return sendBadRequest(res, 'Insufficient Nuqta Coin balance');
+        return sendBadRequest(res, `Insufficient ${BRAND.COIN_NAME} balance`);
       }
     } else if (coinType === 'branded' && merchantId) {
       const brandedCoin = senderWallet.brandedCoins.find(

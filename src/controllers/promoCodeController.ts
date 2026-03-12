@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import { PromoCode, IPromoCode } from '../models/PromoCode';
 import { SubscriptionTier, BillingCycle, Subscription } from '../models/Subscription';
@@ -82,7 +83,7 @@ export const validatePromoCode = async (req: Request, res: Response) => {
           userAgent: req.headers['user-agent'] || 'unknown'
         });
       } catch (auditError) {
-        console.error('Error creating audit log:', auditError);
+        logger.error('Error creating audit log:', auditError);
         // Continue even if audit log fails
       }
     }
@@ -111,7 +112,7 @@ export const validatePromoCode = async (req: Request, res: Response) => {
       });
     }
   } catch (error: any) {
-    console.error('Error validating promo code:', error);
+    logger.error('Error validating promo code:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to validate promo code',
@@ -166,7 +167,7 @@ export const getAvailablePromoCodes = async (req: Request, res: Response) => {
       data: availableCodes
     });
   } catch (error: any) {
-    console.error('Error fetching available promo codes:', error);
+    logger.error('Error fetching available promo codes:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch available promo codes',
@@ -259,7 +260,7 @@ export const createPromoCode = async (req: Request, res: Response) => {
         userAgent: req.headers['user-agent'] || 'unknown'
       });
     } catch (auditError) {
-      console.error('Error creating audit log:', auditError);
+      logger.error('Error creating audit log:', auditError);
     }
 
     res.status(201).json({
@@ -268,7 +269,7 @@ export const createPromoCode = async (req: Request, res: Response) => {
       data: promoCode
     });
   } catch (error: any) {
-    console.error('Error creating promo code:', error);
+    logger.error('Error creating promo code:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to create promo code',
@@ -317,7 +318,7 @@ export const getAllPromoCodes = async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('Error fetching promo codes:', error);
+    logger.error('Error fetching promo codes:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch promo codes',
@@ -359,7 +360,7 @@ export const getPromoCode = async (req: Request, res: Response) => {
       data: promoCode
     });
   } catch (error: any) {
-    console.error('Error fetching promo code:', error);
+    logger.error('Error fetching promo code:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch promo code',
@@ -436,7 +437,7 @@ export const updatePromoCode = async (req: Request, res: Response) => {
         userAgent: req.headers['user-agent'] || 'unknown'
       });
     } catch (auditError) {
-      console.error('Error creating audit log:', auditError);
+      logger.error('Error creating audit log:', auditError);
     }
 
     res.status(200).json({
@@ -445,7 +446,7 @@ export const updatePromoCode = async (req: Request, res: Response) => {
       data: promoCode
     });
   } catch (error: any) {
-    console.error('Error updating promo code:', error);
+    logger.error('Error updating promo code:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update promo code',
@@ -497,7 +498,7 @@ export const deactivatePromoCode = async (req: Request, res: Response) => {
         userAgent: req.headers['user-agent'] || 'unknown'
       });
     } catch (auditError) {
-      console.error('Error creating audit log:', auditError);
+      logger.error('Error creating audit log:', auditError);
     }
 
     res.status(200).json({
@@ -506,7 +507,7 @@ export const deactivatePromoCode = async (req: Request, res: Response) => {
       data: promoCode
     });
   } catch (error: any) {
-    console.error('Error deactivating promo code:', error);
+    logger.error('Error deactivating promo code:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to deactivate promo code',
@@ -581,7 +582,7 @@ export const getPromoCodeUsage = async (req: Request, res: Response) => {
       data: stats
     });
   } catch (error: any) {
-    console.error('Error fetching promo code usage:', error);
+    logger.error('Error fetching promo code usage:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch promo code usage',
@@ -651,7 +652,7 @@ export const getPromoCodeAnalytics = async (req: Request, res: Response) => {
       data: analytics
     });
   } catch (error: any) {
-    console.error('Error fetching promo code analytics:', error);
+    logger.error('Error fetching promo code analytics:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch promo code analytics',

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import express, { Request, Response } from 'express';
 import Joi from 'joi';
 import { Types } from 'mongoose';
@@ -222,7 +223,7 @@ router.get('/:slug/eligibility', optionalAuth, async (req: Request, res: Respons
       },
     });
   } catch (error: any) {
-    console.error('[ZONE] Eligibility check error:', error);
+    logger.error('[ZONE] Eligibility check error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to check eligibility',
@@ -321,7 +322,7 @@ router.post('/:slug/verify', authenticate, async (req: Request, res: Response) =
       },
     });
   } catch (error: any) {
-    console.error('[ZONE] Submit verification error:', error);
+    logger.error('[ZONE] Submit verification error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to submit verification request',
@@ -369,7 +370,7 @@ router.get('/:slug/status', authenticate, async (req: Request, res: Response) =>
       },
     });
   } catch (error: any) {
-    console.error('[ZONE] Get verification status error:', error);
+    logger.error('[ZONE] Get verification status error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to get verification status',
@@ -396,7 +397,7 @@ router.get('/my-verifications', authenticate, async (req: Request, res: Response
       data: verifications,
     });
   } catch (error: any) {
-    console.error('[ZONE] Get user verifications error:', error);
+    logger.error('[ZONE] Get user verifications error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to get verifications',

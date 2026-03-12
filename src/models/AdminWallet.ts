@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Admin Wallet Model
 // Singleton wallet for platform commission tracking (5% of order subtotals)
 
@@ -121,7 +122,7 @@ AdminWalletSchema.statics.getOrCreate = async function(): Promise<IAdminWallet> 
       statistics: { totalCommissions: 0, totalOrders: 0, averageCommission: 0 },
       transactions: []
     });
-    console.log('[ADMIN WALLET] Created new admin wallet');
+    logger.info('[ADMIN WALLET] Created new admin wallet');
   }
   return wallet;
 };

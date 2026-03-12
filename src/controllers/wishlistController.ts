@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import { Wishlist, IDiscountSnapshot } from '../models/Wishlist';
 import { Product } from '../models/Product';
@@ -191,10 +192,10 @@ export const addToWishlist = asyncHandler(async (req: Request, res: Response) =>
         await storeFollowService.incrementFollowers(itemId);
         // Record follow event for analytics
         recordNewFollow(itemId).catch(err =>
-          console.error('[WishlistController] Failed to record follow analytics:', err)
+          logger.error('[WishlistController] Failed to record follow analytics:', err)
         );
       } catch (error) {
-        console.error('[WishlistController] Failed to increment store followers:', error);
+        logger.error('[WishlistController] Failed to increment store followers:', error);
         // Don't fail the entire request if followers update fails
       }
     }
@@ -244,10 +245,10 @@ export const removeFromWishlist = asyncHandler(async (req: Request, res: Respons
         await storeFollowService.decrementFollowers(removedItem.itemId.toString());
         // Record unfollow event for analytics
         recordUnfollow(removedItem.itemId).catch(err =>
-          console.error('[WishlistController] Failed to record unfollow analytics:', err)
+          logger.error('[WishlistController] Failed to record unfollow analytics:', err)
         );
       } catch (error) {
-        console.error('[WishlistController] Failed to decrement store followers:', error);
+        logger.error('[WishlistController] Failed to decrement store followers:', error);
         // Don't fail the entire request if followers update fails
       }
     }
@@ -486,7 +487,7 @@ export const removeItemByTypeAndId = asyncHandler(async (req: Request, res: Resp
       try {
         await storeFollowService.decrementFollowers(itemId);
       } catch (error) {
-        console.error('[WishlistController] Failed to decrement store followers:', error);
+        logger.error('[WishlistController] Failed to decrement store followers:', error);
         // Don't fail the entire request if followers update fails
       }
     }

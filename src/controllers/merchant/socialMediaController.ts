@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 // Merchant Social Media Controller
 // Handles merchant verification of user-submitted social media posts
 
@@ -19,11 +20,11 @@ export const listSocialMediaPosts = asyncHandler(async (req: Request, res: Respo
   const merchantId = (req as any).merchantId;
   const storeId = req.query.storeId as string; // Allow filtering by specific store
 
-  console.log('\n========================================');
-  console.log('📱 [MERCHANT SOCIAL] LIST POSTS REQUEST');
-  console.log('========================================');
-  console.log('📱 [MERCHANT SOCIAL] Merchant ID:', merchantId);
-  console.log('📱 [MERCHANT SOCIAL] Store ID filter:', storeId || 'none (all stores)');
+  logger.info('\n========================================');
+  logger.info('📱 [MERCHANT SOCIAL] LIST POSTS REQUEST');
+  logger.info('========================================');
+  logger.info('📱 [MERCHANT SOCIAL] Merchant ID:', merchantId);
+  logger.info('📱 [MERCHANT SOCIAL] Store ID filter:', storeId || 'none (all stores)');
 
   try {
     const page = parseInt(req.query.page as string) || 1;
@@ -36,14 +37,14 @@ export const listSocialMediaPosts = asyncHandler(async (req: Request, res: Respo
     const stores = await Store.find({ merchantId: merchantId }).select('_id name').lean();
     const storeIds = stores.map(s => s._id);
 
-    console.log('📱 [MERCHANT SOCIAL] Found stores for this merchant:', stores.map(s => ({ id: s._id, name: s.name })));
-    console.log('📱 [MERCHANT SOCIAL] Store IDs:', storeIds);
+    logger.info('📱 [MERCHANT SOCIAL] Found stores for this merchant:', stores.map(s => ({ id: s._id, name: s.name })));
+    logger.info('📱 [MERCHANT SOCIAL] Store IDs:', storeIds);
 
     // DEBUG: Check ALL social media posts in the system
     const allPosts = await SocialMediaPost.find({}).select('_id user order store status postUrl submittedAt').lean();
-    console.log('📱 [MERCHANT SOCIAL] DEBUG - All posts in system:', allPosts.length);
+    logger.info('📱 [MERCHANT SOCIAL] DEBUG - All posts in system:', allPosts.length);
     allPosts.forEach((p, i) => {
-      console.log(`   Post ${i + 1}: id=${p._id}, store=${p.store}, status=${p.status}`);
+      logger.info(`   Post ${i + 1}: id=${p._id}, store=${p.store}, status=${p.status}`);
     });
 
     // Build query to filter posts by merchant's stores
@@ -54,9 +55,9 @@ export const listSocialMediaPosts = asyncHandler(async (req: Request, res: Respo
       const isValidStore = storeIds.some(id => id.toString() === storeId);
       if (isValidStore) {
         targetStoreIds = [new mongoose.Types.ObjectId(storeId)];
-        console.log('📱 [MERCHANT SOCIAL] Filtering by specific store:', storeId);
+        logger.info('📱 [MERCHANT SOCIAL] Filtering by specific store:', storeId);
       } else {
-        console.log('⚠️ [MERCHANT SOCIAL] Store ID not owned by merchant:', storeId);
+        logger.info('⚠️ [MERCHANT SOCIAL] Store ID not owned by merchant:', storeId);
       }
     }
 
@@ -68,7 +69,7 @@ export const listSocialMediaPosts = asyncHandler(async (req: Request, res: Respo
       query.status = status;
     }
 
-    console.log('📱 [MERCHANT SOCIAL] Query:', JSON.stringify(query, null, 2));
+    logger.info('📱 [MERCHANT SOCIAL] Query:', JSON.stringify(query, null, 2));
 
     const [posts, total] = await Promise.all([
       SocialMediaPost.find(query)
@@ -82,7 +83,7 @@ export const listSocialMediaPosts = asyncHandler(async (req: Request, res: Respo
       SocialMediaPost.countDocuments(query)
     ]);
 
-    console.log(`📱 [MERCHANT SOCIAL] Found ${posts.length} posts, total: ${total}`);
+    logger.info(`📱 [MERCHANT SOCIAL] Found ${posts.length} posts, total: ${total}`);
 
     // Format posts for response
     const formattedPosts = posts.map(post => {
@@ -131,7 +132,7 @@ export const listSocialMediaPosts = asyncHandler(async (req: Request, res: Respo
     }, 'Social media posts retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT SOCIAL] Error listing posts:', error);
+    logger.error('❌ [MERCHANT SOCIAL] Error listing posts:', error);
     return sendInternalError(res, error.message);
   }
 });
@@ -143,7 +144,7 @@ export const listSocialMediaPosts = asyncHandler(async (req: Request, res: Respo
 export const getSocialMediaStats = asyncHandler(async (req: Request, res: Response) => {
   const merchantId = (req as any).merchantId;
 
-  console.log('📱 [MERCHANT SOCIAL] Getting stats for merchant:', merchantId);
+  logger.info('📱 [MERCHANT SOCIAL] Getting stats for merchant:', merchantId);
 
   try {
     // Get all stores belonging to this merchant
@@ -201,7 +202,7 @@ export const getSocialMediaStats = asyncHandler(async (req: Request, res: Respon
       ? Math.round(((result.approved + result.credited) / totalReviewed) * 100)
       : 0;
 
-    console.log('📱 [MERCHANT SOCIAL] Stats:', result);
+    logger.info('📱 [MERCHANT SOCIAL] Stats:', result);
 
     return sendSuccess(res, {
       stats: {
@@ -211,7 +212,7 @@ export const getSocialMediaStats = asyncHandler(async (req: Request, res: Respon
     }, 'Social media statistics retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT SOCIAL] Error getting stats:', error);
+    logger.error('❌ [MERCHANT SOCIAL] Error getting stats:', error);
     return sendInternalError(res, error.message);
   }
 });
@@ -224,7 +225,7 @@ export const getSocialMediaPost = asyncHandler(async (req: Request, res: Respons
   const merchantId = (req as any).merchantId;
   const { postId } = req.params;
 
-  console.log('📱 [MERCHANT SOCIAL] Getting post:', postId);
+  logger.info('📱 [MERCHANT SOCIAL] Getting post:', postId);
 
   try {
     // Get merchant's stores
@@ -248,7 +249,7 @@ export const getSocialMediaPost = asyncHandler(async (req: Request, res: Respons
     return sendSuccess(res, { post }, 'Social media post retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT SOCIAL] Error getting post:', error);
+    logger.error('❌ [MERCHANT SOCIAL] Error getting post:', error);
     return sendInternalError(res, error.message);
   }
 });
@@ -263,7 +264,7 @@ export const approveSocialMediaPost = asyncHandler(async (req: Request, res: Res
   const { postId } = req.params;
   const { notes } = req.body;
 
-  console.log('📱 [MERCHANT SOCIAL] Approving post:', postId);
+  logger.info('📱 [MERCHANT SOCIAL] Approving post:', postId);
 
   // Step 1: Update post status atomically in a transaction
   const session = await mongoose.startSession();
@@ -336,13 +337,13 @@ export const approveSocialMediaPost = asyncHandler(async (req: Request, res: Res
         userAgent: (req.headers['user-agent'] || 'unknown') as string
       });
     } catch (auditError) {
-      console.error('❌ [MERCHANT SOCIAL] Audit log error (non-fatal):', auditError);
+      logger.error('❌ [MERCHANT SOCIAL] Audit log error (non-fatal):', auditError);
     }
 
     await session.commitTransaction();
   } catch (error: any) {
     await session.abortTransaction();
-    console.error('❌ [MERCHANT SOCIAL] Error approving post:', error);
+    logger.error('❌ [MERCHANT SOCIAL] Error approving post:', error);
     return sendInternalError(res, error.message);
   } finally {
     session.endSession();
@@ -361,9 +362,9 @@ export const approveSocialMediaPost = asyncHandler(async (req: Request, res: Res
       { postId: savedPostId, platform: postPlatform, orderId: postOrderId }
     );
     newBalance = result.newBalance || 0;
-    console.log(`✅ [MERCHANT SOCIAL] Post approved and ${cashbackAmount} REZ coins credited to user via CoinTransaction`);
+    logger.info(`✅ [MERCHANT SOCIAL] Post approved and ${cashbackAmount} REZ coins credited to user via CoinTransaction`);
   } catch (coinError) {
-    console.error('❌ [MERCHANT SOCIAL] Failed to credit coins via coinService:', coinError);
+    logger.error('❌ [MERCHANT SOCIAL] Failed to credit coins via coinService:', coinError);
     // Post is already approved - log error but don't fail the response
   }
 
@@ -392,7 +393,7 @@ export const rejectSocialMediaPost = asyncHandler(async (req: Request, res: Resp
   const { postId } = req.params;
   const { reason } = req.body;
 
-  console.log('📱 [MERCHANT SOCIAL] Rejecting post:', postId);
+  logger.info('📱 [MERCHANT SOCIAL] Rejecting post:', postId);
 
   if (!reason || reason.trim().length === 0) {
     return sendBadRequest(res, 'Rejection reason is required');
@@ -444,10 +445,10 @@ export const rejectSocialMediaPost = asyncHandler(async (req: Request, res: Resp
         userAgent: (req.headers['user-agent'] || 'unknown') as string
       });
     } catch (auditError) {
-      console.error('❌ [MERCHANT SOCIAL] Audit log error (non-fatal):', auditError);
+      logger.error('❌ [MERCHANT SOCIAL] Audit log error (non-fatal):', auditError);
     }
 
-    console.log('✅ [MERCHANT SOCIAL] Post rejected:', postId);
+    logger.info('✅ [MERCHANT SOCIAL] Post rejected:', postId);
 
     return sendSuccess(res, {
       post: {
@@ -459,7 +460,7 @@ export const rejectSocialMediaPost = asyncHandler(async (req: Request, res: Resp
     }, 'Post has been rejected.');
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT SOCIAL] Error rejecting post:', error);
+    logger.error('❌ [MERCHANT SOCIAL] Error rejecting post:', error);
     return sendInternalError(res, error.message);
   }
 });

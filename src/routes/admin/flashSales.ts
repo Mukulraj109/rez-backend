@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Flash Sales
  * CRUD for FlashSale model
@@ -55,7 +56,7 @@ router.get('/', async (req: Request, res: Response) => {
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     }, 'Flash sales fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching flash sales:', error);
+    logger.error('[Admin] Error fetching flash sales:', error);
     return sendError(res, 'Failed to fetch flash sales', 500);
   }
 });
@@ -78,7 +79,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, sale, 'Flash sale fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching flash sale:', error);
+    logger.error('[Admin] Error fetching flash sale:', error);
     return sendError(res, 'Failed to fetch flash sale', 500);
   }
 });
@@ -103,7 +104,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     return sendSuccess(res, sale, 'Flash sale created');
   } catch (error) {
-    console.error('[Admin] Error creating flash sale:', error);
+    logger.error('[Admin] Error creating flash sale:', error);
     return sendError(res, 'Failed to create flash sale', 500);
   }
 });
@@ -126,7 +127,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, sale, 'Flash sale updated');
   } catch (error) {
-    console.error('[Admin] Error updating flash sale:', error);
+    logger.error('[Admin] Error updating flash sale:', error);
     return sendError(res, 'Failed to update flash sale', 500);
   }
 });
@@ -148,7 +149,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
 
     return sendSuccess(res, sale, `Flash sale ${sale.enabled ? 'enabled' : 'disabled'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling flash sale:', error);
+    logger.error('[Admin] Error toggling flash sale:', error);
     return sendError(res, 'Failed to toggle flash sale', 500);
   }
 });
@@ -167,7 +168,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, null, 'Flash sale deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting flash sale:', error);
+    logger.error('[Admin] Error deleting flash sale:', error);
     return sendError(res, 'Failed to delete flash sale', 500);
   }
 });

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Activity } from '../models/Activity';
 import Follow from '../models/Follow';
 import ActivityInteraction from '../models/ActivityInteraction';
@@ -62,7 +63,7 @@ export async function getActivityFeed(
       }
     }));
   } catch (error) {
-    console.error('Error fetching activity feed:', error);
+    logger.error('Error fetching activity feed:', error);
     throw error;
   }
 }
@@ -87,7 +88,7 @@ export async function getUserActivities(
 
     return activities;
   } catch (error) {
-    console.error('Error fetching user activities:', error);
+    logger.error('Error fetching user activities:', error);
     throw error;
   }
 }
@@ -127,7 +128,7 @@ export async function createSocialActivity(
 
     return populatedActivity;
   } catch (error) {
-    console.error('Error creating social activity:', error);
+    logger.error('Error creating social activity:', error);
     throw error;
   }
 }
@@ -173,7 +174,7 @@ export async function toggleLike(activityId: string, userId: string): Promise<{ 
       return { liked: true, likesCount };
     }
   } catch (error) {
-    console.error('Error toggling like:', error);
+    logger.error('Error toggling like:', error);
     throw error;
   }
 }
@@ -188,7 +189,7 @@ export async function getLikesCount(activityId: string): Promise<number> {
       type: 'like'
     });
   } catch (error) {
-    console.error('Error getting likes count:', error);
+    logger.error('Error getting likes count:', error);
     throw error;
   }
 }
@@ -216,7 +217,7 @@ export async function getActivityComments(
 
     return comments;
   } catch (error) {
-    console.error('Error fetching comments:', error);
+    logger.error('Error fetching comments:', error);
     throw error;
   }
 }
@@ -247,7 +248,7 @@ export async function addComment(
 
     return populatedComment;
   } catch (error) {
-    console.error('Error adding comment:', error);
+    logger.error('Error adding comment:', error);
     throw error;
   }
 }
@@ -292,7 +293,7 @@ export async function toggleFollow(
       return { following: true, followersCount };
     }
   } catch (error) {
-    console.error('Error toggling follow:', error);
+    logger.error('Error toggling follow:', error);
     throw error;
   }
 }
@@ -309,7 +310,7 @@ export async function isFollowing(followerId: string, followingId: string): Prom
 
     return !!follow;
   } catch (error) {
-    console.error('Error checking follow status:', error);
+    logger.error('Error checking follow status:', error);
     throw error;
   }
 }
@@ -334,7 +335,7 @@ export async function getFollowers(
 
     return followers.map(f => f.follower);
   } catch (error) {
-    console.error('Error fetching followers:', error);
+    logger.error('Error fetching followers:', error);
     throw error;
   }
 }
@@ -359,7 +360,7 @@ export async function getFollowing(
 
     return following.map(f => f.following);
   } catch (error) {
-    console.error('Error fetching following:', error);
+    logger.error('Error fetching following:', error);
     throw error;
   }
 }
@@ -376,7 +377,7 @@ export async function getFollowCounts(userId: string): Promise<{ followersCount:
 
     return { followersCount, followingCount };
   } catch (error) {
-    console.error('Error fetching follow counts:', error);
+    logger.error('Error fetching follow counts:', error);
     throw error;
   }
 }
@@ -434,7 +435,7 @@ export async function getSuggestedUsers(userId: string, limit: number = 10): Pro
 
     return suggestedUsers;
   } catch (error) {
-    console.error('Error fetching suggested users:', error);
+    logger.error('Error fetching suggested users:', error);
     throw error;
   }
 }
@@ -450,7 +451,7 @@ export async function shareActivity(activityId: string, userId: string): Promise
       type: 'share'
     });
   } catch (error) {
-    console.error('Error sharing activity:', error);
+    logger.error('Error sharing activity:', error);
     throw error;
   }
 }
@@ -472,7 +473,7 @@ export async function getActivityStats(activityId: string): Promise<{
 
     return { likes, comments, shares };
   } catch (error) {
-    console.error('Error fetching activity stats:', error);
+    logger.error('Error fetching activity stats:', error);
     throw error;
   }
 }

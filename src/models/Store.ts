@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
 // Store location interface
@@ -953,28 +954,22 @@ StoreSchema.index({ 'location.coordinates': '2dsphere' });
 StoreSchema.index({ 'location.city': 1, isActive: 1 });
 StoreSchema.index({ 'location.pincode': 1 });
 StoreSchema.index({ 'ratings.average': -1, isActive: 1 });
-StoreSchema.index({ isFeatured: 1, isActive: 1 });
-StoreSchema.index({ 'offers.isPartner': 1, isActive: 1 });
+// Removed: { isFeatured: 1, isActive: 1 } — covered by compound { isActive: 1, isFeatured: 1, 'ratings.average': -1 } (line 987)
+// Removed: { 'offers.isPartner': 1, isActive: 1 } — covered by { 'offers.isPartner': 1, 'ratings.average': -1 } (line 983)
 StoreSchema.index({ tags: 1, isActive: 1 });
 StoreSchema.index({ createdAt: -1 });
 StoreSchema.index({ hasMenu: 1, isActive: 1 }); // Menu index
 StoreSchema.index({ bookingType: 1, isActive: 1 }); // Booking type index
 StoreSchema.index({ 'paymentSettings.upiId': 1 }); // UPI ID lookup index
 
-// Service capability indexes
+// Service capability indexes (kept high-traffic, removed driveThru + storePickup — low usage)
 StoreSchema.index({ 'serviceCapabilities.homeDelivery.enabled': 1, category: 1, isActive: 1, 'ratings.average': -1 });
-StoreSchema.index({ 'serviceCapabilities.driveThru.enabled': 1, category: 1, isActive: 1 });
 StoreSchema.index({ 'serviceCapabilities.tableBooking.enabled': 1, category: 1, isActive: 1 });
 StoreSchema.index({ 'serviceCapabilities.dineIn.enabled': 1, category: 1, isActive: 1 });
-StoreSchema.index({ 'serviceCapabilities.storePickup.enabled': 1, category: 1, isActive: 1 });
 
-// Delivery category indexes
+// Delivery category indexes (kept high-traffic, removed budgetFriendly/organic/alliance/lowestPrice — low usage, covered by collection scans)
 StoreSchema.index({ 'deliveryCategories.fastDelivery': 1, isActive: 1 });
-StoreSchema.index({ 'deliveryCategories.budgetFriendly': 1, isActive: 1 });
 StoreSchema.index({ 'deliveryCategories.premium': 1, isActive: 1 });
-StoreSchema.index({ 'deliveryCategories.organic': 1, isActive: 1 });
-StoreSchema.index({ 'deliveryCategories.alliance': 1, isActive: 1 });
-StoreSchema.index({ 'deliveryCategories.lowestPrice': 1, isActive: 1 });
 StoreSchema.index({ 'deliveryCategories.mall': 1, isActive: 1 });
 StoreSchema.index({ 'deliveryCategories.cashStore': 1, isActive: 1 });
 
@@ -1091,7 +1086,7 @@ StoreSchema.post('save', async function (doc: any) {
       await CategoryModel.findByIdAndUpdate(doc._prevCategory, { storeCount: oldCount });
     }
   } catch (err) {
-    console.error('Error updating store count after save:', err);
+    logger.error('Error updating store count after save:', err);
   }
 });
 
@@ -1105,7 +1100,7 @@ StoreSchema.post('findOneAndDelete', async function (doc: any) {
       await Category.findByIdAndUpdate(doc.category, { storeCount: count });
     }
   } catch (err) {
-    console.error('Error updating store count after delete:', err);
+    logger.error('Error updating store count after delete:', err);
   }
 });
 

@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
@@ -99,7 +100,7 @@ router.get('/', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[Admin Events] Error fetching events:', error);
+    logger.error('[Admin Events] Error fetching events:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -147,7 +148,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       data: { event, bookingStats, attendanceCount },
     });
   } catch (error: any) {
-    console.error('[Admin Events] Error fetching event:', error);
+    logger.error('[Admin Events] Error fetching event:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -194,7 +195,7 @@ router.post('/', async (req: Request, res: Response) => {
       message: 'Event created successfully',
     });
   } catch (error: any) {
-    console.error('[Admin Events] Error creating event:', error);
+    logger.error('[Admin Events] Error creating event:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -255,7 +256,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       message: 'Event updated successfully',
     });
   } catch (error: any) {
-    console.error('[Admin Events] Error updating event:', error);
+    logger.error('[Admin Events] Error updating event:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -299,7 +300,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     res.json({ success: true, message: 'Event deleted successfully' });
   } catch (error: any) {
-    console.error('[Admin Events] Error deleting event:', error);
+    logger.error('[Admin Events] Error deleting event:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -347,7 +348,7 @@ router.put('/:id/status', async (req: Request, res: Response) => {
       message: `Event status changed to ${status}`,
     });
   } catch (error: any) {
-    console.error('[Admin Events] Error updating status:', error);
+    logger.error('[Admin Events] Error updating status:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -376,7 +377,7 @@ router.put('/:id/featured', async (req: Request, res: Response) => {
       message: `Event ${featured ? 'featured' : 'unfeatured'} successfully`,
     });
   } catch (error: any) {
-    console.error('[Admin Events] Error updating featured:', error);
+    logger.error('[Admin Events] Error updating featured:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -430,7 +431,7 @@ router.get('/:id/bookings', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[Admin Events] Error fetching bookings:', error);
+    logger.error('[Admin Events] Error fetching bookings:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -507,7 +508,7 @@ router.get('/:id/analytics', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[Admin Events] Error fetching analytics:', error);
+    logger.error('[Admin Events] Error fetching analytics:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

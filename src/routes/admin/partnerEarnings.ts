@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { PartnerEarningsConfig } from '../../models/PartnerEarningsConfig';
@@ -152,7 +153,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN] Partner earnings analytics error:', error);
+    logger.error('[ADMIN] Partner earnings analytics error:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to fetch analytics' });
   }
 });
@@ -213,7 +214,7 @@ router.get('/users', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN] Partner users list error:', error);
+    logger.error('[ADMIN] Partner users list error:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to fetch partners' });
   }
 });
@@ -360,7 +361,7 @@ router.post('/:userId/adjust', async (req: Request, res: Response) => {
       message: `Successfully ${type}ed ${amount} to partner earnings`,
     });
   } catch (error: any) {
-    console.error('[ADMIN] Partner earnings adjust error:', error);
+    logger.error('[ADMIN] Partner earnings adjust error:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to adjust earnings' });
   }
 });

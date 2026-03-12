@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin API for Store Collection Configuration
  * Controls which delivery categories appear on the Store Categories page,
@@ -38,7 +39,7 @@ router.get('/', async (_req: Request, res: Response) => {
 
     sendSuccess(res, configs, 'Store collection configs retrieved');
   } catch (error) {
-    console.error('[ADMIN] Error fetching store collection configs:', error);
+    logger.error('[ADMIN] Error fetching store collection configs:', error);
     sendError(res, 'Failed to fetch store collection configs', 500);
   }
 });
@@ -80,7 +81,7 @@ router.put('/:categoryKey', async (req: Request, res: Response) => {
 
     sendSuccess(res, config, 'Store collection config updated');
   } catch (error) {
-    console.error('[ADMIN] Error updating store collection config:', error);
+    logger.error('[ADMIN] Error updating store collection config:', error);
     sendError(res, 'Failed to update store collection config', 500);
   }
 });
@@ -112,7 +113,7 @@ router.post('/seed', async (req: Request, res: Response) => {
 
     sendSuccess(res, results, 'Store collection configs seeded');
   } catch (error) {
-    console.error('[ADMIN] Error seeding store collection configs:', error);
+    logger.error('[ADMIN] Error seeding store collection configs:', error);
     sendError(res, 'Failed to seed store collection configs', 500);
   }
 });
@@ -144,7 +145,7 @@ router.post('/reorder', async (req: Request, res: Response) => {
 
     sendSuccess(res, results, 'Store collections reordered');
   } catch (error) {
-    console.error('[ADMIN] Error reordering store collections:', error);
+    logger.error('[ADMIN] Error reordering store collections:', error);
     sendError(res, 'Failed to reorder store collections', 500);
   }
 });

@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 // Admin Fraud Report Routes
 // CRUD and management for fraud reports
 
@@ -109,7 +110,7 @@ router.get('/', async (req: Request, res: Response) => {
       pages: Math.ceil(total / Number(limit)),
     });
   } catch (error: any) {
-    console.error('[Admin FraudReports] Error listing reports:', error.message);
+    logger.error('[Admin FraudReports] Error listing reports:', error.message);
     sendError(res, 'Failed to list fraud reports', 500);
   }
 });
@@ -137,7 +138,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     sendSuccess(res, { report });
   } catch (error: any) {
-    console.error('[Admin FraudReports] Error fetching report:', error.message);
+    logger.error('[Admin FraudReports] Error fetching report:', error.message);
     sendError(res, 'Failed to fetch fraud report', 500);
   }
 });
@@ -178,7 +179,7 @@ router.put('/:id/status', async (req: Request, res: Response) => {
 
     sendSuccess(res, { report });
   } catch (error: any) {
-    console.error('[Admin FraudReports] Error updating status:', error.message);
+    logger.error('[Admin FraudReports] Error updating status:', error.message);
     sendError(res, 'Failed to update status', 500);
   }
 });
@@ -219,7 +220,7 @@ router.put('/:id/priority', async (req: Request, res: Response) => {
 
     sendSuccess(res, { report });
   } catch (error: any) {
-    console.error('[Admin FraudReports] Error updating priority:', error.message);
+    logger.error('[Admin FraudReports] Error updating priority:', error.message);
     sendError(res, 'Failed to update priority', 500);
   }
 });
@@ -265,7 +266,7 @@ router.post('/:id/notes', async (req: Request, res: Response) => {
 
     sendSuccess(res, { report });
   } catch (error: any) {
-    console.error('[Admin FraudReports] Error adding note:', error.message);
+    logger.error('[Admin FraudReports] Error adding note:', error.message);
     sendError(res, 'Failed to add note', 500);
   }
 });

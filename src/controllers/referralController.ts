@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Referral Controller
 // Handles referral program API endpoints
 
@@ -229,7 +230,7 @@ export const shareReferralLink = asyncHandler(async (req: Request, res: Response
     // In a real application, you would integrate with the respective platform APIs
     // For now, we'll just return success
     // Note: Logging without PII - only platform type and userId (sanitized)
-    console.log(`📱 [REFERRAL] User shared link via ${platform} - UserID: ${userId.toString().slice(-4)}`);
+    logger.info(`📱 [REFERRAL] User shared link via ${platform} - UserID: ${userId.toString().slice(-4)}`);
 
     sendSuccess(res, { success: true }, 'Referral link shared successfully');
   } catch (error) {

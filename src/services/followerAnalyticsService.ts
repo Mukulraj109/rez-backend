@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose from 'mongoose';
 import { FollowerAnalytics } from '../models/FollowerAnalytics';
 import { Store } from '../models/Store';
@@ -31,9 +32,9 @@ export async function recordDailySnapshot(storeId: string | mongoose.Types.Objec
       { upsert: true }
     );
 
-    console.log(`📊 Daily snapshot recorded for store ${storeId}: ${followersCount} followers`);
+    logger.info(`📊 Daily snapshot recorded for store ${storeId}: ${followersCount} followers`);
   } catch (error) {
-    console.error('Error recording daily snapshot:', error);
+    logger.error('Error recording daily snapshot:', error);
     throw error;
   }
 }
@@ -58,9 +59,9 @@ export async function recordNewFollow(storeId: string | mongoose.Types.ObjectId)
       { upsert: true }
     );
 
-    console.log(`➕ New follow recorded for store ${storeId}`);
+    logger.info(`➕ New follow recorded for store ${storeId}`);
   } catch (error) {
-    console.error('Error recording new follow:', error);
+    logger.error('Error recording new follow:', error);
     // Don't throw - this is analytics, shouldn't break user flow
   }
 }
@@ -85,9 +86,9 @@ export async function recordUnfollow(storeId: string | mongoose.Types.ObjectId):
       { upsert: true }
     );
 
-    console.log(`➖ Unfollow recorded for store ${storeId}`);
+    logger.info(`➖ Unfollow recorded for store ${storeId}`);
   } catch (error) {
-    console.error('Error recording unfollow:', error);
+    logger.error('Error recording unfollow:', error);
     // Don't throw - this is analytics, shouldn't break user flow
   }
 }
@@ -106,7 +107,7 @@ export async function recordFollowerClick(storeId: string | mongoose.Types.Objec
       { upsert: true }
     );
   } catch (error) {
-    console.error('Error recording follower click:', error);
+    logger.error('Error recording follower click:', error);
   }
 }
 
@@ -132,9 +133,9 @@ export async function recordFollowerOrder(
       { upsert: true }
     );
 
-    console.log(`💰 Follower order recorded for store ${storeId}: ₹${orderAmount}`);
+    logger.info(`💰 Follower order recorded for store ${storeId}: ₹${orderAmount}`);
   } catch (error) {
-    console.error('Error recording follower order:', error);
+    logger.error('Error recording follower order:', error);
   }
 }
 
@@ -152,7 +153,7 @@ export async function recordExclusiveOfferView(storeId: string | mongoose.Types.
       { upsert: true }
     );
   } catch (error) {
-    console.error('Error recording exclusive offer view:', error);
+    logger.error('Error recording exclusive offer view:', error);
   }
 }
 
@@ -170,9 +171,9 @@ export async function recordExclusiveOfferRedemption(storeId: string | mongoose.
       { upsert: true }
     );
 
-    console.log(`🎟️ Exclusive offer redeemed for store ${storeId}`);
+    logger.info(`🎟️ Exclusive offer redeemed for store ${storeId}`);
   } catch (error) {
-    console.error('Error recording exclusive offer redemption:', error);
+    logger.error('Error recording exclusive offer redemption:', error);
   }
 }
 
@@ -190,7 +191,7 @@ export async function getAnalytics(
       date: { $gte: startDate, $lte: endDate }
     }).sort({ date: 1 }).lean();
   } catch (error) {
-    console.error('Error getting analytics:', error);
+    logger.error('Error getting analytics:', error);
     throw error;
   }
 }
@@ -283,7 +284,7 @@ export async function getGrowthMetrics(storeId: string | mongoose.Types.ObjectId
       }
     };
   } catch (error) {
-    console.error('Error getting growth metrics:', error);
+    logger.error('Error getting growth metrics:', error);
     throw error;
   }
 }
@@ -350,7 +351,7 @@ export async function getDetailedAnalytics(
       }
     };
   } catch (error) {
-    console.error('Error getting detailed analytics:', error);
+    logger.error('Error getting detailed analytics:', error);
     throw error;
   }
 }
@@ -369,7 +370,7 @@ export async function getCurrentFollowerCount(storeId: string | mongoose.Types.O
       }
     });
   } catch (error) {
-    console.error('Error getting current follower count:', error);
+    logger.error('Error getting current follower count:', error);
     return 0;
   }
 }

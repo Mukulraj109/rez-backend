@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Menu Controller - Handle menu operations
 import { Request, Response } from 'express';
 import Menu, { IMenuItem, IMenuCategory } from '../models/Menu';
@@ -64,7 +65,7 @@ export const getStoreMenu = async (req: Request, res: Response) => {
 
     sendSuccess(res, response, 'Menu retrieved successfully');
   } catch (error: any) {
-    console.error('[MENU] Error getting store menu:', error);
+    logger.error('[MENU] Error getting store menu:', error);
     sendError(res, error.message || 'Failed to retrieve menu', 500);
   }
 };
@@ -115,7 +116,7 @@ export const createOrUpdateMenu = async (req: Request, res: Response) => {
 
     sendSuccess(res, menu, 'Menu saved successfully', 201);
   } catch (error: any) {
-    console.error('[MENU] Error creating/updating menu:', error);
+    logger.error('[MENU] Error creating/updating menu:', error);
     sendError(res, error.message || 'Failed to save menu', 500);
   }
 };
@@ -144,7 +145,7 @@ export const addMenuItem = async (req: Request, res: Response) => {
 
     sendSuccess(res, menu, 'Menu item added successfully', 201);
   } catch (error: any) {
-    console.error('[MENU] Error adding menu item:', error);
+    logger.error('[MENU] Error adding menu item:', error);
     sendError(res, error.message || 'Failed to add menu item', 500);
   }
 };
@@ -174,7 +175,7 @@ export const updateMenuItem = async (req: Request, res: Response) => {
 
     sendSuccess(res, menu, 'Menu item updated successfully');
   } catch (error: any) {
-    console.error('[MENU] Error updating menu item:', error);
+    logger.error('[MENU] Error updating menu item:', error);
     sendError(res, error.message || 'Failed to update menu item', 500);
   }
 };
@@ -204,7 +205,7 @@ export const deleteMenuItem = async (req: Request, res: Response) => {
 
     sendSuccess(res, { deleted: true }, 'Menu item deleted successfully');
   } catch (error: any) {
-    console.error('[MENU] Error deleting menu item:', error);
+    logger.error('[MENU] Error deleting menu item:', error);
     sendError(res, error.message || 'Failed to delete menu item', 500);
   }
 };
@@ -234,7 +235,7 @@ export const getMenuItem = async (req: Request, res: Response) => {
 
     sendSuccess(res, item, 'Menu item retrieved successfully');
   } catch (error: any) {
-    console.error('[MENU] Error getting menu item:', error);
+    logger.error('[MENU] Error getting menu item:', error);
     sendError(res, error.message || 'Failed to retrieve menu item', 500);
   }
 };
@@ -337,7 +338,7 @@ export const createPreOrder = async (req: Request, res: Response) => {
 
     sendSuccess(res, preOrder, 'Pre-order created successfully', 201);
   } catch (error: any) {
-    console.error('[MENU] Error creating pre-order:', error);
+    logger.error('[MENU] Error creating pre-order:', error);
     sendError(res, error.message || 'Failed to create pre-order', 500);
   }
 };
@@ -359,7 +360,7 @@ export const getUserPreOrders = async (req: Request, res: Response) => {
 
     sendSuccess(res, preOrders, 'Pre-orders retrieved successfully');
   } catch (error: any) {
-    console.error('[MENU] Error getting user pre-orders:', error);
+    logger.error('[MENU] Error getting user pre-orders:', error);
     sendError(res, error.message || 'Failed to retrieve pre-orders', 500);
   }
 };
@@ -388,7 +389,7 @@ export const getPreOrder = async (req: Request, res: Response) => {
 
     sendSuccess(res, preOrder, 'Pre-order retrieved successfully');
   } catch (error: any) {
-    console.error('[MENU] Error getting pre-order:', error);
+    logger.error('[MENU] Error getting pre-order:', error);
     sendError(res, error.message || 'Failed to retrieve pre-order', 500);
   }
 };
@@ -417,7 +418,7 @@ export const cancelPreOrder = async (req: Request, res: Response) => {
 
     sendSuccess(res, preOrder, 'Pre-order cancelled successfully');
   } catch (error: any) {
-    console.error('[MENU] Error cancelling pre-order:', error);
+    logger.error('[MENU] Error cancelling pre-order:', error);
     sendError(res, error.message || 'Failed to cancel pre-order', 500);
   }
 };
@@ -480,7 +481,7 @@ export const searchMenuItems = async (req: Request, res: Response) => {
 
     sendSuccess(res, results, `Found ${results.length} menu items`);
   } catch (error: any) {
-    console.error('[MENU] Error searching menu items:', error);
+    logger.error('[MENU] Error searching menu items:', error);
     sendError(res, error.message || 'Failed to search menu items', 500);
   }
 };

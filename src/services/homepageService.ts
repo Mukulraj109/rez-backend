@@ -10,6 +10,7 @@ import { ModeId } from './modeService';
 import { regionService, RegionId, isValidRegion, DEFAULT_REGION } from './regionService';
 import { withCache, CacheKeys } from '../utils/cacheHelper';
 import { CacheTTL } from '../config/redis';
+import { logger } from '../config/logger';
 
 /**
  * Homepage Service
@@ -117,11 +118,11 @@ async function fetchFeaturedProducts(limit: number, region?: RegionId): Promise<
         .lean();
 
       const duration = Date.now() - startTime;
-      console.log(`✅ [Homepage Service] Fetched ${products.length} featured products (region: ${region || 'all'}) in ${duration}ms`);
+      logger.info(` [Homepage Service] Fetched ${products.length} featured products (region: ${region || 'all'}) in ${duration}ms`);
       return products;
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error(`❌ [Homepage Service] Failed to fetch featured products in ${duration}ms:`, error);
+      logger.error(` [Homepage Service] Failed to fetch featured products in ${duration}ms:`, error);
       throw error;
     }
   });
@@ -193,7 +194,7 @@ async function fetchNewArrivals(limit: number, region?: RegionId): Promise<any[]
       }));
 
       const duration = Date.now() - startTime;
-      console.log(`✅ [Homepage Service] Fetched ${transformedProducts.length} new arrivals (region: ${region || 'all'}) in ${duration}ms`);
+      logger.info(` [Homepage Service] Fetched ${transformedProducts.length} new arrivals (region: ${region || 'all'}) in ${duration}ms`);
       return transformedProducts;
     } catch (error) {
       throw error;
@@ -230,11 +231,11 @@ async function fetchFeaturedStores(limit: number, region?: RegionId): Promise<an
         .lean();
 
       const duration = Date.now() - startTime;
-      console.log(`✅ [Homepage Service] Fetched ${stores.length} featured stores (region: ${region || 'all'}) in ${duration}ms`);
+      logger.info(` [Homepage Service] Fetched ${stores.length} featured stores (region: ${region || 'all'}) in ${duration}ms`);
       return stores;
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error(`❌ [Homepage Service] Failed to fetch featured stores in ${duration}ms:`, error);
+      logger.error(` [Homepage Service] Failed to fetch featured stores in ${duration}ms:`, error);
       throw error;
     }
   });
@@ -268,11 +269,11 @@ async function fetchTrendingStores(limit: number, region?: RegionId): Promise<an
         .lean();
 
       const duration = Date.now() - startTime;
-      console.log(`✅ [Homepage Service] Fetched ${stores.length} trending stores (region: ${region || 'all'}) in ${duration}ms`);
+      logger.info(` [Homepage Service] Fetched ${stores.length} trending stores (region: ${region || 'all'}) in ${duration}ms`);
       return stores;
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error(`❌ [Homepage Service] Failed to fetch trending stores in ${duration}ms:`, error);
+      logger.error(` [Homepage Service] Failed to fetch trending stores in ${duration}ms:`, error);
       throw error;
     }
   });
@@ -300,11 +301,11 @@ async function fetchUpcomingEvents(limit: number): Promise<any[]> {
         .lean();
 
       const duration = Date.now() - startTime;
-      console.log(`✅ [Homepage Service] Fetched ${events.length} upcoming events in ${duration}ms`);
+      logger.info(` [Homepage Service] Fetched ${events.length} upcoming events in ${duration}ms`);
       return events;
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error(`❌ [Homepage Service] Failed to fetch upcoming events in ${duration}ms:`, error);
+      logger.error(` [Homepage Service] Failed to fetch upcoming events in ${duration}ms:`, error);
       throw error;
     }
   });
@@ -333,11 +334,11 @@ async function fetchMegaOffers(limit: number): Promise<any[]> {
         .lean();
 
       const duration = Date.now() - startTime;
-      console.log(`✅ [Homepage Service] Fetched ${offers.length} mega offers in ${duration}ms`);
+      logger.info(` [Homepage Service] Fetched ${offers.length} mega offers in ${duration}ms`);
       return offers;
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error(`❌ [Homepage Service] Failed to fetch mega offers in ${duration}ms:`, error);
+      logger.error(` [Homepage Service] Failed to fetch mega offers in ${duration}ms:`, error);
       throw error;
     }
   });
@@ -366,11 +367,11 @@ async function fetchStudentOffers(limit: number): Promise<any[]> {
         .lean();
 
       const duration = Date.now() - startTime;
-      console.log(`✅ [Homepage Service] Fetched ${offers.length} student offers in ${duration}ms`);
+      logger.info(` [Homepage Service] Fetched ${offers.length} student offers in ${duration}ms`);
       return offers;
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error(`❌ [Homepage Service] Failed to fetch student offers in ${duration}ms:`, error);
+      logger.error(` [Homepage Service] Failed to fetch student offers in ${duration}ms:`, error);
       throw error;
     }
   });
@@ -392,11 +393,11 @@ async function fetchCategories(limit: number): Promise<any[]> {
         .lean();
 
       const duration = Date.now() - startTime;
-      console.log(`✅ [Homepage Service] Fetched ${categories.length} categories in ${duration}ms`);
+      logger.info(` [Homepage Service] Fetched ${categories.length} categories in ${duration}ms`);
       return categories;
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error(`❌ [Homepage Service] Failed to fetch categories in ${duration}ms:`, error);
+      logger.error(` [Homepage Service] Failed to fetch categories in ${duration}ms:`, error);
       throw error;
     }
   });
@@ -422,11 +423,11 @@ async function fetchTrendingVideos(limit: number): Promise<any[]> {
         .lean();
 
       const duration = Date.now() - startTime;
-      console.log(`✅ [Homepage Service] Fetched ${videos.length} trending videos in ${duration}ms`);
+      logger.info(` [Homepage Service] Fetched ${videos.length} trending videos in ${duration}ms`);
       return videos;
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error(`❌ [Homepage Service] Failed to fetch trending videos in ${duration}ms:`, error);
+      logger.error(` [Homepage Service] Failed to fetch trending videos in ${duration}ms:`, error);
       throw error;
     }
   });
@@ -452,11 +453,11 @@ async function fetchLatestArticles(limit: number): Promise<any[]> {
         .lean();
 
       const duration = Date.now() - startTime;
-      console.log(`✅ [Homepage Service] Fetched ${articles.length} latest articles in ${duration}ms`);
+      logger.info(` [Homepage Service] Fetched ${articles.length} latest articles in ${duration}ms`);
       return articles;
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error(`❌ [Homepage Service] Failed to fetch latest articles in ${duration}ms:`, error);
+      logger.error(` [Homepage Service] Failed to fetch latest articles in ${duration}ms:`, error);
       throw error;
     }
   });
@@ -511,11 +512,11 @@ async function fetchBrandPartnerships(limit: number): Promise<any[]> {
       }));
 
       const duration = Date.now() - startTime;
-      console.log(`✅ [Homepage Service] Fetched ${transformedBrands.length} brand partnerships in ${duration}ms`);
+      logger.info(` [Homepage Service] Fetched ${transformedBrands.length} brand partnerships in ${duration}ms`);
       return transformedBrands;
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error(`❌ [Homepage Service] Failed to fetch brand partnerships in ${duration}ms:`, error);
+      logger.error(` [Homepage Service] Failed to fetch brand partnerships in ${duration}ms:`, error);
       throw error;
     }
   });
@@ -527,7 +528,7 @@ async function fetchBrandPartnerships(limit: number): Promise<any[]> {
  */
 export async function getHomepageData(params: HomepageQueryParams): Promise<HomepageResponse> {
   const startTime = Date.now();
-  console.log('🏠 [Homepage Service] Starting homepage data fetch...');
+  logger.info('[Homepage Service] Starting homepage data fetch...');
 
   // Determine which sections to fetch (default: all)
   const requestedSections = params.sections || [
@@ -550,7 +551,7 @@ export async function getHomepageData(params: HomepageQueryParams): Promise<Home
 
   // Get region for filtering (if specified)
   const region = params.region;
-  console.log(`🌍 [Homepage Service] Region filter: ${region || 'none'}`);
+  logger.info(` [Homepage Service] Region filter: ${region || 'none'}`);
 
   // Add each requested section to promises
   if (requestedSections.includes('featuredProducts')) {
@@ -642,7 +643,7 @@ export async function getHomepageData(params: HomepageQueryParams): Promise<Home
   }
 
   // Execute all queries in parallel
-  console.log(`🔄 [Homepage Service] Executing ${Object.keys(promises).length} queries in parallel...`);
+  logger.info(` [Homepage Service] Executing ${Object.keys(promises).length} queries in parallel...`);
   const results = await Promise.all(Object.values(promises));
   const data = Object.keys(promises).reduce((acc, key, index) => {
     acc[key] = results[index];
@@ -653,9 +654,9 @@ export async function getHomepageData(params: HomepageQueryParams): Promise<Home
   const successfulSections = Object.keys(data).filter(key => !errors[key]);
   const failedSections = Object.keys(errors);
 
-  console.log(`✅ [Homepage Service] Homepage data fetched in ${duration}ms`);
-  console.log(`   ✅ Successful sections: ${successfulSections.length}`);
-  console.log(`   ❌ Failed sections: ${failedSections.length}`);
+  logger.info(` [Homepage Service] Homepage data fetched in ${duration}ms`);
+  logger.info(` Successful sections: ${successfulSections.length}`);
+  logger.info(` Failed sections: ${failedSections.length}`);
 
   return {
     success: true,

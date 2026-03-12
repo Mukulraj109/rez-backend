@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import GameSession, { IGameSession } from '../models/GameSession';
 import GameConfig, { IGameConfig } from '../models/GameConfig';
 import Tournament from '../models/Tournament';
@@ -33,7 +34,7 @@ async function getCachedGameConfig(gameType: string): Promise<IGameConfig | null
     gameConfigCache.set(gameType, { config, cachedAt: Date.now() });
     return config;
   } catch (err) {
-    console.error(`[GAME SERVICE] Failed to fetch GameConfig for ${gameType}:`, err);
+    logger.error(`[GAME SERVICE] Failed to fetch GameConfig for ${gameType}:`, err);
     return null;
   }
 }
@@ -113,7 +114,7 @@ class GameService {
     const minSeconds = MIN_PLAY_DURATION_SECONDS[session.gameType] || 2;
     const elapsedMs = Date.now() - new Date(session.startedAt).getTime();
     if (elapsedMs < minSeconds * 1000) {
-      console.warn(
+      logger.warn(
         `[ANTI-CHEAT] Suspiciously fast completion: ${session.gameType} session ${session.sessionId} ` +
         `completed in ${elapsedMs}ms (min: ${minSeconds * 1000}ms), user: ${session.user}`
       );
@@ -187,7 +188,7 @@ class GameService {
    * Emit fraud suspicion event for monitoring.
    */
   private emitFraudEvent(userId: string, gameType: string, reason: string, data: Record<string, any>): void {
-    console.warn(`[FRAUD] ${reason} for user ${userId} on ${gameType}:`, data);
+    logger.warn(`[FRAUD] ${reason} for user ${userId} on ${gameType}:`, data);
     // Log to gamification event bus for monitoring
     gamificationEventBus.emit('game_won', {
       userId,
@@ -228,13 +229,13 @@ class GameService {
             firstUpdate = { tournamentName: tournament.name, pointsAdded: score, newRank: newRank || 1 };
           }
         } catch (err) {
-          console.error(`[GAME SERVICE] Tournament score update failed for ${tournament.name}:`, err);
+          logger.error(`[GAME SERVICE] Tournament score update failed for ${tournament.name}:`, err);
         }
       }
 
       return firstUpdate;
     } catch (err) {
-      console.error('[GAME SERVICE] Tournament score lookup failed:', err);
+      logger.error('[GAME SERVICE] Tournament score lookup failed:', err);
       return null;
     }
   }
@@ -322,7 +323,7 @@ class GameService {
           { sessionId }
         );
       } catch (err) {
-        console.error(`[GAME SERVICE] Spin wheel coin award failed for user ${spinUserId}:`, err);
+        logger.error(`[GAME SERVICE] Spin wheel coin award failed for user ${spinUserId}:`, err);
       }
     }
 
@@ -333,7 +334,7 @@ class GameService {
     let tournamentUpdate = null;
     if (result.prize?.value && result.prize.type === 'coins') {
       tournamentUpdate = await this.updateTournamentScores(spinUserId, 'spin_wheel', result.prize.value as number).catch((err) => {
-        console.error('[GAME] Tournament score update failed:', err.message);
+        logger.error('[GAME] Tournament score update failed:', err.message);
         return null;
       });
     }
@@ -394,7 +395,7 @@ class GameService {
       } : undefined,
     });
 
-    console.log(`[SCRATCH_CARD:CREATE] userId=${userId} sessionId=${session.sessionId} ip=${requestMeta?.ip || 'unknown'}`);
+    logger.info(`[SCRATCH_CARD:CREATE] userId=${userId} sessionId=${session.sessionId} ip=${requestMeta?.ip || 'unknown'}`);
 
     return session;
   }
@@ -451,7 +452,7 @@ class GameService {
     const scratchUserId = session.user.toString();
     const idempotencyKey = `scratch_card:${sessionId}`;
 
-    console.log(`[SCRATCH_CARD:PLAY] userId=${scratchUserId} sessionId=${sessionId} prizeType=${result.prize.type} prizeValue=${result.prize.value}`);
+    logger.info(`[SCRATCH_CARD:PLAY] userId=${scratchUserId} sessionId=${sessionId} prizeType=${result.prize.type} prizeValue=${result.prize.value}`);
 
     // Credit coins to user's wallet (if prize is coins)
     if (result.prize.type === 'coins' && typeof result.prize.value === 'number' && result.prize.value > 0) {
@@ -464,7 +465,7 @@ class GameService {
           { idempotencyKey, sessionId }
         );
 
-        console.log(`[SCRATCH_CARD:AWARD] userId=${scratchUserId} sessionId=${sessionId} amount=${result.prize.value} newBalance=${awardResult?.newBalance}`);
+        logger.info(`[SCRATCH_CARD:AWARD] userId=${scratchUserId} sessionId=${sessionId} amount=${result.prize.value} newBalance=${awardResult?.newBalance}`);
 
         // Record ledger entry (double-entry: debit platform_float → credit user_wallet)
         try {
@@ -481,14 +482,14 @@ class GameService {
               description: `Scratch & Win: ${result.prize.description}`,
             },
           });
-          console.log(`[SCRATCH_CARD:LEDGER] userId=${scratchUserId} sessionId=${sessionId} pairId=${pairId} amount=${result.prize.value}`);
+          logger.info(`[SCRATCH_CARD:LEDGER] userId=${scratchUserId} sessionId=${sessionId} pairId=${pairId} amount=${result.prize.value}`);
         } catch (ledgerErr) {
           // Ledger failure is non-blocking — coins already credited, reconciliation can fix
-          console.error(`[SCRATCH_CARD:LEDGER_FAIL] userId=${scratchUserId} sessionId=${sessionId}`, ledgerErr);
+          logger.error(`[SCRATCH_CARD:LEDGER_FAIL] userId=${scratchUserId} sessionId=${sessionId}`, ledgerErr);
         }
       } catch (err) {
         // Coin award failed — revert session to pending so user can retry
-        console.error(`[SCRATCH_CARD:AWARD_FAIL] userId=${scratchUserId} sessionId=${sessionId}`, err);
+        logger.error(`[SCRATCH_CARD:AWARD_FAIL] userId=${scratchUserId} sessionId=${sessionId}`, err);
         await GameSession.findOneAndUpdate(
           { sessionId, status: 'completed' },
           { $set: { status: 'pending' }, $unset: { completedAt: 1 } }
@@ -550,7 +551,7 @@ class GameService {
         { idempotencyKey, sessionId }
       );
 
-      console.log(`[SCRATCH_CARD:RETRY_AWARD] userId=${scratchUserId} sessionId=${sessionId} amount=${prize.value} newBalance=${awardResult?.newBalance}`);
+      logger.info(`[SCRATCH_CARD:RETRY_AWARD] userId=${scratchUserId} sessionId=${sessionId} amount=${prize.value} newBalance=${awardResult?.newBalance}`);
 
       // Record ledger entry
       try {
@@ -564,9 +565,9 @@ class GameService {
           referenceModel: 'GameSession',
           metadata: { idempotencyKey, description: `Scratch & Win (retry): ${prize.description}` },
         });
-        console.log(`[SCRATCH_CARD:RETRY_LEDGER] userId=${scratchUserId} sessionId=${sessionId} pairId=${pairId}`);
+        logger.info(`[SCRATCH_CARD:RETRY_LEDGER] userId=${scratchUserId} sessionId=${sessionId} pairId=${pairId}`);
       } catch (ledgerErr) {
-        console.error(`[SCRATCH_CARD:RETRY_LEDGER_FAIL] userId=${scratchUserId} sessionId=${sessionId}`, ledgerErr);
+        logger.error(`[SCRATCH_CARD:RETRY_LEDGER_FAIL] userId=${scratchUserId} sessionId=${sessionId}`, ledgerErr);
       }
     }
 
@@ -777,7 +778,7 @@ class GameService {
           { sessionId, score, total, percentage: Math.round(percentage) }
         );
       } catch (err) {
-        console.error(`[GAME SERVICE] Quiz coin award failed for user ${quizUserId}:`, err);
+        logger.error(`[GAME SERVICE] Quiz coin award failed for user ${quizUserId}:`, err);
       }
     }
 
@@ -788,7 +789,7 @@ class GameService {
     let tournamentUpdate = null;
     if (coins > 0) {
       tournamentUpdate = await this.updateTournamentScores(quizUserId, 'quiz', coins).catch((err) => {
-        console.error('[GAME] Tournament score update failed:', err.message);
+        logger.error('[GAME] Tournament score update failed:', err.message);
         return null;
       });
     }
@@ -899,7 +900,7 @@ class GameService {
           { sessionId: triviaSessionId, questionId }
         );
       } catch (err) {
-        console.error(`[GAME SERVICE] Daily trivia coin award failed for user ${userId}:`, err);
+        logger.error(`[GAME SERVICE] Daily trivia coin award failed for user ${userId}:`, err);
       }
     }
 
@@ -1133,7 +1134,7 @@ class GameService {
 
     // Minimum time check — realistic minimum is ~10 seconds
     if (timeSpent > 0 && timeSpent < 10000) {
-      console.warn(`[ANTI-CHEAT] Suspicious fast completion: ${timeSpent}ms, ${moves} moves for session ${sessionId}`);
+      logger.warn(`[ANTI-CHEAT] Suspicious fast completion: ${timeSpent}ms, ${moves} moves for session ${sessionId}`);
     }
     // Maximum score sanity check
     const maxPossibleCoins = pairs * 100; // generous upper bound
@@ -1185,7 +1186,7 @@ class GameService {
         );
         newBalance = coinResult.newBalance;
       } catch (err) {
-        console.error(`[GAME SERVICE] Memory Match coin award failed for user ${sessionOwnerId}:`, err);
+        logger.error(`[GAME SERVICE] Memory Match coin award failed for user ${sessionOwnerId}:`, err);
       }
     }
 
@@ -1193,7 +1194,7 @@ class GameService {
     this.emitGameEvent(sessionOwnerId, 'memory_match', true, coins, { sessionId, score, timeSpent, moves, difficulty });
 
     // Update tournament scores (non-blocking)
-    this.updateTournamentScores(sessionOwnerId, 'memory_match', score).catch((err) => console.error('[GAME] Tournament score update failed:', err.message));
+    this.updateTournamentScores(sessionOwnerId, 'memory_match', score).catch((err) => logger.error('[GAME] Tournament score update failed:', err.message));
 
     return {
       sessionId,
@@ -1310,7 +1311,7 @@ class GameService {
         );
         newBalance = coinResult.newBalance;
       } catch (err) {
-        console.error(`[GAME SERVICE] Coin Hunt coin award failed for user ${sessionOwnerId}:`, err);
+        logger.error(`[GAME SERVICE] Coin Hunt coin award failed for user ${sessionOwnerId}:`, err);
       }
     }
 
@@ -1326,7 +1327,7 @@ class GameService {
     }
 
     // Update tournament scores (non-blocking)
-    this.updateTournamentScores(sessionOwnerId, 'coin_hunt', score).catch((err) => console.error('[GAME] Tournament score update failed:', err.message));
+    this.updateTournamentScores(sessionOwnerId, 'coin_hunt', score).catch((err) => logger.error('[GAME] Tournament score update failed:', err.message));
 
     return {
       sessionId,
@@ -1458,7 +1459,7 @@ class GameService {
         );
         newBalance = coinResult.newBalance;
       } catch (err) {
-        console.error(`[GAME SERVICE] Guess Price coin award failed for user ${sessionOwnerId}:`, err);
+        logger.error(`[GAME SERVICE] Guess Price coin award failed for user ${sessionOwnerId}:`, err);
       }
     }
 
@@ -1466,7 +1467,7 @@ class GameService {
     this.emitGameEvent(sessionOwnerId, 'guess_price', coins > 0, coins, { sessionId, accuracy: Math.round(accuracy) });
 
     // Update tournament scores (non-blocking)
-    this.updateTournamentScores(sessionOwnerId, 'guess_price', Math.round(accuracy)).catch((err) => console.error('[GAME] Tournament score update failed:', err.message));
+    this.updateTournamentScores(sessionOwnerId, 'guess_price', Math.round(accuracy)).catch((err) => logger.error('[GAME] Tournament score update failed:', err.message));
 
     return {
       sessionId,
@@ -1743,7 +1744,7 @@ class GameService {
     try {
       dbConfigs = await GameConfig.find({}).sort({ sortOrder: 1 }).limit(1000).lean() as IGameConfig[];
     } catch (err) {
-      console.error('[GAME SERVICE] Failed to load GameConfig from DB, using defaults:', err);
+      logger.error('[GAME SERVICE] Failed to load GameConfig from DB, using defaults:', err);
     }
 
     let games: any[];

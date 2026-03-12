@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { requireAuth, requireAdmin, requireSeniorAdmin, requireOperator } from '../../middleware/auth';
@@ -96,7 +97,7 @@ router.get('/', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('[ADMIN COIN REWARDS] Error fetching rewards:', error);
+    logger.error('[ADMIN COIN REWARDS] Error fetching rewards:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch coin rewards'
@@ -144,7 +145,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error: any) {
-    console.error('[ADMIN COIN REWARDS] Error fetching stats:', error);
+    logger.error('[ADMIN COIN REWARDS] Error fetching stats:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch stats'
@@ -175,7 +176,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       data: mapPostToReward(post)
     });
   } catch (error: any) {
-    console.error('[ADMIN COIN REWARDS] Error fetching reward:', error);
+    logger.error('[ADMIN COIN REWARDS] Error fetching reward:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch submission'
@@ -237,7 +238,7 @@ router.post('/:id/approve', async (req: Request, res: Response) => {
       data: mapPostToReward(post)
     });
   } catch (error: any) {
-    console.error('[ADMIN COIN REWARDS] Error approving:', error);
+    logger.error('[ADMIN COIN REWARDS] Error approving:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to approve submission'
@@ -290,7 +291,7 @@ router.post('/:id/reject', async (req: Request, res: Response) => {
       data: mapPostToReward(post)
     });
   } catch (error: any) {
-    console.error('[ADMIN COIN REWARDS] Error rejecting:', error);
+    logger.error('[ADMIN COIN REWARDS] Error rejecting:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to reject submission'
@@ -355,7 +356,7 @@ router.post('/bulk-approve', async (req: Request, res: Response) => {
       data: { processed: results.approved, ...results }
     });
   } catch (error: any) {
-    console.error('[ADMIN COIN REWARDS] Error bulk approving:', error);
+    logger.error('[ADMIN COIN REWARDS] Error bulk approving:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to bulk approve'
@@ -415,7 +416,7 @@ router.post('/bulk-reject', async (req: Request, res: Response) => {
       data: { processed: results.rejected, ...results }
     });
   } catch (error: any) {
-    console.error('[ADMIN COIN REWARDS] Error bulk rejecting:', error);
+    logger.error('[ADMIN COIN REWARDS] Error bulk rejecting:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to bulk reject'

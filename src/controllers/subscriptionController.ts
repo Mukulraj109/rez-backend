@@ -10,6 +10,8 @@ import subscriptionAuditService from '../services/subscriptionAuditService';
 import { ProcessedWebhookEvent } from '../models/ProcessedWebhookEvent';
 import { Types } from 'mongoose';
 import * as alertService from '../services/webhookSecurityAlertService';
+import { withCache } from '../utils/cacheHelper';
+import { logger } from '../config/logger';
 
 /**
  * Get all available subscription tiers
@@ -20,15 +22,18 @@ export const getSubscriptionTiers = async (req: Request, res: Response) => {
     // Import SubscriptionTier model
     const { SubscriptionTier } = await import('../models/SubscriptionTier');
 
-    // Fetch active tiers from database, sorted by sortOrder
-    const tierConfigs = await SubscriptionTier.find({ isActive: true })
-      .sort({ sortOrder: 1 })
-      .lean()
-      .exec();
+    // Cache active tiers for 1 hour (rarely changes, admin-configured)
+    const tierConfigs = await withCache('subscription:tiers:active', 3600, () =>
+      SubscriptionTier.find({ isActive: true })
+        .select('name slug tier sortOrder price benefits description icon color badge billingOptions isActive')
+        .sort({ sortOrder: 1 })
+        .lean()
+        .exec()
+    );
 
     // If no tiers found in database, return empty array with warning
     if (!tierConfigs || tierConfigs.length === 0) {
-      console.warn('⚠️ No subscription tiers found in database. Run seed script: npm run seed:tiers');
+      logger.warn('No subscription tiers found in database. Run seed script: npm run seed:tiers');
       return res.status(200).json({
         success: true,
         data: [],
@@ -41,8 +46,7 @@ export const getSubscriptionTiers = async (req: Request, res: Response) => {
       data: tierConfigs
     });
   } catch (error: any) {
-    console.error('Error fetching subscription tiers:', error);
-    console.error('Error stack:', error.stack);
+    logger.error('Error fetching subscription tiers:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch subscription tiers',
@@ -93,7 +97,7 @@ export const getCurrentSubscription = async (req: Request, res: Response) => {
       data: subscription
     });
   } catch (error: any) {
-    console.error('Error fetching current subscription:', error);
+    logger.error('Error fetching current subscription:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch current subscription',
@@ -110,55 +114,55 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
   try {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
-      console.error('❌ [SUBSCRIBE] No user ID found - user not authenticated');
+      logger.error('[SUBSCRIBE] No user ID found - user not authenticated');
       return res.status(401).json({
         success: false,
         message: 'User not authenticated'
       });
     }
 
-    console.log('✅ [SUBSCRIBE] User authenticated:', userId);
+    logger.debug('[SUBSCRIBE] User authenticated:', userId);
 
     const { tier, billingCycle, paymentMethod, promoCode, source } = req.body;
-    console.log('🔷 [SUBSCRIBE] Payment method requested:', paymentMethod || 'not specified');
+    logger.debug('[SUBSCRIBE] Payment method requested:', paymentMethod || 'not specified');
 
     // Determine payment gateway based on paymentMethod parameter
     const useStripe = paymentMethod === 'stripe';
     const useRazorpay = paymentMethod === 'razorpay' || !paymentMethod;
 
-    console.log('🔷 [SUBSCRIBE] Using payment gateway:', useStripe ? 'STRIPE' : 'RAZORPAY');
+    logger.debug('[SUBSCRIBE] Using payment gateway:', useStripe ? 'STRIPE' : 'RAZORPAY');
 
     // Check if the requested payment gateway is configured
     if (useRazorpay) {
-      console.log('🔷 [SUBSCRIBE] Checking Razorpay configuration...');
+      logger.debug('[SUBSCRIBE] Checking Razorpay configuration...');
       if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET ||
           process.env.RAZORPAY_KEY_ID === 'rzp_test_your_razorpay_key_id' ||
           process.env.RAZORPAY_KEY_SECRET === 'your_razorpay_key_secret') {
-        console.error('❌ [SUBSCRIBE] Razorpay not configured properly');
+        logger.error('[SUBSCRIBE] Razorpay not configured properly');
         return res.status(503).json({
           success: false,
           message: 'Razorpay payment gateway is not configured. Please use Stripe or contact support.',
           error: 'Razorpay credentials not configured'
         });
       }
-      console.log('✅ [SUBSCRIBE] Razorpay is configured');
+      logger.debug('[SUBSCRIBE] Razorpay is configured');
     } else if (useStripe) {
-      console.log('🔷 [SUBSCRIBE] Checking Stripe configuration...');
+      logger.debug('[SUBSCRIBE] Checking Stripe configuration...');
       if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.includes('your_stripe')) {
-        console.error('❌ [SUBSCRIBE] Stripe not configured properly');
+        logger.error('[SUBSCRIBE] Stripe not configured properly');
         return res.status(503).json({
           success: false,
           message: 'Stripe payment gateway is not configured. Please contact support.',
           error: 'Stripe credentials not configured'
         });
       }
-      console.log('✅ [SUBSCRIBE] Stripe is configured');
+      logger.debug('[SUBSCRIBE] Stripe is configured');
     }
 
     // Validate tier
-    console.log('🔷 [SUBSCRIBE] Validating tier:', tier);
+    logger.debug('[SUBSCRIBE] Validating tier:', tier);
     if (!['premium', 'vip'].includes(tier)) {
-      console.error('❌ [SUBSCRIBE] Invalid tier:', tier);
+      logger.error('[SUBSCRIBE] Invalid tier:', tier);
       return res.status(400).json({
         success: false,
         message: 'Invalid subscription tier'
@@ -166,9 +170,9 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
     }
 
     // Validate billing cycle
-    console.log('🔷 [SUBSCRIBE] Validating billing cycle:', billingCycle);
+    logger.debug('[SUBSCRIBE] Validating billing cycle:', billingCycle);
     if (!['monthly', 'yearly'].includes(billingCycle)) {
-      console.error('❌ [SUBSCRIBE] Invalid billing cycle:', billingCycle);
+      logger.error('[SUBSCRIBE] Invalid billing cycle:', billingCycle);
       return res.status(400).json({
         success: false,
         message: 'Invalid billing cycle'
@@ -176,26 +180,26 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
     }
 
     // Check if user already has an active subscription
-    console.log('🔷 [SUBSCRIBE] Checking for existing subscription...');
+    logger.debug('[SUBSCRIBE] Checking for existing subscription...');
     const existingSubscription = await subscriptionBenefitsService.getUserSubscription(userId);
     if (existingSubscription && existingSubscription.isActive()) {
-      console.warn('⚠️ [SUBSCRIBE] User already has active subscription:', existingSubscription.tier);
+      logger.warn('[SUBSCRIBE] User already has active subscription:', existingSubscription.tier);
       return res.status(400).json({
         success: false,
         message: 'User already has an active subscription. Please upgrade or downgrade instead.'
       });
     }
-    console.log('✅ [SUBSCRIBE] No existing active subscription');
+    logger.debug('[SUBSCRIBE] No existing active subscription');
 
     // Get tier pricing from single source of truth (DB)
     let price = await tierConfigService.getTierPrice(tier, billingCycle);
     let appliedDiscount = 0;
 
-    console.log('🔷 [SUBSCRIBE] Base price:', price, '(from DB)');
+    logger.debug('[SUBSCRIBE] Base price:', price, '(from DB)');
 
     // Apply promo code if provided
     if (promoCode) {
-      console.log('🔷 [SUBSCRIBE] Validating promo code:', promoCode);
+      logger.debug('[SUBSCRIBE] Validating promo code:', promoCode);
       const promoResult = await promoCodeService.validatePromoCode(
         promoCode,
         tier,
@@ -206,9 +210,9 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
       if (promoResult.valid && promoResult.finalPrice !== undefined) {
         appliedDiscount = promoResult.discount || 0;
         price = promoResult.finalPrice;
-        console.log(`✅ [SUBSCRIBE] Promo code applied: ${promoCode}, discount: ₹${appliedDiscount}, final price: ₹${price}`);
+        logger.info(`[SUBSCRIBE] Promo code applied: ${promoCode}, discount: ₹${appliedDiscount}, final price: ₹${price}`);
       } else {
-        console.warn(`⚠️ [SUBSCRIBE] Invalid promo code attempted: ${promoCode}`);
+        logger.warn(`[SUBSCRIBE] Invalid promo code attempted: ${promoCode}`);
       }
     }
 
@@ -216,15 +220,15 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
     let paymentGatewaySubscription: any = null;
 
     if (useRazorpay) {
-      console.log('🔷 [SUBSCRIBE] Creating Razorpay subscription...');
+      logger.debug('[SUBSCRIBE] Creating Razorpay subscription...');
       paymentGatewaySubscription = await razorpaySubscriptionService.createSubscription(
         userId.toString(),
         tier,
         billingCycle
       );
-      console.log('✅ [SUBSCRIBE] Razorpay subscription created:', paymentGatewaySubscription.id);
+      logger.info('[SUBSCRIBE] Razorpay subscription created:', paymentGatewaySubscription.id);
     } else if (useStripe) {
-      console.log('✅ [SUBSCRIBE] Stripe selected - will create payment intent on frontend');
+      logger.debug('[SUBSCRIBE] Stripe selected - will create payment intent on frontend');
       // For Stripe, we don't create subscription here
       // The frontend will create a Stripe Checkout session or Payment Intent
       paymentGatewaySubscription = {
@@ -234,7 +238,7 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
     }
 
     // Calculate dates
-    console.log('🔷 [SUBSCRIBE] Calculating subscription dates...');
+    logger.debug('[SUBSCRIBE] Calculating subscription dates...');
     const startDate = new Date();
     const trialEndDate = new Date();
     trialEndDate.setDate(trialEndDate.getDate() + 7); // 7-day trial
@@ -246,12 +250,12 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
       endDate.setFullYear(endDate.getFullYear() + 1);
     }
 
-    console.log('🔷 [SUBSCRIBE] Start date:', startDate);
-    console.log('🔷 [SUBSCRIBE] Trial end date:', trialEndDate);
-    console.log('🔷 [SUBSCRIBE] End date:', endDate);
+    logger.debug('[SUBSCRIBE] Start date:', startDate);
+    logger.debug('[SUBSCRIBE] Trial end date:', trialEndDate);
+    logger.debug('[SUBSCRIBE] End date:', endDate);
 
     // Create subscription in database
-    console.log('🔷 [SUBSCRIBE] Creating subscription in database...');
+    logger.debug('[SUBSCRIBE] Creating subscription in database...');
     const subscriptionData: any = {
       user: userId,
       tier,
@@ -282,9 +286,9 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
 
     const subscription = new Subscription(subscriptionData);
 
-    console.log('🔷 [SUBSCRIBE] Saving subscription to database...');
+    logger.debug('[SUBSCRIBE] Saving subscription to database...');
     await subscription.save();
-    console.log('✅ [SUBSCRIBE] Subscription saved successfully:', subscription._id);
+    logger.info('[SUBSCRIBE] Subscription saved successfully:', { subscriptionId: subscription._id });
 
     // Audit log
     subscriptionAuditService.logChange({
@@ -309,14 +313,14 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
           userId,
           String(subscription._id)
         );
-        console.log(`[SUBSCRIPTION] Promo code usage incremented: ${promoCode}`);
+        logger.info(`[SUBSCRIPTION] Promo code usage incremented: ${promoCode}`);
       } catch (promoError: any) {
-        console.error(`[SUBSCRIPTION] Failed to increment promo code usage:`, promoError);
+        logger.error(`[SUBSCRIPTION] Failed to increment promo code usage:`, promoError);
         // Don't fail the subscription creation if promo tracking fails
       }
     }
 
-    console.log('🔷 [SUBSCRIBE] Preparing response...');
+    logger.debug('[SUBSCRIBE] Preparing response...');
     const response: any = {
       success: true,
       message: 'Subscription created successfully',
@@ -329,24 +333,25 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
     // Add payment URL for Razorpay, for Stripe frontend will handle payment
     if (useRazorpay && paymentGatewaySubscription?.short_url) {
       response.data.paymentUrl = paymentGatewaySubscription.short_url;
-      console.log('🔷 [SUBSCRIBE] Payment URL (Razorpay):', paymentGatewaySubscription.short_url);
+      logger.debug('[SUBSCRIBE] Payment URL (Razorpay):', paymentGatewaySubscription.short_url);
     } else if (useStripe) {
       // For Stripe, frontend will create the checkout session
       response.data.paymentUrl = null;
-      console.log('🔷 [SUBSCRIBE] Using Stripe - frontend will handle checkout');
+      logger.debug('[SUBSCRIBE] Using Stripe - frontend will handle checkout');
     }
 
-    console.log('✅ [SUBSCRIBE] ========== SUBSCRIPTION CREATED SUCCESSFULLY ==========');
-    console.log('✅ [SUBSCRIBE] Subscription ID:', subscription._id);
-    console.log('✅ [SUBSCRIBE] Tier:', subscription.tier);
-    console.log('✅ [SUBSCRIBE] Price:', subscription.price, 'INR');
-    console.log('✅ [SUBSCRIBE] Payment Method:', subscription.paymentMethod);
+    logger.info('[SUBSCRIBE] Subscription created successfully', {
+      subscriptionId: subscription._id,
+      tier: subscription.tier,
+      price: subscription.price,
+      paymentMethod: subscription.paymentMethod,
+    });
 
     res.status(201).json(response);
   } catch (error: any) {
-    console.error('❌ [SUBSCRIBE] ========== SUBSCRIPTION FAILED ==========');
-    console.error('❌ [SUBSCRIBE] Error:', error.message);
-    console.error('❌ [SUBSCRIBE] Stack:', error.stack);
+    logger.error('[SUBSCRIBE] ========== SUBSCRIPTION FAILED ==========');
+    logger.error('[SUBSCRIBE] Error:', error.message);
+    logger.error('[SUBSCRIBE] Stack:', error.stack);
     res.status(500).json({
       success: false,
       message: 'Failed to subscribe to plan',
@@ -506,7 +511,7 @@ export const initiateUpgrade = async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('[UPGRADE] Error initiating upgrade:', error);
+    logger.error('[UPGRADE] Error initiating upgrade:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to initiate upgrade',
@@ -595,7 +600,7 @@ export const confirmUpgrade = async (req: Request, res: Response) => {
             { plan_id: newPlanId, schedule_change_at: 'now' }
           );
         } catch (rpError) {
-          console.error('[UPGRADE] Razorpay plan update failed (non-blocking):', rpError);
+          logger.error('[UPGRADE] Razorpay plan update failed (non-blocking):', rpError);
         }
       }
     } else {
@@ -667,7 +672,7 @@ export const confirmUpgrade = async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('[UPGRADE] Error confirming upgrade:', error);
+    logger.error('[UPGRADE] Error confirming upgrade:', error);
 
     // Rollback: revert processing → pending_payment so user can retry
     if (req.body.upgradeId) {
@@ -677,7 +682,7 @@ export const confirmUpgrade = async (req: Request, res: Response) => {
           { status: 'pending_payment' }
         );
       } catch (rollbackErr) {
-        console.error('[UPGRADE] Rollback failed:', rollbackErr);
+        logger.error('[UPGRADE] Rollback failed:', rollbackErr);
       }
     }
 
@@ -795,7 +800,7 @@ export const downgradeSubscription = async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('Error downgrading subscription:', error);
+    logger.error('Error downgrading subscription:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to downgrade subscription',
@@ -881,7 +886,7 @@ export const cancelSubscription = async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('Error cancelling subscription:', error);
+    logger.error('Error cancelling subscription:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to cancel subscription',
@@ -973,7 +978,7 @@ export const renewSubscription = async (req: Request, res: Response) => {
       data: subscription
     });
   } catch (error: any) {
-    console.error('Error renewing subscription:', error);
+    logger.error('Error renewing subscription:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to renew subscription',
@@ -1003,7 +1008,7 @@ export const getSubscriptionBenefits = async (req: Request, res: Response) => {
       data: benefits
     });
   } catch (error: any) {
-    console.error('Error fetching subscription benefits:', error);
+    logger.error('Error fetching subscription benefits:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch subscription benefits',
@@ -1062,7 +1067,7 @@ export const getSubscriptionUsage = async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('Error fetching subscription usage:', error);
+    logger.error('Error fetching subscription usage:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch subscription usage',
@@ -1104,7 +1109,7 @@ export const getValueProposition = async (req: Request, res: Response) => {
       data: valueProposition
     });
   } catch (error: any) {
-    console.error('Error fetching value proposition:', error);
+    logger.error('Error fetching value proposition:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch value proposition',
@@ -1141,7 +1146,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
   try {
     // Step 1: Check for required fields
     if (!webhookBody?.id || !webhookBody?.event || !signature) {
-      console.error('[WEBHOOK] Missing required fields', {
+      logger.error('[WEBHOOK] Missing required fields', {
         hasId: !!webhookBody?.id,
         hasEvent: !!webhookBody?.event,
         hasSignature: !!signature,
@@ -1163,7 +1168,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
     const eventType = webhookBody.event;
 
     // Step 2: Verify webhook signature
-    console.log('[WEBHOOK] Verifying signature', {
+    logger.info('[WEBHOOK] Verifying signature', {
       eventId,
       eventType,
       ip: clientIP,
@@ -1176,7 +1181,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
     );
 
     if (!isValid) {
-      console.error('[WEBHOOK] Invalid signature', {
+      logger.error('[WEBHOOK] Invalid signature', {
         eventId,
         eventType,
         ip: clientIP,
@@ -1194,14 +1199,14 @@ export const handleWebhook = async (req: Request, res: Response) => {
     }
 
     // Step 3: Check for duplicate/replay attack
-    console.log('[WEBHOOK] Checking for duplicates', {
+    logger.info('[WEBHOOK] Checking for duplicates', {
       eventId,
     });
 
     const isDuplicate = await ProcessedWebhookEvent.isEventProcessed(eventId);
 
     if (isDuplicate) {
-      console.warn('[WEBHOOK] Duplicate event detected', {
+      logger.warn('[WEBHOOK] Duplicate event detected', {
         eventId,
         eventType,
         ip: clientIP,
@@ -1225,7 +1230,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
     const webhookAge = currentTimestamp - eventTimestamp;
 
     if (webhookAge > WEBHOOK_MAX_AGE_SECONDS) {
-      console.error('[WEBHOOK] Webhook expired', {
+      logger.error('[WEBHOOK] Webhook expired', {
         eventId,
         age: webhookAge,
         maxAge: WEBHOOK_MAX_AGE_SECONDS,
@@ -1243,7 +1248,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
     }
 
     // Step 5: Log successful validation
-    console.log('[WEBHOOK] Validation successful', {
+    logger.info('[WEBHOOK] Validation successful', {
       eventId,
       eventType,
       ip: clientIP,
@@ -1252,7 +1257,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
     // Step 6: Process webhook
     try {
-      console.log('[WEBHOOK] Processing started', {
+      logger.info('[WEBHOOK] Processing started', {
         eventId,
         eventType,
       });
@@ -1264,7 +1269,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
 
       const processingTimeMs = Date.now() - processingStartTime;
 
-      console.log('[WEBHOOK] Processing completed', {
+      logger.info('[WEBHOOK] Processing completed', {
         eventId,
         eventType,
         processingTimeMs,
@@ -1281,12 +1286,12 @@ export const handleWebhook = async (req: Request, res: Response) => {
           req.headers['user-agent']?.toString()
         );
 
-        console.log('[WEBHOOK] Event recorded in audit log', {
+        logger.info('[WEBHOOK] Event recorded in audit log', {
           eventId,
         });
       } catch (recordError: any) {
         // Log but don't fail the webhook response
-        console.warn('[WEBHOOK] Failed to record event in audit log', {
+        logger.warn('[WEBHOOK] Failed to record event in audit log', {
           eventId,
           error: recordError.message,
         });
@@ -1300,7 +1305,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
         processingTimeMs,
       });
     } catch (processingError: any) {
-      console.error('[WEBHOOK] Processing error', {
+      logger.error('[WEBHOOK] Processing error', {
         eventId,
         eventType,
         error: processingError.message,
@@ -1319,7 +1324,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
           processingError.message
         );
       } catch (recordError: any) {
-        console.warn('[WEBHOOK] Failed to record error in audit log', {
+        logger.warn('[WEBHOOK] Failed to record error in audit log', {
           eventId,
           error: recordError.message,
         });
@@ -1334,7 +1339,7 @@ export const handleWebhook = async (req: Request, res: Response) => {
       });
     }
   } catch (error: any) {
-    console.error('[WEBHOOK] Unexpected error', {
+    logger.error('[WEBHOOK] Unexpected error', {
       error: error.message,
       stack: error.stack,
       timestamp: new Date().toISOString(),
@@ -1413,7 +1418,7 @@ export const toggleAutoRenew = async (req: Request, res: Response) => {
       data: subscription
     });
   } catch (error: any) {
-    console.error('Error toggling auto-renew:', error);
+    logger.error('Error toggling auto-renew:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to toggle auto-renew',
@@ -1489,7 +1494,7 @@ export const validatePromoCode = async (req: Request, res: Response) => {
       message: result.message || 'Promo code is valid'
     });
   } catch (error: any) {
-    console.error('Error validating promo code:', error);
+    logger.error('Error validating promo code:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to validate promo code',

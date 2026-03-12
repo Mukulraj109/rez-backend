@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Spin Wheel Coupon Assignment Service
  *
@@ -95,7 +96,7 @@ export async function getRandomStore(): Promise<StoreAssignment> {
 
     if (stores.length === 0) {
       // Fallback: Create a generic store assignment
-      console.warn('⚠️ [COUPON_ASSIGNMENT] No active stores found, using fallback');
+      logger.warn('⚠️ [COUPON_ASSIGNMENT] No active stores found, using fallback');
       return {
         storeId: 'generic',
         storeName: 'All Stores',
@@ -111,7 +112,7 @@ export async function getRandomStore(): Promise<StoreAssignment> {
       storeImage: store.logo?.url
     };
   } catch (error) {
-    console.error('❌ [COUPON_ASSIGNMENT] Error getting random store:', error);
+    logger.error('❌ [COUPON_ASSIGNMENT] Error getting random store:', error);
     // Fallback
     return {
       storeId: 'generic',
@@ -166,7 +167,7 @@ export async function getRandomProduct(storeId?: string): Promise<ProductAssignm
 
     if (products.length === 0) {
       // Fallback: Use the store's generic product
-      console.warn('⚠️ [COUPON_ASSIGNMENT] No products found, using fallback');
+      logger.warn('⚠️ [COUPON_ASSIGNMENT] No products found, using fallback');
       const store = storeId ? await getStoreById(storeId) : await getRandomStore();
 
       return {
@@ -190,7 +191,7 @@ export async function getRandomProduct(storeId?: string): Promise<ProductAssignm
       originalPrice: product.price || 0
     };
   } catch (error) {
-    console.error('❌ [COUPON_ASSIGNMENT] Error getting random product:', error);
+    logger.error('❌ [COUPON_ASSIGNMENT] Error getting random product:', error);
     // Fallback
     const store = storeId ? await getStoreById(storeId) : await getRandomStore();
 

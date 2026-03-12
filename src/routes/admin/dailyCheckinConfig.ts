@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Daily Check-In Configuration
  * CRUD endpoints for managing the DailyCheckInConfig singleton
@@ -22,7 +23,7 @@ router.get('/', async (_req: Request, res: Response) => {
     const config = await DailyCheckInConfig.getActiveConfig();
     return sendSuccess(res, config, 'Daily check-in config fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching daily check-in config:', error);
+    logger.error('[Admin] Error fetching daily check-in config:', error);
     return sendError(res, 'Failed to fetch daily check-in config', 500);
   }
 });
@@ -82,7 +83,7 @@ router.put('/', async (req: Request, res: Response) => {
 
     return sendSuccess(res, config, 'Daily check-in config updated');
   } catch (error: any) {
-    console.error('[Admin] Error updating daily check-in config:', error);
+    logger.error('[Admin] Error updating daily check-in config:', error);
     if (error.name === 'ValidationError') {
       return sendBadRequest(res, error.message);
     }
@@ -108,7 +109,7 @@ router.post('/reset', async (_req: Request, res: Response) => {
 
     return sendSuccess(res, config, 'Daily check-in config reset to defaults');
   } catch (error) {
-    console.error('[Admin] Error resetting daily check-in config:', error);
+    logger.error('[Admin] Error resetting daily check-in config:', error);
     return sendError(res, 'Failed to reset daily check-in config', 500);
   }
 });

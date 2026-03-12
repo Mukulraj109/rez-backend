@@ -16,7 +16,9 @@ import { withCache } from '../utils/cacheHelper';
 async function enrichAchievements(userAchievements: IUserAchievement[]): Promise<any[]> {
   // Batch-load all Achievement definitions
   const types = [...new Set(userAchievements.map(ua => ua.type))];
-  const definitions = await Achievement.find({ type: { $in: types } }).lean();
+  const definitions = await Achievement.find({ type: { $in: types } })
+    .select('type category tier reward coinReward visibility repeatability conditions prerequisites isActive')
+    .lean();
   const defMap = new Map(definitions.map((d: any) => [d.type, d]));
 
   return userAchievements.map(ua => {
@@ -47,6 +49,7 @@ export const getUserAchievements = asyncHandler(async (req: Request, res: Respon
   const userId = String(req.user._id);
   const userAchievements = await withCache(`achievements:user:${userId}:all`, 300, () =>
     UserAchievement.find({ user: req.user!._id })
+      .select('user achievement type title description icon color unlocked unlockedDate progress currentValue targetValue ruleProgress timesCompleted createdAt')
       .sort({ unlocked: -1, progress: -1, createdAt: -1 })
       .limit(200)
       .lean()
@@ -67,7 +70,9 @@ export const getUnlockedAchievements = asyncHandler(async (req: Request, res: Re
     UserAchievement.find({
       user: req.user!._id,
       unlocked: true
-    }).sort({ unlockedDate: -1 }).limit(200).lean()
+    })
+      .select('user achievement type title description icon color unlocked unlockedDate progress currentValue targetValue ruleProgress timesCompleted createdAt')
+      .sort({ unlockedDate: -1 }).limit(200).lean()
   );
 
   sendSuccess(res, achievements, 'Unlocked achievements retrieved successfully');
@@ -81,7 +86,9 @@ export const getAchievementProgress = asyncHandler(async (req: Request, res: Res
 
   const userId = String(req.user._id);
   const userAchievements = await withCache(`achievements:user:${userId}:progress`, 300, () =>
-    UserAchievement.find({ user: req.user!._id }).limit(200).lean()
+    UserAchievement.find({ user: req.user!._id })
+      .select('user achievement type title description icon color unlocked unlockedDate progress currentValue targetValue ruleProgress timesCompleted createdAt')
+      .limit(200).lean()
   );
   const enriched = await enrichAchievements(userAchievements);
 
@@ -120,7 +127,9 @@ export const initializeUserAchievements = asyncHandler(async (req: Request, res:
   }
 
   // Load active achievement definitions from DB (not hardcoded)
-  const activeDefinitions = await Achievement.find({ isActive: true }).limit(200).lean();
+  const activeDefinitions = await Achievement.find({ isActive: true })
+    .select('type title description icon color isActive requirement conditions category tier reward coinReward')
+    .limit(200).lean();
 
   // Fallback to legacy ACHIEVEMENT_DEFINITIONS if no DB definitions exist yet
   const definitions = activeDefinitions.length > 0
@@ -217,7 +226,9 @@ export const recalculateAchievements = asyncHandler(async (req: Request, res: Re
         (projectStats[0]?.totalProjects || 0) + (reviewCount || 0) + (offerCount || 0)
     };
 
-    const achievements = await UserAchievement.find({ user: userId }).limit(200);
+    const achievements = await UserAchievement.find({ user: userId })
+      .select('user type title description icon color unlocked unlockedDate progress currentValue targetValue ruleProgress timesCompleted')
+      .limit(200);
     await Promise.all(achievements.map(async (achievement) => {
       const definition = ACHIEVEMENT_DEFINITIONS.find(def => def.type === achievement.type);
       if (!definition) return;
@@ -233,6 +244,7 @@ export const recalculateAchievements = asyncHandler(async (req: Request, res: Re
   }
 
   const updatedAchievements = await UserAchievement.find({ user: userId })
+    .select('user achievement type title description icon color unlocked unlockedDate progress currentValue targetValue ruleProgress timesCompleted createdAt')
     .sort({ unlocked: -1, progress: -1 }).limit(200).lean();
 
   const enriched = await enrichAchievements(updatedAchievements);

@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin, requireSeniorAdmin } from '../../middleware/auth';
 import { User } from '../../models/User';
@@ -85,7 +86,7 @@ router.get('/', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('[ADMIN USERS] Error fetching users:', error);
+    logger.error('[ADMIN USERS] Error fetching users:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch users'
@@ -115,7 +116,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       data: user
     });
   } catch (error: any) {
-    console.error('[ADMIN USERS] Error fetching user:', error);
+    logger.error('[ADMIN USERS] Error fetching user:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch user'
@@ -163,7 +164,7 @@ router.get('/:id/wallet', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('[ADMIN USERS] Error fetching user wallet:', error);
+    logger.error('[ADMIN USERS] Error fetching user wallet:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch user wallet'
@@ -215,7 +216,7 @@ router.post('/:id/suspend', requireSeniorAdmin, async (req: Request, res: Respon
       await wallet.freeze(reason || 'Account suspended by admin');
     }
 
-    console.log(`[ADMIN USERS] User ${user._id} suspended by admin ${req.userId}. Reason: ${reason || 'No reason provided'}`);
+    logger.info(`[ADMIN USERS] User ${user._id} suspended by admin ${req.userId}. Reason: ${reason || 'No reason provided'}`);
 
     res.json({
       success: true,
@@ -228,7 +229,7 @@ router.post('/:id/suspend', requireSeniorAdmin, async (req: Request, res: Respon
       }
     });
   } catch (error: any) {
-    console.error('[ADMIN USERS] Error suspending user:', error);
+    logger.error('[ADMIN USERS] Error suspending user:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to suspend user'
@@ -270,7 +271,7 @@ router.post('/:id/unsuspend', requireSeniorAdmin, async (req: Request, res: Resp
       await wallet.unfreeze();
     }
 
-    console.log(`[ADMIN USERS] User ${user._id} unsuspended by admin ${req.userId}`);
+    logger.info(`[ADMIN USERS] User ${user._id} unsuspended by admin ${req.userId}`);
 
     res.json({
       success: true,
@@ -282,7 +283,7 @@ router.post('/:id/unsuspend', requireSeniorAdmin, async (req: Request, res: Resp
       }
     });
   } catch (error: any) {
-    console.error('[ADMIN USERS] Error unsuspending user:', error);
+    logger.error('[ADMIN USERS] Error unsuspending user:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to unsuspend user'

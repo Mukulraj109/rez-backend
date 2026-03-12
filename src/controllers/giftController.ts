@@ -15,6 +15,7 @@ import { checkVelocity } from '../services/walletVelocityService';
 import { createServiceLogger } from '../config/logger';
 import pushNotificationService from '../services/pushNotificationService';
 import { giftSendTotal, giftClaimTotal, giftSendDuration, walletGiftAmount } from '../config/walletMetrics';
+import { BRAND } from '../config/brand';
 
 const logger = createServiceLogger('coin-gift');
 
@@ -199,7 +200,7 @@ export const sendGift = asyncHandler(async (req: Request, res: Response) => {
   const effectiveCoinType = coinType || 'nuqta';
   if (effectiveCoinType === 'nuqta') {
     if (senderWallet.balance.available < validatedAmount) {
-      return sendBadRequest(res, 'Insufficient Nuqta Coin balance');
+      return sendBadRequest(res, `Insufficient ${BRAND.COIN_NAME} balance`);
     }
   }
 

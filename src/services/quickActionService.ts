@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import QuickAction, { IQuickAction } from '../models/QuickAction';
 import { UserAchievement } from '../models/Achievement';
 import mongoose from 'mongoose';
@@ -91,7 +92,7 @@ class QuickActionService {
 
       return filtered;
     } catch (error) {
-      console.error('[QuickActionService] getPersonalized error:', error);
+      logger.error('[QuickActionService] getPersonalized error:', error);
       // Fallback: return all active actions without progress info
       const actions = await QuickAction.find({ isActive: true })
         .sort({ priority: 1 })

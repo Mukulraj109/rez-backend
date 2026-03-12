@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import { Store } from '../models/Store';
 import redisService from '../services/redisService';
@@ -34,7 +35,7 @@ export const getPlatformStats = async (_req: Request, res: Response) => {
 
     return sendSuccess(res, stats, 'Platform stats retrieved');
   } catch (error) {
-    console.error('[platformController] getPlatformStats error:', error);
+    logger.error('[platformController] getPlatformStats error:', error);
     return sendError(res, 'Failed to fetch platform stats', 500);
   }
 };

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import { Wishlist } from '../models/Wishlist';
 import { Store } from '../models/Store';
@@ -36,7 +37,7 @@ export const getFollowerCount = asyncHandler(async (req: Request, res: Response)
 
     sendSuccess(res, { followersCount }, 'Follower count retrieved successfully');
   } catch (error) {
-    console.error('Error getting follower count:', error);
+    logger.error('Error getting follower count:', error);
     throw new AppError('Failed to get follower count', 500);
   }
 });
@@ -108,7 +109,7 @@ export const getFollowersList = asyncHandler(async (req: Request, res: Response)
       }
     }, 'Followers list retrieved successfully');
   } catch (error) {
-    console.error('Error getting followers list:', error);
+    logger.error('Error getting followers list:', error);
     throw new AppError('Failed to get followers list', 500);
   }
 });
@@ -226,7 +227,7 @@ export const getFollowerAnalytics = asyncHandler(async (req: Request, res: Respo
       followersOverTime
     }, 'Follower analytics retrieved successfully');
   } catch (error) {
-    console.error('Error getting follower analytics:', error);
+    logger.error('Error getting follower analytics:', error);
     throw new AppError('Failed to get follower analytics', 500);
   }
 });
@@ -330,7 +331,7 @@ export const getTopFollowers = asyncHandler(async (req: Request, res: Response) 
 
     sendSuccess(res, { topFollowers }, 'Top followers retrieved successfully');
   } catch (error) {
-    console.error('Error getting top followers:', error);
+    logger.error('Error getting top followers:', error);
     throw new AppError('Failed to get top followers', 500);
   }
 });

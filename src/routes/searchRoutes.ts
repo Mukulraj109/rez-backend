@@ -12,7 +12,8 @@ import {
   markSearchAsClicked,
   deleteSearchHistory,
   clearSearchHistory,
-  getSearchAnalytics
+  getSearchAnalytics,
+  getDidYouMean,
 } from '../controllers/searchController';
 import { protect, optionalAuth } from '../middleware/auth';
 import { searchLimiter, aiSearchLimiter } from '../middleware/rateLimiter';
@@ -89,6 +90,17 @@ router.get('/products-grouped', searchLimiter, searchProductsGrouped);
  * @query   q - Natural language search query (required)
  */
 router.get('/ai-search', aiSearchLimiter, aiSearch);
+
+/**
+ * @route   GET /api/search/did-you-mean
+ * @desc    Typo correction suggestions based on popular search terms
+ * @access  Public
+ * @query   q - Misspelled search query (min 3 chars)
+ *
+ * @example
+ * GET /api/search/did-you-mean?q=shamppo
+ */
+router.get('/did-you-mean', searchLimiter, getDidYouMean);
 
 // ============================================
 // SEARCH HISTORY ROUTES

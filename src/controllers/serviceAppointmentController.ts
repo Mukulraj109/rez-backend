@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // ServiceAppointment Controller
 // Handles service appointment booking API endpoints
 
@@ -89,11 +90,11 @@ export const createServiceAppointment = async (req: Request, res: Response): Pro
       .populate('store', 'name logo location contact')
       .populate('user', 'profile.firstName profile.lastName profile.phoneNumber').lean();
 
-    console.log(`✅ [SERVICE APPOINTMENT] Created appointment ${appointmentNumber} for store ${storeId}`);
+    logger.info(`✅ [SERVICE APPOINTMENT] Created appointment ${appointmentNumber} for store ${storeId}`);
 
     sendCreated(res, populatedAppointment, 'Service appointment created successfully');
   } catch (error: any) {
-    console.error('❌ [SERVICE APPOINTMENT] Error creating appointment:', error);
+    logger.error('❌ [SERVICE APPOINTMENT] Error creating appointment:', error);
     sendError(res, 'Failed to create service appointment', 500);
   }
 };
@@ -124,11 +125,11 @@ export const getUserServiceAppointments = async (req: Request, res: Response): P
       .sort({ appointmentDate: -1, createdAt: -1 })
       .lean();
 
-    console.log(`✅ [SERVICE APPOINTMENT] Retrieved ${appointments.length} appointments for user ${userId}`);
+    logger.info(`✅ [SERVICE APPOINTMENT] Retrieved ${appointments.length} appointments for user ${userId}`);
 
     sendSuccess(res, { appointments, total: appointments.length }, 'Appointments retrieved successfully');
   } catch (error: any) {
-    console.error('❌ [SERVICE APPOINTMENT] Error getting user appointments:', error);
+    logger.error('❌ [SERVICE APPOINTMENT] Error getting user appointments:', error);
     sendError(res, 'Failed to get appointments', 500);
   }
 };
@@ -168,11 +169,11 @@ export const getServiceAppointment = async (req: Request, res: Response): Promis
       return;
     }
 
-    console.log(`✅ [SERVICE APPOINTMENT] Retrieved appointment ${appointmentId}`);
+    logger.info(`✅ [SERVICE APPOINTMENT] Retrieved appointment ${appointmentId}`);
 
     sendSuccess(res, appointment, 'Appointment retrieved successfully');
   } catch (error: any) {
-    console.error('❌ [SERVICE APPOINTMENT] Error getting appointment:', error);
+    logger.error('❌ [SERVICE APPOINTMENT] Error getting appointment:', error);
     sendError(res, 'Failed to get appointment', 500);
   }
 };
@@ -231,11 +232,11 @@ export const getStoreServiceAppointments = async (req: Request, res: Response): 
       .sort({ appointmentDate: 1, appointmentTime: 1 })
       .lean();
 
-    console.log(`✅ [SERVICE APPOINTMENT] Retrieved ${appointments.length} appointments for store ${storeId}`);
+    logger.info(`✅ [SERVICE APPOINTMENT] Retrieved ${appointments.length} appointments for store ${storeId}`);
 
     sendSuccess(res, { appointments, total: appointments.length }, 'Store appointments retrieved successfully');
   } catch (error: any) {
-    console.error('❌ [SERVICE APPOINTMENT] Error getting store appointments:', error);
+    logger.error('❌ [SERVICE APPOINTMENT] Error getting store appointments:', error);
     sendError(res, 'Failed to get store appointments', 500);
   }
 };
@@ -292,11 +293,11 @@ export const cancelServiceAppointment = async (req: Request, res: Response): Pro
       .populate('store', 'name logo location contact')
       .lean();
 
-    console.log(`✅ [SERVICE APPOINTMENT] Cancelled appointment ${appointmentId}`);
+    logger.info(`✅ [SERVICE APPOINTMENT] Cancelled appointment ${appointmentId}`);
 
     sendSuccess(res, updatedAppointment, 'Appointment cancelled successfully');
   } catch (error: any) {
-    console.error('❌ [SERVICE APPOINTMENT] Error cancelling appointment:', error);
+    logger.error('❌ [SERVICE APPOINTMENT] Error cancelling appointment:', error);
     sendError(res, 'Failed to cancel appointment', 500);
   }
 };
@@ -345,7 +346,7 @@ export const checkAvailability = async (req: Request, res: Response): Promise<vo
       appointmentDuration
     );
 
-    console.log(`✅ [SERVICE APPOINTMENT] Checked availability for ${storeId} on ${date} at ${time}: ${isAvailable}`);
+    logger.info(`✅ [SERVICE APPOINTMENT] Checked availability for ${storeId} on ${date} at ${time}: ${isAvailable}`);
 
     sendSuccess(
       res,
@@ -358,7 +359,7 @@ export const checkAvailability = async (req: Request, res: Response): Promise<vo
       isAvailable ? 'Time slot is available' : 'Time slot is not available'
     );
   } catch (error: any) {
-    console.error('❌ [SERVICE APPOINTMENT] Error checking availability:', error);
+    logger.error('❌ [SERVICE APPOINTMENT] Error checking availability:', error);
     sendError(res, 'Failed to check availability', 500);
   }
 };
@@ -435,7 +436,7 @@ export const getAvailableSlots = async (req: Request, res: Response): Promise<vo
       });
     }
 
-    console.log(`✅ [SERVICE APPOINTMENT] Generated ${slots.length} time slots for ${storeId} on ${date}`);
+    logger.info(`✅ [SERVICE APPOINTMENT] Generated ${slots.length} time slots for ${storeId} on ${date}`);
 
     sendSuccess(
       res,
@@ -447,7 +448,7 @@ export const getAvailableSlots = async (req: Request, res: Response): Promise<vo
       'Available slots retrieved successfully'
     );
   } catch (error: any) {
-    console.error('❌ [SERVICE APPOINTMENT] Error getting available slots:', error);
+    logger.error('❌ [SERVICE APPOINTMENT] Error getting available slots:', error);
     sendError(res, 'Failed to get available slots', 500);
   }
 };

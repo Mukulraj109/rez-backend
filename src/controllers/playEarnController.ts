@@ -9,6 +9,7 @@ import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess } from '../utils/response';
 import redisService from '../services/redisService';
+import { BRAND } from '../config/brand';
 import QuickAction from '../models/QuickAction';
 import ValueCard from '../models/ValueCard';
 
@@ -26,7 +27,7 @@ export const getShoppingMethods = asyncHandler(async (req: Request, res: Respons
     {
       id: 'online-shopping',
       icon: 'bag',
-      title: 'Shop Online via Nuqta',
+      title: `Shop Online via ${BRAND.APP_NAME}`,
       description: 'Amazon, Flipkart, Myntra & more',
       reward: 'Up to 8% Cashback',
       extraReward: '+ Branded Coins',
@@ -38,7 +39,7 @@ export const getShoppingMethods = asyncHandler(async (req: Request, res: Respons
       id: 'offline-payment',
       icon: 'storefront',
       title: 'Pay at Partner Stores',
-      description: 'Instant Nuqta Coins on every purchase',
+      description: `Instant ${BRAND.COIN_NAME} on every purchase`,
       reward: 'Always Better Price',
       extraReward: '+ First visit bonus',
       path: '/pay-in-store',
@@ -66,7 +67,7 @@ export const getShoppingMethods = asyncHandler(async (req: Request, res: Respons
   sendSuccess(res, {
     shoppingMethods: activeMethods,
     valueBanner: {
-      text: 'Pay via Nuqta = Always Better Price',
+      text: `Pay via ${BRAND.APP_NAME} = Always Better Price`,
       icon: 'locate',
       enabled: true,
     },
@@ -103,8 +104,8 @@ export const getPlayEarnBatch = asyncHandler(async (req: Request, res: Response)
       QuickAction.find({ isActive: true }).sort({ priority: -1 }).limit(10).lean().catch(() => []),
       ValueCard.find({ isActive: true }).sort({ priority: -1 }).limit(10).lean().catch(() => []),
       Promise.resolve([
-        { id: 'online-shopping', icon: 'bag', title: 'Shop Online via Nuqta', description: 'Amazon, Flipkart, Myntra & more', reward: 'Up to 8% Cashback', extraReward: '+ Branded Coins', path: '/cash-store', enabled: true, order: 1 },
-        { id: 'offline-payment', icon: 'storefront', title: 'Pay at Partner Stores', description: 'Instant Nuqta Coins on every purchase', reward: 'Always Better Price', extraReward: '+ First visit bonus', path: '/pay-in-store', enabled: true, order: 2 },
+        { id: 'online-shopping', icon: 'bag', title: `Shop Online via ${BRAND.APP_NAME}`, description: 'Amazon, Flipkart, Myntra & more', reward: 'Up to 8% Cashback', extraReward: '+ Branded Coins', path: '/cash-store', enabled: true, order: 1 },
+        { id: 'offline-payment', icon: 'storefront', title: 'Pay at Partner Stores', description: `Instant ${BRAND.COIN_NAME} on every purchase`, reward: 'Always Better Price', extraReward: '+ First visit bonus', path: '/pay-in-store', enabled: true, order: 2 },
         { id: 'lock-price', icon: 'lock-closed', title: 'Lock Price Deals', description: 'Lock with 10%, earn on both actions', reward: 'Double Earnings', extraReward: '+ Pickup bonus', path: '/lock-deals', enabled: true, order: 3 },
       ]),
     ]);

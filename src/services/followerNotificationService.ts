@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Types } from 'mongoose';
 import { Wishlist } from '../models/Wishlist';
 import { Store } from '../models/Store';
@@ -45,11 +46,11 @@ export async function getStoreFollowers(storeId: string | Types.ObjectId): Promi
     wishlists.forEach(w => userIdSet.add(w.user.toString()));
     const followerIds = Array.from(userIdSet);
 
-    console.log(`📢 [FOLLOWER SERVICE] Store ${storeId} has ${followerIds.length} followers`);
+    logger.info(`📢 [FOLLOWER SERVICE] Store ${storeId} has ${followerIds.length} followers`);
 
     return followerIds;
   } catch (error) {
-    console.error(`❌ [FOLLOWER SERVICE] Error getting followers for store ${storeId}:`, error);
+    logger.error(`❌ [FOLLOWER SERVICE] Error getting followers for store ${storeId}:`, error);
     return [];
   }
 }
@@ -72,7 +73,7 @@ export async function getStoreFollowerCount(storeId: string | Types.ObjectId): P
 
     return count;
   } catch (error) {
-    console.error(`❌ [FOLLOWER SERVICE] Error getting follower count:`, error);
+    logger.error(`❌ [FOLLOWER SERVICE] Error getting follower count:`, error);
     return 0;
   }
 }
@@ -90,14 +91,14 @@ export async function notifyFollowers(
   const followerIds = await getStoreFollowers(storeId);
 
   if (followerIds.length === 0) {
-    console.log(`📢 [FOLLOWER SERVICE] No followers to notify for store ${storeId}`);
+    logger.info(`📢 [FOLLOWER SERVICE] No followers to notify for store ${storeId}`);
     return { sent: 0, failed: 0, totalFollowers: 0 };
   }
 
   let sent = 0;
   let failed = 0;
 
-  console.log(`📢 [FOLLOWER SERVICE] Sending notifications to ${followerIds.length} followers`);
+  logger.info(`📢 [FOLLOWER SERVICE] Sending notifications to ${followerIds.length} followers`);
 
   // Send notifications to all followers
   for (const userId of followerIds) {
@@ -126,12 +127,12 @@ export async function notifyFollowers(
 
       sent++;
     } catch (error) {
-      console.error(`❌ [FOLLOWER SERVICE] Failed to notify user ${userId}:`, error);
+      logger.error(`❌ [FOLLOWER SERVICE] Failed to notify user ${userId}:`, error);
       failed++;
     }
   }
 
-  console.log(`✅ [FOLLOWER SERVICE] Notification sent: ${sent}/${followerIds.length} (${failed} failed)`);
+  logger.info(`✅ [FOLLOWER SERVICE] Notification sent: ${sent}/${followerIds.length} (${failed} failed)`);
 
   return { sent, failed, totalFollowers: followerIds.length };
 }
@@ -174,7 +175,7 @@ export async function notifyNewOffer(
       }
     });
   } catch (error) {
-    console.error(`❌ [FOLLOWER SERVICE] Error notifying new offer:`, error);
+    logger.error(`❌ [FOLLOWER SERVICE] Error notifying new offer:`, error);
     return { sent: 0, failed: 0, totalFollowers: 0 };
   }
 }
@@ -219,7 +220,7 @@ export async function notifyNewProduct(
       }
     });
   } catch (error) {
-    console.error(`❌ [FOLLOWER SERVICE] Error notifying new product:`, error);
+    logger.error(`❌ [FOLLOWER SERVICE] Error notifying new product:`, error);
     return { sent: 0, failed: 0, totalFollowers: 0 };
   }
 }
@@ -269,7 +270,7 @@ export async function notifyPriceDrop(
       }
     });
   } catch (error) {
-    console.error(`❌ [FOLLOWER SERVICE] Error notifying price drop:`, error);
+    logger.error(`❌ [FOLLOWER SERVICE] Error notifying price drop:`, error);
     return { sent: 0, failed: 0, totalFollowers: 0 };
   }
 }
@@ -311,7 +312,7 @@ export async function notifyBackInStock(
       }
     });
   } catch (error) {
-    console.error(`❌ [FOLLOWER SERVICE] Error notifying back in stock:`, error);
+    logger.error(`❌ [FOLLOWER SERVICE] Error notifying back in stock:`, error);
     return { sent: 0, failed: 0, totalFollowers: 0 };
   }
 }
@@ -354,7 +355,7 @@ export async function notifyNewMenuItem(
       }
     });
   } catch (error) {
-    console.error(`❌ [FOLLOWER SERVICE] Error notifying new menu item:`, error);
+    logger.error(`❌ [FOLLOWER SERVICE] Error notifying new menu item:`, error);
     return { sent: 0, failed: 0, totalFollowers: 0 };
   }
 }
@@ -392,7 +393,7 @@ export async function notifyStoreUpdate(
       }
     });
   } catch (error) {
-    console.error(`❌ [FOLLOWER SERVICE] Error notifying store update:`, error);
+    logger.error(`❌ [FOLLOWER SERVICE] Error notifying store update:`, error);
     return { sent: 0, failed: 0, totalFollowers: 0 };
   }
 }

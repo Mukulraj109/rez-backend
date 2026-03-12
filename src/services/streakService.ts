@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import UserStreak, { IUserStreak } from '../models/UserStreak';
 
 // Streak milestones and their rewards
@@ -251,7 +252,7 @@ class StreakService {
       streak.freezeExpiresAt = undefined;
       await streak.save();
 
-      console.log(`Streak broken for user ${streak.user}, type: ${streak.type}`);
+      logger.info(`Streak broken for user ${streak.user}, type: ${streak.type}`);
     }
   }
 }

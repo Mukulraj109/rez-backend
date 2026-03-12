@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import LearningContent, { ILearningContent } from '../models/LearningContent';
 import UserLearningProgress, { IUserLearningProgress } from '../models/UserLearningProgress';
 import { Wallet } from '../models/Wallet';
@@ -167,7 +168,7 @@ class LearningService {
           }
         );
       } catch (err) {
-        console.error('[LEARNING SERVICE] Failed to create CoinTransaction:', err);
+        logger.error('[LEARNING SERVICE] Failed to create CoinTransaction:', err);
       }
 
       // Mark reward as claimed

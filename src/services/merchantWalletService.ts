@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Types } from 'mongoose';
 import { MerchantWallet, IMerchantWallet, IMerchantWalletTransaction } from '../models/MerchantWallet';
 import { Store } from '../models/Store';
@@ -87,7 +88,7 @@ class MerchantWalletService {
 
       await wallet.creditOrder(orderObjectId, orderNumber, grossAmount, platformFee);
 
-      console.log(`✅ [MERCHANT WALLET SERVICE] Credited ₹${grossAmount - platformFee} to merchant ${merchantId}`);
+      logger.info(`✅ [MERCHANT WALLET SERVICE] Credited ₹${grossAmount - platformFee} to merchant ${merchantId}`);
 
       // Return updated balance for real-time notifications
       return {
@@ -98,7 +99,7 @@ class MerchantWalletService {
         }
       };
     } catch (error) {
-      console.error(`❌ [MERCHANT WALLET SERVICE] Failed to credit wallet:`, error);
+      logger.error(`❌ [MERCHANT WALLET SERVICE] Failed to credit wallet:`, error);
       throw error;
     }
   }
@@ -182,7 +183,7 @@ class MerchantWalletService {
 
     const transaction = await wallet.requestWithdrawal(amount);
 
-    console.log(`💸 [MERCHANT WALLET SERVICE] Withdrawal requested: ₹${amount} for merchant ${merchantId}`);
+    logger.info(`💸 [MERCHANT WALLET SERVICE] Withdrawal requested: ₹${amount} for merchant ${merchantId}`);
 
     return transaction;
   }
@@ -226,7 +227,7 @@ class MerchantWalletService {
 
     await wallet.save();
 
-    console.log(`✅ [MERCHANT WALLET SERVICE] Processed withdrawal: ₹${transaction.amount}`);
+    logger.info(`✅ [MERCHANT WALLET SERVICE] Processed withdrawal: ₹${transaction.amount}`);
 
     // Send notification to merchant about successful withdrawal
     try {
@@ -236,9 +237,9 @@ class MerchantWalletService {
         amount: transaction.amount,
         status: 'completed',
       });
-      console.log('📬 [MERCHANT WALLET SERVICE] Sent withdrawal completion notification');
+      logger.info('📬 [MERCHANT WALLET SERVICE] Sent withdrawal completion notification');
     } catch (notifyError) {
-      console.warn('Failed to send withdrawal notification:', notifyError);
+      logger.warn('Failed to send withdrawal notification:', notifyError);
     }
   }
 
@@ -277,7 +278,7 @@ class MerchantWalletService {
 
     await wallet.save();
 
-    console.log(`❌ [MERCHANT WALLET SERVICE] Rejected withdrawal: ₹${transaction.amount} - ${reason}`);
+    logger.info(`❌ [MERCHANT WALLET SERVICE] Rejected withdrawal: ₹${transaction.amount} - ${reason}`);
 
     // Send notification to merchant about rejected withdrawal
     try {
@@ -288,9 +289,9 @@ class MerchantWalletService {
         status: 'rejected',
         reason,
       });
-      console.log('📬 [MERCHANT WALLET SERVICE] Sent withdrawal rejection notification');
+      logger.info('📬 [MERCHANT WALLET SERVICE] Sent withdrawal rejection notification');
     } catch (notifyError) {
-      console.warn('Failed to send withdrawal rejection notification:', notifyError);
+      logger.warn('Failed to send withdrawal rejection notification:', notifyError);
     }
   }
 
@@ -317,7 +318,7 @@ class MerchantWalletService {
 
     await wallet.save();
 
-    console.log(`📝 [MERCHANT WALLET SERVICE] Updated bank details for merchant ${merchantId}`);
+    logger.info(`📝 [MERCHANT WALLET SERVICE] Updated bank details for merchant ${merchantId}`);
   }
 
   /**
@@ -337,7 +338,7 @@ class MerchantWalletService {
 
     await wallet.save();
 
-    console.log(`✅ [MERCHANT WALLET SERVICE] Bank details verified for merchant ${merchantId}`);
+    logger.info(`✅ [MERCHANT WALLET SERVICE] Bank details verified for merchant ${merchantId}`);
   }
 
   /**
@@ -436,7 +437,7 @@ class MerchantWalletService {
 
     await wallet.save();
 
-    console.log(`🔄 [MERCHANT WALLET SERVICE] Processed refund: ₹${netRefund} for order ${orderNumber}`);
+    logger.info(`🔄 [MERCHANT WALLET SERVICE] Processed refund: ₹${netRefund} for order ${orderNumber}`);
   }
 
   /**

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import { Favorite } from '../models/Favorite';
 import { Store } from '../models/Store';
@@ -54,7 +55,7 @@ export const addToFavorites = asyncHandler(async (req: Request, res: Response) =
     }, 'Store added to favorites successfully');
 
   } catch (error) {
-    console.error('Add to favorites error:', error);
+    logger.error('Add to favorites error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -84,7 +85,7 @@ export const removeFromFavorites = asyncHandler(async (req: Request, res: Respon
     sendSuccess(res, null, 'Store removed from favorites successfully');
 
   } catch (error) {
-    console.error('Remove from favorites error:', error);
+    logger.error('Remove from favorites error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -135,7 +136,7 @@ export const toggleFavorite = asyncHandler(async (req: Request, res: Response) =
       challengeService.updateProgress(
         String(userId), 'add_favorites', 1,
         { storeId: String(storeId) }
-      ).catch(err => console.error('[FAVORITE] Challenge progress update failed:', err));
+      ).catch(err => logger.error('[FAVORITE] Challenge progress update failed:', err));
     }
 
     // Invalidate favorites cache for this user
@@ -147,7 +148,7 @@ export const toggleFavorite = asyncHandler(async (req: Request, res: Response) =
     }, isFavorited ? 'Store added to favorites' : 'Store removed from favorites');
 
   } catch (error) {
-    console.error('Toggle favorite error:', error);
+    logger.error('Toggle favorite error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -183,7 +184,7 @@ export const getUserFavorites = asyncHandler(async (req: Request, res: Response)
     sendSuccess(res, data);
 
   } catch (error) {
-    console.error('Get user favorites error:', error);
+    logger.error('Get user favorites error:', error);
     throw new AppError('Failed to fetch user favorites', 500);
   }
 });
@@ -205,7 +206,7 @@ export const isStoreFavorited = asyncHandler(async (req: Request, res: Response)
     });
 
   } catch (error) {
-    console.error('Check favorite status error:', error);
+    logger.error('Check favorite status error:', error);
     throw new AppError('Failed to check favorite status', 500);
   }
 });
@@ -240,7 +241,7 @@ export const getFavoriteStatuses = asyncHandler(async (req: Request, res: Respon
     });
 
   } catch (error) {
-    console.error('Get favorite statuses error:', error);
+    logger.error('Get favorite statuses error:', error);
     throw new AppError('Failed to get favorite statuses', 500);
   }
 });
@@ -261,7 +262,7 @@ export const clearAllFavorites = asyncHandler(async (req: Request, res: Response
     }, 'All favorites cleared successfully');
 
   } catch (error) {
-    console.error('Clear all favorites error:', error);
+    logger.error('Clear all favorites error:', error);
     throw new AppError('Failed to clear all favorites', 500);
   }
 });

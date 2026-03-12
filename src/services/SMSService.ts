@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import twilio from 'twilio';
 
 // Configure Twilio
@@ -28,7 +29,7 @@ export class SMSService {
           throw new Error('SMS service not configured (TWILIO_* env vars required). Cannot send OTP in production.');
         }
         // Dev only: log destination but NEVER the OTP/message body
-        console.log(`[DEV] SMS would be sent to ***${options.to.slice(-4)} (Twilio not configured)`);
+        logger.info(`[DEV] SMS would be sent to ***${options.to.slice(-4)} (Twilio not configured)`);
         return;
       }
 
@@ -38,9 +39,9 @@ export class SMSService {
         to: options.to,
       });
 
-      console.log(`✅ SMS sent successfully to ***${options.to.slice(-4)} (SID: ${result.sid})`);
+      logger.info(`✅ SMS sent successfully to ***${options.to.slice(-4)} (SID: ${result.sid})`);
     } catch (error: any) {
-      console.error('❌ SMS send error:', error);
+      logger.error('❌ SMS send error:', error);
       throw new Error(`Failed to send SMS: ${error.message}`);
     }
   }
@@ -68,7 +69,7 @@ export class SMSService {
       });
       return true;
     } catch (error) {
-      console.error('❌ [SMSService] Failed to send OTP:', error);
+      logger.error('❌ [SMSService] Failed to send OTP:', error);
       return false;
     }
   }

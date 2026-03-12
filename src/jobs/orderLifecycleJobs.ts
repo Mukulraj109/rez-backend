@@ -224,19 +224,33 @@ async function runPaymentVerificationRecovery(): Promise<void> {
       createdAt: { $lt: twoHoursAgo },
     }).select('_id orderNumber items').lean();
 
+    // Batch restore stock: collect all product increments across all expired orders
+    const stockIncrements = new Map<string, number>();
+    for (const order of expiredPaymentOrders) {
+      for (const item of order.items || []) {
+        const pid = item.product.toString();
+        stockIncrements.set(pid, (stockIncrements.get(pid) || 0) + item.quantity);
+      }
+    }
+
+    // Single bulkWrite for all stock restores instead of N*M individual queries
+    if (stockIncrements.size > 0) {
+      const bulkOps = Array.from(stockIncrements.entries()).map(([productId, qty]) => ({
+        updateOne: {
+          filter: { _id: productId },
+          update: { $inc: { 'inventory.stock': qty } },
+        },
+      }));
+      try {
+        await Product.bulkWrite(bulkOps, { ordered: false });
+      } catch (err) {
+        logger.error('[ORDER LIFECYCLE] Bulk stock restore failed:', err);
+      }
+    }
+
+    // Batch cancel all expired orders
     for (const order of expiredPaymentOrders) {
       try {
-        // Restore stock
-        for (const item of order.items || []) {
-          try {
-            await Product.findByIdAndUpdate(item.product, {
-              $inc: { 'inventory.stock': item.quantity },
-            });
-          } catch {
-            // Non-critical
-          }
-        }
-
         await Order.findByIdAndUpdate(order._id, {
           $set: {
             status: 'cancelled',

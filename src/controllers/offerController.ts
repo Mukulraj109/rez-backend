@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Offer, { IOffer } from '../models/Offer';
@@ -131,7 +132,7 @@ export const getOffers = async (req: Request, res: Response) => {
 
     sendPaginated(res, filteredOffers, pageNum, limitNum, total, 'Offers fetched successfully');
   } catch (error) {
-    console.error('Error fetching offers:', error);
+    logger.error('Error fetching offers:', error);
     sendError(res, 'Failed to fetch offers', 500);
   }
 };
@@ -186,7 +187,7 @@ export const getFeaturedOffers = async (req: Request, res: Response) => {
 
     sendSuccess(res, offers, 'Featured offers fetched successfully');
   } catch (error) {
-    console.error('Error fetching featured offers:', error);
+    logger.error('Error fetching featured offers:', error);
     sendError(res, 'Failed to fetch featured offers', 500);
   }
 };
@@ -211,7 +212,7 @@ export const getTrendingOffers = async (req: Request, res: Response) => {
 
     sendSuccess(res, offers, 'Trending offers fetched successfully');
   } catch (error) {
-    console.error('Error fetching trending offers:', error);
+    logger.error('Error fetching trending offers:', error);
     sendError(res, 'Failed to fetch trending offers', 500);
   }
 };
@@ -252,7 +253,7 @@ export const searchOffers = async (req: Request, res: Response) => {
 
     sendPaginated(res, offers, pageNum, limitNum, total, 'Offers fetched successfully');
   } catch (error) {
-    console.error('Error searching offers:', error);
+    logger.error('Error searching offers:', error);
     sendError(res, 'Failed to search offers', 500);
   }
 };
@@ -293,7 +294,7 @@ export const getOffersByCategory = async (req: Request, res: Response) => {
 
     sendPaginated(res, offers, pageNum, limitNum, total, 'Offers fetched successfully');
   } catch (error) {
-    console.error('Error fetching offers by category:', error);
+    logger.error('Error fetching offers by category:', error);
     sendError(res, 'Failed to fetch offers by category', 500);
   }
 };
@@ -343,7 +344,7 @@ export const getOffersByStore = async (req: Request, res: Response) => {
 
     sendPaginated(res, offers, pageNum, limitNum, total, 'Offers fetched successfully');
   } catch (error) {
-    console.error('Error fetching store offers:', error);
+    logger.error('Error fetching store offers:', error);
     sendError(res, 'Failed to fetch store offers', 500);
   }
 };
@@ -383,7 +384,7 @@ export const getOfferById = async (req: Request, res: Response) => {
       // Record analytics for exclusive offer view
       if (offer.isFollowerExclusive && offerStoreId) {
         recordExclusiveOfferView(offerStoreId).catch(err =>
-          console.error('Failed to record exclusive offer view:', err)
+          logger.error('Failed to record exclusive offer view:', err)
         );
       }
     }
@@ -401,7 +402,7 @@ export const getOfferById = async (req: Request, res: Response) => {
 
     sendSuccess(res, { ...offer, isFavorite }, 'Offer fetched successfully');
   } catch (error) {
-    console.error('Error fetching offer:', error);
+    logger.error('Error fetching offer:', error);
     sendError(res, 'Failed to fetch offer', 500);
   }
 };
@@ -539,7 +540,7 @@ export const redeemOffer = async (req: Request, res: Response) => {
       const storeId = offer.store?.id?.toString() || offer.store?.toString();
       if (storeId) {
         recordExclusiveOfferRedemption(storeId).catch(err =>
-          console.error('Failed to record exclusive offer redemption:', err)
+          logger.error('Failed to record exclusive offer redemption:', err)
         );
       }
     }
@@ -561,7 +562,7 @@ export const redeemOffer = async (req: Request, res: Response) => {
 
     sendSuccess(res, responseData, 'Offer redeemed successfully', 201);
   } catch (error) {
-    console.error('Error redeeming offer:', error);
+    logger.error('Error redeeming offer:', error);
     sendError(res, 'Failed to redeem offer', 500);
   }
 };
@@ -610,7 +611,7 @@ export const getUserRedemptions = async (req: Request, res: Response) => {
 
     sendPaginated(res, enhancedRedemptions, pageNum, limitNum, total, 'Redemptions fetched successfully');
   } catch (error) {
-    console.error('Error fetching user redemptions:', error);
+    logger.error('Error fetching user redemptions:', error);
     sendError(res, 'Failed to fetch redemptions', 500);
   }
 };
@@ -658,7 +659,7 @@ export const addOfferToFavorites = async (req: Request, res: Response) => {
 
     sendSuccess(res, { success: true }, 'Offer added to favorites', 201);
   } catch (error) {
-    console.error('Error adding to favorites:', error);
+    logger.error('Error adding to favorites:', error);
     sendError(res, 'Failed to add to favorites', 500);
   }
 };
@@ -690,7 +691,7 @@ export const removeOfferFromFavorites = async (req: Request, res: Response) => {
 
     sendSuccess(res, { success: true }, 'Offer removed from favorites');
   } catch (error) {
-    console.error('Error removing from favorites:', error);
+    logger.error('Error removing from favorites:', error);
     sendError(res, 'Failed to remove from favorites', 500);
   }
 };
@@ -741,7 +742,7 @@ export const getUserFavoriteOffers = async (req: Request, res: Response) => {
 
     sendPaginated(res, offers, pageNum, limitNum, total, 'Offers fetched successfully');
   } catch (error) {
-    console.error('Error fetching favorite offers:', error);
+    logger.error('Error fetching favorite offers:', error);
     sendError(res, 'Failed to fetch favorite offers', 500);
   }
 };
@@ -759,7 +760,7 @@ export const trackOfferView = async (req: Request, res: Response) => {
 
     sendSuccess(res, { success: true }, 'View tracked');
   } catch (error) {
-    console.error('Error tracking view:', error);
+    logger.error('Error tracking view:', error);
     // Don't return error for analytics endpoints
     res.status(200).json({ success: true });
   }
@@ -778,7 +779,7 @@ export const trackOfferClick = async (req: Request, res: Response) => {
 
     sendSuccess(res, { success: true }, 'Click tracked');
   } catch (error) {
-    console.error('Error tracking click:', error);
+    logger.error('Error tracking click:', error);
     // Don't return error for analytics endpoints
     res.status(200).json({ success: true });
   }
@@ -845,7 +846,7 @@ export const getRecommendedOffers = async (req: Request, res: Response) => {
 
     sendSuccess(res, offers, 'Recommended offers fetched successfully');
   } catch (error) {
-    console.error('Error fetching recommendations:', error);
+    logger.error('Error fetching recommendations:', error);
     sendError(res, 'Failed to fetch recommendations', 500);
   }
 };
@@ -863,7 +864,7 @@ export const getMegaOffers = async (req: Request, res: Response) => {
 
     sendSuccess(res, limitedOffers, 'Mega offers fetched successfully');
   } catch (error) {
-    console.error('Error fetching mega offers:', error);
+    logger.error('Error fetching mega offers:', error);
     sendError(res, 'Failed to fetch mega offers', 500);
   }
 };
@@ -881,7 +882,7 @@ export const getStudentOffers = async (req: Request, res: Response) => {
 
     sendSuccess(res, limitedOffers, 'Student offers fetched successfully');
   } catch (error) {
-    console.error('Error fetching student offers:', error);
+    logger.error('Error fetching student offers:', error);
     sendError(res, 'Failed to fetch student offers', 500);
   }
 };
@@ -898,7 +899,7 @@ export const getNewArrivalOffers = async (req: Request, res: Response) => {
 
     sendSuccess(res, offers, 'New arrival offers fetched successfully');
   } catch (error) {
-    console.error('Error fetching new arrival offers:', error);
+    logger.error('Error fetching new arrival offers:', error);
     sendError(res, 'Failed to fetch new arrival offers', 500);
   }
 };
@@ -927,7 +928,7 @@ export const getNearbyOffers = async (req: Request, res: Response) => {
 
     sendSuccess(res, offersWithDistance, 'Nearby offers fetched successfully');
   } catch (error) {
-    console.error('Error fetching nearby offers:', error);
+    logger.error('Error fetching nearby offers:', error);
     sendError(res, 'Failed to fetch nearby offers', 500);
   }
 };
@@ -1089,7 +1090,7 @@ export const getOffersPageData = async (req: Request, res: Response) => {
 
     sendSuccess(res, pageData, 'Offers page data fetched successfully');
   } catch (error) {
-    console.error('Error fetching offers page data:', error);
+    logger.error('Error fetching offers page data:', error);
     sendError(res, 'Failed to fetch offers page data', 500);
   }
 };
@@ -1156,7 +1157,7 @@ export const toggleOfferLike = async (req: Request, res: Response) => {
       likesCount
     }, isLiked ? 'Offer liked successfully' : 'Offer unliked successfully');
   } catch (error) {
-    console.error('Error toggling offer like:', error);
+    logger.error('Error toggling offer like:', error);
     sendError(res, 'Failed to toggle offer like', 500);
   }
 };
@@ -1199,7 +1200,7 @@ export const shareOffer = async (req: Request, res: Response) => {
 
     sendSuccess(res, { success: true }, 'Offer shared successfully');
   } catch (error) {
-    console.error('Error sharing offer:', error);
+    logger.error('Error sharing offer:', error);
     sendError(res, 'Failed to share offer', 500);
   }
 };
@@ -1214,7 +1215,7 @@ export const getOfferCategories = async (req: Request, res: Response) => {
 
     sendSuccess(res, categories, 'Offer categories fetched successfully');
   } catch (error) {
-    console.error('Error fetching offer categories:', error);
+    logger.error('Error fetching offer categories:', error);
     sendError(res, 'Failed to fetch offer categories', 500);
   }
 };
@@ -1237,7 +1238,7 @@ export const getHeroBanners = async (req: Request, res: Response) => {
 
     sendSuccess(res, banners, 'Hero banners fetched successfully');
   } catch (error) {
-    console.error('Error fetching hero banners:', error);
+    logger.error('Error fetching hero banners:', error);
     sendError(res, 'Failed to fetch hero banners', 500);
   }
 };
@@ -1314,7 +1315,7 @@ export const validateRedemptionCode = async (req: Request, res: Response) => {
       }
     }, 'Voucher is valid');
   } catch (error) {
-    console.error('Error validating redemption code:', error);
+    logger.error('Error validating redemption code:', error);
     sendError(res, 'Failed to validate redemption code', 500);
   }
 };
@@ -1441,9 +1442,9 @@ export const markRedemptionAsUsed = async (req: Request, res: Response) => {
           amount: cashbackAmount,
           redemptionId: (redemption as any)._id?.toString() || id,
         }
-      }).catch((err: any) => console.error('Failed to send cashback notification:', err));
+      }).catch((err: any) => logger.error('Failed to send cashback notification:', err));
     } catch (notifError) {
-      console.error('Failed to send cashback notification:', notifError);
+      logger.error('Failed to send cashback notification:', notifError);
     }
 
     sendSuccess(res, {
@@ -1465,7 +1466,7 @@ export const markRedemptionAsUsed = async (req: Request, res: Response) => {
     // Rollback transaction on error
     await session.abortTransaction();
     session.endSession();
-    console.error('Error marking redemption as used:', error);
+    logger.error('Error marking redemption as used:', error);
     sendError(res, 'Failed to process voucher', 500);
   }
 };
@@ -1499,7 +1500,7 @@ export const getRedemptionById = async (req: Request, res: Response) => {
       }
     }, 'Redemption fetched successfully');
   } catch (error) {
-    console.error('Error fetching redemption:', error);
+    logger.error('Error fetching redemption:', error);
     sendError(res, 'Failed to fetch redemption', 500);
   }
 };

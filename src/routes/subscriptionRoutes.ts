@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import express from 'express';
 import * as subscriptionController from '../controllers/subscriptionController';
 import { authenticate } from '../middleware/auth';
@@ -12,7 +13,7 @@ const router = express.Router();
 
 // Logging middleware for all subscription routes
 router.use((req, res, next) => {
-  console.log('📡 [SUBSCRIPTION ROUTE] Incoming request:', {
+  logger.info('📡 [SUBSCRIPTION ROUTE] Incoming request:', {
     method: req.method,
     path: req.path,
     fullUrl: req.originalUrl,
@@ -37,9 +38,9 @@ router.post(
 );
 
 // Protected routes (require authentication)
-console.log('🔒 [SUBSCRIPTION ROUTES] Setting up protected routes with authentication');
+logger.info('🔒 [SUBSCRIPTION ROUTES] Setting up protected routes with authentication');
 router.use((req, res, next) => {
-  console.log('🔒 [SUBSCRIPTION ROUTE] Attempting authentication for:', req.path);
+  logger.info('🔒 [SUBSCRIPTION ROUTE] Attempting authentication for:', req.path);
   next();
 });
 router.use(authenticate);

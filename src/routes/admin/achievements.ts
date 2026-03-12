@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Achievements
  * CRUD for Achievement model (admin-manageable achievement definitions)
@@ -101,7 +102,7 @@ router.get('/', async (req: Request, res: Response) => {
       },
     }, 'Achievements fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching achievements:', error);
+    logger.error('[Admin] Error fetching achievements:', error);
     return sendError(res, 'Failed to fetch achievements', 500);
   }
 });
@@ -160,7 +161,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       leastUnlocked: leastUnlockedAchievement,
     }, 'Achievement stats fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching achievement stats:', error);
+    logger.error('[Admin] Error fetching achievement stats:', error);
     return sendError(res, 'Failed to fetch achievement stats', 500);
   }
 });
@@ -179,7 +180,7 @@ router.get('/metrics', async (_req: Request, res: Response) => {
     }));
     return sendSuccess(res, { metrics }, 'Achievement metrics fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching achievement metrics:', error);
+    logger.error('[Admin] Error fetching achievement metrics:', error);
     return sendError(res, 'Failed to fetch metrics', 500);
   }
 });
@@ -209,7 +210,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       unlockCount,
     }, 'Achievement fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching achievement:', error);
+    logger.error('[Admin] Error fetching achievement:', error);
     return sendError(res, 'Failed to fetch achievement', 500);
   }
 });
@@ -265,7 +266,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     return sendSuccess(res, achievement, 'Achievement created');
   } catch (error) {
-    console.error('[Admin] Error creating achievement:', error);
+    logger.error('[Admin] Error creating achievement:', error);
     return sendError(res, 'Failed to create achievement', 500);
   }
 });
@@ -306,7 +307,7 @@ router.post('/seed', async (req: Request, res: Response) => {
 
     return sendSuccess(res, { created, skipped, total: achievementEntries.length }, `Seed complete: ${created} created, ${skipped} skipped`);
   } catch (error) {
-    console.error('[Admin] Error seeding achievements:', error);
+    logger.error('[Admin] Error seeding achievements:', error);
     return sendError(res, 'Failed to seed achievements', 500);
   }
 });
@@ -333,7 +334,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, achievement, 'Achievement updated');
   } catch (error) {
-    console.error('[Admin] Error updating achievement:', error);
+    logger.error('[Admin] Error updating achievement:', error);
     return sendError(res, 'Failed to update achievement', 500);
   }
 });
@@ -358,7 +359,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
 
     return sendSuccess(res, achievement, `Achievement ${achievement.isActive ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling achievement:', error);
+    logger.error('[Admin] Error toggling achievement:', error);
     return sendError(res, 'Failed to toggle achievement', 500);
   }
 });
@@ -392,7 +393,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, null, 'Achievement deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting achievement:', error);
+    logger.error('[Admin] Error deleting achievement:', error);
     return sendError(res, 'Failed to delete achievement', 500);
   }
 });

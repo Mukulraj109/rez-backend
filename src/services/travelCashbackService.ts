@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Travel Cashback Service
  *
@@ -101,7 +102,7 @@ class TravelCashbackService {
     }
 
     if (booking.cashbackStatus !== 'pending') {
-      console.log(`⚠️ [TRAVEL-CASHBACK] Booking ${booking.bookingNumber} already in cashbackStatus: ${booking.cashbackStatus}`);
+      logger.info(`⚠️ [TRAVEL-CASHBACK] Booking ${booking.bookingNumber} already in cashbackStatus: ${booking.cashbackStatus}`);
       return;
     }
 
@@ -109,7 +110,7 @@ class TravelCashbackService {
     booking.cashbackHeldAt = new Date();
     await booking.save();
 
-    console.log(`🔒 [TRAVEL-CASHBACK] Cashback held for booking ${booking.bookingNumber}: ₹${booking.pricing.cashbackEarned}`);
+    logger.info(`🔒 [TRAVEL-CASHBACK] Cashback held for booking ${booking.bookingNumber}: ₹${booking.pricing.cashbackEarned}`);
   }
 
   /**
@@ -127,7 +128,7 @@ class TravelCashbackService {
 
     const cashbackAmount = booking.pricing.cashbackEarned || 0;
     if (cashbackAmount <= 0) {
-      console.log(`⚠️ [TRAVEL-CASHBACK] No cashback to credit for booking ${booking.bookingNumber}`);
+      logger.info(`⚠️ [TRAVEL-CASHBACK] No cashback to credit for booking ${booking.bookingNumber}`);
       return;
     }
 
@@ -140,7 +141,7 @@ class TravelCashbackService {
       if (!freshBooking || freshBooking.cashbackStatus === 'credited') {
         await session.abortTransaction();
         session.endSession();
-        console.log(`⚠️ [TRAVEL-CASHBACK] Booking ${booking.bookingNumber} already credited, skipping`);
+        logger.info(`⚠️ [TRAVEL-CASHBACK] Booking ${booking.bookingNumber} already credited, skipping`);
         return;
       }
       if (freshBooking.cashbackStatus !== 'held') {
@@ -231,7 +232,7 @@ class TravelCashbackService {
       // walletService.credit already handles cache invalidation
     } catch (error) {
       await session.abortTransaction();
-      console.error('❌ [TRAVEL-CASHBACK] Error crediting cashback:', error);
+      logger.error('❌ [TRAVEL-CASHBACK] Error crediting cashback:', error);
       throw error;
     } finally {
       session.endSession();
@@ -302,7 +303,7 @@ class TravelCashbackService {
 
     // Idempotent: if already clawed back, return without error
     if (booking.cashbackStatus === 'clawed_back') {
-      console.log(`⚠️ [TRAVEL-CASHBACK] Booking ${booking.bookingNumber} cashback already clawed back`);
+      logger.info(`⚠️ [TRAVEL-CASHBACK] Booking ${booking.bookingNumber} cashback already clawed back`);
       return booking;
     }
 
@@ -413,10 +414,10 @@ class TravelCashbackService {
         try {
           await deductResult.syncWithUser();
         } catch (syncError) {
-          console.warn(`⚠️ [TRAVEL-CASHBACK] User wallet sync failed after refund (non-blocking):`, syncError);
+          logger.warn(`⚠️ [TRAVEL-CASHBACK] User wallet sync failed after refund (non-blocking):`, syncError);
         }
 
-        console.log(`💸 [TRAVEL-CASHBACK] Deducted ₹${deductAmount} from wallet for user ${booking.user} (refund for ${booking.bookingNumber})`);
+        logger.info(`💸 [TRAVEL-CASHBACK] Deducted ₹${deductAmount} from wallet for user ${booking.user} (refund for ${booking.bookingNumber})`);
       } catch (txError) {
         await session.abortTransaction();
         throw txError;
@@ -434,7 +435,7 @@ class TravelCashbackService {
       await booking.save();
     }
 
-    console.log(`💸 [TRAVEL-CASHBACK] Refund processed for booking ${booking.bookingNumber}`);
+    logger.info(`💸 [TRAVEL-CASHBACK] Refund processed for booking ${booking.bookingNumber}`);
     return booking;
   }
 
@@ -487,21 +488,21 @@ class TravelCashbackService {
           } catch (error: any) {
             failed++;
             failedBookingIds.add(booking._id.toString());
-            console.error(`Failed to credit travel cashback for booking ${booking.bookingNumber}: ${error.message}`);
+            logger.error(`Failed to credit travel cashback for booking ${booking.bookingNumber}: ${error.message}`);
           }
         }
 
-        console.log(`💰 [TRAVEL-CASHBACK] Batch ${batchCount}: ${batch.length} attempted, ${credited} credited, ${failed} failed`);
+        logger.info(`💰 [TRAVEL-CASHBACK] Batch ${batchCount}: ${batch.length} attempted, ${credited} credited, ${failed} failed`);
       } while (batchCount < MAX_BATCHES);
 
       if (batchCount >= MAX_BATCHES) {
-        console.warn(`⚠️ [TRAVEL-CASHBACK] Hit max batch limit (${MAX_BATCHES}). Some bookings may remain unprocessed.`);
+        logger.warn(`⚠️ [TRAVEL-CASHBACK] Hit max batch limit (${MAX_BATCHES}). Some bookings may remain unprocessed.`);
       }
 
-      console.log(`💰 [TRAVEL-CASHBACK] Credit job complete: ${credited}/${total} credited, ${failed} failed`);
+      logger.info(`💰 [TRAVEL-CASHBACK] Credit job complete: ${credited}/${total} credited, ${failed} failed`);
       return { credited, total, failed };
     } catch (error) {
-      console.error('❌ [TRAVEL-CASHBACK] Error in credit pending cashback job:', error);
+      logger.error('❌ [TRAVEL-CASHBACK] Error in credit pending cashback job:', error);
       throw error;
     }
   }

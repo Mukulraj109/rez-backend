@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose, { Types } from 'mongoose';
 import Achievement, {
   IAchievementDoc,
@@ -60,7 +61,7 @@ class AchievementEngine {
       }
     } catch (error) {
       // Gamification errors should not block main operations
-      console.error(`[ACHIEVEMENT ENGINE] Error processing metric update for user ${userId}:`, error);
+      logger.error(`[ACHIEVEMENT ENGINE] Error processing metric update for user ${userId}:`, error);
     }
 
     return { unlocked: unlockedTypes };
@@ -288,7 +289,7 @@ class AchievementEngine {
           periodKey // null for one_time, date-string for repeating
         }
       );
-      console.log(`[ACHIEVEMENT ENGINE] Awarded ${coins} coins for "${achievementDef.title}" to user ${userId}`);
+      logger.info(`[ACHIEVEMENT ENGINE] Awarded ${coins} coins for "${achievementDef.title}" to user ${userId}`);
 
       // Send achievement unlocked SMS notification (fire-and-forget)
       try {
@@ -302,15 +303,15 @@ class AchievementEngine {
         }
       } catch (notifErr) {
         if (process.env.NODE_ENV === 'development') {
-          console.log(`[ACHIEVEMENT ENGINE] Failed to send achievement notification:`, notifErr);
+          logger.info(`[ACHIEVEMENT ENGINE] Failed to send achievement notification:`, notifErr);
         }
       }
     } catch (err: any) {
       if (err.code === 11000) {
         // Duplicate key — reward already granted (idempotent success)
-        console.log(`[ACHIEVEMENT ENGINE] Reward already granted for "${achievementDef.title}" to user ${userId}`);
+        logger.info(`[ACHIEVEMENT ENGINE] Reward already granted for "${achievementDef.title}" to user ${userId}`);
       } else {
-        console.error(`[ACHIEVEMENT ENGINE] Failed to award coins for "${achievementDef.title}":`, err);
+        logger.error(`[ACHIEVEMENT ENGINE] Failed to award coins for "${achievementDef.title}":`, err);
       }
     }
   }
@@ -417,7 +418,7 @@ class AchievementEngine {
         await this.evaluateAndUpdate(userId, achievementDef, allMetrics);
       }
     } catch (error) {
-      console.error(`[ACHIEVEMENT ENGINE] Full recalculate failed for user ${userId}:`, error);
+      logger.error(`[ACHIEVEMENT ENGINE] Full recalculate failed for user ${userId}:`, error);
     }
   }
 
@@ -485,7 +486,7 @@ class AchievementEngine {
         metrics.longestLoginStreak = 0;
       }
     } catch (error) {
-      console.error(`[ACHIEVEMENT ENGINE] Error computing metrics for user ${userId}:`, error);
+      logger.error(`[ACHIEVEMENT ENGINE] Error computing metrics for user ${userId}:`, error);
     }
 
     return metrics;

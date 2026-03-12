@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import adminWalletService from '../../services/adminWalletService';
@@ -18,7 +19,7 @@ router.get('/', async (req: Request, res: Response) => {
     const summary = await adminWalletService.getWalletSummary();
     res.json({ success: true, data: summary });
   } catch (error: any) {
-    console.error('[ADMIN WALLET] Error fetching summary:', error);
+    logger.error('[ADMIN WALLET] Error fetching summary:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch admin wallet summary'
@@ -41,7 +42,7 @@ router.get('/transactions', async (req: Request, res: Response) => {
     const result = await adminWalletService.getTransactionHistory(page, limit, startDate, endDate);
     res.json({ success: true, data: result });
   } catch (error: any) {
-    console.error('[ADMIN WALLET] Error fetching transactions:', error);
+    logger.error('[ADMIN WALLET] Error fetching transactions:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch transactions'
@@ -60,7 +61,7 @@ router.get('/daily-breakdown', async (req: Request, res: Response) => {
     const result = await adminWalletService.getDailyBreakdown(days);
     res.json({ success: true, data: result });
   } catch (error: any) {
-    console.error('[ADMIN WALLET] Error fetching daily breakdown:', error);
+    logger.error('[ADMIN WALLET] Error fetching daily breakdown:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch daily breakdown'

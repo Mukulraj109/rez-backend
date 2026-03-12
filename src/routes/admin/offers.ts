@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import express, { Request, Response } from 'express';
 import Joi from 'joi';
 import { Types } from 'mongoose';
@@ -146,7 +147,7 @@ router.get('/', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN] Get offers error:', error);
+    logger.error('[ADMIN] Get offers error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch offers',
@@ -221,7 +222,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN] Get offer stats error:', error);
+    logger.error('[ADMIN] Get offer stats error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch stats',
@@ -248,7 +249,7 @@ router.get('/stores', async (req: Request, res: Response) => {
       data: stores,
     });
   } catch (error: any) {
-    console.error('[ADMIN] Get stores error:', error);
+    logger.error('[ADMIN] Get stores error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch stores',
@@ -291,7 +292,7 @@ router.get('/pending-approval', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN] Get pending offers error:', error);
+    logger.error('[ADMIN] Get pending offers error:', error);
     return res.status(500).json({ success: false, message: 'Failed to fetch pending offers', error: error.message });
   }
 });
@@ -326,7 +327,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       data: offer,
     });
   } catch (error: any) {
-    console.error('[ADMIN] Get offer error:', error);
+    logger.error('[ADMIN] Get offer error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch offer',
@@ -405,7 +406,7 @@ router.post('/', async (req: Request, res: Response) => {
       data: offer,
     });
   } catch (error: any) {
-    console.error('[ADMIN] Create offer error:', error);
+    logger.error('[ADMIN] Create offer error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to create offer',
@@ -501,7 +502,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       data: offer,
     });
   } catch (error: any) {
-    console.error('[ADMIN] Update offer error:', error);
+    logger.error('[ADMIN] Update offer error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to update offer',
@@ -543,7 +544,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
       data: { isActive: offer.validity.isActive },
     });
   } catch (error: any) {
-    console.error('[ADMIN] Toggle offer error:', error);
+    logger.error('[ADMIN] Toggle offer error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to toggle offer',
@@ -582,7 +583,7 @@ router.put('/:id/approve', async (req: Request, res: Response) => {
       data: offer,
     });
   } catch (error: any) {
-    console.error('[ADMIN] Approve offer error:', error);
+    logger.error('[ADMIN] Approve offer error:', error);
     return res.status(500).json({ success: false, message: 'Failed to approve offer', error: error.message });
   }
 });
@@ -618,7 +619,7 @@ router.put('/:id/reject', async (req: Request, res: Response) => {
       data: offer,
     });
   } catch (error: any) {
-    console.error('[ADMIN] Reject offer error:', error);
+    logger.error('[ADMIN] Reject offer error:', error);
     return res.status(500).json({ success: false, message: 'Failed to reject offer', error: error.message });
   }
 });
@@ -653,7 +654,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       message: 'Offer deleted successfully',
     });
   } catch (error: any) {
-    console.error('[ADMIN] Delete offer error:', error);
+    logger.error('[ADMIN] Delete offer error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to delete offer',

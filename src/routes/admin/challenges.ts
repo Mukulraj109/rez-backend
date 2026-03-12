@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Challenges
  * CRUD for Challenge model (used by Play & Earn admin page)
@@ -78,7 +79,7 @@ router.get('/', async (req: Request, res: Response) => {
       },
     }, 'Challenges fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching challenges:', error);
+    logger.error('[Admin] Error fetching challenges:', error);
     return sendError(res, 'Failed to fetch challenges', 500);
   }
 });
@@ -91,7 +92,7 @@ router.get('/templates', async (req: Request, res: Response) => {
   try {
     return sendSuccess(res, CHALLENGE_TEMPLATES, 'Challenge templates fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching challenge templates:', error);
+    logger.error('[Admin] Error fetching challenge templates:', error);
     return sendError(res, 'Failed to fetch challenge templates', 500);
   }
 });
@@ -153,7 +154,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       totalCompletions: stats.totalCompletions,
     }, 'Challenge stats fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching challenge stats:', error);
+    logger.error('[Admin] Error fetching challenge stats:', error);
     return sendError(res, 'Failed to fetch challenge stats', 500);
   }
 });
@@ -222,7 +223,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
       conversionFunnel,
     }, 'Challenge analytics retrieved');
   } catch (error) {
-    console.error('[Admin] Error fetching analytics:', error);
+    logger.error('[Admin] Error fetching analytics:', error);
     return sendError(res, 'Failed to fetch analytics', 500);
   }
 });
@@ -245,7 +246,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, challenge, 'Challenge fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching challenge:', error);
+    logger.error('[Admin] Error fetching challenge:', error);
     return sendError(res, 'Failed to fetch challenge', 500);
   }
 });
@@ -336,7 +337,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     return sendSuccess(res, challenge, 'Challenge created');
   } catch (error: any) {
-    console.error('[Admin] Error creating challenge:', error);
+    logger.error('[Admin] Error creating challenge:', error);
     if (error.name === 'ValidationError') {
       return sendError(res, error.message, 400);
     }
@@ -375,7 +376,7 @@ router.post('/from-template', async (req: Request, res: Response) => {
 
     return sendSuccess(res, challenge, 'Challenge created from template');
   } catch (error: any) {
-    console.error('[Admin] Error creating challenge from template:', error);
+    logger.error('[Admin] Error creating challenge from template:', error);
     if (error.name === 'ValidationError') {
       return sendError(res, error.message, 400);
     }
@@ -422,7 +423,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, challenge, 'Challenge updated');
   } catch (error: any) {
-    console.error('[Admin] Error updating challenge:', error);
+    logger.error('[Admin] Error updating challenge:', error);
     if (error.name === 'ValidationError') {
       return sendError(res, error.message, 400);
     }
@@ -452,7 +453,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
 
     return sendSuccess(res, challenge, `Challenge ${challenge.active ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling challenge:', error);
+    logger.error('[Admin] Error toggling challenge:', error);
     return sendError(res, 'Failed to toggle challenge', 500);
   }
 });
@@ -477,7 +478,7 @@ router.patch('/:id/feature', async (req: Request, res: Response) => {
 
     return sendSuccess(res, challenge, `Challenge ${challenge.featured ? 'featured' : 'unfeatured'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling challenge featured:', error);
+    logger.error('[Admin] Error toggling challenge featured:', error);
     return sendError(res, 'Failed to toggle challenge featured status', 500);
   }
 });
@@ -506,13 +507,13 @@ router.delete('/:id', async (req: Request, res: Response) => {
         ChallengeAnalytics.deleteMany({ challenge: req.params.id }),
       ]);
     } catch (cleanupErr) {
-      console.error('[Admin] Error cleaning up related records:', cleanupErr);
+      logger.error('[Admin] Error cleaning up related records:', cleanupErr);
       // Don't fail the delete - challenge is already removed
     }
 
     return sendSuccess(res, null, 'Challenge deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting challenge:', error);
+    logger.error('[Admin] Error deleting challenge:', error);
     return sendError(res, 'Failed to delete challenge', 500);
   }
 });
@@ -591,7 +592,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
 
     return sendSuccess(res, challenge, `Challenge status changed to ${status}`);
   } catch (error) {
-    console.error('[Admin] Error changing challenge status:', error);
+    logger.error('[Admin] Error changing challenge status:', error);
     return sendError(res, 'Failed to change challenge status', 500);
   }
 });
@@ -611,7 +612,7 @@ router.post('/:id/clone', async (req: Request, res: Response) => {
 
     return sendSuccess(res, cloned, 'Challenge cloned successfully', 201);
   } catch (error: any) {
-    console.error('[Admin] Error cloning challenge:', error);
+    logger.error('[Admin] Error cloning challenge:', error);
     return sendError(res, error.message || 'Failed to clone challenge', 500);
   }
 });
@@ -644,7 +645,7 @@ router.patch('/:id/visibility', async (req: Request, res: Response) => {
 
     return sendSuccess(res, challenge, `Challenge visibility set to ${visibility}`);
   } catch (error) {
-    console.error('[Admin] Error setting visibility:', error);
+    logger.error('[Admin] Error setting visibility:', error);
     return sendError(res, 'Failed to set challenge visibility', 500);
   }
 });
@@ -676,7 +677,7 @@ router.patch('/:id/priority', async (req: Request, res: Response) => {
 
     return sendSuccess(res, challenge, `Challenge priority set to ${priority}`);
   } catch (error) {
-    console.error('[Admin] Error setting priority:', error);
+    logger.error('[Admin] Error setting priority:', error);
     return sendError(res, 'Failed to set challenge priority', 500);
   }
 });

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // ServiceAppointment Model
 // Tracks service appointments for stores (salons, spas, consultations, etc.)
 
@@ -263,7 +264,7 @@ ServiceAppointmentSchema.methods.updateStatus = async function(
 
   await this.save();
 
-  console.log(`✅ Appointment ${this.appointmentNumber} status updated to: ${newStatus}`);
+  logger.info(`✅ Appointment ${this.appointmentNumber} status updated to: ${newStatus}`);
   return this as IServiceAppointment;
 };
 
@@ -280,7 +281,7 @@ ServiceAppointmentSchema.methods.cancel = async function(
 
   await this.save();
 
-  console.log(`✅ Appointment ${this.appointmentNumber} cancelled`);
+  logger.info(`✅ Appointment ${this.appointmentNumber} cancelled`);
   return this as IServiceAppointment;
 };
 
@@ -291,7 +292,7 @@ ServiceAppointmentSchema.methods.confirm = async function(): Promise<IServiceApp
 
   await this.save();
 
-  console.log(`✅ Appointment ${this.appointmentNumber} confirmed`);
+  logger.info(`✅ Appointment ${this.appointmentNumber} confirmed`);
   return this as IServiceAppointment;
 };
 

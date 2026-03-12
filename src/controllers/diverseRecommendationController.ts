@@ -8,6 +8,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import redisService from '../services/redisService';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
+import { logger } from '../config/logger';
 
 /**
  * Diverse Recommendation Controller
@@ -195,8 +196,8 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
   const startTime = Date.now();
   const userId = req.user?.id;
 
-  console.log('🎯 [DIVERSE RECOMMENDATIONS] Request received');
-  console.log('👤 [DIVERSE RECOMMENDATIONS] User ID:', userId || 'Anonymous');
+  logger.info('[DIVERSE RECOMMENDATIONS] Request received');
+  logger.info('[DIVERSE RECOMMENDATIONS] User ID:', userId || 'Anonymous');
 
   // Parse and validate request body
   const {
@@ -211,7 +212,7 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
   // Validate limit
   const requestLimit = Math.min(Math.max(limit, 1), 50); // Clamp between 1-50
 
-  console.log('📋 [DIVERSE RECOMMENDATIONS] Parameters:', {
+  logger.info('[DIVERSE RECOMMENDATIONS] Parameters:', {
     excludeProducts: excludeProducts.length,
     excludeStores: excludeStores.length,
     shownProducts: shownProducts.length,
@@ -245,13 +246,13 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
     // Try to get from cache first
     const cached = await redisService.get<any>(cacheKey);
     if (cached) {
-      console.log('✅ [DIVERSE RECOMMENDATIONS] Returning from cache');
-      console.log('⏱️ [DIVERSE RECOMMENDATIONS] Response time:', Date.now() - startTime, 'ms');
+      logger.info('[DIVERSE RECOMMENDATIONS] Returning from cache');
+      logger.debug('[DIVERSE RECOMMENDATIONS] Response time:', Date.now() - startTime, 'ms');
 
       return sendSuccess(res, cached, 'Diverse recommendations retrieved from cache');
     }
 
-    console.log('🔍 [DIVERSE RECOMMENDATIONS] Fetching candidates from database');
+    logger.info('[DIVERSE RECOMMENDATIONS] Fetching candidates from database');
 
     // Build exclusion lists
     const allExcludedProducts = [
@@ -273,7 +274,7 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
       }
     }).filter(id => id !== null) as Types.ObjectId[];
 
-    console.log('🚫 [DIVERSE RECOMMENDATIONS] Exclusions:', {
+    logger.info('[DIVERSE RECOMMENDATIONS] Exclusions:', {
       products: allExcludedProducts.length,
       stores: excludedStoreIds.length
     });
@@ -315,7 +316,7 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
 
     // Fetch candidates (5x limit to have good selection pool)
     const candidateLimit = requestLimit * 5;
-    console.log('📦 [DIVERSE RECOMMENDATIONS] Fetching', candidateLimit, 'candidates');
+    logger.info('[DIVERSE RECOMMENDATIONS] Fetching', candidateLimit, 'candidates');
 
     const candidates = await Product.find(query)
       .populate('category', 'name slug type')
@@ -324,10 +325,10 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
       .limit(candidateLimit)
       .lean();
 
-    console.log('✅ [DIVERSE RECOMMENDATIONS] Found', candidates.length, 'candidates');
+    logger.info('[DIVERSE RECOMMENDATIONS] Found', candidates.length, 'candidates');
 
     if (candidates.length === 0) {
-      console.log('⚠️ [DIVERSE RECOMMENDATIONS] No candidates found');
+      logger.info('[DIVERSE RECOMMENDATIONS] No candidates found');
       return sendSuccess(res, {
         recommendations: [],
         metadata: {
@@ -344,7 +345,7 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
     let recommendations: any[] = [];
 
     if (algorithm === 'hybrid' || algorithm === 'content_based') {
-      console.log('🎨 [DIVERSE RECOMMENDATIONS] Applying hybrid scoring algorithm');
+      logger.info('[DIVERSE RECOMMENDATIONS] Applying hybrid scoring algorithm');
 
       // Score each candidate
       const scoredCandidates = candidates.map(product => {
@@ -363,7 +364,7 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
       // Sort by hybrid score
       scoredCandidates.sort((a, b) => b.hybridScore - a.hybridScore);
 
-      console.log('📊 [DIVERSE RECOMMENDATIONS] Top scored candidates:', scoredCandidates.slice(0, 3).map(c => ({
+      logger.info('[DIVERSE RECOMMENDATIONS] Top scored candidates:', scoredCandidates.slice(0, 3).map(c => ({
         name: c.product.name,
         relevance: c.relevance,
         diversity: c.diversity,
@@ -387,10 +388,10 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
 
       recommendations = selectedProducts;
 
-      console.log('✅ [DIVERSE RECOMMENDATIONS] Greedy selection complete:', recommendations.length);
+      logger.info('[DIVERSE RECOMMENDATIONS] Greedy selection complete:', recommendations.length);
     } else {
       // Collaborative filtering (simplified - just use diversity service)
-      console.log('🎨 [DIVERSE RECOMMENDATIONS] Applying diversity service');
+      logger.info('[DIVERSE RECOMMENDATIONS] Applying diversity service');
 
       recommendations = await diversityService.applyDiversityMode(
         candidates as any,
@@ -412,10 +413,10 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
       recommendations.map(p => p.category?.name || p.category || 'unknown')
     );
 
-    console.log('📊 [DIVERSE RECOMMENDATIONS] Categories represented:', categoriesRepresented.size);
+    logger.info('[DIVERSE RECOMMENDATIONS] Categories represented:', categoriesRepresented.size);
 
     if (categoriesRepresented.size < minCategories) {
-      console.log('⚠️ [DIVERSE RECOMMENDATIONS] Not enough categories, fetching more');
+      logger.info('[DIVERSE RECOMMENDATIONS] Not enough categories, fetching more');
 
       // Fetch from underrepresented categories
       const missingCategories = minCategories - categoriesRepresented.size;
@@ -432,7 +433,7 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
         .lean();
 
       recommendations = [...recommendations.slice(0, requestLimit - additionalProducts.length), ...additionalProducts];
-      console.log('✅ [DIVERSE RECOMMENDATIONS] Added', additionalProducts.length, 'products from new categories');
+      logger.info('[DIVERSE RECOMMENDATIONS] Added', additionalProducts.length, 'products from new categories');
     }
 
     // Calculate final diversity score
@@ -442,8 +443,8 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
     const metadata = diversityService.getMetadata(recommendations as DiversityProduct[]);
     metadata.deduplicatedCount = candidates.length - recommendations.length;
 
-    console.log('📈 [DIVERSE RECOMMENDATIONS] Final diversity score:', finalDiversityScore);
-    console.log('📊 [DIVERSE RECOMMENDATIONS] Metadata:', {
+    logger.info('[DIVERSE RECOMMENDATIONS] Final diversity score:', finalDiversityScore);
+    logger.info('[DIVERSE RECOMMENDATIONS] Metadata:', {
       categories: metadata.categoriesShown.length,
       brands: metadata.brandsShown.length,
       deduplicatedCount: metadata.deduplicatedCount
@@ -483,18 +484,18 @@ export const getDiverseRecommendations = asyncHandler(async (req: Request, res: 
     // Cache for 5 minutes (300 seconds)
     await redisService.set(cacheKey, responseData, 300);
 
-    console.log('✅ [DIVERSE RECOMMENDATIONS] Request complete');
-    console.log('⏱️ [DIVERSE RECOMMENDATIONS] Response time:', Date.now() - startTime, 'ms');
+    logger.info('[DIVERSE RECOMMENDATIONS] Request complete');
+    logger.debug('[DIVERSE RECOMMENDATIONS] Response time:', Date.now() - startTime, 'ms');
 
     // Track analytics (async, don't wait)
     trackRecommendationAnalytics(context, requestLimit, finalDiversityScore, Date.now() - startTime)
-      .catch(err => console.error('❌ [DIVERSE RECOMMENDATIONS] Analytics error:', err));
+      .catch(err => logger.error('[DIVERSE RECOMMENDATIONS] Analytics error:', err));
 
     return sendSuccess(res, responseData, 'Diverse recommendations retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [DIVERSE RECOMMENDATIONS] Error:', error);
-    console.error('❌ [DIVERSE RECOMMENDATIONS] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    logger.error('[DIVERSE RECOMMENDATIONS] Error:', error);
+    logger.error('[DIVERSE RECOMMENDATIONS] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
 
     throw new AppError('Failed to get diverse recommendations', 500);
   }
@@ -532,13 +533,13 @@ async function trackRecommendationAnalytics(
     // Note: Using set instead of lpush for simpler analytics storage
     await redisService.set(analyticsKey, analytics, 30 * 24 * 60 * 60);
 
-    console.log('📊 [ANALYTICS] Tracked recommendation request:', {
+    logger.info('[ANALYTICS] Tracked recommendation request:', {
       context,
       diversityScore,
       responseTime: `${responseTime}ms`
     });
   } catch (error) {
-    console.error('❌ [ANALYTICS] Failed to track:', error);
+    logger.error('[ANALYTICS] Failed to track:', error);
   }
 }
 

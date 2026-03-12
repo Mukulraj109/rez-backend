@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Admin Wallet Service
 // Handles platform commission crediting and wallet queries
 
@@ -17,16 +18,16 @@ class AdminWalletService {
     try {
       const commission = Math.floor(orderSubtotal * rate);
       if (commission <= 0) {
-        console.log('[ADMIN WALLET] Commission is 0, skipping');
+        logger.info('[ADMIN WALLET] Commission is 0, skipping');
         return;
       }
 
       const wallet = await AdminWallet.getOrCreate();
       await wallet.creditCommission(orderId, orderNumber, commission);
 
-      console.log(`[ADMIN WALLET] Credited ${commission} commission from order ${orderNumber}`);
+      logger.info(`[ADMIN WALLET] Credited ${commission} commission from order ${orderNumber}`);
     } catch (error) {
-      console.error('[ADMIN WALLET] Failed to credit commission:', error);
+      logger.error('[ADMIN WALLET] Failed to credit commission:', error);
       throw error;
     }
   }

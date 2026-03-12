@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Router, Request, Response } from 'express';
 import StoreGallery from '../models/StoreGallery';
 import { Store } from '../models/Store';
@@ -146,7 +147,7 @@ router.get(
         offset: parseInt(offset as string),
       });
     } catch (error: any) {
-      console.error('❌ Get public gallery error:', error);
+      logger.error('❌ Get public gallery error:', error);
       return sendError(res, error.message || 'Failed to get gallery items', 500);
     }
   }
@@ -233,7 +234,7 @@ router.get(
         })),
       });
     } catch (error: any) {
-      console.error('❌ Get public gallery categories error:', error);
+      logger.error('❌ Get public gallery categories error:', error);
       return sendError(res, error.message || 'Failed to get gallery categories', 500);
     }
   }
@@ -320,7 +321,7 @@ router.post(
         views: updateResult?.views || item.views,
       }, 'View tracked successfully');
     } catch (error: any) {
-      console.error('❌ Track gallery view error:', error);
+      logger.error('❌ Track gallery view error:', error);
       // Don't fail the request if tracking fails
       return sendSuccess(res, { views: 0 }, 'View tracking attempted');
     }

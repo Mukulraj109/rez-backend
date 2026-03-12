@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import OfferComment from '../models/OfferComment';
@@ -77,7 +78,7 @@ export const createOfferComment = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error creating offer comment:', error);
+    logger.error('Error creating offer comment:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to post comment' });
   }
 };
@@ -141,7 +142,7 @@ export const getOfferComments = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching offer comments:', error);
+    logger.error('Error fetching offer comments:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch comments' });
   }
 };
@@ -178,7 +179,7 @@ export const toggleCommentLike = async (req: Request, res: Response) => {
       data: { isLiked: !isLiked, likes: comment.likes.length },
     });
   } catch (error: any) {
-    console.error('Error toggling comment like:', error);
+    logger.error('Error toggling comment like:', error);
     res.status(500).json({ success: false, error: 'Failed to update like' });
   }
 };
@@ -225,7 +226,7 @@ export const replyToComment = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error replying to comment:', error);
+    logger.error('Error replying to comment:', error);
     res.status(500).json({ success: false, error: 'Failed to post reply' });
   }
 };
@@ -283,7 +284,7 @@ export const getMyComments = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching my comments:', error);
+    logger.error('Error fetching my comments:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch comments' });
   }
 };
@@ -348,7 +349,7 @@ export const moderateComment = async (req: Request, res: Response) => {
         }
       }
     } catch (rewardError) {
-      console.error('[OFFER COMMENT MODERATION] Failed to update reward:', rewardError);
+      logger.error('[OFFER COMMENT MODERATION] Failed to update reward:', rewardError);
     }
 
     res.status(200).json({
@@ -361,7 +362,7 @@ export const moderateComment = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error moderating comment:', error);
+    logger.error('Error moderating comment:', error);
     res.status(500).json({ success: false, error: 'Failed to moderate comment' });
   }
 };
@@ -414,7 +415,7 @@ export const getPendingComments = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching pending comments:', error);
+    logger.error('Error fetching pending comments:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch pending comments' });
   }
 };
@@ -477,7 +478,7 @@ export const getCommentableOffers = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching commentable offers:', error);
+    logger.error('Error fetching commentable offers:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch offers' });
   }
 };

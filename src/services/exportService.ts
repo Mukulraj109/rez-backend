@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Job } from 'bull';
 import { AnalyticsService } from '../merchantservices/AnalyticsService';
 
@@ -86,7 +87,7 @@ export class ExportService {
         recordCount: data.length
       };
     } catch (error: any) {
-      console.error('Export processing error:', error);
+      logger.error('Export processing error:', error);
       return {
         success: false,
         error: error.message

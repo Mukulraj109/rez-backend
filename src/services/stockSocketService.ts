@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Stock Socket Service
  *
@@ -46,7 +47,7 @@ class StockSocketService {
   public initialize(io: SocketIOServer): void {
     this.io = io;
     this.setupSocketHandlers();
-    console.log('✅ Stock Socket Service initialized');
+    logger.info('✅ Stock Socket Service initialized');
   }
 
   /**
@@ -56,22 +57,22 @@ class StockSocketService {
     if (!this.io) return;
 
     this.io.on(SocketEvent.CONNECTION, (socket) => {
-      console.log(`📡 Client connected to stock updates: ${socket.id}`);
+      logger.info(`📡 Client connected to stock updates: ${socket.id}`);
 
       // Handle client joining specific rooms
       socket.on(SocketEvent.JOIN_ROOM, (roomName: string) => {
         socket.join(roomName);
-        console.log(`👤 Client ${socket.id} joined room: ${roomName}`);
+        logger.info(`👤 Client ${socket.id} joined room: ${roomName}`);
       });
 
       // Handle client leaving specific rooms
       socket.on(SocketEvent.LEAVE_ROOM, (roomName: string) => {
         socket.leave(roomName);
-        console.log(`👤 Client ${socket.id} left room: ${roomName}`);
+        logger.info(`👤 Client ${socket.id} left room: ${roomName}`);
       });
 
       socket.on(SocketEvent.DISCONNECT, () => {
-        console.log(`📡 Client disconnected from stock updates: ${socket.id}`);
+        logger.info(`📡 Client disconnected from stock updates: ${socket.id}`);
       });
     });
   }
@@ -95,7 +96,7 @@ class StockSocketService {
     }
   ): Promise<void> {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit stock update.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit stock update.');
       return;
     }
 
@@ -119,11 +120,11 @@ class StockSocketService {
     // Emit to all users room
     this.io.to(SocketRoom.allUsers).emit(SocketEvent.STOCK_UPDATED, payload);
 
-    console.log(`📦 Stock updated: Product ${productId}, New Stock: ${newStock}`);
+    logger.info(`📦 Stock updated: Product ${productId}, New Stock: ${newStock}`);
 
     // Invalidate stock and product cache asynchronously
     CacheInvalidator.invalidateStock(productId).catch(error => {
-      console.error(`❌ Error invalidating stock cache for product ${productId}:`, error);
+      logger.error(`❌ Error invalidating stock cache for product ${productId}:`, error);
     });
 
     // Check if stock was 0 and now is > 0 (back in stock) - trigger notifications
@@ -131,7 +132,7 @@ class StockSocketService {
     const isNowInStock = newStock > 0;
 
     if (wasOutOfStock && isNowInStock) {
-      console.log(`🔔 Product ${productId} is back in stock! Notifying subscribers...`);
+      logger.info(`🔔 Product ${productId} is back in stock! Notifying subscribers...`);
 
       // Notify subscribers asynchronously (don't await to not block socket emission)
       stockNotificationService.notifySubscribers({
@@ -141,7 +142,7 @@ class StockSocketService {
         productPrice: options?.productPrice || 0,
         newStock
       }).catch(error => {
-        console.error(`❌ Error notifying subscribers for product ${productId}:`, error);
+        logger.error(`❌ Error notifying subscribers for product ${productId}:`, error);
       });
     }
 
@@ -170,7 +171,7 @@ class StockSocketService {
     productName?: string
   ): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit low stock warning.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit low stock warning.');
       return;
     }
 
@@ -193,7 +194,7 @@ class StockSocketService {
       this.io.to(SocketRoom.allMerchants).emit(SocketEvent.STOCK_LOW, payload);
     }
 
-    console.log(`⚠️ Low stock warning: Product ${productId}, Stock: ${currentStock}`);
+    logger.info(`⚠️ Low stock warning: Product ${productId}, Stock: ${currentStock}`);
   }
 
   /**
@@ -208,7 +209,7 @@ class StockSocketService {
     productName?: string
   ): void {
     if (!this.io) {
-      console.warn('⚠️ Socket.IO not initialized. Cannot emit out of stock event.');
+      logger.warn('⚠️ Socket.IO not initialized. Cannot emit out of stock event.');
       return;
     }
 
@@ -233,7 +234,7 @@ class StockSocketService {
     // Emit to all users room
     this.io.to(SocketRoom.allUsers).emit(SocketEvent.STOCK_OUT_OF_STOCK, payload);
 
-    console.log(`🚫 Out of stock: Product ${productId}`);
+    logger.info(`🚫 Out of stock: Product ${productId}`);
   }
 
   /**
@@ -249,11 +250,11 @@ class StockSocketService {
    */
   public setLowStockThreshold(threshold: number): void {
     if (threshold < 0) {
-      console.warn('⚠️ Invalid threshold value. Must be >= 0.');
+      logger.warn('⚠️ Invalid threshold value. Must be >= 0.');
       return;
     }
     (this as any).LOW_STOCK_THRESHOLD = threshold;
-    console.log(`✅ Low stock threshold updated to: ${threshold}`);
+    logger.info(`✅ Low stock threshold updated to: ${threshold}`);
   }
 }
 

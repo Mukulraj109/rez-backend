@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Server as SocketIOServer } from 'socket.io';
 import { Types } from 'mongoose';
 
@@ -22,25 +23,25 @@ class EarningsSocketService {
 
   initialize(io: SocketIOServer) {
     this.io = io;
-    console.log('✅ [EARNINGS SOCKET] Earnings socket service initialized');
+    logger.info('✅ [EARNINGS SOCKET] Earnings socket service initialized');
 
     io.on('connection', (socket) => {
-      console.log('🔌 [EARNINGS SOCKET] Client connected:', socket.id);
+      logger.info('🔌 [EARNINGS SOCKET] Client connected:', socket.id);
 
       // Join user's earnings room
       socket.on('join-earnings-room', (userId: string) => {
         socket.join(`earnings-${userId}`);
-        console.log(`✅ [EARNINGS SOCKET] User ${userId} joined earnings room`);
+        logger.info(`✅ [EARNINGS SOCKET] User ${userId} joined earnings room`);
       });
 
       // Leave user's earnings room
       socket.on('leave-earnings-room', (userId: string) => {
         socket.leave(`earnings-${userId}`);
-        console.log(`✅ [EARNINGS SOCKET] User ${userId} left earnings room`);
+        logger.info(`✅ [EARNINGS SOCKET] User ${userId} left earnings room`);
       });
 
       socket.on('disconnect', () => {
-        console.log('🔌 [EARNINGS SOCKET] Client disconnected:', socket.id);
+        logger.info('🔌 [EARNINGS SOCKET] Client disconnected:', socket.id);
       });
     });
   }
@@ -50,7 +51,7 @@ class EarningsSocketService {
    */
   emitBalanceUpdate(userId: string, balance: number, pendingBalance: number) {
     if (!this.io) {
-      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      logger.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
       return;
     }
 
@@ -60,7 +61,7 @@ class EarningsSocketService {
       timestamp: new Date().toISOString(),
     });
 
-    console.log(`📤 [EARNINGS SOCKET] Balance update sent to user ${userId}`);
+    logger.info(`📤 [EARNINGS SOCKET] Balance update sent to user ${userId}`);
   }
 
   /**
@@ -71,7 +72,7 @@ class EarningsSocketService {
     status: { completeNow: number; inReview: number; completed: number }
   ) {
     if (!this.io) {
-      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      logger.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
       return;
     }
 
@@ -80,7 +81,7 @@ class EarningsSocketService {
       timestamp: new Date().toISOString(),
     });
 
-    console.log(`📤 [EARNINGS SOCKET] Project status update sent to user ${userId}`);
+    logger.info(`📤 [EARNINGS SOCKET] Project status update sent to user ${userId}`);
   }
 
   /**
@@ -99,7 +100,7 @@ class EarningsSocketService {
     }
   ) {
     if (!this.io) {
-      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      logger.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
       return;
     }
 
@@ -108,7 +109,7 @@ class EarningsSocketService {
       timestamp: new Date().toISOString(),
     });
 
-    console.log(`📤 [EARNINGS SOCKET] Earnings update sent to user ${userId}`);
+    logger.info(`📤 [EARNINGS SOCKET] Earnings update sent to user ${userId}`);
   }
 
   /**
@@ -116,7 +117,7 @@ class EarningsSocketService {
    */
   emitNewTransaction(userId: string, transaction: any) {
     if (!this.io) {
-      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      logger.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
       return;
     }
 
@@ -125,7 +126,7 @@ class EarningsSocketService {
       timestamp: new Date().toISOString(),
     });
 
-    console.log(`📤 [EARNINGS SOCKET] New transaction sent to user ${userId}`);
+    logger.info(`📤 [EARNINGS SOCKET] New transaction sent to user ${userId}`);
   }
 
   /**
@@ -133,7 +134,7 @@ class EarningsSocketService {
    */
   emitNotification(userId: string, notification: any) {
     if (!this.io) {
-      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      logger.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
       return;
     }
 
@@ -142,7 +143,7 @@ class EarningsSocketService {
       timestamp: new Date().toISOString(),
     });
 
-    console.log(`📤 [EARNINGS SOCKET] Notification sent to user ${userId}`);
+    logger.info(`📤 [EARNINGS SOCKET] Notification sent to user ${userId}`);
   }
 
   /**
@@ -150,7 +151,7 @@ class EarningsSocketService {
    */
   emitCoinsEarned(userId: string, amount: number, source: string, description: string) {
     if (!this.io) {
-      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      logger.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
       return;
     }
 
@@ -161,7 +162,7 @@ class EarningsSocketService {
       timestamp: new Date().toISOString(),
     });
 
-    console.log(`📤 [EARNINGS SOCKET] Coins earned event sent to user ${userId}: ${amount} from ${source}`);
+    logger.info(`📤 [EARNINGS SOCKET] Coins earned event sent to user ${userId}: ${amount} from ${source}`);
   }
 
   /**
@@ -169,7 +170,7 @@ class EarningsSocketService {
    */
   emitChallengeCompleted(userId: string, challengeTitle: string, coinsReward: number) {
     if (!this.io) {
-      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      logger.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
       return;
     }
 
@@ -179,7 +180,7 @@ class EarningsSocketService {
       timestamp: new Date().toISOString(),
     });
 
-    console.log(`📤 [EARNINGS SOCKET] Challenge completed event sent to user ${userId}: ${challengeTitle}`);
+    logger.info(`📤 [EARNINGS SOCKET] Challenge completed event sent to user ${userId}: ${challengeTitle}`);
   }
 
   /**
@@ -187,7 +188,7 @@ class EarningsSocketService {
    */
   emitAchievementUnlocked(userId: string, achievement: { title: string; icon: string; coinReward: number }) {
     if (!this.io) {
-      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      logger.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
       return;
     }
 
@@ -196,7 +197,7 @@ class EarningsSocketService {
       timestamp: new Date().toISOString(),
     });
 
-    console.log(`📤 [EARNINGS SOCKET] Achievement unlocked event sent to user ${userId}: ${achievement.title}`);
+    logger.info(`📤 [EARNINGS SOCKET] Achievement unlocked event sent to user ${userId}: ${achievement.title}`);
   }
 
   /**
@@ -204,7 +205,7 @@ class EarningsSocketService {
    */
   emitLeaderboardUpdate(userId: string, rank: number, previousRank: number) {
     if (!this.io) {
-      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      logger.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
       return;
     }
 
@@ -214,7 +215,7 @@ class EarningsSocketService {
       timestamp: new Date().toISOString(),
     });
 
-    console.log(`📤 [EARNINGS SOCKET] Leaderboard update sent to user ${userId}: rank ${previousRank} -> ${rank}`);
+    logger.info(`📤 [EARNINGS SOCKET] Leaderboard update sent to user ${userId}: rank ${previousRank} -> ${rank}`);
   }
 
   /**
@@ -222,7 +223,7 @@ class EarningsSocketService {
    */
   emitCreatorConversion(userId: string, data: { pickTitle: string; commissionAmount: number; buyerName: string }) {
     if (!this.io) {
-      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      logger.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
       return;
     }
 
@@ -231,7 +232,7 @@ class EarningsSocketService {
       timestamp: new Date().toISOString(),
     });
 
-    console.log(`📤 [EARNINGS SOCKET] Creator conversion event sent to user ${userId}: +${data.commissionAmount} coins`);
+    logger.info(`📤 [EARNINGS SOCKET] Creator conversion event sent to user ${userId}: +${data.commissionAmount} coins`);
   }
 
   /**
@@ -239,7 +240,7 @@ class EarningsSocketService {
    */
   emitCreatorApplicationUpdate(userId: string, data: { status: string; reason?: string }) {
     if (!this.io) {
-      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      logger.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
       return;
     }
 
@@ -248,7 +249,7 @@ class EarningsSocketService {
       timestamp: new Date().toISOString(),
     });
 
-    console.log(`📤 [EARNINGS SOCKET] Creator application update sent to user ${userId}: ${data.status}`);
+    logger.info(`📤 [EARNINGS SOCKET] Creator application update sent to user ${userId}: ${data.status}`);
   }
 
   /**
@@ -264,7 +265,7 @@ class EarningsSocketService {
     reward?: { type: string; amount: number };
   }) {
     if (!this.io) {
-      console.warn('[EARNINGS SOCKET] Socket.IO not initialized');
+      logger.warn('[EARNINGS SOCKET] Socket.IO not initialized');
       return;
     }
 
@@ -273,7 +274,7 @@ class EarningsSocketService {
       timestamp: new Date().toISOString(),
     });
 
-    console.log(`[EARNINGS SOCKET] Pick merchant approval sent to user ${userId}: ${data.status}`);
+    logger.info(`[EARNINGS SOCKET] Pick merchant approval sent to user ${userId}: ${data.status}`);
   }
 
   /**
@@ -281,7 +282,7 @@ class EarningsSocketService {
    */
   emitNewFollower(userId: string, data: { followerName: string }) {
     if (!this.io) {
-      console.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
+      logger.warn('⚠️ [EARNINGS SOCKET] Socket.IO not initialized');
       return;
     }
 
@@ -290,7 +291,7 @@ class EarningsSocketService {
       timestamp: new Date().toISOString(),
     });
 
-    console.log(`📤 [EARNINGS SOCKET] New follower event sent to user ${userId}: ${data.followerName}`);
+    logger.info(`📤 [EARNINGS SOCKET] New follower event sent to user ${userId}: ${data.followerName}`);
   }
 }
 

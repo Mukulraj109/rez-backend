@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import * as cron from 'node-cron';
 import { Product } from '../models/Product';
 import { Store } from '../models/Store';
@@ -46,7 +47,7 @@ async function runInventoryAlerts(): Promise<AlertStats> {
   const merchantsNotifiedSet = new Set<string>();
 
   try {
-    console.log('📦 [INVENTORY JOB] Running inventory alerts scan...');
+    logger.info('📦 [INVENTORY JOB] Running inventory alerts scan...');
 
     // Find all products with low stock or out of stock
     const lowStockProducts = await Product.find({
@@ -69,7 +70,7 @@ async function runInventoryAlerts(): Promise<AlertStats> {
       .select('name inventory store')
       .lean();
 
-    console.log(`📦 [INVENTORY JOB] Found ${lowStockProducts.length} products with stock issues`);
+    logger.info(`📦 [INVENTORY JOB] Found ${lowStockProducts.length} products with stock issues`);
 
     // Process each product
     for (const product of lowStockProducts) {
@@ -78,7 +79,7 @@ async function runInventoryAlerts(): Promise<AlertStats> {
         const merchantId = store?.merchantId?.toString();
 
         if (!merchantId) {
-          console.warn(`⚠️ [INVENTORY JOB] No merchant found for product ${product._id}`);
+          logger.warn(`⚠️ [INVENTORY JOB] No merchant found for product ${product._id}`);
           continue;
         }
 
@@ -94,7 +95,7 @@ async function runInventoryAlerts(): Promise<AlertStats> {
             storeId: store._id?.toString(),
           });
           stats.outOfStockAlerts++;
-          console.log(`🚨 [INVENTORY JOB] Out of stock: ${product.name}`);
+          logger.info(`🚨 [INVENTORY JOB] Out of stock: ${product.name}`);
         } else if (stock <= threshold) {
           // Low stock notification
           await merchantNotificationService.notifyLowStock({
@@ -106,20 +107,20 @@ async function runInventoryAlerts(): Promise<AlertStats> {
             storeId: store._id?.toString(),
           });
           stats.lowStockAlerts++;
-          console.log(`⚠️ [INVENTORY JOB] Low stock: ${product.name} (${stock} units)`);
+          logger.info(`⚠️ [INVENTORY JOB] Low stock: ${product.name} (${stock} units)`);
         }
 
         merchantsNotifiedSet.add(merchantId);
       } catch (productError: any) {
         stats.errors.push(`Product ${product._id}: ${productError.message}`);
-        console.error(`❌ [INVENTORY JOB] Error processing product ${product._id}:`, productError.message);
+        logger.error(`❌ [INVENTORY JOB] Error processing product ${product._id}:`, productError.message);
       }
     }
 
     stats.merchantsNotified = merchantsNotifiedSet.size;
     stats.duration = Date.now() - startTime;
 
-    console.log(`✅ [INVENTORY JOB] Completed:`, {
+    logger.info(`✅ [INVENTORY JOB] Completed:`, {
       lowStockAlerts: stats.lowStockAlerts,
       outOfStockAlerts: stats.outOfStockAlerts,
       merchantsNotified: stats.merchantsNotified,
@@ -133,7 +134,7 @@ async function runInventoryAlerts(): Promise<AlertStats> {
     stats.duration = Date.now() - startTime;
     stats.errors.push(error.message || 'Unknown error');
 
-    console.error('❌ [INVENTORY JOB] Job failed:', {
+    logger.error('❌ [INVENTORY JOB] Job failed:', {
       error: error.message,
       duration: `${stats.duration}ms`,
       timestamp: new Date().toISOString(),
@@ -148,15 +149,15 @@ async function runInventoryAlerts(): Promise<AlertStats> {
  */
 export function startInventoryAlertJob(): void {
   if (inventoryAlertJob) {
-    console.log('⚠️ [INVENTORY JOB] Job already running');
+    logger.info('⚠️ [INVENTORY JOB] Job already running');
     return;
   }
 
-  console.log(`📦 [INVENTORY JOB] Starting inventory alert job (runs daily at 8:00 AM)`);
+  logger.info(`📦 [INVENTORY JOB] Starting inventory alert job (runs daily at 8:00 AM)`);
 
   inventoryAlertJob = cron.schedule(INVENTORY_ALERT_SCHEDULE, async () => {
     if (isJobRunning) {
-      console.log('⏭️ [INVENTORY JOB] Previous job still running, skipping');
+      logger.info('⏭️ [INVENTORY JOB] Previous job still running, skipping');
       return;
     }
 
@@ -164,7 +165,7 @@ export function startInventoryAlertJob(): void {
     const lockKey = 'job:inventory-alerts';
     const lockToken = await redisService.acquireLock(lockKey, 300);
     if (!lockToken) {
-      console.log('inventory-alerts skipped — lock held by another instance');
+      logger.info('inventory-alerts skipped — lock held by another instance');
       return;
     }
 
@@ -180,7 +181,7 @@ export function startInventoryAlertJob(): void {
     }
   });
 
-  console.log('✅ [INVENTORY JOB] Job started');
+  logger.info('✅ [INVENTORY JOB] Job started');
 }
 
 /**
@@ -190,7 +191,7 @@ export function stopInventoryAlertJob(): void {
   if (inventoryAlertJob) {
     inventoryAlertJob.stop();
     inventoryAlertJob = null;
-    console.log('🛑 [INVENTORY JOB] Job stopped');
+    logger.info('🛑 [INVENTORY JOB] Job stopped');
   }
 }
 
@@ -217,7 +218,7 @@ export async function triggerManualInventoryAlerts(): Promise<AlertStats> {
     throw new Error('Inventory alert job already in progress');
   }
 
-  console.log('📦 [INVENTORY JOB] Manual inventory alerts triggered');
+  logger.info('📦 [INVENTORY JOB] Manual inventory alerts triggered');
 
   isJobRunning = true;
 

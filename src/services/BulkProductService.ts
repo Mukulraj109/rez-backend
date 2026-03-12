@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Readable } from 'stream';
 import csv from 'csv-parser';
 import { createObjectCsvWriter } from 'csv-writer';
@@ -499,7 +500,7 @@ class BulkProductService {
 
       await userProduct.save({ session });
     } catch (error) {
-      console.error('Error creating user-side product:', error);
+      logger.error('Error creating user-side product:', error);
       throw error;
     }
   }

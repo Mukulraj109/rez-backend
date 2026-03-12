@@ -23,6 +23,7 @@ import {
   sanitizePaymentData
 } from '../utils/razorpayUtils';
 import { PaymentLogger } from '../services/logging/paymentLogger';
+import { logger } from '../config/logger';
 
 /**
  * Create Razorpay order for payment
@@ -32,7 +33,7 @@ export const createPaymentOrder = asyncHandler(async (req: Request, res: Respons
   const userId = req.userId!;
   const { orderId, amount, currency = 'INR' }: ICreatePaymentOrderRequest = req.body;
 
-  console.log('💳 [PAYMENT CONTROLLER] Creating payment order:', {
+  logger.info('[PAYMENT CONTROLLER] Creating payment order:', {
     orderId,
     amount,
     currency,
@@ -76,11 +77,11 @@ export const createPaymentOrder = asyncHandler(async (req: Request, res: Respons
       notes: razorpayOrder.notes
     };
 
-    console.log('✅ [PAYMENT CONTROLLER] Payment order created successfully');
+    logger.info('[PAYMENT CONTROLLER] Payment order created successfully');
 
     sendSuccess(res, response, 'Payment order created successfully', 201);
   } catch (error: any) {
-    console.error('❌ [PAYMENT CONTROLLER] Error creating payment order:', error);
+    logger.error('[PAYMENT CONTROLLER] Error creating payment order:', error);
     throw new AppError(`Failed to create payment order: ${error.message}`, 500);
   }
 });
@@ -106,7 +107,7 @@ export const verifyPayment = asyncHandler(async (req: Request, res: Response) =>
     razorpay_signature
   });
 
-  console.log('🔐 [PAYMENT CONTROLLER] Verifying payment:', {
+  logger.info('[PAYMENT CONTROLLER] Verifying payment:', {
     ...sanitizedData,
     userId,
     timestamp: new Date().toISOString()
@@ -123,7 +124,7 @@ export const verifyPayment = asyncHandler(async (req: Request, res: Response) =>
   });
 
   if (!dataValidation.isValid) {
-    console.error('❌ [PAYMENT CONTROLLER] Invalid payment data:', dataValidation.error);
+    logger.error('[PAYMENT CONTROLLER] Invalid payment data:', dataValidation.error);
     PaymentLogger.logPaymentFailure(
       razorpay_payment_id || 'unknown',
       userId,
@@ -163,7 +164,7 @@ export const verifyPayment = asyncHandler(async (req: Request, res: Response) =>
     );
 
     if (!isValidSignature) {
-      console.error('❌ [PAYMENT CONTROLLER] Invalid payment signature');
+      logger.error('[PAYMENT CONTROLLER] Invalid payment signature');
 
       // Log failed verification attempt
       logPaymentVerificationAttempt(
@@ -211,19 +212,19 @@ export const verifyPayment = asyncHandler(async (req: Request, res: Response) =>
       razorpay_signature
     });
 
-    console.log('✅ [PAYMENT CONTROLLER] Payment verified and processed successfully');
+    logger.info('[PAYMENT CONTROLLER] Payment verified and processed successfully');
 
     // Auto-trigger bank_offer bonus campaign on successful payment
     try {
       const bonusCampaignService = require('../services/bonusCampaignService');
-      console.log('[PAYMENT] Triggering bank_offer for order:', orderId);
+      logger.info('[PAYMENT] Triggering bank_offer for order:', orderId);
       await bonusCampaignService.autoClaimForTransaction('bank_offer', userId, {
         transactionRef: { type: 'payment' as const, refId: razorpay_payment_id },
         transactionAmount: order.totals.total,
         paymentMethod: order.payment?.method,
       });
     } catch (bonusErr) {
-      console.error('[PAYMENT] bank_offer auto-claim failed (non-blocking):', bonusErr);
+      logger.error('[PAYMENT] bank_offer auto-claim failed (non-blocking):', bonusErr);
     }
 
     // Populate order for response
@@ -241,13 +242,13 @@ export const verifyPayment = asyncHandler(async (req: Request, res: Response) =>
 
     sendSuccess(res, response, 'Payment verified successfully');
   } catch (error: any) {
-    console.error('❌ [PAYMENT CONTROLLER] Error verifying payment:', error);
+    logger.error('[PAYMENT CONTROLLER] Error verifying payment:', error);
 
     // Handle payment failure
     try {
       await paymentService.handlePaymentFailure(orderId, error.message);
     } catch (failureError) {
-      console.error('❌ [PAYMENT CONTROLLER] Error handling payment failure:', failureError);
+      logger.error('[PAYMENT CONTROLLER] Error handling payment failure:', failureError);
     }
 
     throw new AppError(`Payment verification failed: ${error.message}`, 500);
@@ -265,7 +266,7 @@ export const handleWebhook = asyncHandler(async (req: Request, res: Response) =>
   // Convert to string for HMAC verification — preserves original byte order
   const rawBody: string = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : JSON.stringify(req.body);
 
-  console.log('🔔 [PAYMENT CONTROLLER] Received webhook event');
+  logger.info('[PAYMENT CONTROLLER] Received webhook event');
 
   try {
     // Verify webhook signature using the original raw body
@@ -275,14 +276,14 @@ export const handleWebhook = asyncHandler(async (req: Request, res: Response) =>
     );
 
     if (!isValidSignature) {
-      console.error('❌ [PAYMENT CONTROLLER] Invalid webhook signature');
+      logger.error('[PAYMENT CONTROLLER] Invalid webhook signature');
       return sendUnauthorized(res, 'Invalid webhook signature');
     }
 
     // Parse the verified raw body into a typed event object
     const event: IRazorpayWebhookEvent = Buffer.isBuffer(req.body) ? JSON.parse(req.body.toString('utf8')) : req.body;
 
-    console.log('🔔 [PAYMENT CONTROLLER] Webhook event type:', event.event);
+    logger.info('[PAYMENT CONTROLLER] Webhook event type:', event.event);
 
     // Handle different webhook events
     switch (event.event) {
@@ -299,13 +300,13 @@ export const handleWebhook = asyncHandler(async (req: Request, res: Response) =>
         break;
 
       default:
-        console.log('ℹ️ [PAYMENT CONTROLLER] Unhandled webhook event:', event.event);
+        logger.info('[PAYMENT CONTROLLER] Unhandled webhook event:', event.event);
     }
 
     // Always return 200 to acknowledge receipt
     res.status(200).json({ status: 'ok' });
   } catch (error: any) {
-    console.error('❌ [PAYMENT CONTROLLER] Error handling webhook:', error);
+    logger.error('[PAYMENT CONTROLLER] Error handling webhook:', error);
     // Still return 200 to acknowledge receipt
     res.status(200).json({ status: 'error', message: error.message });
   }
@@ -319,7 +320,7 @@ export const getPaymentStatus = asyncHandler(async (req: Request, res: Response)
   const userId = req.userId!;
   const { orderId } = req.params;
 
-  console.log('📊 [PAYMENT CONTROLLER] Getting payment status for order:', orderId);
+  logger.info('[PAYMENT CONTROLLER] Getting payment status for order:', orderId);
 
   try {
     // Verify order belongs to user
@@ -344,7 +345,7 @@ export const getPaymentStatus = asyncHandler(async (req: Request, res: Response)
 
     sendSuccess(res, response, 'Payment status retrieved successfully');
   } catch (error: any) {
-    console.error('❌ [PAYMENT CONTROLLER] Error getting payment status:', error);
+    logger.error('[PAYMENT CONTROLLER] Error getting payment status:', error);
     throw new AppError(`Failed to get payment status: ${error.message}`, 500);
   }
 });
@@ -357,16 +358,16 @@ async function handlePaymentCaptured(event: IRazorpayWebhookEvent) {
     const orderId = payment.notes?.orderId;
 
     if (!orderId) {
-      console.error('❌ [WEBHOOK] Order ID not found in payment notes');
+      logger.error('[WEBHOOK] Order ID not found in payment notes');
       return;
     }
 
-    console.log('✅ [WEBHOOK] Payment captured for order:', orderId);
+    logger.info('[WEBHOOK] Payment captured for order:', orderId);
 
     // Payment success is already handled in verify endpoint
     // This is just for logging and backup
   } catch (error) {
-    console.error('❌ [WEBHOOK] Error handling payment.captured:', error);
+    logger.error('[WEBHOOK] Error handling payment.captured:', error);
   }
 }
 
@@ -376,18 +377,18 @@ async function handlePaymentFailed(event: IRazorpayWebhookEvent) {
     const orderId = payment.notes?.orderId;
 
     if (!orderId) {
-      console.error('❌ [WEBHOOK] Order ID not found in payment notes');
+      logger.error('[WEBHOOK] Order ID not found in payment notes');
       return;
     }
 
-    console.log('❌ [WEBHOOK] Payment failed for order:', orderId);
+    logger.info('[WEBHOOK] Payment failed for order:', orderId);
 
     const failureReason = payment.error_description || 'Payment failed';
 
     // Handle payment failure
     await paymentService.handlePaymentFailure(orderId, failureReason);
   } catch (error) {
-    console.error('❌ [WEBHOOK] Error handling payment.failed:', error);
+    logger.error('[WEBHOOK] Error handling payment.failed:', error);
   }
 }
 
@@ -397,15 +398,15 @@ async function handleOrderPaid(event: IRazorpayWebhookEvent) {
     const orderId = order.notes?.orderId;
 
     if (!orderId) {
-      console.error('❌ [WEBHOOK] Order ID not found in order notes');
+      logger.error('[WEBHOOK] Order ID not found in order notes');
       return;
     }
 
-    console.log('✅ [WEBHOOK] Order paid:', orderId);
+    logger.info('[WEBHOOK] Order paid:', orderId);
 
     // Additional processing if needed
   } catch (error) {
-    console.error('❌ [WEBHOOK] Error handling order.paid:', error);
+    logger.error('[WEBHOOK] Error handling order.paid:', error);
   }
 }
 
@@ -425,7 +426,7 @@ export const createCheckoutSession = asyncHandler(async (req: Request, res: Resp
     customerEmail
   } = req.body;
 
-  console.log('💳 [PAYMENT CONTROLLER] Creating Stripe checkout session:', {
+  logger.info('[PAYMENT CONTROLLER] Creating Stripe checkout session:', {
     subscriptionId,
     tier,
     amount,
@@ -473,7 +474,7 @@ export const createCheckoutSession = asyncHandler(async (req: Request, res: Resp
       }
     });
 
-    console.log('✅ [PAYMENT CONTROLLER] Stripe checkout session created successfully');
+    logger.info('[PAYMENT CONTROLLER] Stripe checkout session created successfully');
 
     const response = {
       success: true,
@@ -483,7 +484,7 @@ export const createCheckoutSession = asyncHandler(async (req: Request, res: Resp
 
     sendSuccess(res, response, 'Stripe checkout session created successfully', 201);
   } catch (error: any) {
-    console.error('❌ [PAYMENT CONTROLLER] Error creating Stripe checkout session:', error);
+    logger.error('[PAYMENT CONTROLLER] Error creating Stripe checkout session:', error);
 
     // Handle Stripe-specific errors
     const stripeError = stripeService.handleStripeError(error);
@@ -499,7 +500,7 @@ export const verifyStripeSession = asyncHandler(async (req: Request, res: Respon
   const userId = req.userId!;
   const { sessionId, orderId } = req.body;
 
-  console.log('🔐 [PAYMENT CONTROLLER] Verifying Stripe session:', {
+  logger.info('[PAYMENT CONTROLLER] Verifying Stripe session:', {
     sessionId,
     orderId,
     userId
@@ -520,7 +521,7 @@ export const verifyStripeSession = asyncHandler(async (req: Request, res: Respon
     const verification = await stripeService.verifyCheckoutSession(sessionId);
 
     if (!verification.verified) {
-      console.error('❌ [PAYMENT CONTROLLER] Stripe payment not completed:', verification.paymentStatus);
+      logger.error('[PAYMENT CONTROLLER] Stripe payment not completed:', verification.paymentStatus);
 
       return sendBadRequest(res, `Payment not completed. Status: ${verification.paymentStatus}`);
     }
@@ -579,7 +580,7 @@ export const verifyStripeSession = asyncHandler(async (req: Request, res: Respon
 
     sendSuccess(res, response, 'Stripe payment verified successfully');
   } catch (error: any) {
-    console.error('❌ [PAYMENT CONTROLLER] Error verifying Stripe session:', error);
+    logger.error('[PAYMENT CONTROLLER] Error verifying Stripe session:', error);
 
     // Handle Stripe-specific errors
     const stripeError = stripeService.handleStripeError(error);
@@ -595,7 +596,7 @@ export const verifyStripePayment = asyncHandler(async (req: Request, res: Respon
   const userId = req.userId!;
   const { paymentIntentId, orderId } = req.body;
 
-  console.log('🔐 [PAYMENT CONTROLLER] Verifying Stripe payment intent:', {
+  logger.info('[PAYMENT CONTROLLER] Verifying Stripe payment intent:', {
     paymentIntentId,
     orderId,
     userId
@@ -616,7 +617,7 @@ export const verifyStripePayment = asyncHandler(async (req: Request, res: Respon
     const verification = await stripeService.verifyPaymentIntent(paymentIntentId);
 
     if (!verification.verified) {
-      console.error('❌ [PAYMENT CONTROLLER] Stripe payment not successful:', verification.status);
+      logger.error('[PAYMENT CONTROLLER] Stripe payment not successful:', verification.status);
 
       return sendBadRequest(res, `Payment not successful. Status: ${verification.status}`);
     }
@@ -672,7 +673,7 @@ export const verifyStripePayment = asyncHandler(async (req: Request, res: Respon
 
     sendSuccess(res, response, 'Stripe payment verified successfully');
   } catch (error: any) {
-    console.error('❌ [PAYMENT CONTROLLER] Error verifying Stripe payment:', error);
+    logger.error('[PAYMENT CONTROLLER] Error verifying Stripe payment:', error);
 
     // Handle Stripe-specific errors
     const stripeError = stripeService.handleStripeError(error);
@@ -687,30 +688,30 @@ export const verifyStripePayment = asyncHandler(async (req: Request, res: Respon
 export const handleStripeWebhook = asyncHandler(async (req: Request, res: Response) => {
   const signature = req.headers['stripe-signature'] as string;
 
-  console.log('🔔 [PAYMENT CONTROLLER] Received Stripe webhook event');
+  logger.info('[PAYMENT CONTROLLER] Received Stripe webhook event');
 
   if (!signature) {
-    console.error('❌ [PAYMENT CONTROLLER] Missing Stripe signature header');
+    logger.error('[PAYMENT CONTROLLER] Missing Stripe signature header');
     return sendUnauthorized(res, 'Missing Stripe signature');
   }
 
   try {
     // Check if Stripe is configured
     if (!stripeService.isStripeConfigured()) {
-      console.error('❌ [PAYMENT CONTROLLER] Stripe is not configured');
+      logger.error('[PAYMENT CONTROLLER] Stripe is not configured');
       return res.status(500).json({ error: 'Stripe not configured' });
     }
 
     // Verify webhook signature using the raw Buffer from express.raw()
     // req.body MUST be a Buffer (express.raw() is mounted before JSON parser in server.ts)
     if (!Buffer.isBuffer(req.body)) {
-      console.error('❌ [PAYMENT CONTROLLER] Stripe webhook req.body is not a Buffer — express.raw() middleware may not be configured correctly');
+      logger.error('[PAYMENT CONTROLLER] Stripe webhook req.body is not a Buffer — express.raw() middleware may not be configured correctly');
       return res.status(400).json({ error: 'Invalid request body format for webhook verification' });
     }
     const event = stripeService.verifyWebhookSignature(req.body, signature);
 
-    console.log('🔔 [PAYMENT CONTROLLER] Stripe webhook event type:', event.type);
-    console.log('🔔 [PAYMENT CONTROLLER] Event ID:', event.id);
+    logger.info('[PAYMENT CONTROLLER] Stripe webhook event type:', event.type);
+    logger.info('[PAYMENT CONTROLLER] Event ID:', event.id);
 
     // Handle different webhook events
     switch (event.type) {
@@ -735,13 +736,13 @@ export const handleStripeWebhook = asyncHandler(async (req: Request, res: Respon
         break;
 
       default:
-        console.log('ℹ️ [PAYMENT CONTROLLER] Unhandled Stripe webhook event:', event.type);
+        logger.info('[PAYMENT CONTROLLER] Unhandled Stripe webhook event:', event.type);
     }
 
     // Always return 200 to acknowledge receipt
     res.status(200).json({ received: true, eventId: event.id });
   } catch (error: any) {
-    console.error('❌ [PAYMENT CONTROLLER] Error handling Stripe webhook:', error);
+    logger.error('[PAYMENT CONTROLLER] Error handling Stripe webhook:', error);
 
     // Return 400 for signature verification failures
     if (error.message.includes('signature')) {
@@ -760,22 +761,22 @@ async function handleStripePaymentSucceeded(event: any) {
     const paymentIntent = event.data.object;
     const orderId = paymentIntent.metadata?.orderId;
 
-    console.log('✅ [STRIPE WEBHOOK] Payment succeeded:', paymentIntent.id);
+    logger.info('[STRIPE WEBHOOK] Payment succeeded:', paymentIntent.id);
 
     if (!orderId) {
-      console.warn('⚠️ [STRIPE WEBHOOK] No orderId in payment intent metadata');
+      logger.warn('[STRIPE WEBHOOK] No orderId in payment intent metadata');
       return;
     }
 
     const order = await Order.findById(orderId);
     if (!order) {
-      console.error('❌ [STRIPE WEBHOOK] Order not found:', orderId);
+      logger.error('[STRIPE WEBHOOK] Order not found:', orderId);
       return;
     }
 
     // Check if already processed
     if (order.payment.status === 'paid') {
-      console.log('ℹ️ [STRIPE WEBHOOK] Payment already processed for order:', orderId);
+      logger.info('[STRIPE WEBHOOK] Payment already processed for order:', orderId);
       return;
     }
 
@@ -803,9 +804,9 @@ async function handleStripePaymentSucceeded(event: any) {
 
     await order.save();
 
-    console.log('✅ [STRIPE WEBHOOK] Order updated successfully');
+    logger.info('[STRIPE WEBHOOK] Order updated successfully');
   } catch (error) {
-    console.error('❌ [STRIPE WEBHOOK] Error handling payment_intent.succeeded:', error);
+    logger.error('[STRIPE WEBHOOK] Error handling payment_intent.succeeded:', error);
   }
 }
 
@@ -814,16 +815,16 @@ async function handleStripePaymentFailed(event: any) {
     const paymentIntent = event.data.object;
     const orderId = paymentIntent.metadata?.orderId;
 
-    console.log('❌ [STRIPE WEBHOOK] Payment failed:', paymentIntent.id);
+    logger.info('[STRIPE WEBHOOK] Payment failed:', paymentIntent.id);
 
     if (!orderId) {
-      console.warn('⚠️ [STRIPE WEBHOOK] No orderId in payment intent metadata');
+      logger.warn('[STRIPE WEBHOOK] No orderId in payment intent metadata');
       return;
     }
 
     const order = await Order.findById(orderId);
     if (!order) {
-      console.error('❌ [STRIPE WEBHOOK] Order not found:', orderId);
+      logger.error('[STRIPE WEBHOOK] Order not found:', orderId);
       return;
     }
 
@@ -845,9 +846,9 @@ async function handleStripePaymentFailed(event: any) {
 
     await order.save();
 
-    console.log('✅ [STRIPE WEBHOOK] Order updated with payment failure');
+    logger.info('[STRIPE WEBHOOK] Order updated with payment failure');
   } catch (error) {
-    console.error('❌ [STRIPE WEBHOOK] Error handling payment_intent.payment_failed:', error);
+    logger.error('[STRIPE WEBHOOK] Error handling payment_intent.payment_failed:', error);
   }
 }
 
@@ -856,22 +857,22 @@ async function handleStripeCheckoutCompleted(event: any) {
     const session = event.data.object;
     const orderId = session.metadata?.orderId;
 
-    console.log('✅ [STRIPE WEBHOOK] Checkout session completed:', session.id);
+    logger.info('[STRIPE WEBHOOK] Checkout session completed:', session.id);
 
     if (!orderId) {
-      console.log('ℹ️ [STRIPE WEBHOOK] No orderId in checkout session metadata (might be subscription)');
+      logger.info('[STRIPE WEBHOOK] No orderId in checkout session metadata (might be subscription)');
       return;
     }
 
     const order = await Order.findById(orderId);
     if (!order) {
-      console.error('❌ [STRIPE WEBHOOK] Order not found:', orderId);
+      logger.error('[STRIPE WEBHOOK] Order not found:', orderId);
       return;
     }
 
     // Check if already processed
     if (order.payment.status === 'paid') {
-      console.log('ℹ️ [STRIPE WEBHOOK] Payment already processed for order:', orderId);
+      logger.info('[STRIPE WEBHOOK] Payment already processed for order:', orderId);
       return;
     }
 
@@ -899,9 +900,9 @@ async function handleStripeCheckoutCompleted(event: any) {
 
     await order.save();
 
-    console.log('✅ [STRIPE WEBHOOK] Order updated successfully');
+    logger.info('[STRIPE WEBHOOK] Order updated successfully');
   } catch (error) {
-    console.error('❌ [STRIPE WEBHOOK] Error handling checkout.session.completed:', error);
+    logger.error('[STRIPE WEBHOOK] Error handling checkout.session.completed:', error);
   }
 }
 
@@ -910,7 +911,7 @@ async function handleStripeCheckoutExpired(event: any) {
     const session = event.data.object;
     const orderId = session.metadata?.orderId;
 
-    console.log('⏰ [STRIPE WEBHOOK] Checkout session expired:', session.id);
+    logger.info('[STRIPE WEBHOOK] Checkout session expired:', session.id);
 
     if (!orderId) {
       return;
@@ -918,7 +919,7 @@ async function handleStripeCheckoutExpired(event: any) {
 
     const order = await Order.findById(orderId);
     if (!order) {
-      console.error('❌ [STRIPE WEBHOOK] Order not found:', orderId);
+      logger.error('[STRIPE WEBHOOK] Order not found:', orderId);
       return;
     }
 
@@ -935,10 +936,10 @@ async function handleStripeCheckoutExpired(event: any) {
 
       await order.save();
 
-      console.log('✅ [STRIPE WEBHOOK] Order updated with expired status');
+      logger.info('[STRIPE WEBHOOK] Order updated with expired status');
     }
   } catch (error) {
-    console.error('❌ [STRIPE WEBHOOK] Error handling checkout.session.expired:', error);
+    logger.error('[STRIPE WEBHOOK] Error handling checkout.session.expired:', error);
   }
 }
 
@@ -947,13 +948,13 @@ async function handleStripeRefund(event: any) {
     const charge = event.data.object;
     const paymentIntentId = charge.payment_intent;
 
-    console.log('💸 [STRIPE WEBHOOK] Refund processed for charge:', charge.id);
+    logger.info('[STRIPE WEBHOOK] Refund processed for charge:', charge.id);
 
     // Find order by payment intent ID
     const order = await Order.findOne({ 'payment.transactionId': paymentIntentId }).lean();
 
     if (!order) {
-      console.error('❌ [STRIPE WEBHOOK] Order not found for payment intent:', paymentIntentId);
+      logger.error('[STRIPE WEBHOOK] Order not found for payment intent:', paymentIntentId);
       return;
     }
 
@@ -979,8 +980,8 @@ async function handleStripeRefund(event: any) {
 
     await order.save();
 
-    console.log('✅ [STRIPE WEBHOOK] Order updated with refund details');
+    logger.info('[STRIPE WEBHOOK] Order updated with refund details');
   } catch (error) {
-    console.error('❌ [STRIPE WEBHOOK] Error handling charge.refunded:', error);
+    logger.error('[STRIPE WEBHOOK] Error handling charge.refunded:', error);
   }
 }

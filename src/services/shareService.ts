@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import Share, { IShare } from '../models/Share';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -432,7 +433,7 @@ class ShareService {
       }
     });
 
-    console.log(`🎉 [SHARE SERVICE] Purchase shared: ${orderNumber}, User ${userId} - ${coinsEarned} coins pending admin approval`);
+    logger.info(`🎉 [SHARE SERVICE] Purchase shared: ${orderNumber}, User ${userId} - ${coinsEarned} coins pending admin approval`);
 
     // Emit socket event for admin notification
     try {
@@ -447,7 +448,7 @@ class ShareService {
         });
       }
     } catch (e) {
-      console.log('[SHARE SERVICE] Could not emit admin notification');
+      logger.info('[SHARE SERVICE] Could not emit admin notification');
     }
 
     return { share, coinsEarned };

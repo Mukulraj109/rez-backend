@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin, requireSeniorAdmin, requireOperator } from '../../middleware/auth';
 import { MerchantWallet } from '../../models/MerchantWallet';
@@ -31,7 +32,7 @@ router.get('/', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN MERCHANT WALLETS] Error fetching wallets:', error);
+    logger.error('❌ [ADMIN MERCHANT WALLETS] Error fetching wallets:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch merchant wallets'
@@ -53,7 +54,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       data: stats
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN MERCHANT WALLETS] Error fetching stats:', error);
+    logger.error('❌ [ADMIN MERCHANT WALLETS] Error fetching stats:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch platform stats'
@@ -94,7 +95,7 @@ router.get('/pending-withdrawals', async (_req: Request, res: Response) => {
       data: pendingWithdrawals
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN MERCHANT WALLETS] Error fetching pending withdrawals:', error);
+    logger.error('❌ [ADMIN MERCHANT WALLETS] Error fetching pending withdrawals:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch pending withdrawals'
@@ -125,7 +126,7 @@ router.get('/:merchantId', async (req: Request, res: Response) => {
       data: wallet
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN MERCHANT WALLETS] Error fetching wallet:', error);
+    logger.error('❌ [ADMIN MERCHANT WALLETS] Error fetching wallet:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch merchant wallet'
@@ -157,7 +158,7 @@ router.get('/:merchantId/transactions', async (req: Request, res: Response) => {
       pagination: result.pagination
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN MERCHANT WALLETS] Error fetching transactions:', error);
+    logger.error('❌ [ADMIN MERCHANT WALLETS] Error fetching transactions:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch transaction history'
@@ -192,7 +193,7 @@ router.post('/:merchantId/process-withdrawal', requireSeniorAdmin, async (req: R
       message: 'Withdrawal processed successfully'
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN MERCHANT WALLETS] Error processing withdrawal:', error);
+    logger.error('❌ [ADMIN MERCHANT WALLETS] Error processing withdrawal:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to process withdrawal'
@@ -227,7 +228,7 @@ router.post('/:merchantId/reject-withdrawal', requireSeniorAdmin, async (req: Re
       message: 'Withdrawal rejected successfully'
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN MERCHANT WALLETS] Error rejecting withdrawal:', error);
+    logger.error('❌ [ADMIN MERCHANT WALLETS] Error rejecting withdrawal:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to reject withdrawal'
@@ -249,7 +250,7 @@ router.post('/:merchantId/verify-bank', requireOperator, async (req: Request, re
       message: 'Bank details verified successfully'
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN MERCHANT WALLETS] Error verifying bank:', error);
+    logger.error('❌ [ADMIN MERCHANT WALLETS] Error verifying bank:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to verify bank details'

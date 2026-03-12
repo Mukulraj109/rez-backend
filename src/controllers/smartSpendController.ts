@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Smart Spend Controller
  *
@@ -113,7 +114,7 @@ export const getSmartSpendCatalog = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('[SmartSpend] Error fetching catalog:', error);
+    logger.error('[SmartSpend] Error fetching catalog:', error);
     return res.status(500).json({ success: false, error: 'Failed to fetch Smart Spend catalog' });
   }
 };
@@ -161,7 +162,7 @@ export const getSmartSpendItem = async (req: Request, res: Response) => {
       data: item,
     });
   } catch (error) {
-    console.error('[SmartSpend] Error fetching item:', error);
+    logger.error('[SmartSpend] Error fetching item:', error);
     return res.status(500).json({ success: false, error: 'Failed to fetch Smart Spend item' });
   }
 };
@@ -182,7 +183,7 @@ export const trackSmartSpendClick = async (req: Request, res: Response) => {
 
     return res.status(200).json({ success: true });
   } catch (error) {
-    console.error('[SmartSpend] Error tracking click:', error);
+    logger.error('[SmartSpend] Error tracking click:', error);
     return res.status(200).json({ success: true }); // Don't fail on analytics
   }
 };

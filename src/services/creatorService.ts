@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose from 'mongoose';
 import { CreatorProfile, ICreatorProfile, CreatorTier } from '../models/CreatorProfile';
 import { CreatorPick, ICreatorPick } from '../models/CreatorPick';
@@ -661,7 +662,7 @@ export async function submitPick(
         pickId: (pick._id as any).toString(),
       });
     } catch (err) {
-      console.error('[CreatorService] Failed to notify merchant about new pick:', err);
+      logger.error('[CreatorService] Failed to notify merchant about new pick:', err);
     }
   }
 
@@ -1059,14 +1060,14 @@ export async function processConversion(
 
   // Anti-fraud: self-purchase check
   if (creator.user.toString() === buyerId) {
-    console.log(`[CREATOR] Self-purchase blocked: creator=${creator.user}, buyer=${buyerId}`);
+    logger.info(`[CREATOR] Self-purchase blocked: creator=${creator.user}, buyer=${buyerId}`);
     return;
   }
 
   // Check for duplicate conversion
   const existingConversion = await CreatorConversion.findOne({ order: orderId, pick: pickId }).lean();
   if (existingConversion) {
-    console.log(`[CREATOR] Duplicate conversion blocked: order=${orderId}, pick=${pickId}`);
+    logger.info(`[CREATOR] Duplicate conversion blocked: order=${orderId}, pick=${pickId}`);
     return;
   }
 
@@ -1090,7 +1091,7 @@ export async function processConversion(
   const commissionAmount = Math.round(purchaseAmount * (commissionRate / 100));
 
   if ((todayEarnings[0]?.total || 0) + commissionAmount > config.maxDailyEarnings) {
-    console.log(`[CREATOR] Daily earnings cap reached for creator=${creator._id}`);
+    logger.info(`[CREATOR] Daily earnings cap reached for creator=${creator._id}`);
     return;
   }
 
@@ -1194,7 +1195,7 @@ export async function confirmPendingConversions(): Promise<{ confirmed: number; 
 
       confirmed++;
     } catch (error: any) {
-      console.error(`[CREATOR] Error confirming conversion ${_id}:`, error.message);
+      logger.error(`[CREATOR] Error confirming conversion ${_id}:`, error.message);
       // Revert to pending so it can be retried next run
       try {
         await CreatorConversion.updateOne({ _id, status: 'confirming' }, { $set: { status: 'pending' } });
@@ -1312,7 +1313,7 @@ export async function refreshCreatorStats(creatorProfileId?: string): Promise<nu
       await redisService.del(CACHE_KEYS.creatorProfile(profile.user.toString()));
       updated++;
     } catch (error: any) {
-      console.error(`[CREATOR] Error refreshing stats for ${profile._id}:`, error.message);
+      logger.error(`[CREATOR] Error refreshing stats for ${profile._id}:`, error.message);
     }
   }
 

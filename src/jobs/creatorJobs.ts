@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import * as cron from 'node-cron';
 import redisService from '../services/redisService';
 import CreatorProfile from '../models/CreatorProfile';
@@ -32,7 +33,7 @@ async function confirmPendingConversions(): Promise<void> {
   try {
     const lockToken = await redisService.acquireLock(lockKey, 300);
     if (!lockToken) {
-      console.log('[CREATOR JOBS] Confirm conversions: lock not acquired, skipping');
+      logger.info('[CREATOR JOBS] Confirm conversions: lock not acquired, skipping');
       return;
     }
 
@@ -96,16 +97,16 @@ async function confirmPendingConversions(): Promise<void> {
 
         confirmed++;
       } catch (err) {
-        console.error(`[CREATOR JOBS] Error confirming conversion ${conversion._id}:`, err);
+        logger.error(`[CREATOR JOBS] Error confirming conversion ${conversion._id}:`, err);
         errors++;
       }
     }
 
-    console.log(`[CREATOR JOBS] Confirmed conversions: ${confirmed}, errors: ${errors}`);
+    logger.info(`[CREATOR JOBS] Confirmed conversions: ${confirmed}, errors: ${errors}`);
 
     await redisService.releaseLock(lockKey, lockToken);
   } catch (err) {
-    console.error('[CREATOR JOBS] Error in confirmPendingConversions:', err);
+    logger.error('[CREATOR JOBS] Error in confirmPendingConversions:', err);
   }
 }
 
@@ -160,11 +161,11 @@ async function refreshTrendingScores(): Promise<void> {
     // Clear trending cache
     await redisService.del('creators:trending-picks:*');
 
-    console.log(`[CREATOR JOBS] Trending scores refreshed: ${updated}/${picks.length} picks updated`);
+    logger.info(`[CREATOR JOBS] Trending scores refreshed: ${updated}/${picks.length} picks updated`);
 
     await redisService.releaseLock(lockKey, lockToken);
   } catch (err) {
-    console.error('[CREATOR JOBS] Error in refreshTrendingScores:', err);
+    logger.error('[CREATOR JOBS] Error in refreshTrendingScores:', err);
   }
 }
 
@@ -240,7 +241,7 @@ async function refreshCreatorStats(): Promise<void> {
 
         updated++;
       } catch (err) {
-        console.error(`[CREATOR JOBS] Error refreshing stats for creator ${creator._id}:`, err);
+        logger.error(`[CREATOR JOBS] Error refreshing stats for creator ${creator._id}:`, err);
       }
     }
 
@@ -248,11 +249,11 @@ async function refreshCreatorStats(): Promise<void> {
     await redisService.del('creators:featured:*');
     await redisService.del('creators:all:*');
 
-    console.log(`[CREATOR JOBS] Creator stats refreshed: ${updated}/${creators.length}`);
+    logger.info(`[CREATOR JOBS] Creator stats refreshed: ${updated}/${creators.length}`);
 
     await redisService.releaseLock(lockKey, lockToken);
   } catch (err) {
-    console.error('[CREATOR JOBS] Error in refreshCreatorStats:', err);
+    logger.error('[CREATOR JOBS] Error in refreshCreatorStats:', err);
   }
 }
 
@@ -297,15 +298,15 @@ async function autoTierUpgrade(): Promise<void> {
           { $set: { tier: newTier } }
         );
         upgraded++;
-        console.log(`[CREATOR JOBS] Creator ${creator._id} upgraded: ${creator.tier} -> ${newTier}`);
+        logger.info(`[CREATOR JOBS] Creator ${creator._id} upgraded: ${creator.tier} -> ${newTier}`);
       }
     }
 
-    console.log(`[CREATOR JOBS] Auto-tier: ${upgraded} creators upgraded`);
+    logger.info(`[CREATOR JOBS] Auto-tier: ${upgraded} creators upgraded`);
 
     await redisService.releaseLock(lockKey, lockToken);
   } catch (err) {
-    console.error('[CREATOR JOBS] Error in autoTierUpgrade:', err);
+    logger.error('[CREATOR JOBS] Error in autoTierUpgrade:', err);
   }
 }
 
@@ -314,7 +315,7 @@ async function autoTierUpgrade(): Promise<void> {
 // ============================================
 
 export function startCreatorJobs(): void {
-  console.log('[CREATOR JOBS] Starting creator background jobs...');
+  logger.info('[CREATOR JOBS] Starting creator background jobs...');
 
   // Every hour at minute 5
   confirmConversionsJob = cron.schedule('5 * * * *', confirmPendingConversions);
@@ -328,7 +329,7 @@ export function startCreatorJobs(): void {
   // Daily at 3:00 AM
   autoTierJob = cron.schedule('0 3 * * *', autoTierUpgrade);
 
-  console.log('[CREATOR JOBS] All creator jobs scheduled');
+  logger.info('[CREATOR JOBS] All creator jobs scheduled');
 }
 
 export function stopCreatorJobs(): void {
@@ -336,7 +337,7 @@ export function stopCreatorJobs(): void {
   trendingScoresJob?.stop();
   refreshStatsJob?.stop();
   autoTierJob?.stop();
-  console.log('[CREATOR JOBS] All creator jobs stopped');
+  logger.info('[CREATOR JOBS] All creator jobs stopped');
 }
 
 export {

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import { Subscription, ISubscription } from '../models/Subscription';
@@ -85,7 +86,7 @@ class RazorpaySubscriptionService {
       const plan: any = await razorpay.plans.create(planData);
       return plan.id as string;
     } catch (error) {
-      console.error('Error creating Razorpay plan:', error);
+      logger.error('Error creating Razorpay plan:', error);
       throw error;
     }
   }
@@ -112,7 +113,7 @@ class RazorpaySubscriptionService {
       const customer = await razorpay.customers.create(customerData);
       return customer.id;
     } catch (error) {
-      console.error('Error creating Razorpay customer:', error);
+      logger.error('Error creating Razorpay customer:', error);
       throw error;
     }
   }
@@ -167,7 +168,7 @@ class RazorpaySubscriptionService {
           : subscription.remaining_count || 0
       } as IRazorpaySubscription;
     } catch (error) {
-      console.error('Error creating Razorpay subscription:', error);
+      logger.error('Error creating Razorpay subscription:', error);
       throw error;
     }
   }
@@ -181,7 +182,7 @@ class RazorpaySubscriptionService {
       const subscription = await razorpay.subscriptions.cancel(razorpaySubscriptionId, cancelAtEnd);
       return subscription;
     } catch (error) {
-      console.error('Error cancelling Razorpay subscription:', error);
+      logger.error('Error cancelling Razorpay subscription:', error);
       throw error;
     }
   }
@@ -194,7 +195,7 @@ class RazorpaySubscriptionService {
       const subscription = await razorpay.subscriptions.pause(razorpaySubscriptionId);
       return subscription;
     } catch (error) {
-      console.error('Error pausing Razorpay subscription:', error);
+      logger.error('Error pausing Razorpay subscription:', error);
       throw error;
     }
   }
@@ -207,7 +208,7 @@ class RazorpaySubscriptionService {
       const subscription = await razorpay.subscriptions.resume(razorpaySubscriptionId);
       return subscription;
     } catch (error) {
-      console.error('Error resuming Razorpay subscription:', error);
+      logger.error('Error resuming Razorpay subscription:', error);
       throw error;
     }
   }
@@ -227,7 +228,7 @@ class RazorpaySubscriptionService {
       const subscription = await razorpay.subscriptions.update(razorpaySubscriptionId, updates);
       return subscription;
     } catch (error) {
-      console.error('Error updating Razorpay subscription:', error);
+      logger.error('Error updating Razorpay subscription:', error);
       throw error;
     }
   }
@@ -246,7 +247,7 @@ class RazorpaySubscriptionService {
           : (typeof subscription.remaining_count === 'number' ? subscription.remaining_count : 0)
       } as IRazorpaySubscription;
     } catch (error) {
-      console.error('Error fetching Razorpay subscription:', error);
+      logger.error('Error fetching Razorpay subscription:', error);
       throw error;
     }
   }
@@ -263,7 +264,7 @@ class RazorpaySubscriptionService {
 
       return expectedSignature === signature;
     } catch (error) {
-      console.error('Error verifying webhook signature:', error);
+      logger.error('Error verifying webhook signature:', error);
       return false;
     }
   }
@@ -276,13 +277,13 @@ class RazorpaySubscriptionService {
       const { entity, payload } = event;
 
       if (entity !== 'event') {
-        console.warn('Received non-event entity:', entity);
+        logger.warn('Received non-event entity:', entity);
         return;
       }
 
       const subscriptionData = payload.subscription?.entity;
       if (!subscriptionData) {
-        console.warn('No subscription data in webhook payload');
+        logger.warn('No subscription data in webhook payload');
         return;
       }
 
@@ -291,7 +292,7 @@ class RazorpaySubscriptionService {
       }).lean();
 
       if (!subscription) {
-        console.warn('Subscription not found for webhook:', subscriptionData.id);
+        logger.warn('Subscription not found for webhook:', subscriptionData.id);
         return;
       }
 
@@ -330,10 +331,10 @@ class RazorpaySubscriptionService {
           break;
 
         default:
-          console.log('Unhandled webhook event:', event.event);
+          logger.info('Unhandled webhook event:', event.event);
       }
     } catch (error) {
-      console.error('Error handling webhook:', error);
+      logger.error('Error handling webhook:', error);
       throw error;
     }
   }
@@ -347,7 +348,7 @@ class RazorpaySubscriptionService {
     subscription.endDate = new Date(data.end_at * 1000);
     await subscription.save();
 
-    console.log(`Subscription activated: ${subscription._id}`);
+    logger.info(`Subscription activated: ${subscription._id}`);
   }
 
   /**
@@ -393,7 +394,7 @@ class RazorpaySubscriptionService {
 
     await subscription.save();
 
-    console.log(`Subscription charged successfully: ${subscription._id}`);
+    logger.info(`Subscription charged successfully: ${subscription._id}`);
   }
 
   /**
@@ -404,7 +405,7 @@ class RazorpaySubscriptionService {
     subscription.cancellationDate = new Date();
     await subscription.save();
 
-    console.log(`Subscription cancelled: ${subscription._id}`);
+    logger.info(`Subscription cancelled: ${subscription._id}`);
   }
 
   /**
@@ -414,7 +415,7 @@ class RazorpaySubscriptionService {
     subscription.status = 'expired';
     await subscription.save();
 
-    console.log(`Subscription completed: ${subscription._id}`);
+    logger.info(`Subscription completed: ${subscription._id}`);
   }
 
   /**
@@ -423,7 +424,7 @@ class RazorpaySubscriptionService {
   private async handleSubscriptionPaused(subscription: ISubscription, data: any): Promise<void> {
     // You might want to create a new status for paused subscriptions
     // For now, we'll keep it as active but add a note
-    console.log(`Subscription paused: ${subscription._id}`);
+    logger.info(`Subscription paused: ${subscription._id}`);
   }
 
   /**
@@ -433,7 +434,7 @@ class RazorpaySubscriptionService {
     subscription.status = 'active';
     await subscription.save();
 
-    console.log(`Subscription resumed: ${subscription._id}`);
+    logger.info(`Subscription resumed: ${subscription._id}`);
   }
 
   /**
@@ -446,7 +447,7 @@ class RazorpaySubscriptionService {
     subscription.lastPaymentRetryDate = new Date();
     await subscription.save();
 
-    console.log(`Subscription payment pending: ${subscription._id}`);
+    logger.info(`Subscription payment pending: ${subscription._id}`);
   }
 
   /**
@@ -456,7 +457,7 @@ class RazorpaySubscriptionService {
     subscription.status = 'payment_failed';
     await subscription.save();
 
-    console.log(`Subscription halted: ${subscription._id}`);
+    logger.info(`Subscription halted: ${subscription._id}`);
   }
 
   /**
@@ -472,7 +473,7 @@ class RazorpaySubscriptionService {
       const razorpaySubscription = await this.createSubscription(userId, tier, billingCycle, customerId);
       return razorpaySubscription.short_url;
     } catch (error) {
-      console.error('Error creating payment link:', error);
+      logger.error('Error creating payment link:', error);
       throw error;
     }
   }
@@ -492,7 +493,7 @@ class RazorpaySubscriptionService {
 
       return subscription;
     } catch (error) {
-      console.error('Error retrying payment:', error);
+      logger.error('Error retrying payment:', error);
       throw error;
     }
   }

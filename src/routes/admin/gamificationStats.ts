@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Gamification Stats
  * Read-only dashboard endpoints for economy overview, engagement metrics, and fraud alerts
@@ -91,7 +92,7 @@ router.get('/economy', async (req: Request, res: Response) => {
       netFlowToday: coinsEarnedToday - coinsSpentToday,
     }, 'Economy stats fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching economy stats:', error);
+    logger.error('[Admin] Error fetching economy stats:', error);
     return sendError(res, 'Failed to fetch economy stats', 500);
   }
 });
@@ -127,7 +128,7 @@ router.get('/engagement', async (req: Request, res: Response) => {
       gameSessionsToday,
     }, 'Engagement stats fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching engagement stats:', error);
+    logger.error('[Admin] Error fetching engagement stats:', error);
     return sendError(res, 'Failed to fetch engagement stats', 500);
   }
 });
@@ -191,7 +192,7 @@ router.get('/fraud-alerts', async (req: Request, res: Response) => {
       window: '24h',
     }, 'Fraud alerts fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching fraud alerts:', error);
+    logger.error('[Admin] Error fetching fraud alerts:', error);
     return sendError(res, 'Failed to fetch fraud alerts', 500);
   }
 });

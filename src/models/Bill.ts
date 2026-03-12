@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
 // Bill image interface
@@ -321,7 +322,7 @@ BillSchema.post('save', async function(doc) {
       const { creditBillCashback } = require('../services/walletService');
       await creditBillCashback(doc.user, doc._id, doc.cashbackAmount, doc.merchant);
     } catch (error) {
-      console.error('Error crediting cashback:', error);
+      logger.error('Error crediting cashback:', error);
     }
   }
 });

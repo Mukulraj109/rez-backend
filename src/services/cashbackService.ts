@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Cashback Service
 // Business logic for user cashback management
 
@@ -119,11 +120,11 @@ class CashbackService {
         status: 'pending',
       });
 
-      console.log(`✅ [CASHBACK SERVICE] Created cashback: ₹${data.amount} for user ${data.userId}`);
+      logger.info(`✅ [CASHBACK SERVICE] Created cashback: ₹${data.amount} for user ${data.userId}`);
 
       return cashback;
     } catch (error) {
-      console.error('❌ [CASHBACK SERVICE] Error creating cashback:', error);
+      logger.error('❌ [CASHBACK SERVICE] Error creating cashback:', error);
       throw error;
     }
   }
@@ -141,13 +142,13 @@ class CashbackService {
       const order = await Order.findById(orderId).populate('items.product').lean();
 
       if (!order) {
-        console.log(`⚠️ [CASHBACK SERVICE] Order not found: ${orderId}`);
+        logger.info(`⚠️ [CASHBACK SERVICE] Order not found: ${orderId}`);
         return null;
       }
 
       // Only create cashback for delivered orders
       if (order.status !== 'delivered') {
-        console.log(`⚠️ [CASHBACK SERVICE] Order not delivered yet: ${orderId}`);
+        logger.info(`⚠️ [CASHBACK SERVICE] Order not delivered yet: ${orderId}`);
         return null;
       }
 
@@ -195,7 +196,7 @@ class CashbackService {
       } catch (createError: any) {
         // MongoDB duplicate key error — cashback already exists for this order+user
         if (createError?.code === 11000 || createError?.message?.includes('E11000')) {
-          console.log(`⚠️ [CASHBACK SERVICE] Cashback already exists for order: ${orderId} (caught duplicate key)`);
+          logger.info(`⚠️ [CASHBACK SERVICE] Cashback already exists for order: ${orderId} (caught duplicate key)`);
           const existing = await UserCashback.findOne({ order: orderId, user: order.user }).lean();
           return existing;
         }
@@ -223,14 +224,14 @@ class CashbackService {
           });
           cashback.status = 'credited';
         } catch (walletError) {
-          console.error('❌ [CASHBACK SERVICE] Error crediting cashback to wallet (non-blocking):', walletError);
+          logger.error('❌ [CASHBACK SERVICE] Error crediting cashback to wallet (non-blocking):', walletError);
           // Cashback record still exists, can be manually credited later
         }
       }
 
       return cashback;
     } catch (error) {
-      console.error('❌ [CASHBACK SERVICE] Error creating cashback from order:', error);
+      logger.error('❌ [CASHBACK SERVICE] Error creating cashback from order:', error);
       throw error;
     }
   }
@@ -242,7 +243,7 @@ class CashbackService {
     try {
       return await (UserCashback as any).getUserSummary(userId);
     } catch (error) {
-      console.error('❌ [CASHBACK SERVICE] Error getting user summary:', error);
+      logger.error('❌ [CASHBACK SERVICE] Error getting user summary:', error);
       throw error;
     }
   }
@@ -291,11 +292,11 @@ class CashbackService {
 
       const pages = Math.ceil(total / limit);
 
-      console.log(`✅ [CASHBACK SERVICE] Retrieved ${cashbacks.length} cashback entries`);
+      logger.info(`✅ [CASHBACK SERVICE] Retrieved ${cashbacks.length} cashback entries`);
 
       return { cashbacks, total, pages };
     } catch (error) {
-      console.error('❌ [CASHBACK SERVICE] Error getting cashback history:', error);
+      logger.error('❌ [CASHBACK SERVICE] Error getting cashback history:', error);
       throw error;
     }
   }
@@ -307,7 +308,7 @@ class CashbackService {
     try {
       return await (UserCashback as any).getPendingReadyForCredit(userId);
     } catch (error) {
-      console.error('❌ [CASHBACK SERVICE] Error getting pending cashback:', error);
+      logger.error('❌ [CASHBACK SERVICE] Error getting pending cashback:', error);
       throw error;
     }
   }
@@ -322,7 +323,7 @@ class CashbackService {
     try {
       return await (UserCashback as any).getExpiringSoon(userId, days);
     } catch (error) {
-      console.error('❌ [CASHBACK SERVICE] Error getting expiring cashback:', error);
+      logger.error('❌ [CASHBACK SERVICE] Error getting expiring cashback:', error);
       throw error;
     }
   }
@@ -343,11 +344,11 @@ class CashbackService {
 
       // Here we would create a wallet transaction
       // For now, just logging
-      console.log(`💰 [CASHBACK SERVICE] Credited ₹${cashback.amount} to wallet for user ${cashback.user}`);
+      logger.info(`💰 [CASHBACK SERVICE] Credited ₹${cashback.amount} to wallet for user ${cashback.user}`);
 
       return cashback;
     } catch (error) {
-      console.error('❌ [CASHBACK SERVICE] Error crediting cashback:', error);
+      logger.error('❌ [CASHBACK SERVICE] Error crediting cashback:', error);
       throw error;
     }
   }
@@ -376,11 +377,11 @@ class CashbackService {
           totalAmount += credited.amount;
           creditedCashbacks.push(credited);
         } catch (error) {
-          console.error(`Failed to credit cashback ${cashback._id}:`, error);
+          logger.error(`Failed to credit cashback ${cashback._id}:`, error);
         }
       }
 
-      console.log(`✅ [CASHBACK SERVICE] Redeemed ${creditedCashbacks.length} cashback entries, total: ₹${totalAmount}`);
+      logger.info(`✅ [CASHBACK SERVICE] Redeemed ${creditedCashbacks.length} cashback entries, total: ₹${totalAmount}`);
 
       return {
         totalAmount,
@@ -388,7 +389,7 @@ class CashbackService {
         cashbacks: creditedCashbacks,
       };
     } catch (error) {
-      console.error('❌ [CASHBACK SERVICE] Error redeeming cashback:', error);
+      logger.error('❌ [CASHBACK SERVICE] Error redeeming cashback:', error);
       throw error;
     }
   }
@@ -430,7 +431,7 @@ class CashbackService {
         multiplier
       };
     } catch (error) {
-      console.error('❌ [CASHBACK SERVICE] Error forecasting cashback:', error);
+      logger.error('❌ [CASHBACK SERVICE] Error forecasting cashback:', error);
       throw error;
     }
   }
@@ -442,7 +443,7 @@ class CashbackService {
     try {
       return await (UserCashback as any).markExpiredCashback();
     } catch (error) {
-      console.error('❌ [CASHBACK SERVICE] Error marking expired cashback:', error);
+      logger.error('❌ [CASHBACK SERVICE] Error marking expired cashback:', error);
       throw error;
     }
   }
@@ -473,7 +474,7 @@ class CashbackService {
         isActive: true,
       }));
     } catch (error) {
-      console.error('❌ [CASHBACK SERVICE] Error fetching campaigns:', error);
+      logger.error('❌ [CASHBACK SERVICE] Error fetching campaigns:', error);
       return [];
     }
   }
@@ -515,7 +516,7 @@ class CashbackService {
         averagePerTransaction: stats.count > 0 ? stats.totalAmount / stats.count : 0,
       };
     } catch (error) {
-      console.error('❌ [CASHBACK SERVICE] Error getting statistics:', error);
+      logger.error('❌ [CASHBACK SERVICE] Error getting statistics:', error);
       throw error;
     }
   }

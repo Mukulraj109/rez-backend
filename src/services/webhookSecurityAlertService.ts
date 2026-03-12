@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Webhook Security Alert Service
  * Sends alerts for security violations and anomalies
@@ -54,27 +55,27 @@ export const sendSecurityAlert = async (
 
   switch (alert.severity) {
     case 'critical':
-      console.error(logMessage, {
+      logger.error(logMessage, {
         ...fullAlert,
       });
       // TODO: Integrate with error tracking (Sentry) and admin notifications (email/SMS)
       break;
 
     case 'high':
-      console.warn(logMessage, {
+      logger.warn(logMessage, {
         ...fullAlert,
       });
       // TODO: Integrate with error tracking service (Sentry)
       break;
 
     case 'medium':
-      console.warn(logMessage, {
+      logger.warn(logMessage, {
         ...fullAlert,
       });
       break;
 
     case 'low':
-      console.log(logMessage, {
+      logger.info(logMessage, {
         ...fullAlert,
       });
       break;
@@ -242,7 +243,7 @@ export const clearOldAlerts = (hoursOld: number = 72) => {
     recentAlerts.shift();
   }
 
-  console.log(
+  logger.info(
     `[ALERT-SERVICE] Cleared ${initialLength - recentAlerts.length} old alerts`
   );
 };

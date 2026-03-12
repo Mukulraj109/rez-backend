@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Memory Monitor Service
  *
@@ -60,8 +61,8 @@ export class MemoryMonitorService {
       this.analyzeMemory();
     }, interval);
 
-    console.log('📊 Memory monitor service initialized');
-    console.log(`📊 Max heap size: ${this.formatBytes(this.MAX_HEAP_SIZE)}`);
+    logger.info('📊 Memory monitor service initialized');
+    logger.info(`📊 Max heap size: ${this.formatBytes(this.MAX_HEAP_SIZE)}`);
   }
 
   /**
@@ -174,19 +175,19 @@ export class MemoryMonitorService {
 
     // Check if memory usage is above threshold
     if (memUsagePercent > this.MEMORY_THRESHOLD * 100) {
-      console.warn(`⚠️ High memory usage detected: ${memUsagePercent.toFixed(2)}%`);
+      logger.warn(`⚠️ High memory usage detected: ${memUsagePercent.toFixed(2)}%`);
       this.triggerAlerts(stats);
     }
 
     // Check for memory leak
     if (stats.leakDetected) {
-      console.error('❌ Potential memory leak detected!');
+      logger.error('❌ Potential memory leak detected!');
       this.triggerAlerts(stats);
     }
 
     // Log periodic report (every 30 snapshots)
     if (this.snapshots.length % 30 === 0) {
-      console.log(this.getReport());
+      logger.info(this.getReport());
     }
   }
 
@@ -248,14 +249,14 @@ export class MemoryMonitorService {
    */
   static forceGC(): void {
     if (global.gc) {
-      console.log('🗑️ Forcing garbage collection...');
+      logger.info('🗑️ Forcing garbage collection...');
       const before = process.memoryUsage().heapUsed;
       global.gc();
       const after = process.memoryUsage().heapUsed;
       const freed = before - after;
-      console.log(`✅ GC complete. Freed: ${this.formatBytes(freed)}`);
+      logger.info(`✅ GC complete. Freed: ${this.formatBytes(freed)}`);
     } else {
-      console.warn('⚠️ Garbage collection not available. Run with --expose-gc flag.');
+      logger.warn('⚠️ Garbage collection not available. Run with --expose-gc flag.');
     }
   }
 
@@ -274,7 +275,7 @@ export class MemoryMonitorService {
       try {
         callback(stats);
       } catch (error) {
-        console.error('Error in memory alert callback:', error);
+        logger.error('Error in memory alert callback:', error);
       }
     });
   }
@@ -332,7 +333,7 @@ export class MemoryMonitorService {
   static clearSnapshots(): void {
     this.snapshots = [];
     this.peakSnapshot = null;
-    console.log('📊 Memory snapshots cleared');
+    logger.info('📊 Memory snapshots cleared');
   }
 
   /**
@@ -343,6 +344,6 @@ export class MemoryMonitorService {
       clearInterval(this.monitorInterval);
       this.monitorInterval = null;
     }
-    console.log('📊 Memory monitor service shut down');
+    logger.info('📊 Memory monitor service shut down');
   }
 }

@@ -8,6 +8,7 @@
 import { createClient, RedisClientType } from 'redis';
 import crypto from 'crypto';
 import { getRedisConfig, RedisConfig, CACHE_VERSION } from '../config/redis';
+import { logger } from '../config/logger';
 
 /**
  * Redis Service Class
@@ -40,18 +41,18 @@ class RedisService {
    */
   public async connect(): Promise<void> {
     if (!this.isEnabled) {
-      console.log('📦 Redis caching is disabled');
+      logger.info('📦 Redis caching is disabled');
       return;
     }
 
     if (this.isConnected && this.client) {
-      console.log('✅ Redis already connected');
+      logger.info('✅ Redis already connected');
       return;
     }
 
     try {
-      console.log('🔄 Connecting to Redis...');
-      console.log(`📍 Redis URL: ${this.config.url.replace(/\/\/.*@/, '//***@')}`);
+      logger.info('🔄 Connecting to Redis...');
+      logger.info(`📍 Redis URL: ${this.config.url.replace(/\/\/.*@/, '//***@')}`);
 
       this.client = createClient({
         url: this.config.url,
@@ -60,11 +61,11 @@ class RedisService {
           connectTimeout: this.config.connectTimeout,
           reconnectStrategy: (retries: number) => {
             if (retries > this.config.maxRetries) {
-              console.error(`❌ Redis connection failed after ${retries} retries`);
+              logger.error(`❌ Redis connection failed after ${retries} retries`);
               this.isEnabled = false;
               return new Error('Redis max retries reached');
             }
-            console.log(`🔄 Redis reconnecting... Attempt ${retries}/${this.config.maxRetries}`);
+            logger.info(`🔄 Redis reconnecting... Attempt ${retries}/${this.config.maxRetries}`);
             return this.config.retryDelay;
           },
         },
@@ -72,36 +73,36 @@ class RedisService {
 
       // Set up event listeners
       this.client.on('error', (err) => {
-        console.error('❌ Redis Client Error:', err.message);
+        logger.error('❌ Redis Client Error:', err.message);
         this.isConnected = false;
       });
 
       this.client.on('connect', () => {
-        console.log('🔌 Redis client connecting...');
+        logger.info('🔌 Redis client connecting...');
       });
 
       this.client.on('ready', () => {
-        console.log('✅ Redis client ready');
+        logger.info('✅ Redis client ready');
         this.isConnected = true;
       });
 
       this.client.on('reconnecting', () => {
-        console.log('🔄 Redis client reconnecting...');
+        logger.info('🔄 Redis client reconnecting...');
         this.isConnected = false;
       });
 
       this.client.on('end', () => {
-        console.log('🔌 Redis connection closed');
+        logger.info('🔌 Redis connection closed');
         this.isConnected = false;
       });
 
       // Connect to Redis
       await this.client.connect();
       this.isConnected = true;
-      console.log('✅ Redis connected successfully');
+      logger.info('✅ Redis connected successfully');
     } catch (error) {
-      console.error('❌ Failed to connect to Redis:', error instanceof Error ? error.message : error);
-      console.log('⚠️ Application will continue without caching');
+      logger.error('❌ Failed to connect to Redis:', error instanceof Error ? error.message : error);
+      logger.info('⚠️ Application will continue without caching');
       this.isEnabled = false;
       this.isConnected = false;
       this.client = null;
@@ -115,9 +116,9 @@ class RedisService {
     if (this.client && this.isConnected) {
       try {
         await this.client.quit();
-        console.log('✅ Redis disconnected successfully');
+        logger.info('✅ Redis disconnected successfully');
       } catch (error) {
-        console.error('❌ Error disconnecting Redis:', error);
+        logger.error('❌ Error disconnecting Redis:', error);
       } finally {
         this.client = null;
         this.isConnected = false;
@@ -156,14 +157,14 @@ class RedisService {
       const value = await this.client!.get(prefixedKey);
 
       if (value) {
-        console.log(`📦 Cache HIT: ${key}`);
+        logger.info(`📦 Cache HIT: ${key}`);
         return JSON.parse(value) as T;
       }
 
-      console.log(`📦 Cache MISS: ${key}`);
+      logger.info(`📦 Cache MISS: ${key}`);
       return null;
     } catch (error) {
-      console.error(`❌ Redis GET error for key ${key}:`, error);
+      logger.error(`❌ Redis GET error for key ${key}:`, error);
       return null;
     }
   }
@@ -189,10 +190,10 @@ class RedisService {
         await this.client!.set(prefixedKey, serializedValue);
       }
 
-      console.log(`💾 Cache SET: ${key} (TTL: ${ttl || 'none'}s)`);
+      logger.info(`💾 Cache SET: ${key} (TTL: ${ttl || 'none'}s)`);
       return true;
     } catch (error) {
-      console.error(`❌ Redis SET error for key ${key}:`, error);
+      logger.error(`❌ Redis SET error for key ${key}:`, error);
       return false;
     }
   }
@@ -209,10 +210,10 @@ class RedisService {
     try {
       const prefixedKey = this.getPrefixedKey(key);
       await this.client!.del(prefixedKey);
-      console.log(`🗑️ Cache DEL: ${key}`);
+      logger.info(`🗑️ Cache DEL: ${key}`);
       return true;
     } catch (error) {
-      console.error(`❌ Redis DEL error for key ${key}:`, error);
+      logger.error(`❌ Redis DEL error for key ${key}:`, error);
       return false;
     }
   }
@@ -251,10 +252,10 @@ class RedisService {
         await this.client!.del(batch);
       }
 
-      console.log(`🗑️ Cache DEL pattern: ${pattern} (${keys.length} keys)`);
+      logger.info(`🗑️ Cache DEL pattern: ${pattern} (${keys.length} keys)`);
       return keys.length;
     } catch (error) {
-      console.error(`❌ Redis DEL pattern error for ${pattern}:`, error);
+      logger.error(`❌ Redis DEL pattern error for ${pattern}:`, error);
       return 0;
     }
   }
@@ -269,10 +270,10 @@ class RedisService {
 
     try {
       await this.client!.flushAll();
-      console.log('🗑️ Cache FLUSHED');
+      logger.info('🗑️ Cache FLUSHED');
       return true;
     } catch (error) {
-      console.error('❌ Redis FLUSH error:', error);
+      logger.error('❌ Redis FLUSH error:', error);
       return false;
     }
   }
@@ -298,11 +299,11 @@ class RedisService {
       });
 
       const hits = Object.values(result).filter((v) => v !== null).length;
-      console.log(`📦 Cache MGET: ${hits}/${keys.length} hits`);
+      logger.info(`📦 Cache MGET: ${hits}/${keys.length} hits`);
 
       return result;
     } catch (error) {
-      console.error('❌ Redis MGET error:', error);
+      logger.error('❌ Redis MGET error:', error);
       return {};
     }
   }
@@ -333,10 +334,10 @@ class RedisService {
       });
 
       await pipeline.exec();
-      console.log(`💾 Cache MSET: ${Object.keys(entries).length} keys (TTL: ${ttl || 'none'}s)`);
+      logger.info(`💾 Cache MSET: ${Object.keys(entries).length} keys (TTL: ${ttl || 'none'}s)`);
       return true;
     } catch (error) {
-      console.error('❌ Redis MSET error:', error);
+      logger.error('❌ Redis MSET error:', error);
       return false;
     }
   }
@@ -355,7 +356,7 @@ class RedisService {
       const exists = await this.client!.exists(prefixedKey);
       return exists === 1;
     } catch (error) {
-      console.error(`❌ Redis EXISTS error for key ${key}:`, error);
+      logger.error(`❌ Redis EXISTS error for key ${key}:`, error);
       return false;
     }
   }
@@ -373,10 +374,10 @@ class RedisService {
     try {
       const prefixedKey = this.getPrefixedKey(key);
       await this.client!.expire(prefixedKey, ttl);
-      console.log(`⏰ Cache EXPIRE: ${key} (TTL: ${ttl}s)`);
+      logger.info(`⏰ Cache EXPIRE: ${key} (TTL: ${ttl}s)`);
       return true;
     } catch (error) {
-      console.error(`❌ Redis EXPIRE error for key ${key}:`, error);
+      logger.error(`❌ Redis EXPIRE error for key ${key}:`, error);
       return false;
     }
   }
@@ -396,7 +397,7 @@ class RedisService {
       const result = await this.client!.incrBy(prefixedKey, amount);
       return result;
     } catch (error) {
-      console.error(`❌ Redis INCR error for key ${key}:`, error);
+      logger.error(`❌ Redis INCR error for key ${key}:`, error);
       return null;
     }
   }
@@ -416,7 +417,7 @@ class RedisService {
       const result = await this.client!.decrBy(prefixedKey, amount);
       return result;
     } catch (error) {
-      console.error(`❌ Redis DECR error for key ${key}:`, error);
+      logger.error(`❌ Redis DECR error for key ${key}:`, error);
       return null;
     }
   }
@@ -447,7 +448,7 @@ class RedisService {
       });
       return result as number;
     } catch (error) {
-      console.error(`❌ Redis ATOMIC_INCR error for key ${key}:`, error);
+      logger.error(`❌ Redis ATOMIC_INCR error for key ${key}:`, error);
       return null;
     }
   }
@@ -475,7 +476,7 @@ class RedisService {
       });
       return result === 'OK' ? ownerToken : null;
     } catch (error) {
-      console.error(`❌ Redis LOCK acquire error for ${key}:`, error);
+      logger.error(`❌ Redis LOCK acquire error for ${key}:`, error);
       if (strict) return null; // Fail-safe for financial operations
       return 'fallback'; // Fail open for single-instance
     }
@@ -509,7 +510,7 @@ class RedisService {
         await this.client!.del(prefixedKey);
       }
     } catch (error) {
-      console.error(`❌ Redis LOCK release error for ${key}:`, error);
+      logger.error(`❌ Redis LOCK release error for ${key}:`, error);
     }
   }
 
@@ -536,7 +537,7 @@ class RedisService {
         info: this.parseRedisInfo(info),
       };
     } catch (error) {
-      console.error('❌ Redis STATS error:', error);
+      logger.error('❌ Redis STATS error:', error);
       return {
         enabled: true,
         connected: false,

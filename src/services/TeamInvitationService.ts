@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import crypto from 'crypto';
 import { MerchantUser, IMerchantUser, MerchantUserRole } from '../models/MerchantUser';
 import { Merchant } from '../models/Merchant';
@@ -113,11 +114,11 @@ export class TeamInvitationService {
           token
         );
       } catch (emailError) {
-        console.error('Failed to send invitation email:', emailError);
+        logger.error('Failed to send invitation email:', emailError);
         // Don't fail the invitation if email fails
       }
 
-      console.log(`✅ Team invitation created: ${email} as ${role} for merchant ${merchantId}`);
+      logger.info(`✅ Team invitation created: ${email} as ${role} for merchant ${merchantId}`);
 
       return {
         success: true,
@@ -127,7 +128,7 @@ export class TeamInvitationService {
         expiresAt: expiry
       };
     } catch (error: any) {
-      console.error('Error creating invitation:', error);
+      logger.error('Error creating invitation:', error);
       return {
         success: false,
         message: `Failed to create invitation: ${error.message}`
@@ -184,10 +185,10 @@ export class TeamInvitationService {
           token
         );
       } catch (emailError) {
-        console.error('Failed to resend invitation email:', emailError);
+        logger.error('Failed to resend invitation email:', emailError);
       }
 
-      console.log(`✅ Team invitation resent: ${merchantUser.email}`);
+      logger.info(`✅ Team invitation resent: ${merchantUser.email}`);
 
       return {
         success: true,
@@ -197,7 +198,7 @@ export class TeamInvitationService {
         expiresAt: expiry
       };
     } catch (error: any) {
-      console.error('Error resending invitation:', error);
+      logger.error('Error resending invitation:', error);
       return {
         success: false,
         message: `Failed to resend invitation: ${error.message}`
@@ -243,7 +244,7 @@ export class TeamInvitationService {
       merchantUser.invitationExpiry = undefined;
       await merchantUser.save();
 
-      console.log(`✅ Invitation accepted: ${merchantUser.email}`);
+      logger.info(`✅ Invitation accepted: ${merchantUser.email}`);
 
       return {
         success: true,
@@ -251,7 +252,7 @@ export class TeamInvitationService {
         merchantUser
       };
     } catch (error: any) {
-      console.error('Error accepting invitation:', error);
+      logger.error('Error accepting invitation:', error);
       return {
         success: false,
         message: `Failed to accept invitation: ${error.message}`
@@ -288,7 +289,7 @@ export class TeamInvitationService {
         merchantUser
       };
     } catch (error: any) {
-      console.error('Error validating invitation token:', error);
+      logger.error('Error validating invitation token:', error);
       return {
         valid: false,
         message: 'Error validating token'
@@ -323,14 +324,14 @@ export class TeamInvitationService {
       // Delete the invitation
       await MerchantUser.deleteOne({ _id: merchantUserId });
 
-      console.log(`✅ Invitation cancelled: ${merchantUser.email}`);
+      logger.info(`✅ Invitation cancelled: ${merchantUser.email}`);
 
       return {
         success: true,
         message: 'Invitation cancelled successfully'
       };
     } catch (error: any) {
-      console.error('Error cancelling invitation:', error);
+      logger.error('Error cancelling invitation:', error);
       return {
         success: false,
         message: `Failed to cancel invitation: ${error.message}`
@@ -460,12 +461,12 @@ export class TeamInvitationService {
 
       const count = result.deletedCount || 0;
       if (count > 0) {
-        console.log(`🧹 Cleaned up ${count} expired invitations`);
+        logger.info(`🧹 Cleaned up ${count} expired invitations`);
       }
 
       return count;
     } catch (error: any) {
-      console.error('Error cleaning up expired invitations:', error);
+      logger.error('Error cleaning up expired invitations:', error);
       return 0;
     }
   }

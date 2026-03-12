@@ -14,6 +14,7 @@ import { Wallet } from '../models/Wallet';
 import redisService from '../services/redisService';
 import Partner from '../models/Partner';
 import { SOURCE_TO_CATEGORY } from '../config/earningsCategories';
+import { logger } from '../config/logger';
 
 /**
  * Filter type → CoinTransaction source mapping for history queries
@@ -290,7 +291,7 @@ export const getConsolidatedEarningsSummary = asyncHandler(async (req: Request, 
 
     sendSuccess(res, result, 'Earnings summary retrieved successfully');
   } catch (error) {
-    console.error('[EARNINGS] Error getting consolidated summary:', error);
+    logger.error('[EARNINGS] Error getting consolidated summary:', error);
     throw new AppError('Failed to fetch earnings summary', 500);
   }
 });
@@ -472,7 +473,7 @@ export const getPartnerEarningsSummary = asyncHandler(async (req: Request, res: 
 
     sendSuccess(res, result, 'Partner earnings summary retrieved successfully');
   } catch (error) {
-    console.error('[EARNINGS] Error getting partner earnings summary:', error);
+    logger.error('[EARNINGS] Error getting partner earnings summary:', error);
     throw new AppError('Failed to fetch partner earnings summary', 500);
   }
 });
@@ -488,7 +489,7 @@ export const getEarningsSummary = asyncHandler(async (req: Request, res: Respons
   }
 
   const userId = (req.user._id as Types.ObjectId).toString();
-  console.log('💰 [EARNINGS] Getting earnings summary for user:', userId);
+  logger.info('[EARNINGS] Getting earnings summary for user:', userId);
 
   try {
     // Fetch all earnings data in parallel
@@ -520,10 +521,10 @@ export const getEarningsSummary = asyncHandler(async (req: Request, res: Respons
             });
           });
 
-          console.log(`💰 [EARNINGS] Project earnings: ${total} from ${approvedCount} approved submissions`);
+          logger.info(`[EARNINGS] Project earnings: ${total} from ${approvedCount} approved submissions`);
           return total;
         } catch (error) {
-          console.error('❌ [EARNINGS] Error calculating project earnings:', error);
+          logger.error('[EARNINGS] Error calculating project earnings:', error);
           return 0;
         }
       })(),
@@ -549,10 +550,10 @@ export const getEarningsSummary = asyncHandler(async (req: Request, res: Respons
             }
           });
 
-          console.log(`💰 [EARNINGS] Referral earnings: ${total} from ${referrals.length} rewarded referrals`);
+          logger.info(`[EARNINGS] Referral earnings: ${total} from ${referrals.length} rewarded referrals`);
           return total;
         } catch (error) {
-          console.error('❌ [EARNINGS] Error calculating referral earnings:', error);
+          logger.error('[EARNINGS] Error calculating referral earnings:', error);
           return 0;
         }
       })(),
@@ -573,10 +574,10 @@ export const getEarningsSummary = asyncHandler(async (req: Request, res: Respons
             }
           });
 
-          console.log(`💰 [EARNINGS] Social media earnings: ${total} from ${posts.length} credited posts`);
+          logger.info(`[EARNINGS] Social media earnings: ${total} from ${posts.length} credited posts`);
           return total;
         } catch (error) {
-          console.error('❌ [EARNINGS] Error calculating social media earnings:', error);
+          logger.error('[EARNINGS] Error calculating social media earnings:', error);
           return 0;
         }
       })(),
@@ -587,7 +588,7 @@ export const getEarningsSummary = asyncHandler(async (req: Request, res: Respons
           const stats = await spinWheelService.getSpinStats(userId);
           return stats.totalCoinsWon || 0;
         } catch (error) {
-          console.error('❌ [EARNINGS] Error calculating spin earnings:', error);
+          logger.error('[EARNINGS] Error calculating spin earnings:', error);
           return 0;
         }
       })()
@@ -631,7 +632,7 @@ export const getEarningsSummary = asyncHandler(async (req: Request, res: Respons
         });
       }
     } catch (error) {
-      console.error('❌ [EARNINGS] Error fetching wallet balance:', error);
+      logger.error('[EARNINGS] Error fetching wallet balance:', error);
     }
 
     const earningsSummary = {
@@ -642,7 +643,7 @@ export const getEarningsSummary = asyncHandler(async (req: Request, res: Respons
       currency: '₹'
     };
 
-    console.log('✅ [EARNINGS] Earnings summary calculated:', earningsSummary);
+    logger.info('[EARNINGS] Earnings summary calculated:', earningsSummary);
 
     // Emit real-time earnings update
     try {
@@ -651,12 +652,12 @@ export const getEarningsSummary = asyncHandler(async (req: Request, res: Respons
         breakdown
       });
     } catch (error) {
-      console.error('❌ [EARNINGS] Error emitting earnings update:', error);
+      logger.error('[EARNINGS] Error emitting earnings update:', error);
     }
 
     sendSuccess(res, earningsSummary, 'Earnings summary retrieved successfully');
   } catch (error) {
-    console.error('❌ [EARNINGS] Error getting earnings summary:', error);
+    logger.error('[EARNINGS] Error getting earnings summary:', error);
     throw new AppError('Failed to fetch earnings summary', 500);
   }
 });
@@ -672,7 +673,7 @@ export const getProjectStats = asyncHandler(async (req: Request, res: Response) 
   }
 
   const userId = (req.user._id as Types.ObjectId).toString();
-  console.log('📊 [EARNINGS] Getting project stats for user:', userId);
+  logger.info('[EARNINGS] Getting project stats for user:', userId);
 
   try {
     // Find all projects with user's submissions
@@ -721,18 +722,18 @@ export const getProjectStats = asyncHandler(async (req: Request, res: Response) 
       totalProjects: completeNow + inReview + completed
     };
 
-    console.log('✅ [EARNINGS] Project stats calculated:', stats);
+    logger.info('[EARNINGS] Project stats calculated:', stats);
 
     // Emit real-time project status update
     try {
       earningsSocketService.emitProjectStatusUpdate(userId, stats);
     } catch (error) {
-      console.error('❌ [EARNINGS] Error emitting project status update:', error);
+      logger.error('[EARNINGS] Error emitting project status update:', error);
     }
 
     sendSuccess(res, stats, 'Project statistics retrieved successfully');
   } catch (error) {
-    console.error('❌ [EARNINGS] Error getting project stats:', error);
+    logger.error('[EARNINGS] Error getting project stats:', error);
     throw new AppError('Failed to fetch project statistics', 500);
   }
 });
@@ -750,7 +751,7 @@ export const getNotifications = asyncHandler(async (req: Request, res: Response)
   const userId = (req.user._id as Types.ObjectId).toString();
   const { unreadOnly, limit } = req.query;
 
-  console.log('🔔 [EARNINGS] Getting notifications for user:', userId);
+  logger.info('[EARNINGS] Getting notifications for user:', userId);
 
   try {
     // For now, return empty array as notifications system may be separate
@@ -767,11 +768,11 @@ export const getNotifications = asyncHandler(async (req: Request, res: Response)
       ? filteredNotifications.slice(0, parseInt(limit as string))
       : filteredNotifications;
 
-    console.log('✅ [EARNINGS] Notifications retrieved:', limitedNotifications.length);
+    logger.info('[EARNINGS] Notifications retrieved:', limitedNotifications.length);
 
     sendSuccess(res, limitedNotifications, 'Notifications retrieved successfully');
   } catch (error) {
-    console.error('❌ [EARNINGS] Error getting notifications:', error);
+    logger.error('[EARNINGS] Error getting notifications:', error);
     throw new AppError('Failed to fetch notifications', 500);
   }
 });
@@ -789,7 +790,7 @@ export const markNotificationAsRead = asyncHandler(async (req: Request, res: Res
   const userId = (req.user._id as Types.ObjectId).toString();
   const { id } = req.params;
 
-  console.log('🔔 [EARNINGS] Marking notification as read:', id, 'for user:', userId);
+  logger.info('[EARNINGS] Marking notification as read:', id, 'for user:', userId);
 
   try {
     // For now, just return success as notifications system may be separate
@@ -799,7 +800,7 @@ export const markNotificationAsRead = asyncHandler(async (req: Request, res: Res
       isRead: true 
     }, 'Notification marked as read successfully');
   } catch (error) {
-    console.error('❌ [EARNINGS] Error marking notification as read:', error);
+    logger.error('[EARNINGS] Error marking notification as read:', error);
     throw new AppError('Failed to mark notification as read', 500);
   }
 });
@@ -815,7 +816,7 @@ export const getReferralInfo = asyncHandler(async (req: Request, res: Response) 
   }
 
   const userId = (req.user._id as Types.ObjectId).toString();
-  console.log('🔗 [EARNINGS] Getting referral info for user:', userId);
+  logger.info('[EARNINGS] Getting referral info for user:', userId);
 
   try {
     // Get all referrals where user is the referrer
@@ -860,11 +861,11 @@ export const getReferralInfo = asyncHandler(async (req: Request, res: Response) 
       referralLink
     };
 
-    console.log('✅ [EARNINGS] Referral info calculated:', referralInfo);
+    logger.info('[EARNINGS] Referral info calculated:', referralInfo);
 
     sendSuccess(res, referralInfo, 'Referral information retrieved successfully');
   } catch (error) {
-    console.error('❌ [EARNINGS] Error getting referral info:', error);
+    logger.error('[EARNINGS] Error getting referral info:', error);
     throw new AppError('Failed to fetch referral information', 500);
   }
 });
@@ -994,7 +995,7 @@ export const getEarningsHistory = asyncHandler(async (req: Request, res: Respons
 
     sendSuccess(res, result, 'Earnings history retrieved successfully');
   } catch (error) {
-    console.error('[EARNINGS] Error getting earnings history:', error);
+    logger.error('[EARNINGS] Error getting earnings history:', error);
     throw new AppError('Failed to fetch earnings history', 500);
   }
 });
@@ -1012,7 +1013,7 @@ export const withdrawEarnings = asyncHandler(async (req: Request, res: Response)
   const userId = (req.user._id as Types.ObjectId).toString();
   const { amount, method, accountDetails } = req.body;
 
-  console.log('💸 [EARNINGS] Withdrawing earnings for user:', userId, 'amount:', amount);
+  logger.info('[EARNINGS] Withdrawing earnings for user:', userId, 'amount:', amount);
 
   try {
     // Validate amount
@@ -1069,7 +1070,7 @@ export const withdrawEarnings = asyncHandler(async (req: Request, res: Response)
         }
       });
     } catch (error) {
-      console.error('❌ [EARNINGS] Error emitting withdrawal notification:', error);
+      logger.error('[EARNINGS] Error emitting withdrawal notification:', error);
     }
 
     const withdrawal = {
@@ -1087,14 +1088,14 @@ export const withdrawEarnings = asyncHandler(async (req: Request, res: Response)
       createdAt: new Date(),
     };
 
-    console.log('✅ [EARNINGS] Withdrawal request created:', withdrawalId);
+    logger.info('[EARNINGS] Withdrawal request created:', withdrawalId);
 
     sendSuccess(res, {
       withdrawal,
       message: 'Withdrawal request submitted successfully. It will be processed within 3-5 business days.'
     }, 'Withdrawal request submitted successfully', 201);
   } catch (error) {
-    console.error('❌ [EARNINGS] Error processing withdrawal:', error);
+    logger.error('[EARNINGS] Error processing withdrawal:', error);
     throw new AppError('Failed to process withdrawal', 500);
   }
 });

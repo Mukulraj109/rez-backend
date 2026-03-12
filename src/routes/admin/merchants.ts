@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin, requireSeniorAdmin } from '../../middleware/auth';
 import { Merchant } from '../../models/Merchant';
@@ -137,7 +138,7 @@ router.get('/', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('[ADMIN MERCHANTS] Error fetching merchants:', error);
+    logger.error('[ADMIN MERCHANTS] Error fetching merchants:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch merchants'
@@ -220,7 +221,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error: any) {
-    console.error('[ADMIN MERCHANTS] Error fetching stats:', error);
+    logger.error('[ADMIN MERCHANTS] Error fetching stats:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch merchant stats'
@@ -250,7 +251,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       data: merchant
     });
   } catch (error: any) {
-    console.error('[ADMIN MERCHANTS] Error fetching merchant:', error);
+    logger.error('[ADMIN MERCHANTS] Error fetching merchant:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch merchant'
@@ -312,7 +313,7 @@ router.post('/:id/approve', requireSeniorAdmin, async (req: Request, res: Respon
       data: merchant
     });
   } catch (error: any) {
-    console.error('[ADMIN MERCHANTS] Error approving merchant:', error);
+    logger.error('[ADMIN MERCHANTS] Error approving merchant:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to approve merchant'
@@ -382,7 +383,7 @@ router.post('/:id/reject', requireSeniorAdmin, async (req: Request, res: Respons
       data: merchant
     });
   } catch (error: any) {
-    console.error('[ADMIN MERCHANTS] Error rejecting merchant:', error);
+    logger.error('[ADMIN MERCHANTS] Error rejecting merchant:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to reject merchant'
@@ -439,7 +440,7 @@ router.post('/:id/suspend', requireSeniorAdmin, async (req: Request, res: Respon
       data: merchant
     });
   } catch (error: any) {
-    console.error('[ADMIN MERCHANTS] Error suspending merchant:', error);
+    logger.error('[ADMIN MERCHANTS] Error suspending merchant:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to suspend merchant'
@@ -486,7 +487,7 @@ router.post('/:id/reactivate', requireSeniorAdmin, async (req: Request, res: Res
       data: merchant
     });
   } catch (error: any) {
-    console.error('[ADMIN MERCHANTS] Error reactivating merchant:', error);
+    logger.error('[ADMIN MERCHANTS] Error reactivating merchant:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to reactivate merchant'

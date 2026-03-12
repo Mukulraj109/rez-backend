@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import Outlet from '../models/Outlet';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
@@ -51,7 +52,7 @@ export const getOutlets = async (req: Request, res: Response) => {
 
     sendPaginated(res, outlets, pageNum, limitNum, total, 'Outlets fetched successfully');
   } catch (error) {
-    console.error('Error fetching outlets:', error);
+    logger.error('Error fetching outlets:', error);
     sendError(res, 'Failed to fetch outlets', 500);
   }
 };
@@ -75,7 +76,7 @@ export const getOutletById = async (req: Request, res: Response) => {
 
     sendSuccess(res, outlet, 'Outlet fetched successfully');
   } catch (error) {
-    console.error('Error fetching outlet:', error);
+    logger.error('Error fetching outlet:', error);
     sendError(res, 'Failed to fetch outlet', 500);
   }
 };
@@ -114,7 +115,7 @@ export const getOutletsByStore = async (req: Request, res: Response) => {
 
     sendPaginated(res, outlets, pageNum, limitNum, total, 'Store outlets fetched successfully');
   } catch (error) {
-    console.error('Error fetching store outlets:', error);
+    logger.error('Error fetching store outlets:', error);
     sendError(res, 'Failed to fetch store outlets', 500);
   }
 };
@@ -209,7 +210,7 @@ export const getNearbyOutlets = async (req: Request, res: Response) => {
       'Nearby outlets fetched successfully'
     );
   } catch (error) {
-    console.error('Error fetching nearby outlets:', error);
+    logger.error('Error fetching nearby outlets:', error);
     sendError(res, 'Failed to fetch nearby outlets', 500);
   }
 };
@@ -256,7 +257,7 @@ export const getOutletOpeningHours = async (req: Request, res: Response) => {
       'Opening hours fetched successfully'
     );
   } catch (error) {
-    console.error('Error fetching opening hours:', error);
+    logger.error('Error fetching opening hours:', error);
     sendError(res, 'Failed to fetch opening hours', 500);
   }
 };
@@ -299,7 +300,7 @@ export const getOutletOffers = async (req: Request, res: Response) => {
       'Outlet offers fetched successfully'
     );
   } catch (error) {
-    console.error('Error fetching outlet offers:', error);
+    logger.error('Error fetching outlet offers:', error);
     sendError(res, 'Failed to fetch outlet offers', 500);
   }
 };
@@ -346,7 +347,7 @@ export const searchOutlets = async (req: Request, res: Response) => {
 
     sendPaginated(res, outlets, pageNum, limitNum, total, 'Outlets search results');
   } catch (error) {
-    console.error('Error searching outlets:', error);
+    logger.error('Error searching outlets:', error);
     sendError(res, 'Failed to search outlets', 500);
   }
 };
@@ -373,7 +374,7 @@ export const getStoreOutletCount = async (req: Request, res: Response) => {
       'Outlet count fetched successfully'
     );
   } catch (error) {
-    console.error('Error fetching outlet count:', error);
+    logger.error('Error fetching outlet count:', error);
     sendError(res, 'Failed to fetch outlet count', 500);
   }
 };

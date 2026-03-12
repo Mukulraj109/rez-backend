@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - FAQ CMS
  * CRUD endpoints for managing FAQ content
@@ -64,7 +65,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     return sendPaginated(res, faqs, page, limit, total, 'FAQs fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching FAQs:', error);
+    logger.error('[Admin] Error fetching FAQs:', error);
     return sendError(res, 'Failed to fetch FAQs', 500);
   }
 });
@@ -99,7 +100,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     return sendCreated(res, faq, 'FAQ created');
   } catch (error: any) {
-    console.error('[Admin] Error creating FAQ:', error);
+    logger.error('[Admin] Error creating FAQ:', error);
     if (error.name === 'ValidationError') {
       return sendBadRequest(res, error.message);
     }
@@ -142,7 +143,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, faq, 'FAQ updated');
   } catch (error: any) {
-    console.error('[Admin] Error updating FAQ:', error);
+    logger.error('[Admin] Error updating FAQ:', error);
     if (error.name === 'ValidationError') {
       return sendBadRequest(res, error.message);
     }
@@ -173,7 +174,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, faq, 'FAQ soft-deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting FAQ:', error);
+    logger.error('[Admin] Error deleting FAQ:', error);
     return sendError(res, 'Failed to delete FAQ', 500);
   }
 });
@@ -195,7 +196,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
 
     return sendSuccess(res, faq, `FAQ ${faq.isActive ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling FAQ:', error);
+    logger.error('[Admin] Error toggling FAQ:', error);
     return sendError(res, 'Failed to toggle FAQ', 500);
   }
 });
@@ -223,7 +224,7 @@ router.put('/reorder', async (req: Request, res: Response) => {
 
     return sendSuccess(res, { modifiedCount: result.modifiedCount }, 'FAQs reordered');
   } catch (error) {
-    console.error('[Admin] Error reordering FAQs:', error);
+    logger.error('[Admin] Error reordering FAQs:', error);
     return sendError(res, 'Failed to reorder FAQs', 500);
   }
 });

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import Program, { IProgram } from '../models/Program';
 import SocialImpactEnrollment, { ISocialImpactEnrollment } from '../models/SocialImpactEnrollment';
 import UserImpactStats, { IUserImpactStatsModel } from '../models/UserImpactStats';
@@ -382,7 +383,7 @@ class SocialImpactService {
           const SponsorAllocation = mongoose.model('SponsorAllocation');
           const balance = await (SponsorAllocation as any).getSponsorBalance(event.sponsor._id.toString());
           if (balance < brandCoins) {
-            console.warn(`[SocialImpact] Sponsor ${event.sponsor._id} budget insufficient: ${balance} < ${brandCoins}`);
+            logger.warn(`[SocialImpact] Sponsor ${event.sponsor._id} budget insufficient: ${balance} < ${brandCoins}`);
             budgetSufficient = false;
           }
         } catch {
@@ -448,7 +449,7 @@ class SocialImpactService {
           }
         }
       } catch (brandError) {
-        console.error('[SocialImpact] Failed to award branded coins:', brandError);
+        logger.error('[SocialImpact] Failed to award branded coins:', brandError);
         // Don't fail the entire completion — rez coins already awarded
       }
     }

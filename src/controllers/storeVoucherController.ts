@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import StoreVoucher from '../models/StoreVoucher';
 import UserStoreVoucher from '../models/UserStoreVoucher';
@@ -77,7 +78,7 @@ export const getStoreVouchers = async (req: Request, res: Response) => {
 
     sendPaginated(res, vouchers, pageNum, limitNum, total, 'Store vouchers fetched successfully');
   } catch (error) {
-    console.error('Error fetching store vouchers:', error);
+    logger.error('Error fetching store vouchers:', error);
     sendError(res, 'Failed to fetch store vouchers', 500);
   }
 };
@@ -128,7 +129,7 @@ export const getStoreVoucherById = async (req: Request, res: Response) => {
 
     sendSuccess(res, voucher, 'Store voucher fetched successfully');
   } catch (error) {
-    console.error('Error fetching store voucher:', error);
+    logger.error('Error fetching store voucher:', error);
     sendError(res, 'Failed to fetch store voucher', 500);
   }
 };
@@ -186,7 +187,7 @@ export const claimStoreVoucher = async (req: Request, res: Response) => {
       201
     );
   } catch (error) {
-    console.error('Error claiming store voucher:', error);
+    logger.error('Error claiming store voucher:', error);
 
     // Handle duplicate key error
     if ((error as any).code === 11000) {
@@ -272,7 +273,7 @@ export const redeemStoreVoucher = async (req: Request, res: Response) => {
       'Voucher redeemed successfully'
     );
   } catch (error) {
-    console.error('Error redeeming store voucher:', error);
+    logger.error('Error redeeming store voucher:', error);
     sendError(res, 'Failed to redeem voucher', 500);
   }
 };
@@ -357,7 +358,7 @@ export const validateStoreVoucher = async (req: Request, res: Response) => {
       'Voucher is valid'
     );
   } catch (error) {
-    console.error('Error validating store voucher:', error);
+    logger.error('Error validating store voucher:', error);
     sendError(res, 'Failed to validate voucher', 500);
   }
 };
@@ -402,7 +403,7 @@ export const getMyStoreVouchers = async (req: Request, res: Response) => {
 
     sendPaginated(res, vouchers, pageNum, limitNum, total, 'My vouchers fetched successfully');
   } catch (error) {
-    console.error('Error fetching my store vouchers:', error);
+    logger.error('Error fetching my store vouchers:', error);
     sendError(res, 'Failed to fetch vouchers', 500);
   }
 };
@@ -436,7 +437,7 @@ export const getMyStoreVoucherById = async (req: Request, res: Response) => {
 
     sendSuccess(res, voucher, 'Voucher details fetched successfully');
   } catch (error) {
-    console.error('Error fetching voucher details:', error);
+    logger.error('Error fetching voucher details:', error);
     sendError(res, 'Failed to fetch voucher details', 500);
   }
 };
@@ -467,7 +468,7 @@ export const removeClaimedVoucher = async (req: Request, res: Response) => {
 
     sendSuccess(res, { success: true }, 'Voucher removed successfully');
   } catch (error) {
-    console.error('Error removing voucher:', error);
+    logger.error('Error removing voucher:', error);
     sendError(res, 'Failed to remove voucher', 500);
   }
 };

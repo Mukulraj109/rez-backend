@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose, { Schema, Document, Types } from 'mongoose';
 import { SubscriptionTier, BillingCycle } from './Subscription';
 import { pct } from '../utils/currency';
@@ -422,7 +423,7 @@ PromoCodeSchema.statics.validateCode = async function(
       promoCode
     };
   } catch (error: any) {
-    console.error('Error validating promo code:', error);
+    logger.error('Error validating promo code:', error);
     return {
       valid: false,
       message: 'Error validating promo code'

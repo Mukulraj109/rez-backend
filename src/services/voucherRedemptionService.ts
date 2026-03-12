@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import axios from 'axios';
 import Referral from '../models/Referral';
 import { Types } from 'mongoose';
@@ -64,7 +65,7 @@ export class VoucherRedemptionService {
         redemptionUrl: response.redemptionUrl
       };
     } catch (error) {
-      console.error('Voucher generation failed:', error);
+      logger.error('Voucher generation failed:', error);
       // Fallback to generated code
       return this.generateFallbackVoucher(type, amount);
     }
@@ -175,7 +176,7 @@ export class VoucherRedemptionService {
       const user = await User.findById(userId).select('email profile.firstName').lean();
 
       if (!user?.email) {
-        console.log(`⚠️ [Voucher] No email address for user ${userId}. Skipping voucher email.`);
+        logger.info(`⚠️ [Voucher] No email address for user ${userId}. Skipping voucher email.`);
         return;
       }
 
@@ -198,9 +199,9 @@ export class VoucherRedemptionService {
         text: `Your ${reward.voucherType} voucher code is ${reward.voucherCode} worth ₹${reward.amount}. Use it at checkout on REZ!`
       });
 
-      console.log(`📧 [Voucher] Email sent to user ${userId} for voucher ${reward.voucherCode}`);
+      logger.info(`📧 [Voucher] Email sent to user ${userId} for voucher ${reward.voucherCode}`);
     } catch (emailErr) {
-      console.error(`❌ [Voucher] Failed to send voucher email to user ${userId}:`, emailErr);
+      logger.error(`❌ [Voucher] Failed to send voucher email to user ${userId}:`, emailErr);
       // Don't throw — email failure should not block the voucher claim flow
     }
   }

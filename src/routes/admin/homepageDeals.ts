@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../../middleware/auth';
 import HomepageDealsSection from '../../models/HomepageDealsSection';
@@ -111,7 +112,7 @@ router.get('/config', async (req: Request, res: Response) => {
       data: config,
     });
   } catch (error: any) {
-    console.error('[ADMIN HOMEPAGE DEALS] Get config error:', error);
+    logger.error('[ADMIN HOMEPAGE DEALS] Get config error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch configuration',
@@ -180,7 +181,7 @@ router.put('/config', async (req: Request, res: Response) => {
 
     await config.save();
 
-    console.log(`✅ [ADMIN HOMEPAGE DEALS] Config updated: ${config.title}`);
+    logger.info(`✅ [ADMIN HOMEPAGE DEALS] Config updated: ${config.title}`);
 
     return res.json({
       success: true,
@@ -188,7 +189,7 @@ router.put('/config', async (req: Request, res: Response) => {
       data: config,
     });
   } catch (error: any) {
-    console.error('[ADMIN HOMEPAGE DEALS] Update config error:', error);
+    logger.error('[ADMIN HOMEPAGE DEALS] Update config error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to update configuration',
@@ -248,7 +249,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN HOMEPAGE DEALS] Stats error:', error);
+    logger.error('[ADMIN HOMEPAGE DEALS] Stats error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch statistics',
@@ -317,7 +318,7 @@ router.get('/items', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN HOMEPAGE DEALS] List items error:', error);
+    logger.error('[ADMIN HOMEPAGE DEALS] List items error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch items',
@@ -360,7 +361,7 @@ router.get('/items/:id', async (req: Request, res: Response) => {
       data: item,
     });
   } catch (error: any) {
-    console.error('[ADMIN HOMEPAGE DEALS] Get item error:', error);
+    logger.error('[ADMIN HOMEPAGE DEALS] Get item error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch item',
@@ -399,7 +400,7 @@ router.post('/items', async (req: Request, res: Response) => {
     const item = new HomepageDealsItem(value);
     await item.save();
 
-    console.log(`✅ [ADMIN HOMEPAGE DEALS] Item created: ${item.title} (${item.tabType})`);
+    logger.info(`✅ [ADMIN HOMEPAGE DEALS] Item created: ${item.title} (${item.tabType})`);
 
     return res.status(201).json({
       success: true,
@@ -407,7 +408,7 @@ router.post('/items', async (req: Request, res: Response) => {
       data: item,
     });
   } catch (error: any) {
-    console.error('[ADMIN HOMEPAGE DEALS] Create item error:', error);
+    logger.error('[ADMIN HOMEPAGE DEALS] Create item error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to create item',
@@ -457,7 +458,7 @@ router.put('/items/:id', async (req: Request, res: Response) => {
       });
     }
 
-    console.log(`✅ [ADMIN HOMEPAGE DEALS] Item updated: ${item.title}`);
+    logger.info(`✅ [ADMIN HOMEPAGE DEALS] Item updated: ${item.title}`);
 
     return res.json({
       success: true,
@@ -465,7 +466,7 @@ router.put('/items/:id', async (req: Request, res: Response) => {
       data: item,
     });
   } catch (error: any) {
-    console.error('[ADMIN HOMEPAGE DEALS] Update item error:', error);
+    logger.error('[ADMIN HOMEPAGE DEALS] Update item error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to update item',
@@ -503,14 +504,14 @@ router.delete('/items/:id', async (req: Request, res: Response) => {
       });
     }
 
-    console.log(`🗑️ [ADMIN HOMEPAGE DEALS] Item deleted: ${item.title}`);
+    logger.info(`🗑️ [ADMIN HOMEPAGE DEALS] Item deleted: ${item.title}`);
 
     return res.json({
       success: true,
       message: 'Item deleted successfully',
     });
   } catch (error: any) {
-    console.error('[ADMIN HOMEPAGE DEALS] Delete item error:', error);
+    logger.error('[ADMIN HOMEPAGE DEALS] Delete item error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to delete item',
@@ -551,7 +552,7 @@ router.patch('/items/:id/toggle', async (req: Request, res: Response) => {
     item.isActive = !item.isActive;
     await item.save();
 
-    console.log(`🔄 [ADMIN HOMEPAGE DEALS] Item toggled: ${item.title} - isActive: ${item.isActive}`);
+    logger.info(`🔄 [ADMIN HOMEPAGE DEALS] Item toggled: ${item.title} - isActive: ${item.isActive}`);
 
     return res.json({
       success: true,
@@ -559,7 +560,7 @@ router.patch('/items/:id/toggle', async (req: Request, res: Response) => {
       data: { isActive: item.isActive },
     });
   } catch (error: any) {
-    console.error('[ADMIN HOMEPAGE DEALS] Toggle item error:', error);
+    logger.error('[ADMIN HOMEPAGE DEALS] Toggle item error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to toggle item',
@@ -598,14 +599,14 @@ router.patch('/items/reorder', async (req: Request, res: Response) => {
 
     await HomepageDealsItem.bulkWrite(bulkOps);
 
-    console.log(`📋 [ADMIN HOMEPAGE DEALS] Reordered ${items.length} items`);
+    logger.info(`📋 [ADMIN HOMEPAGE DEALS] Reordered ${items.length} items`);
 
     return res.json({
       success: true,
       message: 'Items reordered successfully',
     });
   } catch (error: any) {
-    console.error('[ADMIN HOMEPAGE DEALS] Reorder error:', error);
+    logger.error('[ADMIN HOMEPAGE DEALS] Reorder error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to reorder items',
@@ -663,14 +664,14 @@ router.patch('/items/:id/move-up', async (req: Request, res: Response) => {
 
     await Promise.all([item.save(), itemAbove.save()]);
 
-    console.log(`⬆️ [ADMIN HOMEPAGE DEALS] Moved up: ${item.title}`);
+    logger.info(`⬆️ [ADMIN HOMEPAGE DEALS] Moved up: ${item.title}`);
 
     return res.json({
       success: true,
       message: 'Item moved up successfully',
     });
   } catch (error: any) {
-    console.error('[ADMIN HOMEPAGE DEALS] Move up error:', error);
+    logger.error('[ADMIN HOMEPAGE DEALS] Move up error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to move item',
@@ -728,14 +729,14 @@ router.patch('/items/:id/move-down', async (req: Request, res: Response) => {
 
     await Promise.all([item.save(), itemBelow.save()]);
 
-    console.log(`⬇️ [ADMIN HOMEPAGE DEALS] Moved down: ${item.title}`);
+    logger.info(`⬇️ [ADMIN HOMEPAGE DEALS] Moved down: ${item.title}`);
 
     return res.json({
       success: true,
       message: 'Item moved down successfully',
     });
   } catch (error: any) {
-    console.error('[ADMIN HOMEPAGE DEALS] Move down error:', error);
+    logger.error('[ADMIN HOMEPAGE DEALS] Move down error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to move item',
@@ -791,7 +792,7 @@ router.patch('/items/:id/update-count', async (req: Request, res: Response) => {
       data: { cachedCount: item.cachedCount },
     });
   } catch (error: any) {
-    console.error('[ADMIN HOMEPAGE DEALS] Update count error:', error);
+    logger.error('[ADMIN HOMEPAGE DEALS] Update count error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to update count',

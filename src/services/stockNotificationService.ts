@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Stock Notification Service
  *
@@ -80,7 +81,7 @@ class StockNotificationService {
       }
       await existingSubscription.save();
 
-      console.log(`✅ Updated stock notification subscription for user ${userId} to product ${productId}`);
+      logger.info(`✅ Updated stock notification subscription for user ${userId} to product ${productId}`);
       return existingSubscription;
     }
 
@@ -101,7 +102,7 @@ class StockNotificationService {
 
     await subscription.save();
 
-    console.log(`✅ Created stock notification subscription for user ${userId} to product ${productId}`);
+    logger.info(`✅ Created stock notification subscription for user ${userId} to product ${productId}`);
     return subscription;
   }
 
@@ -123,7 +124,7 @@ class StockNotificationService {
       }
     );
 
-    console.log(`✅ Unsubscribed user ${userId} from product ${productId}`);
+    logger.info(`✅ Unsubscribed user ${userId} from product ${productId}`);
     return result.modifiedCount > 0;
   }
 
@@ -167,7 +168,7 @@ class StockNotificationService {
   public async notifySubscribers(payload: NotificationPayload): Promise<void> {
     const { productId, productName, productImage, productPrice, newStock } = payload;
 
-    console.log(`📢 Notifying subscribers for product ${productId} - New stock: ${newStock}`);
+    logger.info(`📢 Notifying subscribers for product ${productId} - New stock: ${newStock}`);
 
     // Get all pending subscriptions for this product
     const subscriptions = await StockNotification.find({
@@ -176,11 +177,11 @@ class StockNotificationService {
     }).populate('userId').lean();
 
     if (subscriptions.length === 0) {
-      console.log(`ℹ️ No pending subscriptions for product ${productId}`);
+      logger.info(`ℹ️ No pending subscriptions for product ${productId}`);
       return;
     }
 
-    console.log(`📢 Found ${subscriptions.length} subscribers for product ${productId}`);
+    logger.info(`📢 Found ${subscriptions.length} subscribers for product ${productId}`);
 
     // Process each subscription
     for (const subscription of subscriptions) {
@@ -197,13 +198,13 @@ class StockNotificationService {
         subscription.notifiedAt = new Date();
         await subscription.save();
 
-        console.log(`✅ Notified user ${subscription.userId} for product ${productId}`);
+        logger.info(`✅ Notified user ${subscription.userId} for product ${productId}`);
       } catch (error) {
-        console.error(`❌ Failed to notify user ${subscription.userId}:`, error);
+        logger.error(`❌ Failed to notify user ${subscription.userId}:`, error);
       }
     }
 
-    console.log(`✅ Completed notifying ${subscriptions.length} subscribers for product ${productId}`);
+    logger.info(`✅ Completed notifying ${subscriptions.length} subscribers for product ${productId}`);
   }
 
   /**
@@ -251,7 +252,7 @@ class StockNotificationService {
         break;
       case 'push':
         // Push notification already handled via in-app notification
-        console.log(`📱 Push notification sent to user ${user._id}`);
+        logger.info(`📱 Push notification sent to user ${user._id}`);
         break;
     }
   }
@@ -272,12 +273,12 @@ class StockNotificationService {
     const email = subscription.email;
 
     if (!email) {
-      console.log(`⚠️ No email address for subscription ${subscription._id}`);
+      logger.info(`⚠️ No email address for subscription ${subscription._id}`);
       return;
     }
 
     // DEV MODE: Just log the email that would be sent
-    console.log(`
+    logger.info(`
 📧 [DEV MODE] Email Notification:
 ───────────────────────────────────────
 To: ${email}
@@ -320,7 +321,7 @@ The REZ Team
     const phoneNumber = subscription.phoneNumber;
 
     if (!phoneNumber) {
-      console.log(`⚠️ No phone number for subscription ${subscription._id}`);
+      logger.info(`⚠️ No phone number for subscription ${subscription._id}`);
       return;
     }
 
@@ -328,9 +329,9 @@ The REZ Team
 
     try {
       await SMSService.send({ to: phoneNumber, message });
-      console.log(`📱 [Stock] SMS sent to ***${phoneNumber.slice(-4)} for ${productName}`);
+      logger.info(`📱 [Stock] SMS sent to ***${phoneNumber.slice(-4)} for ${productName}`);
     } catch (smsErr) {
-      console.error(`❌ [Stock] Failed to send SMS to ***${phoneNumber.slice(-4)}:`, smsErr);
+      logger.error(`❌ [Stock] Failed to send SMS to ***${phoneNumber.slice(-4)}:`, smsErr);
     }
   }
 
@@ -343,7 +344,7 @@ The REZ Team
       userId: new Types.ObjectId(userId)
     });
 
-    console.log(`✅ Deleted subscription ${notificationId} for user ${userId}`);
+    logger.info(`✅ Deleted subscription ${notificationId} for user ${userId}`);
     return result.deletedCount > 0;
   }
 
@@ -359,7 +360,7 @@ The REZ Team
       updatedAt: { $lt: cutoffDate }
     });
 
-    console.log(`✅ Cleaned up ${result.deletedCount} old notifications`);
+    logger.info(`✅ Cleaned up ${result.deletedCount} old notifications`);
     return result.deletedCount;
   }
 }

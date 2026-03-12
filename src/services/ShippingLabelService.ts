@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
@@ -34,7 +35,7 @@ export class ShippingLabelService {
       });
       return png;
     } catch (error) {
-      console.error('Error generating barcode:', error);
+      logger.error('Error generating barcode:', error);
       // Return empty buffer if barcode generation fails
       return Buffer.from('');
     }
@@ -63,7 +64,7 @@ export class ShippingLabelService {
 
       return `${this.PUBLIC_URL_BASE}/uploads/labels/${filename}`;
     } catch (error) {
-      console.error('Error generating shipping label:', error);
+      logger.error('Error generating shipping label:', error);
       throw new Error(
         `Failed to generate shipping label: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
@@ -231,7 +232,7 @@ export class ShippingLabelService {
         const labelUrl = await this.generateShippingLabel(order, merchantId);
         labels.push(labelUrl);
       } catch (error) {
-        console.error(`Failed to generate label for order ${order.orderNumber}:`, error);
+        logger.error(`Failed to generate label for order ${order.orderNumber}:`, error);
         labels.push(''); // Add empty string for failed labels
       }
     }
@@ -370,7 +371,7 @@ export class ShippingLabelService {
         }
       });
     } catch (error) {
-      console.error('Error generating combined shipping labels:', error);
+      logger.error('Error generating combined shipping labels:', error);
       throw new Error(
         `Failed to generate combined shipping labels: ${error instanceof Error ? error.message : 'Unknown error'}`
       );

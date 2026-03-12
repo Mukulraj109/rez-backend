@@ -550,8 +550,8 @@ class LeaderboardService {
     ];
 
     const [results, countResult] = await Promise.all([
-      CoinTransaction.aggregate(mainPipeline),
-      CoinTransaction.aggregate(countPipeline)
+      CoinTransaction.aggregate(mainPipeline).option({ allowDiskUse: true }),
+      CoinTransaction.aggregate(countPipeline).option({ allowDiskUse: true })
     ]);
 
     const total = Math.min(
@@ -648,7 +648,7 @@ class LeaderboardService {
       }
     ];
 
-    const results = await CoinTransaction.aggregate(pipeline);
+    const results = await CoinTransaction.aggregate(pipeline).option({ allowDiskUse: true });
 
     return results.map((entry: any, index: number) => ({
       user: {

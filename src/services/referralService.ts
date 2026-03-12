@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Referral Service
 // Business logic for referral program
 
@@ -95,7 +96,7 @@ class ReferralService {
     );
 
     // Log without PII - only sanitized IDs
-    console.log(`✅ [REFERRAL] Created referral relationship: ${referrerId.toString().slice(-6)} -> ${refereeId.toString().slice(-6)}`);
+    logger.info(`✅ [REFERRAL] Created referral relationship: ${referrerId.toString().slice(-6)} -> ${refereeId.toString().slice(-6)}`);
     return referral;
   }
 
@@ -116,7 +117,7 @@ class ReferralService {
 
     if (!referral) {
       // Log without PII - only sanitized ID
-      console.log(`ℹ️ [REFERRAL] No pending referral found for referee ID: ${refereeId.toString().slice(-6)}`);
+      logger.info(`ℹ️ [REFERRAL] No pending referral found for referee ID: ${refereeId.toString().slice(-6)}`);
       return;
     }
 
@@ -171,11 +172,11 @@ class ReferralService {
       challengeService.updateProgress(
         String(referral.referrer), 'refer_friends', 1,
         { referralId: String(referral._id) }
-      ).catch(err => console.error('[REFERRAL] Challenge progress update failed:', err));
+      ).catch(err => logger.error('[REFERRAL] Challenge progress update failed:', err));
 
       // Recalculate Privé reputation on referral completion (fire-and-forget)
       reputationService.onReferralCompleted(referral.referrer as Types.ObjectId)
-        .catch(err => console.warn('[REFERRAL] Reputation recalculation failed:', err));
+        .catch(err => logger.warn('[REFERRAL] Reputation recalculation failed:', err));
     }
 
     referral.markModified('metadata');
@@ -188,13 +189,13 @@ class ReferralService {
     referralTierService.checkTierUpgrade(String(referral.referrer))
       .then(result => {
         if (result.upgraded) {
-          console.log(`🏆 [REFERRAL] Referrer auto-upgraded to tier ${result.newTier}`);
+          logger.info(`🏆 [REFERRAL] Referrer auto-upgraded to tier ${result.newTier}`);
         }
       })
-      .catch(err => console.error('[REFERRAL] Tier upgrade check failed:', err));
+      .catch(err => logger.error('[REFERRAL] Tier upgrade check failed:', err));
 
     // Log without PII - only sanitized referral ID
-    console.log(`✅ [REFERRAL] Processed first order for referral ID: ${(referral._id as any).toString().slice(-6)}`);
+    logger.info(`✅ [REFERRAL] Processed first order for referral ID: ${(referral._id as any).toString().slice(-6)}`);
   }
 
   /**
@@ -213,7 +214,7 @@ class ReferralService {
     }).lean();
 
     if (!referral) {
-      console.log(`ℹ️ [REFERRAL] No active referral found for milestone bonus`);
+      logger.info(`ℹ️ [REFERRAL] No active referral found for milestone bonus`);
       return;
     }
 
@@ -259,13 +260,13 @@ class ReferralService {
       referralTierService.checkTierUpgrade(String(referral.referrer))
         .then(result => {
           if (result.upgraded) {
-            console.log(`🏆 [REFERRAL] Referrer auto-upgraded to tier ${result.newTier} after milestone`);
+            logger.info(`🏆 [REFERRAL] Referrer auto-upgraded to tier ${result.newTier} after milestone`);
           }
         })
-        .catch(err => console.error('[REFERRAL] Tier upgrade check failed after milestone:', err));
+        .catch(err => logger.error('[REFERRAL] Tier upgrade check failed after milestone:', err));
 
       // Log without PII - only sanitized referral ID
-      console.log(`✅ [REFERRAL] Processed milestone bonus for referral ID: ${(referral._id as any).toString().slice(-6)}`);
+      logger.info(`✅ [REFERRAL] Processed milestone bonus for referral ID: ${(referral._id as any).toString().slice(-6)}`);
     }
   }
 
@@ -350,7 +351,7 @@ class ReferralService {
    */
   async trackShare(userId: Types.ObjectId, shareMethod: string): Promise<void> {
     // Log share event without PII - only sanitized user ID
-    console.log(`📤 [REFERRAL] User ID: ${userId.toString().slice(-6)} shared via ${shareMethod}`);
+    logger.info(`📤 [REFERRAL] User ID: ${userId.toString().slice(-6)} shared via ${shareMethod}`);
 
     // Optional: Create activity for sharing
     // await activityService.referral.onReferralShared(userId, shareMethod);
@@ -406,7 +407,7 @@ class ReferralService {
       }
     );
 
-    console.log(`⏰ [REFERRAL] Marked ${result.modifiedCount} referrals as expired`);
+    logger.info(`⏰ [REFERRAL] Marked ${result.modifiedCount} referrals as expired`);
     return result.modifiedCount || 0;
   }
 }

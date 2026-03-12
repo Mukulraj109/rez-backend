@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import StoreExperience from '../../models/StoreExperience';
@@ -122,7 +123,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Stats error:', error);
+    logger.error('[ADMIN EXPERIENCES] Stats error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch statistics',
@@ -183,7 +184,7 @@ router.get('/stores/search', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Search stores error:', error);
+    logger.error('[ADMIN EXPERIENCES] Search stores error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to search stores',
@@ -227,7 +228,7 @@ router.get('/stores/suggested', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Suggested stores error:', error);
+    logger.error('[ADMIN EXPERIENCES] Suggested stores error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch suggested stores',
@@ -311,7 +312,7 @@ router.get('/', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] List error:', error);
+    logger.error('[ADMIN EXPERIENCES] List error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch experiences',
@@ -341,7 +342,7 @@ router.get('/categories/list', async (req: Request, res: Response) => {
       data: categories,
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Get categories error:', error);
+    logger.error('[ADMIN EXPERIENCES] Get categories error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch categories',
@@ -375,7 +376,7 @@ router.get('/tags/list', async (req: Request, res: Response) => {
       data: tags.map(t => ({ tag: t._id, count: t.count })),
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Get tags error:', error);
+    logger.error('[ADMIN EXPERIENCES] Get tags error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch tags',
@@ -466,7 +467,7 @@ router.post('/preview-stores', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Preview stores error:', error);
+    logger.error('[ADMIN EXPERIENCES] Preview stores error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to preview stores',
@@ -552,7 +553,7 @@ router.post('/refresh-all-counts', async (req: Request, res: Response) => {
       data: { totalExperiences: experiences.length, updated },
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Refresh all counts error:', error);
+    logger.error('[ADMIN EXPERIENCES] Refresh all counts error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to refresh store counts',
@@ -597,7 +598,7 @@ router.patch('/reorder', async (req: Request, res: Response) => {
       message: 'Experiences reordered successfully',
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Reorder error:', error);
+    logger.error('[ADMIN EXPERIENCES] Reorder error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to reorder experiences',
@@ -640,7 +641,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       data: experience,
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Get error:', error);
+    logger.error('[ADMIN EXPERIENCES] Get error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch experience',
@@ -693,7 +694,7 @@ router.post('/', async (req: Request, res: Response) => {
       data: experience,
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Create error:', error);
+    logger.error('[ADMIN EXPERIENCES] Create error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to create experience',
@@ -764,7 +765,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       data: experience,
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Update error:', error);
+    logger.error('[ADMIN EXPERIENCES] Update error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to update experience',
@@ -808,7 +809,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       message: 'Experience deleted successfully',
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Delete error:', error);
+    logger.error('[ADMIN EXPERIENCES] Delete error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to delete experience',
@@ -856,7 +857,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
       data: { isActive: experience.isActive },
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Toggle error:', error);
+    logger.error('[ADMIN EXPERIENCES] Toggle error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to toggle experience',
@@ -904,7 +905,7 @@ router.patch('/:id/feature', async (req: Request, res: Response) => {
       data: { isFeatured: experience.isFeatured },
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Feature toggle error:', error);
+    logger.error('[ADMIN EXPERIENCES] Feature toggle error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to toggle featured status',
@@ -999,7 +1000,7 @@ router.patch('/:id/refresh-count', async (req: Request, res: Response) => {
       data: { storeCount },
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Refresh count error:', error);
+    logger.error('[ADMIN EXPERIENCES] Refresh count error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to refresh store count',
@@ -1067,7 +1068,7 @@ router.get('/:id/assigned-stores', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Get assigned stores error:', error);
+    logger.error('[ADMIN EXPERIENCES] Get assigned stores error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch assigned stores',
@@ -1154,7 +1155,7 @@ router.post('/:id/assign-store', async (req: Request, res: Response) => {
       data: { storeId, storeName: store.name, storeCount: experience.storeCount },
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Assign store error:', error);
+    logger.error('[ADMIN EXPERIENCES] Assign store error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to assign store',
@@ -1227,7 +1228,7 @@ router.delete('/:id/remove-store/:storeId', async (req: Request, res: Response) 
       data: { storeCount: experience.storeCount },
     });
   } catch (error: any) {
-    console.error('[ADMIN EXPERIENCES] Remove store error:', error);
+    logger.error('[ADMIN EXPERIENCES] Remove store error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to remove store',

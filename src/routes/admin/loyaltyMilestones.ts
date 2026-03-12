@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Loyalty Milestones
  * CRUD for LoyaltyMilestone model
@@ -42,7 +43,7 @@ router.get('/', async (req: Request, res: Response) => {
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     }, 'Loyalty milestones fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching loyalty milestones:', error);
+    logger.error('[Admin] Error fetching loyalty milestones:', error);
     return sendError(res, 'Failed to fetch loyalty milestones', 500);
   }
 });
@@ -57,7 +58,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     if (!milestone) return sendError(res, 'Loyalty milestone not found', 404);
     return sendSuccess(res, milestone, 'Loyalty milestone fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching loyalty milestone:', error);
+    logger.error('[Admin] Error fetching loyalty milestone:', error);
     return sendError(res, 'Failed to fetch loyalty milestone', 500);
   }
 });
@@ -75,7 +76,7 @@ router.post('/', async (req: Request, res: Response) => {
     const milestone = await LoyaltyMilestone.create({ ...req.body });
     return sendSuccess(res, milestone, 'Loyalty milestone created');
   } catch (error) {
-    console.error('[Admin] Error creating loyalty milestone:', error);
+    logger.error('[Admin] Error creating loyalty milestone:', error);
     return sendError(res, 'Failed to create loyalty milestone', 500);
   }
 });
@@ -90,7 +91,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (!milestone) return sendError(res, 'Loyalty milestone not found', 404);
     return sendSuccess(res, milestone, 'Loyalty milestone updated');
   } catch (error) {
-    console.error('[Admin] Error updating loyalty milestone:', error);
+    logger.error('[Admin] Error updating loyalty milestone:', error);
     return sendError(res, 'Failed to update loyalty milestone', 500);
   }
 });
@@ -107,7 +108,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
     await milestone.save();
     return sendSuccess(res, milestone, `Loyalty milestone ${milestone.isActive ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling loyalty milestone:', error);
+    logger.error('[Admin] Error toggling loyalty milestone:', error);
     return sendError(res, 'Failed to toggle loyalty milestone', 500);
   }
 });
@@ -122,7 +123,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     if (!milestone) return sendError(res, 'Loyalty milestone not found', 404);
     return sendSuccess(res, null, 'Loyalty milestone deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting loyalty milestone:', error);
+    logger.error('[Admin] Error deleting loyalty milestone:', error);
     return sendError(res, 'Failed to delete loyalty milestone', 500);
   }
 });

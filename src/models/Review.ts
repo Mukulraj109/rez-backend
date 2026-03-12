@@ -175,6 +175,9 @@ ReviewSchema.index({ rating: 1, isActive: 1 });
 ReviewSchema.index({ store: 1, moderationStatus: 1 });
 ReviewSchema.index({ moderationStatus: 1, isActive: 1 });
 
+// Compound index for paginated active reviews per store sorted by newest
+ReviewSchema.index({ store: 1, isActive: 1, createdAt: -1 });
+
 // Virtual for user info (populated)
 ReviewSchema.virtual('userInfo', {
   ref: 'User',

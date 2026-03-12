@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
@@ -118,7 +119,7 @@ router.get('/', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('[ADMIN LOYALTY] Error fetching loyalty records:', error);
+    logger.error('[ADMIN LOYALTY] Error fetching loyalty records:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch loyalty records'
@@ -187,7 +188,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error: any) {
-    console.error('[ADMIN LOYALTY] Error fetching stats:', error);
+    logger.error('[ADMIN LOYALTY] Error fetching stats:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch loyalty stats'
@@ -258,7 +259,7 @@ router.get('/missions', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('[ADMIN LOYALTY] Error fetching missions:', error);
+    logger.error('[ADMIN LOYALTY] Error fetching missions:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch mission stats'
@@ -288,7 +289,7 @@ router.get('/:userId', async (req: Request, res: Response) => {
       data: loyalty
     });
   } catch (error: any) {
-    console.error('[ADMIN LOYALTY] Error fetching user loyalty:', error);
+    logger.error('[ADMIN LOYALTY] Error fetching user loyalty:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch user loyalty'
@@ -360,7 +361,7 @@ router.post('/:userId/add-coins', async (req: Request, res: Response) => {
       data: loyalty
     });
   } catch (error: any) {
-    console.error('[ADMIN LOYALTY] Error adding coins:', error);
+    logger.error('[ADMIN LOYALTY] Error adding coins:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to add coins'
@@ -394,7 +395,7 @@ router.post('/:userId/reset-streak', async (req: Request, res: Response) => {
       data: loyalty
     });
   } catch (error: any) {
-    console.error('[ADMIN LOYALTY] Error resetting streak:', error);
+    logger.error('[ADMIN LOYALTY] Error resetting streak:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to reset streak'
@@ -440,7 +441,7 @@ router.post('/:userId/reset-missions', async (req: Request, res: Response) => {
       data: loyalty
     });
   } catch (error: any) {
-    console.error('[ADMIN LOYALTY] Error resetting missions:', error);
+    logger.error('[ADMIN LOYALTY] Error resetting missions:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to reset missions'

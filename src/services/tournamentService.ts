@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import Tournament, { ITournament } from '../models/Tournament';
 import { Wallet } from '../models/Wallet';
 import { CoinTransaction } from '../models/CoinTransaction';
@@ -111,7 +112,7 @@ class TournamentService {
           { tournamentId: String(tournament._id), tournamentName: tournament.name }
         );
       } catch (txErr) {
-        console.error('[TOURNAMENT] Failed to record entry fee transaction:', txErr);
+        logger.error('[TOURNAMENT] Failed to record entry fee transaction:', txErr);
       }
     }
 
@@ -207,7 +208,7 @@ class TournamentService {
       );
     } catch (socketErr) {
       // Socket errors should never block game flow
-      console.error('[TOURNAMENT] Socket emission error:', socketErr);
+      logger.error('[TOURNAMENT] Socket emission error:', socketErr);
     }
   }
 
@@ -358,7 +359,7 @@ class TournamentService {
       if (tournament.participants.length >= (tournament.minParticipants || 0)) {
         await this.distributeTournamentPrizes(tournament);
       } else {
-        console.log(`⚠️ [TOURNAMENT] Skipping prize distribution for "${tournament.name}" - only ${tournament.participants.length}/${tournament.minParticipants} participants`);
+        logger.info(`⚠️ [TOURNAMENT] Skipping prize distribution for "${tournament.name}" - only ${tournament.participants.length}/${tournament.minParticipants} participants`);
         // Refund entry fees if applicable
         if (tournament.entryFee > 0) {
           for (const participant of tournament.participants) {
@@ -381,7 +382,7 @@ class TournamentService {
                 { tournamentId: String(tournament._id) }
               );
             } catch (refundErr) {
-              console.error(`❌ [TOURNAMENT] Failed to refund entry fee for user ${participant.user}:`, refundErr);
+              logger.error(`❌ [TOURNAMENT] Failed to refund entry fee for user ${participant.user}:`, refundErr);
             }
           }
         }
@@ -402,7 +403,7 @@ class TournamentService {
    * 5. Individual try/catch per winner so one failure doesn't block others
    */
   private async distributeTournamentPrizes(tournament: ITournament): Promise<void> {
-    console.log(`🏆 [TOURNAMENT] Distributing prizes for tournament: ${tournament.name}`);
+    logger.info(`🏆 [TOURNAMENT] Distributing prizes for tournament: ${tournament.name}`);
 
     const sortedParticipants = [...tournament.participants].sort((a, b) => b.score - a.score);
     const prizes = tournament.prizes || [];
@@ -418,7 +419,7 @@ class TournamentService {
       // Fix #3: Idempotency guard - skip already awarded prizes
       if (participant.prizeAwarded) {
         skipped++;
-        console.log(`⏭️ [TOURNAMENT] Skipping rank ${i + 1} - prize already awarded`);
+        logger.info(`⏭️ [TOURNAMENT] Skipping rank ${i + 1} - prize already awarded`);
         continue;
       }
 
@@ -481,11 +482,11 @@ class TournamentService {
               }
             );
           } catch (coinTxError) {
-            console.error(`❌ [TOURNAMENT] Failed to create CoinTransaction for rank ${i + 1}:`, coinTxError);
+            logger.error(`❌ [TOURNAMENT] Failed to create CoinTransaction for rank ${i + 1}:`, coinTxError);
             // Don't fail - wallet was already updated atomically
           }
 
-          console.log(`✅ [TOURNAMENT] Awarded ${coinsReward} coins to rank ${i + 1} (${userId})`);
+          logger.info(`✅ [TOURNAMENT] Awarded ${coinsReward} coins to rank ${i + 1} (${userId})`);
         }
 
         // Fix #4: Set prizeAwarded AFTER successful wallet update + CoinTransaction
@@ -507,13 +508,13 @@ class TournamentService {
         awarded++;
       } catch (prizeError) {
         // Fix #5: Individual try/catch - continue to next winner
-        console.error(`❌ [TOURNAMENT] Failed to award prize to rank ${i + 1}:`, prizeError);
+        logger.error(`❌ [TOURNAMENT] Failed to award prize to rank ${i + 1}:`, prizeError);
       }
     }
 
     // Save updated participant prize statuses
     await tournament.save();
-    console.log(`✅ [TOURNAMENT] Prize distribution complete for: ${tournament.name} (awarded: ${awarded}, skipped: ${skipped})`);
+    logger.info(`✅ [TOURNAMENT] Prize distribution complete for: ${tournament.name} (awarded: ${awarded}, skipped: ${skipped})`);
   }
 
   // Get featured tournaments

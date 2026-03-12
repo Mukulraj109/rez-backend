@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Game Configuration
  * CRUD for GameConfig model + Analytics + Game Ban + Manual Coin Ops
@@ -177,7 +178,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     return sendSuccess(res, { gameConfigs }, 'Game configs fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching game configs:', error);
+    logger.error('[Admin] Error fetching game configs:', error);
     return sendError(res, 'Failed to fetch game configs', 500);
   }
 });
@@ -207,7 +208,7 @@ router.get('/:gameType', async (req: Request, res: Response) => {
 
     return sendSuccess(res, gameConfig, 'Game config fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching game config:', error);
+    logger.error('[Admin] Error fetching game config:', error);
     return sendError(res, 'Failed to fetch game config', 500);
   }
 });
@@ -238,7 +239,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     return sendSuccess(res, gameConfig, 'Game config created');
   } catch (error: any) {
-    console.error('[Admin] Error creating game config:', error);
+    logger.error('[Admin] Error creating game config:', error);
     if (error.code === 11000) {
       return sendError(res, 'A game config with this gameType already exists', 409);
     }
@@ -271,7 +272,7 @@ router.post('/seed', async (req: Request, res: Response) => {
       newConfigs: created,
     }, `Seeded ${created.length} game configs`);
   } catch (error) {
-    console.error('[Admin] Error seeding game configs:', error);
+    logger.error('[Admin] Error seeding game configs:', error);
     return sendError(res, 'Failed to seed game configs', 500);
   }
 });
@@ -307,7 +308,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     invalidateGameConfigCache(gameConfig.gameType);
     return sendSuccess(res, gameConfig, 'Game config updated');
   } catch (error) {
-    console.error('[Admin] Error updating game config:', error);
+    logger.error('[Admin] Error updating game config:', error);
     return sendError(res, 'Failed to update game config', 500);
   }
 });
@@ -332,7 +333,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
 
     return sendSuccess(res, gameConfig, `Game "${gameConfig.displayName}" ${gameConfig.isEnabled ? 'enabled' : 'disabled'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling game config:', error);
+    logger.error('[Admin] Error toggling game config:', error);
     return sendError(res, 'Failed to toggle game config', 500);
   }
 });
@@ -357,7 +358,7 @@ router.patch('/:id/featured', async (req: Request, res: Response) => {
 
     return sendSuccess(res, gameConfig, `Game "${gameConfig.displayName}" ${gameConfig.featured ? 'featured' : 'unfeatured'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling game config featured:', error);
+    logger.error('[Admin] Error toggling game config featured:', error);
     return sendError(res, 'Failed to toggle featured status', 500);
   }
 });
@@ -387,7 +388,7 @@ router.patch('/reorder', async (req: Request, res: Response) => {
 
     return sendSuccess(res, { gameConfigs: updated }, 'Sort orders updated');
   } catch (error) {
-    console.error('[Admin] Error reordering game configs:', error);
+    logger.error('[Admin] Error reordering game configs:', error);
     return sendError(res, 'Failed to reorder game configs', 500);
   }
 });
@@ -410,7 +411,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     invalidateGameConfigCache(gameConfig.gameType);
     return sendSuccess(res, null, 'Game config deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting game config:', error);
+    logger.error('[Admin] Error deleting game config:', error);
     return sendError(res, 'Failed to delete game config', 500);
   }
 });
@@ -430,7 +431,7 @@ router.get('/analytics/overview', async (req: Request, res: Response) => {
     );
     return sendSuccess(res, analytics, 'Game analytics fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching game analytics:', error);
+    logger.error('[Admin] Error fetching game analytics:', error);
     return sendError(res, 'Failed to fetch game analytics', 500);
   }
 });
@@ -461,7 +462,7 @@ router.get('/user/:userId/history', async (req: Request, res: Response) => {
 
     return sendSuccess(res, { user, sessions, total: sessions.length }, 'User game history fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching user game history:', error);
+    logger.error('[Admin] Error fetching user game history:', error);
     return sendError(res, 'Failed to fetch user game history', 500);
   }
 });
@@ -497,7 +498,7 @@ router.post('/user/:userId/ban', async (req: Request, res: Response) => {
 
     return sendSuccess(res, user, `User ${user.fullName || userId} banned from games`);
   } catch (error) {
-    console.error('[Admin] Error banning user from games:', error);
+    logger.error('[Admin] Error banning user from games:', error);
     return sendError(res, 'Failed to ban user', 500);
   }
 });
@@ -527,7 +528,7 @@ router.post('/user/:userId/unban', async (req: Request, res: Response) => {
 
     return sendSuccess(res, user, `User ${user.fullName || userId} unbanned from games`);
   } catch (error) {
-    console.error('[Admin] Error unbanning user from games:', error);
+    logger.error('[Admin] Error unbanning user from games:', error);
     return sendError(res, 'Failed to unban user', 500);
   }
 });
@@ -563,7 +564,7 @@ router.post('/user/:userId/credit-coins', async (req: Request, res: Response) =>
 
     return sendSuccess(res, { amount, newBalance: result.newBalance, reason }, `Credited ${amount} coins to user`);
   } catch (error: any) {
-    console.error('[Admin] Error crediting coins:', error);
+    logger.error('[Admin] Error crediting coins:', error);
     return sendError(res, error.message || 'Failed to credit coins', 500);
   }
 });
@@ -598,7 +599,7 @@ router.post('/user/:userId/revoke-coins', async (req: Request, res: Response) =>
 
     return sendSuccess(res, { amount, newBalance: result.newBalance, reason }, `Revoked ${amount} coins from user`);
   } catch (error: any) {
-    console.error('[Admin] Error revoking coins:', error);
+    logger.error('[Admin] Error revoking coins:', error);
     return sendError(res, error.message || 'Failed to revoke coins', 500);
   }
 });
@@ -612,7 +613,7 @@ router.post('/invalidate-cache', async (_req: Request, res: Response) => {
     invalidateGameConfigCache();
     return sendSuccess(res, null, 'Game config cache invalidated');
   } catch (error) {
-    console.error('[Admin] Error invalidating cache:', error);
+    logger.error('[Admin] Error invalidating cache:', error);
     return sendError(res, 'Failed to invalidate cache', 500);
   }
 });
@@ -718,7 +719,7 @@ router.get('/analytics/scratch-card', async (req: Request, res: Response) => {
       suspiciousActivity,
     }, 'Scratch card analytics fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching scratch card analytics:', error);
+    logger.error('[Admin] Error fetching scratch card analytics:', error);
     return sendError(res, 'Failed to fetch scratch card analytics', 500);
   }
 });

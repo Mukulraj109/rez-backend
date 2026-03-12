@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Feature Flags & Earning Config
  * CRUD for FeatureFlag model + single-document EarningConfig
@@ -35,7 +36,7 @@ router.get('/flags', async (req: Request, res: Response) => {
 
     return sendSuccess(res, { flags }, 'Feature flags fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching feature flags:', error);
+    logger.error('[Admin] Error fetching feature flags:', error);
     return sendError(res, 'Failed to fetch feature flags', 500);
   }
 });
@@ -52,7 +53,7 @@ router.get('/flags/:key', async (req: Request, res: Response) => {
     }
     return sendSuccess(res, flag, 'Feature flag fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching feature flag:', error);
+    logger.error('[Admin] Error fetching feature flag:', error);
     return sendError(res, 'Failed to fetch feature flag', 500);
   }
 });
@@ -86,7 +87,7 @@ router.post('/flags', async (req: Request, res: Response) => {
 
     return sendSuccess(res, flag, 'Feature flag created', 201);
   } catch (error) {
-    console.error('[Admin] Error creating feature flag:', error);
+    logger.error('[Admin] Error creating feature flag:', error);
     return sendError(res, 'Failed to create feature flag', 500);
   }
 });
@@ -126,7 +127,7 @@ router.post('/flags/seed', async (req: Request, res: Response) => {
 
     return sendSuccess(res, { created, skipped }, `Seeded ${created} flags, ${skipped} already existed`);
   } catch (error) {
-    console.error('[Admin] Error seeding feature flags:', error);
+    logger.error('[Admin] Error seeding feature flags:', error);
     return sendError(res, 'Failed to seed feature flags', 500);
   }
 });
@@ -151,7 +152,7 @@ router.put('/flags/:key', async (req: Request, res: Response) => {
 
     return sendSuccess(res, flag, 'Feature flag updated');
   } catch (error) {
-    console.error('[Admin] Error updating feature flag:', error);
+    logger.error('[Admin] Error updating feature flag:', error);
     return sendError(res, 'Failed to update feature flag', 500);
   }
 });
@@ -172,7 +173,7 @@ router.patch('/flags/:key/toggle', async (req: Request, res: Response) => {
 
     return sendSuccess(res, flag, `Feature flag ${flag.enabled ? 'enabled' : 'disabled'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling feature flag:', error);
+    logger.error('[Admin] Error toggling feature flag:', error);
     return sendError(res, 'Failed to toggle feature flag', 500);
   }
 });
@@ -200,7 +201,7 @@ router.patch('/flags/reorder', async (req: Request, res: Response) => {
 
     return sendSuccess(res, null, `Reordered ${items.length} flags`);
   } catch (error) {
-    console.error('[Admin] Error reordering feature flags:', error);
+    logger.error('[Admin] Error reordering feature flags:', error);
     return sendError(res, 'Failed to reorder feature flags', 500);
   }
 });
@@ -218,7 +219,7 @@ router.delete('/flags/:key', async (req: Request, res: Response) => {
 
     return sendSuccess(res, null, 'Feature flag deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting feature flag:', error);
+    logger.error('[Admin] Error deleting feature flag:', error);
     return sendError(res, 'Failed to delete feature flag', 500);
   }
 });
@@ -266,7 +267,7 @@ router.get('/earning-config', async (req: Request, res: Response) => {
 
     return sendSuccess(res, config, 'Earning config fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching earning config:', error);
+    logger.error('[Admin] Error fetching earning config:', error);
     return sendError(res, 'Failed to fetch earning config', 500);
   }
 });
@@ -295,7 +296,7 @@ router.put('/earning-config', async (req: Request, res: Response) => {
 
     return sendSuccess(res, config, 'Earning config updated');
   } catch (error) {
-    console.error('[Admin] Error updating earning config:', error);
+    logger.error('[Admin] Error updating earning config:', error);
     return sendError(res, 'Failed to update earning config', 500);
   }
 });
@@ -340,7 +341,7 @@ router.post('/earning-config/seed', async (req: Request, res: Response) => {
 
     return sendSuccess(res, config, 'Earning config seeded with defaults', 201);
   } catch (error) {
-    console.error('[Admin] Error seeding earning config:', error);
+    logger.error('[Admin] Error seeding earning config:', error);
     return sendError(res, 'Failed to seed earning config', 500);
   }
 });

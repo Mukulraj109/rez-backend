@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // UserProduct Model
 // Tracks products purchased by users with warranty, registration, installation, and AMC details
 
@@ -332,7 +333,7 @@ UserProductSchema.statics.markExpiredWarranties = async function(): Promise<numb
     }
   );
 
-  console.log(`✅ Marked ${result.modifiedCount} products with expired warranties`);
+  logger.info(`✅ Marked ${result.modifiedCount} products with expired warranties`);
   return result.modifiedCount;
 };
 
@@ -355,7 +356,7 @@ UserProductSchema.methods.registerProduct = async function(
 
   await this.save();
 
-  console.log(`✅ Product registered: ${this.registration.registrationNumber}`);
+  logger.info(`✅ Product registered: ${this.registration.registrationNumber}`);
   return this as unknown as IUserProduct;
 };
 
@@ -378,7 +379,7 @@ UserProductSchema.methods.scheduleInstallation = async function(
 
   await this.save();
 
-  console.log(`✅ Installation scheduled for: ${scheduledDate}`);
+  logger.info(`✅ Installation scheduled for: ${scheduledDate}`);
   return this as unknown as IUserProduct;
 };
 
@@ -395,7 +396,7 @@ UserProductSchema.methods.completeInstallation = async function(
 
   await this.save();
 
-  console.log(`✅ Installation completed for product`);
+  logger.info(`✅ Installation completed for product`);
   return this as unknown as IUserProduct;
 };
 
@@ -416,7 +417,7 @@ UserProductSchema.methods.renewAMC = async function(
 
   await this.save();
 
-  console.log(`✅ AMC renewed until: ${endDate}`);
+  logger.info(`✅ AMC renewed until: ${endDate}`);
   return this as unknown as IUserProduct;
 };
 

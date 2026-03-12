@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import EngagementConfig from '../models/EngagementConfig';
@@ -32,7 +33,7 @@ export const getAllConfigs = async (req: Request, res: Response) => {
       data: { configs },
     });
   } catch (error: any) {
-    console.error('Error fetching engagement configs:', error);
+    logger.error('Error fetching engagement configs:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch configs' });
   }
 };
@@ -71,7 +72,7 @@ export const updateConfig = async (req: Request, res: Response) => {
       data: { config },
     });
   } catch (error: any) {
-    console.error('Error updating engagement config:', error);
+    logger.error('Error updating engagement config:', error);
     res.status(500).json({ success: false, error: 'Failed to update config' });
   }
 };
@@ -112,7 +113,7 @@ export const setCampaign = async (req: Request, res: Response) => {
       data: { config },
     });
   } catch (error: any) {
-    console.error('Error setting campaign:', error);
+    logger.error('Error setting campaign:', error);
     res.status(500).json({ success: false, error: 'Failed to set campaign' });
   }
 };

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import { recommendationService } from '../services/recommendationService';
 import {
@@ -54,7 +55,7 @@ export const getPersonalizedRecommendations = asyncHandler(async (req: Request, 
     }, 'Recommendations retrieved successfully');
 
   } catch (error) {
-    console.error('Get personalized recommendations error:', error);
+    logger.error('Get personalized recommendations error:', error);
     throw new AppError('Failed to get recommendations', 500);
   }
 });
@@ -82,7 +83,7 @@ export const getStoreRecommendations = asyncHandler(async (req: Request, res: Re
     }, 'Store recommendations retrieved successfully');
 
   } catch (error) {
-    console.error('Get store recommendations error:', error);
+    logger.error('Get store recommendations error:', error);
     throw new AppError('Failed to get store recommendations', 500);
   }
 });
@@ -136,7 +137,7 @@ export const getTrendingStores = asyncHandler(async (req: Request, res: Response
     }, 'Trending stores retrieved successfully');
 
   } catch (error) {
-    console.error('Get trending stores error:', error);
+    logger.error('Get trending stores error:', error);
     throw new AppError('Failed to get trending stores', 500);
   }
 });
@@ -171,7 +172,7 @@ export const getCategoryRecommendations = asyncHandler(async (req: Request, res:
     }, 'Category recommendations retrieved successfully');
 
   } catch (error) {
-    console.error('Get category recommendations error:', error);
+    logger.error('Get category recommendations error:', error);
     throw new AppError('Failed to get category recommendations', 500);
   }
 });
@@ -200,7 +201,7 @@ export const getUserRecommendationPreferences = asyncHandler(async (req: Request
     }, 'User preferences retrieved successfully');
 
   } catch (error) {
-    console.error('Get user preferences error:', error);
+    logger.error('Get user preferences error:', error);
     throw new AppError('Failed to get user preferences', 500);
   }
 });
@@ -222,7 +223,7 @@ export const updateUserRecommendationPreferences = asyncHandler(async (req: Requ
     }, 'User preferences updated successfully');
 
   } catch (error) {
-    console.error('Update user preferences error:', error);
+    logger.error('Update user preferences error:', error);
     throw new AppError('Failed to update user preferences', 500);
   }
 });
@@ -249,7 +250,7 @@ export const getSimilarProducts = asyncHandler(async (req: Request, res: Respons
     }, 'Similar products retrieved successfully');
 
   } catch (error) {
-    console.error('Get similar products error:', error);
+    logger.error('Get similar products error:', error);
     throw new AppError('Failed to get similar products', 500);
   }
 });
@@ -272,7 +273,7 @@ export const getFrequentlyBoughtTogether = asyncHandler(async (req: Request, res
     }, 'Frequently bought together retrieved successfully');
 
   } catch (error) {
-    console.error('Get frequently bought together error:', error);
+    logger.error('Get frequently bought together error:', error);
     throw new AppError('Failed to get frequently bought together', 500);
   }
 });
@@ -295,7 +296,7 @@ export const getBundleDeals = asyncHandler(async (req: Request, res: Response) =
     }, 'Bundle deals retrieved successfully');
 
   } catch (error) {
-    console.error('Get bundle deals error:', error);
+    logger.error('Get bundle deals error:', error);
     throw new AppError('Failed to get bundle deals', 500);
   }
 });
@@ -327,7 +328,7 @@ export const getPersonalizedProductRecommendations = asyncHandler(async (req: Re
     }, 'Personalized product recommendations retrieved successfully');
 
   } catch (error) {
-    console.error('Get personalized product recommendations error:', error);
+    logger.error('Get personalized product recommendations error:', error);
     throw new AppError('Failed to get personalized product recommendations', 500);
   }
 });
@@ -446,7 +447,7 @@ export const getPickedForYouRecommendations = asyncHandler(async (req: Request, 
     }, 'Picked for you recommendations retrieved successfully');
 
   } catch (error) {
-    console.error('Get picked for you recommendations error:', error);
+    logger.error('Get picked for you recommendations error:', error);
     throw new AppError('Failed to get picked for you recommendations', 500);
   }
 });
@@ -478,7 +479,7 @@ export const trackProductView = asyncHandler(async (req: Request, res: Response)
     }, 'Product view tracked successfully');
 
   } catch (error) {
-    console.error('Track product view error:', error);
+    logger.error('Track product view error:', error);
     throw new AppError('Failed to track product view', 500);
   }
 });

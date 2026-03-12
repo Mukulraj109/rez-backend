@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Types } from 'mongoose';
 import { Subscription, ISubscription, SubscriptionTier } from '../models/Subscription';
 import { User, IUser } from '../models/User';
@@ -10,7 +11,7 @@ class SubscriptionBenefitsService {
    */
   async getUserSubscription(userId: string | Types.ObjectId): Promise<ISubscription | null> {
     try {
-      console.log('🔍 [SUBSCRIPTION SERVICE] Getting subscription for user:', userId);
+      logger.info('🔍 [SUBSCRIPTION SERVICE] Getting subscription for user:', userId);
 
       const subscription = await Subscription.findOne({
         user: userId,
@@ -18,7 +19,7 @@ class SubscriptionBenefitsService {
       }).sort({ createdAt: -1 }).lean(); // FIXED: Sort by most recently created instead of end date
 
       if (subscription) {
-        console.log('📊 [SUBSCRIPTION SERVICE] Found subscription:', {
+        logger.info('📊 [SUBSCRIPTION SERVICE] Found subscription:', {
           id: subscription._id,
           tier: subscription.tier,
           price: subscription.price,
@@ -26,12 +27,12 @@ class SubscriptionBenefitsService {
           createdAt: subscription.createdAt,
         });
       } else {
-        console.log('⚠️ [SUBSCRIPTION SERVICE] No active subscription found for user');
+        logger.info('⚠️ [SUBSCRIPTION SERVICE] No active subscription found for user');
       }
 
       return subscription;
     } catch (error) {
-      console.error('❌ [SUBSCRIPTION SERVICE] Error fetching user subscription:', error);
+      logger.error('❌ [SUBSCRIPTION SERVICE] Error fetching user subscription:', error);
       return null;
     }
   }
@@ -49,7 +50,7 @@ class SubscriptionBenefitsService {
 
       return subscription.benefits.cashbackMultiplier;
     } catch (error) {
-      console.error('Error getting cashback multiplier:', error);
+      logger.error('Error getting cashback multiplier:', error);
       return 1;
     }
   }
@@ -67,7 +68,7 @@ class SubscriptionBenefitsService {
 
       return subscription.benefits.freeDelivery;
     } catch (error) {
-      console.error('Error checking free delivery:', error);
+      logger.error('Error checking free delivery:', error);
       return false;
     }
   }
@@ -85,7 +86,7 @@ class SubscriptionBenefitsService {
 
       return subscription.benefits.exclusiveDeals;
     } catch (error) {
-      console.error('Error checking exclusive deals access:', error);
+      logger.error('Error checking exclusive deals access:', error);
       return false;
     }
   }
@@ -103,7 +104,7 @@ class SubscriptionBenefitsService {
 
       return subscription.benefits.prioritySupport;
     } catch (error) {
-      console.error('Error checking priority support:', error);
+      logger.error('Error checking priority support:', error);
       return false;
     }
   }
@@ -121,7 +122,7 @@ class SubscriptionBenefitsService {
 
       return subscription.benefits.unlimitedWishlists;
     } catch (error) {
-      console.error('Error checking unlimited wishlists:', error);
+      logger.error('Error checking unlimited wishlists:', error);
       return false;
     }
   }
@@ -139,7 +140,7 @@ class SubscriptionBenefitsService {
 
       return subscription.benefits.earlyFlashSaleAccess;
     } catch (error) {
-      console.error('Error checking early flash sale access:', error);
+      logger.error('Error checking early flash sale access:', error);
       return false;
     }
   }
@@ -157,7 +158,7 @@ class SubscriptionBenefitsService {
 
       return subscription.benefits.personalShopper;
     } catch (error) {
-      console.error('Error checking personal shopper:', error);
+      logger.error('Error checking personal shopper:', error);
       return false;
     }
   }
@@ -175,7 +176,7 @@ class SubscriptionBenefitsService {
 
       return subscription.benefits.premiumEvents;
     } catch (error) {
-      console.error('Error checking premium events access:', error);
+      logger.error('Error checking premium events access:', error);
       return false;
     }
   }
@@ -193,7 +194,7 @@ class SubscriptionBenefitsService {
 
       return subscription.benefits.conciergeService;
     } catch (error) {
-      console.error('Error checking concierge service:', error);
+      logger.error('Error checking concierge service:', error);
       return false;
     }
   }
@@ -259,7 +260,7 @@ class SubscriptionBenefitsService {
         appliedBenefits
       };
     } catch (error) {
-      console.error('Error applying tier benefits:', error);
+      logger.error('Error applying tier benefits:', error);
       return {
         cashbackRate: orderData.cashbackRate,
         deliveryFee: orderData.deliveryFee,
@@ -305,7 +306,7 @@ class SubscriptionBenefitsService {
         usage: subscription.usage
       };
     } catch (error) {
-      console.error('Error getting user benefits:', error);
+      logger.error('Error getting user benefits:', error);
       throw error;
     }
   }
@@ -323,7 +324,7 @@ class SubscriptionBenefitsService {
         await subscription.save();
       }
     } catch (error) {
-      console.error('Error tracking exclusive deal usage:', error);
+      logger.error('Error tracking exclusive deal usage:', error);
     }
   }
 
@@ -339,7 +340,7 @@ class SubscriptionBenefitsService {
         await subscription.save();
       }
     } catch (error) {
-      console.error('Error tracking cashback earned:', error);
+      logger.error('Error tracking cashback earned:', error);
     }
   }
 
@@ -378,7 +379,7 @@ class SubscriptionBenefitsService {
         roiPercentage
       };
     } catch (error) {
-      console.error('Error calculating subscription ROI:', error);
+      logger.error('Error calculating subscription ROI:', error);
       throw error;
     }
   }
@@ -410,7 +411,7 @@ class SubscriptionBenefitsService {
 
       return false;
     } catch (error) {
-      console.error('Error checking birthday offer qualification:', error);
+      logger.error('Error checking birthday offer qualification:', error);
       return false;
     }
   }
@@ -437,7 +438,7 @@ class SubscriptionBenefitsService {
 
       return anniversaryMonth === currentMonth;
     } catch (error) {
-      console.error('Error checking anniversary offer qualification:', error);
+      logger.error('Error checking anniversary offer qualification:', error);
       return false;
     }
   }
@@ -452,9 +453,9 @@ class SubscriptionBenefitsService {
         { $set: { 'usage.ordersThisMonth': 0 } }
       );
 
-      console.log('Monthly usage stats reset successfully');
+      logger.info('Monthly usage stats reset successfully');
     } catch (error) {
-      console.error('Error resetting monthly usage stats:', error);
+      logger.error('Error resetting monthly usage stats:', error);
     }
   }
 
@@ -517,7 +518,7 @@ class SubscriptionBenefitsService {
         benefits: tierConfig.features
       };
     } catch (error) {
-      console.error('Error calculating value proposition:', error);
+      logger.error('Error calculating value proposition:', error);
       throw error;
     }
   }

@@ -77,7 +77,7 @@ export class QueueService {
    */
   static async initialize(): Promise<void> {
     if (this.isInitialized) {
-      console.log('⚠️ Queue service already initialized');
+      logger.info('⚠️ Queue service already initialized');
       return;
     }
 
@@ -85,7 +85,7 @@ export class QueueService {
       const redisConfig = getRedisConfig();
 
       if (!redisConfig.enabled) {
-        console.log('⚠️ Queue service disabled (Redis not available)');
+        logger.info('⚠️ Queue service disabled (Redis not available)');
         return;
       }
 
@@ -120,10 +120,10 @@ export class QueueService {
       this.setupEventListeners();
 
       this.isInitialized = true;
-      console.log('✅ Queue service initialized successfully');
+      logger.info('✅ Queue service initialized successfully');
 
     } catch (error) {
-      console.error('❌ Failed to initialize queue service:', error);
+      logger.error('❌ Failed to initialize queue service:', error);
       throw error;
     }
   }
@@ -133,7 +133,7 @@ export class QueueService {
    */
   static async sendEmail(data: EmailJobData, options?: JobOptions): Promise<Job<EmailJobData> | null> {
     if (!this.emailQueue) {
-      console.error('Email queue not initialized');
+      logger.error('Email queue not initialized');
       return null;
     }
 
@@ -154,7 +154,7 @@ export class QueueService {
    */
   static async sendSMS(data: SMSJobData, options?: JobOptions): Promise<Job<SMSJobData> | null> {
     if (!this.smsQueue) {
-      console.error('SMS queue not initialized');
+      logger.error('SMS queue not initialized');
       return null;
     }
 
@@ -175,7 +175,7 @@ export class QueueService {
    */
   static async generateReport(data: ReportJobData, options?: JobOptions): Promise<Job<ReportJobData> | null> {
     if (!this.reportQueue) {
-      console.error('Report queue not initialized');
+      logger.error('Report queue not initialized');
       return null;
     }
 
@@ -197,7 +197,7 @@ export class QueueService {
    */
   static async calculateAnalytics(data: AnalyticsJobData, options?: JobOptions): Promise<Job<AnalyticsJobData> | null> {
     if (!this.analyticsQueue) {
-      console.error('Analytics queue not initialized');
+      logger.error('Analytics queue not initialized');
       return null;
     }
 
@@ -218,7 +218,7 @@ export class QueueService {
    */
   static async writeAuditLog(data: AuditLogJobData, options?: JobOptions): Promise<Job<AuditLogJobData> | null> {
     if (!this.auditLogQueue) {
-      console.error('Audit log queue not initialized');
+      logger.error('Audit log queue not initialized');
       return null;
     }
 
@@ -238,7 +238,7 @@ export class QueueService {
    */
   static async warmupCache(data: CacheWarmupJobData, options?: JobOptions): Promise<Job<CacheWarmupJobData> | null> {
     if (!this.cacheWarmupQueue) {
-      console.error('Cache warmup queue not initialized');
+      logger.error('Cache warmup queue not initialized');
       return null;
     }
 
@@ -446,19 +446,19 @@ export class QueueService {
    */
   private static setupCacheWarmupProcessor(): void {
     this.cacheWarmupQueue?.process(async (job: Job<CacheWarmupJobData>) => {
-      console.log(`🔥 Processing cache warmup job ${job.id}`);
+      logger.info(`🔥 Processing cache warmup job ${job.id}`);
       const { keys } = job.data;
 
       try {
         // TODO: Implement cache warmup logic
-        console.log(`Warming up ${keys.length} cache keys`);
+        logger.info(`Warming up ${keys.length} cache keys`);
 
         // Simulate cache warmup
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         return { success: true, warmedKeys: keys.length };
       } catch (error) {
-        console.error('Cache warmup failed:', error);
+        logger.error('Cache warmup failed:', error);
         throw error;
       }
     });
@@ -481,15 +481,15 @@ export class QueueService {
       if (!queue) return;
 
       queue.on('completed', (job, result) => {
-        console.log(`✅ Job ${job.id} completed in queue ${queue.name}`);
+        logger.info(`✅ Job ${job.id} completed in queue ${queue.name}`);
       });
 
       queue.on('failed', (job, err) => {
-        console.error(`❌ Job ${job?.id} failed in queue ${queue.name}:`, err.message);
+        logger.error(`❌ Job ${job?.id} failed in queue ${queue.name}:`, err.message);
       });
 
       queue.on('stalled', (job) => {
-        console.warn(`⚠️ Job ${job.id} stalled in queue ${queue.name}`);
+        logger.warn(`⚠️ Job ${job.id} stalled in queue ${queue.name}`);
       });
     });
   }
@@ -516,6 +516,6 @@ export class QueueService {
     );
 
     this.isInitialized = false;
-    console.log('📦 Queue service shut down');
+    logger.info('📦 Queue service shut down');
   }
 }

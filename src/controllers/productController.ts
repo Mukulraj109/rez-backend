@@ -17,6 +17,7 @@ import { CacheKeys, generateQueryCacheKey, withCache } from '../utils/cacheHelpe
 import { logProductSearch } from '../services/searchHistoryService';
 import { modeService, ModeId } from '../services/modeService';
 import { regionService, isValidRegion, RegionId, getRegionConfig } from '../services/regionService';
+import { logger } from '../config/logger';
 
 // Get all products with filtering and pagination
 export const getProducts = asyncHandler(async (req: Request, res: Response) => {
@@ -70,54 +71,45 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
     'inventory.isAvailable': true
   };
 
-  // Apply mode-based store filter
-  if (activeMode !== 'near-u') {
-    // Get stores matching the mode criteria
-    const modeStoreFilter = modeService.getStoreFilter(activeMode);
-    const modeStores = await Store.find(modeStoreFilter).select('_id').lean();
-    const modeStoreIds = modeStores.map(s => s._id);
-
-    if (modeStoreIds.length > 0) {
-      query.store = store ? store : { $in: modeStoreIds };
-    }
-  }
-
-  // Apply region-based store filter (use already extracted regionHeader)
+  // Build combined store filter for mode + region in a single query
   const effectiveRegion = (region as string) || regionHeader;
+  const needsModeFilter = activeMode !== 'near-u';
+  const needsRegionFilter = effectiveRegion && isValidRegion(effectiveRegion);
 
-  if (effectiveRegion && isValidRegion(effectiveRegion)) {
-    // Get stores in the region
-    const regionStoreFilter = regionService.getStoreFilter(effectiveRegion as RegionId);
-    const regionStores = await Store.find({
-      ...regionStoreFilter,
-      isActive: true
-    }).select('_id').lean();
+  if (needsModeFilter || needsRegionFilter) {
+    // Build a single combined store filter
+    const combinedStoreFilter: any = { isActive: true };
 
-    const regionStoreIds = regionStores.map(s => s._id);
+    if (needsModeFilter) {
+      const modeStoreFilter = modeService.getStoreFilter(activeMode);
+      Object.assign(combinedStoreFilter, modeStoreFilter);
+    }
 
-    if (regionStoreIds.length > 0) {
-      // Merge with existing store filter if present
-      if (query.store) {
-        if (query.store.$in) {
-          // Intersect with mode store filter
-          query.store.$in = query.store.$in.filter((id: any) =>
-            regionStoreIds.some((rid: any) => rid.toString() === id.toString())
-          );
-        } else {
-          // Specific store requested, check if it's in the region
-          const storeInRegion = regionStoreIds.some((id: any) =>
-            id.toString() === query.store.toString()
-          );
-          if (!storeInRegion) {
-            // Store not in region - return empty result
-            return sendPaginated(res, [], Number(page), Number(limit), 0);
-          }
+    if (needsRegionFilter) {
+      const regionStoreFilter = regionService.getStoreFilter(effectiveRegion as RegionId);
+      Object.assign(combinedStoreFilter, regionStoreFilter);
+    }
+
+    // Single DB query instead of two sequential ones
+    const filteredStores = await Store.find(combinedStoreFilter).select('_id').lean();
+    const filteredStoreIds = filteredStores.map(s => s._id);
+
+    if (filteredStoreIds.length > 0) {
+      if (store) {
+        // Specific store requested, check if it matches the filters
+        const storeInFiltered = filteredStoreIds.some((id: any) =>
+          id.toString() === (store as string).toString()
+        );
+        if (!storeInFiltered && needsRegionFilter) {
+          // Store not in region - return empty result
+          return sendPaginated(res, [], Number(page), Number(limit), 0);
         }
+        // If store matches or only mode filter, let the specific store override below
       } else {
-        query.store = { $in: regionStoreIds };
+        query.store = { $in: filteredStoreIds };
       }
-    } else {
-      // No stores in region - return empty result
+    } else if (needsRegionFilter) {
+      // No stores match filters - return empty result
       return sendPaginated(res, [], Number(page), Number(limit), 0);
     }
   }
@@ -254,15 +246,15 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
       productsQuery = productsQuery.sort(sortOptions);
     }
 
-    // Get total count for pagination
-    const totalProducts = await Product.countDocuments(query);
-
-    // Apply pagination
+    // Run count and paginated find in parallel
     const skip = (Number(page) - 1) * Number(limit);
-    const products = await productsQuery
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
+    const [totalProducts, products] = await Promise.all([
+      Product.countDocuments(search ? { ...query, $text: { $search: search as string } } : query),
+      productsQuery
+        .skip(skip)
+        .limit(Number(limit))
+        .lean()
+    ]);
 
     // Track views for authenticated users
     if (req.user && products.length > 0) {
@@ -270,7 +262,7 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
       Product.updateMany(
         { _id: { $in: products.map(p => p._id) } },
         { $inc: { 'analytics.views': 1 } }
-      ).catch(console.error);
+      ).catch(() => {});
     }
 
     // Log search history for authenticated users (async, don't block)
@@ -285,7 +277,7 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
           maxPrice: maxPrice ? Number(maxPrice) : undefined,
           rating: rating ? Number(rating) : undefined
         }
-      ).catch(err => console.error('Failed to log product search:', err));
+      ).catch(() => {});
     }
 
     // Apply diversity mode if specified
@@ -391,9 +383,7 @@ export const getProductById = asyncHandler(async (req: Request, res: Response) =
     sendSuccess(res, response, 'Product retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [GET PRODUCT BY ID] Error occurred:', error);
-    console.error('❌ [GET PRODUCT BY ID] Error message:', error instanceof Error ? error.message : 'Unknown error');
-    console.error('❌ [GET PRODUCT BY ID] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    logger.error('[GET PRODUCT BY ID] Error occurred:', error);
     throw new AppError('Failed to fetch product', 500);
   }
 });
@@ -603,7 +593,7 @@ export const getProductsBySubcategory = asyncHandler(async (req: Request, res: R
     sendSuccess(res, transformedProducts, `Products for subcategory: ${subcategorySlug}`);
 
   } catch (error) {
-    console.error('❌ [SUBCATEGORY PRODUCTS] Error:', error);
+    logger.error('❌ [SUBCATEGORY PRODUCTS] Error:', error);
     throw new AppError('Failed to fetch products by subcategory', 500);
   }
 });
@@ -828,9 +818,9 @@ export const getFeaturedProducts = asyncHandler(async (req: Request, res: Respon
 
     sendSuccess(res, transformedProducts, 'Featured products retrieved successfully');
   } catch (error) {
-    console.error('❌ [FEATURED PRODUCTS] Error occurred:', error);
-    console.error('❌ [FEATURED PRODUCTS] Error message:', error instanceof Error ? error.message : 'Unknown error');
-    console.error('❌ [FEATURED PRODUCTS] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    logger.error('❌ [FEATURED PRODUCTS] Error occurred:', error);
+    logger.error('❌ [FEATURED PRODUCTS] Error message:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('❌ [FEATURED PRODUCTS] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     throw new AppError('Failed to fetch featured products', 500);
   }
 });
@@ -920,9 +910,9 @@ export const getNewArrivals = asyncHandler(async (req: Request, res: Response) =
 
     sendSuccess(res, transformedProducts, 'New arrival products retrieved successfully');
   } catch (error) {
-    console.error('❌ [NEW ARRIVALS] Error occurred:', error);
-    console.error('❌ [NEW ARRIVALS] Error message:', error instanceof Error ? error.message : 'Unknown error');
-    console.error('❌ [NEW ARRIVALS] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    logger.error('❌ [NEW ARRIVALS] Error occurred:', error);
+    logger.error('❌ [NEW ARRIVALS] Error message:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('❌ [NEW ARRIVALS] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     throw new AppError('Failed to fetch new arrival products', 500);
   }
 });
@@ -1125,7 +1115,7 @@ export const getRecommendations = asyncHandler(async (req: Request, res: Respons
     sendSuccess(res, transformedRecommendations, 'Product recommendations retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [RECOMMENDATIONS] Error:', error);
+    logger.error('❌ [RECOMMENDATIONS] Error:', error);
     throw new AppError('Failed to get recommendations', 500);
   }
 });
@@ -1155,7 +1145,7 @@ export const trackProductView = asyncHandler(async (req: Request, res: Response)
     }, 'Product view tracked successfully');
 
   } catch (error) {
-    console.error('❌ [TRACK VIEW] Error:', error);
+    logger.error('❌ [TRACK VIEW] Error:', error);
     throw new AppError('Failed to track product view', 500);
   }
 });
@@ -1206,7 +1196,7 @@ export const getProductAnalytics = asyncHandler(async (req: Request, res: Respon
     sendSuccess(res, analytics, 'Product analytics retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [PRODUCT ANALYTICS] Error:', error);
+    logger.error('❌ [PRODUCT ANALYTICS] Error:', error);
     throw new AppError('Failed to get product analytics', 500);
   }
 });
@@ -1252,7 +1242,7 @@ export const getFrequentlyBoughtTogether = asyncHandler(async (req: Request, res
     sendSuccess(res, frequentProducts, 'Frequently bought products retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [FREQUENTLY BOUGHT] Error:', error);
+    logger.error('❌ [FREQUENTLY BOUGHT] Error:', error);
     throw new AppError('Failed to get frequently bought products', 500);
   }
 });
@@ -1301,7 +1291,7 @@ export const getBundleProducts = asyncHandler(async (req: Request, res: Response
     sendSuccess(res, response, 'Bundle products retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [BUNDLE PRODUCTS] Error:', error);
+    logger.error('❌ [BUNDLE PRODUCTS] Error:', error);
     throw new AppError('Failed to get bundle products', 500);
   }
 });
@@ -1343,7 +1333,7 @@ export const getSearchSuggestions = asyncHandler(async (req: Request, res: Respo
     sendSuccess(res, suggestions, 'Search suggestions retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [SEARCH SUGGESTIONS] Error:', error);
+    logger.error('❌ [SEARCH SUGGESTIONS] Error:', error);
     throw new AppError('Failed to get search suggestions', 500);
   }
 });
@@ -1392,7 +1382,7 @@ export const getPopularSearches = asyncHandler(async (req: Request, res: Respons
     sendSuccess(res, popularSearches, 'Popular searches retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [POPULAR SEARCHES] Error:', error);
+    logger.error('❌ [POPULAR SEARCHES] Error:', error);
     throw new AppError('Failed to get popular searches', 500);
   }
 });
@@ -1530,7 +1520,7 @@ export const getTrendingProducts = asyncHandler(async (req: Request, res: Respon
     sendSuccess(res, result, 'Trending products retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [TRENDING PRODUCTS] Error:', error);
+    logger.error('❌ [TRENDING PRODUCTS] Error:', error);
     throw new AppError('Failed to get trending products', 500);
   }
 });
@@ -1614,7 +1604,7 @@ export const getRelatedProducts = asyncHandler(async (req: Request, res: Respons
     sendSuccess(res, transformedRelatedProducts, 'Related products retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [RELATED PRODUCTS] Error:', error);
+    logger.error('❌ [RELATED PRODUCTS] Error:', error);
     throw new AppError('Failed to get related products', 500);
   }
 });
@@ -1674,7 +1664,7 @@ export const checkAvailability = asyncHandler(async (req: Request, res: Response
     sendSuccess(res, response, 'Product availability checked successfully');
 
   } catch (error) {
-    console.error('❌ [CHECK AVAILABILITY] Error:', error);
+    logger.error('❌ [CHECK AVAILABILITY] Error:', error);
     throw new AppError('Failed to check product availability', 500);
   }
 });
@@ -1749,7 +1739,7 @@ export const getPopularProducts = asyncHandler(async (req: Request, res: Respons
     sendSuccess(res, transformedProducts, 'Popular products retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [POPULAR PRODUCTS] Error:', error);
+    logger.error('❌ [POPULAR PRODUCTS] Error:', error);
     throw new AppError('Failed to get popular products', 500);
   }
 });
@@ -1866,7 +1856,7 @@ export const getNearbyProducts = asyncHandler(async (req: Request, res: Response
     sendSuccess(res, transformedProducts, 'Nearby products retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [NEARBY PRODUCTS] Error:', error);
+    logger.error('❌ [NEARBY PRODUCTS] Error:', error);
     throw new AppError('Failed to get nearby products', 500);
   }
 });
@@ -1937,7 +1927,7 @@ export const getHotDeals = asyncHandler(async (req: Request, res: Response) => {
     sendSuccess(res, transformedProducts, 'Hot deals retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [HOT DEALS] Error:', error);
+    logger.error('❌ [HOT DEALS] Error:', error);
     throw new AppError('Failed to get hot deals', 500);
   }
 });
@@ -2005,7 +1995,7 @@ export const getProductsByCategorySlugHomepage = asyncHandler(async (req: Reques
     sendSuccess(res, transformedProducts, `Products for ${category.name} retrieved successfully`);
 
   } catch (error) {
-    console.error('❌ [CATEGORY SECTION] Error:', error);
+    logger.error('❌ [CATEGORY SECTION] Error:', error);
     throw new AppError('Failed to get products by category', 500);
   }
 });
@@ -2104,7 +2094,7 @@ export const getSimilarProducts = asyncHandler(async (req: Request, res: Respons
     sendSuccess(res, { products: formattedProducts }, 'Similar products retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [SIMILAR PRODUCTS] Error:', error);
+    logger.error('❌ [SIMILAR PRODUCTS] Error:', error);
     throw new AppError('Failed to fetch similar products', 500);
   }
 });

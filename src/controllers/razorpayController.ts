@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess, sendError, sendBadRequest } from '../utils/response';
@@ -37,7 +38,7 @@ export const createRazorpayOrder = asyncHandler(async (req: Request, res: Respon
       }
     );
 
-    console.log('✅ [RAZORPAY CONTROLLER] Order created successfully:', razorpayOrder.id);
+    logger.info('✅ [RAZORPAY CONTROLLER] Order created successfully:', razorpayOrder.id);
 
     // Return order details to frontend
     sendSuccess(res, {
@@ -49,7 +50,7 @@ export const createRazorpayOrder = asyncHandler(async (req: Request, res: Respon
     }, 'Razorpay order created successfully');
 
   } catch (error: any) {
-    console.error('❌ [RAZORPAY CONTROLLER] Order creation error:', error);
+    logger.error('❌ [RAZORPAY CONTROLLER] Order creation error:', error);
     sendError(res, error.message || 'Failed to create Razorpay order', 500);
   }
 });
@@ -82,23 +83,23 @@ export const verifyRazorpayPayment = asyncHandler(async (req: Request, res: Resp
     );
 
     if (!isValid) {
-      console.error('❌ [RAZORPAY CONTROLLER] Payment signature verification failed');
+      logger.error('❌ [RAZORPAY CONTROLLER] Payment signature verification failed');
       return sendError(res, 'Payment verification failed. Please contact support.', 400);
     }
 
-    console.log('✅ [RAZORPAY CONTROLLER] Payment signature verified');
+    logger.info('✅ [RAZORPAY CONTROLLER] Payment signature verified');
 
     // Step 2: Fetch payment details from Razorpay
     const paymentDetails = await razorpayService.fetchPaymentDetails(razorpayPaymentId);
 
     if (paymentDetails.status !== 'captured' && paymentDetails.status !== 'authorized') {
-      console.error('❌ [RAZORPAY CONTROLLER] Payment not successful:', paymentDetails.status);
+      logger.error('❌ [RAZORPAY CONTROLLER] Payment not successful:', paymentDetails.status);
       return sendError(res, `Payment failed with status: ${paymentDetails.status}`, 400);
     }
 
     const amountInRupees = Number(paymentDetails.amount) / 100;
 
-    console.log('✅ [RAZORPAY CONTROLLER] Payment successful:', {
+    logger.info('✅ [RAZORPAY CONTROLLER] Payment successful:', {
       paymentId: razorpayPaymentId,
       method: paymentDetails.method,
       amount: `₹${amountInRupees}`,
@@ -119,7 +120,7 @@ export const verifyRazorpayPayment = asyncHandler(async (req: Request, res: Resp
     }, 'Payment verified successfully');
 
   } catch (error: any) {
-    console.error('❌ [RAZORPAY CONTROLLER] Payment verification error:', error);
+    logger.error('❌ [RAZORPAY CONTROLLER] Payment verification error:', error);
     sendError(res, error.message || 'Payment verification failed', 500);
   }
 });
@@ -135,7 +136,7 @@ export const getRazorpayConfig = asyncHandler(async (req: Request, res: Response
     
     sendSuccess(res, config, 'Razorpay configuration retrieved successfully');
   } catch (error: any) {
-    console.error('❌ [RAZORPAY CONTROLLER] Config retrieval error:', error);
+    logger.error('❌ [RAZORPAY CONTROLLER] Config retrieval error:', error);
     sendError(res, error.message || 'Failed to get Razorpay config', 500);
   }
 });
@@ -158,12 +159,12 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
     const isValid = razorpayService.validateWebhookSignature(webhookBody, webhookSignature);
 
     if (!isValid) {
-      console.error('❌ [RAZORPAY WEBHOOK] Signature verification failed');
+      logger.error('❌ [RAZORPAY WEBHOOK] Signature verification failed');
       return sendError(res, 'Invalid webhook signature', 401);
     }
 
     const event = req.body;
-    console.log('📥 [RAZORPAY WEBHOOK] Event received:', {
+    logger.info('📥 [RAZORPAY WEBHOOK] Event received:', {
       event: event.event,
       paymentId: event.payload?.payment?.entity?.id,
     });
@@ -173,7 +174,7 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
       case 'payment.captured': {
         // Payment successful
         const paymentEntity = event.payload.payment.entity;
-        console.log('✅ [RAZORPAY WEBHOOK] Payment captured:', paymentEntity.id);
+        logger.info('✅ [RAZORPAY WEBHOOK] Payment captured:', paymentEntity.id);
 
         // Find order by Razorpay order ID (stored in notes or as gatewayOrderId)
         const razorpayOrderId = paymentEntity.order_id;
@@ -211,9 +212,9 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
           }
 
           await order.save();
-          console.log('✅ [RAZORPAY WEBHOOK] Order updated:', order.orderNumber);
+          logger.info('✅ [RAZORPAY WEBHOOK] Order updated:', order.orderNumber);
         } else {
-          console.warn('⚠️ [RAZORPAY WEBHOOK] Order not found for Razorpay order:', razorpayOrderId);
+          logger.warn('⚠️ [RAZORPAY WEBHOOK] Order not found for Razorpay order:', razorpayOrderId);
         }
         break;
       }
@@ -221,7 +222,7 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
       case 'payment.failed': {
         // Payment failed
         const failedPayment = event.payload.payment.entity;
-        console.log('❌ [RAZORPAY WEBHOOK] Payment failed:', failedPayment.id);
+        logger.info('❌ [RAZORPAY WEBHOOK] Payment failed:', failedPayment.id);
 
         const razorpayOrderId = failedPayment.order_id;
         const order = await Order.findOne({
@@ -242,7 +243,7 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
           });
 
           await order.save();
-          console.log('✅ [RAZORPAY WEBHOOK] Order marked as payment failed:', order.orderNumber);
+          logger.info('✅ [RAZORPAY WEBHOOK] Order marked as payment failed:', order.orderNumber);
         }
         break;
       }
@@ -250,7 +251,7 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
       case 'refund.created': {
         // Refund created
         const refundEntity = event.payload.refund.entity;
-        console.log('💰 [RAZORPAY WEBHOOK] Refund created:', refundEntity.id);
+        logger.info('💰 [RAZORPAY WEBHOOK] Refund created:', refundEntity.id);
 
         const paymentId = refundEntity.payment_id;
         const order = await Order.findOne({
@@ -280,20 +281,20 @@ export const handleRazorpayWebhook = asyncHandler(async (req: Request, res: Resp
           });
 
           await order.save();
-          console.log('✅ [RAZORPAY WEBHOOK] Order refund recorded:', order.orderNumber);
+          logger.info('✅ [RAZORPAY WEBHOOK] Order refund recorded:', order.orderNumber);
         }
         break;
       }
 
       default:
-        console.log('ℹ️ [RAZORPAY WEBHOOK] Unhandled event:', event.event);
+        logger.info('ℹ️ [RAZORPAY WEBHOOK] Unhandled event:', event.event);
     }
 
     // Always return 200 to acknowledge webhook receipt
     res.status(200).json({ received: true });
 
   } catch (error: any) {
-    console.error('❌ [RAZORPAY WEBHOOK] Processing error:', error);
+    logger.error('❌ [RAZORPAY WEBHOOK] Processing error:', error);
     // Still return 200 to avoid Razorpay retrying
     res.status(200).json({ received: true, error: error.message });
   }
@@ -314,7 +315,7 @@ export const createRazorpayRefund = asyncHandler(async (req: Request, res: Respo
   try {
     const refund = await razorpayService.createRefund(paymentId, amount, notes);
 
-    console.log('✅ [RAZORPAY CONTROLLER] Refund created:', refund.id);
+    logger.info('✅ [RAZORPAY CONTROLLER] Refund created:', refund.id);
 
     const refundAmountInRupees = refund.amount ? Number(refund.amount) / 100 : 0;
 
@@ -326,7 +327,7 @@ export const createRazorpayRefund = asyncHandler(async (req: Request, res: Respo
     }, 'Refund created successfully');
 
   } catch (error: any) {
-    console.error('❌ [RAZORPAY CONTROLLER] Refund creation error:', error);
+    logger.error('❌ [RAZORPAY CONTROLLER] Refund creation error:', error);
     sendError(res, error.message || 'Failed to create refund', 500);
   }
 });

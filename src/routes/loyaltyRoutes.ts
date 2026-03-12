@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import {
@@ -49,7 +50,7 @@ router.get('/milestones', async (req: Request, res: Response) => {
       message: 'Loyalty milestones retrieved successfully',
     });
   } catch (error) {
-    console.error('[Loyalty] Error fetching milestones:', error);
+    logger.error('[Loyalty] Error fetching milestones:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch loyalty milestones',

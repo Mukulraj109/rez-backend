@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin API for Offers Section Configuration
  * Controls visibility, ordering, and limits for offers page sections
@@ -53,7 +54,7 @@ router.get('/', async (_req: Request, res: Response) => {
 
     sendSuccess(res, configs, 'Section configs retrieved');
   } catch (error) {
-    console.error('[ADMIN] Error fetching section configs:', error);
+    logger.error('[ADMIN] Error fetching section configs:', error);
     sendError(res, 'Failed to fetch section configs', 500);
   }
 });
@@ -87,7 +88,7 @@ router.put('/:sectionKey', async (req: Request, res: Response) => {
 
     sendSuccess(res, config, 'Section config updated');
   } catch (error) {
-    console.error('[ADMIN] Error updating section config:', error);
+    logger.error('[ADMIN] Error updating section config:', error);
     sendError(res, 'Failed to update section config', 500);
   }
 });
@@ -116,7 +117,7 @@ router.post('/seed', async (req: Request, res: Response) => {
 
     sendSuccess(res, results, 'Section configs seeded');
   } catch (error) {
-    console.error('[ADMIN] Error seeding section configs:', error);
+    logger.error('[ADMIN] Error seeding section configs:', error);
     sendError(res, 'Failed to seed section configs', 500);
   }
 });

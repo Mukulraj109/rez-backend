@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import streakService from '../services/streakService';
 import UserStreak from '../models/UserStreak';
@@ -163,7 +164,7 @@ class StreakController {
         message: 'Login streak retrieved successfully'
       });
     } catch (error: any) {
-      console.error('Error fetching user streak:', error);
+      logger.error('Error fetching user streak:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Failed to fetch streak data'

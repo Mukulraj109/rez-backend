@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Bill Verification Service
  * Handles bill verification workflow with OCR and fraud detection
@@ -28,7 +29,7 @@ class BillVerificationService {
     imageUrl: string,
     imageHash?: string
   ): Promise<VerificationResult> {
-    console.log(`🔄 [BILL VERIFICATION] Processing bill ${billId}...`);
+    logger.info(`🔄 [BILL VERIFICATION] Processing bill ${billId}...`);
 
     try {
       // Get bill document
@@ -45,7 +46,7 @@ class BillVerificationService {
       await bill.save();
 
       // Step 1: Run OCR to extract text
-      console.log('📸 [VERIFICATION] Step 1: Running OCR...');
+      logger.info('📸 [VERIFICATION] Step 1: Running OCR...');
       const ocrResult = await ocrService.extractTextFromBill(imageUrl);
 
       if (ocrResult.success && ocrResult.extractedData) {
@@ -63,16 +64,16 @@ class BillVerificationService {
         });
 
         if (!validation.isValid) {
-          console.log('⚠️ [VERIFICATION] OCR validation warnings:', validation.warnings);
+          logger.info('⚠️ [VERIFICATION] OCR validation warnings:', validation.warnings);
           // Store warnings but don't reject automatically
           bill.metadata.fraudFlags = validation.warnings;
         }
       } else {
-        console.log('⚠️ [VERIFICATION] OCR failed, proceeding with manual review');
+        logger.info('⚠️ [VERIFICATION] OCR failed, proceeding with manual review');
       }
 
       // Step 2: Run fraud detection
-      console.log('🔍 [VERIFICATION] Step 2: Running fraud detection...');
+      logger.info('🔍 [VERIFICATION] Step 2: Running fraud detection...');
       const fraudCheck = await fraudDetectionService.checkBillFraud({
         userId: bill.user,
         merchantId: bill.merchant as Types.ObjectId,
@@ -89,10 +90,10 @@ class BillVerificationService {
       await bill.save();
 
       // Step 3: Automatic decision making
-      console.log('⚖️ [VERIFICATION] Step 3: Making verification decision...');
+      logger.info('⚖️ [VERIFICATION] Step 3: Making verification decision...');
       const decision = await this.makeVerificationDecision(bill, ocrResult.confidence || 0, fraudCheck.fraudScore);
 
-      console.log(`✅ [VERIFICATION] Decision: ${decision.status}`);
+      logger.info(`✅ [VERIFICATION] Decision: ${decision.status}`);
 
       return {
         success: true,
@@ -102,7 +103,7 @@ class BillVerificationService {
         warnings: fraudCheck.warnings,
       };
     } catch (error) {
-      console.error('❌ [VERIFICATION] Error processing bill:', error);
+      logger.error('❌ [VERIFICATION] Error processing bill:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Verification failed',
@@ -173,20 +174,20 @@ class BillVerificationService {
         const bonusCampaignService = require('./bonusCampaignService');
         const billUserId = bill.user.toString();
         const billId = (bill._id as Types.ObjectId).toString();
-        console.log('[BILL VERIFICATION] Triggering bill_upload_bonus for auto-approved bill:', billId);
+        logger.info('[BILL VERIFICATION] Triggering bill_upload_bonus for auto-approved bill:', billId);
         await bonusCampaignService.autoClaimForTransaction('bill_upload_bonus', billUserId, {
           transactionRef: { type: 'bill' as const, refId: billId },
           transactionAmount: bill.amount,
         });
       } catch (bonusErr) {
-        console.error('[BILL VERIFICATION] bill_upload_bonus auto-claim failed (non-blocking):', bonusErr);
+        logger.error('[BILL VERIFICATION] bill_upload_bonus auto-claim failed (non-blocking):', bonusErr);
       }
 
       // Update challenge progress for bill upload (non-blocking)
       challengeService.updateProgress(
         bill.user.toString(), 'upload_bills', 1,
         { billId: (bill._id as Types.ObjectId).toString() }
-      ).catch(err => console.error('[BILL] Challenge progress update failed:', err));
+      ).catch(err => logger.error('[BILL] Challenge progress update failed:', err));
 
       return {
         status: 'approved',
@@ -217,7 +218,7 @@ class BillVerificationService {
     notes?: string
   ): Promise<VerificationResult> {
     try {
-      console.log(`✅ [MANUAL APPROVAL] Admin ${adminId} approving bill ${billId}`);
+      logger.info(`✅ [MANUAL APPROVAL] Admin ${adminId} approving bill ${billId}`);
 
       const bill = await Bill.findById(billId);
       if (!bill) {
@@ -242,27 +243,27 @@ class BillVerificationService {
         await bill.save();
       }
 
-      console.log('✅ [MANUAL APPROVAL] Bill approved successfully');
+      logger.info('✅ [MANUAL APPROVAL] Bill approved successfully');
 
       // Auto-trigger bill_upload_bonus campaign on manual approval
       try {
         const bonusCampaignService = require('./bonusCampaignService');
         const billUserId = bill.user.toString();
         const billIdStr = (bill._id as Types.ObjectId).toString();
-        console.log('[MANUAL APPROVAL] Triggering bill_upload_bonus for bill:', billIdStr);
+        logger.info('[MANUAL APPROVAL] Triggering bill_upload_bonus for bill:', billIdStr);
         await bonusCampaignService.autoClaimForTransaction('bill_upload_bonus', billUserId, {
           transactionRef: { type: 'bill' as const, refId: billIdStr },
           transactionAmount: bill.amount,
         });
       } catch (bonusErr) {
-        console.error('[MANUAL APPROVAL] bill_upload_bonus auto-claim failed (non-blocking):', bonusErr);
+        logger.error('[MANUAL APPROVAL] bill_upload_bonus auto-claim failed (non-blocking):', bonusErr);
       }
 
       // Update challenge progress for bill upload (non-blocking)
       challengeService.updateProgress(
         bill.user.toString(), 'upload_bills', 1,
         { billId: (bill._id as Types.ObjectId).toString() }
-      ).catch(err => console.error('[BILL MANUAL] Challenge progress update failed:', err));
+      ).catch(err => logger.error('[BILL MANUAL] Challenge progress update failed:', err));
 
       return {
         success: true,
@@ -271,7 +272,7 @@ class BillVerificationService {
         message: 'Bill manually approved',
       };
     } catch (error) {
-      console.error('❌ [MANUAL APPROVAL] Error:', error);
+      logger.error('❌ [MANUAL APPROVAL] Error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Approval failed',
@@ -288,7 +289,7 @@ class BillVerificationService {
     reason: string
   ): Promise<VerificationResult> {
     try {
-      console.log(`❌ [MANUAL REJECTION] Admin ${adminId} rejecting bill ${billId}`);
+      logger.info(`❌ [MANUAL REJECTION] Admin ${adminId} rejecting bill ${billId}`);
 
       const bill = await Bill.findById(billId).lean();
       if (!bill) {
@@ -308,7 +309,7 @@ class BillVerificationService {
       // Reject the bill
       await bill.reject(reason, adminId);
 
-      console.log('✅ [MANUAL REJECTION] Bill rejected successfully');
+      logger.info('✅ [MANUAL REJECTION] Bill rejected successfully');
 
       return {
         success: true,
@@ -317,7 +318,7 @@ class BillVerificationService {
         message: 'Bill manually rejected',
       };
     } catch (error) {
-      console.error('❌ [MANUAL REJECTION] Error:', error);
+      logger.error('❌ [MANUAL REJECTION] Error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Rejection failed',
@@ -345,7 +346,7 @@ class BillVerificationService {
 
       return bills;
     } catch (error) {
-      console.error('Error getting pending review bills:', error);
+      logger.error('Error getting pending review bills:', error);
       return [];
     }
   }
@@ -435,7 +436,7 @@ class BillVerificationService {
 
       return stats[0];
     } catch (error) {
-      console.error('Error getting verification statistics:', error);
+      logger.error('Error getting verification statistics:', error);
       throw error;
     }
   }
@@ -449,7 +450,7 @@ class BillVerificationService {
     newImageHash?: string
   ): Promise<VerificationResult> {
     try {
-      console.log(`🔄 [REPROCESS] Reprocessing bill ${originalBillId}...`);
+      logger.info(`🔄 [REPROCESS] Reprocessing bill ${originalBillId}...`);
 
       const originalBill = await Bill.findById(originalBillId);
       if (!originalBill) {
@@ -478,7 +479,7 @@ class BillVerificationService {
       // Process the bill again
       return await this.processBill(originalBill._id as Types.ObjectId, newImageUrl, newImageHash);
     } catch (error) {
-      console.error('❌ [REPROCESS] Error:', error);
+      logger.error('❌ [REPROCESS] Error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Reprocessing failed',

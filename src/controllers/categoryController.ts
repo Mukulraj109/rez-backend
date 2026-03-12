@@ -293,82 +293,88 @@ export const getFeaturedCategories = asyncHandler(async (req: Request, res: Resp
 // Get best discount categories
 export const getBestDiscountCategories = asyncHandler(async (req: Request, res: Response) => {
   const { limit = 10 } = req.query;
+  const limitNum = Number(limit);
 
   try {
-    // First try to get categories marked as best discount
-    let categories = await Category.find({
-      isActive: true,
-      isBestDiscount: true
-    })
-      .select('name slug image icon sortOrder maxCashback storeCount isBestDiscount isActive')
-      .sort({ maxCashback: -1, sortOrder: 1 })
-      .limit(Number(limit))
-      .lean();
+    const cacheKey = `category:bestDiscount:${limitNum}`;
+    const categories = await withCache(cacheKey, 3600, async () => {
+      // First try to get categories marked as best discount
+      let cats = await Category.find({
+        isActive: true,
+        isBestDiscount: true
+      })
+        .select('name slug image icon sortOrder maxCashback storeCount isBestDiscount isActive')
+        .sort({ maxCashback: -1, sortOrder: 1 })
+        .limit(limitNum)
+        .lean();
 
-    // If no categories marked as best discount, get categories with highest cashback from stores
-    if (categories.length === 0) {
-      // Aggregate to find categories with highest cashback
-      const categoryStats = await Store.aggregate([
-        { $match: { isActive: true, 'offers.cashback': { $gt: 0 } } },
-        {
-          $group: {
-            _id: '$category',
-            maxCashback: { $max: '$offers.cashback' },
-            storeCount: { $sum: 1 }
+      // If no categories marked as best discount, get categories with highest cashback from stores
+      if (cats.length === 0) {
+        // Aggregate to find categories with highest cashback
+        const categoryStats = await Store.aggregate([
+          { $match: { isActive: true, 'offers.cashback': { $gt: 0 } } },
+          {
+            $group: {
+              _id: '$category',
+              maxCashback: { $max: '$offers.cashback' },
+              storeCount: { $sum: 1 }
+            }
+          },
+          { $sort: { maxCashback: -1 } },
+          { $limit: limitNum }
+        ]);
+
+        if (categoryStats.length > 0) {
+          const categoryIds = categoryStats.map(s => s._id).filter(Boolean);
+          const categoryMap = new Map(categoryStats.map(s => [s._id?.toString(), s]));
+
+          cats = await Category.find({
+            _id: { $in: categoryIds },
+            isActive: true
+          })
+            .select('name slug image icon sortOrder maxCashback storeCount isActive')
+            .lean();
+
+          // Add computed stats
+          cats = cats.map((cat: any) => {
+            const stats = categoryMap.get(cat._id.toString());
+            return {
+              ...cat,
+              maxCashback: stats?.maxCashback || cat.maxCashback || 0,
+              storeCount: stats?.storeCount || cat.storeCount || 0
+            };
+          });
+
+          // Sort by maxCashback
+          cats.sort((a: any, b: any) => (b.maxCashback || 0) - (a.maxCashback || 0));
+        }
+      } else {
+        // Batch compute stats for all marked categories at once
+        const markedCategoryIds = cats.map((c: any) => c._id);
+        const batchStoreStats = await Store.aggregate([
+          { $match: { category: { $in: markedCategoryIds }, isActive: true } },
+          {
+            $group: {
+              _id: '$category',
+              maxCashback: { $max: '$offers.cashback' },
+              storeCount: { $sum: 1 }
+            }
           }
-        },
-        { $sort: { maxCashback: -1 } },
-        { $limit: Number(limit) }
-      ]);
+        ]);
+        const discountStatsMap = new Map(batchStoreStats.map((s: any) => [s._id?.toString(), s]));
 
-      if (categoryStats.length > 0) {
-        const categoryIds = categoryStats.map(s => s._id).filter(Boolean);
-        const categoryMap = new Map(categoryStats.map(s => [s._id?.toString(), s]));
-
-        categories = await Category.find({
-          _id: { $in: categoryIds },
-          isActive: true
-        })
-          .select('name slug image icon sortOrder maxCashback storeCount isActive')
-          .lean();
-
-        // Add computed stats
-        categories = categories.map((cat: any) => {
-          const stats = categoryMap.get(cat._id.toString());
+        cats = cats.map((category: any) => {
+          const stats = discountStatsMap.get(category._id.toString());
           return {
-            ...cat,
-            maxCashback: stats?.maxCashback || cat.maxCashback || 0,
-            storeCount: stats?.storeCount || cat.storeCount || 0
+            ...category,
+            maxCashback: stats?.maxCashback || category.maxCashback || 0,
+            storeCount: stats?.storeCount || category.storeCount || 0
           };
         });
-
-        // Sort by maxCashback
-        categories.sort((a: any, b: any) => (b.maxCashback || 0) - (a.maxCashback || 0));
       }
-    } else {
-      // Batch compute stats for all marked categories at once
-      const markedCategoryIds = categories.map((c: any) => c._id);
-      const batchStoreStats = await Store.aggregate([
-        { $match: { category: { $in: markedCategoryIds }, isActive: true } },
-        {
-          $group: {
-            _id: '$category',
-            maxCashback: { $max: '$offers.cashback' },
-            storeCount: { $sum: 1 }
-          }
-        }
-      ]);
-      const discountStatsMap = new Map(batchStoreStats.map((s: any) => [s._id?.toString(), s]));
 
-      categories = categories.map((category: any) => {
-        const stats = discountStatsMap.get(category._id.toString());
-        return {
-          ...category,
-          maxCashback: stats?.maxCashback || category.maxCashback || 0,
-          storeCount: stats?.storeCount || category.storeCount || 0
-        };
-      });
-    }
+      return cats;
+    });
 
     sendSuccess(res, categories, 'Best discount categories retrieved successfully');
 

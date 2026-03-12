@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Support Ticket Model
 // Manages customer support tickets and conversations
 
@@ -274,7 +275,7 @@ SupportTicketSchema.methods.addMessage = async function(
   }
 
   await this.save();
-  console.log(`✅ [SUPPORT_TICKET] Message added to ticket ${this.ticketNumber}`);
+  logger.info(`✅ [SUPPORT_TICKET] Message added to ticket ${this.ticketNumber}`);
 };
 
 // Instance method to mark messages as read
@@ -290,7 +291,7 @@ SupportTicketSchema.methods.markMessagesAsRead = async function(
   });
 
   await this.save();
-  console.log(`✅ [SUPPORT_TICKET] Messages marked as read for ${userType}`);
+  logger.info(`✅ [SUPPORT_TICKET] Messages marked as read for ${userType}`);
 };
 
 // Instance method to resolve ticket
@@ -318,7 +319,7 @@ SupportTicketSchema.methods.resolveTicket = async function(
   });
 
   await this.save();
-  console.log(`✅ [SUPPORT_TICKET] Ticket ${this.ticketNumber} resolved`);
+  logger.info(`✅ [SUPPORT_TICKET] Ticket ${this.ticketNumber} resolved`);
 };
 
 // Instance method to close ticket
@@ -326,7 +327,7 @@ SupportTicketSchema.methods.closeTicket = async function() {
   this.status = 'closed';
   this.closedAt = new Date();
   await this.save();
-  console.log(`✅ [SUPPORT_TICKET] Ticket ${this.ticketNumber} closed`);
+  logger.info(`✅ [SUPPORT_TICKET] Ticket ${this.ticketNumber} closed`);
 };
 
 // Instance method to reopen ticket
@@ -350,7 +351,7 @@ SupportTicketSchema.methods.reopenTicket = async function(
   });
 
   await this.save();
-  console.log(`✅ [SUPPORT_TICKET] Ticket ${this.ticketNumber} reopened`);
+  logger.info(`✅ [SUPPORT_TICKET] Ticket ${this.ticketNumber} reopened`);
 };
 
 // Instance method to rate ticket
@@ -364,7 +365,7 @@ SupportTicketSchema.methods.rateTicket = async function(
     ratedAt: new Date(),
   };
   await this.save();
-  console.log(`✅ [SUPPORT_TICKET] Ticket ${this.ticketNumber} rated: ${score}/5`);
+  logger.info(`✅ [SUPPORT_TICKET] Ticket ${this.ticketNumber} rated: ${score}/5`);
 };
 
 // Static method to generate ticket number
@@ -414,7 +415,7 @@ SupportTicketSchema.statics.autoAssignTicket = async function(
 ): Promise<void> {
   // This would integrate with an agent management system
   // For now, we'll leave unassigned
-  console.log(`📋 [SUPPORT_TICKET] Auto-assign logic not yet implemented for ticket ${ticketId}`);
+  logger.info(`📋 [SUPPORT_TICKET] Auto-assign logic not yet implemented for ticket ${ticketId}`);
 };
 
 // Pre-save hook to set priority based on category

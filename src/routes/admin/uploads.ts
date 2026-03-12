@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import * as path from 'path';
@@ -109,7 +110,7 @@ router.post(
         },
       });
     } catch (error: any) {
-      console.error('[Admin Upload] Error:', error);
+      logger.error('[Admin Upload] Error:', error);
 
       // Clean up temp file on error
       if (req.file && fs.existsSync(req.file.path)) {
@@ -178,7 +179,7 @@ router.post(
         })),
       });
     } catch (error: any) {
-      console.error('[Admin Upload] Multiple upload error:', error);
+      logger.error('[Admin Upload] Multiple upload error:', error);
 
       // Clean up temp files on error
       const files = req.files as Express.Multer.File[];
@@ -223,7 +224,7 @@ router.post(
         message: 'Image deleted successfully',
       });
     } catch (error: any) {
-      console.error('[Admin Upload] Delete error:', error);
+      logger.error('[Admin Upload] Delete error:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Failed to delete image',

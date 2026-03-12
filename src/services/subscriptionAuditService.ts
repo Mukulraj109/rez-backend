@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Types } from 'mongoose';
 import { SubscriptionAuditLog, SubscriptionAuditAction } from '../models/SubscriptionAuditLog';
 
@@ -48,7 +49,7 @@ class SubscriptionAuditService {
       });
     } catch (error) {
       // Audit logging should never crash the main flow
-      console.error('[SUBSCRIPTION_AUDIT] Failed to log change:', error);
+      logger.error('[SUBSCRIPTION_AUDIT] Failed to log change:', error);
     }
   }
 

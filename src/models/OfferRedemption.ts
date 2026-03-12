@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose, { Document, Schema, Model } from 'mongoose';
 
 // Instance methods interface
@@ -242,7 +243,7 @@ OfferRedemptionSchema.methods.markAsUsed = async function (
 ) {
   // Idempotency check - if already used, return without error
   if (this.status === 'used') {
-    console.log(`⚠️ [OFFER REDEMPTION] Redemption ${this.redemptionCode} already marked as used, skipping`);
+    logger.info(`⚠️ [OFFER REDEMPTION] Redemption ${this.redemptionCode} already marked as used, skipping`);
     return this;
   }
 

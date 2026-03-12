@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Value Cards
  * CRUD endpoints for managing ValueCard model
@@ -54,7 +55,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     return sendPaginated(res, cards, page, limit, total, 'Value cards fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching value cards:', error);
+    logger.error('[Admin] Error fetching value cards:', error);
     return sendError(res, 'Failed to fetch value cards', 500);
   }
 });
@@ -71,7 +72,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
     return sendSuccess(res, card, 'Value card fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching value card:', error);
+    logger.error('[Admin] Error fetching value card:', error);
     return sendError(res, 'Failed to fetch value card', 500);
   }
 });
@@ -104,7 +105,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     return sendCreated(res, card, 'Value card created');
   } catch (error: any) {
-    console.error('[Admin] Error creating value card:', error);
+    logger.error('[Admin] Error creating value card:', error);
     if (error.name === 'ValidationError') {
       return sendBadRequest(res, error.message);
     }
@@ -145,7 +146,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, card, 'Value card updated');
   } catch (error: any) {
-    console.error('[Admin] Error updating value card:', error);
+    logger.error('[Admin] Error updating value card:', error);
     if (error.name === 'ValidationError') {
       return sendBadRequest(res, error.message);
     }
@@ -165,7 +166,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
     return sendSuccess(res, null, 'Value card deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting value card:', error);
+    logger.error('[Admin] Error deleting value card:', error);
     return sendError(res, 'Failed to delete value card', 500);
   }
 });
@@ -186,7 +187,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
 
     return sendSuccess(res, card, `Value card ${card.isActive ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling value card:', error);
+    logger.error('[Admin] Error toggling value card:', error);
     return sendError(res, 'Failed to toggle value card', 500);
   }
 });

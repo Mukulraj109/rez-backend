@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Router, Request, Response } from 'express';
 import ProductGallery from '../models/ProductGallery';
 import { Product } from '../models/Product';
@@ -139,7 +140,7 @@ router.get(
         offset: parseInt(offset as string),
       });
     } catch (error: any) {
-      console.error('Error fetching product gallery:', error);
+      logger.error('Error fetching product gallery:', error);
       return sendError(res, error.message || 'Failed to fetch product gallery', 500);
     }
   }
@@ -214,7 +215,7 @@ router.get(
         })),
       });
     } catch (error: any) {
-      console.error('Error fetching product gallery categories:', error);
+      logger.error('Error fetching product gallery categories:', error);
       return sendError(res, error.message || 'Failed to fetch gallery categories', 500);
     }
   }
@@ -261,7 +262,7 @@ router.get(
       ProductGallery.updateOne(
         { _id: itemId },
         { $inc: { views: 1 } }
-      ).catch(err => console.error('Failed to increment view count:', err));
+      ).catch(err => logger.error('Failed to increment view count:', err));
 
       return sendSuccess(res, {
         item: {
@@ -283,7 +284,7 @@ router.get(
         },
       });
     } catch (error: any) {
-      console.error('Error fetching product gallery item:', error);
+      logger.error('Error fetching product gallery item:', error);
       return sendError(res, error.message || 'Failed to fetch gallery item', 500);
     }
   }

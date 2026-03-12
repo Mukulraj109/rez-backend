@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Privé Invite Service
  *
@@ -225,7 +226,7 @@ class PriveInviteService {
         } catch (err: any) {
           // Idempotency: duplicate key means already rewarded
           if (err?.code !== 11000) {
-            console.error('[PriveInvite] Failed to reward inviter:', err);
+            logger.error('[PriveInvite] Failed to reward inviter:', err);
           }
         }
       }
@@ -249,7 +250,7 @@ class PriveInviteService {
           inviteeReward = config.inviteeRewardCoins;
         } catch (err: any) {
           if (err?.code !== 11000) {
-            console.error('[PriveInvite] Failed to reward invitee:', err);
+            logger.error('[PriveInvite] Failed to reward invitee:', err);
           }
         }
       }
@@ -260,7 +261,7 @@ class PriveInviteService {
         { $set: { 'usedBy.$.rewardDistributed': true } }
       );
     } catch (err) {
-      console.error('[PriveInvite] Reward distribution error:', err);
+      logger.error('[PriveInvite] Reward distribution error:', err);
     }
 
     // Fire-and-forget: recalculate reputation for both

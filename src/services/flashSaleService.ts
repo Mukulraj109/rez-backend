@@ -89,7 +89,7 @@ class FlashSaleService {
       await flashSale.populate('stores', 'name logo');
       await flashSale.populate('category', 'name');
 
-      console.log('✅ [FlashSaleService] Flash sale created:', flashSale._id);
+      logger.info('✅ [FlashSaleService] Flash sale created:', flashSale._id);
 
       // Schedule start notification if in the future
       if (flashSale.notifyOnStart && flashSale.startTime > new Date()) {
@@ -98,7 +98,7 @@ class FlashSaleService {
 
       return flashSale;
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error creating flash sale:', error);
+      logger.error('❌ [FlashSaleService] Error creating flash sale:', error);
       throw error;
     }
   }
@@ -116,7 +116,7 @@ class FlashSaleService {
 
       return flashSales;
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error getting active flash sales:', error);
+      logger.error('❌ [FlashSaleService] Error getting active flash sales:', error);
       throw error;
     }
   }
@@ -134,7 +134,7 @@ class FlashSaleService {
 
       return flashSales;
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error getting upcoming flash sales:', error);
+      logger.error('❌ [FlashSaleService] Error getting upcoming flash sales:', error);
       throw error;
     }
   }
@@ -152,7 +152,7 @@ class FlashSaleService {
 
       return flashSales;
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error getting expiring flash sales:', error);
+      logger.error('❌ [FlashSaleService] Error getting expiring flash sales:', error);
       throw error;
     }
   }
@@ -170,7 +170,7 @@ class FlashSaleService {
 
       return flashSale;
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error getting flash sale:', error);
+      logger.error('❌ [FlashSaleService] Error getting flash sale:', error);
       throw error;
     }
   }
@@ -194,7 +194,7 @@ class FlashSaleService {
 
       return flashSales;
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error getting flash sales by product:', error);
+      logger.error('❌ [FlashSaleService] Error getting flash sales by product:', error);
       throw error;
     }
   }
@@ -213,7 +213,7 @@ class FlashSaleService {
 
       return flashSales;
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error getting flash sales by category:', error);
+      logger.error('❌ [FlashSaleService] Error getting flash sales by category:', error);
       throw error;
     }
   }
@@ -249,7 +249,7 @@ class FlashSaleService {
         throw new Error('Flash sale not found');
       }
 
-      console.log('✅ [FlashSaleService] Flash sale updated:', flashSaleId);
+      logger.info('✅ [FlashSaleService] Flash sale updated:', flashSaleId);
 
       // Emit socket event for update
       if (io) {
@@ -263,7 +263,7 @@ class FlashSaleService {
 
       return flashSale;
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error updating flash sale:', error);
+      logger.error('❌ [FlashSaleService] Error updating flash sale:', error);
       throw error;
     }
   }
@@ -310,7 +310,7 @@ class FlashSaleService {
 
       return { valid: true, flashSale };
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error validating flash sale purchase:', error);
+      logger.error('❌ [FlashSaleService] Error validating flash sale purchase:', error);
       throw error;
     }
   }
@@ -393,7 +393,7 @@ class FlashSaleService {
 
       return flashSale;
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error updating sold quantity:', error);
+      logger.error('❌ [FlashSaleService] Error updating sold quantity:', error);
       throw error;
     }
   }
@@ -407,7 +407,7 @@ class FlashSaleService {
         $inc: { viewCount: 1 },
       });
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error tracking view:', error);
+      logger.error('❌ [FlashSaleService] Error tracking view:', error);
       // Don't throw - analytics shouldn't break the flow
     }
   }
@@ -421,7 +421,7 @@ class FlashSaleService {
         $inc: { clickCount: 1 },
       });
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error tracking click:', error);
+      logger.error('❌ [FlashSaleService] Error tracking click:', error);
       // Don't throw - analytics shouldn't break the flow
     }
   }
@@ -432,14 +432,14 @@ class FlashSaleService {
   async deleteFlashSale(flashSaleId: string): Promise<void> {
     try {
       await FlashSale.findByIdAndDelete(flashSaleId);
-      console.log('✅ [FlashSaleService] Flash sale deleted:', flashSaleId);
+      logger.info('✅ [FlashSaleService] Flash sale deleted:', flashSaleId);
 
       // Emit socket event
       if (io) {
         stockSocketService.getIO()?.emit('flashsale:deleted', { flashSaleId });
       }
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error deleting flash sale:', error);
+      logger.error('❌ [FlashSaleService] Error deleting flash sale:', error);
       throw error;
     }
   }
@@ -452,7 +452,7 @@ class FlashSaleService {
 
     if (timeUntilStart > 0) {
       setTimeout(() => {
-        console.log('🔔 [FlashSaleService] Flash sale starting:', flashSale.title);
+        logger.info('🔔 [FlashSaleService] Flash sale starting:', flashSale.title);
 
         // Emit socket event
         if (io) {
@@ -466,7 +466,7 @@ class FlashSaleService {
 
         // Send push notifications to users with phone numbers
         this.sendFlashSaleNotifications(flashSale).catch(err =>
-          console.error('❌ [FlashSaleService] Error sending flash sale notifications:', err)
+          logger.error('❌ [FlashSaleService] Error sending flash sale notifications:', err)
         );
       }, timeUntilStart);
     }
@@ -507,7 +507,7 @@ class FlashSaleService {
       if (users.length < BATCH_SIZE) break;
     }
 
-    console.log(`📢 [FlashSaleService] Flash sale notifications sent to ${notifiedCount} users`);
+    logger.info(`📢 [FlashSaleService] Flash sale notifications sent to ${notifiedCount} users`);
   }
 
   /**
@@ -528,7 +528,7 @@ class FlashSaleService {
         }
       }
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error checking ending soon:', error);
+      logger.error('❌ [FlashSaleService] Error checking ending soon:', error);
     }
   }
 
@@ -550,7 +550,7 @@ class FlashSaleService {
       );
 
       if (result.modifiedCount > 0) {
-        console.log(`✅ [FlashSaleService] Marked ${result.modifiedCount} flash sales as ended`);
+        logger.info(`✅ [FlashSaleService] Marked ${result.modifiedCount} flash sales as ended`);
 
         // Emit socket event
         if (io) {
@@ -560,7 +560,7 @@ class FlashSaleService {
         }
       }
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error marking ended flash sales:', error);
+      logger.error('❌ [FlashSaleService] Error marking ended flash sales:', error);
     }
   }
 
@@ -597,7 +597,7 @@ class FlashSaleService {
         remainingTime: flashSale.getRemainingTime(),
       };
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error getting flash sale stats:', error);
+      logger.error('❌ [FlashSaleService] Error getting flash sale stats:', error);
       throw error;
     }
   }
@@ -629,7 +629,7 @@ class FlashSaleService {
         canPurchase,
       };
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error checking user purchase limit:', error);
+      logger.error('❌ [FlashSaleService] Error checking user purchase limit:', error);
       throw error;
     }
   }
@@ -757,7 +757,7 @@ class FlashSaleService {
       purchase.razorpayOrderId = stripeSession.id; // Using this field for Stripe session ID
       await purchase.save();
 
-      console.log('✅ [FlashSaleService] Flash sale purchase initiated with Stripe:', {
+      logger.info('✅ [FlashSaleService] Flash sale purchase initiated with Stripe:', {
         purchaseId: purchaseIdStr,
         stripeSessionId: stripeSession.id,
         amount: totalAmount,
@@ -778,7 +778,7 @@ class FlashSaleService {
         },
       };
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error initiating flash sale purchase:', error);
+      logger.error('❌ [FlashSaleService] Error initiating flash sale purchase:', error);
       throw error;
     }
   }
@@ -846,7 +846,7 @@ class FlashSaleService {
         purchase.user.toString()
       );
 
-      console.log('✅ [FlashSaleService] Flash sale purchase completed:', {
+      logger.info('✅ [FlashSaleService] Flash sale purchase completed:', {
         purchaseId: purchase._id,
         voucherCode: purchase.voucherCode,
         amount: purchase.amount,
@@ -870,7 +870,7 @@ class FlashSaleService {
         expiresAt: purchase.voucherExpiresAt,
       };
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error completing flash sale purchase:', error);
+      logger.error('❌ [FlashSaleService] Error completing flash sale purchase:', error);
       throw error;
     }
   }
@@ -893,12 +893,12 @@ class FlashSaleService {
       purchase.failureReason = reason;
       await purchase.save();
 
-      console.log('⚠️ [FlashSaleService] Flash sale purchase failed:', {
+      logger.info('⚠️ [FlashSaleService] Flash sale purchase failed:', {
         purchaseId,
         reason,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error failing flash sale purchase:', error);
+      logger.error('❌ [FlashSaleService] Error failing flash sale purchase:', error);
       throw error;
     }
   }
@@ -911,7 +911,7 @@ class FlashSaleService {
       const purchases = await FlashSalePurchase.getUserPurchases(userId);
       return purchases;
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error getting user flash sale purchases:', error);
+      logger.error('❌ [FlashSaleService] Error getting user flash sale purchases:', error);
       throw error;
     }
   }
@@ -928,7 +928,7 @@ class FlashSaleService {
 
       return purchase;
     } catch (error) {
-      console.error('❌ [FlashSaleService] Error getting flash sale purchase:', error);
+      logger.error('❌ [FlashSaleService] Error getting flash sale purchase:', error);
       throw error;
     }
   }

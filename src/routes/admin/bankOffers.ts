@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Bank Offers
  * CRUD for BankOffer model
@@ -47,7 +48,7 @@ router.get('/', async (req: Request, res: Response) => {
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     }, 'Bank offers fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching bank offers:', error);
+    logger.error('[Admin] Error fetching bank offers:', error);
     return sendError(res, 'Failed to fetch bank offers', 500);
   }
 });
@@ -62,7 +63,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     if (!offer) return sendError(res, 'Bank offer not found', 404);
     return sendSuccess(res, offer, 'Bank offer fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching bank offer:', error);
+    logger.error('[Admin] Error fetching bank offer:', error);
     return sendError(res, 'Failed to fetch bank offer', 500);
   }
 });
@@ -86,7 +87,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     return sendSuccess(res, offer, 'Bank offer created');
   } catch (error) {
-    console.error('[Admin] Error creating bank offer:', error);
+    logger.error('[Admin] Error creating bank offer:', error);
     return sendError(res, 'Failed to create bank offer', 500);
   }
 });
@@ -101,7 +102,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (!offer) return sendError(res, 'Bank offer not found', 404);
     return sendSuccess(res, offer, 'Bank offer updated');
   } catch (error) {
-    console.error('[Admin] Error updating bank offer:', error);
+    logger.error('[Admin] Error updating bank offer:', error);
     return sendError(res, 'Failed to update bank offer', 500);
   }
 });
@@ -118,7 +119,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
     await offer.save();
     return sendSuccess(res, offer, `Bank offer ${offer.isActive ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling bank offer:', error);
+    logger.error('[Admin] Error toggling bank offer:', error);
     return sendError(res, 'Failed to toggle bank offer', 500);
   }
 });
@@ -133,7 +134,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     if (!offer) return sendError(res, 'Bank offer not found', 404);
     return sendSuccess(res, null, 'Bank offer deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting bank offer:', error);
+    logger.error('[Admin] Error deleting bank offer:', error);
     return sendError(res, 'Failed to delete bank offer', 500);
   }
 });

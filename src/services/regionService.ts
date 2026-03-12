@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Region Service
  * Handles region detection, filtering, and validation for multi-region support
@@ -125,7 +126,7 @@ class RegionService {
         }
       }
     } catch (error) {
-      console.warn('IP-based region detection failed:', error);
+      logger.warn('IP-based region detection failed:', error);
     }
 
     // 4. Try coordinates from query params
@@ -198,7 +199,7 @@ class RegionService {
 
       return null;
     } catch (error) {
-      console.error('IP geolocation failed:', error);
+      logger.error('IP geolocation failed:', error);
       return null;
     }
   }

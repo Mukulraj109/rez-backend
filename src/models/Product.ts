@@ -767,19 +767,10 @@ ProductSchema.index({ serviceCategory: 1, isActive: 1, productType: 1 });
 ProductSchema.index({ productType: 1, 'ratings.average': -1, isActive: 1 });
 
 // Text search index
-ProductSchema.index({
-  name: 'text',
-  description: 'text',
-  tags: 'text',
-  brand: 'text'
-}, {
-  weights: {
-    name: 10,
-    tags: 5,
-    brand: 3,
-    description: 1
-  }
-});
+ProductSchema.index(
+  { name: 'text', description: 'text', brand: 'text', tags: 'text' },
+  { weights: { name: 10, brand: 5, tags: 3, description: 1 }, name: 'product_text_search' }
+);
 
 // Compound indexes
 ProductSchema.index({ category: 1, 'pricing.selling': 1, isActive: 1, isDeleted: 1 });
@@ -794,6 +785,12 @@ ProductSchema.index({ store: 1, 'inventory.stock': 1, 'inventory.lowStockThresho
 // Homepage query indexes
 ProductSchema.index({ isActive: 1, isFeatured: 1, 'inventory.isAvailable': 1, 'analytics.views': -1 }); // featured products
 ProductSchema.index({ isActive: 1, 'inventory.isAvailable': 1, createdAt: -1 }); // new arrivals
+
+// Query performance indexes
+ProductSchema.index({ isActive: 1, createdAt: -1 }); // Product listing sorted by date
+ProductSchema.index({ isActive: 1, 'analytics.views': -1 }); // Popular products sort
+ProductSchema.index({ store: 1, isActive: 1, createdAt: -1 }); // Store menu listing
+ProductSchema.index({ category: 1, isActive: 1, 'pricing.selling': 1 }); // Category product listing with price sort
 
 // Soft delete indexes
 ProductSchema.index({ isDeleted: 1, deletedAt: 1 }); // For cleanup queries

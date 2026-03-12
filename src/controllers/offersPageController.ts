@@ -18,6 +18,7 @@ import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
 import { logger } from '../config/logger';
 import { getOffersPageData as getAggregatedData } from '../services/offersPageService';
+import { withCache } from '../utils/cacheHelper';
 
 /**
  * GET /api/offers/hotspots
@@ -245,58 +246,73 @@ export const getExclusiveZones = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?._id;
 
-    const zones = await ExclusiveZone.find({ isActive: true })
-      .sort({ priority: -1 })
-      .lean();
-
-    // If user is authenticated, add eligibility status to each zone
-    let zonesWithEligibility = zones;
-    if (userId) {
-      const { User } = await import('../models/User');
-      const user = await User.findById(userId).lean();
-
-      if (user) {
-        zonesWithEligibility = zones.map((zone: any) => {
-          let isEligible = false;
-
-          switch (zone.eligibilityType) {
-            case 'student':
-              isEligible = (user as any).verifications?.student?.verified === true;
-              break;
-            case 'corporate_email':
-              isEligible = (user as any).verifications?.corporate?.verified === true;
-              break;
-            case 'gender':
-              isEligible = user.profile?.gender === 'female';
-              break;
-            case 'birthday_month':
-              if (user.profile?.dateOfBirth) {
-                const birthMonth = new Date(user.profile.dateOfBirth).getMonth();
-                const currentMonth = new Date().getMonth();
-                isEligible = birthMonth === currentMonth;
-              }
-              break;
-            case 'age':
-              if (user.profile?.dateOfBirth) {
-                const age = Math.floor((Date.now() - new Date(user.profile.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-                isEligible = age >= 60;
-              }
-              break;
-            case 'verification':
-              // First time user - check if no orders yet
-              isEligible = true; // Will be refined when order tracking is implemented
-              break;
-            default:
-              isEligible = !zone.verificationRequired;
-          }
-
-          return {
-            ...zone,
-            userEligible: isEligible,
-          };
-        });
-      }
+    if (!userId) {
+      // Unauthenticated: cache for 5 minutes
+      const zones = await withCache('offers:exclusiveZones:anon', 300, () =>
+        ExclusiveZone.find({ isActive: true })
+          .select('name slug description icon image eligibilityType verificationRequired priority isActive')
+          .sort({ priority: -1 })
+          .lean()
+      );
+      return sendSuccess(res, zones, 'Exclusive zones retrieved successfully');
     }
+
+    // Authenticated: cache per user for 60 seconds
+    const zonesWithEligibility = await withCache(`offers:exclusiveZones:${userId}`, 60, async () => {
+      const { User } = await import('../models/User');
+
+      // Run zone fetch and user fetch in parallel
+      const [zones, user] = await Promise.all([
+        ExclusiveZone.find({ isActive: true })
+          .select('name slug description icon image eligibilityType verificationRequired priority isActive')
+          .sort({ priority: -1 })
+          .lean(),
+        User.findById(userId)
+          .select('verifications profile.dateOfBirth profile.gender')
+          .lean(),
+      ]);
+
+      if (!user) return zones;
+
+      return zones.map((zone: any) => {
+        let isEligible = false;
+
+        switch (zone.eligibilityType) {
+          case 'student':
+            isEligible = (user as any).verifications?.student?.verified === true;
+            break;
+          case 'corporate_email':
+            isEligible = (user as any).verifications?.corporate?.verified === true;
+            break;
+          case 'gender':
+            isEligible = user.profile?.gender === 'female';
+            break;
+          case 'birthday_month':
+            if (user.profile?.dateOfBirth) {
+              const birthMonth = new Date(user.profile.dateOfBirth).getMonth();
+              const currentMonth = new Date().getMonth();
+              isEligible = birthMonth === currentMonth;
+            }
+            break;
+          case 'age':
+            if (user.profile?.dateOfBirth) {
+              const age = Math.floor((Date.now() - new Date(user.profile.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+              isEligible = age >= 60;
+            }
+            break;
+          case 'verification':
+            isEligible = true;
+            break;
+          default:
+            isEligible = !zone.verificationRequired;
+        }
+
+        return {
+          ...zone,
+          userEligible: isEligible,
+        };
+      });
+    });
 
     sendSuccess(res, zonesWithEligibility, 'Exclusive zones retrieved successfully');
   } catch (error) {
@@ -345,50 +361,66 @@ export const getSpecialProfiles = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?._id;
 
-    const profiles = await SpecialProfile.find({ isActive: true })
-      .sort({ priority: -1 })
-      .lean();
-
-    // If user is authenticated, add eligibility status to each profile
-    let profilesWithEligibility = profiles;
-    if (userId) {
-      const { User } = await import('../models/User');
-      const user = await User.findById(userId).lean();
-
-      if (user) {
-        profilesWithEligibility = profiles.map((profile: any) => {
-          let isEligible = false;
-
-          switch (profile.slug) {
-            case 'defence':
-              isEligible = (user as any).verifications?.defence?.verified === true;
-              break;
-            case 'healthcare':
-              isEligible = (user as any).verifications?.healthcare?.verified === true;
-              break;
-            case 'senior':
-              isEligible = (user as any).verifications?.senior?.verified === true;
-              break;
-            case 'teachers':
-              isEligible = (user as any).verifications?.teacher?.verified === true;
-              break;
-            case 'government':
-              isEligible = (user as any).verifications?.government?.verified === true;
-              break;
-            case 'differently-abled':
-              isEligible = (user as any).verifications?.differentlyAbled?.verified === true;
-              break;
-            default:
-              isEligible = !profile.verificationRequired;
-          }
-
-          return {
-            ...profile,
-            userEligible: isEligible,
-          };
-        });
-      }
+    if (!userId) {
+      // Unauthenticated: cache for 5 minutes
+      const profiles = await withCache('offers:specialProfiles:anon', 300, () =>
+        SpecialProfile.find({ isActive: true })
+          .select('name slug description icon image verificationRequired priority isActive')
+          .sort({ priority: -1 })
+          .lean()
+      );
+      return sendSuccess(res, profiles, 'Special profiles retrieved successfully');
     }
+
+    // Authenticated: cache per user for 60 seconds
+    const profilesWithEligibility = await withCache(`offers:specialProfiles:${userId}`, 60, async () => {
+      const { User } = await import('../models/User');
+
+      // Run profile fetch and user fetch in parallel
+      const [profiles, user] = await Promise.all([
+        SpecialProfile.find({ isActive: true })
+          .select('name slug description icon image verificationRequired priority isActive')
+          .sort({ priority: -1 })
+          .lean(),
+        User.findById(userId)
+          .select('verifications profile.dateOfBirth profile.gender')
+          .lean(),
+      ]);
+
+      if (!user) return profiles;
+
+      return profiles.map((profile: any) => {
+        let isEligible = false;
+
+        switch (profile.slug) {
+          case 'defence':
+            isEligible = (user as any).verifications?.defence?.verified === true;
+            break;
+          case 'healthcare':
+            isEligible = (user as any).verifications?.healthcare?.verified === true;
+            break;
+          case 'senior':
+            isEligible = (user as any).verifications?.senior?.verified === true;
+            break;
+          case 'teachers':
+            isEligible = (user as any).verifications?.teacher?.verified === true;
+            break;
+          case 'government':
+            isEligible = (user as any).verifications?.government?.verified === true;
+            break;
+          case 'differently-abled':
+            isEligible = (user as any).verifications?.differentlyAbled?.verified === true;
+            break;
+          default:
+            isEligible = !profile.verificationRequired;
+        }
+
+        return {
+          ...profile,
+          userEligible: isEligible,
+        };
+      });
+    });
 
     sendSuccess(res, profilesWithEligibility, 'Special profiles retrieved successfully');
   } catch (error) {
@@ -707,9 +739,11 @@ export const getLoyaltyProgress = async (req: Request, res: Response) => {
  */
 export const getLoyaltyMilestones = async (req: Request, res: Response) => {
   try {
-    const milestones = await LoyaltyMilestone.find({ isActive: true })
-      .sort({ order: 1 })
-      .lean();
+    const milestones = await withCache('offers:loyaltyMilestones', 3600, () =>
+      LoyaltyMilestone.find({ isActive: true })
+        .sort({ order: 1 })
+        .lean()
+    );
 
     sendSuccess(res, milestones, 'Loyalty milestones retrieved successfully');
   } catch (error) {

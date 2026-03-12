@@ -10,6 +10,7 @@ import { Wallet } from '../models/Wallet';
 import { CoinTransaction } from '../models/CoinTransaction';
 import { sendSuccess, sendError } from '../utils/response';
 import mongoose from 'mongoose';
+import { logger } from '../config/logger';
 
 // Payment Gateway Types
 export interface PaymentGatewayConfig {
@@ -91,9 +92,9 @@ class PaymentGatewayService {
     // Initialize Stripe
     if (this.config.stripe.secretKey) {
       this.stripe = new Stripe(this.config.stripe.secretKey);
-      console.log('✅ [PAYMENT GATEWAY] Stripe initialized');
+      logger.info('✅ [PAYMENT GATEWAY] Stripe initialized');
     } else {
-      console.warn('⚠️ [PAYMENT GATEWAY] Stripe secret key not found. Stripe payments will not work.');
+      logger.warn('⚠️ [PAYMENT GATEWAY] Stripe secret key not found. Stripe payments will not work.');
     }
 
     // Initialize Razorpay
@@ -117,9 +118,9 @@ class PaymentGatewayService {
       // Fetch payments with count=1 — lightweight call to verify auth
       await (this.razorpay as any).payments.all({ count: 1 });
       this.razorpayVerified = true;
-      console.log('✅ [PAYMENT GATEWAY] Razorpay credentials verified');
+      logger.info('✅ [PAYMENT GATEWAY] Razorpay credentials verified');
     } catch (err: any) {
-      console.warn('⚠️ [PAYMENT GATEWAY] Razorpay credentials invalid — disabling Razorpay:', err?.error?.description || err?.message || 'Auth failed');
+      logger.warn('⚠️ [PAYMENT GATEWAY] Razorpay credentials invalid — disabling Razorpay:', err?.error?.description || err?.message || 'Auth failed');
       this.razorpay = undefined;
       this.razorpayVerified = false;
     }
@@ -132,7 +133,7 @@ class PaymentGatewayService {
     paymentData: PaymentRequestData,
     userId: string
   ): Promise<PaymentResponseData> {
-    console.log('💳 [PAYMENT GATEWAY] Initiating payment:', {
+    logger.info('💳 [PAYMENT GATEWAY] Initiating payment:', {
       gateway: paymentData.paymentMethod,
       amount: paymentData.amount,
       currency: paymentData.currency,
@@ -159,10 +160,10 @@ class PaymentGatewayService {
       // Save payment record to database
       await this.savePaymentRecord(response, userId, paymentData);
 
-      console.log('✅ [PAYMENT GATEWAY] Payment initiated successfully:', response.paymentId);
+      logger.info('✅ [PAYMENT GATEWAY] Payment initiated successfully:', response.paymentId);
       return response;
     } catch (error) {
-      console.error('❌ [PAYMENT GATEWAY] Payment initiation failed:', error);
+      logger.error('❌ [PAYMENT GATEWAY] Payment initiation failed:', error);
       throw error;
     }
   }
@@ -175,7 +176,7 @@ class PaymentGatewayService {
     userId: string
   ): Promise<PaymentResponseData> {
     if (!this.stripe) {
-      console.error('❌ [STRIPE] Stripe instance not initialized. Check STRIPE_SECRET_KEY environment variable.');
+      logger.error('❌ [STRIPE] Stripe instance not initialized. Check STRIPE_SECRET_KEY environment variable.');
       throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY environment variable.');
     }
 
@@ -209,7 +210,7 @@ class PaymentGatewayService {
         gateway: 'stripe'
       };
     } catch (error: any) {
-      console.error('❌ [STRIPE] Payment creation failed:', error);
+      logger.error('❌ [STRIPE] Payment creation failed:', error);
       throw new Error(`Stripe payment failed: ${error.message}`);
     }
   }
@@ -273,7 +274,7 @@ class PaymentGatewayService {
         gateway: 'razorpay'
       };
     } catch (error: any) {
-      console.error('❌ [RAZORPAY] Payment creation failed:', error);
+      logger.error('❌ [RAZORPAY] Payment creation failed:', error);
       throw new Error(`Razorpay payment failed: ${error.message}`);
     }
   }
@@ -292,7 +293,7 @@ class PaymentGatewayService {
    * Check payment status
    */
   async checkPaymentStatus(paymentId: string, gateway: string, userId: string): Promise<PaymentResponseData> {
-    console.log('💳 [PAYMENT GATEWAY] Checking payment status:', { paymentId, gateway, userId });
+    logger.info('💳 [PAYMENT GATEWAY] Checking payment status:', { paymentId, gateway, userId });
 
     try {
       let status: PaymentResponseData;
@@ -316,7 +317,7 @@ class PaymentGatewayService {
 
       return status;
     } catch (error) {
-      console.error('❌ [PAYMENT GATEWAY] Status check failed:', error);
+      logger.error('❌ [PAYMENT GATEWAY] Status check failed:', error);
       throw error;
     }
   }
@@ -347,7 +348,7 @@ class PaymentGatewayService {
         gateway: 'stripe'
       };
     } catch (error: any) {
-      console.error('❌ [STRIPE] Status check failed:', error);
+      logger.error('❌ [STRIPE] Status check failed:', error);
       throw error;
     }
   }
@@ -381,7 +382,7 @@ class PaymentGatewayService {
         gateway: 'razorpay'
       };
     } catch (error: any) {
-      console.error('❌ [RAZORPAY] Status check failed:', error);
+      logger.error('❌ [RAZORPAY] Status check failed:', error);
       throw error;
     }
   }
@@ -401,7 +402,7 @@ class PaymentGatewayService {
     payload: any,
     signature: string
   ): Promise<{ success: boolean; message: string }> {
-    console.log('🔔 [PAYMENT GATEWAY] Webhook received:', { gateway, signature });
+    logger.info('🔔 [PAYMENT GATEWAY] Webhook received:', { gateway, signature });
 
     try {
       let isValid = false;
@@ -429,7 +430,7 @@ class PaymentGatewayService {
 
       return { success: true, message: 'Webhook processed successfully' };
     } catch (error) {
-      console.error('❌ [PAYMENT GATEWAY] Webhook processing failed:', error);
+      logger.error('❌ [PAYMENT GATEWAY] Webhook processing failed:', error);
       return { success: false, message: (error as Error).message };
     }
   }
@@ -450,7 +451,7 @@ class PaymentGatewayService {
       );
       return !!event;
     } catch (error) {
-      console.error('❌ [STRIPE] Webhook verification failed:', error);
+      logger.error('❌ [STRIPE] Webhook verification failed:', error);
       return false;
     }
   }
@@ -471,7 +472,7 @@ class PaymentGatewayService {
 
       return signature === expectedSignature;
     } catch (error) {
-      console.error('❌ [RAZORPAY] Webhook verification failed:', error);
+      logger.error('❌ [RAZORPAY] Webhook verification failed:', error);
       return false;
     }
   }
@@ -487,7 +488,7 @@ class PaymentGatewayService {
    * Process webhook payload
    */
   private async processWebhook(gateway: string, payload: any): Promise<void> {
-    console.log('🔄 [PAYMENT GATEWAY] Processing webhook:', { gateway, eventType: payload.type });
+    logger.info('🔄 [PAYMENT GATEWAY] Processing webhook:', { gateway, eventType: payload.type });
 
     switch (gateway) {
       case 'stripe':
@@ -563,13 +564,13 @@ class PaymentGatewayService {
     try {
       const payment = await Payment.findOne({ paymentId });
       if (!payment) {
-        console.warn('[PAYMENT GATEWAY] Payment not found for webhook:', paymentId);
+        logger.warn('[PAYMENT GATEWAY] Payment not found for webhook:', paymentId);
         return;
       }
 
       // Prevent double-processing
       if (payment.status === 'completed' && status === 'completed') {
-        console.log('[PAYMENT GATEWAY] Payment already completed, skipping:', paymentId);
+        logger.info('[PAYMENT GATEWAY] Payment already completed, skipping:', paymentId);
         return;
       }
 
@@ -578,14 +579,14 @@ class PaymentGatewayService {
         payment.completedAt = new Date();
       }
       await payment.save();
-      console.log('✅ [PAYMENT GATEWAY] Payment updated from webhook:', paymentId, status);
+      logger.info('✅ [PAYMENT GATEWAY] Payment updated from webhook:', paymentId, status);
 
       // Credit wallet if this is a wallet_topup and payment succeeded
       if (status === 'completed' && payment.purpose === 'wallet_topup') {
         await this.creditWalletFromPayment(payment);
       }
     } catch (error) {
-      console.error('❌ [PAYMENT GATEWAY] Failed to update payment from webhook:', error);
+      logger.error('❌ [PAYMENT GATEWAY] Failed to update payment from webhook:', error);
     }
   }
 
@@ -606,7 +607,7 @@ class PaymentGatewayService {
       }).lean();
 
       if (existing) {
-        console.log('[PAYMENT GATEWAY] Wallet already credited for payment:', payment.paymentId);
+        logger.info('[PAYMENT GATEWAY] Wallet already credited for payment:', payment.paymentId);
         return;
       }
 
@@ -617,7 +618,7 @@ class PaymentGatewayService {
       }
 
       if (!wallet) {
-        console.error('[PAYMENT GATEWAY] Failed to find/create wallet for user:', userId);
+        logger.error('[PAYMENT GATEWAY] Failed to find/create wallet for user:', userId);
         return;
       }
 
@@ -653,11 +654,11 @@ class PaymentGatewayService {
         }
       );
 
-      console.log('✅ [PAYMENT GATEWAY] Wallet credited:', { userId, amount, paymentId: payment.paymentId });
+      logger.info('✅ [PAYMENT GATEWAY] Wallet credited:', { userId, amount, paymentId: payment.paymentId });
     } catch (error) {
-      console.error('❌ [PAYMENT GATEWAY] Failed to credit wallet:', error);
+      logger.error('❌ [PAYMENT GATEWAY] Failed to credit wallet:', error);
       // This is critical — log for manual resolution
-      console.error('MANUAL_RESOLUTION_NEEDED:', { userId, amount, paymentId: payment.paymentId });
+      logger.error('MANUAL_RESOLUTION_NEEDED:', { userId, amount, paymentId: payment.paymentId });
     }
   }
 
@@ -680,14 +681,14 @@ class PaymentGatewayService {
       }).lean();
 
       if (!payment) {
-        console.warn('⚠️ [PAYMENT GATEWAY] Payment not found for payment intent:', paymentIntentId);
+        logger.warn('⚠️ [PAYMENT GATEWAY] Payment not found for payment intent:', paymentIntentId);
         return;
       }
 
       // Get booking ID from payment metadata
       const bookingId = payment.metadata?.bookingId;
       if (!bookingId) {
-        console.warn('⚠️ [PAYMENT GATEWAY] Booking ID not found in payment metadata');
+        logger.warn('⚠️ [PAYMENT GATEWAY] Booking ID not found in payment metadata');
         return;
       }
 
@@ -697,16 +698,16 @@ class PaymentGatewayService {
       if (booking) {
         booking.status = bookingStatus;
         await booking.save();
-        console.log('✅ [PAYMENT GATEWAY] Booking status updated:', {
+        logger.info('✅ [PAYMENT GATEWAY] Booking status updated:', {
           bookingId,
           status: bookingStatus,
           paymentIntentId
         });
       } else {
-        console.warn('⚠️ [PAYMENT GATEWAY] Booking not found:', bookingId);
+        logger.warn('⚠️ [PAYMENT GATEWAY] Booking not found:', bookingId);
       }
     } catch (error) {
-      console.error('❌ [PAYMENT GATEWAY] Failed to update booking status from payment:', error);
+      logger.error('❌ [PAYMENT GATEWAY] Failed to update booking status from payment:', error);
     }
   }
 
@@ -735,9 +736,9 @@ class PaymentGatewayService {
       });
 
       await payment.save();
-      console.log('💾 [PAYMENT GATEWAY] Payment record saved:', payment._id);
+      logger.info('💾 [PAYMENT GATEWAY] Payment record saved:', payment._id);
     } catch (error) {
-      console.error('❌ [PAYMENT GATEWAY] Failed to save payment record:', error);
+      logger.error('❌ [PAYMENT GATEWAY] Failed to save payment record:', error);
       throw error;
     }
   }
@@ -759,10 +760,10 @@ class PaymentGatewayService {
           payment.completedAt = new Date(response.completedAt);
         }
         await payment.save();
-        console.log('✅ [PAYMENT GATEWAY] Payment record updated:', paymentId);
+        logger.info('✅ [PAYMENT GATEWAY] Payment record updated:', paymentId);
       }
     } catch (error) {
-      console.error('❌ [PAYMENT GATEWAY] Failed to update payment record:', error);
+      logger.error('❌ [PAYMENT GATEWAY] Failed to update payment record:', error);
     }
   }
 
@@ -874,6 +875,22 @@ class PaymentGatewayService {
       default:
         return [];
     }
+  }
+  /**
+   * Return health status of configured payment gateways (no network calls).
+   */
+  public getHealthStatus(): Record<string, string> {
+    const status: Record<string, string> = {};
+    if (this.config.stripe.secretKey) {
+      status.stripe = this.stripe ? 'configured' : 'error';
+    }
+    if (this.config.razorpay.keyId) {
+      status.razorpay = this.razorpayVerified ? 'verified' : (this.razorpay ? 'configured' : 'error');
+    }
+    if (this.config.paypal.clientId) {
+      status.paypal = 'configured';
+    }
+    return status;
   }
 }
 

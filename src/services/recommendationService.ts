@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Store } from '../models/Store';
 import { StoreAnalytics } from '../models/StoreAnalytics';
 import { Favorite } from '../models/Favorite';
@@ -108,7 +109,7 @@ class RecommendationService {
       return sortedRecommendations;
 
     } catch (error) {
-      console.error('Error getting personalized recommendations:', error);
+      logger.error('Error getting personalized recommendations:', error);
       return [];
     }
   }
@@ -161,7 +162,7 @@ class RecommendationService {
       return recommendations;
 
     } catch (error) {
-      console.error('Error getting user-based recommendations:', error);
+      logger.error('Error getting user-based recommendations:', error);
       return [];
     }
   }
@@ -198,7 +199,7 @@ class RecommendationService {
       return recommendations;
 
     } catch (error) {
-      console.error('Error getting collaborative recommendations:', error);
+      logger.error('Error getting collaborative recommendations:', error);
       return [];
     }
   }
@@ -231,7 +232,7 @@ class RecommendationService {
       return recommendations;
 
     } catch (error) {
-      console.error('Error getting trending recommendations:', error);
+      logger.error('Error getting trending recommendations:', error);
       return [];
     }
   }
@@ -383,7 +384,7 @@ class RecommendationService {
       return similarUsers;
 
     } catch (error) {
-      console.error('Error finding similar users:', error);
+      logger.error('Error finding similar users:', error);
       return [];
     }
   }
@@ -646,7 +647,7 @@ class RecommendationService {
         .slice(0, limit);
 
     } catch (error) {
-      console.error('Error getting similar products:', error);
+      logger.error('Error getting similar products:', error);
       return [];
     }
   }
@@ -718,7 +719,7 @@ class RecommendationService {
       return bundles;
 
     } catch (error) {
-      console.error('Error getting frequently bought together:', error);
+      logger.error('Error getting frequently bought together:', error);
       return [];
     }
   }
@@ -785,7 +786,7 @@ class RecommendationService {
         .slice(0, limit);
 
     } catch (error) {
-      console.error('Error getting personalized product recommendations:', error);
+      logger.error('Error getting personalized product recommendations:', error);
       return [];
     }
   }
@@ -844,7 +845,7 @@ class RecommendationService {
       return bundles;
 
     } catch (error) {
-      console.error('Error getting bundle deals:', error);
+      logger.error('Error getting bundle deals:', error);
       return [];
     }
   }
@@ -858,7 +859,7 @@ class RecommendationService {
         $inc: { 'analytics.views': 1 }
       });
     } catch (error) {
-      console.error('Error tracking product view:', error);
+      logger.error('Error tracking product view:', error);
     }
   }
 

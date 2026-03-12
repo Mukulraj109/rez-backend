@@ -4,6 +4,7 @@ import { Order } from '../models/Order';
 import mongoose from 'mongoose';
 import { pct } from '../utils/currency';
 import { invalidatePartnerEarningsCache } from './walletCacheService';
+import { logger } from '../config/logger';
 
 /**
  * Partner Service
@@ -130,9 +131,9 @@ class PartnerService {
           }
         });
         
-        console.log(`🎁 [LEVEL UP] Added ${newOffers.length} new offers for level ${newLevel}`);
+        logger.info(`🎁 [LEVEL UP] Added ${newOffers.length} new offers for level ${newLevel}`);
       } catch (error) {
-        console.error('❌ [LEVEL UP] Error adding new offers:', error);
+        logger.error('❌ [LEVEL UP] Error adding new offers:', error);
       }
       
       // Add bonus to wallet via CoinTransaction (single source of truth — no direct wallet mutation)
@@ -142,7 +143,7 @@ class PartnerService {
         // Ensure wallet exists before CoinTransaction
         let wallet = await Wallet.findOne({ user: userId }).lean();
         if (!wallet) {
-          console.log(`⚠️ [LEVEL UP] Wallet not found, creating for user ${userId}`);
+          logger.info(`⚠️ [LEVEL UP] Wallet not found, creating for user ${userId}`);
           wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
         }
 
@@ -161,12 +162,12 @@ class PartnerService {
           );
           // Invalidate partner earnings cache
           invalidatePartnerEarningsCache(userId).catch(() => {});
-          console.log(`✅ [LEVEL UP] Upgraded Level ${oldLevel} → ${newLevel}, Added ₹${levelBonus} to wallet`);
+          logger.info(`✅ [LEVEL UP] Upgraded Level ${oldLevel} → ${newLevel}, Added ₹${levelBonus} to wallet`);
         } else {
-          console.error('❌ [LEVEL UP] Failed to create wallet for bonus');
+          logger.error('❌ [LEVEL UP] Failed to create wallet for bonus');
         }
       } catch (error) {
-        console.error('❌ [LEVEL UP] Error adding bonus to wallet:', error);
+        logger.error('❌ [LEVEL UP] Error adding bonus to wallet:', error);
         // Don't fail the upgrade if wallet update fails
       }
     }
@@ -186,7 +187,7 @@ class PartnerService {
     session.startTransaction();
     
     try {
-      console.log(`🔄 [MILESTONE CLAIM] Starting claim for user ${userId}, milestone ${orderCount}`);
+      logger.info(`🔄 [MILESTONE CLAIM] Starting claim for user ${userId}, milestone ${orderCount}`);
       
       const partner = await this.getOrCreatePartner(userId);
       
@@ -216,7 +217,7 @@ class PartnerService {
         const { Wallet } = require('../models/Wallet');
         let wallet = await Wallet.findOne({ user: userId }).session(session);
         if (!wallet) {
-          console.log(`⚠️ [MILESTONE] Wallet not found, creating new wallet for user ${userId}`);
+          logger.info(`⚠️ [MILESTONE] Wallet not found, creating new wallet for user ${userId}`);
           wallet = await (Wallet as any).createForUser(
             new mongoose.Types.ObjectId(userId),
             { session }
@@ -254,11 +255,11 @@ class PartnerService {
             },
             { session }
           );
-          console.log(`✅ [MILESTONE] Added ₹${milestone.reward.value} cashback to wallet`);
+          logger.info(`✅ [MILESTONE] Added ₹${milestone.reward.value} cashback to wallet`);
         } else if (milestone.reward.type === 'points') {
           wallet.loyaltyPoints = (wallet.loyaltyPoints || 0) + milestone.reward.value;
           await wallet.save({ session });
-          console.log(`✅ [MILESTONE] Added ${milestone.reward.value} loyalty points`);
+          logger.info(`✅ [MILESTONE] Added ${milestone.reward.value} loyalty points`);
         }
       }
       
@@ -269,14 +270,14 @@ class PartnerService {
       await session.commitTransaction();
       // Invalidate partner earnings cache after successful commit
       invalidatePartnerEarningsCache(userId).catch(() => {});
-      console.log(`✅ [MILESTONE CLAIM] Successfully claimed milestone ${orderCount} for user ${userId}`);
+      logger.info(`✅ [MILESTONE CLAIM] Successfully claimed milestone ${orderCount} for user ${userId}`);
 
       return partner;
 
     } catch (error) {
       // Rollback transaction on error
       await session.abortTransaction();
-      console.error(`❌ [MILESTONE CLAIM] Transaction failed, rolled back:`, error);
+      logger.error(`❌ [MILESTONE CLAIM] Transaction failed, rolled back:`, error);
       throw error;
     } finally {
       session.endSession();
@@ -292,7 +293,7 @@ class PartnerService {
     session.startTransaction();
     
     try {
-      console.log(`🔄 [TASK CLAIM] Starting claim for user ${userId}, task ${taskTitle}`);
+      logger.info(`🔄 [TASK CLAIM] Starting claim for user ${userId}, task ${taskTitle}`);
       
       const partner = await this.getOrCreatePartner(userId);
       
@@ -323,7 +324,7 @@ class PartnerService {
         const { Wallet } = require('../models/Wallet');
         let wallet = await Wallet.findOne({ user: userId }).session(session);
         if (!wallet) {
-          console.log(`⚠️ [TASK] Wallet not found, creating new wallet for user ${userId}`);
+          logger.info(`⚠️ [TASK] Wallet not found, creating new wallet for user ${userId}`);
           wallet = await (Wallet as any).createForUser(
             new mongoose.Types.ObjectId(userId),
             { session }
@@ -361,11 +362,11 @@ class PartnerService {
             },
             { session }
           );
-          console.log(`✅ [TASK] Added ₹${task.reward.value} cashback to wallet`);
+          logger.info(`✅ [TASK] Added ₹${task.reward.value} cashback to wallet`);
         } else if (task.reward.type === 'points') {
           wallet.loyaltyPoints = (wallet.loyaltyPoints || 0) + task.reward.value;
           await wallet.save({ session });
-          console.log(`✅ [TASK] Added ${task.reward.value} loyalty points`);
+          logger.info(`✅ [TASK] Added ${task.reward.value} loyalty points`);
         }
       }
       
@@ -376,14 +377,14 @@ class PartnerService {
       await session.commitTransaction();
       // Invalidate partner earnings cache after successful commit
       invalidatePartnerEarningsCache(userId).catch(() => {});
-      console.log(`✅ [TASK CLAIM] Successfully claimed task ${taskTitle} for user ${userId}`);
+      logger.info(`✅ [TASK CLAIM] Successfully claimed task ${taskTitle} for user ${userId}`);
 
       return partner;
       
     } catch (error) {
       // Rollback transaction on error
       await session.abortTransaction();
-      console.error(`❌ [TASK CLAIM] Transaction failed, rolled back:`, error);
+      logger.error(`❌ [TASK CLAIM] Transaction failed, rolled back:`, error);
       throw error;
     } finally {
       session.endSession();
@@ -399,7 +400,7 @@ class PartnerService {
     session.startTransaction();
     
     try {
-      console.log(`🔄 [JACKPOT CLAIM] Starting claim for user ${userId}, spend amount ₹${spendAmount}`);
+      logger.info(`🔄 [JACKPOT CLAIM] Starting claim for user ${userId}, spend amount ₹${spendAmount}`);
       
       const partner = await this.getOrCreatePartner(userId);
       
@@ -429,7 +430,7 @@ class PartnerService {
         const { Wallet } = require('../models/Wallet');
         let wallet = await Wallet.findOne({ user: userId }).session(session).lean();
         if (!wallet) {
-          console.log(`⚠️ [JACKPOT] Wallet not found, creating new wallet for user ${userId}`);
+          logger.info(`⚠️ [JACKPOT] Wallet not found, creating new wallet for user ${userId}`);
           wallet = await (Wallet as any).createForUser(
             new mongoose.Types.ObjectId(userId),
             { session }
@@ -468,11 +469,11 @@ class PartnerService {
             },
             { session }
           );
-          console.log(`✅ [JACKPOT] Added ₹${jackpot.reward.value} cashback to wallet`);
+          logger.info(`✅ [JACKPOT] Added ₹${jackpot.reward.value} cashback to wallet`);
         } else if (jackpot.reward.type === 'points') {
           wallet.loyaltyPoints = (wallet.loyaltyPoints || 0) + jackpot.reward.value;
           await wallet.save({ session });
-          console.log(`✅ [JACKPOT] Added ${jackpot.reward.value} loyalty points`);
+          logger.info(`✅ [JACKPOT] Added ${jackpot.reward.value} loyalty points`);
         } else if (jackpot.reward.type === 'voucher') {
           const { CoinTransaction } = require('../models/CoinTransaction');
           await CoinTransaction.create([{
@@ -498,7 +499,7 @@ class PartnerService {
             },
             { session }
           );
-          console.log(`✅ [JACKPOT] Added ₹${jackpot.reward.value} voucher to wallet`);
+          logger.info(`✅ [JACKPOT] Added ₹${jackpot.reward.value} voucher to wallet`);
         }
       }
       
@@ -509,14 +510,14 @@ class PartnerService {
       await session.commitTransaction();
       // Invalidate partner earnings cache after successful commit
       invalidatePartnerEarningsCache(userId).catch(() => {});
-      console.log(`✅ [JACKPOT CLAIM] Successfully claimed jackpot ₹${spendAmount} for user ${userId}`);
+      logger.info(`✅ [JACKPOT CLAIM] Successfully claimed jackpot ₹${spendAmount} for user ${userId}`);
 
       return partner;
       
     } catch (error) {
       // Rollback transaction on error
       await session.abortTransaction();
-      console.error(`❌ [JACKPOT CLAIM] Transaction failed, rolled back:`, error);
+      logger.error(`❌ [JACKPOT CLAIM] Transaction failed, rolled back:`, error);
       throw error;
     } finally {
       session.endSession();
@@ -563,7 +564,7 @@ class PartnerService {
       let wallet = await Wallet.findOne({ user: userId });
       
       if (!wallet) {
-        console.log(`⚠️ [OFFER CLAIM] Wallet not found, creating for user ${userId}`);
+        logger.info(`⚠️ [OFFER CLAIM] Wallet not found, creating for user ${userId}`);
         wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
       }
       
@@ -587,10 +588,10 @@ class PartnerService {
         wallet.statistics.vouchersEarned = (wallet.statistics.vouchersEarned || 0) + 1;
         
         await wallet.save();
-        console.log(`✅ [OFFER CLAIM] Voucher added to wallet: ${voucherCode}`);
+        logger.info(`✅ [OFFER CLAIM] Voucher added to wallet: ${voucherCode}`);
       }
     } catch (error) {
-      console.error('❌ [OFFER CLAIM] Error adding voucher to wallet:', error);
+      logger.error('❌ [OFFER CLAIM] Error adding voucher to wallet:', error);
       // Don't fail the claim if wallet update fails
     }
     
@@ -658,7 +659,7 @@ class PartnerService {
         discount = offer.maxDiscount;
       }
       
-      console.log(`✅ [VOUCHER APPLY] ${voucherCode} applied: ₹${discount} discount on ₹${orderAmount} order`);
+      logger.info(`✅ [VOUCHER APPLY] ${voucherCode} applied: ₹${discount} discount on ₹${orderAmount} order`);
       
       return {
         valid: true,
@@ -666,7 +667,7 @@ class PartnerService {
         offerTitle: offer.title
       };
     } catch (error) {
-      console.error('❌ [VOUCHER APPLY] Error applying voucher:', error);
+      logger.error('❌ [VOUCHER APPLY] Error applying voucher:', error);
       return { valid: false, discount: 0, offerTitle: '', error: 'Failed to apply voucher' };
     }
   }
@@ -679,7 +680,7 @@ class PartnerService {
       const partner = await Partner.findOne({ userId });
       
       if (!partner) {
-        console.error('❌ [VOUCHER USED] Partner not found');
+        logger.error('❌ [VOUCHER USED] Partner not found');
         return;
       }
       
@@ -689,9 +690,9 @@ class PartnerService {
       );
       
       await partner.save();
-      console.log(`✅ [VOUCHER USED] ${voucherCode} marked as used and removed`);
+      logger.info(`✅ [VOUCHER USED] ${voucherCode} marked as used and removed`);
     } catch (error) {
-      console.error('❌ [VOUCHER USED] Error marking voucher as used:', error);
+      logger.error('❌ [VOUCHER USED] Error marking voucher as used:', error);
     }
   }
   
@@ -755,7 +756,7 @@ class PartnerService {
       
       return Math.round((completed / total) * 100);
     } catch (error) {
-      console.error('Error calculating profile completion:', error);
+      logger.error('Error calculating profile completion:', error);
       return 0;
     }
   }
@@ -806,20 +807,20 @@ class PartnerService {
       if (profileTask) {
         // Calculate from actual USER profile data
         const completion = await this.calculateProfileCompletion(userId);
-        console.log(`📝 [PROFILE] User ${userId} profile completion: ${completion}%`);
+        logger.info(`📝 [PROFILE] User ${userId} profile completion: ${completion}%`);
         
         profileTask.progress.current = completion >= 100 ? 1 : 0;
         
         if (completion >= 100 && !profileTask.completed) {
           profileTask.completed = true;
           profileTask.completedAt = new Date();
-          console.log(`✅ [PROFILE] Profile task completed for user ${userId}`);
+          logger.info(`✅ [PROFILE] Profile task completed for user ${userId}`);
         }
         
         await partner.save();
       }
     } catch (error) {
-      console.error('Error syncing profile completion:', error);
+      logger.error('Error syncing profile completion:', error);
     }
   }
 
@@ -858,9 +859,9 @@ class PartnerService {
           reviewTask.completedAt = new Date();
         }
       }
-      console.log(`📝 [REVIEW] User has ${reviewCount} reviews`);
+      logger.info(`📝 [REVIEW] User has ${reviewCount} reviews`);
     } catch (error) {
-      console.error('Error syncing review task:', error);
+      logger.error('Error syncing review task:', error);
     }
     
     // Sync referral task with actual referrals count
@@ -875,9 +876,9 @@ class PartnerService {
           referralTask.completedAt = new Date();
         }
       }
-      console.log(`👥 [REFERRAL] User has ${referralCount} referrals`);
+      logger.info(`👥 [REFERRAL] User has ${referralCount} referrals`);
     } catch (error) {
-      console.error('Error syncing referral task:', error);
+      logger.error('Error syncing referral task:', error);
     }
     
     // Sync social task with actual shares count
@@ -895,21 +896,21 @@ class PartnerService {
           socialTask.completedAt = new Date();
         }
       }
-      console.log(`📱 [SOCIAL] User has ${shareCount} shares`);
+      logger.info(`📱 [SOCIAL] User has ${shareCount} shares`);
     } catch (error) {
-      console.error('Error syncing social task:', error);
+      logger.error('Error syncing social task:', error);
     }
     
     // Update milestone achievement status based on current orders
     let milestonesUpdated = false;
-    console.log(`📊 [MILESTONE CHECK] User has ${partner.totalOrders} orders and spent ₹${partner.totalSpent}`);
+    logger.info(`📊 [MILESTONE CHECK] User has ${partner.totalOrders} orders and spent ₹${partner.totalSpent}`);
     
     partner.milestones.forEach((milestone: any) => {
       const wasAchieved = milestone.achieved;
       if (partner.totalOrders >= milestone.orderCount && !milestone.achieved) {
         milestone.achieved = true;
         milestonesUpdated = true;
-        console.log(`✅ [MILESTONE] Unlocked: ${milestone.orderCount} orders (${milestone.reward.title})`);
+        logger.info(`✅ [MILESTONE] Unlocked: ${milestone.orderCount} orders (${milestone.reward.title})`);
       }
     });
     
@@ -918,16 +919,16 @@ class PartnerService {
       if (partner.totalSpent >= jackpot.spendAmount && !jackpot.achieved) {
         jackpot.achieved = true;
         milestonesUpdated = true;
-        console.log(`✅ [JACKPOT] Unlocked: ₹${jackpot.spendAmount} (${jackpot.title})`);
+        logger.info(`✅ [JACKPOT] Unlocked: ₹${jackpot.spendAmount} (${jackpot.title})`);
       }
     });
     
     // Save if any milestones were updated
     if (milestonesUpdated) {
-      console.log(`💾 [MILESTONE] Saving ${partner.milestones.filter((m: any) => m.achieved).length} achieved milestones`);
+      logger.info(`💾 [MILESTONE] Saving ${partner.milestones.filter((m: any) => m.achieved).length} achieved milestones`);
       await partner.save();
     } else {
-      console.log(`ℹ️ [MILESTONE] No new milestones unlocked`);
+      logger.info(`ℹ️ [MILESTONE] No new milestones unlocked`);
     }
     
     return {

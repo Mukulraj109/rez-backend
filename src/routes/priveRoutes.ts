@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Privé Routes
  *
@@ -95,7 +96,7 @@ router.get('/next-actions', generalLimiter, async (req, res) => {
     const result = await priveNextBestActionService.getNextActions(userId);
     res.json({ success: true, data: result });
   } catch (error) {
-    console.error('[PRIVE] Error fetching next actions:', error);
+    logger.error('[PRIVE] Error fetching next actions:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch next actions' });
   }
 });
@@ -336,7 +337,7 @@ router.get('/notifications', generalLimiter, async (req, res) => {
     const result = await priveNotificationService.getNotifications(userId, tier);
     res.json({ success: true, data: result });
   } catch (error) {
-    console.error('[PRIVE] Error fetching notifications:', error);
+    logger.error('[PRIVE] Error fetching notifications:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch notifications' });
   }
 });
@@ -349,7 +350,7 @@ router.get('/analytics', generalLimiter, async (req, res) => {
     const result = await priveAnalyticsService.getAnalytics(userId, period);
     res.json({ success: true, data: result });
   } catch (error) {
-    console.error('[PRIVE] Error fetching analytics:', error);
+    logger.error('[PRIVE] Error fetching analytics:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch analytics' });
   }
 });

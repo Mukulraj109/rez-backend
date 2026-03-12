@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Store } from '../models/Store';
 import { Wishlist } from '../models/Wishlist';
 
@@ -12,7 +13,7 @@ import { Wishlist } from '../models/Wishlist';
  */
 export const incrementFollowers = async (storeId: string): Promise<void> => {
   try {
-    console.log(`[StoreFollowService] Incrementing followers count for store: ${storeId}`);
+    logger.info(`[StoreFollowService] Incrementing followers count for store: ${storeId}`);
 
     const store = await Store.findByIdAndUpdate(
       storeId,
@@ -21,13 +22,13 @@ export const incrementFollowers = async (storeId: string): Promise<void> => {
     );
 
     if (!store) {
-      console.error(`[StoreFollowService] Store not found: ${storeId}`);
+      logger.error(`[StoreFollowService] Store not found: ${storeId}`);
       throw new Error('Store not found');
     }
 
-    console.log(`[StoreFollowService] Store ${storeId} followers count incremented to: ${store.analytics.followersCount}`);
+    logger.info(`[StoreFollowService] Store ${storeId} followers count incremented to: ${store.analytics.followersCount}`);
   } catch (error) {
-    console.error(`[StoreFollowService] Error incrementing followers for store ${storeId}:`, error);
+    logger.error(`[StoreFollowService] Error incrementing followers for store ${storeId}:`, error);
     throw error;
   }
 };
@@ -39,12 +40,12 @@ export const incrementFollowers = async (storeId: string): Promise<void> => {
  */
 export const decrementFollowers = async (storeId: string): Promise<void> => {
   try {
-    console.log(`[StoreFollowService] Decrementing followers count for store: ${storeId}`);
+    logger.info(`[StoreFollowService] Decrementing followers count for store: ${storeId}`);
 
     const store = await Store.findById(storeId);
 
     if (!store) {
-      console.error(`[StoreFollowService] Store not found: ${storeId}`);
+      logger.error(`[StoreFollowService] Store not found: ${storeId}`);
       throw new Error('Store not found');
     }
 
@@ -52,12 +53,12 @@ export const decrementFollowers = async (storeId: string): Promise<void> => {
     if (store.analytics.followersCount > 0) {
       store.analytics.followersCount -= 1;
       await store.save();
-      console.log(`[StoreFollowService] Store ${storeId} followers count decremented to: ${store.analytics.followersCount}`);
+      logger.info(`[StoreFollowService] Store ${storeId} followers count decremented to: ${store.analytics.followersCount}`);
     } else {
-      console.warn(`[StoreFollowService] Store ${storeId} followers count already at 0, skipping decrement`);
+      logger.warn(`[StoreFollowService] Store ${storeId} followers count already at 0, skipping decrement`);
     }
   } catch (error) {
-    console.error(`[StoreFollowService] Error decrementing followers for store ${storeId}:`, error);
+    logger.error(`[StoreFollowService] Error decrementing followers for store ${storeId}:`, error);
     throw error;
   }
 };
@@ -69,7 +70,7 @@ export const decrementFollowers = async (storeId: string): Promise<void> => {
  */
 export const recalculateFollowers = async (storeId: string): Promise<number> => {
   try {
-    console.log(`[StoreFollowService] Recalculating followers count for store: ${storeId}`);
+    logger.info(`[StoreFollowService] Recalculating followers count for store: ${storeId}`);
 
     // Count all wishlists that have this store
     const count = await Wishlist.countDocuments({
@@ -77,7 +78,7 @@ export const recalculateFollowers = async (storeId: string): Promise<number> => 
       'items.itemId': storeId
     });
 
-    console.log(`[StoreFollowService] Found ${count} followers for store ${storeId}`);
+    logger.info(`[StoreFollowService] Found ${count} followers for store ${storeId}`);
 
     // Update the store with the accurate count
     const store = await Store.findByIdAndUpdate(
@@ -87,15 +88,15 @@ export const recalculateFollowers = async (storeId: string): Promise<number> => 
     );
 
     if (!store) {
-      console.error(`[StoreFollowService] Store not found: ${storeId}`);
+      logger.error(`[StoreFollowService] Store not found: ${storeId}`);
       throw new Error('Store not found');
     }
 
-    console.log(`[StoreFollowService] Store ${storeId} followers count updated to: ${store.analytics.followersCount}`);
+    logger.info(`[StoreFollowService] Store ${storeId} followers count updated to: ${store.analytics.followersCount}`);
 
     return count;
   } catch (error) {
-    console.error(`[StoreFollowService] Error recalculating followers for store ${storeId}:`, error);
+    logger.error(`[StoreFollowService] Error recalculating followers for store ${storeId}:`, error);
     throw error;
   }
 };
@@ -108,13 +109,13 @@ export const getFollowersCount = async (storeId: string): Promise<number> => {
     const store = await Store.findById(storeId).lean();
 
     if (!store) {
-      console.error(`[StoreFollowService] Store not found: ${storeId}`);
+      logger.error(`[StoreFollowService] Store not found: ${storeId}`);
       throw new Error('Store not found');
     }
 
     return store.analytics.followersCount;
   } catch (error) {
-    console.error(`[StoreFollowService] Error getting followers count for store ${storeId}:`, error);
+    logger.error(`[StoreFollowService] Error getting followers count for store ${storeId}:`, error);
     throw error;
   }
 };

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import Referral, { ReferralStatus } from '../models/Referral';
 import { User } from '../models/User';
 import { Order } from '../models/Order';
@@ -301,7 +302,7 @@ export class ReferralFraudDetection {
     await referral.save();
 
     // TODO: Send notification to admin when notification service is integrated
-    console.warn(`[FRAUD] Referral ${referralId} marked as fraud: ${reason}`);
+    logger.warn(`[FRAUD] Referral ${referralId} marked as fraud: ${reason}`);
 
     return referral;
   }

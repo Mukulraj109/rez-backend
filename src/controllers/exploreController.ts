@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import { Activity } from '../models/Activity';
 import { Store } from '../models/Store';
@@ -67,7 +68,7 @@ export const getExploreStats = asyncHandler(async (req: Request, res: Response) 
 
     sendSuccess(res, statsData, 'Explore stats retrieved successfully');
   } catch (error) {
-    console.error('Get explore stats error:', error);
+    logger.error('Get explore stats error:', error);
     throw new AppError('Failed to fetch explore stats', 500);
   }
 });
@@ -134,7 +135,7 @@ export const getVerifiedReviews = asyncHandler(async (req: Request, res: Respons
       }
     }, 'Verified reviews retrieved successfully');
   } catch (error) {
-    console.error('Get verified reviews error:', error);
+    logger.error('Get verified reviews error:', error);
     throw new AppError('Failed to fetch verified reviews', 500);
   }
 });
@@ -178,7 +179,7 @@ export const getFeaturedComparison = asyncHandler(async (req: Request, res: Resp
       comparison: transformedComparison
     }, 'Featured comparison retrieved successfully');
   } catch (error) {
-    console.error('Get featured comparison error:', error);
+    logger.error('Get featured comparison error:', error);
     throw new AppError('Failed to fetch featured comparison', 500);
   }
 });
@@ -240,7 +241,7 @@ export const getFriendsActivity = asyncHandler(async (req: Request, res: Respons
       activities: transformedActivities
     }, 'Friends activity retrieved successfully');
   } catch (error) {
-    console.error('Get friends activity error:', error);
+    logger.error('Get friends activity error:', error);
     throw new AppError('Failed to fetch friends activity', 500);
   }
 });
@@ -281,7 +282,7 @@ export const getExploreStatsSummary = asyncHandler(async (req: Request, res: Res
       totalUsers: totalUsersResult[0]?.total || 0
     }, 'Explore stats summary retrieved successfully');
   } catch (error) {
-    console.error('Get explore stats summary error:', error);
+    logger.error('Get explore stats summary error:', error);
     throw new AppError('Failed to fetch explore stats summary', 500);
   }
 });

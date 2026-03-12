@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Merchant Notification Service
  * Handles all notifications sent to merchants for their business operations
@@ -68,7 +69,7 @@ class MerchantNotificationService {
       const merchant = await Merchant.findById(merchantId).select('phone email businessName').lean();
 
       if (!merchant) {
-        console.warn(`⚠️ [MERCHANT NOTIFICATION] Merchant not found for SMS/Email: ${merchantId}`);
+        logger.warn(`⚠️ [MERCHANT NOTIFICATION] Merchant not found for SMS/Email: ${merchantId}`);
         return;
       }
 
@@ -80,9 +81,9 @@ class MerchantNotificationService {
             to: formattedPhone,
             message: `[${merchant.businessName || 'Rez'}] ${title}: ${message.substring(0, 140)}`,
           });
-          console.log(`📱 [MERCHANT NOTIFICATION] SMS sent to ${formattedPhone}`);
+          logger.info(`📱 [MERCHANT NOTIFICATION] SMS sent to ${formattedPhone}`);
         } catch (smsError) {
-          console.warn('⚠️ [MERCHANT NOTIFICATION] Failed to send SMS:', smsError);
+          logger.warn('⚠️ [MERCHANT NOTIFICATION] Failed to send SMS:', smsError);
         }
       }
 
@@ -112,13 +113,13 @@ class MerchantNotificationService {
               </div>
             `,
           });
-          console.log(`📧 [MERCHANT NOTIFICATION] Email sent to ${merchant.email}`);
+          logger.info(`📧 [MERCHANT NOTIFICATION] Email sent to ${merchant.email}`);
         } catch (emailError) {
-          console.warn('⚠️ [MERCHANT NOTIFICATION] Failed to send email:', emailError);
+          logger.warn('⚠️ [MERCHANT NOTIFICATION] Failed to send email:', emailError);
         }
       }
     } catch (error) {
-      console.error('❌ [MERCHANT NOTIFICATION] Error sending critical channels:', error);
+      logger.error('❌ [MERCHANT NOTIFICATION] Error sending critical channels:', error);
     }
   }
 
@@ -167,12 +168,12 @@ class MerchantNotificationService {
         params.title,
         params.message,
         params.priority
-      ).catch(err => console.error('Error sending critical channels:', err));
+      ).catch(err => logger.error('Error sending critical channels:', err));
 
-      console.log(`📬 [MERCHANT NOTIFICATION] Created: ${params.title} for merchant ${params.merchantId}`);
+      logger.info(`📬 [MERCHANT NOTIFICATION] Created: ${params.title} for merchant ${params.merchantId}`);
       return notification;
     } catch (error) {
-      console.error('❌ [MERCHANT NOTIFICATION] Error creating notification:', error);
+      logger.error('❌ [MERCHANT NOTIFICATION] Error creating notification:', error);
       throw error;
     }
   }
@@ -199,7 +200,7 @@ class MerchantNotificationService {
         this.emitUnreadCount(merchantId);
       }
     } catch (error) {
-      console.error('❌ [MERCHANT NOTIFICATION] Socket emit error:', error);
+      logger.error('❌ [MERCHANT NOTIFICATION] Socket emit error:', error);
     }
   }
 
@@ -246,7 +247,7 @@ class MerchantNotificationService {
         byType: byTypeMap,
       });
     } catch (error) {
-      console.error('❌ [MERCHANT NOTIFICATION] Error emitting unread count:', error);
+      logger.error('❌ [MERCHANT NOTIFICATION] Error emitting unread count:', error);
     }
   }
 

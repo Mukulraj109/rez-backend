@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import express from 'express';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { createRateLimiter } from '../middleware/rateLimiter';
@@ -247,7 +248,7 @@ router.get('/quick-actions', gateAchievements, async (req, res) => {
     const { sendSuccess } = await import('../utils/response');
     sendSuccess(res, { actions });
   } catch (error: any) {
-    console.error('[QUICK ACTIONS] Error:', error);
+    logger.error('[QUICK ACTIONS] Error:', error);
     const { sendError } = await import('../utils/response');
     sendError(res, error.message || 'Failed to fetch quick actions');
   }

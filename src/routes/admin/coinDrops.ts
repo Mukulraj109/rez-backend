@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Coin Drops
  * CRUD for CoinDrop model (used by Extra Rewards page)
@@ -65,7 +66,7 @@ router.get('/', async (req: Request, res: Response) => {
       },
     }, 'Coin drops fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching coin drops:', error);
+    logger.error('[Admin] Error fetching coin drops:', error);
     return sendError(res, 'Failed to fetch coin drops', 500);
   }
 });
@@ -91,7 +92,7 @@ router.get('/stores', async (req: Request, res: Response) => {
 
     return sendSuccess(res, stores, 'Stores fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching stores for coin drops:', error);
+    logger.error('[Admin] Error fetching stores for coin drops:', error);
     return sendError(res, 'Failed to fetch stores', 500);
   }
 });
@@ -116,7 +117,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, coinDrop, 'Coin drop fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching coin drop:', error);
+    logger.error('[Admin] Error fetching coin drop:', error);
     return sendError(res, 'Failed to fetch coin drop', 500);
   }
 });
@@ -171,7 +172,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     return sendSuccess(res, coinDrop, 'Coin drop created');
   } catch (error) {
-    console.error('[Admin] Error creating coin drop:', error);
+    logger.error('[Admin] Error creating coin drop:', error);
     return sendError(res, 'Failed to create coin drop', 500);
   }
 });
@@ -207,7 +208,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, coinDrop, 'Coin drop updated');
   } catch (error) {
-    console.error('[Admin] Error updating coin drop:', error);
+    logger.error('[Admin] Error updating coin drop:', error);
     return sendError(res, 'Failed to update coin drop', 500);
   }
 });
@@ -232,7 +233,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
 
     return sendSuccess(res, coinDrop, `Coin drop ${coinDrop.isActive ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling coin drop:', error);
+    logger.error('[Admin] Error toggling coin drop:', error);
     return sendError(res, 'Failed to toggle coin drop', 500);
   }
 });
@@ -254,7 +255,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, null, 'Coin drop deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting coin drop:', error);
+    logger.error('[Admin] Error deleting coin drop:', error);
     return sendError(res, 'Failed to delete coin drop', 500);
   }
 });

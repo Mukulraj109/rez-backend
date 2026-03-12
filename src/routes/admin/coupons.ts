@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Coupons
  * CRUD for Coupon model (used by Coupons admin page)
@@ -83,7 +84,7 @@ router.get('/', async (req: Request, res: Response) => {
       },
     }, 'Coupons fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching coupons:', error);
+    logger.error('[Admin] Error fetching coupons:', error);
     return sendError(res, 'Failed to fetch coupons', 500);
   }
 });
@@ -106,7 +107,7 @@ router.get('/stores', async (req: Request, res: Response) => {
       .lean();
     return sendSuccess(res, stores, 'Stores fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching stores for coupons:', error);
+    logger.error('[Admin] Error fetching stores for coupons:', error);
     return sendError(res, 'Failed to fetch stores', 500);
   }
 });
@@ -134,7 +135,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, coupon, 'Coupon fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching coupon:', error);
+    logger.error('[Admin] Error fetching coupon:', error);
     return sendError(res, 'Failed to fetch coupon', 500);
   }
 });
@@ -214,7 +215,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     return sendSuccess(res, coupon, 'Coupon created');
   } catch (error) {
-    console.error('[Admin] Error creating coupon:', error);
+    logger.error('[Admin] Error creating coupon:', error);
     return sendError(res, 'Failed to create coupon', 500);
   }
 });
@@ -262,7 +263,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, coupon, 'Coupon updated');
   } catch (error) {
-    console.error('[Admin] Error updating coupon:', error);
+    logger.error('[Admin] Error updating coupon:', error);
     return sendError(res, 'Failed to update coupon', 500);
   }
 });
@@ -287,7 +288,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
 
     return sendSuccess(res, coupon, `Coupon ${coupon.status === 'active' ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling coupon:', error);
+    logger.error('[Admin] Error toggling coupon:', error);
     return sendError(res, 'Failed to toggle coupon', 500);
   }
 });
@@ -309,7 +310,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, null, 'Coupon deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting coupon:', error);
+    logger.error('[Admin] Error deleting coupon:', error);
     return sendError(res, 'Failed to delete coupon', 500);
   }
 });

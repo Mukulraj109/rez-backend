@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Offers Page Service
  * Aggregates data from multiple sources for the offers page
@@ -640,7 +641,7 @@ export async function getOffersPageData(params: OffersPageParams): Promise<Offer
   const startTime = Date.now();
   const { userId, lat, lng, region = 'all', tab = 'all' } = params;
 
-  console.log(`[OFFERS_PAGE] Starting aggregated fetch tab=${tab} region=${region} userId=${userId ? 'yes' : 'anon'}`);
+  logger.info(`[OFFERS_PAGE] Starting aggregated fetch tab=${tab} region=${region} userId=${userId ? 'yes' : 'anon'}`);
 
   const cacheKey = CacheKeys.offersPageData(region, tab);
 
@@ -728,13 +729,13 @@ export async function getOffersPageData(params: OffersPageParams): Promise<Offer
     const populatedSections = keys.filter((_, i) => Array.isArray(results[i]) && results[i].length > 0).length;
 
     if (Object.keys(errors).length > 0) {
-      console.warn(`[OFFERS_PAGE] Errors in sections: ${Object.keys(errors).join(', ')}`);
+      logger.warn(`[OFFERS_PAGE] Errors in sections: ${Object.keys(errors).join(', ')}`);
     }
 
     const disabledCount = configMap.size > 0
       ? Array.from(configMap.values()).filter(c => !c.isEnabled).length
       : 0;
-    console.log(`[OFFERS_PAGE] durationMs=${duration} populatedSections=${populatedSections}/${keys.length} disabledSections=${disabledCount} region=${region} tab=${tab}`);
+    logger.info(`[OFFERS_PAGE] durationMs=${duration} populatedSections=${populatedSections}/${keys.length} disabledSections=${disabledCount} region=${region} tab=${tab}`);
 
     return {
       sections,

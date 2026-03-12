@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import partnerService from '../services/partnerService';
 import { PARTNER_LEVELS } from '../models/Partner';
@@ -44,7 +45,7 @@ export const getPartnerBenefits = async (req: Request, res: Response): Promise<v
       }
     });
   } catch (error) {
-    console.error('Error getting partner benefits:', error);
+    logger.error('Error getting partner benefits:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to get partner benefits'
@@ -76,7 +77,7 @@ export const getPartnerDashboard = async (req: Request, res: Response): Promise<
       data: dashboardData
     });
   } catch (error) {
-    console.error('Error getting partner dashboard:', error);
+    logger.error('Error getting partner dashboard:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get partner dashboard'
@@ -127,7 +128,7 @@ export const getPartnerProfile = async (req: Request, res: Response): Promise<vo
       }
     });
   } catch (error) {
-    console.error('Error getting partner profile:', error);
+    logger.error('Error getting partner profile:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get partner profile'
@@ -186,7 +187,7 @@ export const getPartnerEarnings = async (req: Request, res: Response): Promise<v
       }
     });
   } catch (error) {
-    console.error('Error getting partner earnings:', error);
+    logger.error('Error getting partner earnings:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get partner earnings'
@@ -226,7 +227,7 @@ export const getPartnerMilestones = async (req: Request, res: Response): Promise
       data: { milestones }
     });
   } catch (error) {
-    console.error('Error getting partner milestones:', error);
+    logger.error('Error getting partner milestones:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get partner milestones'
@@ -281,7 +282,7 @@ export const claimMilestoneReward = async (req: Request, res: Response): Promise
       }
     });
   } catch (error) {
-    console.error('Error claiming milestone reward:', error);
+    logger.error('Error claiming milestone reward:', error);
     res.status(400).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to claim milestone reward'
@@ -328,7 +329,7 @@ export const getPartnerTasks = async (req: Request, res: Response): Promise<void
       data: { tasks }
     });
   } catch (error) {
-    console.error('Error getting partner tasks:', error);
+    logger.error('Error getting partner tasks:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get partner tasks'
@@ -375,7 +376,7 @@ export const claimTaskReward = async (req: Request, res: Response): Promise<void
       }
     });
   } catch (error) {
-    console.error('Error claiming task reward:', error);
+    logger.error('Error claiming task reward:', error);
     res.status(400).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to claim task reward'
@@ -419,7 +420,7 @@ export const getJackpotProgress = async (req: Request, res: Response): Promise<v
       }
     });
   } catch (error) {
-    console.error('Error getting jackpot progress:', error);
+    logger.error('Error getting jackpot progress:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get jackpot progress'
@@ -471,7 +472,7 @@ export const claimJackpotReward = async (req: Request, res: Response): Promise<v
       }
     });
   } catch (error) {
-    console.error('Error claiming jackpot reward:', error);
+    logger.error('Error claiming jackpot reward:', error);
     res.status(400).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to claim jackpot reward'
@@ -515,7 +516,7 @@ export const getPartnerOffers = async (req: Request, res: Response): Promise<voi
       data: { offers }
     });
   } catch (error) {
-    console.error('Error getting partner offers:', error);
+    logger.error('Error getting partner offers:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get partner offers'
@@ -541,7 +542,7 @@ export const claimPartnerOffer = async (req: Request, res: Response): Promise<vo
       return;
     }
     
-    console.log('🎫 [CONTROLLER] Claiming offer:', offerId);
+    logger.info('🎫 [CONTROLLER] Claiming offer:', offerId);
     
     // No need to decode - coming from body as plain string
     const { partner, voucherCode } = await partnerService.claimOffer(
@@ -562,7 +563,7 @@ export const claimPartnerOffer = async (req: Request, res: Response): Promise<vo
       }
     });
   } catch (error) {
-    console.error('Error claiming partner offer:', error);
+    logger.error('Error claiming partner offer:', error);
     res.status(400).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to claim offer'
@@ -608,7 +609,7 @@ export const updateTaskProgress = async (req: Request, res: Response): Promise<v
       }
     });
   } catch (error) {
-    console.error('Error updating task progress:', error);
+    logger.error('Error updating task progress:', error);
     res.status(400).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to update task progress'
@@ -638,7 +639,7 @@ export const getPartnerFAQs = async (req: Request, res: Response): Promise<void>
       data: { faqs }
     });
   } catch (error) {
-    console.error('Error getting partner FAQs:', error);
+    logger.error('Error getting partner FAQs:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get partner FAQs'
@@ -665,7 +666,7 @@ export const getPartnerLevels = async (req: Request, res: Response): Promise<voi
       data: { levels }
     });
   } catch (error) {
-    console.error('Error getting partner levels:', error);
+    logger.error('Error getting partner levels:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get partner levels'
@@ -709,7 +710,7 @@ export const requestPayout = async (req: Request, res: Response): Promise<void> 
       }
     });
   } catch (error) {
-    console.error('Error requesting payout:', error);
+    logger.error('Error requesting payout:', error);
     res.status(400).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to request payout'
@@ -741,7 +742,7 @@ export const getPartnerStats = async (req: Request, res: Response): Promise<void
       data: stats
     });
   } catch (error) {
-    console.error('Error getting partner stats:', error);
+    logger.error('Error getting partner stats:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to get partner stats'

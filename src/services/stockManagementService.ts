@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Types } from 'mongoose';
 import { Product } from '../models/Product';
 import stockAuditService from './stockAuditService';
@@ -73,7 +74,7 @@ class StockManagementService {
         notes: metadata?.notes
       });
 
-      console.log('📦 [STOCK MGMT] Stock deducted for order:', {
+      logger.info('📦 [STOCK MGMT] Stock deducted for order:', {
         productId,
         quantity,
         previousStock,
@@ -82,7 +83,7 @@ class StockManagementService {
 
       return { success: true, previousStock, newStock };
     } catch (error) {
-      console.error('📦 [STOCK MGMT] Failed to deduct stock:', error);
+      logger.error('📦 [STOCK MGMT] Failed to deduct stock:', error);
       throw error;
     }
   }
@@ -145,7 +146,7 @@ class StockManagementService {
         reason: metadata?.reason || 'Order cancelled/returned'
       });
 
-      console.log('📦 [STOCK MGMT] Stock restored:', {
+      logger.info('📦 [STOCK MGMT] Stock restored:', {
         productId,
         quantity,
         previousStock,
@@ -154,7 +155,7 @@ class StockManagementService {
 
       return { success: true, previousStock, newStock };
     } catch (error) {
-      console.error('📦 [STOCK MGMT] Failed to restore stock:', error);
+      logger.error('📦 [STOCK MGMT] Failed to restore stock:', error);
       throw error;
     }
   }
@@ -225,7 +226,7 @@ class StockManagementService {
         notes: metadata?.notes
       });
 
-      console.log('📦 [STOCK MGMT] Stock adjusted:', {
+      logger.info('📦 [STOCK MGMT] Stock adjusted:', {
         productId,
         previousStock,
         newStock,
@@ -234,7 +235,7 @@ class StockManagementService {
 
       return { success: true, previousStock, newStock };
     } catch (error) {
-      console.error('📦 [STOCK MGMT] Failed to adjust stock:', error);
+      logger.error('📦 [STOCK MGMT] Failed to adjust stock:', error);
       throw error;
     }
   }
@@ -282,14 +283,14 @@ class StockManagementService {
         metadata: { reservedQuantity: quantity }
       });
 
-      console.log('📦 [STOCK MGMT] Stock reserved:', {
+      logger.info('📦 [STOCK MGMT] Stock reserved:', {
         productId,
         quantity
       });
 
       return { success: true };
     } catch (error) {
-      console.error('📦 [STOCK MGMT] Failed to reserve stock:', error);
+      logger.error('📦 [STOCK MGMT] Failed to reserve stock:', error);
       throw error;
     }
   }
@@ -337,14 +338,14 @@ class StockManagementService {
         metadata: { releasedQuantity: quantity }
       });
 
-      console.log('📦 [STOCK MGMT] Reservation released:', {
+      logger.info('📦 [STOCK MGMT] Reservation released:', {
         productId,
         quantity
       });
 
       return { success: true };
     } catch (error) {
-      console.error('📦 [STOCK MGMT] Failed to release reservation:', error);
+      logger.error('📦 [STOCK MGMT] Failed to release reservation:', error);
       throw error;
     }
   }

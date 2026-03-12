@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * MallAffiliateClick Model
  *
@@ -236,7 +237,7 @@ MallAffiliateClickSchema.statics.markExpiredClicks = async function(): Promise<n
     }
   );
 
-  console.log(`⏰ [AFFILIATE] Marked ${result.modifiedCount} clicks as expired`);
+  logger.info(`⏰ [AFFILIATE] Marked ${result.modifiedCount} clicks as expired`);
   return result.modifiedCount;
 };
 
@@ -302,7 +303,7 @@ MallAffiliateClickSchema.methods.markAsConverted = async function(
     this.cashback = cashbackId;
   }
   await this.save();
-  console.log(`✅ [AFFILIATE] Click ${this.clickId} marked as converted`);
+  logger.info(`✅ [AFFILIATE] Click ${this.clickId} marked as converted`);
 };
 
 // Virtual for time until expiry

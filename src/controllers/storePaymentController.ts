@@ -73,7 +73,7 @@ export const generateStoreQR = async (req: Request, res: Response) => {
       data: result,
     });
   } catch (error: any) {
-    console.error('Error generating store QR:', error);
+    logger.error('Error generating store QR:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to generate QR code',
@@ -112,7 +112,7 @@ export const regenerateQR = async (req: Request, res: Response) => {
       data: result,
     });
   } catch (error: any) {
-    console.error('Error regenerating store QR:', error);
+    logger.error('Error regenerating store QR:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to regenerate QR code',
@@ -152,7 +152,7 @@ export const getStoreQRDetails = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error getting QR details:', error);
+    logger.error('Error getting QR details:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to get QR code details',
@@ -202,7 +202,7 @@ export const toggleQRStatus = async (req: Request, res: Response) => {
       data: { isActive },
     });
   } catch (error: any) {
-    console.error('Error toggling QR status:', error);
+    logger.error('Error toggling QR status:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to toggle QR status',
@@ -229,7 +229,7 @@ export const lookupStoreByQR = async (req: Request, res: Response) => {
 
     // Validate QR code format
     if (!QRCodeService.isValidQRCode(qrCode)) {
-      console.warn(`⚠️ [QR_INVALID_FORMAT] qrCode=${qrCode?.substring(0, 50)} ip=${req.ip}`);
+      logger.warn(`[QR_INVALID_FORMAT] qrCode=${qrCode?.substring(0, 50)} ip=${req.ip}`);
       return res.status(400).json({
         success: false,
         message: 'Invalid QR code format',
@@ -240,7 +240,7 @@ export const lookupStoreByQR = async (req: Request, res: Response) => {
     const result = await QRCodeService.lookupStoreByQR(qrCode);
 
     if (!result.success) {
-      console.warn(`⚠️ [QR_LOOKUP_FAILED] qrCode=${qrCode} error=${result.error || 'Store not found'} ip=${req.ip}`);
+      logger.warn(`[QR_LOOKUP_FAILED] qrCode=${qrCode} error=${result.error || 'Store not found'} ip=${req.ip}`);
       return res.status(404).json({
         success: false,
         message: result.error || 'Store not found',
@@ -252,7 +252,7 @@ export const lookupStoreByQR = async (req: Request, res: Response) => {
       data: result.store,
     });
   } catch (error: any) {
-    console.error('Error looking up store by QR:', error);
+    logger.error('Error looking up store by QR:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to lookup store',
@@ -317,7 +317,7 @@ export const getPaymentSettings = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error getting payment settings:', error);
+    logger.error('Error getting payment settings:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to get payment settings',
@@ -398,7 +398,7 @@ export const updatePaymentSettings = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error updating payment settings:', error);
+    logger.error('Error updating payment settings:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to update payment settings',
@@ -513,7 +513,7 @@ export const getStorePaymentOffers = async (req: Request, res: Response) => {
         });
       }
     } catch (discountError) {
-      console.error('Failed to fetch bank offers:', discountError);
+      logger.error('Failed to fetch bank offers:', discountError);
     }
 
     // Fetch ReZ platform offers (global discounts without store/merchant restriction)
@@ -548,7 +548,7 @@ export const getStorePaymentOffers = async (req: Request, res: Response) => {
         });
       }
     } catch (discountError) {
-      console.error('Failed to fetch ReZ offers:', discountError);
+      logger.error('Failed to fetch ReZ offers:', discountError);
     }
 
     // Calculate best offer from all offer types
@@ -583,7 +583,7 @@ export const getStorePaymentOffers = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error getting store payment offers:', error);
+    logger.error('Error getting store payment offers:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to get offers',
@@ -811,10 +811,10 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
     if (remainingAmount > 0) {
       // Check if Stripe is configured
       if (!stripeService.isStripeConfigured()) {
-        console.warn('⚠️ [STORE PAYMENT] Stripe not configured, proceeding without payment intent');
+        logger.warn('[STORE PAYMENT] Stripe not configured, proceeding without payment intent');
       } else {
         try {
-          console.log('💳 [STORE PAYMENT] Creating Stripe PaymentIntent for ₹', remainingAmount);
+          logger.info('[STORE PAYMENT] Creating Stripe PaymentIntent for ₹', remainingAmount);
 
           const paymentIntent = await stripeService.createPaymentIntent({
             amount: remainingAmount,
@@ -833,9 +833,9 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
           storePayment.stripeClientSecret = paymentIntent.client_secret || undefined;
           clientSecret = paymentIntent.client_secret || undefined;
 
-          console.log('✅ [STORE PAYMENT] PaymentIntent created:', paymentIntent.id);
+          logger.info('[STORE PAYMENT] PaymentIntent created:', paymentIntent.id);
         } catch (stripeError: any) {
-          console.error('❌ [STORE PAYMENT] Failed to create PaymentIntent:', stripeError.message);
+          logger.error('[STORE PAYMENT] Failed to create PaymentIntent:', stripeError.message);
           // Continue without Stripe - can still process coin-only or manual verification
         }
       }
@@ -843,7 +843,7 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
 
     // Save the payment record
     await storePayment.save();
-    console.log('✅ [STORE PAYMENT] Payment record created:', paymentId);
+    logger.info('[STORE PAYMENT] Payment record created:', paymentId);
 
     res.status(200).json({
       success: true,
@@ -865,7 +865,7 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error initiating store payment:', error);
+    logger.error('Error initiating store payment:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to initiate payment',
@@ -935,22 +935,22 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
     const isCardPayment = storePayment.paymentMethod.includes('card');
 
     if (storePayment.stripePaymentIntentId && storePayment.remainingAmount > 0 && isCardPayment) {
-      console.log('🔐 [STORE PAYMENT] Verifying Stripe payment:', storePayment.stripePaymentIntentId);
+      logger.info('[STORE PAYMENT] Verifying Stripe payment:', storePayment.stripePaymentIntentId);
 
       try {
         const verification = await stripeService.verifyPaymentIntent(storePayment.stripePaymentIntentId);
 
         if (!verification.verified) {
-          console.error('❌ [STORE PAYMENT] Payment not verified. Status:', verification.status);
+          logger.error('[STORE PAYMENT] Payment not verified. Status:', verification.status);
           return res.status(400).json({
             success: false,
             message: `Payment not completed. Status: ${verification.status}`,
           });
         }
 
-        console.log('✅ [STORE PAYMENT] Stripe payment verified');
+        logger.info('[STORE PAYMENT] Stripe payment verified');
       } catch (stripeError: any) {
-        console.error('❌ [STORE PAYMENT] Stripe verification failed:', stripeError.message);
+        logger.error('[STORE PAYMENT] Stripe verification failed:', stripeError.message);
         return res.status(400).json({
           success: false,
           message: 'Payment verification failed',
@@ -959,7 +959,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
     } else if (storePayment.paymentMethod === 'upi') {
       // For UPI payments, log the UPI transaction
       // In production, you would verify UPI payment through your payment gateway
-      console.log('📱 [STORE PAYMENT] UPI payment confirmation - Transaction ID:', transactionId);
+      logger.info('[STORE PAYMENT] UPI payment confirmation - Transaction ID:', transactionId);
     }
 
     // Retry loop for transient transaction errors (WriteConflict code 112)
@@ -1222,7 +1222,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
               storeName: storePayment.storeName,
             }
           }], { session });
-          console.log('✅ [STORE PAYMENT] CoinTransaction record created for branded coins:', brandedCoinsToDeduct);
+          logger.info('[STORE PAYMENT] CoinTransaction record created for branded coins:', brandedCoinsToDeduct);
         }
       }
 
@@ -1299,7 +1299,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
       // First visit bonus — award extra coins on first-ever completed payment at this store
       if (visitCount === 0 && rewardRules?.firstVisitBonus && rewardRules.firstVisitBonus > 0) {
         rewards.firstVisitBonus = rewardRules.firstVisitBonus;
-        console.log('🎉 [STORE PAYMENT] First visit bonus awarded:', rewards.firstVisitBonus, 'coins');
+        logger.info('[STORE PAYMENT] First visit bonus awarded:', rewards.firstVisitBonus, 'coins');
       }
 
       // Credit reward coins to user's wallet via walletService (atomic $inc + CoinTransaction + LedgerEntry)
@@ -1371,7 +1371,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
 
       // Commit the transaction
       await session.commitTransaction();
-      console.log('✅ [STORE PAYMENT] Payment completed (atomic):', paymentId);
+      logger.info('[STORE PAYMENT] Payment completed (atomic):', paymentId);
 
       // Notify merchant of in-store payment (non-blocking)
       if (store?.merchantId) {
@@ -1387,21 +1387,21 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
             cashbackAwarded: rewards.cashbackEarned || 0,
           });
         } catch (notifyErr) {
-          console.error('[STORE PAYMENT] Merchant notification failed (non-blocking):', notifyErr);
+          logger.error('[STORE PAYMENT] Merchant notification failed (non-blocking):', notifyErr);
         }
       }
 
       // Auto-trigger bank_offer bonus campaign on successful store payment
       try {
         const bonusCampaignService = require('../services/bonusCampaignService');
-        console.log('[STORE PAYMENT] Triggering bank_offer for payment:', paymentId);
+        logger.info('[STORE PAYMENT] Triggering bank_offer for payment:', paymentId);
         await bonusCampaignService.autoClaimForTransaction('bank_offer', userId, {
           transactionRef: { type: 'payment' as const, refId: (storePayment._id as Types.ObjectId).toString() },
           transactionAmount: storePayment.billAmount,
           paymentMethod: storePayment.paymentMethod,
         });
       } catch (bonusErr) {
-        console.error('[STORE PAYMENT] bank_offer auto-claim failed (non-blocking):', bonusErr);
+        logger.error('[STORE PAYMENT] bank_offer auto-claim failed (non-blocking):', bonusErr);
       }
 
       res.status(200).json({
@@ -1422,13 +1422,13 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
       // Retry on TransientTransactionError (WriteConflict code 112)
       const isTransient = atomicError.errorLabelSet?.has('TransientTransactionError') || atomicError.code === 112;
       if (isTransient && attempt < MAX_RETRIES) {
-        console.warn(`⚠️ [STORE PAYMENT] Transient transaction error (attempt ${attempt}/${MAX_RETRIES}), retrying...`);
+        logger.warn(`[STORE PAYMENT] Transient transaction error (attempt ${attempt}/${MAX_RETRIES}), retrying...`);
         // Brief backoff before retry
         await new Promise(resolve => setTimeout(resolve, 100 * attempt));
         continue;
       }
 
-      console.error('❌ [STORE PAYMENT] Atomic transaction failed:', atomicError.message);
+      logger.error('[STORE PAYMENT] Atomic transaction failed:', atomicError.message);
 
       // Revert payment status if it was changed
       if (storePayment.status === 'processing') {
@@ -1442,7 +1442,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
     break;
     } // end retry while loop
   } catch (error: any) {
-    console.error('Error confirming store payment:', error);
+    logger.error('Error confirming store payment:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to confirm payment',
@@ -1498,11 +1498,11 @@ export const cancelStorePayment = async (req: Request, res: Response) => {
     // Cancel Stripe PaymentIntent if exists
     if (storePayment.stripePaymentIntentId) {
       try {
-        console.log('🚫 [STORE PAYMENT] Cancelling Stripe PaymentIntent:', storePayment.stripePaymentIntentId);
+        logger.info('[STORE PAYMENT] Cancelling Stripe PaymentIntent:', storePayment.stripePaymentIntentId);
         await stripeService.cancelPaymentIntent(storePayment.stripePaymentIntentId);
-        console.log('✅ [STORE PAYMENT] Stripe PaymentIntent cancelled');
+        logger.info('[STORE PAYMENT] Stripe PaymentIntent cancelled');
       } catch (stripeError: any) {
-        console.error('⚠️ [STORE PAYMENT] Failed to cancel Stripe PaymentIntent:', stripeError.message);
+        logger.error('[STORE PAYMENT] Failed to cancel Stripe PaymentIntent:', stripeError.message);
         // Continue with cancellation even if Stripe fails
       }
     }
@@ -1513,7 +1513,7 @@ export const cancelStorePayment = async (req: Request, res: Response) => {
     storePayment.cancellationReason = reason || 'user_cancelled';
     await storePayment.save();
 
-    console.log('✅ [STORE PAYMENT] Payment cancelled:', paymentId);
+    logger.info('[STORE PAYMENT] Payment cancelled:', paymentId);
 
     res.status(200).json({
       success: true,
@@ -1525,7 +1525,7 @@ export const cancelStorePayment = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error cancelling store payment:', error);
+    logger.error('Error cancelling store payment:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to cancel payment',
@@ -1542,7 +1542,7 @@ export const getStorePaymentById = async (req: Request, res: Response) => {
     const { paymentId } = req.params;
     const userId = (req as any).user?.id;
 
-    console.log('📜 [GET PAYMENT] Looking up payment:', paymentId, 'for user:', userId);
+    logger.info('[GET PAYMENT] Looking up payment:', paymentId, 'for user:', userId);
 
     if (!paymentId) {
       return res.status(400).json({
@@ -1554,12 +1554,12 @@ export const getStorePaymentById = async (req: Request, res: Response) => {
     // Find the payment record
     const storePayment = await StorePayment.findOne({ paymentId }).lean();
 
-    console.log('📜 [GET PAYMENT] Found payment:', storePayment ? 'Yes' : 'No');
+    logger.info('[GET PAYMENT] Found payment:', storePayment ? 'Yes' : 'No');
 
     if (!storePayment) {
       // Check if any payments exist at all
       const count = await StorePayment.countDocuments();
-      console.log('📜 [GET PAYMENT] Total payments in DB:', count);
+      logger.info('[GET PAYMENT] Total payments in DB:', count);
 
       return res.status(404).json({
         success: false,
@@ -1603,7 +1603,7 @@ export const getStorePaymentById = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error getting store payment:', error);
+    logger.error('Error getting store payment:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to get payment details',
@@ -1813,7 +1813,7 @@ export const getCoinsForStore = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error getting coins for store:', error);
+    logger.error('Error getting coins for store:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to get coins',
@@ -1963,7 +1963,7 @@ export const getEnhancedPaymentMethods = async (req: Request, res: Response) => 
       data: paymentMethods,
     });
   } catch (error: any) {
-    console.error('Error getting enhanced payment methods:', error);
+    logger.error('Error getting enhanced payment methods:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to get payment methods',
@@ -2167,7 +2167,7 @@ export const autoOptimizeCoins = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error auto-optimizing coins:', error);
+    logger.error('Error auto-optimizing coins:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to auto-optimize coins',
@@ -2247,7 +2247,7 @@ export const getStoreMembership = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error getting store membership:', error);
+    logger.error('Error getting store membership:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to get membership info',
@@ -2328,7 +2328,7 @@ export const getStorePaymentHistory = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error getting payment history:', error);
+    logger.error('Error getting payment history:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to get payment history',
@@ -2398,7 +2398,7 @@ export const getStorePaymentStats = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error getting payment stats:', error);
+    logger.error('Error getting payment stats:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to get payment statistics',

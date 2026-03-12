@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Notification Management
  * Template CRUD, send notifications, and stats
@@ -97,7 +98,7 @@ router.get('/templates', async (req: Request, res: Response) => {
 
     return sendPaginated(res, templates, page, limit, total, 'Templates fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching notification templates:', error);
+    logger.error('[Admin] Error fetching notification templates:', error);
     return sendError(res, 'Failed to fetch templates', 500);
   }
 });
@@ -129,7 +130,7 @@ router.post('/templates', async (req: Request, res: Response) => {
 
     return sendCreated(res, template, 'Notification template created');
   } catch (error: any) {
-    console.error('[Admin] Error creating notification template:', error);
+    logger.error('[Admin] Error creating notification template:', error);
     if (error.name === 'ValidationError') {
       return sendBadRequest(res, error.message);
     }
@@ -174,7 +175,7 @@ router.put('/templates/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, template, 'Template updated');
   } catch (error: any) {
-    console.error('[Admin] Error updating notification template:', error);
+    logger.error('[Admin] Error updating notification template:', error);
     if (error.name === 'ValidationError') {
       return sendBadRequest(res, error.message);
     }
@@ -200,7 +201,7 @@ router.delete('/templates/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, null, 'Template deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting notification template:', error);
+    logger.error('[Admin] Error deleting notification template:', error);
     return sendError(res, 'Failed to delete template', 500);
   }
 });
@@ -253,7 +254,7 @@ router.post('/send', async (req: Request, res: Response) => {
     }
 
     // Log the send request (actual delivery not yet implemented)
-    console.log('[Admin] Notification send request:', {
+    logger.info('[Admin] Notification send request:', {
       templateId,
       templateTitle: template.title,
       channel: template.channel,
@@ -278,7 +279,7 @@ router.post('/send', async (req: Request, res: Response) => {
         : `Notification scheduled for ${scheduledAt.toISOString()}`
     );
   } catch (error) {
-    console.error('[Admin] Error sending notification:', error);
+    logger.error('[Admin] Error sending notification:', error);
     return sendError(res, 'Failed to send notification', 500);
   }
 });
@@ -325,7 +326,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
       'Notification stats fetched'
     );
   } catch (error) {
-    console.error('[Admin] Error fetching notification stats:', error);
+    logger.error('[Admin] Error fetching notification stats:', error);
     return sendError(res, 'Failed to fetch notification stats', 500);
   }
 });

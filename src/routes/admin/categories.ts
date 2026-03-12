@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { requireAuth, requireAdmin, requireSeniorAdmin } from '../../middleware/auth';
@@ -86,7 +87,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     res.json({ success: true, data: { categories: enriched } });
   } catch (error) {
-    console.error('Admin Get Categories Error:', error);
+    logger.error('Admin Get Categories Error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch categories' });
   }
 });
@@ -119,7 +120,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('Admin Get Category Error:', error);
+    logger.error('Admin Get Category Error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch category' });
   }
 });
@@ -161,7 +162,7 @@ router.put('/:id', requireSeniorAdmin, async (req: Request, res: Response) => {
 
     res.json({ success: true, data: { category }, message: 'Category updated successfully' });
   } catch (error) {
-    console.error('Admin Update Category Error:', error);
+    logger.error('Admin Update Category Error:', error);
     res.status(500).json({ success: false, message: 'Failed to update category' });
   }
 });
@@ -305,7 +306,7 @@ router.put('/:id/page-config', requireSeniorAdmin, async (req: Request, res: Res
 
     res.json({ success: true, data: { category }, message: 'Page config updated successfully' });
   } catch (error) {
-    console.error('Admin Update Page Config Error:', error);
+    logger.error('Admin Update Page Config Error:', error);
     res.status(500).json({ success: false, message: 'Failed to update page config' });
   }
 });
@@ -335,7 +336,7 @@ router.patch('/:id/tabs', requireSeniorAdmin, async (req: Request, res: Response
 
     res.json({ success: true, data: { tabs: (category.pageConfig as any).tabs }, message: 'Tabs updated' });
   } catch (error) {
-    console.error('Admin Update Tabs Error:', error);
+    logger.error('Admin Update Tabs Error:', error);
     res.status(500).json({ success: false, message: 'Failed to update tabs' });
   }
 });
@@ -365,7 +366,7 @@ router.patch('/:id/quick-actions', requireSeniorAdmin, async (req: Request, res:
 
     res.json({ success: true, data: { quickActions: (category.pageConfig as any).quickActions }, message: 'Quick actions updated' });
   } catch (error) {
-    console.error('Admin Update Quick Actions Error:', error);
+    logger.error('Admin Update Quick Actions Error:', error);
     res.status(500).json({ success: false, message: 'Failed to update quick actions' });
   }
 });
@@ -395,7 +396,7 @@ router.patch('/:id/sections', requireSeniorAdmin, async (req: Request, res: Resp
 
     res.json({ success: true, data: { sections: (category.pageConfig as any).sections }, message: 'Sections updated' });
   } catch (error) {
-    console.error('Admin Update Sections Error:', error);
+    logger.error('Admin Update Sections Error:', error);
     res.status(500).json({ success: false, message: 'Failed to update sections' });
   }
 });
@@ -425,7 +426,7 @@ router.patch('/:id/service-types', requireSeniorAdmin, async (req: Request, res:
 
     res.json({ success: true, data: { serviceTypes: (category.pageConfig as any).serviceTypes }, message: 'Service types updated' });
   } catch (error) {
-    console.error('Admin Update Service Types Error:', error);
+    logger.error('Admin Update Service Types Error:', error);
     res.status(500).json({ success: false, message: 'Failed to update service types' });
   }
 });
@@ -455,7 +456,7 @@ router.patch('/:id/banner', requireSeniorAdmin, async (req: Request, res: Respon
 
     res.json({ success: true, data: { banner: (category.pageConfig as any).banner }, message: 'Banner updated' });
   } catch (error) {
-    console.error('Admin Update Banner Error:', error);
+    logger.error('Admin Update Banner Error:', error);
     res.status(500).json({ success: false, message: 'Failed to update banner' });
   }
 });
@@ -485,7 +486,7 @@ router.patch('/:id/theme', requireSeniorAdmin, async (req: Request, res: Respons
 
     res.json({ success: true, data: { theme: (category.pageConfig as any).theme }, message: 'Theme updated' });
   } catch (error) {
-    console.error('Admin Update Theme Error:', error);
+    logger.error('Admin Update Theme Error:', error);
     res.status(500).json({ success: false, message: 'Failed to update theme' });
   }
 });
@@ -512,7 +513,7 @@ router.patch('/:id/dietary-options', requireSeniorAdmin, async (req: Request, re
     await category.save();
     res.json({ success: true, data: { dietaryOptions: (category.pageConfig as any).dietaryOptions }, message: 'Dietary options updated' });
   } catch (error) {
-    console.error('Admin Update Dietary Options Error:', error);
+    logger.error('Admin Update Dietary Options Error:', error);
     res.status(500).json({ success: false, message: 'Failed to update dietary options' });
   }
 });
@@ -539,7 +540,7 @@ router.patch('/:id/curated-collections', requireSeniorAdmin, async (req: Request
     await category.save();
     res.json({ success: true, data: { curatedCollections: (category.pageConfig as any).curatedCollections }, message: 'Curated collections updated' });
   } catch (error) {
-    console.error('Admin Update Curated Collections Error:', error);
+    logger.error('Admin Update Curated Collections Error:', error);
     res.status(500).json({ success: false, message: 'Failed to update curated collections' });
   }
 });
@@ -566,7 +567,7 @@ router.patch('/:id/search-placeholders', requireSeniorAdmin, async (req: Request
     await category.save();
     res.json({ success: true, data: { searchPlaceholders: (category.pageConfig as any).searchPlaceholders }, message: 'Search placeholders updated' });
   } catch (error) {
-    console.error('Admin Update Search Placeholders Error:', error);
+    logger.error('Admin Update Search Placeholders Error:', error);
     res.status(500).json({ success: false, message: 'Failed to update search placeholders' });
   }
 });
@@ -593,7 +594,7 @@ router.patch('/:id/value-prop-items', requireSeniorAdmin, async (req: Request, r
     await category.save();
     res.json({ success: true, data: { valuePropItems: (category.pageConfig as any).valuePropItems }, message: 'Value prop items updated' });
   } catch (error) {
-    console.error('Admin Update Value Prop Items Error:', error);
+    logger.error('Admin Update Value Prop Items Error:', error);
     res.status(500).json({ success: false, message: 'Failed to update value prop items' });
   }
 });
@@ -668,7 +669,7 @@ router.post('/', requireSeniorAdmin, async (req: Request, res: Response) => {
 
     res.status(201).json({ success: true, data: { category }, message: 'Category created successfully' });
   } catch (error) {
-    console.error('Admin Create Category Error:', error);
+    logger.error('Admin Create Category Error:', error);
     res.status(500).json({ success: false, message: 'Failed to create category' });
   }
 });
@@ -713,7 +714,7 @@ router.delete('/:id', requireSeniorAdmin, async (req: Request, res: Response) =>
 
     res.json({ success: true, message: 'Category deleted successfully' });
   } catch (error) {
-    console.error('Admin Delete Category Error:', error);
+    logger.error('Admin Delete Category Error:', error);
     res.status(500).json({ success: false, message: 'Failed to delete category' });
   }
 });
@@ -745,7 +746,7 @@ router.get('/:id/subcategories', async (req: Request, res: Response) => {
 
     res.json({ success: true, data: { subcategories: enriched } });
   } catch (error) {
-    console.error('Admin Get Subcategories Error:', error);
+    logger.error('Admin Get Subcategories Error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch subcategories' });
   }
 });
@@ -824,7 +825,7 @@ router.post('/:id/subcategories', requireSeniorAdmin, async (req: Request, res: 
 
     res.status(201).json({ success: true, data: { subcategory }, message: 'Subcategory created successfully' });
   } catch (error) {
-    console.error('Admin Create Subcategory Error:', error);
+    logger.error('Admin Create Subcategory Error:', error);
     res.status(500).json({ success: false, message: 'Failed to create subcategory' });
   }
 });
@@ -883,7 +884,7 @@ router.put('/:id/subcategories/:subId', requireSeniorAdmin, async (req: Request,
 
     res.json({ success: true, data: { subcategory: updated }, message: 'Subcategory updated successfully' });
   } catch (error) {
-    console.error('Admin Update Subcategory Error:', error);
+    logger.error('Admin Update Subcategory Error:', error);
     res.status(500).json({ success: false, message: 'Failed to update subcategory' });
   }
 });
@@ -934,7 +935,7 @@ router.delete('/:id/subcategories/:subId', requireSeniorAdmin, async (req: Reque
 
     res.json({ success: true, message: 'Subcategory deleted successfully' });
   } catch (error) {
-    console.error('Admin Delete Subcategory Error:', error);
+    logger.error('Admin Delete Subcategory Error:', error);
     res.status(500).json({ success: false, message: 'Failed to delete subcategory' });
   }
 });
@@ -983,7 +984,7 @@ router.post('/:id/subcategories/reorder', requireSeniorAdmin, async (req: Reques
 
     res.json({ success: true, message: 'Subcategories reordered successfully' });
   } catch (error) {
-    console.error('Admin Reorder Subcategories Error:', error);
+    logger.error('Admin Reorder Subcategories Error:', error);
     res.status(500).json({ success: false, message: 'Failed to reorder subcategories' });
   }
 });
@@ -1059,7 +1060,7 @@ router.patch('/:id/sort-filter-options', requireSeniorAdmin, async (req: Request
 
     res.json({ success: true, data: { pageConfig: category.pageConfig }, message: 'Sort/filter options updated successfully' });
   } catch (error) {
-    console.error('Admin Update Sort/Filter Options Error:', error);
+    logger.error('Admin Update Sort/Filter Options Error:', error);
     res.status(500).json({ success: false, message: 'Failed to update sort/filter options' });
   }
 });
@@ -1119,7 +1120,7 @@ router.post('/reorder', requireSeniorAdmin, async (req: Request, res: Response) 
 
     res.json({ success: true, message: 'Categories reordered successfully' });
   } catch (error) {
-    console.error('Admin Reorder Categories Error:', error);
+    logger.error('Admin Reorder Categories Error:', error);
     res.status(500).json({ success: false, message: 'Failed to reorder categories' });
   }
 });
@@ -1143,7 +1144,7 @@ router.patch('/:id/toggle', requireSeniorAdmin, async (req: Request, res: Respon
       message: `Category ${category.isActive ? 'activated' : 'deactivated'} successfully`,
     });
   } catch (error) {
-    console.error('Admin Toggle Category Error:', error);
+    logger.error('Admin Toggle Category Error:', error);
     res.status(500).json({ success: false, message: 'Failed to toggle category' });
   }
 });

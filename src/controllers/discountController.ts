@@ -4,6 +4,7 @@ import DiscountUsage from '../models/DiscountUsage';
 import { Store } from '../models/Store';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import mongoose from 'mongoose';
+import { logger } from '../config/logger';
 
 /**
  * GET /api/discounts
@@ -130,7 +131,7 @@ export const getDiscounts = async (req: Request, res: Response) => {
 
     sendPaginated(res, discounts, pageNum, limitNum, total, 'Discounts fetched successfully');
   } catch (error) {
-    console.error('Error fetching discounts:', error);
+    logger.error('Error fetching discounts:', error);
     sendError(res, 'Failed to fetch discounts', 500);
   }
 };
@@ -151,7 +152,7 @@ export const getDiscountById = async (req: Request, res: Response) => {
 
     sendSuccess(res, discount, 'Discount fetched successfully');
   } catch (error) {
-    console.error('Error fetching discount:', error);
+    logger.error('Error fetching discount:', error);
     sendError(res, 'Failed to fetch discount', 500);
   }
 };
@@ -238,7 +239,7 @@ export const getDiscountsForProduct = async (req: Request, res: Response) => {
 
     sendSuccess(res, discounts, 'Product discounts fetched successfully');
   } catch (error) {
-    console.error('Error fetching product discounts:', error);
+    logger.error('Error fetching product discounts:', error);
     sendError(res, 'Failed to fetch product discounts', 500);
   }
 };
@@ -355,7 +356,7 @@ export const validateDiscount = async (req: Request, res: Response) => {
       'Discount is valid'
     );
   } catch (error) {
-    console.error('Error validating discount:', error);
+    logger.error('Error validating discount:', error);
     sendError(res, 'Failed to validate discount', 500);
   }
 };
@@ -434,7 +435,7 @@ export const applyDiscount = async (req: Request, res: Response) => {
       201
     );
   } catch (error) {
-    console.error('Error applying discount:', error);
+    logger.error('Error applying discount:', error);
     sendError(res, 'Failed to apply discount', 500);
   }
 };
@@ -466,7 +467,7 @@ export const getUserDiscountHistory = async (req: Request, res: Response) => {
 
     sendPaginated(res, history, pageNum, limitNum, total, 'Discount history fetched successfully');
   } catch (error) {
-    console.error('Error fetching discount history:', error);
+    logger.error('Error fetching discount history:', error);
     sendError(res, 'Failed to fetch discount history', 500);
   }
 };
@@ -503,7 +504,7 @@ export const getDiscountAnalytics = async (req: Request, res: Response) => {
       'Analytics fetched successfully'
     );
   } catch (error) {
-    console.error('Error fetching discount analytics:', error);
+    logger.error('Error fetching discount analytics:', error);
     sendError(res, 'Failed to fetch analytics', 500);
   }
 };
@@ -614,7 +615,7 @@ export const getBillPaymentDiscounts = async (req: Request, res: Response) => {
 
     sendSuccess(res, discounts, 'Bill payment discounts fetched successfully');
   } catch (error) {
-    console.error('Error fetching bill payment discounts:', error);
+    logger.error('Error fetching bill payment discounts:', error);
     sendError(res, 'Failed to fetch bill payment discounts', 500);
   }
 };
@@ -710,7 +711,7 @@ export const validateCardForOffers = async (req: Request, res: Response) => {
       bestOffer,
     }, 'Card validation completed');
   } catch (error) {
-    console.error('Error validating card for offers:', error);
+    logger.error('Error validating card for offers:', error);
     sendError(res, 'Failed to validate card', 500);
   }
 };
@@ -772,7 +773,7 @@ export const applyCardOffer = async (req: Request, res: Response) => {
       },
     }, 'Card offer applied successfully');
   } catch (error) {
-    console.error('Error applying card offer:', error);
+    logger.error('Error applying card offer:', error);
     sendError(res, 'Failed to apply card offer', 500);
   }
 };

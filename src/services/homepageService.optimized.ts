@@ -6,6 +6,7 @@ import { Category } from '../models/Category';
 import { Video } from '../models/Video';
 import { Article } from '../models/Article';
 import mongoose, { PipelineStage } from 'mongoose';
+import { logger } from '../config/logger';
 
 /**
  * Homepage Service - OPTIMIZED VERSION
@@ -191,11 +192,11 @@ async function fetchFeaturedProductsOptimized(limit: number): Promise<any[]> {
     const products = await (Product as any).aggregate(pipeline);
 
     const duration = Date.now() - startTime;
-    console.log(`✅ [Optimized] Fetched ${products.length} featured products in ${duration}ms`);
+    logger.info(` [Optimized] Fetched ${products.length} featured products in ${duration}ms`);
     return products;
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`❌ [Optimized] Failed to fetch featured products in ${duration}ms:`, error);
+    logger.error(` [Optimized] Failed to fetch featured products in ${duration}ms:`, error);
     throw error;
   }
 }
@@ -308,11 +309,11 @@ async function fetchNewArrivalsOptimized(limit: number): Promise<any[]> {
     const products = await (Product as any).aggregate(pipeline);
 
     const duration = Date.now() - startTime;
-    console.log(`✅ [Optimized] Fetched ${products.length} new arrivals in ${duration}ms`);
+    logger.info(` [Optimized] Fetched ${products.length} new arrivals in ${duration}ms`);
     return products;
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`❌ [Optimized] Failed to fetch new arrivals in ${duration}ms:`, error);
+    logger.error(` [Optimized] Failed to fetch new arrivals in ${duration}ms:`, error);
     throw error;
   }
 }
@@ -434,12 +435,12 @@ async function fetchStoresOptimized(featuredLimit: number, trendingLimit: number
     const { featured, trending } = result[0] || { featured: [], trending: [] };
 
     const duration = Date.now() - startTime;
-    console.log(`✅ [Optimized] Fetched ${featured.length} featured + ${trending.length} trending stores in ${duration}ms`);
+    logger.info(` [Optimized] Fetched ${featured.length} featured + ${trending.length} trending stores in ${duration}ms`);
 
     return { featured, trending };
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`❌ [Optimized] Failed to fetch stores in ${duration}ms:`, error);
+    logger.error(` [Optimized] Failed to fetch stores in ${duration}ms:`, error);
     throw error;
   }
 }
@@ -516,11 +517,11 @@ async function fetchUpcomingEventsOptimized(limit: number): Promise<any[]> {
     const events = await Event.aggregate(pipeline as PipelineStage[]);
 
     const duration = Date.now() - startTime;
-    console.log(`✅ [Optimized] Fetched ${events.length} upcoming events in ${duration}ms`);
+    logger.info(` [Optimized] Fetched ${events.length} upcoming events in ${duration}ms`);
     return events;
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`❌ [Optimized] Failed to fetch upcoming events in ${duration}ms:`, error);
+    logger.error(` [Optimized] Failed to fetch upcoming events in ${duration}ms:`, error);
     throw error;
   }
 }
@@ -660,12 +661,12 @@ async function fetchOffersOptimized(megaLimit: number, studentLimit: number): Pr
     const { mega, student } = result[0] || { mega: [], student: [] };
 
     const duration = Date.now() - startTime;
-    console.log(`✅ [Optimized] Fetched ${mega.length} mega + ${student.length} student offers in ${duration}ms`);
+    logger.info(` [Optimized] Fetched ${mega.length} mega + ${student.length} student offers in ${duration}ms`);
 
     return { mega, student };
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`❌ [Optimized] Failed to fetch offers in ${duration}ms:`, error);
+    logger.error(` [Optimized] Failed to fetch offers in ${duration}ms:`, error);
     throw error;
   }
 }
@@ -712,11 +713,11 @@ async function fetchCategoriesOptimized(limit: number): Promise<any[]> {
     const categories = await Category.aggregate(pipeline as PipelineStage[]);
 
     const duration = Date.now() - startTime;
-    console.log(`✅ [Optimized] Fetched ${categories.length} categories in ${duration}ms`);
+    logger.info(` [Optimized] Fetched ${categories.length} categories in ${duration}ms`);
     return categories;
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`❌ [Optimized] Failed to fetch categories in ${duration}ms:`, error);
+    logger.error(` [Optimized] Failed to fetch categories in ${duration}ms:`, error);
     throw error;
   }
 }
@@ -804,11 +805,11 @@ async function fetchTrendingVideosOptimized(limit: number): Promise<any[]> {
     const videos = await Video.aggregate(pipeline as PipelineStage[]);
 
     const duration = Date.now() - startTime;
-    console.log(`✅ [Optimized] Fetched ${videos.length} trending videos in ${duration}ms`);
+    logger.info(` [Optimized] Fetched ${videos.length} trending videos in ${duration}ms`);
     return videos;
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`❌ [Optimized] Failed to fetch trending videos in ${duration}ms:`, error);
+    logger.error(` [Optimized] Failed to fetch trending videos in ${duration}ms:`, error);
     throw error;
   }
 }
@@ -896,11 +897,11 @@ async function fetchLatestArticlesOptimized(limit: number): Promise<any[]> {
     const articles = await Article.aggregate(pipeline as PipelineStage[]);
 
     const duration = Date.now() - startTime;
-    console.log(`✅ [Optimized] Fetched ${articles.length} latest articles in ${duration}ms`);
+    logger.info(` [Optimized] Fetched ${articles.length} latest articles in ${duration}ms`);
     return articles;
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`❌ [Optimized] Failed to fetch latest articles in ${duration}ms:`, error);
+    logger.error(` [Optimized] Failed to fetch latest articles in ${duration}ms:`, error);
     throw error;
   }
 }
@@ -916,7 +917,7 @@ async function fetchLatestArticlesOptimized(limit: number): Promise<any[]> {
  */
 export async function getHomepageDataOptimized(params: HomepageQueryParams): Promise<HomepageResponse> {
   const startTime = Date.now();
-  console.log('🏠 [Homepage Service - OPTIMIZED] Starting homepage data fetch...');
+  logger.info('🏠 [Homepage Service - OPTIMIZED] Starting homepage data fetch...');
 
   // Determine which sections to fetch (default: all)
   const requestedSections = params.sections || [
@@ -1016,7 +1017,7 @@ export async function getHomepageDataOptimized(params: HomepageQueryParams): Pro
   }
 
   // Execute all queries in parallel
-  console.log(`🔄 [Homepage Service - OPTIMIZED] Executing ${Object.keys(promises).length} optimized queries in parallel...`);
+  logger.info(` [Homepage Service - OPTIMIZED] Executing ${Object.keys(promises).length} optimized queries in parallel...`);
   const results = await Promise.allSettled(Object.values(promises));
 
   // Process results
@@ -1046,10 +1047,10 @@ export async function getHomepageDataOptimized(params: HomepageQueryParams): Pro
   const successfulSections = Object.keys(data).filter(key => !errors[key]);
   const failedSections = Object.keys(errors);
 
-  console.log(`✅ [Homepage Service - OPTIMIZED] Homepage data fetched in ${duration}ms`);
-  console.log(`   ✅ Successful sections: ${successfulSections.length}`);
-  console.log(`   ❌ Failed sections: ${failedSections.length}`);
-  console.log(`   ⚡ Performance improvement vs original implementation`);
+  logger.info(`[Homepage Service - OPTIMIZED] Homepage data fetched in ${duration}ms`, {
+    successful: successfulSections.length,
+    failed: failedSections.length,
+  });
 
   return {
     success: true,

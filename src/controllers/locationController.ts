@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import { User } from '../models/User';
 import {
@@ -53,7 +54,7 @@ export const updateUserLocation = asyncHandler(async (req: Request, res: Respons
           pincode: pincode || geocodeResult.pincode || '',
         };
       } catch (error) {
-        console.error('Geocoding failed:', error);
+        logger.error('Geocoding failed:', error);
         // Continue with what we have
       }
     }
@@ -87,7 +88,7 @@ export const updateUserLocation = asyncHandler(async (req: Request, res: Respons
       const timezone = await geocodingService.getTimezone(latitude, longitude);
       user.profile.timezone = timezone;
     } catch (error) {
-      console.error('Timezone detection failed:', error);
+      logger.error('Timezone detection failed:', error);
     }
 
     await user.save();
@@ -104,7 +105,7 @@ export const updateUserLocation = asyncHandler(async (req: Request, res: Respons
       },
     });
   } catch (error) {
-    console.error('Location update error:', error);
+    logger.error('Location update error:', error);
     throw new AppError('Failed to update location', 500);
   }
 });
@@ -137,7 +138,7 @@ export const getCurrentLocation = asyncHandler(async (req: Request, res: Respons
       },
     });
   } catch (error) {
-    console.error('Get location error:', error);
+    logger.error('Get location error:', error);
     throw new AppError('Failed to get location', 500);
   }
 });
@@ -173,7 +174,7 @@ export const getLocationHistory = asyncHandler(async (req: Request, res: Respons
       },
     });
   } catch (error) {
-    console.error('Get location history error:', error);
+    logger.error('Get location history error:', error);
     throw new AppError('Failed to get location history', 500);
   }
 });
@@ -190,7 +191,7 @@ export const reverseGeocode = asyncHandler(async (req: Request, res: Response) =
     const result = await geocodingService.reverseGeocode({ latitude, longitude });
     sendSuccess(res, result);
   } catch (error) {
-    console.error('Reverse geocoding error:', error);
+    logger.error('Reverse geocoding error:', error);
     throw new AppError('Failed to get address from coordinates', 500);
   }
 });
@@ -207,7 +208,7 @@ export const searchAddresses = asyncHandler(async (req: Request, res: Response) 
     const results = await geocodingService.searchAddresses({ query: query.trim(), limit });
     sendSuccess(res, { results });
   } catch (error) {
-    console.error('Address search error:', error);
+    logger.error('Address search error:', error);
     throw new AppError('Failed to search addresses', 500);
   }
 });
@@ -252,7 +253,7 @@ export const validateAddress = asyncHandler(async (req: Request, res: Response) 
       validatedAddress,
     });
   } catch (error) {
-    console.error('Address validation error:', error);
+    logger.error('Address validation error:', error);
     throw new AppError('Failed to validate address', 500);
   }
 });
@@ -276,7 +277,7 @@ export const getTimezone = asyncHandler(async (req: Request, res: Response) => {
     const timezone = await geocodingService.getTimezone(lat, lng);
     sendSuccess(res, { timezone });
   } catch (error) {
-    console.error('Timezone error:', error);
+    logger.error('Timezone error:', error);
     throw new AppError('Failed to get timezone', 500);
   }
 });
@@ -351,7 +352,7 @@ export const getNearbyStores = asyncHandler(async (req: Request, res: Response) 
       },
     });
   } catch (error) {
-    console.error('Nearby stores error:', error);
+    logger.error('Nearby stores error:', error);
     throw new AppError('Failed to get nearby stores', 500);
   }
 });
@@ -403,7 +404,7 @@ export const getLocationStats = asyncHandler(async (req: Request, res: Response)
       },
     });
   } catch (error) {
-    console.error('Location stats error:', error);
+    logger.error('Location stats error:', error);
     throw new AppError('Failed to get location statistics', 500);
   }
 });

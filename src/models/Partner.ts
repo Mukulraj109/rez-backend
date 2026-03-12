@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose, { Schema, Document } from 'mongoose';
 
 // Partner Benefits Interface
@@ -506,7 +507,7 @@ PartnerSchema.methods.canUpgradeLevel = function(): boolean {
   );
   const withinTimeframe = daysSinceStart <= this.currentLevel.requirements.timeframe;
   
-  console.log(`📊 [LEVEL CHECK] User ${this.userId}: Orders ${this.ordersThisLevel}/${(nextLevelConfig as any).requirements.orders}, Days ${daysSinceStart}/${this.currentLevel.requirements.timeframe}, Can upgrade: ${hasEnoughOrders && withinTimeframe}`);
+  logger.info(`📊 [LEVEL CHECK] User ${this.userId}: Orders ${this.ordersThisLevel}/${(nextLevelConfig as any).requirements.orders}, Days ${daysSinceStart}/${this.currentLevel.requirements.timeframe}, Can upgrade: ${hasEnoughOrders && withinTimeframe}`);
   
   return hasEnoughOrders && withinTimeframe;
 };
@@ -548,7 +549,7 @@ PartnerSchema.methods.isLevelExpired = function(): boolean {
 PartnerSchema.methods.handleLevelExpiry = function(): void {
   if (!this.isLevelExpired()) return;
   
-  console.log(`⏰ [LEVEL EXPIRY] Level expired for partner ${this.userId}, checking status...`);
+  logger.info(`⏰ [LEVEL EXPIRY] Level expired for partner ${this.userId}, checking status...`);
   
   // Check if user met requirements before expiry
   // Note: We check orders only, not timeframe, since it already expired
@@ -561,7 +562,7 @@ PartnerSchema.methods.handleLevelExpiry = function(): void {
     // User met order requirements, auto-upgrade them
     const oldLevel = this.currentLevel.name;
     this.upgradeLevel();
-    console.log(`✅ [LEVEL EXPIRY] Auto-upgraded ${oldLevel} → ${this.currentLevel.name}`);
+    logger.info(`✅ [LEVEL EXPIRY] Auto-upgraded ${oldLevel} → ${this.currentLevel.name}`);
   } else {
     // User didn't meet requirements, reset progress for current level
     const ordersLost = this.ordersThisLevel;
@@ -570,7 +571,7 @@ PartnerSchema.methods.handleLevelExpiry = function(): void {
     this.validUntil = new Date(
       Date.now() + this.currentLevel.requirements.timeframe * 24 * 60 * 60 * 1000
     );
-    console.log(`🔄 [LEVEL EXPIRY] Progress reset (lost ${ordersLost} orders), new deadline: ${this.validUntil.toISOString().split('T')[0]}`);
+    logger.info(`🔄 [LEVEL EXPIRY] Progress reset (lost ${ordersLost} orders), new deadline: ${this.validUntil.toISOString().split('T')[0]}`);
   }
 };
 
@@ -613,7 +614,7 @@ function generateLevelOffers(level: number): IClaimableOffer[] {
     });
   }
   
-  console.log(`🎁 [OFFERS] Generated ${offers.length} offers for level ${level}`);
+  logger.info(`🎁 [OFFERS] Generated ${offers.length} offers for level ${level}`);
   return offers;
 }
 

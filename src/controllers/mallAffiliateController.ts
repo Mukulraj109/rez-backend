@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Mall Affiliate Controller
  *
@@ -74,7 +75,7 @@ const logWebhookRequest = async (
     });
     return log._id;
   } catch (error) {
-    console.error('[WEBHOOK LOG] Failed to create log entry:', error);
+    logger.error('[WEBHOOK LOG] Failed to create log entry:', error);
     return null;
   }
 };
@@ -97,7 +98,7 @@ const updateWebhookLog = async (
   try {
     await (AffiliateWebhookLog as any).updateLogResult(logId, result);
   } catch (error) {
-    console.error('[WEBHOOK LOG] Failed to update log entry:', error);
+    logger.error('[WEBHOOK LOG] Failed to update log entry:', error);
   }
 };
 

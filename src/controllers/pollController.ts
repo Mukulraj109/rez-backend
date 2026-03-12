@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Poll from '../models/Poll';
@@ -71,7 +72,7 @@ export const getActivePolls = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching active polls:', error);
+    logger.error('Error fetching active polls:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch polls' });
   }
 };
@@ -134,7 +135,7 @@ export const getDailyPoll = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching daily poll:', error);
+    logger.error('Error fetching daily poll:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch daily poll' });
   }
 };
@@ -189,7 +190,7 @@ export const getPollDetail = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching poll detail:', error);
+    logger.error('Error fetching poll detail:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch poll' });
   }
 };
@@ -280,7 +281,7 @@ export const votePoll = async (req: Request, res: Response) => {
     if (error.code === 11000) {
       return res.status(400).json({ success: false, error: 'You have already voted on this poll' });
     }
-    console.error('Error voting on poll:', error);
+    logger.error('Error voting on poll:', error);
     res.status(500).json({ success: false, error: 'Failed to record vote' });
   }
 };
@@ -341,7 +342,7 @@ export const getMyVotes = async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('Error fetching vote history:', error);
+    logger.error('Error fetching vote history:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch vote history' });
   }
 };
@@ -398,7 +399,7 @@ export const createPoll = async (req: Request, res: Response) => {
       data: { poll },
     });
   } catch (error: any) {
-    console.error('Error creating poll:', error);
+    logger.error('Error creating poll:', error);
     res.status(500).json({ success: false, error: error.message || 'Failed to create poll' });
   }
 };
@@ -433,7 +434,7 @@ export const updatePoll = async (req: Request, res: Response) => {
       data: { poll },
     });
   } catch (error: any) {
-    console.error('Error updating poll:', error);
+    logger.error('Error updating poll:', error);
     res.status(500).json({ success: false, error: 'Failed to update poll' });
   }
 };
@@ -459,7 +460,7 @@ export const archivePoll = async (req: Request, res: Response) => {
       message: 'Poll archived successfully',
     });
   } catch (error: any) {
-    console.error('Error archiving poll:', error);
+    logger.error('Error archiving poll:', error);
     res.status(500).json({ success: false, error: 'Failed to archive poll' });
   }
 };

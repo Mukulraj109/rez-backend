@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Coupon Service
 // Business logic for coupon management and validation
 
@@ -164,7 +165,7 @@ class CouponService {
         message: `Coupon applied! You save ₹${discount}`,
       };
     } catch (error) {
-      console.error('❌ [COUPON SERVICE] Error validating coupon:', error);
+      logger.error('❌ [COUPON SERVICE] Error validating coupon:', error);
       return {
         valid: false,
         discount: 0,
@@ -233,7 +234,7 @@ class CouponService {
 
       return bestCoupon;
     } catch (error) {
-      console.error('❌ [COUPON SERVICE] Error getting best coupon:', error);
+      logger.error('❌ [COUPON SERVICE] Error getting best coupon:', error);
       return null;
     }
   }
@@ -443,22 +444,22 @@ class CouponService {
         const existingCoupon = await Coupon.findOne({ couponCode: upperCouponCode }).lean();
 
         if (!existingCoupon) {
-          console.error('❌ [COUPON SERVICE] Coupon not found:', couponCode);
+          logger.error('❌ [COUPON SERVICE] Coupon not found:', couponCode);
           return { success: false, error: 'COUPON_NOT_FOUND' };
         }
 
         if (existingCoupon.status !== 'active') {
-          console.error('❌ [COUPON SERVICE] Coupon is inactive:', couponCode);
+          logger.error('❌ [COUPON SERVICE] Coupon is inactive:', couponCode);
           return { success: false, error: 'COUPON_INACTIVE' };
         }
 
         if (existingCoupon.usageLimit.totalUsage > 0 &&
             existingCoupon.usageLimit.usedCount >= existingCoupon.usageLimit.totalUsage) {
-          console.error('❌ [COUPON SERVICE] Coupon usage limit reached:', couponCode);
+          logger.error('❌ [COUPON SERVICE] Coupon usage limit reached:', couponCode);
           return { success: false, error: 'USAGE_LIMIT_REACHED' };
         }
 
-        console.error('❌ [COUPON SERVICE] Coupon validation failed:', couponCode);
+        logger.error('❌ [COUPON SERVICE] Coupon validation failed:', couponCode);
         return { success: false, error: 'COUPON_VALIDATION_FAILED' };
       }
 
@@ -469,7 +470,7 @@ class CouponService {
           { _id: updatedCoupon._id },
           { $set: { status: 'inactive' } }
         );
-        console.log(`⚠️ [COUPON SERVICE] Coupon ${couponCode} deactivated - usage limit reached`);
+        logger.info(`⚠️ [COUPON SERVICE] Coupon ${couponCode} deactivated - usage limit reached`);
       }
 
       // Atomically update user coupon record to prevent duplicate usage by same user
@@ -511,13 +512,13 @@ class CouponService {
           },
           { upsert: true, new: true }
         );
-        console.log(`✅ [COUPON SERVICE] Created used UserCoupon record for unclaimed coupon ${couponCode}`);
+        logger.info(`✅ [COUPON SERVICE] Created used UserCoupon record for unclaimed coupon ${couponCode}`);
       }
 
-      console.log(`✅ [COUPON SERVICE] Coupon ${couponCode} marked as used by user ${userId}`);
+      logger.info(`✅ [COUPON SERVICE] Coupon ${couponCode} marked as used by user ${userId}`);
       return { success: true };
     } catch (error) {
-      console.error('❌ [COUPON SERVICE] Error marking coupon as used:', error);
+      logger.error('❌ [COUPON SERVICE] Error marking coupon as used:', error);
       return { success: false, error: 'INTERNAL_ERROR' };
     }
   }
@@ -545,7 +546,7 @@ class CouponService {
         .sort({ isFeatured: -1, createdAt: -1 })
         .limit(20).lean();
     } catch (error) {
-      console.error('❌ [COUPON SERVICE] Error searching coupons:', error);
+      logger.error('❌ [COUPON SERVICE] Error searching coupons:', error);
       return [];
     }
   }

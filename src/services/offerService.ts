@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import Offer, { IOffer } from '../models/Offer';
 import FlashSale, { IFlashSale } from '../models/FlashSale';
 import { User } from '../models/User';
@@ -53,7 +54,7 @@ class OfferService {
     userId: string
   ): Promise<BestOfferResult> {
     try {
-      console.log('🔍 [OfferService] Finding best offer for cart:', {
+      logger.info('🔍 [OfferService] Finding best offer for cart:', {
         cartTotal,
         itemCount: items.length,
         userId,
@@ -92,7 +93,7 @@ class OfferService {
         totalSavings: bestOffer.savings,
       };
     } catch (error) {
-      console.error('❌ [OfferService] Error finding best offer:', error);
+      logger.error('❌ [OfferService] Error finding best offer:', error);
       throw error;
     }
   }
@@ -172,7 +173,7 @@ class OfferService {
         };
       });
     } catch (error) {
-      console.error('❌ [OfferService] Error getting flash sale offers:', error);
+      logger.error('❌ [OfferService] Error getting flash sale offers:', error);
       return [];
     }
   }
@@ -227,7 +228,7 @@ class OfferService {
         };
       });
     } catch (error) {
-      console.error('❌ [OfferService] Error getting exclusive offers:', error);
+      logger.error('❌ [OfferService] Error getting exclusive offers:', error);
       return [];
     }
   }
@@ -278,7 +279,7 @@ class OfferService {
         };
       });
     } catch (error) {
-      console.error('❌ [OfferService] Error getting category offers:', error);
+      logger.error('❌ [OfferService] Error getting category offers:', error);
       return [];
     }
   }
@@ -332,7 +333,7 @@ class OfferService {
         };
       });
     } catch (error) {
-      console.error('❌ [OfferService] Error getting store offers:', error);
+      logger.error('❌ [OfferService] Error getting store offers:', error);
       return [];
     }
   }
@@ -380,7 +381,7 @@ class OfferService {
         };
       });
     } catch (error) {
-      console.error('❌ [OfferService] Error getting general offers:', error);
+      logger.error('❌ [OfferService] Error getting general offers:', error);
       return [];
     }
   }
@@ -434,7 +435,7 @@ class OfferService {
         offer: selectedOffer,
       };
     } catch (error) {
-      console.error('❌ [OfferService] Error applying offer:', error);
+      logger.error('❌ [OfferService] Error applying offer:', error);
       throw error;
     }
   }
@@ -525,7 +526,7 @@ class OfferService {
         finalPrice: cartTotal - cappedSavings,
       };
     } catch (error) {
-      console.error('❌ [OfferService] Error validating promo code:', error);
+      logger.error('❌ [OfferService] Error validating promo code:', error);
       throw error;
     }
   }

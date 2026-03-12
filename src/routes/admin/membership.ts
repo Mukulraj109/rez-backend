@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Subscription Tier Management
  * CRUD endpoints for managing subscription tier configuration.
@@ -40,7 +41,7 @@ router.get('/plans', async (req: Request, res: Response) => {
 
     return sendSuccess(res, tiers, 'Subscription tiers fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching subscription tiers:', error);
+    logger.error('[Admin] Error fetching subscription tiers:', error);
     return sendError(res, 'Failed to fetch subscription tiers', 500);
   }
 });
@@ -107,7 +108,7 @@ router.post('/plans', async (req: Request, res: Response) => {
 
     return sendCreated(res, newTier, 'Subscription tier created');
   } catch (error: any) {
-    console.error('[Admin] Error creating subscription tier:', error);
+    logger.error('[Admin] Error creating subscription tier:', error);
     if (error.code === 11000) {
       return sendBadRequest(res, 'A tier with that identifier already exists');
     }
@@ -164,7 +165,7 @@ router.put('/plans/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, tier, 'Subscription tier updated');
   } catch (error: any) {
-    console.error('[Admin] Error updating subscription tier:', error);
+    logger.error('[Admin] Error updating subscription tier:', error);
     if (error.code === 11000) {
       return sendBadRequest(res, 'A tier with that identifier already exists');
     }
@@ -211,7 +212,7 @@ router.delete('/plans/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, tierDoc, 'Subscription tier deactivated');
   } catch (error) {
-    console.error('[Admin] Error deactivating subscription tier:', error);
+    logger.error('[Admin] Error deactivating subscription tier:', error);
     return sendError(res, 'Failed to deactivate subscription tier', 500);
   }
 });
@@ -265,7 +266,7 @@ router.get('/subscribers', async (req: Request, res: Response) => {
       tierDistribution,
     }, 'Subscribers fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching subscribers:', error);
+    logger.error('[Admin] Error fetching subscribers:', error);
     return sendError(res, 'Failed to fetch subscribers', 500);
   }
 });
@@ -321,7 +322,7 @@ router.post('/subscribers/:userId/override', async (req: Request, res: Response)
 
     return sendSuccess(res, subscription, `Subscription overridden to ${newTier}`);
   } catch (error) {
-    console.error('[Admin] Error overriding subscription:', error);
+    logger.error('[Admin] Error overriding subscription:', error);
     return sendError(res, 'Failed to override subscription', 500);
   }
 });

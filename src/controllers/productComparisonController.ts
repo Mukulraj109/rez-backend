@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import { ProductComparison } from '../models/ProductComparison';
 import { Product } from '../models/Product';
@@ -68,7 +69,7 @@ export const createProductComparison = asyncHandler(async (req: Request, res: Re
     }, 'Product comparison created successfully');
 
   } catch (error) {
-    console.error('Create product comparison error:', error);
+    logger.error('Create product comparison error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -94,7 +95,7 @@ export const getUserProductComparisons = asyncHandler(async (req: Request, res: 
     });
 
   } catch (error) {
-    console.error('Get user product comparisons error:', error);
+    logger.error('Get user product comparisons error:', error);
     throw new AppError('Failed to fetch user product comparisons', 500);
   }
 });
@@ -136,7 +137,7 @@ export const getProductComparisonById = asyncHandler(async (req: Request, res: R
     });
 
   } catch (error) {
-    console.error('Get product comparison by ID error:', error);
+    logger.error('Get product comparison by ID error:', error);
     throw new AppError('Failed to fetch product comparison', 500);
   }
 });
@@ -204,7 +205,7 @@ export const updateProductComparison = asyncHandler(async (req: Request, res: Re
     }, 'Product comparison updated successfully');
 
   } catch (error) {
-    console.error('Update product comparison error:', error);
+    logger.error('Update product comparison error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -234,7 +235,7 @@ export const deleteProductComparison = asyncHandler(async (req: Request, res: Re
     sendSuccess(res, null, 'Product comparison deleted successfully');
 
   } catch (error) {
-    console.error('Delete product comparison error:', error);
+    logger.error('Delete product comparison error:', error);
     throw new AppError('Failed to delete product comparison', 500);
   }
 });
@@ -303,7 +304,7 @@ export const addProductToComparison = asyncHandler(async (req: Request, res: Res
     }, 'Product added to comparison successfully');
 
   } catch (error) {
-    console.error('Add product to comparison error:', error);
+    logger.error('Add product to comparison error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -359,7 +360,7 @@ export const removeProductFromComparison = asyncHandler(async (req: Request, res
     }, 'Product removed from comparison successfully');
 
   } catch (error) {
-    console.error('Remove product from comparison error:', error);
+    logger.error('Remove product from comparison error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -383,7 +384,7 @@ export const getProductComparisonStats = asyncHandler(async (req: Request, res: 
     });
 
   } catch (error) {
-    console.error('Get product comparison stats error:', error);
+    logger.error('Get product comparison stats error:', error);
     throw new AppError('Failed to fetch comparison statistics', 500);
   }
 });
@@ -404,7 +405,7 @@ export const clearAllProductComparisons = asyncHandler(async (req: Request, res:
     }, 'All product comparisons cleared successfully');
 
   } catch (error) {
-    console.error('Clear all product comparisons error:', error);
+    logger.error('Clear all product comparisons error:', error);
     throw new AppError('Failed to clear product comparisons', 500);
   }
 });

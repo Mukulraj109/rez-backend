@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Activity Service
 // Helper service for creating activities from other controllers
 
@@ -43,10 +44,10 @@ export const createActivity = async (options: CreateActivityOptions): Promise<vo
     });
 
     await activity.save();
-    console.log(`✅ [ACTIVITY] Created ${type} activity for user ${userId}: ${title}`);
+    logger.info(`✅ [ACTIVITY] Created ${type} activity for user ${userId}: ${title}`);
   } catch (error) {
     // Silent fail - don't disrupt main flow if activity creation fails
-    console.error(`❌ [ACTIVITY] Failed to create activity:`, error);
+    logger.error(`❌ [ACTIVITY] Failed to create activity:`, error);
   }
 };
 

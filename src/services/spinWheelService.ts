@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { MiniGame } from '../models/MiniGame';
 import { CoinTransaction } from '../models/CoinTransaction';
 import mongoose from 'mongoose';
@@ -276,7 +277,7 @@ export async function awardSpinPrize(userId: string, prize: SpinResult): Promise
     );
 
     if (updated) {
-      console.log(`💰 [SPIN_WHEEL] Added ${prize.value} coins to wallet atomically. New balance: ${updated.balance.total}`);
+      logger.info(`💰 [SPIN_WHEEL] Added ${prize.value} coins to wallet atomically. New balance: ${updated.balance.total}`);
     } else {
       // Wallet might not exist or no rez coin entry — try creating
       const wallet = await Wallet.findOne({ user: userId }).lean();
@@ -297,7 +298,7 @@ export async function awardSpinPrize(userId: string, prize: SpinResult): Promise
           );
         }
       }
-      console.warn(`⚠️ [SPIN_WHEEL] Wallet atomic update returned null for user ${userId}, created/retried`);
+      logger.warn(`⚠️ [SPIN_WHEEL] Wallet atomic update returned null for user ${userId}, created/retried`);
     }
 
     return null;
@@ -401,9 +402,9 @@ export async function awardSpinPrize(userId: string, prize: SpinResult): Promise
       }
     });
 
-    console.log(`✅ [SPIN_WHEEL] Awarded ${prize.value}% cashback coupon to user ${userId}`);
-    console.log(`   📍 ${applicabilityText}`);
-    console.log(`   🎫 Code: ${coupon.couponCode}`);
+    logger.info(`✅ [SPIN_WHEEL] Awarded ${prize.value}% cashback coupon to user ${userId}`);
+    logger.info(`   📍 ${applicabilityText}`);
+    logger.info(`   🎫 Code: ${coupon.couponCode}`);
 
     // Return coupon metadata for frontend display
     return coupon.metadata;
@@ -506,9 +507,9 @@ export async function awardSpinPrize(userId: string, prize: SpinResult): Promise
       }
     });
 
-    console.log(`✅ [SPIN_WHEEL] Awarded ${prize.value}% discount coupon to user ${userId}`);
-    console.log(`   📍 ${applicabilityText}`);
-    console.log(`   🎫 Code: ${coupon.couponCode}`);
+    logger.info(`✅ [SPIN_WHEEL] Awarded ${prize.value}% discount coupon to user ${userId}`);
+    logger.info(`   📍 ${applicabilityText}`);
+    logger.info(`   🎫 Code: ${coupon.couponCode}`);
 
     // Return coupon metadata for frontend display
     return coupon.metadata;
@@ -611,9 +612,9 @@ export async function awardSpinPrize(userId: string, prize: SpinResult): Promise
       }
     });
 
-    console.log(`✅ [SPIN_WHEEL] Awarded ₹${prize.value} voucher to user ${userId}`);
-    console.log(`   📍 ${applicabilityText}`);
-    console.log(`   🎫 Code: ${coupon.couponCode}`);
+    logger.info(`✅ [SPIN_WHEEL] Awarded ₹${prize.value} voucher to user ${userId}`);
+    logger.info(`   📍 ${applicabilityText}`);
+    logger.info(`   🎫 Code: ${coupon.couponCode}`);
 
     // Return coupon metadata for frontend display
     return coupon.metadata;

@@ -6,6 +6,7 @@ import { SupportTicket, ISupportTicket } from '../models/SupportTicket';
 import { FAQ, IFAQ } from '../models/FAQ';
 import { User } from '../models/User';
 import supportSocketService from './supportSocketService';
+import { logger } from '../config/logger';
 
 interface CreateTicketData {
   userId: Types.ObjectId;
@@ -52,7 +53,7 @@ class SupportService {
           createdAt: { $gte: fiveMinutesAgo },
         }).lean();
         if (existing) {
-          console.log(`🔁 [SUPPORT SERVICE] Returning existing ticket for idempotency key: ${data.idempotencyKey}`);
+          logger.info(`🔁 [SUPPORT SERVICE] Returning existing ticket for idempotency key: ${data.idempotencyKey}`);
           return existing;
         }
       }
@@ -82,7 +83,7 @@ class SupportService {
         ...(data.idempotencyKey ? { metadata: { idempotencyKey: data.idempotencyKey } } : {}),
       });
 
-      console.log(`✅ [SUPPORT SERVICE] Ticket created: ${ticketNumber}`);
+      logger.info(`✅ [SUPPORT SERVICE] Ticket created: ${ticketNumber}`);
 
       // Notify support team (implement notification logic here)
       await this.notifyAgents(ticket);
@@ -92,7 +93,7 @@ class SupportService {
 
       return ticket;
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error creating ticket:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error creating ticket:', error);
       throw error;
     }
   }
@@ -145,11 +146,11 @@ class SupportService {
 
       const pages = Math.ceil(total / limit);
 
-      console.log(`✅ [SUPPORT SERVICE] Retrieved ${tickets.length} tickets for user`);
+      logger.info(`✅ [SUPPORT SERVICE] Retrieved ${tickets.length} tickets for user`);
 
       return { tickets, total, pages };
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error getting user tickets:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error getting user tickets:', error);
       throw error;
     }
   }
@@ -171,13 +172,13 @@ class SupportService {
         .lean();
 
       if (!ticket) {
-        console.log(`⚠️ [SUPPORT SERVICE] Ticket not found or unauthorized: ${ticketId}`);
+        logger.info(`⚠️ [SUPPORT SERVICE] Ticket not found or unauthorized: ${ticketId}`);
         return null;
       }
 
       return ticket;
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error getting ticket:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error getting ticket:', error);
       throw error;
     }
   }
@@ -198,7 +199,7 @@ class SupportService {
       }).lean();
 
       if (!ticket) {
-        console.log(`⚠️ [SUPPORT SERVICE] Ticket not found: ${ticketId}`);
+        logger.info(`⚠️ [SUPPORT SERVICE] Ticket not found: ${ticketId}`);
         return null;
       }
 
@@ -211,7 +212,7 @@ class SupportService {
 
       return ticket;
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error adding message:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error adding message:', error);
       throw error;
     }
   }
@@ -230,7 +231,7 @@ class SupportService {
       }).lean();
 
       if (!ticket) {
-        console.log(`⚠️ [SUPPORT SERVICE] Ticket not found: ${ticketId}`);
+        logger.info(`⚠️ [SUPPORT SERVICE] Ticket not found: ${ticketId}`);
         return null;
       }
 
@@ -238,7 +239,7 @@ class SupportService {
 
       return ticket;
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error closing ticket:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error closing ticket:', error);
       throw error;
     }
   }
@@ -258,7 +259,7 @@ class SupportService {
       }).lean();
 
       if (!ticket) {
-        console.log(`⚠️ [SUPPORT SERVICE] Ticket not found: ${ticketId}`);
+        logger.info(`⚠️ [SUPPORT SERVICE] Ticket not found: ${ticketId}`);
         return null;
       }
 
@@ -269,7 +270,7 @@ class SupportService {
 
       return ticket;
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error reopening ticket:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error reopening ticket:', error);
       throw error;
     }
   }
@@ -290,7 +291,7 @@ class SupportService {
       }).lean();
 
       if (!ticket) {
-        console.log(`⚠️ [SUPPORT SERVICE] Ticket not found: ${ticketId}`);
+        logger.info(`⚠️ [SUPPORT SERVICE] Ticket not found: ${ticketId}`);
         return null;
       }
 
@@ -303,7 +304,7 @@ class SupportService {
 
       return ticket;
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error rating ticket:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error rating ticket:', error);
       throw error;
     }
   }
@@ -322,13 +323,13 @@ class SupportService {
       }).lean();
 
       if (!ticket) {
-        console.log(`⚠️ [SUPPORT SERVICE] Ticket not found: ${ticketId}`);
+        logger.info(`⚠️ [SUPPORT SERVICE] Ticket not found: ${ticketId}`);
         return;
       }
 
       await (ticket as any).markMessagesAsRead('user');
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error marking messages as read:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error marking messages as read:', error);
       throw error;
     }
   }
@@ -357,7 +358,7 @@ class SupportService {
 
       return summary;
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error getting tickets summary:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error getting tickets summary:', error);
       throw error;
     }
   }
@@ -389,7 +390,7 @@ class SupportService {
         .lean();
 
       if (admins.length === 0) {
-        console.log(`📋 [SUPPORT SERVICE] No active admins for auto-assignment of ticket ${ticketId}`);
+        logger.info(`📋 [SUPPORT SERVICE] No active admins for auto-assignment of ticket ${ticketId}`);
         return;
       }
 
@@ -428,10 +429,10 @@ class SupportService {
           });
         }
 
-        console.log(`✅ [SUPPORT SERVICE] Auto-assigned ticket ${ticketId} to ${agentName}`);
+        logger.info(`✅ [SUPPORT SERVICE] Auto-assigned ticket ${ticketId} to ${agentName}`);
       }
     } catch (error) {
-      console.error(`❌ [SUPPORT SERVICE] Auto-assign failed for ticket ${ticketId}:`, error);
+      logger.error(`❌ [SUPPORT SERVICE] Auto-assign failed for ticket ${ticketId}:`, error);
     }
   }
 
@@ -441,9 +442,9 @@ class SupportService {
   private async notifyAgents(ticket: ISupportTicket): Promise<void> {
     try {
       supportSocketService.emitNewTicket(ticket);
-      console.log(`📧 [SUPPORT SERVICE] Notified agents about ticket ${ticket.ticketNumber}`);
+      logger.info(`📧 [SUPPORT SERVICE] Notified agents about ticket ${ticket.ticketNumber}`);
     } catch (error) {
-      console.error(`❌ [SUPPORT SERVICE] Failed to notify agents:`, error);
+      logger.error(`❌ [SUPPORT SERVICE] Failed to notify agents:`, error);
     }
   }
 
@@ -459,9 +460,9 @@ class SupportService {
         ticketId: (ticket._id as Types.ObjectId).toString(),
         ticketNumber: ticket.ticketNumber,
       });
-      console.log(`📧 [SUPPORT SERVICE] Notifying agent ${agentId} about ticket ${ticket.ticketNumber}`);
+      logger.info(`📧 [SUPPORT SERVICE] Notifying agent ${agentId} about ticket ${ticket.ticketNumber}`);
     } catch (error) {
-      console.error(`❌ [SUPPORT SERVICE] Failed to notify agent:`, error);
+      logger.error(`❌ [SUPPORT SERVICE] Failed to notify agent:`, error);
     }
   }
 
@@ -479,9 +480,9 @@ class SupportService {
         ticketNumber: ticket.ticketNumber,
         score,
       });
-      console.log(`⭐ [SUPPORT SERVICE] Agent ${agentId} received ${score}/5 rating for ticket ${ticket.ticketNumber}`);
+      logger.info(`⭐ [SUPPORT SERVICE] Agent ${agentId} received ${score}/5 rating for ticket ${ticket.ticketNumber}`);
     } catch (error) {
-      console.error(`❌ [SUPPORT SERVICE] Failed to notify agent about rating:`, error);
+      logger.error(`❌ [SUPPORT SERVICE] Failed to notify agent about rating:`, error);
     }
   }
 
@@ -492,7 +493,7 @@ class SupportService {
     try {
       return await (FAQ as any).searchFAQs(query, limit);
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error searching FAQs:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error searching FAQs:', error);
       throw error;
     }
   }
@@ -504,7 +505,7 @@ class SupportService {
     try {
       return await (FAQ as any).getByCategory(category, subcategory);
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error getting FAQs:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error getting FAQs:', error);
       throw error;
     }
   }
@@ -516,7 +517,7 @@ class SupportService {
     try {
       return await (FAQ as any).getPopularFAQs(limit);
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error getting popular FAQs:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error getting popular FAQs:', error);
       throw error;
     }
   }
@@ -528,7 +529,7 @@ class SupportService {
     try {
       return await (FAQ as any).getCategories();
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error getting FAQ categories:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error getting FAQ categories:', error);
       throw error;
     }
   }
@@ -543,7 +544,7 @@ class SupportService {
         await (faq as any).markAsHelpful();
       }
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error marking FAQ as helpful:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error marking FAQ as helpful:', error);
       throw error;
     }
   }
@@ -558,7 +559,7 @@ class SupportService {
         await (faq as any).markAsNotHelpful();
       }
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error marking FAQ as not helpful:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error marking FAQ as not helpful:', error);
       throw error;
     }
   }
@@ -573,7 +574,7 @@ class SupportService {
         await (faq as any).incrementView();
       }
     } catch (error) {
-      console.error('❌ [SUPPORT SERVICE] Error incrementing FAQ view:', error);
+      logger.error('❌ [SUPPORT SERVICE] Error incrementing FAQ view:', error);
       throw error;
     }
   }

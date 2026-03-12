@@ -15,6 +15,7 @@ import { Refund } from '../../models/Refund';
 import { Store } from '../../models/Store';
 import merchantWalletService from '../../services/merchantWalletService';
 import orderSocketService from '../../services/orderSocketService';
+import { logger } from '../../config/logger';
 
 /**
  * Transform a raw MongoDB order document into the shape the merchant frontend expects.
@@ -91,7 +92,7 @@ async function sendOrderStatusNotification(order: any, action: string): Promise<
     }
     
     if (!user) {
-      console.warn('⚠️ [ORDER NOTIFICATION] User not found for order:', order._id);
+      logger.warn('⚠️ [ORDER NOTIFICATION] User not found for order:', order._id);
       return;
     }
 
@@ -141,9 +142,9 @@ async function sendOrderStatusNotification(order: any, action: string): Promise<
           to: userPhone,
           message: message.sms
         });
-        console.log(`✅ [ORDER NOTIFICATION] SMS sent to customer: ${userPhone}`);
+        logger.info(`✅ [ORDER NOTIFICATION] SMS sent to customer: ${userPhone}`);
       } catch (smsError) {
-        console.error(`❌ [ORDER NOTIFICATION] Failed to send SMS:`, smsError);
+        logger.error(`❌ [ORDER NOTIFICATION] Failed to send SMS:`, smsError);
       }
     }
 
@@ -165,13 +166,13 @@ async function sendOrderStatusNotification(order: any, action: string): Promise<
             storeName
           }
         );
-        console.log(`✅ [ORDER NOTIFICATION] Email sent to customer: ${userEmail}`);
+        logger.info(`✅ [ORDER NOTIFICATION] Email sent to customer: ${userEmail}`);
       } catch (emailError) {
-        console.error(`❌ [ORDER NOTIFICATION] Failed to send email:`, emailError);
+        logger.error(`❌ [ORDER NOTIFICATION] Failed to send email:`, emailError);
       }
     }
   } catch (error) {
-    console.error('❌ [ORDER NOTIFICATION] Error sending notifications:', error);
+    logger.error('❌ [ORDER NOTIFICATION] Error sending notifications:', error);
     throw error;
   }
 }
@@ -184,7 +185,7 @@ export const getMerchantOrderById = asyncHandler(async (req: Request, res: Respo
   const { id } = req.params;
   const merchantId = (req as any).merchantId;
 
-  console.log('🔍 [ORDER DETAIL] getMerchantOrderById called:', { id, merchantId });
+  logger.info('🔍 [ORDER DETAIL] getMerchantOrderById called:', { id, merchantId });
 
   try {
     // Verify the order belongs to one of this merchant's stores
@@ -239,7 +240,7 @@ export const getMerchantOrderById = asyncHandler(async (req: Request, res: Respo
           }
         }
       } catch (storeError) {
-        console.warn('⚠️ [ORDER DETAIL] Failed to fetch store info:', storeError);
+        logger.warn('⚠️ [ORDER DETAIL] Failed to fetch store info:', storeError);
         // Continue without store info
       }
     }
@@ -252,7 +253,7 @@ export const getMerchantOrderById = asyncHandler(async (req: Request, res: Respo
     // Transform to merchant frontend's expected shape
     const transformed = transformOrderForMerchant(orderWithStore);
 
-    console.log('✅ [ORDER DETAIL] Order retrieved:', {
+    logger.info('✅ [ORDER DETAIL] Order retrieved:', {
       orderId: id,
       orderNumber: order.orderNumber,
       status: order.status
@@ -261,7 +262,7 @@ export const getMerchantOrderById = asyncHandler(async (req: Request, res: Respo
     sendSuccess(res, transformed, 'Order retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [ORDER DETAIL] Error:', error);
+    logger.error('❌ [ORDER DETAIL] Error:', error);
     throw new AppError(`Failed to fetch order: ${error.message}`, 500);
   }
 });
@@ -271,9 +272,9 @@ export const getMerchantOrderById = asyncHandler(async (req: Request, res: Respo
  * Enhanced endpoint with advanced filters, search, and pagination
  */
 export const getMerchantOrders = asyncHandler(async (req: Request, res: Response) => {
-  console.log('🔍 [ORDERS] getMerchantOrders called');
-  console.log('🔍 [ORDERS] req.merchantId:', (req as any).merchantId);
-  console.log('🔍 [ORDERS] req.merchant:', (req as any).merchant);
+  logger.info('🔍 [ORDERS] getMerchantOrders called');
+  logger.info('🔍 [ORDERS] req.merchantId:', (req as any).merchantId);
+  logger.info('🔍 [ORDERS] req.merchant:', (req as any).merchant);
 
   const {
     status,
@@ -289,7 +290,7 @@ export const getMerchantOrders = asyncHandler(async (req: Request, res: Response
   } = req.query;
 
   try {
-    console.log('📊 [MERCHANT ORDERS] Fetching orders with filters:', {
+    logger.info('📊 [MERCHANT ORDERS] Fetching orders with filters:', {
       status,
       paymentStatus,
       startDate,
@@ -399,7 +400,7 @@ export const getMerchantOrders = asyncHandler(async (req: Request, res: Response
     // Get total count
     const total = await Order.countDocuments(query);
 
-    console.log('✅ [MERCHANT ORDERS] Orders retrieved:', {
+    logger.info('✅ [MERCHANT ORDERS] Orders retrieved:', {
       count: orders.length,
       total,
       page,
@@ -420,7 +421,7 @@ export const getMerchantOrders = asyncHandler(async (req: Request, res: Response
     }, 'Orders retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT ORDERS] Error:', error);
+    logger.error('❌ [MERCHANT ORDERS] Error:', error);
     throw new AppError(`Failed to fetch merchant orders: ${error.message}`, 500);
   }
 });
@@ -430,14 +431,14 @@ export const getMerchantOrders = asyncHandler(async (req: Request, res: Response
  * Proper analytics endpoint (no more fallback)
  */
 export const getMerchantOrderAnalytics = asyncHandler(async (req: Request, res: Response) => {
-  console.log('🔍 [ORDERS] getMerchantOrderAnalytics called');
-  console.log('🔍 [ORDERS] req.merchantId:', (req as any).merchantId);
-  console.log('🔍 [ORDERS] req.merchant:', (req as any).merchant);
+  logger.info('🔍 [ORDERS] getMerchantOrderAnalytics called');
+  logger.info('🔍 [ORDERS] req.merchantId:', (req as any).merchantId);
+  logger.info('🔍 [ORDERS] req.merchant:', (req as any).merchant);
 
   const { startDate, endDate, storeId, interval = 'day' } = req.query;
 
   try {
-    console.log('📈 [MERCHANT ANALYTICS] Generating analytics:', {
+    logger.info('📈 [MERCHANT ANALYTICS] Generating analytics:', {
       startDate,
       endDate,
       storeId,
@@ -473,7 +474,7 @@ export const getMerchantOrderAnalytics = asyncHandler(async (req: Request, res: 
       $lte: dateEnd
     };
 
-    console.log('📊 [MERCHANT ANALYTICS] Query range:', {
+    logger.info('📊 [MERCHANT ANALYTICS] Query range:', {
       start: dateStart.toISOString(),
       end: dateEnd.toISOString()
     });
@@ -583,7 +584,7 @@ export const getMerchantOrderAnalytics = asyncHandler(async (req: Request, res: 
       }
     };
 
-    console.log('✅ [MERCHANT ANALYTICS] Analytics generated:', {
+    logger.info('✅ [MERCHANT ANALYTICS] Analytics generated:', {
       totalOrders: analytics.totalOrders,
       totalRevenue: analytics.totalRevenue,
       conversionRate: analytics.conversionRate
@@ -595,7 +596,7 @@ export const getMerchantOrderAnalytics = asyncHandler(async (req: Request, res: 
     sendSuccess(res, analytics, 'Analytics retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT ANALYTICS] Error:', error);
+    logger.error('❌ [MERCHANT ANALYTICS] Error:', error);
     throw new AppError(`Failed to generate analytics: ${error.message}`, 500);
   }
 });
@@ -611,7 +612,7 @@ export const bulkOrderAction = asyncHandler(async (req: Request, res: Response) 
   session.startTransaction();
 
   try {
-    console.log('🔄 [BULK ACTION] Processing bulk action:', {
+    logger.info('🔄 [BULK ACTION] Processing bulk action:', {
       action,
       orderCount: orderIds.length,
       reason,
@@ -754,18 +755,18 @@ export const bulkOrderAction = asyncHandler(async (req: Request, res: Response) 
         // Send notifications to customers
         try {
           await sendOrderStatusNotification(order, action);
-          console.log(`✅ [BULK ACTION] Notification sent for order ${orderId}`);
+          logger.info(`✅ [BULK ACTION] Notification sent for order ${orderId}`);
         } catch (notificationError) {
-          console.error(`❌ [BULK ACTION] Failed to send notification for order ${orderId}:`, notificationError);
+          logger.error(`❌ [BULK ACTION] Failed to send notification for order ${orderId}:`, notificationError);
           // Don't fail the bulk action if notification fails
         }
 
         results.success++;
 
-        console.log(`✅ [BULK ACTION] Processed order ${orderId}: ${action}`);
+        logger.info(`✅ [BULK ACTION] Processed order ${orderId}: ${action}`);
 
       } catch (error: any) {
-        console.error(`❌ [BULK ACTION] Error processing order ${orderId}:`, error);
+        logger.error(`❌ [BULK ACTION] Error processing order ${orderId}:`, error);
         results.failed++;
         results.errors.push({
           orderId,
@@ -778,7 +779,7 @@ export const bulkOrderAction = asyncHandler(async (req: Request, res: Response) 
     await session.commitTransaction();
     session.endSession();
 
-    console.log('✅ [BULK ACTION] Bulk action completed:', results);
+    logger.info('✅ [BULK ACTION] Bulk action completed:', results);
 
     sendSuccess(res, results, `Bulk action completed: ${results.success} succeeded, ${results.failed} failed`);
 
@@ -786,7 +787,7 @@ export const bulkOrderAction = asyncHandler(async (req: Request, res: Response) 
     await session.abortTransaction();
     session.endSession();
 
-    console.error('❌ [BULK ACTION] Transaction error:', error);
+    logger.error('❌ [BULK ACTION] Transaction error:', error);
     throw new AppError(`Bulk action failed: ${error.message}`, 500);
   }
 });
@@ -803,7 +804,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
   session.startTransaction();
 
   try {
-    console.log('💰 [REFUND] Processing refund:', {
+    logger.info('💰 [REFUND] Processing refund:', {
       orderId,
       amount,
       reason,
@@ -853,7 +854,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
     // Determine if partial or full refund
     const isPartialRefund = amount < order.totals.paidAmount;
 
-    console.log('💰 [REFUND] Refund type:', isPartialRefund ? 'PARTIAL' : 'FULL');
+    logger.info('💰 [REFUND] Refund type:', isPartialRefund ? 'PARTIAL' : 'FULL');
 
     // Process refund based on payment method
     let gatewayRefundId = '';
@@ -867,7 +868,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
             throw new AppError('Payment transaction ID not found', 400);
           }
 
-          console.log('💳 [REFUND] Processing Razorpay refund...');
+          logger.info('💳 [REFUND] Processing Razorpay refund...');
 
           const razorpayRefund = await createRazorpayRefund(
             order.payment.transactionId,
@@ -884,7 +885,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
           gatewayRefundId = razorpayRefund.id;
           gatewayRefundStatus = razorpayRefund.status;
 
-          console.log('✅ [REFUND] Razorpay refund created:', {
+          logger.info('✅ [REFUND] Razorpay refund created:', {
             refundId: gatewayRefundId,
             status: gatewayRefundStatus,
             amount: razorpayRefund.amount ? razorpayRefund.amount / 100 : amount
@@ -901,7 +902,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
             throw new AppError('Stripe is not configured', 500);
           }
 
-          console.log('💳 [REFUND] Processing Stripe refund...');
+          logger.info('💳 [REFUND] Processing Stripe refund...');
 
           const amountInPaise = Math.round(amount * 100);
           const stripeRefund = await stripeService.createRefund({
@@ -919,7 +920,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
           gatewayRefundId = stripeRefund.id;
           gatewayRefundStatus = stripeRefund.status || 'pending';
 
-          console.log('✅ [REFUND] Stripe refund created:', {
+          logger.info('✅ [REFUND] Stripe refund created:', {
             refundId: gatewayRefundId,
             status: gatewayRefundStatus,
             amount: stripeRefund.amount ? stripeRefund.amount / 100 : amount
@@ -928,7 +929,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
         }
 
         case 'wallet': {
-          console.log('💳 [REFUND] Processing wallet refund...');
+          logger.info('💳 [REFUND] Processing wallet refund...');
 
           // Get user wallet
           const user = order.user as any;
@@ -955,7 +956,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
           gatewayRefundId = `wallet_refund_${Date.now()}`;
           gatewayRefundStatus = 'completed';
 
-          console.log('✅ [REFUND] Wallet refund completed via walletService:', { gatewayRefundId, amount });
+          logger.info('✅ [REFUND] Wallet refund completed via walletService:', { gatewayRefundId, amount });
           break;
         }
 
@@ -964,7 +965,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
           gatewayRefundId = `cod_refund_${Date.now()}`;
           gatewayRefundStatus = 'pending_manual_processing';
 
-          console.log('⚠️ [REFUND] COD refund requires manual processing:', gatewayRefundId);
+          logger.info('⚠️ [REFUND] COD refund requires manual processing:', gatewayRefundId);
           break;
         }
 
@@ -972,7 +973,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
           throw new AppError(`Unsupported payment method for refund: ${paymentMethod}`, 400);
       }
     } catch (refundError: any) {
-      console.error(`❌ [REFUND] ${paymentMethod} refund failed:`, refundError);
+      logger.error(`❌ [REFUND] ${paymentMethod} refund failed:`, refundError);
 
       await session.abortTransaction();
       session.endSession();
@@ -1005,7 +1006,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
 
     // Restore inventory for refunded items
     if (refundItems && refundItems.length > 0) {
-      console.log('📦 [REFUND] Restoring inventory for refunded items...');
+      logger.info('📦 [REFUND] Restoring inventory for refunded items...');
 
       for (const refundItem of refundItems) {
         const orderItem = order.items.find(
@@ -1013,7 +1014,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
         );
 
         if (!orderItem) {
-          console.warn('⚠️ [REFUND] Order item not found:', refundItem.itemId);
+          logger.warn('⚠️ [REFUND] Order item not found:', refundItem.itemId);
           continue;
         }
 
@@ -1054,11 +1055,11 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
           );
         }
 
-        console.log(`✅ [REFUND] Restored ${quantityToRestore} units for product ${orderItem.product}`);
+        logger.info(`✅ [REFUND] Restored ${quantityToRestore} units for product ${orderItem.product}`);
       }
     } else if (!isPartialRefund) {
       // Full refund - restore all items
-      console.log('📦 [REFUND] Full refund - restoring all inventory...');
+      logger.info('📦 [REFUND] Full refund - restoring all inventory...');
 
       for (const orderItem of order.items) {
         if (orderItem.variant) {
@@ -1134,7 +1135,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
     });
 
     await refundRecord.save({ session });
-    console.log('✅ [REFUND] Refund audit record created:', refundRecord._id);
+    logger.info('✅ [REFUND] Refund audit record created:', refundRecord._id);
 
     await order.save({ session });
 
@@ -1142,7 +1143,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
     await session.commitTransaction();
     session.endSession();
 
-    console.log('✅ [REFUND] Refund processed successfully');
+    logger.info('✅ [REFUND] Refund processed successfully');
 
     // Calculate estimated refund arrival
     const estimatedArrival = new Date();
@@ -1174,17 +1175,17 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
               refundId: (refundRecord._id as any)?.toString() || ''
             }
           );
-          console.log('✅ [REFUND] Admin notified for manual COD refund processing');
+          logger.info('✅ [REFUND] Admin notified for manual COD refund processing');
         }
       } catch (adminError) {
-        console.error('❌ [REFUND] Failed to notify admin for COD refund:', adminError);
+        logger.error('❌ [REFUND] Failed to notify admin for COD refund:', adminError);
       }
     }
 
     // Send refund confirmation email/SMS
     if (notifyCustomer) {
       try {
-        console.log('📧 [REFUND] Sending refund notification to customer...');
+        logger.info('📧 [REFUND] Sending refund notification to customer...');
 
         // Populate user data if not already populated
         let user = order.user as any;
@@ -1199,7 +1200,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
 
         // Send SMS notification
         if (userPhone) {
-          console.log('📱 [REFUND] Sending SMS to customer:', userPhone);
+          logger.info('📱 [REFUND] Sending SMS to customer:', userPhone);
           await SMSService.sendRefundNotification(userPhone, orderNumber, amount);
           
           // Update refund record with SMS notification
@@ -1212,7 +1213,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
 
         // Send email notification
         if (userEmail && userName) {
-          console.log('📧 [REFUND] Sending email to customer:', userEmail);
+          logger.info('📧 [REFUND] Sending email to customer:', userEmail);
 
           await EmailService.sendRefundConfirmation(
             userEmail,
@@ -1236,9 +1237,9 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
           await refundRecord.save();
         }
 
-        console.log('✅ [REFUND] Refund notifications sent successfully');
+        logger.info('✅ [REFUND] Refund notifications sent successfully');
       } catch (notificationError) {
-        console.error('❌ [REFUND] Error sending notifications:', notificationError);
+        logger.error('❌ [REFUND] Error sending notifications:', notificationError);
         // Don't fail the refund if notifications fail
       }
     }
@@ -1258,7 +1259,7 @@ export const refundOrder = asyncHandler(async (req: Request, res: Response) => {
     await session.abortTransaction();
     session.endSession();
 
-    console.error('❌ [REFUND] Error:', error);
+    logger.error('❌ [REFUND] Error:', error);
     throw new AppError(`Refund processing failed: ${error.message}`, 500);
   }
 });
@@ -1272,7 +1273,7 @@ export const updateMerchantOrderStatus = asyncHandler(async (req: Request, res: 
   const { status, notes, notifyCustomer = true } = req.body;
   const merchantId = (req as any).merchantId;
 
-  console.log('🔄 [ORDER STATUS] updateMerchantOrderStatus called:', { id, status, merchantId });
+  logger.info('🔄 [ORDER STATUS] updateMerchantOrderStatus called:', { id, status, merchantId });
 
   // Valid status transitions
   const validTransitions: Record<string, string[]> = {
@@ -1329,12 +1330,12 @@ export const updateMerchantOrderStatus = asyncHandler(async (req: Request, res: 
 
     // Inventory deduction on confirm
     if (status === 'confirmed' && currentStatus !== 'confirmed') {
-      console.log(`📦 [ORDER STATUS] Processing inventory deduction for order ${order.orderNumber}`);
+      logger.info(`📦 [ORDER STATUS] Processing inventory deduction for order ${order.orderNumber}`);
 
       for (const item of order.items) {
         const product = await Product.findById(item.product).session(session);
         if (!product) {
-          console.warn(`⚠️ [ORDER STATUS] Product ${item.product} not found, skipping inventory`);
+          logger.warn(`⚠️ [ORDER STATUS] Product ${item.product} not found, skipping inventory`);
           continue;
         }
 
@@ -1373,14 +1374,14 @@ export const updateMerchantOrderStatus = asyncHandler(async (req: Request, res: 
     await session.commitTransaction();
     session.endSession();
 
-    console.log(`✅ [ORDER STATUS] Order ${order.orderNumber} updated: ${currentStatus} → ${status}`);
+    logger.info(`✅ [ORDER STATUS] Order ${order.orderNumber} updated: ${currentStatus} → ${status}`);
 
     // Send notifications (outside transaction)
     if (notifyCustomer) {
       try {
         await sendOrderStatusNotification(order, status);
       } catch (notifError) {
-        console.error('❌ [ORDER STATUS] Notification error (non-fatal):', notifError);
+        logger.error('❌ [ORDER STATUS] Notification error (non-fatal):', notifError);
       }
     }
 
@@ -1408,10 +1409,10 @@ export const updateMerchantOrderStatus = asyncHandler(async (req: Request, res: 
               `5% purchase reward for order ${populatedOrder.orderNumber}`,
               { orderId: populatedOrder._id }
             );
-            console.log(`✅ [ORDER STATUS] Purchase reward: ${coinsToAward} coins`);
+            logger.info(`✅ [ORDER STATUS] Purchase reward: ${coinsToAward} coins`);
           }
         } catch (err) {
-          console.error('❌ [ORDER STATUS] Failed to award purchase reward:', err);
+          logger.error('❌ [ORDER STATUS] Failed to award purchase reward:', err);
         }
 
         // 2. Credit merchant wallet (subtotal minus 15% platform fee)
@@ -1436,7 +1437,7 @@ export const updateMerchantOrderStatus = asyncHandler(async (req: Request, res: 
                 storeId
               );
 
-              console.log('✅ [ORDER STATUS] Merchant wallet credited:', {
+              logger.info('✅ [ORDER STATUS] Merchant wallet credited:', {
                 gross: grossAmount, fee: platformFee, net: grossAmount - platformFee
               });
 
@@ -1460,7 +1461,7 @@ export const updateMerchantOrderStatus = asyncHandler(async (req: Request, res: 
             }
           }
         } catch (err) {
-          console.error('❌ [ORDER STATUS] Failed to credit merchant wallet:', err);
+          logger.error('❌ [ORDER STATUS] Failed to credit merchant wallet:', err);
         }
 
         // 3. Credit 5% admin commission (5% of subtotal)
@@ -1474,10 +1475,10 @@ export const updateMerchantOrderStatus = asyncHandler(async (req: Request, res: 
               populatedOrder.orderNumber,
               subtotal
             );
-            console.log('✅ [ORDER STATUS] Admin wallet credited:', adminCommission);
+            logger.info('✅ [ORDER STATUS] Admin wallet credited:', adminCommission);
           }
         } catch (err) {
-          console.error('❌ [ORDER STATUS] Failed to credit admin wallet:', err);
+          logger.error('❌ [ORDER STATUS] Failed to credit admin wallet:', err);
         }
       }
     }
@@ -1501,7 +1502,7 @@ export const updateMerchantOrderStatus = asyncHandler(async (req: Request, res: 
   } catch (error: any) {
     await session.abortTransaction();
     session.endSession();
-    console.error('❌ [ORDER STATUS] Error:', error);
+    logger.error('❌ [ORDER STATUS] Error:', error);
     throw new AppError(`Failed to update order status: ${error.message}`, 500);
   }
 });

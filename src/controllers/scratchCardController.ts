@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // ScratchCard Controller
 // Controller for managing scratch card functionality
 
@@ -35,7 +36,7 @@ export const createScratchCard = asyncHandler(async (req: Request, res: Response
       createdAt: scratchCard.createdAt
     }, 'Scratch card created successfully');
   } catch (error: any) {
-    console.error('❌ [SCRATCH CARD] Create failed:', error);
+    logger.error('❌ [SCRATCH CARD] Create failed:', error);
     sendError(res, error.message, 400);
   }
 });
@@ -67,7 +68,7 @@ export const getUserScratchCards = asyncHandler(async (req: Request, res: Respon
     
     sendSuccess(res, formattedCards, 'Scratch cards retrieved successfully');
   } catch (error: any) {
-    console.error('❌ [SCRATCH CARD] Get failed:', error);
+    logger.error('❌ [SCRATCH CARD] Get failed:', error);
     sendError(res, error.message, 500);
   }
 });
@@ -109,7 +110,7 @@ export const scratchCard = asyncHandler(async (req: Request, res: Response) => {
       expiresAt: scratchCard.expiresAt
     }, 'Card scratched successfully');
   } catch (error: any) {
-    console.error('❌ [SCRATCH CARD] Scratch failed:', error);
+    logger.error('❌ [SCRATCH CARD] Scratch failed:', error);
     sendError(res, error.message, 500);
   }
 });
@@ -171,7 +172,7 @@ export const claimPrize = asyncHandler(async (req: Request, res: Response) => {
             newBalance: cashbackResult.newBalance
           };
         } catch (coinErr: any) {
-          console.error('❌ [SCRATCH CARD] Cashback award failed:', coinErr);
+          logger.error('❌ [SCRATCH CARD] Cashback award failed:', coinErr);
           claimResult = {
             type: 'cashback',
             value: prize.value,
@@ -197,7 +198,7 @@ export const claimPrize = asyncHandler(async (req: Request, res: Response) => {
             newBalance: coinResult.newBalance
           };
         } catch (coinErr: any) {
-          console.error('❌ [SCRATCH CARD] Coin award failed:', coinErr);
+          logger.error('❌ [SCRATCH CARD] Coin award failed:', coinErr);
           claimResult = {
             type: 'coin',
             value: prize.value,
@@ -247,7 +248,7 @@ export const claimPrize = asyncHandler(async (req: Request, res: Response) => {
       claimedAt: scratchCard.claimedAt
     }, 'Prize claimed successfully');
   } catch (error: any) {
-    console.error('❌ [SCRATCH CARD] Claim failed:', error);
+    logger.error('❌ [SCRATCH CARD] Claim failed:', error);
     sendError(res, error.message, 500);
   }
 });
@@ -298,7 +299,7 @@ export const checkEligibility = asyncHandler(async (req: Request, res: Response)
         : `Complete ${80 - completionPercentage}% more of your profile to unlock scratch cards!`
     }, 'Eligibility checked successfully');
   } catch (error: any) {
-    console.error('❌ [SCRATCH CARD] Eligibility check failed:', error);
+    logger.error('❌ [SCRATCH CARD] Eligibility check failed:', error);
     sendError(res, error.message, 500);
   }
 });

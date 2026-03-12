@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * OCR Service - Bill Text Extraction
  *
@@ -48,7 +49,7 @@ class OCRService {
 
     if (this.googleApiKey) {
       this.provider = 'google';
-      console.log('✅ [OCR SERVICE] Using Google Cloud Vision API');
+      logger.info('✅ [OCR SERVICE] Using Google Cloud Vision API');
     } else if (
       process.env.AWS_ACCESS_KEY_ID &&
       process.env.AWS_SECRET_ACCESS_KEY &&
@@ -60,10 +61,10 @@ class OCRService {
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
         region: process.env.AWS_REGION,
       };
-      console.log('✅ [OCR SERVICE] Using AWS Textract');
+      logger.info('✅ [OCR SERVICE] Using AWS Textract');
     } else {
       this.provider = 'manual';
-      console.warn('⚠️ [OCR SERVICE] No OCR provider configured, using manual extraction');
+      logger.warn('⚠️ [OCR SERVICE] No OCR provider configured, using manual extraction');
     }
   }
 
@@ -74,8 +75,8 @@ class OCRService {
     const startTime = Date.now();
 
     try {
-      console.log(`📸 [OCR] Extracting text from bill image...`);
-      console.log(`Provider: ${this.provider}`);
+      logger.info(`📸 [OCR] Extracting text from bill image...`);
+      logger.info(`Provider: ${this.provider}`);
 
       let result: OCRResult;
 
@@ -92,12 +93,12 @@ class OCRService {
       }
 
       const processingTime = Date.now() - startTime;
-      console.log(`✅ [OCR] Text extraction completed in ${processingTime}ms`);
-      console.log(`Confidence: ${result.confidence || 0}%`);
+      logger.info(`✅ [OCR] Text extraction completed in ${processingTime}ms`);
+      logger.info(`Confidence: ${result.confidence || 0}%`);
 
       return result;
     } catch (error) {
-      console.error('❌ [OCR] Text extraction failed:', error);
+      logger.error('❌ [OCR] Text extraction failed:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'OCR extraction failed',
@@ -110,7 +111,7 @@ class OCRService {
    */
   private async extractWithGoogleVision(imageUrl: string): Promise<OCRResult> {
     try {
-      console.log('📤 [GOOGLE VISION] Sending request...');
+      logger.info('📤 [GOOGLE VISION] Sending request...');
 
       const response = await axios.post(
         `https://vision.googleapis.com/v1/images:annotate?key=${this.googleApiKey}`,
@@ -149,8 +150,8 @@ class OCRService {
       // Get full text
       const rawText = annotations.fullTextAnnotation?.text || annotations.textAnnotations[0].description;
 
-      console.log('📄 [GOOGLE VISION] Raw text extracted:');
-      console.log(rawText);
+      logger.info('📄 [GOOGLE VISION] Raw text extracted:');
+      logger.info(rawText);
 
       // Parse the text to extract bill details
       const extractedData = this.parseTextToBillData(rawText);
@@ -167,7 +168,7 @@ class OCRService {
         rawText,
       };
     } catch (error) {
-      console.error('❌ [GOOGLE VISION] Error:', error);
+      logger.error('❌ [GOOGLE VISION] Error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Google Vision API error',
@@ -180,7 +181,7 @@ class OCRService {
    */
   private async extractWithAWSTextract(imageUrl: string): Promise<OCRResult> {
     try {
-      console.log('📤 [AWS TEXTRACT] Sending request...');
+      logger.info('📤 [AWS TEXTRACT] Sending request...');
 
       // Note: This is a simplified version. In production, use AWS SDK
       // npm install aws-sdk
@@ -216,8 +217,8 @@ class OCRService {
         });
       }
 
-      console.log('📄 [AWS TEXTRACT] Raw text extracted:');
-      console.log(rawText);
+      logger.info('📄 [AWS TEXTRACT] Raw text extracted:');
+      logger.info(rawText);
 
       // Parse the text to extract bill details
       const extractedData = this.parseTextToBillData(rawText);
@@ -232,7 +233,7 @@ class OCRService {
         rawText,
       };
     } catch (error) {
-      console.error('❌ [AWS TEXTRACT] Error:', error);
+      logger.error('❌ [AWS TEXTRACT] Error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'AWS Textract error',
@@ -244,7 +245,7 @@ class OCRService {
    * Manual extraction (fallback)
    */
   private manualExtraction(): OCRResult {
-    console.log('⚠️ [MANUAL] No OCR provider available, returning empty result');
+    logger.info('⚠️ [MANUAL] No OCR provider available, returning empty result');
     return {
       success: true,
       extractedData: {},
@@ -323,7 +324,7 @@ class OCRService {
             break;
           }
         } catch (error) {
-          console.error('Error parsing date:', error);
+          logger.error('Error parsing date:', error);
         }
       }
     }
@@ -387,8 +388,8 @@ class OCRService {
     const confidenceScore = (fieldsExtracted / 4) * 100;
     extractedData.confidence = Math.round(confidenceScore);
 
-    console.log('📊 [OCR PARSER] Extracted data:');
-    console.log(JSON.stringify(extractedData, null, 2));
+    logger.info('📊 [OCR PARSER] Extracted data:');
+    logger.info(JSON.stringify(extractedData, null, 2));
 
     return extractedData;
   }

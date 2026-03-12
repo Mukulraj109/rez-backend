@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { Order } from '../../models/Order';
@@ -182,7 +183,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       data: stats
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN DASHBOARD] Error fetching stats:', error);
+    logger.error('❌ [ADMIN DASHBOARD] Error fetching stats:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch dashboard stats'
@@ -221,7 +222,7 @@ router.get('/recent-activity', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN DASHBOARD] Error fetching recent activity:', error);
+    logger.error('❌ [ADMIN DASHBOARD] Error fetching recent activity:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch recent activity'

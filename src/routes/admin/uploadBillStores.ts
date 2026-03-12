@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Upload Bill Stores
  * CRUD for UploadBillStore model
@@ -40,7 +41,7 @@ router.get('/', async (req: Request, res: Response) => {
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     }, 'Upload bill stores fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching upload bill stores:', error);
+    logger.error('[Admin] Error fetching upload bill stores:', error);
     return sendError(res, 'Failed to fetch upload bill stores', 500);
   }
 });
@@ -55,7 +56,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     if (!store) return sendError(res, 'Upload bill store not found', 404);
     return sendSuccess(res, store, 'Upload bill store fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching upload bill store:', error);
+    logger.error('[Admin] Error fetching upload bill store:', error);
     return sendError(res, 'Failed to fetch upload bill store', 500);
   }
 });
@@ -73,7 +74,7 @@ router.post('/', async (req: Request, res: Response) => {
     const store = await UploadBillStore.create({ ...req.body });
     return sendSuccess(res, store, 'Upload bill store created');
   } catch (error) {
-    console.error('[Admin] Error creating upload bill store:', error);
+    logger.error('[Admin] Error creating upload bill store:', error);
     return sendError(res, 'Failed to create upload bill store', 500);
   }
 });
@@ -88,7 +89,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (!store) return sendError(res, 'Upload bill store not found', 404);
     return sendSuccess(res, store, 'Upload bill store updated');
   } catch (error) {
-    console.error('[Admin] Error updating upload bill store:', error);
+    logger.error('[Admin] Error updating upload bill store:', error);
     return sendError(res, 'Failed to update upload bill store', 500);
   }
 });
@@ -105,7 +106,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
     await store.save();
     return sendSuccess(res, store, `Upload bill store ${store.isActive ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling upload bill store:', error);
+    logger.error('[Admin] Error toggling upload bill store:', error);
     return sendError(res, 'Failed to toggle upload bill store', 500);
   }
 });
@@ -120,7 +121,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     if (!store) return sendError(res, 'Upload bill store not found', 404);
     return sendSuccess(res, null, 'Upload bill store deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting upload bill store:', error);
+    logger.error('[Admin] Error deleting upload bill store:', error);
     return sendError(res, 'Failed to delete upload bill store', 500);
   }
 });

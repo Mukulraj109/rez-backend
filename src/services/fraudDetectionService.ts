@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Fraud Detection Service
  * Implements anti-fraud rules for bill uploads
@@ -29,7 +30,7 @@ class FraudDetectionService {
    * Run all fraud checks on a bill
    */
   async checkBillFraud(billData: BillData): Promise<FraudCheckResult> {
-    console.log('🔍 [FRAUD DETECTION] Running fraud checks...');
+    logger.info('🔍 [FRAUD DETECTION] Running fraud checks...');
 
     const result: FraudCheckResult = {
       isFraudulent: false,
@@ -56,9 +57,9 @@ class FraudDetectionService {
       result.isFraudulent = true;
     }
 
-    console.log(`📊 [FRAUD DETECTION] Fraud score: ${result.fraudScore}/100`);
-    console.log(`🚩 Flags: ${result.flags.length}`);
-    console.log(`⚠️ Warnings: ${result.warnings.length}`);
+    logger.info(`📊 [FRAUD DETECTION] Fraud score: ${result.fraudScore}/100`);
+    logger.info(`🚩 Flags: ${result.flags.length}`);
+    logger.info(`⚠️ Warnings: ${result.warnings.length}`);
 
     return result;
   }
@@ -87,7 +88,7 @@ class FraudDetectionService {
       if (duplicate) {
         result.flags.push('DUPLICATE_BILL');
         result.fraudScore += 50;
-        console.log('🚩 [FRAUD] Duplicate bill detected');
+        logger.info('🚩 [FRAUD] Duplicate bill detected');
       }
 
       // Check for same bill number
@@ -102,11 +103,11 @@ class FraudDetectionService {
         if (sameBillNumber) {
           result.flags.push('DUPLICATE_BILL_NUMBER');
           result.fraudScore += 40;
-          console.log('🚩 [FRAUD] Duplicate bill number detected');
+          logger.info('🚩 [FRAUD] Duplicate bill number detected');
         }
       }
     } catch (error) {
-      console.error('Error checking duplicate bill:', error);
+      logger.error('Error checking duplicate bill:', error);
     }
   }
 
@@ -130,10 +131,10 @@ class FraudDetectionService {
       if (sameImage) {
         result.flags.push('DUPLICATE_IMAGE');
         result.fraudScore += 60;
-        console.log('🚩 [FRAUD] Duplicate image detected');
+        logger.info('🚩 [FRAUD] Duplicate image detected');
       }
     } catch (error) {
-      console.error('Error checking duplicate image:', error);
+      logger.error('Error checking duplicate image:', error);
     }
   }
 
@@ -158,7 +159,7 @@ class FraudDetectionService {
       if (billsLastHour >= 5) {
         result.flags.push('HIGH_FREQUENCY_UPLOADS');
         result.fraudScore += 30;
-        console.log('🚩 [FRAUD] High frequency uploads detected');
+        logger.info('🚩 [FRAUD] High frequency uploads detected');
       }
 
       // Count bills uploaded in last 24 hours
@@ -171,12 +172,12 @@ class FraudDetectionService {
       if (billsLastDay >= 20) {
         result.flags.push('EXCESSIVE_DAILY_UPLOADS');
         result.fraudScore += 20;
-        console.log('⚠️ [FRAUD] Excessive daily uploads detected');
+        logger.info('⚠️ [FRAUD] Excessive daily uploads detected');
       } else if (billsLastDay >= 10) {
         result.warnings.push('High number of bills uploaded today');
       }
     } catch (error) {
-      console.error('Error checking upload frequency:', error);
+      logger.error('Error checking upload frequency:', error);
     }
   }
 
@@ -217,7 +218,7 @@ class FraudDetectionService {
         }
       }
     } catch (error) {
-      console.error('Error checking amount suspicion:', error);
+      logger.error('Error checking amount suspicion:', error);
     }
   }
 
@@ -236,14 +237,14 @@ class FraudDetectionService {
       if (billAge < 0) {
         result.flags.push('FUTURE_DATED_BILL');
         result.fraudScore += 40;
-        console.log('🚩 [FRAUD] Future-dated bill detected');
+        logger.info('🚩 [FRAUD] Future-dated bill detected');
       }
 
       // Bill too old (> 30 days)
       if (billAge > 30) {
         result.flags.push('EXPIRED_BILL');
         result.fraudScore += 30;
-        console.log('🚩 [FRAUD] Expired bill detected (>30 days old)');
+        logger.info('🚩 [FRAUD] Expired bill detected (>30 days old)');
       }
 
       // Bill very recent (< 1 hour) - might be photoshopped
@@ -253,7 +254,7 @@ class FraudDetectionService {
         result.fraudScore += 5;
       }
     } catch (error) {
-      console.error('Error checking bill age:', error);
+      logger.error('Error checking bill age:', error);
     }
   }
 
@@ -278,10 +279,10 @@ class FraudDetectionService {
       if (recentBills.length >= 5) {
         result.flags.push('MULTIPLE_MERCHANTS_VELOCITY');
         result.fraudScore += 25;
-        console.log('🚩 [FRAUD] Multiple merchants velocity detected');
+        logger.info('🚩 [FRAUD] Multiple merchants velocity detected');
       }
     } catch (error) {
-      console.error('Error checking multiple merchants:', error);
+      logger.error('Error checking multiple merchants:', error);
     }
   }
 
@@ -311,7 +312,7 @@ class FraudDetectionService {
 
       return !!duplicate;
     } catch (error) {
-      console.error('Error checking cross-user duplicate:', error);
+      logger.error('Error checking cross-user duplicate:', error);
       return false;
     }
   }
@@ -355,7 +356,7 @@ class FraudDetectionService {
         recentFlags: [...new Set(recentFlags)], // Remove duplicates
       };
     } catch (error) {
-      console.error('Error getting user fraud history:', error);
+      logger.error('Error getting user fraud history:', error);
       return {
         totalFlagged: 0,
         totalRejected: 0,

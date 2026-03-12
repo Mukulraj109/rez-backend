@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import * as cron from 'node-cron';
 import { TableBooking } from '../models/TableBooking';
 import redisService from '../services/redisService';
@@ -23,7 +24,7 @@ async function processExpiredTableBookings(): Promise<number> {
     const count = await TableBooking.markNoShows({}, 1);
     return count;
   } catch (error: any) {
-    console.error('❌ [TABLE BOOKING EXPIRY] Error processing expired bookings:', error);
+    logger.error('❌ [TABLE BOOKING EXPIRY] Error processing expired bookings:', error);
     throw error;
   }
 }
@@ -33,15 +34,15 @@ async function processExpiredTableBookings(): Promise<number> {
  */
 export function startTableBookingExpiryJob(): void {
   if (expiryJob) {
-    console.log('⚠️ [TABLE BOOKING EXPIRY] Job already running');
+    logger.info('⚠️ [TABLE BOOKING EXPIRY] Job already running');
     return;
   }
 
-  console.log(`📅 [TABLE BOOKING EXPIRY] Starting table booking expiry job (runs every 30 min)`);
+  logger.info(`📅 [TABLE BOOKING EXPIRY] Starting table booking expiry job (runs every 30 min)`);
 
   expiryJob = cron.schedule(CRON_SCHEDULE, async () => {
     if (isRunning) {
-      console.log('⏭️ [TABLE BOOKING EXPIRY] Previous job still running, skipping');
+      logger.info('⏭️ [TABLE BOOKING EXPIRY] Previous job still running, skipping');
       return;
     }
 
@@ -49,7 +50,7 @@ export function startTableBookingExpiryJob(): void {
     const lockKey = 'job:table-booking-expiry';
     const lockToken = await redisService.acquireLock(lockKey, 300);
     if (!lockToken) {
-      console.log('table-booking-expiry skipped — lock held by another instance');
+      logger.info('table-booking-expiry skipped — lock held by another instance');
       return;
     }
 
@@ -61,7 +62,7 @@ export function startTableBookingExpiryJob(): void {
       const duration = Date.now() - startTime;
 
       if (count > 0) {
-        console.log('✅ [TABLE BOOKING EXPIRY] Job completed:', {
+        logger.info('✅ [TABLE BOOKING EXPIRY] Job completed:', {
           duration: `${duration}ms`,
           expiredCount: count,
           timestamp: new Date().toISOString()
@@ -69,7 +70,7 @@ export function startTableBookingExpiryJob(): void {
       }
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error('❌ [TABLE BOOKING EXPIRY] Job failed:', {
+      logger.error('❌ [TABLE BOOKING EXPIRY] Job failed:', {
         duration: `${duration}ms`,
         error: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString()
@@ -80,7 +81,7 @@ export function startTableBookingExpiryJob(): void {
     }
   });
 
-  console.log('✅ [TABLE BOOKING EXPIRY] Job started successfully');
+  logger.info('✅ [TABLE BOOKING EXPIRY] Job started successfully');
 }
 
 /**
@@ -90,7 +91,7 @@ export function stopTableBookingExpiryJob(): void {
   if (expiryJob) {
     expiryJob.stop();
     expiryJob = null;
-    console.log('🛑 [TABLE BOOKING EXPIRY] Job stopped');
+    logger.info('🛑 [TABLE BOOKING EXPIRY] Job stopped');
   }
 }
 
@@ -102,12 +103,12 @@ export async function triggerManualTableBookingExpiry(): Promise<number> {
     throw new Error('Expiry already in progress');
   }
 
-  console.log('📅 [TABLE BOOKING EXPIRY] Manual expiry triggered');
+  logger.info('📅 [TABLE BOOKING EXPIRY] Manual expiry triggered');
   isRunning = true;
 
   try {
     const count = await processExpiredTableBookings();
-    console.log('✅ [TABLE BOOKING EXPIRY] Manual expiry completed:', { expiredCount: count });
+    logger.info('✅ [TABLE BOOKING EXPIRY] Manual expiry completed:', { expiredCount: count });
     return count;
   } finally {
     isRunning = false;

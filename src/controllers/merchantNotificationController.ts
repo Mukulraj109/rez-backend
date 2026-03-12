@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { Notification } from '../models/Notification';
@@ -204,7 +205,7 @@ export const getMerchantNotifications = asyncHandler(async (req: Request, res: R
       }
     }, 'Notifications retrieved successfully');
   } catch (error: any) {
-    console.error('Get merchant notifications error:', error);
+    logger.error('Get merchant notifications error:', error);
     throw new AppError(error.message || 'Failed to fetch notifications', 500);
   }
 });
@@ -302,7 +303,7 @@ export const markMultipleAsRead = asyncHandler(async (req: Request, res: Respons
         timestamp: new Date()
       });
     } catch (socketError) {
-      console.error('Socket emit error:', socketError);
+      logger.error('Socket emit error:', socketError);
     }
 
     sendSuccess(res, {
@@ -349,7 +350,7 @@ export const deleteMultipleNotifications = asyncHandler(async (req: Request, res
         timestamp: new Date()
       });
     } catch (socketError) {
-      console.error('Socket emit error:', socketError);
+      logger.error('Socket emit error:', socketError);
     }
 
     sendSuccess(res, {
@@ -395,7 +396,7 @@ export const archiveNotification = asyncHandler(async (req: Request, res: Respon
         timestamp: new Date()
       });
     } catch (socketError) {
-      console.error('Socket emit error:', socketError);
+      logger.error('Socket emit error:', socketError);
     }
 
     sendSuccess(res, {
@@ -449,7 +450,7 @@ export const clearAllNotifications = asyncHandler(async (req: Request, res: Resp
         timestamp: new Date()
       });
     } catch (socketError) {
-      console.error('Socket emit error:', socketError);
+      logger.error('Socket emit error:', socketError);
       // Don't fail the request if socket fails
     }
 
@@ -457,7 +458,7 @@ export const clearAllNotifications = asyncHandler(async (req: Request, res: Resp
       cleared: result.modifiedCount || 0
     }, `${result.modifiedCount || 0} notification(s) cleared`);
   } catch (error: any) {
-    console.error('Clear all notifications error:', error);
+    logger.error('Clear all notifications error:', error);
     throw new AppError(error.message || 'Failed to clear notifications', 500);
   }
 });
@@ -538,7 +539,7 @@ export const sendTestNotification = asyncHandler(async (req: Request, res: Respo
         timestamp: new Date()
       });
     } catch (socketError) {
-      console.error('Socket emit error:', socketError);
+      logger.error('Socket emit error:', socketError);
     }
 
     sendSuccess(res, {
@@ -697,7 +698,7 @@ export const markNotificationAsRead = asyncHandler(async (req: Request, res: Res
         timestamp: new Date()
       });
     } catch (socketError) {
-      console.error('Socket emit error:', socketError);
+      logger.error('Socket emit error:', socketError);
     }
 
     // Transform notification for frontend
@@ -746,7 +747,7 @@ export const deleteNotification = asyncHandler(async (req: Request, res: Respons
         timestamp: new Date()
       });
     } catch (socketError) {
-      console.error('Socket emit error:', socketError);
+      logger.error('Socket emit error:', socketError);
     }
 
     sendSuccess(res, {
@@ -879,7 +880,7 @@ export const getNotificationStats = asyncHandler(async (req: Request, res: Respo
 
     return sendSuccess(res, stats, 'Notification statistics retrieved successfully');
   } catch (error: any) {
-    console.error('Get notification stats error:', error);
+    logger.error('Get notification stats error:', error);
     throw new AppError(error.message || 'Failed to fetch notification statistics', 500);
   }
 });
@@ -911,7 +912,7 @@ export const subscribeToEmail = asyncHandler(async (req: Request, res: Response)
         timestamp: new Date()
       });
     } catch (socketError) {
-      console.error('Socket emit error:', socketError);
+      logger.error('Socket emit error:', socketError);
     }
 
     sendSuccess(res, {
@@ -950,7 +951,7 @@ export const unsubscribeFromEmail = asyncHandler(async (req: Request, res: Respo
         timestamp: new Date()
       });
     } catch (socketError) {
-      console.error('Socket emit error:', socketError);
+      logger.error('Socket emit error:', socketError);
     }
 
     sendSuccess(res, {
@@ -989,7 +990,7 @@ export const subscribeToSMS = asyncHandler(async (req: Request, res: Response) =
         timestamp: new Date()
       });
     } catch (socketError) {
-      console.error('Socket emit error:', socketError);
+      logger.error('Socket emit error:', socketError);
     }
 
     sendSuccess(res, {
@@ -1028,7 +1029,7 @@ export const unsubscribeFromSMS = asyncHandler(async (req: Request, res: Respons
         timestamp: new Date()
       });
     } catch (socketError) {
-      console.error('Socket emit error:', socketError);
+      logger.error('Socket emit error:', socketError);
     }
 
     sendSuccess(res, {
@@ -1064,7 +1065,7 @@ export const getUnreadCount = asyncHandler(async (req: Request, res: Response) =
       timestamp: new Date()
     }, 'Unread count retrieved successfully');
   } catch (error: any) {
-    console.error('Get unread count error:', error);
+    logger.error('Get unread count error:', error);
     throw new AppError(error.message || 'Failed to fetch unread count', 500);
   }
 });
@@ -1115,7 +1116,7 @@ export const markAllAsRead = asyncHandler(async (req: Request, res: Response) =>
         timestamp: new Date()
       });
     } catch (socketError) {
-      console.error('Socket emit error:', socketError);
+      logger.error('Socket emit error:', socketError);
       // Don't fail the request if socket fails
     }
 
@@ -1124,7 +1125,7 @@ export const markAllAsRead = asyncHandler(async (req: Request, res: Response) =>
       unreadCount: unreadCount || 0
     }, `All notifications marked as read (${result.modifiedCount || 0} updated)`);
   } catch (error: any) {
-    console.error('Mark all as read error:', error);
+    logger.error('Mark all as read error:', error);
     throw new AppError(error.message || 'Failed to mark all notifications as read', 500);
   }
 });

@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import express, { Request, Response } from 'express';
 import Joi from 'joi';
 import { Types } from 'mongoose';
@@ -84,7 +85,7 @@ router.get('/', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN] Get zone verifications error:', error);
+    logger.error('[ADMIN] Get zone verifications error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch verifications',
@@ -142,7 +143,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN] Get zone verification stats error:', error);
+    logger.error('[ADMIN] Get zone verification stats error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch stats',
@@ -184,7 +185,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       data: verification,
     });
   } catch (error: any) {
-    console.error('[ADMIN] Get zone verification error:', error);
+    logger.error('[ADMIN] Get zone verification error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch verification',
@@ -359,7 +360,7 @@ router.patch('/:id/review', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN] Review zone verification error:', error);
+    logger.error('[ADMIN] Review zone verification error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to review verification',
@@ -398,7 +399,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       message: 'Verification deleted',
     });
   } catch (error: any) {
-    console.error('[ADMIN] Delete zone verification error:', error);
+    logger.error('[ADMIN] Delete zone verification error:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to delete verification',

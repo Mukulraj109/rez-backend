@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
 // TableBooking interface
@@ -230,7 +231,7 @@ TableBookingSchema.statics.markNoShows = async function(
   );
 
   if (result.modifiedCount > 0) {
-    console.log(`📅 [TABLE BOOKING] Marked ${result.modifiedCount} bookings as no_show`);
+    logger.info(`📅 [TABLE BOOKING] Marked ${result.modifiedCount} bookings as no_show`);
   }
 
   return result.modifiedCount;

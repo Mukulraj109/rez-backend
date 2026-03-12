@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Comprehensive Audit Service for Merchant Backend
 // Tracks all merchant activities and changes
 
@@ -42,7 +43,7 @@ export class AuditService {
         severity: params.severity || 'info'
       });
     } catch (error) {
-      console.error('❌ [AUDIT] Logging failed:', error);
+      logger.error('❌ [AUDIT] Logging failed:', error);
       // Never throw - audit logging should not break the main flow
     }
   }

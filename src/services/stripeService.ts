@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { logger } from '../config/logger';
 
 class StripeService {
   private stripe: Stripe | null = null;
@@ -15,7 +16,7 @@ class StripeService {
     const secretKey = process.env.STRIPE_SECRET_KEY;
 
     if (!secretKey) {
-      console.warn('⚠️ [STRIPE SERVICE] STRIPE_SECRET_KEY not configured');
+      logger.warn('[STRIPE SERVICE] STRIPE_SECRET_KEY not configured');
       this.isConfigured = false;
       return;
     }
@@ -25,9 +26,9 @@ class StripeService {
         apiVersion: '2024-12-18.acacia' as any, // Latest stable Stripe API version
       });
       this.isConfigured = true;
-      console.log('✅ [STRIPE SERVICE] Stripe initialized successfully');
+      logger.info('[STRIPE SERVICE] Stripe initialized successfully');
     } catch (error: any) {
-      console.error('❌ [STRIPE SERVICE] Failed to initialize Stripe:', error.message);
+      logger.error('[STRIPE SERVICE] Failed to initialize Stripe', { error: error.message });
       this.isConfigured = false;
     }
   }
@@ -56,7 +57,7 @@ class StripeService {
       throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY in environment variables.');
     }
 
-    console.log('💳 [STRIPE SERVICE] Creating checkout session:', {
+    logger.info('[STRIPE SERVICE] Creating checkout session', {
       subscriptionId: params.subscriptionId,
       tier: params.tier,
       amount: params.amount,
@@ -95,11 +96,11 @@ class StripeService {
         },
       });
 
-      console.log('✅ [STRIPE SERVICE] Checkout session created:', session.id);
+      logger.info('[STRIPE SERVICE] Checkout session created', { sessionId: session.id });
 
       return session;
     } catch (error: any) {
-      console.error('❌ [STRIPE SERVICE] Error creating checkout session:', error.message);
+      logger.error('[STRIPE SERVICE] Error creating checkout session', { error: error.message });
       throw new Error(`Failed to create Stripe checkout session: ${error.message}`);
     }
   }
@@ -128,7 +129,7 @@ class StripeService {
       throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY in environment variables.');
     }
 
-    console.log('💳 [STRIPE SERVICE] Creating checkout session for order:', {
+    logger.info('[STRIPE SERVICE] Creating checkout session for order', {
       orderId: params.orderId,
       amount: params.amount,
       itemCount: params.items?.length,
@@ -192,11 +193,11 @@ class StripeService {
         },
       });
 
-      console.log('✅ [STRIPE SERVICE] Order checkout session created:', session.id);
+      logger.info('[STRIPE SERVICE] Order checkout session created', { sessionId: session.id });
 
       return session;
     } catch (error: any) {
-      console.error('❌ [STRIPE SERVICE] Error creating order checkout session:', error.message);
+      logger.error('[STRIPE SERVICE] Error creating order checkout session', { error: error.message });
       throw new Error(`Failed to create Stripe checkout session for order: ${error.message}`);
     }
   }
@@ -213,7 +214,7 @@ class StripeService {
       const session = await this.stripe.checkout.sessions.retrieve(sessionId);
       return session;
     } catch (error: any) {
-      console.error('❌ [STRIPE SERVICE] Error retrieving checkout session:', error.message);
+      logger.error('[STRIPE SERVICE] Error retrieving checkout session', { error: error.message });
       throw new Error(`Failed to retrieve checkout session: ${error.message}`);
     }
   }
@@ -239,11 +240,11 @@ class StripeService {
         metadata: params.metadata || {},
       });
 
-      console.log('✅ [STRIPE SERVICE] Payment intent created:', paymentIntent.id);
+      logger.info('[STRIPE SERVICE] Payment intent created', { paymentIntentId: paymentIntent.id });
 
       return paymentIntent;
     } catch (error: any) {
-      console.error('❌ [STRIPE SERVICE] Error creating payment intent:', error.message);
+      logger.error('[STRIPE SERVICE] Error creating payment intent', { error: error.message });
       throw new Error(`Failed to create payment intent: ${error.message}`);
     }
   }
@@ -258,10 +259,10 @@ class StripeService {
 
     try {
       const paymentIntent = await this.stripe.paymentIntents.retrieve(paymentIntentId);
-      console.log('✅ [STRIPE SERVICE] Payment intent retrieved:', paymentIntent.id);
+      logger.info('[STRIPE SERVICE] Payment intent retrieved', { paymentIntentId: paymentIntent.id });
       return paymentIntent;
     } catch (error: any) {
-      console.error('❌ [STRIPE SERVICE] Error retrieving payment intent:', error.message);
+      logger.error('[STRIPE SERVICE] Error retrieving payment intent', { error: error.message });
       throw new Error(`Failed to retrieve payment intent: ${error.message}`);
     }
   }
@@ -276,15 +277,15 @@ class StripeService {
 
     try {
       const paymentIntent = await this.stripe.paymentIntents.cancel(paymentIntentId);
-      console.log('✅ [STRIPE SERVICE] Payment intent cancelled:', paymentIntent.id);
+      logger.info('[STRIPE SERVICE] Payment intent cancelled', { paymentIntentId: paymentIntent.id });
       return paymentIntent;
     } catch (error: any) {
       // If already cancelled or in terminal state, that's OK
       if (error.code === 'payment_intent_unexpected_state') {
-        console.log('⚠️ [STRIPE SERVICE] Payment intent already in terminal state');
+        logger.warn('[STRIPE SERVICE] Payment intent already in terminal state');
         return await this.stripe.paymentIntents.retrieve(paymentIntentId);
       }
-      console.error('❌ [STRIPE SERVICE] Error cancelling payment intent:', error.message);
+      logger.error('[STRIPE SERVICE] Error cancelling payment intent', { error: error.message });
       throw new Error(`Failed to cancel payment intent: ${error.message}`);
     }
   }
@@ -305,17 +306,17 @@ class StripeService {
     }
 
     try {
-      console.log('🔐 [STRIPE SERVICE] Verifying payment intent:', paymentIntentId);
+      logger.info('[STRIPE SERVICE] Verifying payment intent', { paymentIntentId });
 
       const paymentIntent = await this.stripe.paymentIntents.retrieve(paymentIntentId);
 
       const verified = paymentIntent.status === 'succeeded';
 
-      console.log(
-        verified
-          ? '✅ [STRIPE SERVICE] Payment intent verified successfully'
-          : `⚠️ [STRIPE SERVICE] Payment intent status: ${paymentIntent.status}`
-      );
+      if (verified) {
+        logger.info('[STRIPE SERVICE] Payment intent verified successfully', { paymentIntentId });
+      } else {
+        logger.warn('[STRIPE SERVICE] Payment intent not verified', { paymentIntentId, status: paymentIntent.status });
+      }
 
       return {
         verified,
@@ -325,7 +326,7 @@ class StripeService {
         metadata: paymentIntent.metadata as Record<string, string>,
       };
     } catch (error: any) {
-      console.error('❌ [STRIPE SERVICE] Error verifying payment intent:', error.message);
+      logger.error('[STRIPE SERVICE] Error verifying payment intent', { error: error.message });
       throw new Error(`Failed to verify payment intent: ${error.message}`);
     }
   }
@@ -346,17 +347,17 @@ class StripeService {
     }
 
     try {
-      console.log('🔐 [STRIPE SERVICE] Verifying checkout session:', sessionId);
+      logger.info('[STRIPE SERVICE] Verifying checkout session', { sessionId });
 
       const session = await this.stripe.checkout.sessions.retrieve(sessionId);
 
       const verified = session.payment_status === 'paid';
 
-      console.log(
-        verified
-          ? '✅ [STRIPE SERVICE] Checkout session verified successfully'
-          : `⚠️ [STRIPE SERVICE] Payment status: ${session.payment_status}`
-      );
+      if (verified) {
+        logger.info('[STRIPE SERVICE] Checkout session verified successfully', { sessionId });
+      } else {
+        logger.warn('[STRIPE SERVICE] Checkout session not verified', { sessionId, paymentStatus: session.payment_status });
+      }
 
       return {
         verified,
@@ -367,7 +368,7 @@ class StripeService {
         paymentIntentId: session.payment_intent as string,
       };
     } catch (error: any) {
-      console.error('❌ [STRIPE SERVICE] Error verifying checkout session:', error.message);
+      logger.error('[STRIPE SERVICE] Error verifying checkout session', { error: error.message });
       throw new Error(`Failed to verify checkout session: ${error.message}`);
     }
   }
@@ -393,10 +394,10 @@ class StripeService {
 
     try {
       const event = this.stripe.webhooks.constructEvent(payload, signature, secret);
-      console.log('✅ [STRIPE SERVICE] Webhook signature verified:', event.type);
+      logger.info('[STRIPE SERVICE] Webhook signature verified', { eventType: event.type });
       return event;
     } catch (error: any) {
-      console.error('❌ [STRIPE SERVICE] Webhook signature verification failed:', error.message);
+      logger.error('[STRIPE SERVICE] Webhook signature verification failed', { error: error.message });
       throw new Error(`Webhook signature verification failed: ${error.message}`);
     }
   }
@@ -415,7 +416,7 @@ class StripeService {
     }
 
     try {
-      console.log('💸 [STRIPE SERVICE] Creating refund for payment:', params.paymentIntentId);
+      logger.info('[STRIPE SERVICE] Creating refund for payment', { paymentIntentId: params.paymentIntentId });
 
       const refund = await this.stripe.refunds.create({
         payment_intent: params.paymentIntentId,
@@ -424,11 +425,11 @@ class StripeService {
         metadata: params.metadata,
       });
 
-      console.log('✅ [STRIPE SERVICE] Refund created:', refund.id);
+      logger.info('[STRIPE SERVICE] Refund created', { refundId: refund.id });
 
       return refund;
     } catch (error: any) {
-      console.error('❌ [STRIPE SERVICE] Error creating refund:', error.message);
+      logger.error('[STRIPE SERVICE] Error creating refund', { error: error.message });
       throw new Error(`Failed to create refund: ${error.message}`);
     }
   }
@@ -449,11 +450,11 @@ class StripeService {
     }
 
     try {
-      console.log('🔍 [STRIPE SERVICE] Retrieving refund status:', refundId);
+      logger.info('[STRIPE SERVICE] Retrieving refund status', { refundId });
 
       const refund = await this.stripe.refunds.retrieve(refundId);
 
-      console.log('✅ [STRIPE SERVICE] Refund status retrieved:', refund.status);
+      logger.info('[STRIPE SERVICE] Refund status retrieved', { refundId, status: refund.status });
 
       return {
         id: refund.id,
@@ -464,7 +465,7 @@ class StripeService {
         reason: refund.reason,
       };
     } catch (error: any) {
-      console.error('❌ [STRIPE SERVICE] Error retrieving refund:', error.message);
+      logger.error('[STRIPE SERVICE] Error retrieving refund', { error: error.message });
       throw new Error(`Failed to retrieve refund: ${error.message}`);
     }
   }
@@ -481,18 +482,18 @@ class StripeService {
     }
 
     try {
-      console.log('🚫 [STRIPE SERVICE] Cancelling refund:', refundId);
+      logger.info('[STRIPE SERVICE] Cancelling refund', { refundId });
 
       const refund = await this.stripe.refunds.cancel(refundId);
 
-      console.log('✅ [STRIPE SERVICE] Refund cancelled:', refund.id);
+      logger.info('[STRIPE SERVICE] Refund cancelled', { refundId: refund.id });
 
       return {
         id: refund.id,
         status: refund.status || 'unknown',
       };
     } catch (error: any) {
-      console.error('❌ [STRIPE SERVICE] Error cancelling refund:', error.message);
+      logger.error('[STRIPE SERVICE] Error cancelling refund', { error: error.message });
       throw new Error(`Failed to cancel refund: ${error.message}`);
     }
   }
@@ -531,7 +532,7 @@ class StripeService {
       throw new Error('Invalid payment amount. Amount must be greater than 0.');
     }
 
-    console.log('💳 [STRIPE SERVICE] Creating deal purchase checkout session:', {
+    logger.info('[STRIPE SERVICE] Creating deal purchase checkout session', {
       campaignSlug: params.campaignSlug,
       dealIndex: params.dealIndex,
       amount: params.amount,
@@ -585,11 +586,11 @@ class StripeService {
         expires_at: Math.floor(Date.now() / 1000) + (60 * 60), // 60 minutes expiry for mobile users
       });
 
-      console.log('✅ [STRIPE SERVICE] Deal purchase checkout session created:', session.id);
+      logger.info('[STRIPE SERVICE] Deal purchase checkout session created', { sessionId: session.id });
 
       return session;
     } catch (error: any) {
-      console.error('❌ [STRIPE SERVICE] Error creating deal purchase checkout session:', error.message);
+      logger.error('[STRIPE SERVICE] Error creating deal purchase checkout session', { error: error.message });
       throw new Error(`Failed to create deal purchase checkout session: ${error.message}`);
     }
   }
@@ -614,18 +615,18 @@ class StripeService {
     }
 
     try {
-      console.log('🔐 [STRIPE SERVICE] Verifying deal purchase session:', sessionId);
+      logger.info('[STRIPE SERVICE] Verifying deal purchase session', { sessionId });
 
       const session = await this.stripe.checkout.sessions.retrieve(sessionId);
 
       const verified = session.payment_status === 'paid';
       const metadata = session.metadata || {};
 
-      console.log(
-        verified
-          ? '✅ [STRIPE SERVICE] Deal purchase session verified successfully'
-          : `⚠️ [STRIPE SERVICE] Deal payment status: ${session.payment_status}`
-      );
+      if (verified) {
+        logger.info('[STRIPE SERVICE] Deal purchase session verified successfully', { sessionId });
+      } else {
+        logger.warn('[STRIPE SERVICE] Deal purchase session not verified', { sessionId, paymentStatus: session.payment_status });
+      }
 
       return {
         verified,
@@ -640,7 +641,7 @@ class StripeService {
         paymentIntentId: session.payment_intent as string,
       };
     } catch (error: any) {
-      console.error('❌ [STRIPE SERVICE] Error verifying deal purchase session:', error.message);
+      logger.error('[STRIPE SERVICE] Error verifying deal purchase session', { error: error.message });
       throw new Error(`Failed to verify deal purchase session: ${error.message}`);
     }
   }

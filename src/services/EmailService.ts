@@ -1,4 +1,6 @@
+import { logger } from '../config/logger';
 import sgMail from '@sendgrid/mail';
+import { BRAND } from '../config/brand';
 
 // Configure SendGrid - only if valid API key is provided
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY;
@@ -7,7 +9,7 @@ const isValidSendGridKey: boolean = !!(SENDGRID_API_KEY && SENDGRID_API_KEY.star
 if (isValidSendGridKey && SENDGRID_API_KEY) {
   sgMail.setApiKey(SENDGRID_API_KEY);
 } else if (SENDGRID_API_KEY && !SENDGRID_API_KEY.startsWith('SG.')) {
-  console.log('⚠️ SendGrid API key is invalid (must start with "SG."). Email service disabled.');
+  logger.info('⚠️ SendGrid API key is invalid (must start with "SG."). Email service disabled.');
 }
 
 export interface EmailOptions {
@@ -31,13 +33,13 @@ export class EmailService {
     try {
       // Check if SendGrid is properly configured with a valid key
       if (!isValidSendGridKey) {
-        console.log('\n📧 EMAIL (SendGrid not configured - logging to console):');
-        console.log('═══════════════════════════════════════════════════════');
-        console.log(`To: ${Array.isArray(options.to) ? options.to.join(', ') : options.to}`);
-        console.log(`Subject: ${options.subject}`);
-        if (options.text) console.log(`Text: ${options.text}`);
-        if (options.html) console.log(`HTML: ${options.html.substring(0, 200)}...`);
-        console.log('═══════════════════════════════════════════════════════\n');
+        logger.info('\n📧 EMAIL (SendGrid not configured - logging to console):');
+        logger.info('═══════════════════════════════════════════════════════');
+        logger.info(`To: ${Array.isArray(options.to) ? options.to.join(', ') : options.to}`);
+        logger.info(`Subject: ${options.subject}`);
+        if (options.text) logger.info(`Text: ${options.text}`);
+        if (options.html) logger.info(`HTML: ${options.html.substring(0, 200)}...`);
+        logger.info('═══════════════════════════════════════════════════════\n');
         return;
       }
 
@@ -57,11 +59,11 @@ export class EmailService {
       };
 
       await sgMail.send(msg);
-      console.log(`✅ Email sent successfully to ${options.to}`);
+      logger.info(`✅ Email sent successfully to ${options.to}`);
     } catch (error: any) {
-      console.error('❌ Email send error:', error);
+      logger.error('❌ Email send error:', error);
       if (error.response) {
-        console.error('SendGrid error response:', error.response.body);
+        logger.error('SendGrid error response:', error.response.body);
       }
       throw new Error(`Failed to send email: ${error.message}`);
     }
@@ -1034,10 +1036,10 @@ export class EmailService {
               </ul>
             </div>
             <p>If you have any questions or concerns, please contact our support team.</p>
-            <p>Best regards,<br>Rez App Team</p>
+            <p>Best regards,<br>${BRAND.APP_NAME} Team</p>
           </div>
           <div class="footer">
-            <p>© ${new Date().getFullYear()} Rez App. All rights reserved.</p>
+            <p>© ${new Date().getFullYear()} ${BRAND.APP_NAME}. All rights reserved.</p>
           </div>
         </div>
       </body>
@@ -1046,7 +1048,7 @@ export class EmailService {
 
     await this.send({
       to: userEmail,
-      subject: `${otp} is your Rez App verification code`,
+      subject: `${otp} is your ${BRAND.APP_NAME} verification code`,
       html,
       text: `Your OTP is: ${otp}\n\nThis code will expire in 10 minutes.\n\nNever share this code with anyone.`,
     });
@@ -1132,11 +1134,11 @@ export class EmailService {
               <a href="${process.env.FRONTEND_URL}/tracking/${orderDetails.orderId}" class="button">Track Your Order</a>
             </p>
             <p>You'll receive updates about your order status via email and in-app notifications.</p>
-            <p>Best regards,<br>Rez App Team</p>
+            <p>Best regards,<br>${BRAND.APP_NAME} Team</p>
           </div>
           <div class="footer">
             <p>Order ID: ${orderDetails.orderId}</p>
-            <p>© ${new Date().getFullYear()} Rez App. All rights reserved.</p>
+            <p>© ${new Date().getFullYear()} ${BRAND.APP_NAME}. All rights reserved.</p>
           </div>
         </div>
       </body>
@@ -1211,11 +1213,11 @@ export class EmailService {
               <a href="${process.env.FRONTEND_URL}/tracking/${orderDetails.orderId}" class="button">Track Order</a>
             </p>
             <p>We'll keep you updated on your order status.</p>
-            <p>Best regards,<br>Rez App Team</p>
+            <p>Best regards,<br>${BRAND.APP_NAME} Team</p>
           </div>
           <div class="footer">
             <p>Order ID: ${orderDetails.orderId}</p>
-            <p>© ${new Date().getFullYear()} Rez App. All rights reserved.</p>
+            <p>© ${new Date().getFullYear()} ${BRAND.APP_NAME}. All rights reserved.</p>
           </div>
         </div>
       </body>
@@ -1258,12 +1260,12 @@ export class EmailService {
       <body>
         <div class="container">
           <div class="header">
-            <h1>🎉 Welcome to Rez App!</h1>
+            <h1>🎉 Welcome to ${BRAND.APP_NAME}!</h1>
             <p style="font-size: 18px; margin: 10px 0 0 0;">Start earning cashback on every purchase</p>
           </div>
           <div class="content">
             <h2>Hi ${userName}! 👋</h2>
-            <p>Thank you for joining Rez App! We're excited to have you in our community.</p>
+            <p>Thank you for joining ${BRAND.APP_NAME}! We're excited to have you in our community.</p>
 
             <div class="welcome-box">
               <h3 style="margin-top: 0; color: #667eea;">🚀 Get Started</h3>
@@ -1299,10 +1301,10 @@ export class EmailService {
 
             <p><strong>Need help?</strong> Check out our help center or contact support anytime.</p>
             <p>Happy shopping and earning!</p>
-            <p>Best regards,<br>The Rez App Team</p>
+            <p>Best regards,<br>The ${BRAND.APP_NAME} Team</p>
           </div>
           <div class="footer">
-            <p>© ${new Date().getFullYear()} Rez App. All rights reserved.</p>
+            <p>© ${new Date().getFullYear()} ${BRAND.APP_NAME}. All rights reserved.</p>
             <p><a href="${process.env.FRONTEND_URL}/help" style="color: #667eea;">Help Center</a> | <a href="${process.env.FRONTEND_URL}/account/settings" style="color: #667eea;">Account Settings</a></p>
           </div>
         </div>
@@ -1312,9 +1314,9 @@ export class EmailService {
 
     await this.send({
       to: userEmail,
-      subject: '🎉 Welcome to Rez App - Start Earning Cashback Today!',
+      subject: `🎉 Welcome to ${BRAND.APP_NAME} - Start Earning Cashback Today!`,
       html,
-      text: `Hi ${userName}!\n\nWelcome to Rez App! 🎉\n\nStart earning cashback on every purchase, play games, and refer friends for rewards.\n\n${referralCode ? `Your referral code: ${referralCode}\n\n` : ''}Visit ${process.env.FRONTEND_URL} to get started!`,
+      text: `Hi ${userName}!\n\nWelcome to ${BRAND.APP_NAME}! 🎉\n\nStart earning cashback on every purchase, play games, and refer friends for rewards.\n\n${referralCode ? `Your referral code: ${referralCode}\n\n` : ''}Visit ${process.env.FRONTEND_URL} to get started!`,
     });
   }
 
@@ -1349,7 +1351,7 @@ export class EmailService {
           </div>
           <div class="content">
             <h2>Hi ${userName},</h2>
-            <p>We received a request to reset your Rez App password.</p>
+            <p>We received a request to reset your ${BRAND.APP_NAME} password.</p>
             <p>Click the button below to create a new password:</p>
             <p style="text-align: center; margin: 30px 0;">
               <a href="${resetUrl}" class="button">Reset Password</a>
@@ -1366,10 +1368,10 @@ export class EmailService {
               </ul>
             </div>
             <p>If you're having trouble, contact our support team for assistance.</p>
-            <p>Best regards,<br>Rez App Security Team</p>
+            <p>Best regards,<br>${BRAND.APP_NAME} Security Team</p>
           </div>
           <div class="footer">
-            <p>© ${new Date().getFullYear()} Rez App. All rights reserved.</p>
+            <p>© ${new Date().getFullYear()} ${BRAND.APP_NAME}. All rights reserved.</p>
           </div>
         </div>
       </body>
@@ -1378,7 +1380,7 @@ export class EmailService {
 
     await this.send({
       to: userEmail,
-      subject: 'Reset Your Rez App Password',
+      subject: `Reset Your ${BRAND.APP_NAME} Password`,
       html,
       text: `Hi ${userName},\n\nReset your password: ${resetUrl}\n\nThis link expires in 1 hour.\n\nIf you didn't request this, please ignore this email.`,
     });
@@ -1433,10 +1435,10 @@ export class EmailService {
             </p>
             <p>Keep shopping to earn more cashback! Upgrade to Premium for 2x cashback or VIP for 3x cashback.</p>
             <p>Happy shopping!</p>
-            <p>Best regards,<br>Rez App Team</p>
+            <p>Best regards,<br>${BRAND.APP_NAME} Team</p>
           </div>
           <div class="footer">
-            <p>© ${new Date().getFullYear()} Rez App. All rights reserved.</p>
+            <p>© ${new Date().getFullYear()} ${BRAND.APP_NAME}. All rights reserved.</p>
           </div>
         </div>
       </body>
@@ -1501,11 +1503,11 @@ export class EmailService {
               <a href="${process.env.FRONTEND_URL}/referral" class="button">Share Your Code</a>
             </p>
             <p>The more friends you invite, the more you earn! There's no limit to your referral rewards.</p>
-            <p>Thank you for spreading the word about Rez App!</p>
-            <p>Best regards,<br>Rez App Team</p>
+            <p>Thank you for spreading the word about ${BRAND.APP_NAME}!</p>
+            <p>Best regards,<br>${BRAND.APP_NAME} Team</p>
           </div>
           <div class="footer">
-            <p>© ${new Date().getFullYear()} Rez App. All rights reserved.</p>
+            <p>© ${new Date().getFullYear()} ${BRAND.APP_NAME}. All rights reserved.</p>
           </div>
         </div>
       </body>
@@ -1607,7 +1609,7 @@ export class EmailService {
           </div>
           
           <p style="margin-top: 30px; font-size: 12px; color: #999; text-align: center;">
-            © ${new Date().getFullYear()} Rez App. All rights reserved.
+            © ${new Date().getFullYear()} ${BRAND.APP_NAME}. All rights reserved.
           </p>
         </div>
       </body>

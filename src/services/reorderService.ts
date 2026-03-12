@@ -7,6 +7,7 @@ import { Product } from '../models/Product';
 import { Cart } from '../models/Cart';
 import { AppError } from '../middleware/errorHandler';
 import { pct, add, sub } from '../utils/currency';
+import { logger } from '../config/logger';
 
 export interface ReorderItem {
   productId: string;
@@ -74,7 +75,7 @@ class ReorderService {
    */
   async validateReorder(userId: string, orderId: string, selectedItemIds?: string[]): Promise<ReorderValidation> {
     try {
-      console.log('🔄 [REORDER SERVICE] Validating reorder:', { userId, orderId, selectedItemIds });
+      logger.info('[REORDER SERVICE] Validating reorder:', { userId, orderId, selectedItemIds });
 
       // Get original order
       const order = await Order.findOne({ _id: orderId, user: userId })
@@ -219,7 +220,7 @@ class ReorderService {
       const totalDifference = totalCurrent - totalOriginal;
       const canReorder = reorderItems.length > 0;
 
-      console.log('✅ [REORDER SERVICE] Validation complete:', {
+      logger.info('[REORDER SERVICE] Validation complete:', {
         canReorder,
         itemCount: reorderItems.length,
         unavailableCount: unavailableItems.length,
@@ -237,7 +238,7 @@ class ReorderService {
         warnings
       };
     } catch (error: any) {
-      console.error('❌ [REORDER SERVICE] Validation error:', error);
+      logger.error('[REORDER SERVICE] Validation error:', error);
       throw error;
     }
   }
@@ -250,7 +251,7 @@ class ReorderService {
     session.startTransaction();
 
     try {
-      console.log('🛒 [REORDER SERVICE] Adding order items to cart:', { userId, orderId, selectedItemIds });
+      logger.info('[REORDER SERVICE] Adding order items to cart:', { userId, orderId, selectedItemIds });
 
       // Validate reorder first
       const validation = await this.validateReorder(userId, orderId, selectedItemIds);
@@ -357,7 +358,7 @@ class ReorderService {
       await session.commitTransaction();
       session.endSession();
 
-      console.log('✅ [REORDER SERVICE] Items added to cart:', {
+      logger.info('[REORDER SERVICE] Items added to cart:', {
         addedCount: addedItems.length,
         skippedCount: skippedItems.length
       });
@@ -371,7 +372,7 @@ class ReorderService {
     } catch (error: any) {
       await session.abortTransaction();
       session.endSession();
-      console.error('❌ [REORDER SERVICE] Add to cart error:', error);
+      logger.error('[REORDER SERVICE] Add to cart error:', error);
       throw error;
     }
   }
@@ -381,7 +382,7 @@ class ReorderService {
    */
   async getFrequentlyOrdered(userId: string, limit: number = 10): Promise<FrequentlyOrderedItem[]> {
     try {
-      console.log('📊 [REORDER SERVICE] Getting frequently ordered items:', { userId, limit });
+      logger.info('[REORDER SERVICE] Getting frequently ordered items:', { userId, limit });
 
       const frequentItems = await Order.aggregate([
         { $match: { user: new mongoose.Types.ObjectId(userId), status: 'delivered' } },
@@ -427,17 +428,17 @@ class ReorderService {
             lastOrderDate: 1,
             averageQuantity: { $round: ['$averageQuantity', 0] },
             totalSpent: { $round: ['$totalSpent', 2] },
-            currentPrice: '$product.basePrice',
+            currentPrice: { $ifNull: ['$product.pricing.selling', '$product.pricing.original', 0] },
             isAvailable: '$product.isActive'
           }
         }
       ]);
 
-      console.log('✅ [REORDER SERVICE] Found frequent items:', frequentItems.length);
+      logger.info('[REORDER SERVICE] Found frequent items:', frequentItems.length);
 
       return frequentItems;
     } catch (error: any) {
-      console.error('❌ [REORDER SERVICE] Frequently ordered error:', error);
+      logger.error('[REORDER SERVICE] Frequently ordered error:', error);
       throw error;
     }
   }
@@ -447,7 +448,7 @@ class ReorderService {
    */
   async getReorderSuggestions(userId: string): Promise<ReorderSuggestion[]> {
     try {
-      console.log('💡 [REORDER SERVICE] Getting reorder suggestions:', { userId });
+      logger.info('[REORDER SERVICE] Getting reorder suggestions:', { userId });
 
       const suggestions: ReorderSuggestion[] = [];
 
@@ -463,7 +464,7 @@ class ReorderService {
         .lean();
 
       if (orders.length < 2) {
-        console.log('⚠️ [REORDER SERVICE] Not enough order history');
+        logger.warn('[REORDER SERVICE] Not enough order history');
         return [];
       }
 
@@ -580,11 +581,11 @@ class ReorderService {
         return typeOrder[a.type] - typeOrder[b.type];
       });
 
-      console.log('✅ [REORDER SERVICE] Generated suggestions:', suggestions.length);
+      logger.info('[REORDER SERVICE] Generated suggestions:', suggestions.length);
 
       return suggestions.slice(0, 10); // Return top 10
     } catch (error: any) {
-      console.error('❌ [REORDER SERVICE] Suggestions error:', error);
+      logger.error('[REORDER SERVICE] Suggestions error:', error);
       throw error;
     }
   }

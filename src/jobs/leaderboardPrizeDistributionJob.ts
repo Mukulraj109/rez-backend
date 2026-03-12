@@ -159,13 +159,15 @@ async function distributeForConfig(config: ILeaderboardConfig): Promise<{
       logger.error(`[PRIZE DIST] ${slug}: Anti-fraud check failed (proceeding with caution):`, fraudError.message);
     }
 
-    // Process each prize slot
+    // Build all prize entries first, then process awards with controlled concurrency
     const prizeEntries: IPrizeEntry[] = [];
     let totalDistributed = 0;
     let totalFlagged = 0;
 
+    // Collect all entries to award (separating flagged from awardable)
+    const awardTasks: Array<{ prizeEntry: IPrizeEntry; entry: LeaderboardEntry; prizeSlot: any }> = [];
+
     for (const prizeSlot of config.prizePool) {
-      // Find entries whose rank falls within this slot's range
       const slotEntries = entries.filter(
         e => e.rank >= prizeSlot.rankStart && e.rank <= prizeSlot.rankEnd
       );
@@ -190,55 +192,80 @@ async function distributeForConfig(config: ILeaderboardConfig): Promise<{
           continue;
         }
 
-        // Award coins via coinService (with retry for transient failures)
-        const MAX_RETRIES = 2;
-        let awarded = false;
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-          try {
-            const idempotencyKey = `leaderboard_prize:${config._id}:${cycleStartDate.toISOString()}:${userId}`;
+        awardTasks.push({ prizeEntry, entry, prizeSlot });
+      }
+    }
 
-            const result = await awardCoins(
-              userId,
-              prizeSlot.prizeAmount,
-              'leaderboard_prize',
-              `${config.title} - Rank #${entry.rank} prize (${prizeSlot.prizeLabel})`,
-              {
-                leaderboardConfigId: (config._id as any).toString(),
-                cycleStartDate: cycleStartDate.toISOString(),
-                cycleEndDate: cycleEndDate.toISOString(),
-                rank: entry.rank,
-                score: entry.value,
-                prizeLabel: prizeSlot.prizeLabel,
-                idempotencyKey
+    // Process awards with controlled concurrency (5 at a time instead of sequential)
+    const CONCURRENCY = 5;
+    const MAX_RETRIES = 2;
+
+    for (let i = 0; i < awardTasks.length; i += CONCURRENCY) {
+      const batch = awardTasks.slice(i, i + CONCURRENCY);
+
+      const results = await Promise.allSettled(
+        batch.map(async ({ prizeEntry, entry, prizeSlot }) => {
+          const userId = entry.user.id;
+
+          for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+            try {
+              const idempotencyKey = `leaderboard_prize:${config._id}:${cycleStartDate.toISOString()}:${userId}`;
+
+              const result = await awardCoins(
+                userId,
+                prizeSlot.prizeAmount,
+                'leaderboard_prize',
+                `${config.title} - Rank #${entry.rank} prize (${prizeSlot.prizeLabel})`,
+                {
+                  leaderboardConfigId: (config._id as any).toString(),
+                  cycleStartDate: cycleStartDate.toISOString(),
+                  cycleEndDate: cycleEndDate.toISOString(),
+                  rank: entry.rank,
+                  score: entry.value,
+                  prizeLabel: prizeSlot.prizeLabel,
+                  idempotencyKey
+                }
+              );
+
+              prizeEntry.coinTransactionId = result.transactionId
+                ? new mongoose.Types.ObjectId(result.transactionId)
+                : undefined;
+              prizeEntry.status = 'distributed';
+              return true;
+            } catch (awardError: any) {
+              if (attempt < MAX_RETRIES) {
+                logger.warn(`[PRIZE DIST] ${slug}: Retry ${attempt + 1}/${MAX_RETRIES} for user ${userId}: ${awardError.message}`);
+                await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+              } else {
+                logger.error(`[PRIZE DIST] ${slug}: Failed to award prize to user ${userId} after ${MAX_RETRIES + 1} attempts:`, awardError.message);
+                prizeEntry.status = 'failed';
+                prizeEntry.flagReason = `Award failed after ${MAX_RETRIES + 1} attempts: ${awardError.message}`;
+                return false;
               }
-            );
-
-            prizeEntry.coinTransactionId = result.transactionId
-              ? new mongoose.Types.ObjectId(result.transactionId)
-              : undefined;
-            prizeEntry.status = 'distributed';
-            totalDistributed++;
-            awarded = true;
-
-            // Invalidate winner's wallet cache
-            await invalidateWalletCache(userId);
-            break;
-          } catch (awardError: any) {
-            if (attempt < MAX_RETRIES) {
-              logger.warn(`[PRIZE DIST] ${slug}: Retry ${attempt + 1}/${MAX_RETRIES} for user ${userId}: ${awardError.message}`);
-              await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
-            } else {
-              logger.error(`[PRIZE DIST] ${slug}: Failed to award prize to user ${userId} after ${MAX_RETRIES + 1} attempts:`, awardError.message);
-              prizeEntry.status = 'failed';
-              prizeEntry.flagReason = `Award failed after ${MAX_RETRIES + 1} attempts: ${awardError.message}`;
-              totalFlagged++;
             }
           }
-        }
+          return false;
+        })
+      );
 
+      // Count results and collect entries
+      for (let j = 0; j < batch.length; j++) {
+        const result = results[j];
+        const { prizeEntry } = batch[j];
+        if (result.status === 'fulfilled' && result.value) {
+          totalDistributed++;
+        } else {
+          if (prizeEntry.status !== 'distributed') totalFlagged++;
+        }
         prizeEntries.push(prizeEntry);
       }
     }
+
+    // Batch invalidate wallet caches for all distributed winners
+    const distributedUserIds = awardTasks
+      .filter(t => t.prizeEntry.status === 'distributed')
+      .map(t => t.entry.user.id);
+    await Promise.all(distributedUserIds.map(uid => invalidateWalletCache(uid)));
 
     // Update distribution record
     distribution.entries = prizeEntries;

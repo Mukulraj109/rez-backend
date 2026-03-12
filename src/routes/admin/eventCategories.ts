@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
@@ -27,7 +28,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     res.json({ success: true, data: { categories } });
   } catch (error: any) {
-    console.error('[Admin EventCategories] Error:', error);
+    logger.error('[Admin EventCategories] Error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -71,7 +72,7 @@ router.post('/', async (req: Request, res: Response) => {
       message: 'Event category created successfully',
     });
   } catch (error: any) {
-    console.error('[Admin EventCategories] Error creating:', error);
+    logger.error('[Admin EventCategories] Error creating:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -100,7 +101,7 @@ router.put('/reorder', async (req: Request, res: Response) => {
 
     res.json({ success: true, message: 'Categories reordered successfully' });
   } catch (error: any) {
-    console.error('[Admin EventCategories] Error reordering:', error);
+    logger.error('[Admin EventCategories] Error reordering:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -144,7 +145,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       message: 'Event category updated successfully',
     });
   } catch (error: any) {
-    console.error('[Admin EventCategories] Error updating:', error);
+    logger.error('[Admin EventCategories] Error updating:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -176,7 +177,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       message: 'Event category deactivated successfully',
     });
   } catch (error: any) {
-    console.error('[Admin EventCategories] Error deleting:', error);
+    logger.error('[Admin EventCategories] Error deleting:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

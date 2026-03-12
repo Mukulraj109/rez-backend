@@ -33,3 +33,7 @@ Thumbs.db
 
 # Test coverage
 coverage/
+
+# Temp/junk files
+tmpclaude-*
+test-results.txt

@@ -10,6 +10,7 @@ import { AppError } from '../middleware/errorHandler';
 import redisService from '../services/redisService';
 import { modeService, ModeId } from '../services/modeService';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
+import { logger } from '../config/logger';
 
 /**
  * Escape special regex characters in user input to prevent regex injection / ReDoS
@@ -84,11 +85,68 @@ const normalizeProductName = (name: string, brand?: string): string => {
 
 /**
  * Search products by query with optional mode and region filtering
+ * Uses $text index for fast full-text search with $regex fallback for partial matches
  */
 const searchProducts = async (query: string, limit: number, mode?: ModeId, region?: RegionId): Promise<any> => {
   try {
-    const searchQuery: any = {
-      isActive: true,
+    // Build base filter (shared by both text and regex paths)
+    const baseFilter: any = { isActive: true };
+
+    // Build store filter combining mode and region in a single query
+    let storeFilter: any = { isActive: true };
+    let needsStoreFilter = false;
+
+    if (mode && mode !== 'near-u') {
+      const modeStoreFilter = modeService.getStoreFilter(mode);
+      Object.assign(storeFilter, modeStoreFilter);
+      needsStoreFilter = true;
+    }
+
+    if (region) {
+      const regionFilter = regionService.getStoreFilter(region);
+      Object.assign(storeFilter, regionFilter);
+      needsStoreFilter = true;
+    }
+
+    // Single combined store query for mode + region
+    if (needsStoreFilter) {
+      const filteredStores = await Store.find(storeFilter).select('_id').lean();
+      const storeIds = filteredStores.map(s => s._id);
+      if (storeIds.length > 0) {
+        baseFilter.store = { $in: storeIds };
+      } else if (region) {
+        return { items: [], total: 0, hasMore: false };
+      }
+    }
+
+    // Try text search first (uses index, fast)
+    const textQuery = { ...baseFilter, $text: { $search: query } };
+    const [textProducts, textTotal] = await Promise.all([
+      Product.find(textQuery, { score: { $meta: 'textScore' } })
+        .sort({ score: { $meta: 'textScore' } })
+        .populate('category', 'name slug')
+        .populate('store', 'name logo')
+        .select('name slug images pricing ratings inventory brand tags')
+        .limit(limit)
+        .lean(),
+      Product.countDocuments(textQuery)
+    ]);
+
+    if (textProducts.length > 0) {
+      return {
+        items: textProducts.map(p => ({
+          ...p,
+          type: 'product',
+          id: p._id?.toString()
+        })),
+        total: textTotal,
+        hasMore: textTotal > limit
+      };
+    }
+
+    // Fallback to regex if text search returns nothing (handles partial words)
+    const regexQuery = {
+      ...baseFilter,
       $or: [
         { name: { $regex: escapeRegex(query), $options: 'i' } },
         { description: { $regex: escapeRegex(query), $options: 'i' } },
@@ -97,45 +155,19 @@ const searchProducts = async (query: string, limit: number, mode?: ModeId, regio
       ]
     };
 
-    // Build store filter combining mode and region
-    let storeFilter: any = { isActive: true };
-
-    // Apply mode-based store filter
-    if (mode && mode !== 'near-u') {
-      const modeStoreFilter = modeService.getStoreFilter(mode);
-      Object.assign(storeFilter, modeStoreFilter);
-    }
-
-    // Apply region-based store filter
-    if (region) {
-      const regionFilter = regionService.getStoreFilter(region);
-      Object.assign(storeFilter, regionFilter);
-    }
-
-    // If we have any store filters, find matching stores
-    if (mode || region) {
-      const filteredStores = await Store.find(storeFilter).select('_id').lean();
-      const storeIds = filteredStores.map(s => s._id);
-      if (storeIds.length > 0) {
-        searchQuery.store = { $in: storeIds };
-      } else if (region) {
-        // If region specified but no stores found, return empty
-        return { items: [], total: 0, hasMore: false };
-      }
-    }
-
-    const products = await Product.find(searchQuery)
-      .populate('category', 'name slug')
-      .populate('store', 'name logo')
-      .select('name slug images pricing ratings inventory brand tags')
-      .limit(limit + 10) // Fetch extra for sorting
-      .lean();
-
-    const total = await Product.countDocuments(searchQuery);
+    const [regexProducts, regexTotal] = await Promise.all([
+      Product.find(regexQuery)
+        .populate('category', 'name slug')
+        .populate('store', 'name logo')
+        .select('name slug images pricing ratings inventory brand tags')
+        .limit(limit + 10)
+        .lean(),
+      Product.countDocuments(regexQuery)
+    ]);
 
     // Sort by relevance and limit
     const sortedProducts = sortByRelevance(
-      products,
+      regexProducts,
       query,
       ['name', 'brand', 'description']
     ).slice(0, limit);
@@ -146,11 +178,11 @@ const searchProducts = async (query: string, limit: number, mode?: ModeId, regio
         type: 'product',
         id: p._id?.toString()
       })),
-      total,
-      hasMore: total > limit
+      total: regexTotal,
+      hasMore: regexTotal > limit
     };
   } catch (error) {
-    console.error('Error searching products:', error);
+    logger.error('Error searching products:', error);
     return { items: [], total: 0, hasMore: false };
   }
 };
@@ -205,46 +237,41 @@ const searchProductsGroupedInternal = async (
       regionStoreIds = regionStores.map(s => s._id);
     }
 
-    const searchQuery: any = {
+    // Build base filter for grouped search (shared by text and regex paths)
+    const baseGroupedFilter: any = {
       isActive: true,
       'inventory.isAvailable': true,
-      $or: [
-        { name: { $regex: escapeRegex(query), $options: 'i' } },
-        { description: { $regex: escapeRegex(query), $options: 'i' } },
-        { brand: { $regex: escapeRegex(query), $options: 'i' } },
-        { tags: { $regex: escapeRegex(query), $options: 'i' } }
-      ]
     };
 
     // Apply filter params
     if (filters) {
       if (filters.minPrice !== undefined) {
-        searchQuery['pricing.selling'] = { ...searchQuery['pricing.selling'], $gte: filters.minPrice };
+        baseGroupedFilter['pricing.selling'] = { ...baseGroupedFilter['pricing.selling'], $gte: filters.minPrice };
       }
       if (filters.maxPrice !== undefined) {
-        searchQuery['pricing.selling'] = { ...searchQuery['pricing.selling'], $lte: filters.maxPrice };
+        baseGroupedFilter['pricing.selling'] = { ...baseGroupedFilter['pricing.selling'], $lte: filters.maxPrice };
       }
       if (filters.rating !== undefined) {
-        searchQuery['ratings.average'] = { $gte: filters.rating };
+        baseGroupedFilter['ratings.average'] = { $gte: filters.rating };
       }
       if (filters.categories && filters.categories.length > 0) {
         // Accept category ids or slugs
         const categoryIds = filters.categories.filter(c => mongoose.Types.ObjectId.isValid(c));
         const categorySlugs = filters.categories.filter(c => !mongoose.Types.ObjectId.isValid(c));
         if (categoryIds.length > 0 && categorySlugs.length === 0) {
-          searchQuery.category = { $in: categoryIds.map(id => new mongoose.Types.ObjectId(id)) };
+          baseGroupedFilter.category = { $in: categoryIds.map(id => new mongoose.Types.ObjectId(id)) };
         } else if (categorySlugs.length > 0) {
           // Will resolve after category lookup below
         }
       }
       if (filters.inStock) {
-        searchQuery['inventory.stock'] = { $gt: 0 };
+        baseGroupedFilter['inventory.stock'] = { $gt: 0 };
       }
     }
 
     // Apply region filter to products
     if (region && regionStoreIds.length > 0) {
-      searchQuery.store = { $in: regionStoreIds };
+      baseGroupedFilter.store = { $in: regionStoreIds };
     } else if (region) {
       // No stores in region, return empty
       return {
@@ -256,27 +283,81 @@ const searchProductsGroupedInternal = async (
       };
     }
 
-    // If we found matching stores, include their products in the search
-    if (matchingStoreIds.length > 0) {
-      searchQuery.$or.push({ store: { $in: matchingStoreIds } });
-    }
-
-    // Fetch products with full store details
-    const products = await Product.find(searchQuery)
+    // Try $text search first (uses index, fast), with $regex fallback
+    let textSearchQuery: any = { ...baseGroupedFilter, $text: { $search: query } };
+    // For text search, add matching store products via separate $or isn't possible
+    // (MongoDB doesn't allow $text with $or at top level), so we run it plain first.
+    let products = await Product.find(textSearchQuery, { score: { $meta: 'textScore' } })
+      .sort({ score: { $meta: 'textScore' } })
       .populate('category', 'name slug')
       .populate({
         path: 'store',
         select: 'name logo location ratings isVerified operationalInfo rewardRules',
-        populate: {
-          path: 'category',
-          select: 'name'
-        }
+        populate: { path: 'category', select: 'name' }
       })
-      .select(
-        'name slug images pricing ratings inventory brand tags model cashback deliveryInfo category store'
-      )
-      .limit(limit * 5) // Fetch more to account for grouping
+      .select('name slug images pricing ratings inventory brand tags model cashback deliveryInfo category store')
+      .limit(limit * 5)
       .lean();
+
+    // If text search returns few results, fallback to regex for partial matches
+    if (products.length < limit) {
+      const regexSearchQuery: any = {
+        ...baseGroupedFilter,
+        $or: [
+          { name: { $regex: escapeRegex(query), $options: 'i' } },
+          { description: { $regex: escapeRegex(query), $options: 'i' } },
+          { brand: { $regex: escapeRegex(query), $options: 'i' } },
+          { tags: { $regex: escapeRegex(query), $options: 'i' } }
+        ]
+      };
+
+      // Include matching store products in the regex fallback
+      if (matchingStoreIds.length > 0) {
+        regexSearchQuery.$or.push({ store: { $in: matchingStoreIds } });
+      }
+
+      const regexProducts = await Product.find(regexSearchQuery)
+        .populate('category', 'name slug')
+        .populate({
+          path: 'store',
+          select: 'name logo location ratings isVerified operationalInfo rewardRules',
+          populate: { path: 'category', select: 'name' }
+        })
+        .select('name slug images pricing ratings inventory brand tags model cashback deliveryInfo category store')
+        .limit(limit * 5)
+        .lean();
+
+      // Merge: add regex results that aren't already in text results
+      const existingIds = new Set(products.map((p: any) => p._id?.toString()));
+      for (const rp of regexProducts) {
+        if (!existingIds.has((rp as any)._id?.toString())) {
+          products.push(rp);
+        }
+      }
+    } else if (matchingStoreIds.length > 0) {
+      // Text search returned enough results but we should still include matching store products
+      const storeProductsQuery: any = {
+        ...baseGroupedFilter,
+        store: { $in: matchingStoreIds }
+      };
+      const storeProducts = await Product.find(storeProductsQuery)
+        .populate('category', 'name slug')
+        .populate({
+          path: 'store',
+          select: 'name logo location ratings isVerified operationalInfo rewardRules',
+          populate: { path: 'category', select: 'name' }
+        })
+        .select('name slug images pricing ratings inventory brand tags model cashback deliveryInfo category store')
+        .limit(limit * 2)
+        .lean();
+
+      const existingIds = new Set(products.map((p: any) => p._id?.toString()));
+      for (const sp of storeProducts) {
+        if (!existingIds.has((sp as any)._id?.toString())) {
+          products.push(sp);
+        }
+      }
+    }
 
     // Group products by normalized name
     const productGroups = new Map<string, any[]>();
@@ -317,7 +398,7 @@ const searchProductsGroupedInternal = async (
 
         // Skip if price is 0 or invalid
         if (!currentPrice || currentPrice <= 0) {
-          console.warn(`[SEARCH] Product ${product._id} has invalid price: ${currentPrice}`);
+          logger.warn(`[SEARCH] Product ${product._id} has invalid price: ${currentPrice}`);
           continue;
         }
 
@@ -361,7 +442,7 @@ const searchProductsGroupedInternal = async (
 
         // Debug logging for first product in first group
         if (groupedProducts.length === 0 && sellers.length === 0) {
-          console.log(`[SEARCH] First product cashback calculation:`, {
+          logger.debug(`[SEARCH] First product cashback calculation:`, {
             productId: product._id,
             productName: product.name?.substring(0, 30),
             currentPrice,
@@ -369,10 +450,6 @@ const searchProductsGroupedInternal = async (
             cashbackPercentage,
             cashbackAmount,
             coins,
-            hasProductCashback: !!product.cashback?.percentage,
-            productCashbackPercent: product.cashback?.percentage,
-            hasStoreRewardRules: !!store.rewardRules?.baseCashbackPercent,
-            storeRewardRulesPercent: store.rewardRules?.baseCashbackPercent
           });
         }
 
@@ -561,7 +638,7 @@ const searchProductsGroupedInternal = async (
       hasMore: productGroups.size > limit
     };
   } catch (error) {
-    console.error('Error searching grouped products:', error);
+    logger.error('Error searching grouped products:', error);
     return {
       groupedProducts: [],
       matchingStores: [],
@@ -605,13 +682,14 @@ const searchStores = async (query: string, limit: number, mode?: ModeId, region?
       Object.assign(searchQuery, regionFilter);
     }
 
-    const stores = await Store.find(searchQuery)
-      .populate('category', 'name slug')
-      .select('name slug logo coverImage description tags location ratings category')
-      .limit(limit + 10) // Fetch extra for sorting
-      .lean();
-
-    const total = await Store.countDocuments(searchQuery);
+    const [stores, total] = await Promise.all([
+      Store.find(searchQuery)
+        .populate('category', 'name slug')
+        .select('name slug logo coverImage description tags location ratings category')
+        .limit(limit + 10) // Fetch extra for sorting
+        .lean(),
+      Store.countDocuments(searchQuery)
+    ]);
 
     // Sort by relevance and limit
     const sortedStores = sortByRelevance(
@@ -630,7 +708,7 @@ const searchStores = async (query: string, limit: number, mode?: ModeId, region?
       hasMore: total > limit
     };
   } catch (error) {
-    console.error('Error searching stores:', error);
+    logger.error('Error searching stores:', error);
     return { items: [], total: 0, hasMore: false };
   }
 };
@@ -651,13 +729,14 @@ const searchArticles = async (query: string, limit: number): Promise<any> => {
       ]
     };
 
-    const articles = await Article.find(searchQuery)
-      .populate('author', 'profile.firstName profile.lastName profile.avatar')
-      .select('title slug excerpt coverImage category tags analytics author authorType')
-      .limit(limit + 10) // Fetch extra for sorting
-      .lean();
-
-    const total = await Article.countDocuments(searchQuery);
+    const [articles, total] = await Promise.all([
+      Article.find(searchQuery)
+        .populate('author', 'profile.firstName profile.lastName profile.avatar')
+        .select('title slug excerpt coverImage category tags analytics author authorType')
+        .limit(limit + 10) // Fetch extra for sorting
+        .lean(),
+      Article.countDocuments(searchQuery)
+    ]);
 
     // Sort by relevance and limit
     const sortedArticles = sortByRelevance(
@@ -682,7 +761,7 @@ const searchArticles = async (query: string, limit: number): Promise<any> => {
       hasMore: total > limit
     };
   } catch (error) {
-    console.error('Error searching articles:', error);
+    logger.error('Error searching articles:', error);
     return { items: [], total: 0, hasMore: false };
   }
 };
@@ -757,7 +836,7 @@ export const globalSearch = asyncHandler(async (req: Request, res: Response) => 
     const cachedResult = await redisService.get(cacheKey);
     if (cachedResult) {
       const executionTime = Date.now() - startTime;
-      console.log(`✅ [GLOBAL SEARCH] Cache hit for query: "${query}" (${executionTime}ms)`);
+      logger.debug(`[GLOBAL SEARCH] Cache hit for query: "${query}" (${executionTime}ms)`);
 
       return sendSuccess(res, {
         ...cachedResult,
@@ -766,7 +845,7 @@ export const globalSearch = asyncHandler(async (req: Request, res: Response) => 
       }, 'Global search completed successfully (cached)');
     }
 
-    console.log(`🔍 [GLOBAL SEARCH] Searching for: "${query}" across types: ${validTypes.join(', ')}`);
+    logger.debug(`[GLOBAL SEARCH] Searching for: "${query}" across types: ${validTypes.join(', ')}`);
 
     // Prepare search promises based on requested types
     const searchPromises: Promise<any>[] = [];
@@ -822,7 +901,7 @@ export const globalSearch = asyncHandler(async (req: Request, res: Response) => 
     await redisService.set(cacheKey, responseData, CACHE_TTL);
 
     const executionTime = Date.now() - startTime;
-    console.log(`✅ [GLOBAL SEARCH] Completed in ${executionTime}ms. Total results: ${totalResults}`);
+    logger.info(`[GLOBAL SEARCH] Completed in ${executionTime}ms. Total results: ${totalResults}`);
 
     return sendSuccess(res, {
       ...responseData,
@@ -832,7 +911,7 @@ export const globalSearch = asyncHandler(async (req: Request, res: Response) => 
 
   } catch (error) {
     const executionTime = Date.now() - startTime;
-    console.error(`❌ [GLOBAL SEARCH] Error after ${executionTime}ms:`, error);
+    logger.error(`[GLOBAL SEARCH] Error after ${executionTime}ms:`, error);
     return sendError(res, 'Failed to perform global search', 500);
   }
 });
@@ -845,13 +924,13 @@ export const clearSearchCache = asyncHandler(async (req: Request, res: Response)
   try {
     // Note: This is a simplified version. In production, you might want to
     // use Redis SCAN to find and delete all keys matching "search:global:*"
-    console.log('🗑️ [GLOBAL SEARCH] Cache clearing requested');
+    logger.info('[GLOBAL SEARCH] Cache clearing requested');
 
     return sendSuccess(res, {
       message: 'Search cache cleared successfully'
     }, 'Cache cleared');
   } catch (error) {
-    console.error('❌ [GLOBAL SEARCH] Error clearing cache:', error);
+    logger.error('[GLOBAL SEARCH] Error clearing cache:', error);
     return sendError(res, 'Failed to clear search cache', 500);
   }
 });
@@ -931,7 +1010,7 @@ export const searchProductsGrouped = asyncHandler(async (req: Request, res: Resp
     const cachedResult = await redisService.get(cacheKey);
     if (cachedResult) {
       const executionTime = Date.now() - startTime;
-      console.log(`✅ [GROUPED SEARCH] Cache hit for query: "${query}" (${executionTime}ms)`);
+      logger.debug(`[GROUPED SEARCH] Cache hit for query: "${query}" (${executionTime}ms)`);
       return sendSuccess(res, {
         ...cachedResult,
         cached: true,
@@ -939,7 +1018,7 @@ export const searchProductsGrouped = asyncHandler(async (req: Request, res: Resp
       }, 'Grouped product search completed successfully (cached)');
     }
 
-    console.log(`🔍 [GROUPED SEARCH] Searching for: "${query}" with limit: ${limit}, region: ${region || 'all'}`);
+    logger.debug(`[GROUPED SEARCH] Searching for: "${query}" with limit: ${limit}, region: ${region || 'all'}`);
 
     // Perform grouped search with region and filter support
     const result = await searchProductsGroupedInternal(query, limit, userLocation, region, hasFilters ? filters : undefined);
@@ -949,23 +1028,7 @@ export const searchProductsGrouped = asyncHandler(async (req: Request, res: Resp
     await redisService.set(cacheKey, result, CACHE_TTL);
 
     const executionTime = Date.now() - startTime;
-    console.log(`✅ [GROUPED SEARCH] Completed in ${executionTime}ms. Products: ${result.total}, Sellers: ${result.summary.sellerCount}`);
-
-    // Debug: Log first seller's cashback data
-    if (result.groupedProducts && result.groupedProducts.length > 0) {
-      const firstProduct = result.groupedProducts[0];
-      if (firstProduct.sellers && firstProduct.sellers.length > 0) {
-        const firstSeller = firstProduct.sellers[0];
-        console.log(`[DEBUG] First seller cashback data:`, {
-          productName: firstProduct.productName,
-          storeName: firstSeller.storeName,
-          price: firstSeller.price?.current,
-          cashback: firstSeller.cashback,
-          cashbackAmount: firstSeller.cashback?.amount,
-          cashbackCoins: firstSeller.cashback?.coins
-        });
-      }
-    }
+    logger.info(`[GROUPED SEARCH] Completed in ${executionTime}ms. Products: ${result.total}, Sellers: ${result.summary.sellerCount}`);
 
     return sendSuccess(res, {
       ...result,
@@ -975,7 +1038,7 @@ export const searchProductsGrouped = asyncHandler(async (req: Request, res: Resp
 
   } catch (error) {
     const executionTime = Date.now() - startTime;
-    console.error(`❌ [GROUPED SEARCH] Error after ${executionTime}ms:`, error);
+    logger.error(`[GROUPED SEARCH] Error after ${executionTime}ms:`, error);
     return sendError(res, 'Failed to perform grouped product search', 500);
   }
 });
@@ -1099,7 +1162,7 @@ export const saveSearchHistory = asyncHandler(async (req: Request, res: Response
     throw new AppError('User not authenticated', 401);
   }
 
-  const { query, type = 'general', resultCount = 0, filters } = req.body;
+  const { query, type = 'general', resultCount = 0, filters, region } = req.body;
 
   if (!query || typeof query !== 'string' || query.trim().length === 0) {
     throw new AppError('Search query is required', 400);
@@ -1116,8 +1179,14 @@ export const saveSearchHistory = asyncHandler(async (req: Request, res: Response
   );
 
   if (isDuplicate) {
-    console.log('🔍 [SEARCH HISTORY] Duplicate search detected, skipping:', trimmedQuery);
+    logger.debug('[SEARCH HISTORY] Duplicate search detected, skipping', { query: trimmedQuery });
     return sendSuccess(res, { message: 'Search already recorded recently' });
+  }
+
+  // Merge region into filters.location if provided
+  const mergedFilters = { ...(filters || {}) };
+  if (region && typeof region === 'string') {
+    mergedFilters.location = region.trim().toLowerCase();
   }
 
   // Create new search history entry
@@ -1126,19 +1195,20 @@ export const saveSearchHistory = asyncHandler(async (req: Request, res: Response
     query: trimmedQuery,
     type,
     resultCount: Number(resultCount) || 0,
-    filters: filters || {}
+    filters: mergedFilters
   });
 
   // Maintain max 50 entries per user (async, don't block response)
   (SearchHistory as any).maintainUserLimit(userId, 50).catch((err: Error) => {
-    console.error('❌ [SEARCH HISTORY] Error maintaining user limit:', err);
+    logger.error('[SEARCH HISTORY] Error maintaining user limit', { error: err.message });
   });
 
-  console.log('✅ [SEARCH HISTORY] Saved search:', {
+  logger.debug('[SEARCH HISTORY] Saved search', {
     userId,
     query: trimmedQuery,
     type,
-    resultCount
+    resultCount,
+    region: mergedFilters.location || 'none'
   });
 
   return sendCreated(res, searchHistory, 'Search history saved successfully');
@@ -1185,7 +1255,7 @@ export const getSearchHistory = asyncHandler(async (req: Request, res: Response)
     SearchHistory.countDocuments(query)
   ]);
 
-  console.log('📜 [SEARCH HISTORY] Retrieved history:', {
+  logger.debug('[SEARCH HISTORY] Retrieved history:', {
     userId,
     count: searches.length,
     total
@@ -1206,11 +1276,28 @@ export const getSearchHistory = asyncHandler(async (req: Request, res: Response)
  * Get popular/frequent searches for autocomplete
  * GET /api/search/history/popular
  * Works with or without authentication - for discovery UI
+ * Supports optional `region` query param for location-filtered trending
  */
 export const getPopularSearches = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?._id;
-  const { limit = 10, type } = req.query;
+  const { limit = 10, type, region } = req.query;
   const limitNum = Math.min(Number(limit), 20);
+  const regionStr = region ? String(region).trim().toLowerCase() : undefined;
+
+  // Build Redis cache key including region
+  const cacheKey = `search:popular:${type || 'all'}:${regionStr || 'global'}`;
+
+  // Try Redis cache first for global (non-user) results
+  if (!userId) {
+    const cached = await redisService.get<any[]>(cacheKey);
+    if (cached) {
+      logger.debug('[SEARCH HISTORY] Popular searches served from cache', { cacheKey });
+      return sendSuccess(res, {
+        searches: cached,
+        count: cached.length
+      });
+    }
+  }
 
   let popularSearches: any[] = [];
 
@@ -1224,8 +1311,24 @@ export const getPopularSearches = asyncHandler(async (req: Request, res: Respons
 
   // If no user-specific searches or not authenticated, get global popular searches
   if (!userId || popularSearches.length === 0) {
-    // Aggregate all searches to get global popular searches
-    popularSearches = await SearchHistory.aggregate([
+    // Build aggregation pipeline with optional region filter
+    const pipeline: any[] = [];
+
+    // Add region match stage if region is provided
+    if (regionStr) {
+      pipeline.push({
+        $match: {
+          'filters.location': { $regex: new RegExp(`^${escapeRegex(regionStr)}$`, 'i') }
+        }
+      });
+    }
+
+    // Add type filter if specified
+    if (type && ['product', 'store', 'general'].includes(type as string)) {
+      pipeline.push({ $match: { type: type as string } });
+    }
+
+    pipeline.push(
       {
         $group: {
           _id: '$query',
@@ -1236,7 +1339,9 @@ export const getPopularSearches = asyncHandler(async (req: Request, res: Respons
       },
       { $sort: { count: -1, lastSearched: -1 } },
       { $limit: limitNum }
-    ]).then(results =>
+    );
+
+    popularSearches = await SearchHistory.aggregate(pipeline).then(results =>
       results.map(item => ({
         query: item._id,
         count: item.count,
@@ -1244,15 +1349,21 @@ export const getPopularSearches = asyncHandler(async (req: Request, res: Respons
         lastSearched: item.lastSearched
       }))
     );
+  } else {
+    // Filter by type if specified (for user-specific results)
+    if (type && ['product', 'store', 'general'].includes(type as string)) {
+      popularSearches = popularSearches.filter((s: any) => s.type === type);
+    }
   }
 
-  // Filter by type if specified
-  if (type && ['product', 'store', 'general'].includes(type as string)) {
-    popularSearches = popularSearches.filter((s: any) => s.type === type);
+  // Cache global results for 5 minutes
+  if (!userId) {
+    await redisService.set(cacheKey, popularSearches, 300);
   }
 
-  console.log('🔥 [SEARCH HISTORY] Popular searches:', {
+  logger.debug('[SEARCH HISTORY] Popular searches', {
     userId: userId || 'anonymous',
+    region: regionStr || 'global',
     count: popularSearches.length
   });
 
@@ -1307,7 +1418,7 @@ export const getRecentSearches = asyncHandler(async (req: Request, res: Response
     }
   ]);
 
-  console.log('🕐 [SEARCH HISTORY] Recent searches:', {
+  logger.debug('[SEARCH HISTORY] Recent searches:', {
     userId,
     count: recentSearches.length
   });
@@ -1356,7 +1467,7 @@ export const markSearchAsClicked = asyncHandler(async (req: Request, res: Respon
     itemType
   );
 
-  console.log('👆 [SEARCH HISTORY] Marked as clicked:', {
+  logger.debug('[SEARCH HISTORY] Marked as clicked:', {
     searchId: id,
     itemId,
     itemType
@@ -1390,7 +1501,7 @@ export const deleteSearchHistory = asyncHandler(async (req: Request, res: Respon
     throw new AppError('Search history not found', 404);
   }
 
-  console.log('🗑️ [SEARCH HISTORY] Deleted entry:', { id, userId });
+  logger.debug('[SEARCH HISTORY] Deleted entry:', { id, userId });
 
   return sendSuccess(res, null, 'Search history deleted successfully');
 });
@@ -1416,7 +1527,7 @@ export const clearSearchHistory = asyncHandler(async (req: Request, res: Respons
 
   const result = await SearchHistory.deleteMany(query);
 
-  console.log('🧹 [SEARCH HISTORY] Cleared history:', {
+  logger.debug('[SEARCH HISTORY] Cleared history:', {
     userId,
     type: type || 'all',
     deletedCount: result.deletedCount
@@ -1502,7 +1613,7 @@ export const getSearchAnalytics = asyncHandler(async (req: Request, res: Respons
 
   const result = analytics[0] || {};
 
-  console.log('📊 [SEARCH HISTORY] Analytics retrieved:', { userId });
+  logger.debug('[SEARCH HISTORY] Analytics retrieved:', { userId });
 
   return sendSuccess(res, {
     totalSearches: result.totalSearches?.[0]?.count || 0,
@@ -1544,14 +1655,14 @@ export const getAutocomplete = asyncHandler(async (req: Request, res: Response) 
     : undefined;
 
   try {
-    console.log('🔍 [AUTOCOMPLETE] Processing query:', normalizedQuery, 'region:', region || 'all');
+    logger.debug('[AUTOCOMPLETE] Processing query:', normalizedQuery, 'region:', region || 'all');
 
     // Include region in cache key
     const cacheKey = `search:autocomplete:${normalizedQuery.toLowerCase()}:${region || 'all'}`;
     const cachedResults = await redisService.get<any>(cacheKey);
 
     if (cachedResults) {
-      console.log('✅ [AUTOCOMPLETE] Returning from cache');
+      logger.debug('[AUTOCOMPLETE] Returning from cache');
       return sendSuccess(res, cachedResults, 'Autocomplete suggestions retrieved successfully');
     }
 
@@ -1624,7 +1735,7 @@ export const getAutocomplete = asyncHandler(async (req: Request, res: Response) 
             .limit(3)
             .lean();
         } catch (error) {
-          console.warn('⚠️ [AUTOCOMPLETE] Category search failed:', error);
+          logger.warn('[AUTOCOMPLETE] Category search failed:', error);
           return [];
         }
       })(),
@@ -1685,7 +1796,7 @@ export const getAutocomplete = asyncHandler(async (req: Request, res: Response) 
 
     await redisService.set(cacheKey, response, 300);
 
-    console.log('✅ [AUTOCOMPLETE] Results:', {
+    logger.debug('[AUTOCOMPLETE] Results:', {
       products: transformedProducts.length,
       stores: transformedStores.length,
       categories: transformedCategories.length,
@@ -1695,9 +1806,61 @@ export const getAutocomplete = asyncHandler(async (req: Request, res: Response) 
     sendSuccess(res, response, 'Autocomplete suggestions retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [AUTOCOMPLETE] Error:', error);
-    console.error('❌ [AUTOCOMPLETE] Error message:', error instanceof Error ? error.message : 'Unknown error');
-    console.error('❌ [AUTOCOMPLETE] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    logger.error('[AUTOCOMPLETE] Error:', error);
+    logger.error('[AUTOCOMPLETE] Error message:', error instanceof Error ? error.message : 'Unknown error');
+    logger.error('[AUTOCOMPLETE] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     return sendError(res, 'Failed to get autocomplete suggestions', 500);
   }
+});
+
+/**
+ * Levenshtein distance between two strings (standard DP)
+ */
+const levenshtein = (a: string, b: string): number => {
+  const m = a.length;
+  const n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[m][n];
+};
+
+/**
+ * "Did you mean?" typo correction based on popular search terms
+ * GET /api/search/did-you-mean?q=shamppo
+ */
+export const getDidYouMean = asyncHandler(async (req: Request, res: Response) => {
+  const q = String(req.query.q || '').toLowerCase().trim();
+  if (q.length < 3) return sendSuccess(res, { suggestions: [] });
+
+  // Check Redis cache
+  const cacheKey = `didyoumean:${q}`;
+  const cached = await redisService.get(cacheKey);
+  if (cached) return sendSuccess(res, cached);
+
+  // Get popular search terms from SearchHistory
+  const popular = await SearchHistory.aggregate([
+    { $group: { _id: { $toLower: '$query' }, count: { $sum: 1 } } },
+    { $match: { count: { $gte: 2 } } },
+    { $sort: { count: -1 } },
+    { $limit: 100 },
+  ]);
+
+  const suggestions = popular
+    .map(s => ({ query: s._id as string, distance: levenshtein(q, (s._id as string).toLowerCase()) }))
+    .filter(s => s.distance > 0 && s.distance <= 3)
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, 3)
+    .map(s => s.query);
+
+  const result = { suggestions };
+  await redisService.set(cacheKey, result, 300);
+  sendSuccess(res, result);
 });

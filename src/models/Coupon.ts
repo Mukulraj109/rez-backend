@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Coupon Model
 // Manages store-wide coupon codes and promotions
 
@@ -270,7 +271,7 @@ CouponSchema.statics.markExpiredCoupons = async function() {
     }
   );
 
-  console.log(`⏰ [COUPON] Marked ${result.modifiedCount} coupons as expired`);
+  logger.info(`⏰ [COUPON] Marked ${result.modifiedCount} coupons as expired`);
   return result.modifiedCount || 0;
 };
 

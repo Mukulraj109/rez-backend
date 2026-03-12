@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 // Admin User Management Routes
 // CRUD for admin portal users
 
@@ -48,7 +49,7 @@ router.get('/', requireSeniorAdmin, async (req: Request, res: Response) => {
 
     sendSuccess(res, { adminUsers });
   } catch (error: any) {
-    console.error('[Admin Users] Error listing admins:', error.message);
+    logger.error('[Admin Users] Error listing admins:', error.message);
     sendError(res, 'Failed to list admin users', 500);
   }
 });
@@ -94,7 +95,7 @@ router.post('/', requireSuperAdmin, async (req: Request, res: Response) => {
       },
     });
 
-    console.log(`✅ [Admin Users] Created new admin: ${email}`);
+    logger.info(`✅ [Admin Users] Created new admin: ${email}`);
 
     res.status(201).json({
       success: true,
@@ -112,7 +113,7 @@ router.post('/', requireSuperAdmin, async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[Admin Users] Error creating admin:', error.message);
+    logger.error('[Admin Users] Error creating admin:', error.message);
     sendError(res, 'Failed to create admin user', 500);
   }
 });
@@ -148,7 +149,7 @@ router.put('/:id', requireSeniorAdmin, async (req: Request, res: Response) => {
 
     await admin.save();
 
-    console.log(`✅ [Admin Users] Updated admin: ${admin.email}`);
+    logger.info(`✅ [Admin Users] Updated admin: ${admin.email}`);
 
     sendSuccess(res, {
       adminUser: {
@@ -162,7 +163,7 @@ router.put('/:id', requireSeniorAdmin, async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[Admin Users] Error updating admin:', error.message);
+    logger.error('[Admin Users] Error updating admin:', error.message);
     sendError(res, 'Failed to update admin user', 500);
   }
 });
@@ -196,11 +197,11 @@ router.delete('/:id', requireSuperAdmin, async (req: Request, res: Response) => 
       { $unset: { assignedTo: 1 }, $set: { status: 'open' } }
     );
 
-    console.log(`✅ [Admin Users] Deactivated admin: ${admin.email}`);
+    logger.info(`✅ [Admin Users] Deactivated admin: ${admin.email}`);
 
     sendSuccess(res, { message: 'Admin user deactivated' });
   } catch (error: any) {
-    console.error('[Admin Users] Error deactivating admin:', error.message);
+    logger.error('[Admin Users] Error deactivating admin:', error.message);
     sendError(res, 'Failed to deactivate admin user', 500);
   }
 });

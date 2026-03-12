@@ -632,6 +632,9 @@ UserSchema.index({ 'auth.isVerified': 1 });
 UserSchema.index({ role: 1 });
 UserSchema.index({ referralTier: 1 });
 
+// Compound index for querying verified active users
+UserSchema.index({ 'auth.isVerified': 1, isActive: 1 });
+
 // Cascade cleanup when a user is deleted
 UserSchema.pre('deleteOne', { document: true, query: false }, async function () {
   const userId = this._id;

@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../../middleware/merchantauth';
 import CoinDrop from '../../models/CoinDrop';
@@ -90,7 +91,7 @@ router.get('/stores/:storeId/coin-drops', async (req: Request, res: Response) =>
       },
     });
   } catch (error: any) {
-    console.error('[Merchant CoinDrops] List error:', error.message);
+    logger.error('[Merchant CoinDrops] List error:', error.message);
     return res.status(500).json({
       success: false,
       message: 'Failed to retrieve CoinDrops',
@@ -139,7 +140,7 @@ router.get('/stores/:storeId/coin-drops/:id', async (req: Request, res: Response
       },
     });
   } catch (error: any) {
-    console.error('[Merchant CoinDrops] Get error:', error.message);
+    logger.error('[Merchant CoinDrops] Get error:', error.message);
     return res.status(500).json({
       success: false,
       message: 'Failed to retrieve CoinDrop',
@@ -245,7 +246,7 @@ router.post('/stores/:storeId/coin-drops', async (req: Request, res: Response) =
       },
     });
   } catch (error: any) {
-    console.error('[Merchant CoinDrops] Create error:', error.message);
+    logger.error('[Merchant CoinDrops] Create error:', error.message);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to create CoinDrop',
@@ -372,7 +373,7 @@ router.put('/stores/:storeId/coin-drops/:id', async (req: Request, res: Response
       },
     });
   } catch (error: any) {
-    console.error('[Merchant CoinDrops] Update error:', error.message);
+    logger.error('[Merchant CoinDrops] Update error:', error.message);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to update CoinDrop',
@@ -428,7 +429,7 @@ router.delete('/stores/:storeId/coin-drops/:id', async (req: Request, res: Respo
       message: 'CoinDrop deleted successfully',
     });
   } catch (error: any) {
-    console.error('[Merchant CoinDrops] Delete error:', error.message);
+    logger.error('[Merchant CoinDrops] Delete error:', error.message);
     return res.status(500).json({
       success: false,
       message: 'Failed to delete CoinDrop',
@@ -496,7 +497,7 @@ router.get('/stores/:storeId/coin-drops/:id/stats', async (req: Request, res: Re
       },
     });
   } catch (error: any) {
-    console.error('[Merchant CoinDrops] Stats error:', error.message);
+    logger.error('[Merchant CoinDrops] Stats error:', error.message);
     return res.status(500).json({
       success: false,
       message: 'Failed to retrieve CoinDrop stats',

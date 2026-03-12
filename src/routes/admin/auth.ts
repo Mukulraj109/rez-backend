@@ -125,7 +125,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    console.error('❌ [Admin Auth] Login error:', error);
+    logger.error('❌ [Admin Auth] Login error:', error);
     res.status(500).json({
       success: false,
       message: 'Login failed',
@@ -146,7 +146,7 @@ router.post('/logout', async (req: Request, res: Response) => {
       message: 'Logged out successfully'
     });
   } catch (error: any) {
-    console.error('❌ [Admin Auth] Logout error:', error);
+    logger.error('❌ [Admin Auth] Logout error:', error);
     res.status(500).json({
       success: false,
       message: 'Logout failed'
@@ -201,7 +201,7 @@ router.get('/me', async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    console.error('❌ [Admin Auth] Get me error:', error);
+    logger.error('❌ [Admin Auth] Get me error:', error);
     res.status(401).json({
       success: false,
       message: 'Invalid token'

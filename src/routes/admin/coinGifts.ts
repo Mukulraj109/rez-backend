@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { CoinGift } from '../../models/CoinGift';
@@ -94,7 +95,7 @@ router.get('/', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN COIN-GIFTS] List error:', error);
+    logger.error('❌ [ADMIN COIN-GIFTS] List error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -166,7 +167,7 @@ router.get('/analytics', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN COIN-GIFTS] Analytics error:', error);
+    logger.error('❌ [ADMIN COIN-GIFTS] Analytics error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -211,7 +212,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN COIN-GIFTS] Detail error:', error);
+    logger.error('❌ [ADMIN COIN-GIFTS] Detail error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -282,7 +283,7 @@ router.post('/:id/refund', async (req: Request, res: Response) => {
         { giftId: gift._id, adminId, reason }
       );
     } catch (ctxErr) {
-      console.error('❌ [ADMIN COIN-GIFTS] CoinTransaction refund error:', ctxErr);
+      logger.error('❌ [ADMIN COIN-GIFTS] CoinTransaction refund error:', ctxErr);
     }
 
     // Ledger entry: platform_float → sender
@@ -302,7 +303,7 @@ router.post('/:id/refund', async (req: Request, res: Response) => {
         },
       });
     } catch (ledgerErr) {
-      console.error('❌ [ADMIN COIN-GIFTS] Ledger refund error:', ledgerErr);
+      logger.error('❌ [ADMIN COIN-GIFTS] Ledger refund error:', ledgerErr);
     }
 
     // Audit log
@@ -338,7 +339,7 @@ router.post('/:id/refund', async (req: Request, res: Response) => {
       message: `Gift refunded. ${gift.amount} NC returned to sender.`,
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN COIN-GIFTS] Refund error:', error);
+    logger.error('❌ [ADMIN COIN-GIFTS] Refund error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -372,7 +373,7 @@ router.post('/:id/deliver', async (req: Request, res: Response) => {
       message: 'Gift manually delivered.',
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN COIN-GIFTS] Deliver error:', error);
+    logger.error('❌ [ADMIN COIN-GIFTS] Deliver error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

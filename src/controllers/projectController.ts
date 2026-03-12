@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Project } from '../models/Project';
@@ -26,7 +27,7 @@ export const submitProject = asyncHandler(async (req: Request, res: Response) =>
   } = req.body;
 
   try {
-    console.log('📋 [PROJECT] Submitting project for user:', userId);
+    logger.info('📋 [PROJECT] Submitting project for user:', userId);
 
     // Validate required fields
     if (!projectId) {
@@ -102,7 +103,7 @@ export const submitProject = asyncHandler(async (req: Request, res: Response) =>
       project.submissions[existingSubmissionIndex] = updatedSubmission as any;
       await project.save();
 
-      console.log('✅ [PROJECT] Project submission updated successfully');
+      logger.info('✅ [PROJECT] Project submission updated successfully');
 
       // Emit real-time project status update
       try {
@@ -147,7 +148,7 @@ export const submitProject = asyncHandler(async (req: Request, res: Response) =>
           completed
         });
       } catch (socketError) {
-        console.error('❌ [PROJECT] Error emitting project status update:', socketError);
+        logger.error('❌ [PROJECT] Error emitting project status update:', socketError);
       }
 
       // Get the updated submission with its _id
@@ -185,7 +186,7 @@ export const submitProject = asyncHandler(async (req: Request, res: Response) =>
         project.submissions.push(submission);
         await project.save();
 
-        console.log('✅ [PROJECT] Project submission created successfully');
+        logger.info('✅ [PROJECT] Project submission created successfully');
 
         // Emit real-time project status update
         try {
@@ -230,7 +231,7 @@ export const submitProject = asyncHandler(async (req: Request, res: Response) =>
             completed
           });
         } catch (error) {
-          console.error('❌ [PROJECT] Error emitting project status update:', error);
+          logger.error('❌ [PROJECT] Error emitting project status update:', error);
         }
 
     // Emit gamification event for project submission
@@ -256,7 +257,7 @@ export const submitProject = asyncHandler(async (req: Request, res: Response) =>
     }, isStarting ? 'Project started successfully' : 'Project submitted successfully');
 
   } catch (error) {
-    console.error('❌ [PROJECT] Submit project error:', error);
+    logger.error('❌ [PROJECT] Submit project error:', error);
     throw new AppError('Failed to submit project', 500);
   }
 });
@@ -295,7 +296,7 @@ export const getProjects = asyncHandler(async (req: Request, res: Response) => {
       ];
     }
 
-    console.log('📊 Project Query:', JSON.stringify(query, null, 2));
+    logger.info('📊 Project Query:', JSON.stringify(query, null, 2));
 
     const sortOptions: any = {};
     switch (sortBy) {
@@ -318,12 +319,12 @@ export const getProjects = asyncHandler(async (req: Request, res: Response) => {
         sortOptions.createdAt = -1;
     }
 
-    console.log('🔍 Sort Options:', sortOptions);
+    logger.info('🔍 Sort Options:', sortOptions);
 
     const skip = (Number(page) - 1) * Number(limit);
-    console.log(`📄 Pagination: page=${page}, limit=${limit}, skip=${skip}`);
+    logger.info(`📄 Pagination: page=${page}, limit=${limit}, skip=${skip}`);
 
-    console.log('🔎 Fetching projects from database...');
+    logger.info('🔎 Fetching projects from database...');
     let projects = await Project.find(query)
       .populate('createdBy', 'profile.firstName profile.lastName profile.avatar')
       .populate('sponsor', 'name logo')
@@ -341,7 +342,7 @@ export const getProjects = asyncHandler(async (req: Request, res: Response) => {
     // Convert to string for comparison (query params are always strings)
     const excludeUserSubmissionsStr = String(excludeUserSubmissionsValue || '');
     const shouldExclude = excludeUserSubmissionsStr === 'true' || excludeUserSubmissionsStr === '1';
-    console.log(`🔍 [PROJECTS] Filtering check: excludeUserSubmissions=${excludeUserSubmissionsStr}, userId=${userId}, shouldExclude=${shouldExclude}`);
+    logger.info(`🔍 [PROJECTS] Filtering check: excludeUserSubmissions=${excludeUserSubmissionsStr}, userId=${userId}, shouldExclude=${shouldExclude}`);
     
     if (shouldExclude && userId) {
       const userObjectId = new mongoose.Types.ObjectId(userId);
@@ -362,9 +363,9 @@ export const getProjects = asyncHandler(async (req: Request, res: Response) => {
                          (subStatus === 'pending' || subStatus === 'under_review');
           
           if (matches) {
-            console.log(`🚫 [PROJECTS] Filtering out project ${project._id}: user ${userObjectIdStr} has ${subStatus} submission (sub.user: ${subUserId})`);
+            logger.info(`🚫 [PROJECTS] Filtering out project ${project._id}: user ${userObjectIdStr} has ${subStatus} submission (sub.user: ${subUserId})`);
           } else if (subUserId === userObjectIdStr) {
-            console.log(`ℹ️ [PROJECTS] Project ${project._id}: user ${userObjectIdStr} has submission with status ${subStatus} (not filtering)`);
+            logger.info(`ℹ️ [PROJECTS] Project ${project._id}: user ${userObjectIdStr} has submission with status ${subStatus} (not filtering)`);
           }
           
           return matches;
@@ -375,17 +376,17 @@ export const getProjects = asyncHandler(async (req: Request, res: Response) => {
       });
       
       const filteredCount = initialCount - projects.length;
-      console.log(`✅ [PROJECTS] Filtered ${filteredCount} projects. Showing ${projects.length} projects (excluded projects with pending/under_review submissions)`);
+      logger.info(`✅ [PROJECTS] Filtered ${filteredCount} projects. Showing ${projects.length} projects (excluded projects with pending/under_review submissions)`);
     } else {
       if (!shouldExclude) {
-        console.log(`ℹ️ [PROJECTS] excludeUserSubmissions is false, showing all ${projects.length} projects`);
+        logger.info(`ℹ️ [PROJECTS] excludeUserSubmissions is false, showing all ${projects.length} projects`);
       } else if (!userId) {
-        console.log(`ℹ️ [PROJECTS] No userId available, showing all ${projects.length} projects`);
+        logger.info(`ℹ️ [PROJECTS] No userId available, showing all ${projects.length} projects`);
       }
     }
 
     const total = await Project.countDocuments(query);
-    console.log(`📊 Total projects in DB matching query: ${total}`);
+    logger.info(`📊 Total projects in DB matching query: ${total}`);
 
     const totalPages = Math.ceil(total / Number(limit));
 
@@ -402,8 +403,8 @@ export const getProjects = asyncHandler(async (req: Request, res: Response) => {
     }, 'Projects retrieved successfully');
 
   } catch (error) {
-    console.error('❌ Error fetching projects:', error);
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    logger.error('❌ Error fetching projects:', error);
+    logger.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     throw new AppError('Failed to fetch projects', 500);
   }
 });
@@ -449,7 +450,7 @@ export const getProjectById = asyncHandler(async (req: Request, res: Response) =
     }, 'Project retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [PROJECT] Error fetching project by ID:', error);
+    logger.error('❌ [PROJECT] Error fetching project by ID:', error);
     throw new AppError(
       error?.message || 'Failed to fetch project',
       error?.statusCode || 500
@@ -739,7 +740,7 @@ export const getEarningCategories = asyncHandler(async (req: Request, res: Respo
     sendSuccess(res, activeCategories, 'Earning categories retrieved successfully');
 
   } catch (error) {
-    console.error('❌ [PROJECT] Error getting earning categories:', error);
+    logger.error('❌ [PROJECT] Error getting earning categories:', error);
     throw new AppError('Failed to fetch earning categories', 500);
   }
 });
@@ -847,7 +848,7 @@ export const getMySubmissions = asyncHandler(async (req: Request, res: Response)
     }, 'User submissions retrieved successfully');
 
   } catch (error) {
-    console.error('Error fetching user submissions:', error);
+    logger.error('Error fetching user submissions:', error);
     throw new AppError('Failed to fetch user submissions', 500);
   }
 });

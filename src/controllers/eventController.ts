@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Event, EventBooking } from '../models';
@@ -50,7 +51,7 @@ export const getAllEvents = asyncHandler(async (req: Request, res: Response) => 
   if (regionHeader && isValidRegion(regionHeader)) {
     const regionFilter = regionService.getEventFilter(regionHeader as RegionId);
     Object.assign(query, regionFilter);
-    console.log(`🌍 [EVENTS] Region filter applied: ${regionHeader}`);
+    logger.info(`🌍 [EVENTS] Region filter applied: ${regionHeader}`);
   }
 
   if (category) {
@@ -554,7 +555,7 @@ export const bookEventSlot = asyncHandler(async (req: Request, res: Response) =>
         { eventName: event.title }
       );
     } catch (err) {
-      console.error('[EVENT BOOKING] Reward grant failed (non-blocking):', err);
+      logger.error('[EVENT BOOKING] Reward grant failed (non-blocking):', err);
     }
   }
 
@@ -609,7 +610,7 @@ export const bookEventSlot = asyncHandler(async (req: Request, res: Response) =>
         sessionId,
       };
     } catch (paymentError: any) {
-      console.error('❌ [EVENT BOOKING] Failed to create payment intent:', paymentError.message);
+      logger.error('❌ [EVENT BOOKING] Failed to create payment intent:', paymentError.message);
       // Rollback slot on payment failure
       if (slotId) {
         await Event.findOneAndUpdate(
@@ -683,7 +684,7 @@ export const confirmBooking = asyncHandler(async (req: Request, res: Response) =
   const userId = (req as any).user?.id;
   const { paymentIntentId } = req.body;
 
-  console.log('🔍 [EVENT BOOKING] Confirm booking request:', {
+  logger.info('🔍 [EVENT BOOKING] Confirm booking request:', {
     bookingId,
     userId,
     paymentIntentId,
@@ -703,21 +704,21 @@ export const confirmBooking = asyncHandler(async (req: Request, res: Response) =
   }).lean();
 
   if (!booking) {
-    console.error('❌ [EVENT BOOKING] Booking not found:', { bookingId, userId });
+    logger.error('❌ [EVENT BOOKING] Booking not found:', { bookingId, userId });
     return res.status(404).json({
       success: false,
       message: 'Booking not found'
     });
   }
 
-  console.log('📋 [EVENT BOOKING] Booking found:', {
+  logger.info('📋 [EVENT BOOKING] Booking found:', {
     bookingId: booking._id,
     status: booking.status,
     paymentStatus: booking.paymentStatus
   });
 
   if (booking.status === 'confirmed') {
-    console.log('✅ [EVENT BOOKING] Booking already confirmed');
+    logger.info('✅ [EVENT BOOKING] Booking already confirmed');
     return res.json({
       success: true,
       message: 'Booking is already confirmed',
@@ -726,7 +727,7 @@ export const confirmBooking = asyncHandler(async (req: Request, res: Response) =
   }
 
   if (booking.status === 'cancelled') {
-    console.error('❌ [EVENT BOOKING] Cannot confirm cancelled booking');
+    logger.error('❌ [EVENT BOOKING] Cannot confirm cancelled booking');
     return res.status(400).json({
       success: false,
       message: 'Cannot confirm a cancelled booking'
@@ -746,7 +747,7 @@ export const confirmBooking = asyncHandler(async (req: Request, res: Response) =
       }).lean();
 
       if (payment) {
-        console.log('✅ [EVENT BOOKING] Payment found for confirmation:', {
+        logger.info('✅ [EVENT BOOKING] Payment found for confirmation:', {
           paymentId: payment.paymentId,
           status: payment.status,
           bookingId
@@ -761,10 +762,10 @@ export const confirmBooking = asyncHandler(async (req: Request, res: Response) =
       } else {
         // Payment record not created yet — allow a small window for webhook to process
         // The webhook will handle final confirmation as a backup
-        console.warn('⚠️ [EVENT BOOKING] Payment not found yet — proceeding with confirmation. Webhook will validate:', paymentIntentId);
+        logger.warn('⚠️ [EVENT BOOKING] Payment not found yet — proceeding with confirmation. Webhook will validate:', paymentIntentId);
       }
     } catch (error) {
-      console.error('❌ [EVENT BOOKING] Error verifying payment:', error);
+      logger.error('❌ [EVENT BOOKING] Error verifying payment:', error);
       // Continue — webhook will handle final validation
     }
   } else if (booking.amount > 0) {
@@ -784,7 +785,7 @@ export const confirmBooking = asyncHandler(async (req: Request, res: Response) =
     booking.lockedUntil = undefined; // Clear inventory lock
     await booking.save();
 
-    console.log('✅ [EVENT BOOKING] Booking confirmed successfully:', {
+    logger.info('✅ [EVENT BOOKING] Booking confirmed successfully:', {
       bookingId: booking._id,
       status: booking.status,
       paymentStatus: booking.paymentStatus
@@ -802,7 +803,7 @@ export const confirmBooking = asyncHandler(async (req: Request, res: Response) =
         { eventName: event?.title || 'Event' }
       );
     } catch (err) {
-      console.error('[EVENT BOOKING] Reward grant on confirm failed (non-blocking):', err);
+      logger.error('[EVENT BOOKING] Reward grant on confirm failed (non-blocking):', err);
     }
 
     res.json({
@@ -814,7 +815,7 @@ export const confirmBooking = asyncHandler(async (req: Request, res: Response) =
       }
     });
   } catch (error: any) {
-    console.error('❌ [EVENT BOOKING] Error saving booking:', error);
+    logger.error('❌ [EVENT BOOKING] Error saving booking:', error);
     return res.status(400).json({
       success: false,
       message: error.message || 'Failed to confirm booking',
@@ -962,7 +963,7 @@ export const getRelatedEvents = asyncHandler(async (req: Request, res: Response)
       message: 'Related events retrieved successfully'
     });
   } catch (error) {
-    console.error('❌ [RELATED EVENTS] Error:', error);
+    logger.error('❌ [RELATED EVENTS] Error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get related events'
@@ -1000,7 +1001,7 @@ export const shareEvent = asyncHandler(async (req: Request, res: Response) => {
         );
       }
     } catch (err) {
-      console.error('[EVENT SHARE] Reward grant failed (non-blocking):', err);
+      logger.error('[EVENT SHARE] Reward grant failed (non-blocking):', err);
     }
   }
 
@@ -1140,7 +1141,7 @@ export const trackEventAnalytics = asyncHandler(async (req: Request, res: Respon
       failed
     });
   } catch (error: any) {
-    console.error('❌ [EVENT ANALYTICS] Error tracking events:', error);
+    logger.error('❌ [EVENT ANALYTICS] Error tracking events:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to track events',
@@ -1264,7 +1265,7 @@ export const checkInToEvent = asyncHandler(async (req: Request, res: Response) =
       { eventName: event.title, checkInMethod: method }
     );
   } catch (err) {
-    console.error('[EVENT CHECKIN] Reward grant failed (non-blocking):', err);
+    logger.error('[EVENT CHECKIN] Reward grant failed (non-blocking):', err);
   }
 
   res.json({

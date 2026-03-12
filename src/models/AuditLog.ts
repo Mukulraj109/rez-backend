@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Audit Log Model - Merchant Backend
 // Tracks all merchant activities for compliance and security
 
@@ -141,13 +142,13 @@ AuditLogSchema.statics.log = async function(data: {
     // Save asynchronously without waiting
     setImmediate(() => {
       log.save().catch((error) => {
-        console.error('❌ [AUDIT] Failed to create log:', error);
+        logger.error('❌ [AUDIT] Failed to create log:', error);
       });
     });
 
     return log;
   } catch (error) {
-    console.error('❌ [AUDIT] Failed to create log:', error);
+    logger.error('❌ [AUDIT] Failed to create log:', error);
     // Don't throw error - audit logging should never break the main flow
     return null;
   }

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Image Processing Service
  *
@@ -21,9 +22,9 @@ let sharpAvailable = false;
 try {
   sharp = require('sharp');
   sharpAvailable = true;
-  console.log('✅ [IMAGE] Sharp available for image processing');
+  logger.info('✅ [IMAGE] Sharp available for image processing');
 } catch {
-  console.warn('⚠️ [IMAGE] Sharp not available - images will be uploaded without local processing');
+  logger.warn('⚠️ [IMAGE] Sharp not available - images will be uploaded without local processing');
 }
 
 export interface ImageVariant {
@@ -133,7 +134,7 @@ export class ImageProcessingService {
       await pipeline.toFile(outputPath);
       return outputPath;
     } catch (error) {
-      console.warn(`⚠️ [IMAGE] Optimization failed for ${inputPath}, using original:`, error);
+      logger.warn(`⚠️ [IMAGE] Optimization failed for ${inputPath}, using original:`, error);
       return inputPath;
     }
   }
@@ -177,7 +178,7 @@ export class ImageProcessingService {
           format: 'webp',
         });
       } catch (error) {
-        console.warn(`⚠️ [IMAGE] Failed to generate ${size.suffix} variant:`, error);
+        logger.warn(`⚠️ [IMAGE] Failed to generate ${size.suffix} variant:`, error);
       }
     }
 
@@ -211,11 +212,11 @@ export class ImageProcessingService {
       const originalSize = fs.statSync(inputPath).size;
       const optimizedSize = fs.statSync(optimizedPath).size;
       const reduction = ((1 - optimizedSize / originalSize) * 100).toFixed(1);
-      console.log(`📦 [IMAGE] Optimized: ${(originalSize / 1024).toFixed(0)}KB → ${(optimizedSize / 1024).toFixed(0)}KB (${reduction}% reduction)`);
+      logger.info(`📦 [IMAGE] Optimized: ${(originalSize / 1024).toFixed(0)}KB → ${(optimizedSize / 1024).toFixed(0)}KB (${reduction}% reduction)`);
 
       return optimizedPath;
     } catch (error) {
-      console.warn('⚠️ [IMAGE] processForUpload failed, using original:', error);
+      logger.warn('⚠️ [IMAGE] processForUpload failed, using original:', error);
       return inputPath;
     }
   }

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import flashSaleService from '../services/flashSaleService';
 import offerService from '../services/offerService';
@@ -16,7 +17,7 @@ class FlashSaleController {
         count: flashSales.length,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error getting active flash sales:', error);
+      logger.error('❌ [FlashSaleController] Error getting active flash sales:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to fetch active flash sales',
@@ -38,7 +39,7 @@ class FlashSaleController {
         count: flashSales.length,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error getting upcoming flash sales:', error);
+      logger.error('❌ [FlashSaleController] Error getting upcoming flash sales:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to fetch upcoming flash sales',
@@ -61,7 +62,7 @@ class FlashSaleController {
         count: flashSales.length,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error getting expiring flash sales:', error);
+      logger.error('❌ [FlashSaleController] Error getting expiring flash sales:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to fetch expiring flash sales',
@@ -94,7 +95,7 @@ class FlashSaleController {
         data: flashSale,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error getting flash sale:', error);
+      logger.error('❌ [FlashSaleController] Error getting flash sale:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to fetch flash sale',
@@ -117,7 +118,7 @@ class FlashSaleController {
         count: flashSales.length,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error getting flash sales by product:', error);
+      logger.error('❌ [FlashSaleController] Error getting flash sales by product:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to fetch flash sales',
@@ -140,7 +141,7 @@ class FlashSaleController {
         count: flashSales.length,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error getting flash sales by category:', error);
+      logger.error('❌ [FlashSaleController] Error getting flash sales by category:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to fetch flash sales',
@@ -185,7 +186,7 @@ class FlashSaleController {
         data: flashSale,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error creating flash sale:', error);
+      logger.error('❌ [FlashSaleController] Error creating flash sale:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to create flash sale',
@@ -249,7 +250,7 @@ class FlashSaleController {
         data: flashSale,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error updating flash sale:', error);
+      logger.error('❌ [FlashSaleController] Error updating flash sale:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to update flash sale',
@@ -271,7 +272,7 @@ class FlashSaleController {
         message: 'Flash sale deleted successfully',
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error deleting flash sale:', error);
+      logger.error('❌ [FlashSaleController] Error deleting flash sale:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to delete flash sale',
@@ -300,7 +301,7 @@ class FlashSaleController {
         data: validation,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error validating purchase:', error);
+      logger.error('❌ [FlashSaleController] Error validating purchase:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to validate flash sale purchase',
@@ -322,7 +323,7 @@ class FlashSaleController {
         message: 'Click tracked successfully',
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error tracking click:', error);
+      logger.error('❌ [FlashSaleController] Error tracking click:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to track click',
@@ -352,7 +353,7 @@ class FlashSaleController {
         data: stats,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error getting stats:', error);
+      logger.error('❌ [FlashSaleController] Error getting stats:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to fetch flash sale statistics',
@@ -376,7 +377,7 @@ class FlashSaleController {
         data: result,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error finding best offer:', error);
+      logger.error('❌ [FlashSaleController] Error finding best offer:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to find best offer',
@@ -408,7 +409,7 @@ class FlashSaleController {
         data: result,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error applying offer:', error);
+      logger.error('❌ [FlashSaleController] Error applying offer:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to apply offer',
@@ -440,7 +441,7 @@ class FlashSaleController {
         data: result,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error validating promo code:', error);
+      logger.error('❌ [FlashSaleController] Error validating promo code:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to validate promo code',
@@ -493,7 +494,7 @@ class FlashSaleController {
         data: result,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error initiating purchase:', error);
+      logger.error('❌ [FlashSaleController] Error initiating purchase:', error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to initiate flash sale purchase',
@@ -532,7 +533,7 @@ class FlashSaleController {
         },
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error verifying payment:', error);
+      logger.error('❌ [FlashSaleController] Error verifying payment:', error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to verify payment',
@@ -563,7 +564,7 @@ class FlashSaleController {
         message: 'Purchase marked as failed',
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error failing purchase:', error);
+      logger.error('❌ [FlashSaleController] Error failing purchase:', error);
       res.status(500).json({
         success: false,
         message: error instanceof Error ? error.message : 'Failed to update purchase status',
@@ -587,7 +588,7 @@ class FlashSaleController {
         count: purchases.length,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error getting user purchases:', error);
+      logger.error('❌ [FlashSaleController] Error getting user purchases:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to fetch flash sale purchases',
@@ -629,7 +630,7 @@ class FlashSaleController {
         data: purchase,
       });
     } catch (error) {
-      console.error('❌ [FlashSaleController] Error getting purchase:', error);
+      logger.error('❌ [FlashSaleController] Error getting purchase:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to fetch purchase details',

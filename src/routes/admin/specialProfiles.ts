@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Special Profiles
  * CRUD for SpecialProfile model
@@ -39,7 +40,7 @@ router.get('/', async (req: Request, res: Response) => {
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     }, 'Special profiles fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching special profiles:', error);
+    logger.error('[Admin] Error fetching special profiles:', error);
     return sendError(res, 'Failed to fetch special profiles', 500);
   }
 });
@@ -54,7 +55,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     if (!profile) return sendError(res, 'Special profile not found', 404);
     return sendSuccess(res, profile, 'Special profile fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching special profile:', error);
+    logger.error('[Admin] Error fetching special profile:', error);
     return sendError(res, 'Failed to fetch special profile', 500);
   }
 });
@@ -72,7 +73,7 @@ router.post('/', async (req: Request, res: Response) => {
     const profile = await SpecialProfile.create({ ...req.body });
     return sendSuccess(res, profile, 'Special profile created');
   } catch (error) {
-    console.error('[Admin] Error creating special profile:', error);
+    logger.error('[Admin] Error creating special profile:', error);
     return sendError(res, 'Failed to create special profile', 500);
   }
 });
@@ -87,7 +88,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (!profile) return sendError(res, 'Special profile not found', 404);
     return sendSuccess(res, profile, 'Special profile updated');
   } catch (error) {
-    console.error('[Admin] Error updating special profile:', error);
+    logger.error('[Admin] Error updating special profile:', error);
     return sendError(res, 'Failed to update special profile', 500);
   }
 });
@@ -104,7 +105,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
     await profile.save();
     return sendSuccess(res, profile, `Special profile ${profile.isActive ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling special profile:', error);
+    logger.error('[Admin] Error toggling special profile:', error);
     return sendError(res, 'Failed to toggle special profile', 500);
   }
 });
@@ -119,7 +120,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     if (!profile) return sendError(res, 'Special profile not found', 404);
     return sendSuccess(res, null, 'Special profile deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting special profile:', error);
+    logger.error('[Admin] Error deleting special profile:', error);
     return sendError(res, 'Failed to delete special profile', 500);
   }
 });

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import Challenge, { IChallenge } from '../models/Challenge';
 import UserChallengeProgress, { IUserChallengeProgress } from '../models/UserChallengeProgress';
 import ChallengeAnalytics from '../models/ChallengeAnalytics';
@@ -68,7 +69,7 @@ class ChallengeService {
 
     // Auto-regenerate if no active challenges found
     if (challenges.length === 0) {
-      console.log('📅 [CHALLENGE SERVICE] No active challenges found, auto-regenerating...');
+      logger.info('📅 [CHALLENGE SERVICE] No active challenges found, auto-regenerating...');
       await this.regenerateExpiredChallenges();
 
       // Fetch again after regeneration
@@ -76,7 +77,7 @@ class ChallengeService {
         .sort({ featured: -1, difficulty: 1, endDate: 1 })
         .lean().exec();
 
-      console.log(`✅ [CHALLENGE SERVICE] Regenerated ${challenges.length} active challenges`);
+      logger.info(`✅ [CHALLENGE SERVICE] Regenerated ${challenges.length} active challenges`);
     }
 
     // Cache for 5 minutes
@@ -110,7 +111,7 @@ class ChallengeService {
         active: true, // Only regenerate ones that were active (not disabled/draft)
       }).lean();
 
-      console.log(`📅 [CHALLENGE SERVICE] Found ${expiredChallenges.length} expired challenges to regenerate`);
+      logger.info(`📅 [CHALLENGE SERVICE] Found ${expiredChallenges.length} expired challenges to regenerate`);
 
       for (const challenge of expiredChallenges) {
         const { startDate, endDate } = this.getDateRangeForType(challenge.type);
@@ -146,9 +147,9 @@ class ChallengeService {
         regeneratedCount++;
       }
 
-      console.log(`✅ [CHALLENGE SERVICE] Regenerated ${regeneratedCount} challenges`);
+      logger.info(`✅ [CHALLENGE SERVICE] Regenerated ${regeneratedCount} challenges`);
     } catch (error) {
-      console.error('❌ [CHALLENGE SERVICE] Error regenerating challenges:', error);
+      logger.error('❌ [CHALLENGE SERVICE] Error regenerating challenges:', error);
     }
 
     return regeneratedCount;
@@ -381,7 +382,7 @@ class ChallengeService {
             }
           } catch (notifErr) {
             if (process.env.NODE_ENV === 'development') {
-              console.log('[CHALLENGE SERVICE] Failed to send challenge completed notification:', notifErr);
+              logger.info('[CHALLENGE SERVICE] Failed to send challenge completed notification:', notifErr);
             }
           }
         }
@@ -460,7 +461,7 @@ class ChallengeService {
     let newWalletBalance: number | undefined;
     if (coinsReward > 0) {
       try {
-        console.log(`💰 [CHALLENGE SERVICE] Crediting ${coinsReward} coins to user ${userId} for challenge ${challenge.title}`);
+        logger.info(`💰 [CHALLENGE SERVICE] Crediting ${coinsReward} coins to user ${userId} for challenge ${challenge.title}`);
 
         // Atomic wallet update (prevents race conditions on concurrent claims)
         const updatedWallet = await Wallet.findOneAndUpdate(
@@ -503,7 +504,7 @@ class ChallengeService {
           newWalletBalance = updatedWallet.balance.available;
         }
 
-        console.log(`✅ [CHALLENGE SERVICE] Coins credited atomically. New balance: ${newWalletBalance}`);
+        logger.info(`✅ [CHALLENGE SERVICE] Coins credited atomically. New balance: ${newWalletBalance}`);
 
         // Create transaction record
         try {
@@ -538,9 +539,9 @@ class ChallengeService {
             isReversible: false
           });
 
-          console.log('✅ [CHALLENGE SERVICE] Transaction record created');
+          logger.info('✅ [CHALLENGE SERVICE] Transaction record created');
         } catch (txError) {
-          console.error('❌ [CHALLENGE SERVICE] Failed to create transaction:', txError);
+          logger.error('❌ [CHALLENGE SERVICE] Failed to create transaction:', txError);
           // Don't fail the whole operation if transaction creation fails
         }
 
@@ -558,13 +559,13 @@ class ChallengeService {
               progressId: String(progress._id)
             }
           );
-          console.log('✅ [CHALLENGE SERVICE] CoinTransaction record created for auto-sync');
+          logger.info('✅ [CHALLENGE SERVICE] CoinTransaction record created for auto-sync');
         } catch (coinTxError) {
-          console.error('❌ [CHALLENGE SERVICE] Failed to create CoinTransaction:', coinTxError);
+          logger.error('❌ [CHALLENGE SERVICE] Failed to create CoinTransaction:', coinTxError);
           // Don't fail - wallet was already updated atomically
         }
       } catch (walletError) {
-        console.error('❌ [CHALLENGE SERVICE] Error crediting coins to wallet:', walletError);
+        logger.error('❌ [CHALLENGE SERVICE] Error crediting coins to wallet:', walletError);
         // Don't fail the claim if wallet credit fails - user can contact support
       }
     }
@@ -898,10 +899,10 @@ class ChallengeService {
       expired += legacyExpiredResult.modifiedCount || 0;
 
       if (activated > 0 || expired > 0) {
-        console.log(`🔄 [CHALLENGE SERVICE] Transitions: ${activated} activated, ${expired} expired`);
+        logger.info(`🔄 [CHALLENGE SERVICE] Transitions: ${activated} activated, ${expired} expired`);
       }
     } catch (error) {
-      console.error('❌ [CHALLENGE SERVICE] Error transitioning statuses:', error);
+      logger.error('❌ [CHALLENGE SERVICE] Error transitioning statuses:', error);
     }
 
     return { activated, expired };

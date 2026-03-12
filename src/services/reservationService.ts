@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Types } from 'mongoose';
 import { Cart, IReservedItem } from '../models/Cart';
 import { Product } from '../models/Product';
@@ -40,7 +41,7 @@ class ReservationService {
     variant?: { type: string; value: string }
   ): Promise<IReservationResult> {
     try {
-      console.log('🔒 [RESERVATION] Attempting to reserve stock:', {
+      logger.info('🔒 [RESERVATION] Attempting to reserve stock:', {
         cartId,
         productId,
         quantity,
@@ -94,7 +95,7 @@ class ReservationService {
       // Calculate actual available stock (physical stock - reserved)
       const actualAvailable = availableStock - totalReserved;
 
-      console.log('🔒 [RESERVATION] Stock analysis:', {
+      logger.info('🔒 [RESERVATION] Stock analysis:', {
         physicalStock: availableStock,
         totalReserved,
         actualAvailable,
@@ -127,7 +128,7 @@ class ReservationService {
         cart.reservedItems[existingReservationIndex].reservedAt = new Date();
         cart.reservedItems[existingReservationIndex].expiresAt = expiresAt;
 
-        console.log('🔒 [RESERVATION] Updated existing reservation');
+        logger.info('🔒 [RESERVATION] Updated existing reservation');
       } else {
         // Create new reservation
         cart.reservedItems.push({
@@ -138,12 +139,12 @@ class ReservationService {
           expiresAt
         });
 
-        console.log('🔒 [RESERVATION] Created new reservation');
+        logger.info('🔒 [RESERVATION] Created new reservation');
       }
 
       await cart.save();
 
-      console.log('✅ [RESERVATION] Stock reserved successfully');
+      logger.info('✅ [RESERVATION] Stock reserved successfully');
 
       return {
         success: true,
@@ -153,7 +154,7 @@ class ReservationService {
         expiresAt
       };
     } catch (error) {
-      console.error('❌ [RESERVATION] Error reserving stock:', error);
+      logger.error('❌ [RESERVATION] Error reserving stock:', error);
       return {
         success: false,
         message: error instanceof Error ? error.message : 'Failed to reserve stock'
@@ -175,7 +176,7 @@ class ReservationService {
     variant?: { type: string; value: string }
   ): Promise<IReservationResult> {
     try {
-      console.log('🔓 [RESERVATION] Releasing stock:', {
+      logger.info('🔓 [RESERVATION] Releasing stock:', {
         cartId,
         productId,
         variant
@@ -200,7 +201,7 @@ class ReservationService {
       });
 
       if (cart.reservedItems.length === initialLength) {
-        console.log('⚠️ [RESERVATION] No reservation found to release');
+        logger.info('⚠️ [RESERVATION] No reservation found to release');
         return {
           success: true,
           message: 'No reservation found'
@@ -209,14 +210,14 @@ class ReservationService {
 
       await cart.save();
 
-      console.log('✅ [RESERVATION] Stock reservation released');
+      logger.info('✅ [RESERVATION] Stock reservation released');
 
       return {
         success: true,
         message: 'Stock reservation released'
       };
     } catch (error) {
-      console.error('❌ [RESERVATION] Error releasing stock:', error);
+      logger.error('❌ [RESERVATION] Error releasing stock:', error);
       return {
         success: false,
         message: error instanceof Error ? error.message : 'Failed to release stock'
@@ -233,7 +234,7 @@ class ReservationService {
    */
   async releaseAllStock(cartId: string): Promise<IReservationResult> {
     try {
-      console.log('🔓 [RESERVATION] Releasing all stock for cart:', cartId);
+      logger.info('🔓 [RESERVATION] Releasing all stock for cart:', cartId);
 
       const cart = await Cart.findById(cartId).lean();
       if (!cart) {
@@ -247,14 +248,14 @@ class ReservationService {
       cart.reservedItems = [];
       await cart.save();
 
-      console.log(`✅ [RESERVATION] Released ${releasedCount} reservations`);
+      logger.info(`✅ [RESERVATION] Released ${releasedCount} reservations`);
 
       return {
         success: true,
         message: `Released ${releasedCount} reservations`
       };
     } catch (error) {
-      console.error('❌ [RESERVATION] Error releasing all stock:', error);
+      logger.error('❌ [RESERVATION] Error releasing all stock:', error);
       return {
         success: false,
         message: error instanceof Error ? error.message : 'Failed to release stock'
@@ -277,7 +278,7 @@ class ReservationService {
     additionalMinutes: number = RESERVATION_TIMEOUT_MINUTES
   ): Promise<IReservationExtension> {
     try {
-      console.log('⏰ [RESERVATION] Extending reservation:', {
+      logger.info('⏰ [RESERVATION] Extending reservation:', {
         cartId,
         productId,
         additionalMinutes
@@ -316,7 +317,7 @@ class ReservationService {
 
       await cart.save();
 
-      console.log('✅ [RESERVATION] Reservation extended');
+      logger.info('✅ [RESERVATION] Reservation extended');
 
       return {
         success: true,
@@ -324,7 +325,7 @@ class ReservationService {
         newExpiresAt
       };
     } catch (error) {
-      console.error('❌ [RESERVATION] Error extending reservation:', error);
+      logger.error('❌ [RESERVATION] Error extending reservation:', error);
       return {
         success: false,
         message: error instanceof Error ? error.message : 'Failed to extend reservation'
@@ -346,7 +347,7 @@ class ReservationService {
     };
 
     try {
-      console.log('🧹 [RESERVATION] Starting expired reservation cleanup...');
+      logger.info('🧹 [RESERVATION] Starting expired reservation cleanup...');
 
       const now = new Date();
 
@@ -355,7 +356,7 @@ class ReservationService {
         'reservedItems.expiresAt': { $lt: now }
       }).lean();
 
-      console.log(`🧹 [RESERVATION] Found ${carts.length} carts with expired reservations`);
+      logger.info(`🧹 [RESERVATION] Found ${carts.length} carts with expired reservations`);
 
       for (const cart of carts) {
         try {
@@ -383,9 +384,9 @@ class ReservationService {
 
           result.releasedCount += expiredItems.length;
 
-          console.log(`🧹 [RESERVATION] Released ${expiredItems.length} expired reservations from cart ${(cart as any)._id}`);
+          logger.info(`🧹 [RESERVATION] Released ${expiredItems.length} expired reservations from cart ${(cart as any)._id}`);
         } catch (error) {
-          console.error(`❌ [RESERVATION] Error cleaning cart ${(cart as any)._id}:`, error);
+          logger.error(`❌ [RESERVATION] Error cleaning cart ${(cart as any)._id}:`, error);
           result.errors.push({
             cartId: (cart as any)._id.toString(),
             productId: 'N/A',
@@ -394,11 +395,11 @@ class ReservationService {
         }
       }
 
-      console.log(`✅ [RESERVATION] Cleanup complete. Released ${result.releasedCount} reservations`);
+      logger.info(`✅ [RESERVATION] Cleanup complete. Released ${result.releasedCount} reservations`);
 
       return result;
     } catch (error) {
-      console.error('❌ [RESERVATION] Error during cleanup:', error);
+      logger.error('❌ [RESERVATION] Error during cleanup:', error);
       result.errors.push({
         cartId: 'N/A',
         productId: 'N/A',
@@ -477,7 +478,7 @@ class ReservationService {
 
       const totalReserved = result.length > 0 ? result[0].totalReserved : 0;
 
-      console.log('🔒 [RESERVATION] Total reserved for product:', {
+      logger.info('🔒 [RESERVATION] Total reserved for product:', {
         productId,
         variant,
         totalReserved
@@ -485,7 +486,7 @@ class ReservationService {
 
       return totalReserved;
     } catch (error) {
-      console.error('❌ [RESERVATION] Error calculating total reserved:', error);
+      logger.error('❌ [RESERVATION] Error calculating total reserved:', error);
       return 0; // Return 0 on error to be safe
     }
   }
@@ -506,7 +507,7 @@ class ReservationService {
 
       return cart.reservedItems;
     } catch (error) {
-      console.error('❌ [RESERVATION] Error getting reservation status:', error);
+      logger.error('❌ [RESERVATION] Error getting reservation status:', error);
       return [];
     }
   }
@@ -575,7 +576,7 @@ class ReservationService {
         message: 'All reservations valid'
       };
     } catch (error) {
-      console.error('❌ [RESERVATION] Error validating reservations:', error);
+      logger.error('❌ [RESERVATION] Error validating reservations:', error);
       return {
         valid: false,
         message: error instanceof Error ? error.message : 'Validation error'

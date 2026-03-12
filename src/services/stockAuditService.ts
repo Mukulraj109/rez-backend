@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Types } from 'mongoose';
 import { StockHistory, StockChangeType, IStockHistory } from '../models/StockHistory';
 import { Product } from '../models/Product';
@@ -65,7 +66,7 @@ class StockAuditService {
    */
   async logStockChange(data: StockChangeData): Promise<IStockHistory> {
     try {
-      console.log('📊 [STOCK AUDIT] Logging stock change:', {
+      logger.info('📊 [STOCK AUDIT] Logging stock change:', {
         product: data.productId,
         changeType: data.changeType,
         previousStock: data.previousStock,
@@ -75,11 +76,11 @@ class StockAuditService {
 
       const historyEntry = await StockHistory.logStockChange(data);
 
-      console.log('📊 [STOCK AUDIT] Stock change logged successfully:', historyEntry._id);
+      logger.info('📊 [STOCK AUDIT] Stock change logged successfully:', historyEntry._id);
 
       return historyEntry;
     } catch (error) {
-      console.error('📊 [STOCK AUDIT] Failed to log stock change:', error);
+      logger.error('📊 [STOCK AUDIT] Failed to log stock change:', error);
       throw new Error(`Failed to log stock change: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -92,15 +93,15 @@ class StockAuditService {
     filters: StockHistoryFilters = {}
   ): Promise<IStockHistory[]> {
     try {
-      console.log('📊 [STOCK AUDIT] Fetching stock history for product:', productId);
+      logger.info('📊 [STOCK AUDIT] Fetching stock history for product:', productId);
 
       const history = await StockHistory.getProductHistory(productId.toString(), filters);
 
-      console.log('📊 [STOCK AUDIT] Found', history.length, 'history entries');
+      logger.info('📊 [STOCK AUDIT] Found', history.length, 'history entries');
 
       return history;
     } catch (error) {
-      console.error('📊 [STOCK AUDIT] Failed to fetch stock history:', error);
+      logger.error('📊 [STOCK AUDIT] Failed to fetch stock history:', error);
       throw new Error(`Failed to fetch stock history: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -114,15 +115,15 @@ class StockAuditService {
     variant?: { type: string; value: string }
   ): Promise<number> {
     try {
-      console.log('📊 [STOCK AUDIT] Getting stock snapshot for product:', productId, 'at date:', date);
+      logger.info('📊 [STOCK AUDIT] Getting stock snapshot for product:', productId, 'at date:', date);
 
       const stock = await StockHistory.getStockSnapshot(productId.toString(), date);
 
-      console.log('📊 [STOCK AUDIT] Stock at', date, 'was:', stock);
+      logger.info('📊 [STOCK AUDIT] Stock at', date, 'was:', stock);
 
       return stock;
     } catch (error) {
-      console.error('📊 [STOCK AUDIT] Failed to get stock snapshot:', error);
+      logger.error('📊 [STOCK AUDIT] Failed to get stock snapshot:', error);
       throw new Error(`Failed to get stock snapshot: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -135,15 +136,15 @@ class StockAuditService {
     options: AnomalyDetectionOptions = {}
   ): Promise<StockAnomalyResult[]> {
     try {
-      console.log('📊 [STOCK AUDIT] Detecting anomalies for store:', storeId);
+      logger.info('📊 [STOCK AUDIT] Detecting anomalies for store:', storeId);
 
       const anomalies = await StockHistory.detectAnomalies(storeId.toString());
 
-      console.log('📊 [STOCK AUDIT] Found', anomalies.length, 'anomalies');
+      logger.info('📊 [STOCK AUDIT] Found', anomalies.length, 'anomalies');
 
       return anomalies;
     } catch (error) {
-      console.error('📊 [STOCK AUDIT] Failed to detect anomalies:', error);
+      logger.error('📊 [STOCK AUDIT] Failed to detect anomalies:', error);
       throw new Error(`Failed to detect anomalies: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -157,16 +158,16 @@ class StockAuditService {
     endDate: Date
   ): Promise<StockReportResult[]> {
     try {
-      console.log('📊 [STOCK AUDIT] Generating stock report for store:', storeId);
-      console.log('📊 [STOCK AUDIT] Date range:', startDate, 'to', endDate);
+      logger.info('📊 [STOCK AUDIT] Generating stock report for store:', storeId);
+      logger.info('📊 [STOCK AUDIT] Date range:', startDate, 'to', endDate);
 
       const report = await StockHistory.generateStockReport(startDate, endDate);
 
-      console.log('📊 [STOCK AUDIT] Report generated with', report.length, 'products');
+      logger.info('📊 [STOCK AUDIT] Report generated with', report.length, 'products');
 
       return report;
     } catch (error) {
-      console.error('📊 [STOCK AUDIT] Failed to generate stock report:', error);
+      logger.error('📊 [STOCK AUDIT] Failed to generate stock report:', error);
       throw new Error(`Failed to generate stock report: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -191,7 +192,7 @@ class StockAuditService {
     }[];
   }> {
     try {
-      console.log('📊 [STOCK AUDIT] Getting stock movement summary for product:', productId);
+      logger.info('📊 [STOCK AUDIT] Getting stock movement summary for product:', productId);
 
       const query: any = {
         product: productId,
@@ -253,7 +254,7 @@ class StockAuditService {
         movements: formattedMovements
       };
     } catch (error) {
-      console.error('📊 [STOCK AUDIT] Failed to get stock movement summary:', error);
+      logger.error('📊 [STOCK AUDIT] Failed to get stock movement summary:', error);
       throw new Error(`Failed to get stock movement summary: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -272,7 +273,7 @@ class StockAuditService {
     recentHistory: IStockHistory[];
   }[]> {
     try {
-      console.log('📊 [STOCK AUDIT] Getting low stock alerts for store:', storeId);
+      logger.info('📊 [STOCK AUDIT] Getting low stock alerts for store:', storeId);
 
       // Get products with low stock
       const products = await Product.find({
@@ -314,7 +315,7 @@ class StockAuditService {
 
       return alerts.sort((a, b) => a.daysUntilStockOut - b.daysUntilStockOut);
     } catch (error) {
-      console.error('📊 [STOCK AUDIT] Failed to get low stock alerts:', error);
+      logger.error('📊 [STOCK AUDIT] Failed to get low stock alerts:', error);
       throw new Error(`Failed to get low stock alerts: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -333,7 +334,7 @@ class StockAuditService {
     totalItems: number;
   }[]> {
     try {
-      console.log('📊 [STOCK AUDIT] Getting stock value over time for store:', storeId);
+      logger.info('📊 [STOCK AUDIT] Getting stock value over time for store:', storeId);
 
       let groupFormat: any;
       switch (interval) {
@@ -396,7 +397,7 @@ class StockAuditService {
         totalItems: item.totalItems
       }));
     } catch (error) {
-      console.error('📊 [STOCK AUDIT] Failed to get stock value over time:', error);
+      logger.error('📊 [STOCK AUDIT] Failed to get stock value over time:', error);
       throw new Error(`Failed to get stock value over time: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

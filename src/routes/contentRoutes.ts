@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Router, Request, Response } from 'express';
 import ValueCard from '../models/ValueCard';
 import QuickAction from '../models/QuickAction';
@@ -20,7 +21,7 @@ router.get('/value-cards', async (_req: Request, res: Response) => {
       .lean();
     sendSuccess(res, { cards });
   } catch (error: any) {
-    console.error('[CONTENT] Error fetching value cards:', error);
+    logger.error('[CONTENT] Error fetching value cards:', error);
     sendError(res, error.message || 'Failed to fetch value cards');
   }
 });
@@ -36,7 +37,7 @@ router.get('/quick-actions', async (_req: Request, res: Response) => {
       .lean();
     sendSuccess(res, { actions });
   } catch (error: any) {
-    console.error('[CONTENT] Error fetching quick actions:', error);
+    logger.error('[CONTENT] Error fetching quick actions:', error);
     sendError(res, error.message || 'Failed to fetch quick actions');
   }
 });

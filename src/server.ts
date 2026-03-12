@@ -19,6 +19,12 @@ import { connectDatabase, database } from './config/database';
 // Import Redis service
 import redisService from './services/redisService';
 
+// Import payment gateway for health check
+import paymentGatewayService from './services/paymentGatewayService';
+
+// App version from package.json
+import { version as appVersion } from '../package.json';
+
 // Import environment validation
 import { validateEnvironment } from './config/validateEnv';
 
@@ -59,6 +65,8 @@ import { runPartnerEarningsSnapshot } from './jobs/partnerEarningsSnapshotJob';
 import { initializeReferralExpiryJob, runReferralExpiry } from './jobs/referralExpiryJob';
 import { initializePriveInviteExpiryJob } from './jobs/priveInviteExpiryJob';
 import { runPushReceiptProcessing } from './jobs/pushReceiptJob';
+import { initializeNearbyFlashSaleNotificationJob } from './jobs/nearbyFlashSaleNotificationJob';
+import { initializeWeeklySummaryJob } from './jobs/weeklySummaryJob';
 import { seedWalletFeatureFlags } from './services/walletFeatureService';
 
 // Import Bull-based scheduled job service (replaces node-cron with Bull repeatable jobs)
@@ -420,7 +428,7 @@ const getAllowedOrigins = (): string[] => {
   }
 
   if (origins.length === 0) {
-    console.warn('⚠️ [CORS] No origins configured! Set CORS_ORIGIN env var for production.');
+    logger.warn('⚠️ [CORS] No origins configured! Set CORS_ORIGIN env var for production.');
     return ['http://localhost:3000']; // Fallback for local dev only
   }
 
@@ -439,7 +447,7 @@ const corsOptions = {
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.warn(`⚠️ [CORS] Blocked request from origin: ${origin}`);
+      logger.warn(`⚠️ [CORS] Blocked request from origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -508,7 +516,6 @@ app.use(express.urlencoded({ extended: true, limit: '50kb' }));
 // Global request sanitization — XSS + NoSQL injection prevention
 // Mounted after body parsing, before routes. Webhook routes (above) are unaffected.
 import mongoSanitize from 'express-mongo-sanitize';
-import { sanitizeRequest, preventNoSQLInjection } from './middleware/sanitization';
 // Wrap mongoSanitize to avoid "Cannot set property query" error on Express 5+ / newer router
 app.use((req, res, next) => {
   if (req.body) mongoSanitize.sanitize(req.body, { replaceWith: '_' });
@@ -520,9 +527,7 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(sanitizeRequest);
-app.use(preventNoSQLInjection);
-console.log('✅ Request sanitization middleware enabled (mongo-sanitize + XSS + NoSQL injection)');
+logger.info('✅ Request sanitization middleware enabled (mongo-sanitize)');
 
 // Cookie parser middleware (required for CSRF protection)
 import cookieParser from 'cookie-parser';
@@ -531,7 +536,7 @@ app.use(cookieParser());
 // CSRF Protection Middleware
 // Sets CSRF token in cookie and response header for all requests
 app.use(setCsrfToken);
-console.log('✅ CSRF protection middleware enabled');
+logger.info('✅ CSRF protection middleware enabled');
 
 // Compression middleware
 app.use(compression());
@@ -574,83 +579,45 @@ if (process.env.NODE_ENV !== 'production') {
   app.get('/api-docs.json', (_req, res) => res.status(404).json({ message: 'Not found' }));
 }
 
-// Health check endpoint with API info
-app.get('/health', async (req, res) => {
+// Health check endpoint — lean, UptimeRobot-friendly
+app.get('/health', async (_req, res) => {
   try {
-    const dbHealth = await database.healthCheck();
-
-    // Check Redis health
-    let redisHealth: { status: string; latencyMs?: number } = { status: 'unknown' };
+    // DB check
+    let db = 'disconnected';
     try {
-      const redisService = (await import('./services/redisService')).default;
-      const start = Date.now();
-      const connected = await redisService.exists('health:ping');
-      redisHealth = { status: connected !== undefined ? 'connected' : 'disconnected', latencyMs: Date.now() - start };
+      const dbHealth = await database.healthCheck();
+      db = dbHealth.status === 'healthy' ? 'connected' : 'disconnected';
     } catch {
-      redisHealth = { status: 'disconnected' };
+      db = 'error';
     }
 
-    const allHealthy = dbHealth && redisHealth.status !== 'disconnected';
+    // Redis check
+    let redis = 'disconnected';
+    try {
+      redis = redisService.isReady() ? 'connected' : 'disconnected';
+    } catch {
+      redis = 'error';
+    }
 
-    const health = {
+    // Payment gateways (no network calls — cached flags only)
+    const payments = paymentGatewayService.getHealthStatus();
+
+    const allHealthy = db === 'connected' && redis === 'connected';
+
+    res.status(allHealthy ? 200 : 503).json({
       status: allHealthy ? 'ok' : 'degraded',
+      db,
+      redis,
+      payments,
+      uptime: Math.floor(process.uptime()),
+      version: appVersion,
       timestamp: new Date().toISOString(),
-      database: dbHealth,
-      redis: redisHealth,
-      environment: process.env.NODE_ENV || 'development',
-      version: '1.0.0',
-      api: {
-        prefix: API_PREFIX,
-        totalEndpoints: 159,
-        modules: 17,
-        endpoints: {
-          auth: `${API_PREFIX}/auth`,
-          products: `${API_PREFIX}/products`,
-          cart: `${API_PREFIX}/cart`,
-          categories: `${API_PREFIX}/categories`,
-          stores: `${API_PREFIX}/stores`,
-          orders: `${API_PREFIX}/orders`,
-          videos: `${API_PREFIX}/videos`,
-          ugc: `${API_PREFIX}/ugc`,
-          articles: `${API_PREFIX}/articles`,
-          projects: `${API_PREFIX}/projects`,
-          notifications: `${API_PREFIX}/notifications`,
-          reviews: `${API_PREFIX}/reviews`,
-          wishlist: `${API_PREFIX}/wishlist`,
-          sync: `${API_PREFIX}/sync`,
-          wallet: `${API_PREFIX}/wallet`,
-          offers: `${API_PREFIX}/offers`,
-          vouchers: `${API_PREFIX}/vouchers`,
-          addresses: `${API_PREFIX}/addresses`,
-          paymentMethods: `${API_PREFIX}/payment-methods`,
-          userSettings: `${API_PREFIX}/user-settings`,
-          achievements: `${API_PREFIX}/achievements`,
-          activities: `${API_PREFIX}/activities`,
-          referral: `${API_PREFIX}/referral`,
-          coupons: `${API_PREFIX}/coupons`,
-          support: `${API_PREFIX}/support`,
-          cashback: `${API_PREFIX}/cashback`,
-          discounts: `${API_PREFIX}/discounts`,
-          storeVouchers: `${API_PREFIX}/store-vouchers`,
-          outlets: `${API_PREFIX}/outlets`,
-          flashSales: `${API_PREFIX}/flash-sales`,
-          bills: `${API_PREFIX}/bills`,
-          partner: `${API_PREFIX}/partner`,
-          menu: `${API_PREFIX}/menu`,
-          tableBookings: `${API_PREFIX}/table-bookings`,
-          consultations: `${API_PREFIX}/consultations`,
-          storeVisits: `${API_PREFIX}/store-visits`,
-          homepage: `${API_PREFIX}/homepage`
-        }
-      }
-    };
-
-    res.status(200).json(health);
+    });
   } catch (error) {
-    res.status(500).json({
+    res.status(503).json({
       status: 'error',
       timestamp: new Date().toISOString(),
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
@@ -826,7 +793,7 @@ app.get('/api-info', (req, res) => {
 
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
+  logger.error(err.stack);
   res.status(500).json({
     success: false,
     message: 'Something went wrong!',
@@ -839,7 +806,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // User API Routes
 app.use(`${API_PREFIX}/user/auth`, authRoutes);
 app.use(`${API_PREFIX}/products`, productRoutes);
-console.log('✅ Product routes registered at /api/products');
+logger.info('✅ Product routes registered at /api/products');
 app.use(`${API_PREFIX}/cart`, cartRoutes);
 app.use(`${API_PREFIX}/categories`, categoryRoutes);
 app.use(`${API_PREFIX}/stores`, storeRoutes);
@@ -859,22 +826,23 @@ app.use(`${API_PREFIX}/favorites`, favoriteRoutes);
 app.use(`${API_PREFIX}/comparisons`, comparisonRoutes);
 app.use(`${API_PREFIX}/product-comparisons`, productComparisonRoutes);
 app.use(`${API_PREFIX}/analytics`, analyticsRoutes);
+app.use(`${API_PREFIX}/t`, analyticsRoutes); // Ad-blocker-safe alias for frontend event ingestion
 app.use(`${API_PREFIX}/recommendations`, recommendationRoutes);
 app.use(`${API_PREFIX}/wishlist`, wishlistRoutes);
 app.use(`${API_PREFIX}/sync`, syncRoutes);
 app.use(`${API_PREFIX}/location`, locationRoutes);
 app.use(`${API_PREFIX}/wallet`, walletRoutes);
 app.use(`${API_PREFIX}/wallet/transfer`, transferRoutes);
-console.log('✅ Transfer routes registered at /api/wallet/transfer');
+logger.info('✅ Transfer routes registered at /api/wallet/transfer');
 app.use(`${API_PREFIX}/wallet/gift`, giftRoutes);
-console.log('✅ Gift routes registered at /api/wallet/gift');
+logger.info('✅ Gift routes registered at /api/wallet/gift');
 app.use(`${API_PREFIX}/wallet/gift-cards`, giftCardRoutes);
-console.log('✅ Gift card routes registered at /api/wallet/gift-cards');
+logger.info('✅ Gift card routes registered at /api/wallet/gift-cards');
 app.use(`${API_PREFIX}/offers`, offerCommentRoutes);
-console.log('✅ Offer comment routes registered at /api/offers');
+logger.info('✅ Offer comment routes registered at /api/offers');
 app.use(`${API_PREFIX}/offers`, offerRoutes);
 app.use(`${API_PREFIX}/zones`, zoneVerificationRoutes);
-console.log('✅ Zone verification routes registered at /api/zones');
+logger.info('✅ Zone verification routes registered at /api/zones');
 app.use(`${API_PREFIX}/offer-categories`, offerCategoryRoutes);
 app.use(`${API_PREFIX}/hero-banners`, heroBannerRoutes);
 app.use(`${API_PREFIX}/whats-new`, whatsNewRoutes);
@@ -886,9 +854,9 @@ app.use(`${API_PREFIX}/achievements`, achievementRoutes);
 app.use(`${API_PREFIX}/activities`, activityRoutes);
 app.use(`${API_PREFIX}/payment`, paymentRoutes);
 app.use(`${API_PREFIX}/store-payment`, storePaymentRoutes);
-console.log('✅ Store payment routes registered at /api/store-payment');
+logger.info('✅ Store payment routes registered at /api/store-payment');
 app.use(`${API_PREFIX}/wallets/external`, externalWalletRoutes);
-console.log('✅ External wallet routes registered at /api/wallets/external');
+logger.info('✅ External wallet routes registered at /api/wallets/external');
 app.use(`${API_PREFIX}/stock`, stockRoutes);
 app.use(`${API_PREFIX}/social-media`, socialMediaRoutes);
 app.use(`${API_PREFIX}/security`, securityRoutes);
@@ -896,43 +864,43 @@ app.use(`${API_PREFIX}/events`, eventRoutes);
 app.use(`${API_PREFIX}/referral`, referralRoutes);
 app.use(`${API_PREFIX}/user/profile`, profileRoutes);
 app.use(`${API_PREFIX}/games`, gameRoutes);
-console.log('✅ Game routes registered at /api/games');
+logger.info('✅ Game routes registered at /api/games');
 app.use(`${API_PREFIX}/leaderboard`, leaderboardRoutes);
-console.log('✅ Leaderboard routes registered at /api/leaderboard');
+logger.info('✅ Leaderboard routes registered at /api/leaderboard');
 app.use(`${API_PREFIX}/streak`, streakRoutes);
-console.log('✅ Streak routes registered at /api/streak');
+logger.info('✅ Streak routes registered at /api/streak');
 app.use(`${API_PREFIX}/shares`, shareRoutes);  // plural to match frontend
-console.log('✅ Share routes registered at /api/shares');
+logger.info('✅ Share routes registered at /api/shares');
 import photoUploadRoutes from './routes/photoUploadRoutes';
 app.use(`${API_PREFIX}/photos`, photoUploadRoutes);
-console.log('✅ Photo upload routes registered at /api/photos');
+logger.info('✅ Photo upload routes registered at /api/photos');
 import pollRoutes from './routes/pollRoutes';
 app.use(`${API_PREFIX}/polls`, pollRoutes);
-console.log('✅ Poll routes registered at /api/polls');
+logger.info('✅ Poll routes registered at /api/polls');
 app.use(`${API_PREFIX}/tournaments`, tournamentRoutes);
-console.log('✅ Tournament routes registered at /api/tournaments');
+logger.info('✅ Tournament routes registered at /api/tournaments');
 app.use(`${API_PREFIX}/programs`, programRoutes);
-console.log('✅ Program routes registered at /api/programs');
+logger.info('✅ Program routes registered at /api/programs');
 app.use(`${API_PREFIX}/special-programs`, specialProgramRoutes);
-console.log('✅ Special Program routes registered at /api/special-programs');
+logger.info('✅ Special Program routes registered at /api/special-programs');
 app.use(`${API_PREFIX}/sponsors`, sponsorRoutes);
-console.log('✅ Sponsor routes registered at /api/sponsors');
+logger.info('✅ Sponsor routes registered at /api/sponsors');
 app.use(`${API_PREFIX}/surveys`, surveyRoutes);
-console.log('✅ Survey routes registered at /api/surveys');
+logger.info('✅ Survey routes registered at /api/surveys');
 app.use(`${API_PREFIX}/user/verifications`, verificationRoutes);
-console.log('✅ User verification routes registered at /api/user/verifications');
+logger.info('✅ User verification routes registered at /api/user/verifications');
 app.use(`${API_PREFIX}/scratch-cards`, scratchCardRoutes);
 app.use(`${API_PREFIX}/coupons`, couponRoutes);
 // store-promo-coins route removed - using wallet.brandedCoins instead
 app.use(`${API_PREFIX}/razorpay`, razorpayRoutes);
 app.use(`${API_PREFIX}/webhooks`, webhookRoutes);
-console.log('✅ Webhook routes registered at /api/webhooks');
+logger.info('✅ Webhook routes registered at /api/webhooks');
 app.use(`${API_PREFIX}/support`, supportRoutes);
 app.use(`${API_PREFIX}/messages`, messageRoutes);
-console.log('✅ Messaging routes registered at /api/messages');
+logger.info('✅ Messaging routes registered at /api/messages');
 app.use(`${API_PREFIX}/cashback`, cashbackRoutes);
 app.use(`${API_PREFIX}/loyalty`, loyaltyRoutes);
-console.log('✅ Loyalty routes registered at /api/loyalty');
+logger.info('✅ Loyalty routes registered at /api/loyalty');
 app.use(`${API_PREFIX}/user-products`, userProductRoutes);
 app.use(`${API_PREFIX}/discounts`, discountRoutes);
 app.use(`${API_PREFIX}/store-vouchers`, storeVoucherRoutes);
@@ -946,114 +914,114 @@ app.use(`${API_PREFIX}/subscriptions`, subscriptionRoutes);
 
 // Billing History Routes - Transaction history and invoices for subscriptions
 app.use(`${API_PREFIX}/billing`, billingRoutes);
-console.log('✅ Billing routes registered at /api/billing');
+logger.info('✅ Billing routes registered at /api/billing');
 
 // Bill Upload & Verification Routes - Offline purchase receipts for cashback
 app.use(`${API_PREFIX}/bills`, billRoutes);
-console.log('✅ Bill routes registered at /api/bills');
+logger.info('✅ Bill routes registered at /api/bills');
 
 // Bill Payment Routes - Utility bill payments (electricity, water, gas, etc.)
 app.use(`${API_PREFIX}/bill-payments`, billPaymentRoutes);
-console.log('✅ Bill payment routes registered at /api/bill-payments');
+logger.info('✅ Bill payment routes registered at /api/bill-payments');
 
 // Unified Gamification Routes - All gamification functionality under one endpoint
 app.use(`${API_PREFIX}/gamification`, unifiedGamificationRoutes);
-console.log('✅ Unified gamification routes registered at /api/gamification');
+logger.info('✅ Unified gamification routes registered at /api/gamification');
 
 // Social Feed Routes - Activity feed, follow system, likes, comments
 app.use(`${API_PREFIX}/social`, activityFeedRoutes);
-console.log('✅ Social feed routes registered at /api/social');
+logger.info('✅ Social feed routes registered at /api/social');
 
 // Social Proof Routes - Nearby activity for trust indicators
 app.use(`${API_PREFIX}/social-proof`, socialProofRoutes);
-console.log('✅ Social proof routes registered at /api/social-proof');
+logger.info('✅ Social proof routes registered at /api/social-proof');
 
 // Partner Program Routes - Partner levels, rewards, milestones, earnings
 app.use(`${API_PREFIX}/partner`, partnerRoutes);
-console.log('✅ Partner program routes registered at /api/partner');
+logger.info('✅ Partner program routes registered at /api/partner');
 
 // // Earnings Routes - User earnings summary with breakdown
 app.use(`${API_PREFIX}/earnings`, earningsRoutes);
-console.log('✅ Earnings routes registered at /api/earnings');
+logger.info('✅ Earnings routes registered at /api/earnings');
 
 // Learning Content Routes - Educational content with coin rewards
 app.use(`${API_PREFIX}/learning`, learningRoutes);
-console.log('✅ Learning routes registered at /api/learning');
+logger.info('✅ Learning routes registered at /api/learning');
 
 // Menu Routes - Restaurant/Store menus and pre-orders
 app.use(`${API_PREFIX}/menu`, menuRoutes);
-console.log('✅ Menu routes registered at /api/menu');
+logger.info('✅ Menu routes registered at /api/menu');
 
 // Table Booking Routes - Restaurant table reservations
 app.use(`${API_PREFIX}/table-bookings`, tableBookingRoutes);
-console.log('✅ Table booking routes registered at /api/table-bookings');
+logger.info('✅ Table booking routes registered at /api/table-bookings');
 
 // Service Appointment Routes - Service appointments for salons, spas, consultations
 app.use(`${API_PREFIX}/service-appointments`, serviceAppointmentRoutes);
-console.log('✅ Service appointment routes registered at /api/service-appointments');
+logger.info('✅ Service appointment routes registered at /api/service-appointments');
 
 // Service Categories Routes - Service categories with cashback offers
 app.use(`${API_PREFIX}/service-categories`, serviceCategoryRoutes);
-console.log('✅ Service category routes registered at /api/service-categories');
+logger.info('✅ Service category routes registered at /api/service-categories');
 
 // Services Routes - Services (products with type 'service')
 app.use(`${API_PREFIX}/services`, serviceRoutes);
-console.log('✅ Service routes registered at /api/services');
+logger.info('✅ Service routes registered at /api/services');
 
 // Home Services Routes - Home services specific endpoints
 app.use(`${API_PREFIX}/home-services`, homeServicesRoutes);
-console.log('✅ Home services routes registered at /api/home-services');
+logger.info('✅ Home services routes registered at /api/home-services');
 
 // Travel Services Routes - Travel services specific endpoints (flights, hotels, trains, bus, cab, packages)
 app.use(`${API_PREFIX}/travel-services`, travelServicesRoutes);
-console.log('✅ Travel services routes registered at /api/travel-services');
+logger.info('✅ Travel services routes registered at /api/travel-services');
 
 // Travel Payment Routes - Razorpay integration for travel bookings
 app.use(`${API_PREFIX}/travel-payment`, travelPaymentRoutes);
-console.log('✅ Travel payment routes registered at /api/travel-payment');
+logger.info('✅ Travel payment routes registered at /api/travel-payment');
 app.use(`${API_PREFIX}/travel-webhooks`, travelWebhookRoutes);
-console.log('✅ Travel webhook routes registered at /api/travel-webhooks');
+logger.info('✅ Travel webhook routes registered at /api/travel-webhooks');
 
 // Financial Services Routes - Financial services endpoints (bills, OTT, recharge, gold, insurance)
 app.use(`${API_PREFIX}/financial-services`, financialServicesRoutes);
-console.log('✅ Financial services routes registered at /api/financial-services');
+logger.info('✅ Financial services routes registered at /api/financial-services');
 
 // Gold Savings Routes - Digital gold buy/sell/holdings
 import goldSavingsRoutes from './routes/goldSavingsRoutes';
 app.use(`${API_PREFIX}/gold`, goldSavingsRoutes);
-console.log('✅ Gold savings routes registered at /api/gold');
+logger.info('✅ Gold savings routes registered at /api/gold');
 
 // Service Bookings Routes - User service bookings
 app.use(`${API_PREFIX}/service-bookings`, serviceBookingRoutes);
-console.log('✅ Service booking routes registered at /api/service-bookings');
+logger.info('✅ Service booking routes registered at /api/service-bookings');
 
 // // Consultation Routes - Medical/Professional consultation bookings
 app.use(`${API_PREFIX}/consultations`, consultationRoutes);
-console.log('✅ Consultation routes registered at /api/consultations');
+logger.info('✅ Consultation routes registered at /api/consultations');
 
 // Health Records Routes - User health document management
 app.use(`${API_PREFIX}/health-records`, healthRecordRoutes);
-console.log('✅ Health records routes registered at /api/health-records');
+logger.info('✅ Health records routes registered at /api/health-records');
 
 // Emergency Routes - Emergency contacts and ambulance booking
 app.use(`${API_PREFIX}/emergency`, emergencyRoutes);
-console.log('✅ Emergency routes registered at /api/emergency');
+logger.info('✅ Emergency routes registered at /api/emergency');
 
 // // Store Visit Routes - Retail store visits and queue system
 app.use(`${API_PREFIX}/store-visits`, storeVisitRoutes);
-console.log('✅ Store visit routes registered at /api/store-visits');
+logger.info('✅ Store visit routes registered at /api/store-visits');
 
 // Homepage Routes - Batch endpoint for all homepage data
 app.use(`${API_PREFIX}/homepage`, homepageRoutes);
-console.log('✅ Homepage routes registered at /api/homepage');
+logger.info('✅ Homepage routes registered at /api/homepage');
 
 // Offers Routes - Bank offers and exclusive offers
 app.use(`${API_PREFIX}/offers`, offersRoutes);
-console.log('✅ Offers routes registered at /api/offers');
+logger.info('✅ Offers routes registered at /api/offers');
 
 // Loyalty Routes - User loyalty, streaks, missions, coins
 app.use(`${API_PREFIX}/users/loyalty`, loyaltyRoutes);
-console.log('✅ Loyalty routes registered at /api/users/loyalty');
+logger.info('✅ Loyalty routes registered at /api/users/loyalty');
 
 // Stats Routes - Social proof stats
 app.use(`${API_PREFIX}/stats`, statsRoutes);
@@ -1064,156 +1032,156 @@ app.use(`${API_PREFIX}/platform`, platformRoutes);
 // Explore page routes
 app.use(`${API_PREFIX}/explore`, exploreRoutes);
 app.use(`${API_PREFIX}/test`, testRoutes);  // Integration test routes (dev/test only)
-console.log('✅ Explore routes registered at /api/explore');
+logger.info('✅ Explore routes registered at /api/explore');
 
 // Admin audit middleware — logs all POST/PUT/PATCH/DELETE on admin routes
 app.use(`${API_PREFIX}/admin`, adminAuditMiddleware);
-console.log('✅ Admin audit middleware registered for /api/admin/*');
+logger.info('✅ Admin audit middleware registered for /api/admin/*');
 
 // Admin explore management routes
 app.use(`${API_PREFIX}/admin/explore`, adminExploreRoutes);
-console.log('✅ Admin explore routes registered at /api/admin/explore');
+logger.info('✅ Admin explore routes registered at /api/admin/explore');
 
 // Admin creator management routes
 app.use(`${API_PREFIX}/admin/creators`, adminCreatorRoutes);
-console.log('✅ Admin creator routes registered at /api/admin/creators');
+logger.info('✅ Admin creator routes registered at /api/admin/creators');
 
 // Admin authentication routes (for rez-admin portal)
 app.use(`${API_PREFIX}/admin/auth`, adminAuthRoutes);
-console.log('✅ Admin auth routes registered at /api/admin/auth');
+logger.info('✅ Admin auth routes registered at /api/admin/auth');
 
 // Admin panel routes
 app.use(`${API_PREFIX}/admin/dashboard`, adminDashboardRoutes);
-console.log('✅ Admin dashboard routes registered at /api/admin/dashboard');
+logger.info('✅ Admin dashboard routes registered at /api/admin/dashboard');
 app.use(`${API_PREFIX}/admin/orders`, adminOrdersRoutes);
-console.log('✅ Admin orders routes registered at /api/admin/orders');
+logger.info('✅ Admin orders routes registered at /api/admin/orders');
 app.use(`${API_PREFIX}/admin/coin-rewards`, adminCoinRewardsRoutes);
-console.log('✅ Admin coin rewards routes registered at /api/admin/coin-rewards');
+logger.info('✅ Admin coin rewards routes registered at /api/admin/coin-rewards');
 app.use(`${API_PREFIX}/admin/merchant-wallets`, adminMerchantWalletsRoutes);
-console.log('✅ Admin merchant wallets routes registered at /api/admin/merchant-wallets');
+logger.info('✅ Admin merchant wallets routes registered at /api/admin/merchant-wallets');
 app.use(`${API_PREFIX}/admin/users`, adminUsersRoutes);
-console.log('✅ Admin users routes registered at /api/admin/users');
+logger.info('✅ Admin users routes registered at /api/admin/users');
 app.use(`${API_PREFIX}/admin/merchants`, adminMerchantsRoutes);
-console.log('✅ Admin merchants routes registered at /api/admin/merchants');
+logger.info('✅ Admin merchants routes registered at /api/admin/merchants');
 app.use(`${API_PREFIX}/admin/wallet`, adminWalletRoutes);
-console.log('✅ Admin wallet routes registered at /api/admin/wallet');
+logger.info('✅ Admin wallet routes registered at /api/admin/wallet');
 app.use(`${API_PREFIX}/admin/campaigns`, adminCampaignsRoutes);
-console.log('✅ Admin campaigns routes registered at /api/admin/campaigns');
+logger.info('✅ Admin campaigns routes registered at /api/admin/campaigns');
 app.use(`${API_PREFIX}/admin/bonus-zone`, adminBonusZoneRoutes);
 app.use(`${API_PREFIX}/admin/offers-sections`, adminOffersSectionRoutes);
 app.use(`${API_PREFIX}/admin/store-collections`, adminStoreCollectionRoutes);
 app.use(`${API_PREFIX}/admin/prive`, adminPriveRoutes);
-console.log('✅ Admin bonus zone routes registered at /api/admin/bonus-zone');
-console.log('✅ Admin store-collections routes registered at /api/admin/store-collections');
-console.log('✅ Admin Privé routes registered at /api/admin/prive');
+logger.info('✅ Admin bonus zone routes registered at /api/admin/bonus-zone');
+logger.info('✅ Admin store-collections routes registered at /api/admin/store-collections');
+logger.info('✅ Admin Privé routes registered at /api/admin/prive');
 app.use(`${API_PREFIX}/admin/uploads`, adminUploadsRoutes);
-console.log('✅ Admin uploads routes registered at /api/admin/uploads');
+logger.info('✅ Admin uploads routes registered at /api/admin/uploads');
 app.use(`${API_PREFIX}/admin/experiences`, adminExperiencesRoutes);
-console.log('✅ Admin experiences routes registered at /api/admin/experiences');
+logger.info('✅ Admin experiences routes registered at /api/admin/experiences');
 app.use(`${API_PREFIX}/admin/categories`, adminCategoriesRoutes);
-console.log('✅ Admin categories routes registered at /api/admin/categories');
+logger.info('✅ Admin categories routes registered at /api/admin/categories');
 app.use(`${API_PREFIX}/admin/stores`, adminStoresRoutes);
-console.log('✅ Admin stores routes registered at /api/admin/stores');
+logger.info('✅ Admin stores routes registered at /api/admin/stores');
 app.use(`${API_PREFIX}/admin/homepage-deals`, adminHomepageDealsRoutes);
-console.log('✅ Admin homepage deals routes registered at /api/admin/homepage-deals');
+logger.info('✅ Admin homepage deals routes registered at /api/admin/homepage-deals');
 app.use(`${API_PREFIX}/admin/zone-verifications`, adminZoneVerificationsRoutes);
-console.log('✅ Admin zone verifications routes registered at /api/admin/zone-verifications');
+logger.info('✅ Admin zone verifications routes registered at /api/admin/zone-verifications');
 app.use(`${API_PREFIX}/admin/offers`, adminOffersRoutes);
-console.log('✅ Admin offers routes registered at /api/admin/offers');
+logger.info('✅ Admin offers routes registered at /api/admin/offers');
 app.use(`${API_PREFIX}/admin/loyalty`, adminLoyaltyRoutes);
-console.log('✅ Admin loyalty routes registered at /api/admin/loyalty');
+logger.info('✅ Admin loyalty routes registered at /api/admin/loyalty');
 app.use(`${API_PREFIX}/admin/double-campaigns`, adminDoubleCampaignsRoutes);
-console.log('✅ Admin double campaigns routes registered at /api/admin/double-campaigns');
+logger.info('✅ Admin double campaigns routes registered at /api/admin/double-campaigns');
 app.use(`${API_PREFIX}/admin/coin-drops`, adminCoinDropsRoutes);
-console.log('✅ Admin coin drops routes registered at /api/admin/coin-drops');
+logger.info('✅ Admin coin drops routes registered at /api/admin/coin-drops');
 app.use(`${API_PREFIX}/admin/vouchers`, adminVouchersRoutes);
-console.log('✅ Admin vouchers routes registered at /api/admin/vouchers');
+logger.info('✅ Admin vouchers routes registered at /api/admin/vouchers');
 app.use(`${API_PREFIX}/admin/coupons`, adminCouponsRoutes);
-console.log('✅ Admin coupons routes registered at /api/admin/coupons');
+logger.info('✅ Admin coupons routes registered at /api/admin/coupons');
 app.use(`${API_PREFIX}/admin/travel`, adminTravelRoutes);
-console.log('✅ Admin travel routes registered at /api/admin/travel');
+logger.info('✅ Admin travel routes registered at /api/admin/travel');
 app.use(`${API_PREFIX}/admin/system`, adminSystemRoutes);
-console.log('✅ Admin system routes registered at /api/admin/system');
+logger.info('✅ Admin system routes registered at /api/admin/system');
 app.use(`${API_PREFIX}/admin/challenges`, adminChallengesRoutes);
-console.log('✅ Admin challenges routes registered at /api/admin/challenges');
+logger.info('✅ Admin challenges routes registered at /api/admin/challenges');
 app.use(`${API_PREFIX}/admin/game-config`, adminGameConfigRoutes);
-console.log('✅ Admin game config routes registered at /api/admin/game-config');
+logger.info('✅ Admin game config routes registered at /api/admin/game-config');
 app.use(`${API_PREFIX}/admin/tournaments`, adminTournamentsRoutes);
-console.log('✅ Admin tournament routes registered at /api/admin/tournaments');
+logger.info('✅ Admin tournament routes registered at /api/admin/tournaments');
 app.use(`${API_PREFIX}/admin/feature-flags`, adminFeatureFlagsRoutes);
-console.log('✅ Admin feature flags routes registered at /api/admin/feature-flags');
+logger.info('✅ Admin feature flags routes registered at /api/admin/feature-flags');
 app.use(`${API_PREFIX}/admin/achievements`, adminAchievementsRoutes);
-console.log('✅ Admin achievements routes registered at /api/admin/achievements');
+logger.info('✅ Admin achievements routes registered at /api/admin/achievements');
 app.use(`${API_PREFIX}/admin/gamification-stats`, adminGamificationStatsRoutes);
-console.log('✅ Admin gamification stats routes registered at /api/admin/gamification-stats');
+logger.info('✅ Admin gamification stats routes registered at /api/admin/gamification-stats');
 app.use(`${API_PREFIX}/admin/daily-checkin-config`, adminDailyCheckinConfigRoutes);
-console.log('✅ Admin daily check-in config routes registered at /api/admin/daily-checkin-config');
+logger.info('✅ Admin daily check-in config routes registered at /api/admin/daily-checkin-config');
 app.use(`${API_PREFIX}/admin/special-programs`, adminSpecialProgramsRoutes);
-console.log('✅ Admin special programs routes registered at /api/admin/special-programs');
+logger.info('✅ Admin special programs routes registered at /api/admin/special-programs');
 app.use(`${API_PREFIX}/admin/events`, adminEventsRoutes);
-console.log('✅ Admin events routes registered at /api/admin/events');
+logger.info('✅ Admin events routes registered at /api/admin/events');
 app.use(`${API_PREFIX}/admin/event-categories`, adminEventCategoriesRoutes);
-console.log('✅ Admin event categories routes registered at /api/admin/event-categories');
+logger.info('✅ Admin event categories routes registered at /api/admin/event-categories');
 app.use(`${API_PREFIX}/admin/event-rewards`, adminEventRewardsRoutes);
-console.log('✅ Admin event rewards routes registered at /api/admin/event-rewards');
+logger.info('✅ Admin event rewards routes registered at /api/admin/event-rewards');
 app.use(`${API_PREFIX}/admin/learning-content`, adminLearningContentRoutes);
-console.log('✅ Admin learning content routes registered at /api/admin/learning-content');
+logger.info('✅ Admin learning content routes registered at /api/admin/learning-content');
 app.use(`${API_PREFIX}/admin/leaderboard/configs`, adminLeaderboardConfigRoutes);
-console.log('✅ Admin leaderboard config routes registered at /api/admin/leaderboard/configs');
+logger.info('✅ Admin leaderboard config routes registered at /api/admin/leaderboard/configs');
 app.use(`${API_PREFIX}/admin/quick-actions`, adminQuickActionRoutes);
-console.log('✅ Admin quick action routes registered at /api/admin/quick-actions');
+logger.info('✅ Admin quick action routes registered at /api/admin/quick-actions');
 app.use(`${API_PREFIX}/admin/value-cards`, adminValueCardRoutes);
-console.log('✅ Admin value card routes registered at /api/admin/value-cards');
+logger.info('✅ Admin value card routes registered at /api/admin/value-cards');
 app.use(`${API_PREFIX}/admin/wallet-config`, adminWalletConfigRoutes);
-console.log('✅ Admin wallet config routes registered at /api/admin/wallet-config');
+logger.info('✅ Admin wallet config routes registered at /api/admin/wallet-config');
 app.use(`${API_PREFIX}/admin/user-wallets`, adminUserWalletsRoutes);
-console.log('✅ Admin user wallets routes registered at /api/admin/user-wallets');
+logger.info('✅ Admin user wallets routes registered at /api/admin/user-wallets');
 app.use(`${API_PREFIX}/admin/gift-cards`, adminGiftCardsRoutes);
-console.log('✅ Admin gift cards routes registered at /api/admin/gift-cards');
+logger.info('✅ Admin gift cards routes registered at /api/admin/gift-cards');
 app.use(`${API_PREFIX}/admin/coin-gifts`, adminCoinGiftsRoutes);
-console.log('✅ Admin coin gift routes registered at /api/admin/coin-gifts');
+logger.info('✅ Admin coin gift routes registered at /api/admin/coin-gifts');
 app.use(`${API_PREFIX}/admin/surprise-coin-drops`, adminSurpriseCoinDropsRoutes);
-console.log('✅ Admin surprise coin drops routes registered at /api/admin/surprise-coin-drops');
+logger.info('✅ Admin surprise coin drops routes registered at /api/admin/surprise-coin-drops');
 
 app.use(`${API_PREFIX}/admin/partner-earnings`, adminPartnerEarningsRoutes);
-console.log('✅ Admin partner earnings routes registered at /api/admin/partner-earnings');
+logger.info('✅ Admin partner earnings routes registered at /api/admin/partner-earnings');
 
 // Admin Gold Price Routes - Set/manage gold prices
 import adminGoldPriceRoutes from './routes/admin/goldPrice';
 app.use(`${API_PREFIX}/admin/gold`, adminGoldPriceRoutes);
-console.log('✅ Admin gold price routes registered at /api/admin/gold');
+logger.info('✅ Admin gold price routes registered at /api/admin/gold');
 
 app.use(`${API_PREFIX}/admin/referrals`, adminReferralsRoutes);
-console.log('✅ Admin referrals routes registered at /api/admin/referrals');
+logger.info('✅ Admin referrals routes registered at /api/admin/referrals');
 
 app.use(`${API_PREFIX}/admin/flash-sales`, adminFlashSalesRoutes);
-console.log('✅ Admin flash sales routes registered at /api/admin/flash-sales');
+logger.info('✅ Admin flash sales routes registered at /api/admin/flash-sales');
 app.use(`${API_PREFIX}/admin/hotspot-areas`, adminHotspotAreasRoutes);
-console.log('✅ Admin hotspot areas routes registered at /api/admin/hotspot-areas');
+logger.info('✅ Admin hotspot areas routes registered at /api/admin/hotspot-areas');
 app.use(`${API_PREFIX}/admin/bank-offers`, adminBankOffersRoutes);
-console.log('✅ Admin bank offers routes registered at /api/admin/bank-offers');
+logger.info('✅ Admin bank offers routes registered at /api/admin/bank-offers');
 app.use(`${API_PREFIX}/admin/upload-bill-stores`, adminUploadBillStoresRoutes);
-console.log('✅ Admin upload bill stores routes registered at /api/admin/upload-bill-stores');
+logger.info('✅ Admin upload bill stores routes registered at /api/admin/upload-bill-stores');
 app.use(`${API_PREFIX}/admin/exclusive-zones`, adminExclusiveZonesRoutes);
-console.log('✅ Admin exclusive zones routes registered at /api/admin/exclusive-zones');
+logger.info('✅ Admin exclusive zones routes registered at /api/admin/exclusive-zones');
 app.use(`${API_PREFIX}/admin/special-profiles`, adminSpecialProfilesRoutes);
-console.log('✅ Admin special profiles routes registered at /api/admin/special-profiles');
+logger.info('✅ Admin special profiles routes registered at /api/admin/special-profiles');
 app.use(`${API_PREFIX}/admin/loyalty-milestones`, adminLoyaltyMilestonesRoutes);
-console.log('✅ Admin loyalty milestones routes registered at /api/admin/loyalty-milestones');
+logger.info('✅ Admin loyalty milestones routes registered at /api/admin/loyalty-milestones');
 app.use(`${API_PREFIX}/admin/support-config`, adminSupportConfigRoutes);
-console.log('✅ Admin support config routes registered at /api/admin/support-config');
+logger.info('✅ Admin support config routes registered at /api/admin/support-config');
 app.use(`${API_PREFIX}/admin/support`, adminSupportRoutes);
-console.log('✅ Admin support routes registered at /api/admin/support');
+logger.info('✅ Admin support routes registered at /api/admin/support');
 app.use(`${API_PREFIX}/admin/support/faq`, adminFaqRoutes);
-console.log('✅ Admin FAQ routes registered at /api/admin/support/faq');
+logger.info('✅ Admin FAQ routes registered at /api/admin/support/faq');
 app.use(`${API_PREFIX}/admin/notifications`, adminNotificationMgmtRoutes);
-console.log('✅ Admin notification management routes registered at /api/admin/notifications');
+logger.info('✅ Admin notification management routes registered at /api/admin/notifications');
 app.use(`${API_PREFIX}/admin/fraud-reports`, adminFraudReportsRoutes);
-console.log('✅ Admin fraud reports routes registered at /api/admin/fraud-reports');
+logger.info('✅ Admin fraud reports routes registered at /api/admin/fraud-reports');
 app.use(`${API_PREFIX}/admin/membership`, adminMembershipRoutes);
-console.log('✅ Admin membership routes registered at /api/admin/membership');
+logger.info('✅ Admin membership routes registered at /api/admin/membership');
 app.use(`${API_PREFIX}/admin/admin-users`, adminAdminUsersRoutes);
-console.log('✅ Admin user management routes registered at /api/admin/admin-users');
+logger.info('✅ Admin user management routes registered at /api/admin/admin-users');
 
 // Admin Engagement Config Routes
 import { Router as EngagementConfigRouter } from 'express';
@@ -1224,80 +1192,80 @@ engagementConfigRouter.get('/', getAllConfigs);
 engagementConfigRouter.patch('/:action', updateConfig);
 engagementConfigRouter.post('/:action/campaign', setCampaign);
 app.use(`${API_PREFIX}/admin/engagement-config`, authTokenMiddleware, engagementConfigRouter);
-console.log('✅ Admin engagement config routes registered at /api/admin/engagement-config');
+logger.info('✅ Admin engagement config routes registered at /api/admin/engagement-config');
 
 // Campaign Routes - Homepage exciting deals
 app.use(`${API_PREFIX}/campaigns`, campaignRoutes);
-console.log('✅ Campaign routes registered at /api/campaigns');
+logger.info('✅ Campaign routes registered at /api/campaigns');
 
 // Recharge Routes - Mobile/DTH/Broadband recharge with cashback
 app.use(`${API_PREFIX}/recharge`, rechargeRoutes);
-console.log('✅ Recharge routes registered at /api/recharge');
+logger.info('✅ Recharge routes registered at /api/recharge');
 
 // Bonus Zone Routes - Production campaign reward engine
 app.use(`${API_PREFIX}/bonus-zone`, bonusZoneRoutes);
-console.log('✅ Bonus Zone routes registered at /api/bonus-zone');
+logger.info('✅ Bonus Zone routes registered at /api/bonus-zone');
 
 // Lock Price Deal Routes - Lock deals with deposit, double earnings, pickup rewards
 app.use(`${API_PREFIX}/lock-deals`, lockDealRoutes);
-console.log('✅ Lock deal routes registered at /api/lock-deals');
+logger.info('✅ Lock deal routes registered at /api/lock-deals');
 
 // Play & Earn Config Routes
 app.use(`${API_PREFIX}/play-earn`, playEarnRoutes);
-console.log('✅ Play & Earn routes registered at /api/play-earn');
+logger.info('✅ Play & Earn routes registered at /api/play-earn');
 
 // Experience Routes - Store experiences
 app.use(`${API_PREFIX}/experiences`, experienceRoutes);
-console.log('✅ Experience routes registered at /api/experiences');
+logger.info('✅ Experience routes registered at /api/experiences');
 
 // Content Routes - Public content (value cards, quick actions)
 app.use(`${API_PREFIX}/content`, contentRoutes);
-console.log('✅ Content routes registered at /api/content');
+logger.info('✅ Content routes registered at /api/content');
 
 // Earn Routes - Nearby earn, earning opportunities
 app.use(`${API_PREFIX}/earn`, earnRoutes);
-console.log('✅ Earn routes registered at /api/earn');
+logger.info('✅ Earn routes registered at /api/earn');
 
 // // Search Routes - Global search across products, stores, and articles
 app.use(`${API_PREFIX}/search`, searchRoutes);
-console.log('✅ Search routes registered at /api/search');
+logger.info('✅ Search routes registered at /api/search');
 
 // Mall Routes - ReZ Mall curated brands and offers
 app.use(`${API_PREFIX}/mall`, mallRoutes);
-console.log('✅ Mall routes registered at /api/mall');
+logger.info('✅ Mall routes registered at /api/mall');
 
 // Mall Affiliate Routes - Cashback tracking, webhooks, and conversions (legacy)
 app.use(`${API_PREFIX}/mall/affiliate`, mallAffiliateRoutes);
-console.log('✅ Mall Affiliate routes registered at /api/mall/affiliate (legacy)');
+logger.info('✅ Mall Affiliate routes registered at /api/mall/affiliate (legacy)');
 
 // Cash Store Browsing Routes - Categories, brands, homepage aggregation
 app.use(`${API_PREFIX}/cashstore`, cashStoreRoutes);
-console.log('✅ Cash Store routes registered at /api/cashstore');
+logger.info('✅ Cash Store routes registered at /api/cashstore');
 
 // Cash Store Affiliate Routes - External brand cashback tracking
 app.use(`${API_PREFIX}/cashstore/affiliate`, cashStoreAffiliateRoutes);
-console.log('✅ Cash Store Affiliate routes registered at /api/cashstore/affiliate');
+logger.info('✅ Cash Store Affiliate routes registered at /api/cashstore/affiliate');
 
 // Privé Routes - Eligibility, reputation, and exclusive access
 app.use(`${API_PREFIX}/prive`, priveRoutes);
 app.use(`${API_PREFIX}/prive`, priveInviteRoutes);
-console.log('✅ Privé routes registered at /api/prive (including invite system)');
+logger.info('✅ Privé routes registered at /api/prive (including invite system)');
 
 // Insurance Routes - Browse insurance plans with cashback
 app.use(`${API_PREFIX}/insurance`, insuranceRoutes);
-console.log('✅ Insurance routes registered at /api/insurance');
+logger.info('✅ Insurance routes registered at /api/insurance');
 
 // Store Gallery Routes - Public gallery viewing
 app.use(`${API_PREFIX}/stores`, storeGalleryRoutes);
-console.log('✅ Store gallery routes registered at /api/stores/:storeId/gallery');
+logger.info('✅ Store gallery routes registered at /api/stores/:storeId/gallery');
 
 // Product Gallery Routes - Public gallery viewing
 app.use(`${API_PREFIX}/products`, productGalleryRoutes);
-console.log('✅ Product gallery routes registered at /api/products/:productId/gallery');
+logger.info('✅ Product gallery routes registered at /api/products/:productId/gallery');
 
 // Merchant API Routes — rate limiter re-enabled for production
 app.use('/api/merchant', generalLimiter);
-console.log('✅ General rate limiter applied to all merchant routes');
+logger.info('✅ General rate limiter applied to all merchant routes');
 
 app.use('/api/merchant/auth', authRoutes1);  // Merchant auth routes
 app.use('/api/merchant/categories', categoryRoutes1);
@@ -1307,37 +1275,37 @@ app.use('/api/merchant/profile', merchantProfileRoutes);
 app.use('/api/merchant/uploads', uploadRoutes);
 // // Enhanced merchant order routes (Agent 7) - includes bulk actions, refunds, analytics
 app.use('/api/merchant/orders', merchantOrderRoutes);
-console.log('✅ Enhanced merchant order routes registered at /api/merchant/orders (Agent 7)');
+logger.info('✅ Enhanced merchant order routes registered at /api/merchant/orders (Agent 7)');
 // // Legacy merchant cashback routes
 app.use('/api/merchant/cashback-old', merchantCashbackRoutes);
 // // Enhanced merchant cashback routes (Agent 5) - 7 critical endpoints with Razorpay integration
 app.use('/api/merchant/cashback', merchantCashbackRoutesNew);
-console.log('✅ Enhanced merchant cashback routes registered at /api/merchant/cashback (Agent 5)');
+logger.info('✅ Enhanced merchant cashback routes registered at /api/merchant/cashback (Agent 5)');
 app.use('/api/merchant/dashboard', dashboardRoutes);
 app.use('/api/merchant/wallet', merchantWalletRoutes);  // Merchant wallet routes
-console.log('✅ Merchant wallet routes registered at /api/merchant/wallet');
+logger.info('✅ Merchant wallet routes registered at /api/merchant/wallet');
 app.use('/api/merchant/coins', merchantCoinsRoutes);  // Merchant coin award routes
-console.log('✅ Merchant coin award routes registered at /api/merchant/coins');
+logger.info('✅ Merchant coin award routes registered at /api/merchant/coins');
 app.use('/api/merchant/analytics', analyticsRoutesM);  // Real-time analytics endpoints
 app.use('/api/merchant/stores', storeRoutesM);  // Merchant store management routes
-console.log('✅ Merchant store management routes registered at /api/merchant/stores');
+logger.info('✅ Merchant store management routes registered at /api/merchant/stores');
 app.use('/api/merchant/stores', storeGalleryRoutesM);  // Merchant store gallery management routes
-console.log('✅ Merchant store gallery management routes registered at /api/merchant/stores/:storeId/gallery');
+logger.info('✅ Merchant store gallery management routes registered at /api/merchant/stores/:storeId/gallery');
 app.use('/api/merchant/products', productGalleryRoutesM);  // Merchant product gallery management routes
-console.log('✅ Merchant product gallery management routes registered at /api/merchant/products/:productId/gallery');
+logger.info('✅ Merchant product gallery management routes registered at /api/merchant/products/:productId/gallery');
 app.use('/api/merchant/offers', merchantOfferRoutes);  // Merchant offers/deals management routes
-console.log('✅ Merchant offers management routes registered at /api/merchant/offers');
+logger.info('✅ Merchant offers management routes registered at /api/merchant/offers');
 app.use('/api/merchant/discounts', merchantDiscountRoutes);  // Merchant discount management routes (Phase 3)
-console.log('✅ Merchant discount management routes registered at /api/merchant/discounts');
+logger.info('✅ Merchant discount management routes registered at /api/merchant/discounts');
 app.use('/api/merchant/store-vouchers', merchantStoreVoucherRoutes);  // Merchant store voucher management routes
-console.log('✅ Merchant store voucher management routes registered at /api/merchant/store-vouchers');
+logger.info('✅ Merchant store voucher management routes registered at /api/merchant/store-vouchers');
 app.use('/api/merchant/outlets', merchantOutletRoutes);  // Merchant outlet management routes
-console.log('✅ Merchant outlet management routes registered at /api/merchant/outlets');
+logger.info('✅ Merchant outlet management routes registered at /api/merchant/outlets');
 app.use('/api/merchant/videos', merchantVideoRoutes);  // Merchant promotional video routes
-console.log('✅ Merchant promotional video routes registered at /api/merchant/videos');
+logger.info('✅ Merchant promotional video routes registered at /api/merchant/videos');
 
 app.use('/api/merchant/store-visits', merchantStoreVisitRoutes);
-console.log('✅ Merchant store visit management routes registered at /api/merchant/store-visits');
+logger.info('✅ Merchant store visit management routes registered at /api/merchant/store-visits');
 
 // // Merchant Sync Routes - Syncs merchant data to customer app
 app.use('/api/merchant/sync', merchantSyncRoutes);
@@ -1351,59 +1319,59 @@ app.use('/api/merchant/audit', auditRoutes);  // Audit logs and activity trackin
 
 // // Merchant Onboarding Routes (Agent 1) - 8 onboarding workflow endpoints
 app.use('/api/merchant/onboarding', onboardingRoutes);
-console.log('✅ Merchant onboarding routes registered at /api/merchant/onboarding (Agent 1)');
+logger.info('✅ Merchant onboarding routes registered at /api/merchant/onboarding (Agent 1)');
 
 // // Bulk Product Operations Routes (Agent 4) - CSV/Excel import/export
 app.use('/api/merchant/bulk', bulkRoutes);
-console.log('✅ Bulk product operations routes registered at /api/merchant/bulk (Agent 4)');
+logger.info('✅ Bulk product operations routes registered at /api/merchant/bulk (Agent 4)');
 
 // // Bulk Product Import Routes - CSV/Excel product import with validation
 app.use('/api/merchant/products', bulkImportRoutes);
-console.log('✅ Bulk product import routes registered at /api/merchant/products');
+logger.info('✅ Bulk product import routes registered at /api/merchant/products');
 
 // // Merchant Notification Routes (Agent 2) - 5 critical notification endpoints
 app.use('/api/merchant/notifications', merchantNotificationRoutes);
-console.log('✅ Merchant notification routes registered at /api/merchant/notifications (Agent 2)');
+logger.info('✅ Merchant notification routes registered at /api/merchant/notifications (Agent 2)');
 
 // // Merchant Social Media Verification Routes - Verify Instagram posts for user cashback
 app.use('/api/merchant/social-media-posts', merchantSocialMediaRoutes);
-console.log('✅ Merchant social media routes registered at /api/merchant/social-media-posts');
+logger.info('✅ Merchant social media routes registered at /api/merchant/social-media-posts');
 
 // Merchant Events Management Routes - Create, manage, and track events
 app.use('/api/merchant/events', merchantEventsRoutes);
-console.log('✅ Merchant events routes registered at /api/merchant/events');
+logger.info('✅ Merchant events routes registered at /api/merchant/events');
 
 // Merchant Services Management Routes - Create, manage services and bookings
 app.use('/api/merchant/services', merchantServicesRoutes);
-console.log('✅ Merchant services routes registered at /api/merchant/services');
+logger.info('✅ Merchant services routes registered at /api/merchant/services');
 
 // Merchant Deal Redemption Routes - Verify and redeem deal codes
 app.use('/api/merchant/deal-redemptions', merchantDealRedemptionRoutes);
-console.log('✅ Merchant deal redemption routes registered at /api/merchant/deal-redemptions');
+logger.info('✅ Merchant deal redemption routes registered at /api/merchant/deal-redemptions');
 
 // Merchant Voucher Redemption Routes - Verify and redeem offer voucher codes
 app.use('/api/merchant/voucher-redemptions', merchantVoucherRedemptionRoutes);
-console.log('✅ Merchant voucher redemption routes registered at /api/merchant/voucher-redemptions');
+logger.info('✅ Merchant voucher redemption routes registered at /api/merchant/voucher-redemptions');
 
 // Merchant CoinDrop Routes (Phase 4.1) - CoinDrop configuration and management
 app.use('/api/merchant', merchantCoinDropRoutes);
-console.log('✅ Merchant CoinDrop routes registered at /api/merchant/stores/:storeId/coin-drops');
+logger.info('✅ Merchant CoinDrop routes registered at /api/merchant/stores/:storeId/coin-drops');
 
 // Merchant Branded Coin Campaign Routes (Phase 4.2) - Branded coin analytics and awards
 app.use('/api/merchant', merchantBrandedCoinRoutes);
-console.log('✅ Merchant branded coin routes registered at /api/merchant/stores/:storeId/branded-campaigns');
+logger.info('✅ Merchant branded coin routes registered at /api/merchant/stores/:storeId/branded-campaigns');
 
 // Merchant Earning Analytics Routes (Phase 4.3) - Earning analytics dashboard
 app.use('/api/merchant', merchantEarningAnalyticsRoutes);
-console.log('✅ Merchant earning analytics routes registered');
+logger.info('✅ Merchant earning analytics routes registered');
 
 // Merchant Creator Analytics Routes - Creator program analytics for merchants
 app.use('/api/merchant/stores', merchantCreatorAnalyticsRoutes);
-console.log('✅ Merchant creator analytics routes registered');
+logger.info('✅ Merchant creator analytics routes registered');
 
 // Merchant Social Impact Routes - Social impact event management for merchants
 app.use('/api/merchant/programs/social-impact', merchantSocialImpactRoutes);
-console.log('✅ Merchant social impact routes registered');
+logger.info('✅ Merchant social impact routes registered');
 
 // Root endpoint (MUST be before 404 handler)
 app.get('/', (req, res) => {
@@ -1459,12 +1427,12 @@ io.on('connection', (socket) => {
 
   // Auto-join user's personal room
   socket.join(`user-${userId}`);
-  console.log(`[Socket] Connected: userId=${userId}, role=${userRole}, socketId=${socket.id}, rooms=[${[...socket.rooms].join(', ')}]`);
+  logger.info(`[Socket] Connected: userId=${userId}, role=${userRole}, socketId=${socket.id}, rooms=[${[...socket.rooms].join(', ')}]`);
 
   // Auto-join support-agents room for admin users
   if (userRole === 'admin' || userRole === 'super_admin' || userRole === 'superadmin') {
     socket.join('support-agents');
-    console.log(`[Socket] Admin ${userId} joined support-agents room`);
+    logger.info(`[Socket] Admin ${userId} joined support-agents room`);
   }
 
   // Join merchant room (only if merchant/admin role)
@@ -1478,7 +1446,7 @@ io.on('connection', (socket) => {
   const handleJoinTicket = (ticketId: string) => {
     if (ticketId) {
       socket.join(`support-ticket-${ticketId}`);
-      console.log(`[Socket] User ${userId} (${userRole}) joined support-ticket-${ticketId}`);
+      logger.info(`[Socket] User ${userId} (${userRole}) joined support-ticket-${ticketId}`);
     }
   };
   socket.on('join-support-ticket', handleJoinTicket);
@@ -1562,157 +1530,157 @@ ReportService.initialize();
 async function startServer() {
   try {
     // Validate environment variables first (fail fast if invalid)
-    console.log('🔍 Validating environment configuration...');
+    logger.info('🔍 Validating environment configuration...');
     try {
       validateEnvironment();
-      console.log('✅ Environment validation passed');
+      logger.info('✅ Environment validation passed');
     } catch (error) {
-      console.error('❌ Environment validation failed:', error);
+      logger.error('❌ Environment validation failed:', error);
       process.exit(1);
     }
 
     // Start listening on port FIRST so Render/hosting detects the port immediately
     // (DB, Redis, and background jobs initialize in parallel below)
     server.listen(Number(PORT), '0.0.0.0', () => {
-      console.log(`\n🚀 Server listening on port ${PORT} (initializing services...)`);
+      logger.info(`\n🚀 Server listening on port ${PORT} (initializing services...)`);
     });
 
     // Connect to database
-    console.log('🔄 Connecting to database...');
+    logger.info('🔄 Connecting to database...');
     await connectDatabase();
 
     // Connect to Redis (required for token blacklist, caching, distributed locks)
-    console.log('🔄 Connecting to Redis...');
+    logger.info('🔄 Connecting to Redis...');
     await redisService.connect();
-    console.log(redisService.isReady() ? '✅ Redis connected' : '⚠️ Redis unavailable — app will continue without caching');
+    logger.info(redisService.isReady() ? '✅ Redis connected' : '⚠️ Redis unavailable — app will continue without caching');
 
     // Warm up public caches after Redis connects (non-blocking)
     if (redisService.isReady()) {
       const { warmUpPublicCaches } = await import('./utils/cacheWarmup');
-      setImmediate(() => warmUpPublicCaches().catch(err => console.warn('[CACHE-WARMUP]', err)));
+      setImmediate(() => warmUpPublicCaches().catch(err => logger.warn('[CACHE-WARMUP]', err)));
     }
 
     // Attach Socket.IO Redis adapter (needs Redis to be connected first)
     try {
       await attachRedisAdapter(io);
     } catch (err) {
-      console.error('[Socket.IO] Redis adapter failed, using in-memory fallback:', err);
+      logger.error('[Socket.IO] Redis adapter failed, using in-memory fallback:', err);
     }
 
     // Validate Cloudinary configuration
     const cloudinaryConfigured = validateCloudinaryConfig();
     if (!cloudinaryConfigured) {
-      console.warn('⚠️  Cloudinary not configured. Bill upload features will not work.');
-      console.warn('   Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET in .env');
+      logger.warn('⚠️  Cloudinary not configured. Bill upload features will not work.');
+      logger.warn('   Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET in .env');
     }
 
     // Initialize partner level maintenance cron jobs (FIXED: Issue #2, #4, #5)
-    console.log('🔄 Initializing partner level maintenance...');
+    logger.info('🔄 Initializing partner level maintenance...');
     partnerLevelMaintenanceService.startAll();
-    console.log('✅ Partner level maintenance cron jobs started');
+    logger.info('✅ Partner level maintenance cron jobs started');
 
     // Initialize trial expiry notification job
-    console.log('🔄 Initializing trial expiry notification job...');
+    logger.info('🔄 Initializing trial expiry notification job...');
     initializeTrialExpiryJob();
-    console.log('✅ Trial expiry notification job started');
+    logger.info('✅ Trial expiry notification job started');
 
     // Initialize session cleanup job
-    console.log('🔄 Initializing session cleanup job...');
+    logger.info('🔄 Initializing session cleanup job...');
     initializeSessionCleanupJob();
-    console.log('✅ Session cleanup job started (runs daily at midnight)');
+    logger.info('✅ Session cleanup job started (runs daily at midnight)');
 
     // Initialize coin expiry job
-    console.log('🔄 Initializing coin expiry job...');
+    logger.info('🔄 Initializing coin expiry job...');
     initializeCoinExpiryJob();
-    console.log('✅ Coin expiry job started (runs daily at 1:00 AM)');
+    logger.info('✅ Coin expiry job started (runs daily at 1:00 AM)');
 
     // Initialize cashback jobs (credit pending & expire clicks)
-    console.log('🔄 Initializing cashback jobs...');
+    logger.info('🔄 Initializing cashback jobs...');
     initializeCashbackJobs();
-    console.log('✅ Cashback jobs started (credit: hourly, expire: daily at 2:00 AM)');
+    logger.info('✅ Cashback jobs started (credit: hourly, expire: daily at 2:00 AM)');
 
     // Initialize travel cashback jobs (credit, expire unpaid, mark completed)
-    console.log('🔄 Initializing travel cashback jobs...');
+    logger.info('🔄 Initializing travel cashback jobs...');
     initializeTravelCashbackJobs();
-    console.log('✅ Travel cashback jobs started (credit: 2h, expire: 15m, complete: daily 3AM)');
+    logger.info('✅ Travel cashback jobs started (credit: 2h, expire: 15m, complete: daily 3AM)');
 
     // Initialize inventory alert job (sends low stock / out of stock notifications)
-    console.log('🔄 Initializing inventory alert job...');
+    logger.info('🔄 Initializing inventory alert job...');
     initializeInventoryAlertJob();
-    console.log('✅ Inventory alert job started (runs daily at 8:00 AM)');
+    logger.info('✅ Inventory alert job started (runs daily at 8:00 AM)');
 
     // Initialize deal redemption expiry job
-    console.log('🔄 Initializing deal expiry job...');
+    logger.info('🔄 Initializing deal expiry job...');
     initializeDealExpiryJob();
-    console.log('✅ Deal expiry job started (runs every hour)');
+    logger.info('✅ Deal expiry job started (runs every hour)');
 
     // Initialize voucher redemption expiry job
-    console.log('🔄 Initializing voucher expiry job...');
+    logger.info('🔄 Initializing voucher expiry job...');
     initializeVoucherExpiryJob();
-    console.log('✅ Voucher expiry job started (runs every hour at :30)');
+    logger.info('✅ Voucher expiry job started (runs every hour at :30)');
 
     // Initialize table booking expiry job
-    console.log('🔄 Initializing table booking expiry job...');
+    logger.info('🔄 Initializing table booking expiry job...');
     initializeTableBookingExpiryJob();
-    console.log('✅ Table booking expiry job started (runs every 30 min)');
+    logger.info('✅ Table booking expiry job started (runs every 30 min)');
 
     // Initialize reconciliation job
-    console.log('🔄 Initializing reconciliation job...');
+    logger.info('🔄 Initializing reconciliation job...');
     startReconciliationJob();
-    console.log('✅ Reconciliation job started (runs daily at 3:00 AM)');
+    logger.info('✅ Reconciliation job started (runs daily at 3:00 AM)');
 
     // Initialize reservation cleanup job
-    console.log('🔄 Initializing reservation cleanup job...');
+    logger.info('🔄 Initializing reservation cleanup job...');
     startReservationCleanup();
-    console.log('✅ Reservation cleanup job started (runs every 5 min)');
+    logger.info('✅ Reservation cleanup job started (runs every 5 min)');
 
     // Initialize leaderboard refresh job (gamification Phase 5.2)
     if (isGamificationEnabled('leaderboard')) {
-      console.log('🔄 Initializing leaderboard refresh job...');
+      logger.info('🔄 Initializing leaderboard refresh job...');
       initializeLeaderboardRefreshJob();
-      console.log('✅ Leaderboard refresh job started (runs every 5 min)');
+      logger.info('✅ Leaderboard refresh job started (runs every 5 min)');
     }
 
     // Initialize bill verification job (gamification Phase 5.2)
-    console.log('🔄 Initializing bill verification job...');
+    logger.info('🔄 Initializing bill verification job...');
     initializeBillVerificationJob();
-    console.log('✅ Bill verification job started (runs every 10 min)');
+    logger.info('✅ Bill verification job started (runs every 10 min)');
 
     // Initialize creator program background jobs
-    console.log('🔄 Starting creator program jobs...');
+    logger.info('🔄 Starting creator program jobs...');
     startCreatorJobs();
-    console.log('✅ Creator jobs started (trending, stats, conversions, tiers)');
+    logger.info('✅ Creator jobs started (trending, stats, conversions, tiers)');
 
     // Initialize streak reset job (resets broken streaks daily at 00:05 UTC)
     if (isGamificationEnabled('streaks')) {
-      console.log('🔄 Initializing streak reset job...');
+      logger.info('🔄 Initializing streak reset job...');
       initializeStreakResetJob();
-      console.log('✅ Streak reset job started (runs daily at 00:05 UTC)');
+      logger.info('✅ Streak reset job started (runs daily at 00:05 UTC)');
     }
 
     // Initialize bonus campaign jobs (status transitions every 5m, expire claims every 30m)
     if (isGamificationEnabled('bonusZones')) {
-      console.log('🔄 Initializing bonus campaign jobs...');
+      logger.info('🔄 Initializing bonus campaign jobs...');
       initBonusCampaignJobs();
-      console.log('✅ Bonus campaign jobs started (transitions: 5m, expire claims: 30m)');
+      logger.info('✅ Bonus campaign jobs started (transitions: 5m, expire claims: 30m)');
     }
 
     // Initialize challenge lifecycle jobs (status transitions every 5m, cleanup every 30m)
     if (isGamificationEnabled('challenges')) {
-      console.log('🔄 Initializing challenge lifecycle jobs...');
+      logger.info('🔄 Initializing challenge lifecycle jobs...');
       initChallengeLifecycleJobs();
-      console.log('✅ Challenge lifecycle jobs started (transitions: 5m, cleanup: 30m)');
+      logger.info('✅ Challenge lifecycle jobs started (transitions: 5m, cleanup: 30m)');
     }
 
     // Initialize tournament lifecycle jobs (activation + completion + prize distribution)
     if (isGamificationEnabled('tournaments')) {
-      console.log('🔄 Initializing tournament lifecycle jobs...');
+      logger.info('🔄 Initializing tournament lifecycle jobs...');
       initializeTournamentLifecycleJobs();
-      console.log('✅ Tournament lifecycle jobs started (activation: 5m, completion: 5m)');
+      logger.info('✅ Tournament lifecycle jobs started (activation: 5m, completion: 5m)');
     }
 
     // Initialize wallet production-readiness jobs with distributed locks
-    console.log('🔄 Initializing wallet production jobs...');
+    logger.info('🔄 Initializing wallet production jobs...');
     const cron = require('node-cron');
 
     // Stuck transaction recovery — every 15 min, one pod only
@@ -1720,7 +1688,7 @@ async function startServer() {
       const lock = await redisService.acquireLock('stuck_tx_recovery', 600);
       if (!lock) return;
       try { await runStuckTransactionRecovery(); }
-      catch (e) { console.error('[JOB] stuckTransactionRecovery:', e); }
+      catch (e) { logger.error('[JOB] stuckTransactionRecovery:', e); }
       finally { await redisService.releaseLock('stuck_tx_recovery', lock); }
     });
 
@@ -1729,7 +1697,7 @@ async function startServer() {
       const lock = await redisService.acquireLock('gift_delivery', 240);
       if (!lock) return;
       try { await runGiftDelivery(); }
-      catch (e) { console.error('[JOB] giftDelivery:', e); }
+      catch (e) { logger.error('[JOB] giftDelivery:', e); }
       finally { await redisService.releaseLock('gift_delivery', lock); }
     });
 
@@ -1738,7 +1706,7 @@ async function startServer() {
       const lock = await redisService.acquireLock('gift_expiry', 3600);
       if (!lock) return;
       try { await runGiftExpiry(); }
-      catch (e) { console.error('[JOB] giftExpiry:', e); }
+      catch (e) { logger.error('[JOB] giftExpiry:', e); }
       finally { await redisService.releaseLock('gift_expiry', lock); }
     });
 
@@ -1747,7 +1715,7 @@ async function startServer() {
       const lock = await redisService.acquireLock('surprise_drop_expiry', 3000);
       if (!lock) return;
       try { await runSurpriseDropExpiry(); }
-      catch (e) { console.error('[JOB] surpriseDropExpiry:', e); }
+      catch (e) { logger.error('[JOB] surpriseDropExpiry:', e); }
       finally { await redisService.releaseLock('surprise_drop_expiry', lock); }
     });
 
@@ -1756,111 +1724,119 @@ async function startServer() {
       const lock = await redisService.acquireLock('partner_earnings_snapshot', 7200);
       if (!lock) return;
       try { await runPartnerEarningsSnapshot(); }
-      catch (e) { console.error('[JOB] partnerEarningsSnapshot:', e); }
+      catch (e) { logger.error('[JOB] partnerEarningsSnapshot:', e); }
       finally { await redisService.releaseLock('partner_earnings_snapshot', lock); }
     });
 
-    // Push receipt processing — every 15 min, one pod only
-    cron.schedule('*/15 * * * *', async () => {
+    // Push receipt processing — every 15 min (offset by 7 min to avoid thundering herd), one pod only
+    cron.schedule('7,22,37,52 * * * *', async () => {
       const lock = await redisService.acquireLock('push_receipt_processing', 600);
       if (!lock) return;
       try { await runPushReceiptProcessing(); }
-      catch (e) { console.error('[JOB] pushReceiptProcessing:', e); }
+      catch (e) { logger.error('[JOB] pushReceiptProcessing:', e); }
       finally { await redisService.releaseLock('push_receipt_processing', lock); }
     });
 
-    console.log('✅ Wallet production jobs started with distributed locks');
+    logger.info('✅ Wallet production jobs started with distributed locks');
+
+    // Nearby flash sale notifications — every 30 min, location-filtered
+    initializeNearbyFlashSaleNotificationJob();
+    logger.info('✅ Nearby flash sale notification job started (runs every 30 minutes)');
+
+    // Weekly savings summary — Monday 10 AM
+    initializeWeeklySummaryJob();
+    logger.info('✅ Weekly summary job started (runs Monday 10:00 AM)');
 
     // Wallet-ledger reconciliation — daily at 4 AM
     const { initializeLedgerReconciliationJob } = await import('./jobs/walletLedgerReconciliationJob');
     initializeLedgerReconciliationJob();
-    console.log('✅ Wallet-ledger reconciliation job started (runs daily at 4:00 AM)');
+    logger.info('✅ Wallet-ledger reconciliation job started (runs daily at 4:00 AM)');
     // Referral expiry — daily at 3 AM
     initializeReferralExpiryJob();
-    console.log('✅ Referral expiry job started (runs daily at 3 AM)');
+    logger.info('✅ Referral expiry job started (runs daily at 3 AM)');
     // Privé invite code expiry — daily at 3:30 AM
     initializePriveInviteExpiryJob();
 
     // Seed wallet feature flags
     await seedWalletFeatureFlags();
-    console.log('✅ Wallet feature flags seeded');
+    logger.info('✅ Wallet feature flags seeded');
 
     // Initialize Bull-based scheduled job service (preferred over node-cron above)
     // The node-cron jobs above serve as fallback if Redis/Bull is unavailable
-    console.log('🔄 Initializing Bull scheduled job service...');
+    logger.info('🔄 Initializing Bull scheduled job service...');
     await ScheduledJobService.initialize();
-    console.log('✅ Bull scheduled job service initialized');
+    logger.info('✅ Bull scheduled job service initialized');
 
     // Initialize audit retention service
-    console.log('🔄 Initializing audit retention service...');
+    logger.info('🔄 Initializing audit retention service...');
     await AuditRetentionService.initialize();
-    console.log('✅ Audit retention service initialized');
+    logger.info('✅ Audit retention service initialized');
 
     // Initialize leaderboard prize distribution job (hourly check for period-end prizes)
     if (isGamificationEnabled('leaderboard')) {
-      console.log('🔄 Initializing leaderboard prize distribution job...');
+      logger.info('🔄 Initializing leaderboard prize distribution job...');
       initializePrizeDistributionJob();
-      console.log('✅ Leaderboard prize distribution job started (runs hourly)');
+      logger.info('✅ Leaderboard prize distribution job started (runs hourly)');
     }
 
     // Initialize order lifecycle background jobs
-    console.log('🔄 Initializing order lifecycle jobs...');
+    logger.info('🔄 Initializing order lifecycle jobs...');
     const { initializeOrderLifecycleJobs } = await import('./jobs/orderLifecycleJobs');
     initializeOrderLifecycleJobs();
     const { initializeOrderReconciliationJob } = await import('./jobs/orderReconciliationJob');
     initializeOrderReconciliationJob();
-    console.log('✅ Order lifecycle + reconciliation jobs started');
+    logger.info('✅ Order lifecycle + reconciliation jobs started');
 
     // Initialize gamification event bus
-    console.log('🔄 Initializing gamification event bus...');
+    logger.info('🔄 Initializing gamification event bus...');
     const gamificationEventBus = (await import('./events/gamificationEventBus')).default;
     await gamificationEventBus.initialize();
-    console.log('✅ Gamification event bus initialized');
+    logger.info('✅ Gamification event bus initialized');
 
     // All services initialized - server is already listening from earlier
-    console.log(`\n✅ All services initialized successfully`);
-    console.log(`✅ Server running on port ${PORT}`);
-    console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`✅ Health Check: http://localhost:${PORT}/health`);
+    logger.info(`\n✅ All services initialized successfully`);
+    logger.info(`✅ Server running on port ${PORT}`);
+    logger.info(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
+    logger.info(`✅ Health Check: http://localhost:${PORT}/health`);
 
     // Graceful shutdown handling
     let isShuttingDown = false;
     const shutdown = (signal: string) => {
       if (isShuttingDown) return; // Prevent double-shutdown
       isShuttingDown = true;
-      console.log(`\n🛑 Received ${signal}. Graceful shutdown...`);
+      logger.info(`\n🛑 Received ${signal}. Graceful shutdown...`);
 
       // Stop accepting new connections, drain in-flight requests
       server.close(async () => {
-        console.log('✅ HTTP server closed (in-flight requests drained)');
+        logger.info('✅ HTTP server closed (in-flight requests drained)');
 
         try {
           // Shut down Bull scheduled job service
           try {
             await ScheduledJobService.shutdown();
-            console.log('✅ Scheduled job service shut down');
+            logger.info('✅ Scheduled job service shut down');
           } catch { /* May not be initialized */ }
 
           // Disconnect Redis
           try {
             const redisService = (await import('./services/redisService')).default;
             await redisService.disconnect();
-            console.log('✅ Redis disconnected');
+            logger.info('✅ Redis disconnected');
           } catch { /* Redis may not be connected */ }
 
           // Disconnect MongoDB
           await database.disconnect();
-          console.log('✅ Database disconnected');
+          logger.info('✅ Database disconnected');
           process.exit(0);
         } catch (error) {
-          console.error('❌ Error during shutdown:', error);
+          logger.error('❌ Error during shutdown:', error);
           process.exit(1);
         }
       });
 
       // Force close after 15 seconds
       setTimeout(() => {
-        console.log('❌ Could not close connections in time, forcefully shutting down');
+        logger.info('❌ Could not close connections in time, forcefully shutting down');
         process.exit(1);
       }, 15000);
     };
@@ -1886,7 +1862,7 @@ async function startServer() {
     return server;
     
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
+    logger.error('❌ Failed to start server:', error);
     process.exit(1);
   }
 }

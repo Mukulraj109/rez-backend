@@ -661,16 +661,22 @@ export const applyCoupon = asyncHandler(async (req: Request, res: Response) => {
 
     logger.info('✅ [APPLY COUPON] Coupon found:', coupon.title);
 
-    // Build validation context from cart items
-    const cartItems = await Promise.all(cart.items.map(async (item: any) => {
-      const product = await Product.findById(item.product).lean() as any;
+    // Build validation context from cart items (batch-load products)
+    const couponProductIds = cart.items.map((item: any) => item.product).filter(Boolean);
+    const couponProducts = await Product.find({ _id: { $in: couponProductIds } })
+      .select('store')
+      .lean() as any[];
+    const couponProductMap = new Map(couponProducts.map(p => [p._id.toString(), p]));
+
+    const cartItems = cart.items.map((item: any) => {
+      const product = item.product ? couponProductMap.get(item.product.toString()) : null;
       return {
-        productId: item.product.toString(),
+        productId: item.product?.toString() || '',
         storeId: product?.store?.toString() || '',
         quantity: item.quantity,
         price: item.price
       };
-    }));
+    });
 
     // Validate coupon using validation service
     const { validateCouponForCart } = await import('../services/couponValidationService');
@@ -814,9 +820,16 @@ export const validateCart = asyncHandler(async (req: Request, res: Response) => 
     const validationErrors: string[] = [];
     const unavailableItems: any[] = [];
 
+    // Batch-load all products in one query instead of N individual queries
+    const productIds = cart.items.map((item: any) => item.product).filter(Boolean);
+    const products = await Product.find({ _id: { $in: productIds } })
+      .select('name isActive inventory')
+      .lean() as any[];
+    const productMap = new Map(products.map(p => [p._id.toString(), p]));
+
     // Check each item's availability and stock with detailed messages
     for (const item of cart.items) {
-      const product = await Product.findById(item.product).lean() as any;
+      const product = item.product ? productMap.get(item.product.toString()) : null;
 
       if (!product) {
         unavailableItems.push({
@@ -854,7 +867,10 @@ export const validateCart = asyncHandler(async (req: Request, res: Response) => 
       let variantInfo = '';
 
       if (item.variant && item.variant.type && item.variant.value && product.inventory.variants) {
-        const variant = product.getVariantByType(item.variant.type, item.variant.value);
+        const variant = product.inventory.variants.find(
+          (v: any) => v.type.toLowerCase() === item.variant!.type.toLowerCase() &&
+                       v.value.toLowerCase() === item.variant!.value.toLowerCase()
+        );
 
         if (!variant) {
           unavailableItems.push({

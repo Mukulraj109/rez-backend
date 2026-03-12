@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Price History Model
  *
@@ -288,7 +289,7 @@ priceHistorySchema.statics.recordPriceChange = async function (data: any) {
 
   await history.save();
 
-  console.log(`📊 [PriceHistory] Recorded ${changeType} for product ${productId}:`, {
+  logger.info(`📊 [PriceHistory] Recorded ${changeType} for product ${productId}:`, {
     oldPrice: previousPrice?.salePrice,
     newPrice: price.salePrice,
     change: changeAmount,
@@ -343,7 +344,7 @@ priceHistorySchema.statics.cleanupOldHistory = async function (daysToKeep: numbe
     recordedAt: { $lt: cutoffDate },
   });
 
-  console.log(`🧹 [PriceHistory] Cleaned up ${result.deletedCount} old records`);
+  logger.info(`🧹 [PriceHistory] Cleaned up ${result.deletedCount} old records`);
 
   return result.deletedCount;
 };

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import axios from 'axios';
 
 // Geocoding service interfaces
@@ -56,7 +57,7 @@ class GeocodingService {
         return await this.reverseGeocodeOpenCage(request);
       }
     } catch (error) {
-      console.error('Geocoding error:', error);
+      logger.error('Geocoding error:', error);
       throw new Error('Failed to get address from coordinates');
     }
   }
@@ -157,7 +158,7 @@ class GeocodingService {
         return await this.searchAddressesOpenCage(request);
       }
     } catch (error) {
-      console.error('Address search error:', error);
+      logger.error('Address search error:', error);
       throw new Error('Failed to search addresses');
     }
   }
@@ -195,7 +196,7 @@ class GeocodingService {
           });
         }
       } catch (error) {
-        console.error('Error getting place details:', error);
+        logger.error('Error getting place details:', error);
       }
     }
 
@@ -255,7 +256,7 @@ class GeocodingService {
         return this.estimateTimezone(longitude);
       }
     } catch (error) {
-      console.error('Timezone error:', error);
+      logger.error('Timezone error:', error);
       return this.estimateTimezone(longitude);
     }
   }

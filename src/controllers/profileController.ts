@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Profile Controller
 // Handles user profile management API endpoints
 
@@ -51,8 +52,8 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
     return sendError(res, 'Authentication required', 401);
   }
 
-  console.log('🔄 [PROFILE_UPDATE] Update request received for user:', userId);
-  console.log('📥 [PROFILE_UPDATE] Request body:', JSON.stringify(req.body, null, 2));
+  logger.info('🔄 [PROFILE_UPDATE] Update request received for user:', userId);
+  logger.info('📥 [PROFILE_UPDATE] Request body:', JSON.stringify(req.body, null, 2));
 
   // Extract from nested profile object (frontend sends { profile: { ... }, preferences: { ... }, email: ... })
   const { profile, preferences, email } = req.body;
@@ -76,7 +77,7 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
         return sendBadRequest(res, 'Email is already in use');
       }
       user.email = email;
-      console.log('✅ [PROFILE_UPDATE] Email updated to:', email);
+      logger.info('✅ [PROFILE_UPDATE] Email updated to:', email);
     }
 
     // Update profile fields
@@ -91,22 +92,22 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
 
       if (profile.bio !== undefined) {
         user.profile.bio = profile.bio;
-        console.log('✅ [PROFILE_UPDATE] Bio updated to:', profile.bio);
+        logger.info('✅ [PROFILE_UPDATE] Bio updated to:', profile.bio);
       }
 
       if (profile.website !== undefined) {
         user.profile.website = profile.website;
-        console.log('✅ [PROFILE_UPDATE] Website updated to:', profile.website);
+        logger.info('✅ [PROFILE_UPDATE] Website updated to:', profile.website);
       }
 
       if (profile.dateOfBirth !== undefined) {
         user.profile.dateOfBirth = new Date(profile.dateOfBirth);
-        console.log('✅ [PROFILE_UPDATE] Date of Birth updated to:', profile.dateOfBirth);
+        logger.info('✅ [PROFILE_UPDATE] Date of Birth updated to:', profile.dateOfBirth);
       }
 
       if (profile.gender !== undefined) {
         user.profile.gender = profile.gender;
-        console.log('✅ [PROFILE_UPDATE] Gender updated to:', profile.gender);
+        logger.info('✅ [PROFILE_UPDATE] Gender updated to:', profile.gender);
       }
 
       if (profile.location !== undefined) {
@@ -117,7 +118,7 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
 
         if (profile.location.address !== undefined) {
           user.profile.location!.address = profile.location.address;
-          console.log('✅ [PROFILE_UPDATE] Location updated to:', profile.location.address);
+          logger.info('✅ [PROFILE_UPDATE] Location updated to:', profile.location.address);
         }
         if (profile.location.city !== undefined) {
           user.profile.location!.city = profile.location.city;
@@ -166,8 +167,8 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
     user.markModified('profile');
     user.markModified('preferences');
 
-    console.log('💾 [PROFILE_UPDATE] Saving user to database...');
-    console.log('📝 [PROFILE_UPDATE] Profile data to save:', {
+    logger.info('💾 [PROFILE_UPDATE] Saving user to database...');
+    logger.info('📝 [PROFILE_UPDATE] Profile data to save:', {
       bio: user.profile.bio,
       website: user.profile.website,
       location: user.profile.location?.address,
@@ -177,7 +178,7 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
 
     await user.save();
 
-    console.log('✅ [PROFILE_UPDATE] Profile saved successfully');
+    logger.info('✅ [PROFILE_UPDATE] Profile saved successfully');
 
     const updatedProfile = {
       id: (user._id as any).toString(),
@@ -196,7 +197,7 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
 
     sendSuccess(res, updatedProfile, 'Profile updated successfully');
   } catch (error: any) {
-    console.error('❌ [PROFILE_UPDATE] Error:', error);
+    logger.error('❌ [PROFILE_UPDATE] Error:', error);
 
     // Handle Mongoose validation errors — return field-specific messages
     if (error.name === 'ValidationError' && error.errors) {
@@ -316,7 +317,7 @@ export const saveRingSize = asyncHandler(async (req: Request, res: Response) => 
 
     sendSuccess(res, { ringSize }, 'Ring size saved successfully');
   } catch (error: any) {
-    console.error('❌ [PROFILE] Save ring size failed:', error);
+    logger.error('❌ [PROFILE] Save ring size failed:', error);
     sendError(res, 'Failed to save ring size', 500);
   }
 });

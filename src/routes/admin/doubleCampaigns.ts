@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Double Cashback Campaigns
  * CRUD for DoubleCashbackCampaign model (used by Extra Rewards page)
@@ -58,7 +59,7 @@ router.get('/', async (req: Request, res: Response) => {
       },
     }, 'Double campaigns fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching double campaigns:', error);
+    logger.error('[Admin] Error fetching double campaigns:', error);
     return sendError(res, 'Failed to fetch double campaigns', 500);
   }
 });
@@ -80,7 +81,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, campaign, 'Campaign fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching double campaign:', error);
+    logger.error('[Admin] Error fetching double campaign:', error);
     return sendError(res, 'Failed to fetch campaign', 500);
   }
 });
@@ -137,7 +138,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     return sendSuccess(res, campaign, 'Double campaign created');
   } catch (error) {
-    console.error('[Admin] Error creating double campaign:', error);
+    logger.error('[Admin] Error creating double campaign:', error);
     return sendError(res, 'Failed to create campaign', 500);
   }
 });
@@ -164,7 +165,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, campaign, 'Campaign updated');
   } catch (error) {
-    console.error('[Admin] Error updating double campaign:', error);
+    logger.error('[Admin] Error updating double campaign:', error);
     return sendError(res, 'Failed to update campaign', 500);
   }
 });
@@ -189,7 +190,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
 
     return sendSuccess(res, campaign, `Campaign ${campaign.isActive ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling double campaign:', error);
+    logger.error('[Admin] Error toggling double campaign:', error);
     return sendError(res, 'Failed to toggle campaign', 500);
   }
 });
@@ -211,7 +212,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, null, 'Campaign deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting double campaign:', error);
+    logger.error('[Admin] Error deleting double campaign:', error);
     return sendError(res, 'Failed to delete campaign', 500);
   }
 });

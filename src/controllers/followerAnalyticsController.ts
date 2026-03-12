@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import {
@@ -44,7 +45,7 @@ export const getDetailedFollowerAnalytics = async (req: Request, res: Response):
 
     sendSuccess(res, analytics, 'Detailed analytics fetched successfully');
   } catch (error) {
-    console.error('Error fetching detailed analytics:', error);
+    logger.error('Error fetching detailed analytics:', error);
     sendError(res, 'Failed to fetch detailed analytics', 500);
   }
 };
@@ -67,7 +68,7 @@ export const getFollowerGrowthMetrics = async (req: Request, res: Response): Pro
 
     sendSuccess(res, metrics, 'Growth metrics fetched successfully');
   } catch (error) {
-    console.error('Error fetching growth metrics:', error);
+    logger.error('Error fetching growth metrics:', error);
     sendError(res, 'Failed to fetch growth metrics', 500);
   }
 };
@@ -90,7 +91,7 @@ export const getFollowerCount = async (req: Request, res: Response): Promise<voi
 
     sendSuccess(res, { count, storeId }, 'Follower count fetched successfully');
   } catch (error) {
-    console.error('Error fetching follower count:', error);
+    logger.error('Error fetching follower count:', error);
     sendError(res, 'Failed to fetch follower count', 500);
   }
 };
@@ -113,7 +114,7 @@ export const triggerDailySnapshot = async (req: Request, res: Response): Promise
 
     sendSuccess(res, { success: true }, 'Daily snapshot recorded successfully');
   } catch (error) {
-    console.error('Error recording daily snapshot:', error);
+    logger.error('Error recording daily snapshot:', error);
     sendError(res, 'Failed to record daily snapshot', 500);
   }
 };
@@ -172,7 +173,7 @@ export const getFollowerAnalyticsSummary = async (req: Request, res: Response): 
 
     sendSuccess(res, summary, 'Analytics summary fetched successfully');
   } catch (error) {
-    console.error('Error fetching analytics summary:', error);
+    logger.error('Error fetching analytics summary:', error);
     sendError(res, 'Failed to fetch analytics summary', 500);
   }
 };

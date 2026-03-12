@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import { razorpayConfig, validateRazorpayConfig } from '../config/razorpay.config';
@@ -19,7 +20,7 @@ function getRazorpayInstance(): Razorpay {
       key_secret: razorpayConfig.keySecret,
     });
     
-    console.log('✅ [RAZORPAY] Instance initialized');
+    logger.info('✅ [RAZORPAY] Instance initialized');
   }
   
   return razorpayInstance;
@@ -55,7 +56,7 @@ export async function createRazorpayOrder(
       notes: notes || {},
     };
     
-    console.log('💳 [RAZORPAY] Creating order:', {
+    logger.info('💳 [RAZORPAY] Creating order:', {
       amount: `₹${amount}`,
       receipt,
       notes,
@@ -63,7 +64,7 @@ export async function createRazorpayOrder(
     
     const order = await razorpay.orders.create(options);
     
-    console.log('✅ [RAZORPAY] Order created:', {
+    logger.info('✅ [RAZORPAY] Order created:', {
       orderId: order.id,
       amount: `₹${amount}`,
       status: order.status,
@@ -79,7 +80,7 @@ export async function createRazorpayOrder(
       notes: (order.notes as Record<string, any>) || {}, // Ensure notes is always an object
     };
   } catch (error: any) {
-    console.error('❌ [RAZORPAY] Order creation failed:', error);
+    logger.error('❌ [RAZORPAY] Order creation failed:', error);
     throw new Error(`Razorpay order creation failed: ${error.message}`);
   }
 }
@@ -104,12 +105,12 @@ export function verifyRazorpaySignature(
     const isValid = expectedSignature === razorpaySignature;
     
     if (isValid) {
-      console.log('✅ [RAZORPAY] Signature verified:', {
+      logger.info('✅ [RAZORPAY] Signature verified:', {
         orderId: razorpayOrderId,
         paymentId: razorpayPaymentId,
       });
     } else {
-      console.error('❌ [RAZORPAY] Signature verification failed:', {
+      logger.error('❌ [RAZORPAY] Signature verification failed:', {
         orderId: razorpayOrderId,
         paymentId: razorpayPaymentId,
         expected: expectedSignature,
@@ -119,7 +120,7 @@ export function verifyRazorpaySignature(
     
     return isValid;
   } catch (error) {
-    console.error('❌ [RAZORPAY] Signature verification error:', error);
+    logger.error('❌ [RAZORPAY] Signature verification error:', error);
     return false;
   }
 }
@@ -134,7 +135,7 @@ export async function fetchPaymentDetails(paymentId: string) {
     
     const paymentAmount = Number(payment.amount) / 100;
     
-    console.log('✅ [RAZORPAY] Payment details fetched:', {
+    logger.info('✅ [RAZORPAY] Payment details fetched:', {
       paymentId,
       status: payment.status,
       method: payment.method,
@@ -143,7 +144,7 @@ export async function fetchPaymentDetails(paymentId: string) {
     
     return payment;
   } catch (error: any) {
-    console.error('❌ [RAZORPAY] Failed to fetch payment details:', error);
+    logger.error('❌ [RAZORPAY] Failed to fetch payment details:', error);
     throw new Error(`Failed to fetch payment details: ${error.message}`);
   }
 }
@@ -167,7 +168,7 @@ export async function createRefund(
       options.amount = Math.round(amount * 100); // Convert to paise
     }
     
-    console.log('💰 [RAZORPAY] Creating refund:', {
+    logger.info('💰 [RAZORPAY] Creating refund:', {
       paymentId,
       amount: amount ? `₹${amount}` : 'Full refund',
     });
@@ -176,7 +177,7 @@ export async function createRefund(
     
     const refundAmount = refund.amount ? Number(refund.amount) / 100 : 0;
     
-    console.log('✅ [RAZORPAY] Refund created:', {
+    logger.info('✅ [RAZORPAY] Refund created:', {
       refundId: refund.id,
       status: refund.status,
       amount: `₹${refundAmount}`,
@@ -184,7 +185,7 @@ export async function createRefund(
     
     return refund;
   } catch (error: any) {
-    console.error('❌ [RAZORPAY] Refund creation failed:', error);
+    logger.error('❌ [RAZORPAY] Refund creation failed:', error);
     throw new Error(`Refund creation failed: ${error.message}`);
   }
 }
@@ -217,7 +218,7 @@ export function validateWebhookSignature(
     
     return expectedSignature === webhookSignature;
   } catch (error) {
-    console.error('❌ [RAZORPAY] Webhook signature validation failed:', error);
+    logger.error('❌ [RAZORPAY] Webhook signature validation failed:', error);
     return false;
   }
 }
@@ -272,7 +273,7 @@ export async function createRazorpayPayout(params: {
       narration: `Cashback payment - ${params.reference}`
     };
 
-    console.log('💸 [RAZORPAY] Creating payout:', {
+    logger.info('💸 [RAZORPAY] Creating payout:', {
       amount: `₹${params.amount}`,
       account: `****${params.accountNumber.slice(-4)}`,
       ifsc: params.ifsc,
@@ -300,7 +301,7 @@ export async function createRazorpayPayout(params: {
       created_at: Math.floor(Date.now() / 1000)
     };
 
-    console.log('✅ [RAZORPAY] Payout created:', {
+    logger.info('✅ [RAZORPAY] Payout created:', {
       payoutId: payout.id,
       amount: `₹${params.amount}`,
       status: payout.status
@@ -308,7 +309,7 @@ export async function createRazorpayPayout(params: {
 
     return payout;
   } catch (error: any) {
-    console.error('❌ [RAZORPAY] Payout creation failed:', error);
+    logger.error('❌ [RAZORPAY] Payout creation failed:', error);
     throw new Error(`Payout creation failed: ${error.message}`);
   }
 }

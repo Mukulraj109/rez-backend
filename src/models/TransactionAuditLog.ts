@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
 /**
@@ -148,6 +149,6 @@ export async function logTransaction(data: Partial<ITransactionAuditLog>): Promi
   try {
     await TransactionAuditLog.create(data);
   } catch (error) {
-    console.error('[AUDIT] Failed to write transaction audit log:', error);
+    logger.error('[AUDIT] Failed to write transaction audit log:', error);
   }
 }

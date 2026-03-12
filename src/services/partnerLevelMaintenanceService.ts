@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Partner Level Maintenance Service
 // Handles automated level expiry checks and warnings
 
@@ -15,7 +16,7 @@ class PartnerLevelMaintenanceService {
   startDailyLevelCheck() {
     // Run every day at 00:00 (midnight)
     this.dailyCheckJob = cron.schedule('0 0 * * *', async () => {
-      console.log('🔍 [LEVEL MAINTENANCE] Starting daily level expiry check...');
+      logger.info('🔍 [LEVEL MAINTENANCE] Starting daily level expiry check...');
       
       try {
         const now = new Date();
@@ -25,7 +26,7 @@ class PartnerLevelMaintenanceService {
           status: 'active'
         });
 
-        console.log(`📊 [LEVEL MAINTENANCE] Found ${expiredPartners.length} expired levels`);
+        logger.info(`📊 [LEVEL MAINTENANCE] Found ${expiredPartners.length} expired levels`);
 
         let upgraded = 0;
         let reset = 0;
@@ -44,13 +45,13 @@ class PartnerLevelMaintenanceService {
           await partner.save();
         }
         
-        console.log(`✅ [LEVEL MAINTENANCE] Processed ${expiredPartners.length} expirations: ${upgraded} upgraded, ${reset} reset`);
+        logger.info(`✅ [LEVEL MAINTENANCE] Processed ${expiredPartners.length} expirations: ${upgraded} upgraded, ${reset} reset`);
       } catch (error) {
-        console.error('❌ [LEVEL MAINTENANCE] Error checking level expiry:', error);
+        logger.error('❌ [LEVEL MAINTENANCE] Error checking level expiry:', error);
       }
     });
     
-    console.log('✅ [LEVEL MAINTENANCE] Daily level check cron job started (runs at midnight)');
+    logger.info('✅ [LEVEL MAINTENANCE] Daily level check cron job started (runs at midnight)');
   }
   
   /**
@@ -60,7 +61,7 @@ class PartnerLevelMaintenanceService {
   startExpiryWarnings() {
     // Run every day at 09:00 AM
     this.warningJob = cron.schedule('0 9 * * *', async () => {
-      console.log('⚠️ [LEVEL WARNINGS] Checking for levels expiring soon...');
+      logger.info('⚠️ [LEVEL WARNINGS] Checking for levels expiring soon...');
       
       try {
         const now = new Date();
@@ -73,13 +74,13 @@ class PartnerLevelMaintenanceService {
           status: 'active'
         }).populate('userId', 'email phoneNumber');
         
-        console.log(`📊 [LEVEL WARNINGS] Found ${expiringPartners.length} partners expiring in next 7 days`);
+        logger.info(`📊 [LEVEL WARNINGS] Found ${expiringPartners.length} partners expiring in next 7 days`);
         
         for (const partner of expiringPartners) {
           const daysLeft = partner.getDaysRemaining();
           const ordersNeeded = partner.getOrdersNeededForNextLevel();
           
-          console.log(`⏰ [LEVEL WARNING] Partner ${partner.userId}: ${daysLeft} days left, ${ordersNeeded} orders needed for next level`);
+          logger.info(`⏰ [LEVEL WARNING] Partner ${partner.userId}: ${daysLeft} days left, ${ordersNeeded} orders needed for next level`);
           
           // TODO: Send actual notification (email/push)
           // await notificationService.sendLevelExpiryWarning(partner.userId, {
@@ -89,13 +90,13 @@ class PartnerLevelMaintenanceService {
           // });
         }
         
-        console.log(`✅ [LEVEL WARNINGS] Sent warnings to ${expiringPartners.length} partners`);
+        logger.info(`✅ [LEVEL WARNINGS] Sent warnings to ${expiringPartners.length} partners`);
       } catch (error) {
-        console.error('❌ [LEVEL WARNINGS] Error sending warnings:', error);
+        logger.error('❌ [LEVEL WARNINGS] Error sending warnings:', error);
       }
     });
     
-    console.log('✅ [LEVEL WARNINGS] Expiry warning cron job started (runs at 9 AM daily)');
+    logger.info('✅ [LEVEL WARNINGS] Expiry warning cron job started (runs at 9 AM daily)');
   }
   
   /**
@@ -105,7 +106,7 @@ class PartnerLevelMaintenanceService {
   startInactivityCheck() {
     // Run every Sunday at 02:00 AM
     const inactivityJob = cron.schedule('0 2 * * 0', async () => {
-      console.log('💤 [INACTIVITY CHECK] Checking for inactive partners...');
+      logger.info('💤 [INACTIVITY CHECK] Checking for inactive partners...');
       
       try {
         const threeMonthsAgo = new Date();
@@ -118,10 +119,10 @@ class PartnerLevelMaintenanceService {
           'currentLevel.level': { $gt: 1 } // Only check Influencer and Ambassador
         }).lean();
         
-        console.log(`📊 [INACTIVITY CHECK] Found ${inactivePartners.length} inactive partners (3+ months)`);
+        logger.info(`📊 [INACTIVITY CHECK] Found ${inactivePartners.length} inactive partners (3+ months)`);
         
         for (const partner of inactivePartners) {
-          console.log(`⚠️ [INACTIVITY] Partner ${partner.userId}: Inactive since ${partner.lastActivityDate.toISOString().split('T')[0]}`);
+          logger.info(`⚠️ [INACTIVITY] Partner ${partner.userId}: Inactive since ${partner.lastActivityDate.toISOString().split('T')[0]}`);
           
           // TODO: Implement downgrade logic or warnings
           // For now, just log. Can implement actual downgrade in future:
@@ -132,13 +133,13 @@ class PartnerLevelMaintenanceService {
           // }
         }
         
-        console.log(`ℹ️ [INACTIVITY CHECK] Monitored ${inactivePartners.length} inactive partners`);
+        logger.info(`ℹ️ [INACTIVITY CHECK] Monitored ${inactivePartners.length} inactive partners`);
       } catch (error) {
-        console.error('❌ [INACTIVITY CHECK] Error checking inactivity:', error);
+        logger.error('❌ [INACTIVITY CHECK] Error checking inactivity:', error);
       }
     });
     
-    console.log('✅ [INACTIVITY CHECK] Inactivity check cron job started (runs weekly on Sunday)');
+    logger.info('✅ [INACTIVITY CHECK] Inactivity check cron job started (runs weekly on Sunday)');
   }
   
   /**
@@ -148,7 +149,7 @@ class PartnerLevelMaintenanceService {
     this.startDailyLevelCheck();
     this.startExpiryWarnings();
     this.startInactivityCheck();
-    console.log('🎯 [PARTNER MAINTENANCE] All maintenance jobs started successfully');
+    logger.info('🎯 [PARTNER MAINTENANCE] All maintenance jobs started successfully');
   }
   
   /**
@@ -157,20 +158,20 @@ class PartnerLevelMaintenanceService {
   stopAll() {
     if (this.dailyCheckJob) {
       this.dailyCheckJob.stop();
-      console.log('🛑 [LEVEL MAINTENANCE] Daily check stopped');
+      logger.info('🛑 [LEVEL MAINTENANCE] Daily check stopped');
     }
     if (this.warningJob) {
       this.warningJob.stop();
-      console.log('🛑 [LEVEL WARNINGS] Warning job stopped');
+      logger.info('🛑 [LEVEL WARNINGS] Warning job stopped');
     }
-    console.log('🛑 [PARTNER MAINTENANCE] All maintenance jobs stopped');
+    logger.info('🛑 [PARTNER MAINTENANCE] All maintenance jobs stopped');
   }
   
   /**
    * Manual trigger for testing (runs expiry check immediately)
    */
   async triggerExpiryCheckNow(): Promise<void> {
-    console.log('🔧 [MANUAL TRIGGER] Running expiry check now...');
+    logger.info('🔧 [MANUAL TRIGGER] Running expiry check now...');
     
     try {
       const now = new Date();
@@ -180,16 +181,16 @@ class PartnerLevelMaintenanceService {
         status: 'active'
       });
 
-      console.log(`📊 [MANUAL TRIGGER] Found ${expiredPartners.length} expired levels`);
+      logger.info(`📊 [MANUAL TRIGGER] Found ${expiredPartners.length} expired levels`);
 
       for (const partner of expiredPartners) {
         partner.handleLevelExpiry();
         await partner.save();
       }
       
-      console.log(`✅ [MANUAL TRIGGER] Processed ${expiredPartners.length} expirations`);
+      logger.info(`✅ [MANUAL TRIGGER] Processed ${expiredPartners.length} expirations`);
     } catch (error) {
-      console.error('❌ [MANUAL TRIGGER] Error:', error);
+      logger.error('❌ [MANUAL TRIGGER] Error:', error);
       throw error;
     }
   }

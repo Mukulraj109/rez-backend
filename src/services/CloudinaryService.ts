@@ -1,7 +1,7 @@
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import * as fs from 'fs';
-import * as path from 'path';
 import { ImageProcessingService } from './ImageProcessingService';
+import { logger } from '../config/logger';
 
 // Configure Cloudinary
 cloudinary.config({
@@ -43,10 +43,10 @@ export class CloudinaryService {
         fs.unlinkSync(filePath);
       }
 
-      console.log(`✅ Uploaded to Cloudinary: ${result.secure_url}`);
+      logger.info('[CLOUDINARY] Uploaded to Cloudinary', { url: result.secure_url });
       return result;
     } catch (error: any) {
-      console.error('❌ Cloudinary upload error:', error);
+      logger.error('[CLOUDINARY] Upload error', { error: error.message });
       throw new Error(`Failed to upload to Cloudinary: ${error.message}`);
     }
   }
@@ -179,10 +179,10 @@ export class CloudinaryService {
         fs.unlinkSync(filePath);
       }
 
-      console.log(`✅ Uploaded video to Cloudinary: ${result.secure_url}`);
+      logger.info('[CLOUDINARY] Uploaded video to Cloudinary', { url: result.secure_url });
       return result;
     } catch (error: any) {
-      console.error('❌ Video upload error:', error);
+      logger.error('[CLOUDINARY] Video upload error', { error: error.message });
       throw new Error(`Failed to upload video: ${error.message}`);
     }
   }
@@ -273,10 +273,10 @@ export class CloudinaryService {
   static async deleteFile(publicId: string): Promise<any> {
     try {
       const result = await cloudinary.uploader.destroy(publicId);
-      console.log(`🗑️ Deleted from Cloudinary: ${publicId}`);
+      logger.info('[CLOUDINARY] Deleted from Cloudinary', { publicId });
       return result;
     } catch (error: any) {
-      console.error('❌ Cloudinary delete error:', error);
+      logger.error('[CLOUDINARY] Delete error', { error: error.message });
       throw new Error(`Failed to delete from Cloudinary: ${error.message}`);
     }
   }
@@ -289,10 +289,10 @@ export class CloudinaryService {
       const result = await cloudinary.uploader.destroy(publicId, {
         resource_type: 'video',
       });
-      console.log(`🗑️ Deleted video from Cloudinary: ${publicId}`);
+      logger.info('[CLOUDINARY] Deleted video from Cloudinary', { publicId });
       return result;
     } catch (error: any) {
-      console.error('❌ Video delete error:', error);
+      logger.error('[CLOUDINARY] Video delete error', { error: error.message });
       throw new Error(`Failed to delete video: ${error.message}`);
     }
   }

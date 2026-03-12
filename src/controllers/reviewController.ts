@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import { Review } from '../models/Review';
 import { Store } from '../models/Store';
@@ -198,7 +199,7 @@ export const getStoreReviews = asyncHandler(async (req: Request, res: Response) 
     sendSuccess(res, result);
 
   } catch (error) {
-    console.error('Get store reviews error:', error);
+    logger.error('Get store reviews error:', error);
     throw new AppError('Failed to fetch store reviews', 500);
   }
 });
@@ -300,7 +301,7 @@ export const getProductReviews = asyncHandler(async (req: Request, res: Response
       },
     });
   } catch (error) {
-    console.error('Get product reviews error:', error);
+    logger.error('Get product reviews error:', error);
     throw new AppError('Failed to fetch product reviews', 500);
   }
 });
@@ -395,7 +396,7 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
 
     // Recalculate Privé reputation on review submission (fire-and-forget)
     reputationService.onReviewSubmitted(userId)
-      .catch(err => console.warn('[REVIEW] Reputation recalculation failed:', err));
+      .catch(err => logger.warn('[REVIEW] Reputation recalculation failed:', err));
 
     // Emit gamification event for review submission
     gamificationEventBus.emit('review_submitted', {
@@ -416,7 +417,7 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
     }, 'Review submitted successfully. It will be visible after merchant approval.');
 
   } catch (error) {
-    console.error('Create review error:', error);
+    logger.error('Create review error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -486,10 +487,10 @@ export const moderateReview = asyncHandler(async (req: Request, res: Response) =
               idempotencyKey: `review-reward:${(review.user as any)._id}:${review._id}`
             }
           );
-          console.log(`💰 [MODERATION] Awarded ${reviewBonusCoins} coins to user ${(review.user as any)._id} for approved review`);
+          logger.info(`💰 [MODERATION] Awarded ${reviewBonusCoins} coins to user ${(review.user as any)._id} for approved review`);
 
           // Audit log for review reward issuance
-          console.log(JSON.stringify({
+          logger.info(JSON.stringify({
             event: 'REVIEW_REWARD_ISSUED',
             userId: String((review.user as any)._id),
             reviewId: String(review._id),
@@ -500,7 +501,7 @@ export const moderateReview = asyncHandler(async (req: Request, res: Response) =
           }));
         }
       } catch (coinError) {
-        console.error('❌ [MODERATION] Error awarding review coins:', coinError);
+        logger.error('❌ [MODERATION] Error awarding review coins:', coinError);
         // Don't fail the moderation if coin award fails
       }
 
@@ -509,7 +510,7 @@ export const moderateReview = asyncHandler(async (req: Request, res: Response) =
         challengeService.updateProgress(
           String((review.user as any)._id), 'review_count', 1,
           { reviewId: String(review._id), storeId: String(review.store._id) }
-        ).catch(err => console.error('[REVIEW] Challenge progress update failed:', err));
+        ).catch(err => logger.error('[REVIEW] Challenge progress update failed:', err));
       }
     }
 
@@ -518,7 +519,7 @@ export const moderateReview = asyncHandler(async (req: Request, res: Response) =
     }, `Review ${status} successfully`);
 
   } catch (error) {
-    console.error('Moderate review error:', error);
+    logger.error('Moderate review error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -587,7 +588,7 @@ export const updateReview = asyncHandler(async (req: Request, res: Response) => 
     }, 'Review updated successfully');
 
   } catch (error) {
-    console.error('Update review error:', error);
+    logger.error('Update review error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -630,7 +631,7 @@ export const deleteReview = asyncHandler(async (req: Request, res: Response) => 
     sendSuccess(res, null, 'Review deleted successfully');
 
   } catch (error) {
-    console.error('Delete review error:', error);
+    logger.error('Delete review error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -662,7 +663,7 @@ export const markReviewHelpful = asyncHandler(async (req: Request, res: Response
     }, 'Review marked as helpful');
 
   } catch (error) {
-    console.error('Mark review helpful error:', error);
+    logger.error('Mark review helpful error:', error);
     if (error instanceof AppError) {
       throw error;
     }
@@ -710,7 +711,7 @@ export const getUserReviews = asyncHandler(async (req: Request, res: Response) =
     });
 
   } catch (error) {
-    console.error('Get user reviews error:', error);
+    logger.error('Get user reviews error:', error);
     throw new AppError('Failed to fetch user reviews', 500);
   }
 });
@@ -733,7 +734,7 @@ export const canUserReviewStore = asyncHandler(async (req: Request, res: Respons
     });
 
   } catch (error) {
-    console.error('Check user review eligibility error:', error);
+    logger.error('Check user review eligibility error:', error);
     throw new AppError('Failed to check review eligibility', 500);
   }
 });
@@ -809,7 +810,7 @@ export const getFeaturedReviews = asyncHandler(async (req: Request, res: Respons
 
     sendSuccess(res, result, 'Featured reviews retrieved successfully');
   } catch (error) {
-    console.error('Get featured reviews error:', error);
+    logger.error('Get featured reviews error:', error);
     throw new AppError('Failed to fetch featured reviews', 500);
   }
 });

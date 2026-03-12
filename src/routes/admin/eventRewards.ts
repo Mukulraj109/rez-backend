@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
@@ -34,7 +35,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     res.json({ success: true, data: { configs } });
   } catch (error: any) {
-    console.error('[Admin EventRewards] Error:', error);
+    logger.error('[Admin EventRewards] Error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -49,7 +50,7 @@ router.get('/global', async (req: Request, res: Response) => {
     const config = await (EventRewardConfig as any).getGlobalDefault();
     res.json({ success: true, data: { config } });
   } catch (error: any) {
-    console.error('[Admin EventRewards] Error:', error);
+    logger.error('[Admin EventRewards] Error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -75,7 +76,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     res.json({ success: true, data: { config } });
   } catch (error: any) {
-    console.error('[Admin EventRewards] Error:', error);
+    logger.error('[Admin EventRewards] Error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -131,7 +132,7 @@ router.post('/', async (req: Request, res: Response) => {
       message: 'Reward config created successfully',
     });
   } catch (error: any) {
-    console.error('[Admin EventRewards] Error creating:', error);
+    logger.error('[Admin EventRewards] Error creating:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -167,7 +168,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       message: 'Reward config updated successfully',
     });
   } catch (error: any) {
-    console.error('[Admin EventRewards] Error updating:', error);
+    logger.error('[Admin EventRewards] Error updating:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -190,7 +191,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     res.json({ success: true, message: 'Reward config deleted successfully' });
   } catch (error: any) {
-    console.error('[Admin EventRewards] Error deleting:', error);
+    logger.error('[Admin EventRewards] Error deleting:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

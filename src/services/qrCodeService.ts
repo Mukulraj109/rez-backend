@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * QR Code Service for Store Payment System
  *
@@ -137,7 +138,7 @@ export class QRCodeService {
         qrImageUrl = uploadResult.secure_url;
       } catch (uploadError) {
         // If Cloudinary fails, generate a data URL as fallback
-        console.warn('Cloudinary upload failed, using data URL fallback:', uploadError);
+        logger.warn('Cloudinary upload failed, using data URL fallback:', uploadError);
         qrImageUrl = await QRCode.toDataURL(qrPayload, {
           width: 512,
           margin: 2,
@@ -162,7 +163,7 @@ export class QRCodeService {
         },
       });
 
-      console.log(`✅ Generated QR code for store ${store.name}: ${qrCode}`);
+      logger.info(`✅ Generated QR code for store ${store.name}: ${qrCode}`);
 
       return {
         success: true,
@@ -171,7 +172,7 @@ export class QRCodeService {
         generatedAt,
       };
     } catch (error: any) {
-      console.error('❌ QR code generation error:', error);
+      logger.error('❌ QR code generation error:', error);
       throw new Error(`Failed to generate QR code: ${error.message}`);
     }
   }
@@ -188,7 +189,7 @@ export class QRCodeService {
 
       return await this.generateStoreQR(storeId);
     } catch (error: any) {
-      console.error('❌ QR code regeneration error:', error);
+      logger.error('❌ QR code regeneration error:', error);
       throw new Error(`Failed to regenerate QR code: ${error.message}`);
     }
   }
@@ -256,7 +257,7 @@ export class QRCodeService {
         },
       };
     } catch (error: any) {
-      console.error('❌ QR lookup error:', error);
+      logger.error('❌ QR lookup error:', error);
       return {
         success: false,
         error: `Failed to lookup store: ${error.message}`,
@@ -290,10 +291,10 @@ export class QRCodeService {
       await Store.findByIdAndUpdate(storeId, {
         'storeQR.isActive': false,
       });
-      console.log(`🔒 Deactivated QR code for store: ${storeId}`);
+      logger.info(`🔒 Deactivated QR code for store: ${storeId}`);
       return true;
     } catch (error: any) {
-      console.error('❌ QR deactivation error:', error);
+      logger.error('❌ QR deactivation error:', error);
       return false;
     }
   }
@@ -314,10 +315,10 @@ export class QRCodeService {
         });
       }
 
-      console.log(`✅ Activated QR code for store: ${storeId}`);
+      logger.info(`✅ Activated QR code for store: ${storeId}`);
       return true;
     } catch (error: any) {
-      console.error('❌ QR activation error:', error);
+      logger.error('❌ QR activation error:', error);
       return false;
     }
   }
@@ -347,7 +348,7 @@ export class QRCodeService {
         generatedAt: store.storeQR.generatedAt,
       };
     } catch (error: any) {
-      console.error('❌ Error getting QR details:', error);
+      logger.error('❌ Error getting QR details:', error);
       return { hasQR: false };
     }
   }

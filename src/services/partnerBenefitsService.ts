@@ -44,7 +44,7 @@ class PartnerBenefitsService {
       
       return levelConfig?.benefits || null;
     } catch (error) {
-      console.error('❌ [PARTNER BENEFITS] Error getting benefits:', error);
+      logger.error('❌ [PARTNER BENEFITS] Error getting benefits:', error);
       return null;
     }
   }
@@ -64,7 +64,7 @@ class PartnerBenefitsService {
       
       return birthMonth === currentMonth;
     } catch (error) {
-      console.error('❌ [PARTNER BENEFITS] Error checking birthday:', error);
+      logger.error('❌ [PARTNER BENEFITS] Error checking birthday:', error);
       return false;
     }
   }
@@ -89,7 +89,7 @@ class PartnerBenefitsService {
       };
       
       if (!benefits) {
-        console.log('ℹ️ [PARTNER BENEFITS] No partner benefits found, using defaults');
+        logger.info('ℹ️ [PARTNER BENEFITS] No partner benefits found, using defaults');
         return defaultResult;
       }
       
@@ -107,7 +107,7 @@ class PartnerBenefitsService {
       const cashbackAmount = pct(orderData.subtotal, cashbackRate);
       totalSavings += cashbackAmount;
       appliedBenefits.push(`${cashbackRate}% Partner Cashback`);
-      console.log(`✅ [PARTNER BENEFITS] Applied ${cashbackRate}% cashback: ₹${cashbackAmount}`);
+      logger.info(`✅ [PARTNER BENEFITS] Applied ${cashbackRate}% cashback: ₹${cashbackAmount}`);
       
       // Apply free delivery if eligible
       if (orderData.subtotal >= benefits.freeDeliveryThreshold && orderData.deliveryFee > 0) {
@@ -115,7 +115,7 @@ class PartnerBenefitsService {
         totalSavings += deliverySavings;
         deliveryFee = 0;
         appliedBenefits.push('Free Delivery');
-        console.log(`✅ [PARTNER BENEFITS] Applied free delivery: ₹${deliverySavings} saved`);
+        logger.info(`✅ [PARTNER BENEFITS] Applied free delivery: ₹${deliverySavings} saved`);
       }
       
       // Apply birthday discount if in birthday month
@@ -123,10 +123,10 @@ class PartnerBenefitsService {
         birthdayDiscount = pct(orderData.subtotal, benefits.birthdayDiscount);
         totalSavings += birthdayDiscount;
         appliedBenefits.push(`${benefits.birthdayDiscount}% Birthday Discount`);
-        console.log(`🎂 [PARTNER BENEFITS] Applied birthday discount: ₹${birthdayDiscount}`);
+        logger.info(`🎂 [PARTNER BENEFITS] Applied birthday discount: ₹${birthdayDiscount}`);
       }
       
-      console.log(`💰 [PARTNER BENEFITS] Total savings: ₹${totalSavings}`);
+      logger.info(`💰 [PARTNER BENEFITS] Total savings: ₹${totalSavings}`);
       
       return {
         cashbackRate,
@@ -139,7 +139,7 @@ class PartnerBenefitsService {
         isBirthdayMonth
       };
     } catch (error) {
-      console.error('❌ [PARTNER BENEFITS] Error applying benefits:', error);
+      logger.error('❌ [PARTNER BENEFITS] Error applying benefits:', error);
       return {
         cashbackRate: 2,
         cashbackAmount: pct(orderData.subtotal, 2),
@@ -204,7 +204,7 @@ class PartnerBenefitsService {
       
       return 0;
     } catch (error) {
-      console.error('❌ [PARTNER BENEFITS] Error checking transaction bonus:', error);
+      logger.error('❌ [PARTNER BENEFITS] Error checking transaction bonus:', error);
       return 0;
     }
   }

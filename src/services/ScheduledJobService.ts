@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Scheduled Job Service
  *
@@ -158,7 +159,7 @@ const JOB_DEFINITIONS: ScheduledJobDefinition[] = [
       const travelCashbackService = (await import('../services/travelCashbackService')).default;
       const lockToken = await redisService.acquireLock('travel_cashback_credit', 3600);
       if (!lockToken) {
-        console.log('[SCHEDULED-JOBS] travel-credit-cashback: lock held by another instance, skipping');
+        logger.info('[SCHEDULED-JOBS] travel-credit-cashback: lock held by another instance, skipping');
         return { skipped: true };
       }
       try {
@@ -179,7 +180,7 @@ const JOB_DEFINITIONS: ScheduledJobDefinition[] = [
       const TRAVEL_SLUGS = ['flights', 'hotels', 'trains', 'bus', 'cab', 'packages'];
       const lockToken = await redisService.acquireLock('travel_expire_unpaid', 600);
       if (!lockToken) {
-        console.log('[SCHEDULED-JOBS] travel-expire-unpaid: lock held by another instance, skipping');
+        logger.info('[SCHEDULED-JOBS] travel-expire-unpaid: lock held by another instance, skipping');
         return { skipped: true };
       }
       try {
@@ -227,7 +228,7 @@ const JOB_DEFINITIONS: ScheduledJobDefinition[] = [
       const TRAVEL_SLUGS = ['flights', 'hotels', 'trains', 'bus', 'cab', 'packages'];
       const lockToken = await redisService.acquireLock('travel_mark_completed', 1800);
       if (!lockToken) {
-        console.log('[SCHEDULED-JOBS] travel-mark-completed: lock held by another instance, skipping');
+        logger.info('[SCHEDULED-JOBS] travel-mark-completed: lock held by another instance, skipping');
         return { skipped: true };
       }
       try {
@@ -326,7 +327,7 @@ export class ScheduledJobService {
    */
   static async initialize(): Promise<void> {
     if (this.isInitialized) {
-      console.log('[SCHEDULED-JOBS] Already initialized');
+      logger.info('[SCHEDULED-JOBS] Already initialized');
       return;
     }
 
@@ -334,7 +335,7 @@ export class ScheduledJobService {
       const redisConfig = getRedisConfig();
 
       if (!redisConfig.enabled) {
-        console.log('[SCHEDULED-JOBS] Disabled (Redis not available)');
+        logger.info('[SCHEDULED-JOBS] Disabled (Redis not available)');
         return;
       }
 
@@ -361,16 +362,16 @@ export class ScheduledJobService {
       for (const def of JOB_DEFINITIONS) {
         this.queue.process(def.name, 1, async (_job: Job) => {
           const startTime = Date.now();
-          console.log(`[SCHEDULED-JOBS] Running "${def.name}" ...`);
+          logger.info(`[SCHEDULED-JOBS] Running "${def.name}" ...`);
 
           try {
             const result = await def.runner();
             const duration = Date.now() - startTime;
-            console.log(`[SCHEDULED-JOBS] "${def.name}" completed in ${duration}ms`);
+            logger.info(`[SCHEDULED-JOBS] "${def.name}" completed in ${duration}ms`);
             return result;
           } catch (error: any) {
             const duration = Date.now() - startTime;
-            console.error(`[SCHEDULED-JOBS] "${def.name}" failed after ${duration}ms:`, error.message);
+            logger.error(`[SCHEDULED-JOBS] "${def.name}" failed after ${duration}ms:`, error.message);
             throw error; // Let Bull handle retries
           }
         });
@@ -402,22 +403,22 @@ export class ScheduledJobService {
       });
 
       this.queue.on('failed', (job: Job, err: Error) => {
-        console.error(`[SCHEDULED-JOBS] Job "${job.name}" (id=${job.id}) failed: ${err.message}`);
+        logger.error(`[SCHEDULED-JOBS] Job "${job.name}" (id=${job.id}) failed: ${err.message}`);
       });
 
       this.queue.on('stalled', (job: Job) => {
-        console.warn(`[SCHEDULED-JOBS] Job "${job.name}" (id=${job.id}) stalled`);
+        logger.warn(`[SCHEDULED-JOBS] Job "${job.name}" (id=${job.id}) stalled`);
       });
 
       this.queue.on('error', (err: Error) => {
-        console.error(`[SCHEDULED-JOBS] Queue error: ${err.message}`);
+        logger.error(`[SCHEDULED-JOBS] Queue error: ${err.message}`);
       });
 
       this.isInitialized = true;
-      console.log(`[SCHEDULED-JOBS] Initialized with ${JOB_DEFINITIONS.length} repeatable jobs`);
+      logger.info(`[SCHEDULED-JOBS] Initialized with ${JOB_DEFINITIONS.length} repeatable jobs`);
 
     } catch (error: any) {
-      console.error(`[SCHEDULED-JOBS] Failed to initialize: ${error.message}`);
+      logger.error(`[SCHEDULED-JOBS] Failed to initialize: ${error.message}`);
       // Do NOT throw -- let node-cron fallback handle scheduling
     }
   }
@@ -441,7 +442,7 @@ export class ScheduledJobService {
       removeOnFail: 100,
     });
 
-    console.log(`[SCHEDULED-JOBS] Manually triggered "${jobName}" (job id=${job.id})`);
+    logger.info(`[SCHEDULED-JOBS] Manually triggered "${jobName}" (job id=${job.id})`);
     return job;
   }
 
@@ -504,7 +505,7 @@ export class ScheduledJobService {
         queueStats: { waiting, active, completed, failed, delayed },
       };
     } catch (error: any) {
-      console.error(`[SCHEDULED-JOBS] Error getting health: ${error.message}`);
+      logger.error(`[SCHEDULED-JOBS] Error getting health: ${error.message}`);
       return {
         initialized: true,
         jobs: JOB_DEFINITIONS.map(d => ({
@@ -532,9 +533,9 @@ export class ScheduledJobService {
     if (this.queue) {
       try {
         await this.queue.close();
-        console.log('[SCHEDULED-JOBS] Queue closed');
+        logger.info('[SCHEDULED-JOBS] Queue closed');
       } catch (error: any) {
-        console.error(`[SCHEDULED-JOBS] Error closing queue: ${error.message}`);
+        logger.error(`[SCHEDULED-JOBS] Error closing queue: ${error.message}`);
       }
       this.queue = null;
     }

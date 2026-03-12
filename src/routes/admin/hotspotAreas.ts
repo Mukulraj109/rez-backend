@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Hotspot Areas
  * CRUD for HotspotArea model
@@ -40,7 +41,7 @@ router.get('/', async (req: Request, res: Response) => {
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     }, 'Hotspot areas fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching hotspot areas:', error);
+    logger.error('[Admin] Error fetching hotspot areas:', error);
     return sendError(res, 'Failed to fetch hotspot areas', 500);
   }
 });
@@ -55,7 +56,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     if (!area) return sendError(res, 'Hotspot area not found', 404);
     return sendSuccess(res, area, 'Hotspot area fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching hotspot area:', error);
+    logger.error('[Admin] Error fetching hotspot area:', error);
     return sendError(res, 'Failed to fetch hotspot area', 500);
   }
 });
@@ -73,7 +74,7 @@ router.post('/', async (req: Request, res: Response) => {
     const area = await HotspotArea.create({ ...req.body });
     return sendSuccess(res, area, 'Hotspot area created');
   } catch (error) {
-    console.error('[Admin] Error creating hotspot area:', error);
+    logger.error('[Admin] Error creating hotspot area:', error);
     return sendError(res, 'Failed to create hotspot area', 500);
   }
 });
@@ -88,7 +89,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (!area) return sendError(res, 'Hotspot area not found', 404);
     return sendSuccess(res, area, 'Hotspot area updated');
   } catch (error) {
-    console.error('[Admin] Error updating hotspot area:', error);
+    logger.error('[Admin] Error updating hotspot area:', error);
     return sendError(res, 'Failed to update hotspot area', 500);
   }
 });
@@ -105,7 +106,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
     await area.save();
     return sendSuccess(res, area, `Hotspot area ${area.isActive ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling hotspot area:', error);
+    logger.error('[Admin] Error toggling hotspot area:', error);
     return sendError(res, 'Failed to toggle hotspot area', 500);
   }
 });
@@ -120,7 +121,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     if (!area) return sendError(res, 'Hotspot area not found', 404);
     return sendSuccess(res, null, 'Hotspot area deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting hotspot area:', error);
+    logger.error('[Admin] Error deleting hotspot area:', error);
     return sendError(res, 'Failed to delete hotspot area', 500);
   }
 });

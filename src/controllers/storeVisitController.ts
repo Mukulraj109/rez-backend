@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import { StoreVisit, VisitType, VisitStatus, IStoreVisit } from '../models/StoreVisit';
 import { Store } from '../models/Store';
@@ -31,7 +32,7 @@ export const scheduleStoreVisit = asyncHandler(async (req: Request, res: Respons
     return sendBadRequest(res, 'Store ID, visit date, visit time, customer name, and phone are required');
   }
 
-  console.log('📅 [STORE VISIT] Scheduling visit:', {
+  logger.info('📅 [STORE VISIT] Scheduling visit:', {
     storeId,
     visitDate,
     visitTime,
@@ -100,7 +101,7 @@ export const scheduleStoreVisit = asyncHandler(async (req: Request, res: Respons
     .populate('storeId', 'name location contact images')
     .populate('userId', 'name phoneNumber email').lean();
 
-  console.log('✅ [STORE VISIT] Visit scheduled successfully:', {
+  logger.info('✅ [STORE VISIT] Visit scheduled successfully:', {
     visitNumber: visit.visitNumber,
     visitId: visit._id
   });
@@ -119,9 +120,9 @@ export const scheduleStoreVisit = asyncHandler(async (req: Request, res: Respons
       customerPhone,
       storeAddress
     );
-    console.log('📱 [SMS] Visit scheduled notification sent');
+    logger.info('📱 [SMS] Visit scheduled notification sent');
   } catch (smsError) {
-    console.error('❌ [SMS] Failed to send visit notification:', smsError);
+    logger.error('❌ [SMS] Failed to send visit notification:', smsError);
   }
 
   // Notify merchant
@@ -135,7 +136,7 @@ export const scheduleStoreVisit = asyncHandler(async (req: Request, res: Respons
       visitTime,
       visitType: 'scheduled',
       storeName: store.name,
-    }).catch(err => console.error('❌ [MERCHANT] Visit notification failed:', err));
+    }).catch(err => logger.error('❌ [MERCHANT] Visit notification failed:', err));
   }
 
   sendSuccess(res, populatedVisit, 'Visit scheduled successfully', 201);
@@ -155,7 +156,7 @@ export const getQueueNumber = asyncHandler(async (req: Request, res: Response) =
     return sendBadRequest(res, 'Store ID, customer name, and phone are required');
   }
 
-  console.log('🎫 [QUEUE] Generating queue number:', {
+  logger.info('🎫 [QUEUE] Generating queue number:', {
     storeId,
     customerPhone
   });
@@ -187,7 +188,7 @@ export const getQueueNumber = asyncHandler(async (req: Request, res: Response) =
     .populate('storeId', 'name location contact images')
     .populate('userId', 'name phoneNumber email').lean();
 
-  console.log('✅ [QUEUE] Queue number generated:', {
+  logger.info('✅ [QUEUE] Queue number generated:', {
     queueNumber,
     visitNumber: visit.visitNumber
   });
@@ -217,9 +218,9 @@ export const getQueueNumber = asyncHandler(async (req: Request, res: Response) =
       estimatedWaitTime,
       currentQueueSize
     );
-    console.log('📱 [SMS] Queue number notification sent');
+    logger.info('📱 [SMS] Queue number notification sent');
   } catch (smsError) {
-    console.error('❌ [SMS] Failed to send queue notification:', smsError);
+    logger.error('❌ [SMS] Failed to send queue notification:', smsError);
     // Don't fail the request if SMS fails
   }
 
@@ -235,7 +236,7 @@ export const getQueueNumber = asyncHandler(async (req: Request, res: Response) =
       visitType: 'queue',
       queueNumber,
       storeName: store.name,
-    }).catch(err => console.error('❌ [MERCHANT] Queue notification failed:', err));
+    }).catch(err => logger.error('❌ [MERCHANT] Queue notification failed:', err));
   }
 
   sendSuccess(res, populatedVisit, 'Queue number generated successfully', 201);
@@ -254,7 +255,7 @@ export const getUserStoreVisits = asyncHandler(async (req: Request, res: Respons
   const limitNum = Math.min(100, Math.max(1, Number(limit)));
   const skip = (pageNum - 1) * limitNum;
 
-  console.log('📋 [STORE VISIT] Fetching user visits:', { userId, page: pageNum, limit: limitNum });
+  logger.info('📋 [STORE VISIT] Fetching user visits:', { userId, page: pageNum, limit: limitNum });
 
   const query: any = { userId };
   if (status) query.status = status;
@@ -269,7 +270,7 @@ export const getUserStoreVisits = asyncHandler(async (req: Request, res: Respons
     StoreVisit.countDocuments(query),
   ]);
 
-  console.log('✅ [STORE VISIT] Found visits:', { count: visits.length, total });
+  logger.info('✅ [STORE VISIT] Found visits:', { count: visits.length, total });
 
   sendSuccess(res, {
     visits,
@@ -292,7 +293,7 @@ export const getStoreVisit = asyncHandler(async (req: Request, res: Response) =>
 
   const { visitId } = req.params;
 
-  console.log('🔍 [STORE VISIT] Fetching visit:', { visitId, userId });
+  logger.info('🔍 [STORE VISIT] Fetching visit:', { visitId, userId });
 
   const visit = await StoreVisit.findById(visitId)
     .populate('storeId', 'name location contact images')
@@ -307,7 +308,7 @@ export const getStoreVisit = asyncHandler(async (req: Request, res: Response) =>
     return sendError(res, 'Unauthorized access', 403);
   }
 
-  console.log('✅ [STORE VISIT] Visit found:', {
+  logger.info('✅ [STORE VISIT] Visit found:', {
     visitNumber: visit.visitNumber,
     status: visit.status
   });
@@ -326,7 +327,7 @@ export const getStoreVisits = asyncHandler(async (req: Request, res: Response) =
   const { storeId } = req.params;
   const { date } = req.query;
 
-  console.log('🏪 [STORE VISIT] Fetching store visits:', {
+  logger.info('🏪 [STORE VISIT] Fetching store visits:', {
     storeId,
     date,
     userId
@@ -349,7 +350,7 @@ export const getStoreVisits = asyncHandler(async (req: Request, res: Response) =
   const visitDate = date ? new Date(date as string) : undefined;
   const visits = await StoreVisit.findStoreVisits(storeId, visitDate);
 
-  console.log('✅ [STORE VISIT] Found store visits:', { count: visits.length });
+  logger.info('✅ [STORE VISIT] Found store visits:', { count: visits.length });
 
   sendSuccess(res, visits, 'Store visits retrieved successfully');
 });
@@ -364,7 +365,7 @@ export const cancelStoreVisit = asyncHandler(async (req: Request, res: Response)
 
   const { visitId } = req.params;
 
-  console.log('❌ [STORE VISIT] Cancelling visit:', { visitId, userId });
+  logger.info('❌ [STORE VISIT] Cancelling visit:', { visitId, userId });
 
   const visit = await StoreVisit.findById(visitId).lean();
 
@@ -389,7 +390,7 @@ export const cancelStoreVisit = asyncHandler(async (req: Request, res: Response)
   // Update status to cancelled
   await visit.updateStatus(VisitStatus.CANCELLED);
 
-  console.log('✅ [STORE VISIT] Visit cancelled:', {
+  logger.info('✅ [STORE VISIT] Visit cancelled:', {
     visitNumber: visit.visitNumber
   });
 
@@ -402,7 +403,7 @@ export const cancelStoreVisit = asyncHandler(async (req: Request, res: Response)
       visitNumber: visit.visitNumber,
       customerName: visit.customerName,
       storeName: cancelStore.name,
-    }).catch(err => console.error('❌ [MERCHANT] Cancel notification failed:', err));
+    }).catch(err => logger.error('❌ [MERCHANT] Cancel notification failed:', err));
   }
 
   // Send cancellation SMS to customer
@@ -413,7 +414,7 @@ export const cancelStoreVisit = asyncHandler(async (req: Request, res: Response)
       visit.customerPhone
     );
   } catch (smsError) {
-    console.error('❌ [SMS] Failed to send cancellation notification:', smsError);
+    logger.error('❌ [SMS] Failed to send cancellation notification:', smsError);
   }
 
   sendSuccess(res, visit, 'Visit cancelled successfully');
@@ -423,7 +424,7 @@ export const cancelStoreVisit = asyncHandler(async (req: Request, res: Response)
 export const getCurrentQueueStatus = asyncHandler(async (req: Request, res: Response) => {
   const { storeId } = req.params;
 
-  console.log('📊 [QUEUE STATUS] Fetching queue status:', { storeId });
+  logger.info('📊 [QUEUE STATUS] Fetching queue status:', { storeId });
 
   // Check if store exists
   const store = await Store.findById(storeId).lean();
@@ -471,7 +472,7 @@ export const getCurrentQueueStatus = asyncHandler(async (req: Request, res: Resp
     }))
   };
 
-  console.log('✅ [QUEUE STATUS] Queue status retrieved:', {
+  logger.info('✅ [QUEUE STATUS] Queue status retrieved:', {
     totalInQueue,
     currentlyServing
   });
@@ -483,7 +484,7 @@ export const getCurrentQueueStatus = asyncHandler(async (req: Request, res: Resp
 export const checkStoreAvailability = asyncHandler(async (req: Request, res: Response) => {
   const { storeId } = req.params;
 
-  console.log('🏪 [AVAILABILITY] Checking store availability:', { storeId });
+  logger.info('🏪 [AVAILABILITY] Checking store availability:', { storeId });
 
   // Check if store exists
   const store = await Store.findById(storeId).lean();
@@ -530,7 +531,7 @@ export const checkStoreAvailability = asyncHandler(async (req: Request, res: Res
         : 'Schedule visit recommended'
   };
 
-  console.log('✅ [AVAILABILITY] Availability checked:', {
+  logger.info('✅ [AVAILABILITY] Availability checked:', {
     crowdStatus,
     currentVisitors: currentCrowd
   });
@@ -642,7 +643,7 @@ export const rescheduleStoreVisit = asyncHandler(async (req: Request, res: Respo
     .populate('storeId', 'name location contact images')
     .populate('userId', 'name phoneNumber email').lean();
 
-  console.log('✅ [STORE VISIT] Visit rescheduled:', { visitNumber: visit.visitNumber });
+  logger.info('✅ [STORE VISIT] Visit rescheduled:', { visitNumber: visit.visitNumber });
 
   // Notify merchant of reschedule
   const store = await Store.findById(visit.storeId).lean();
@@ -656,7 +657,7 @@ export const rescheduleStoreVisit = asyncHandler(async (req: Request, res: Respo
       visitTime,
       visitType: 'rescheduled',
       storeName: store.name,
-    }).catch(err => console.error('❌ [MERCHANT] Reschedule notification failed:', err));
+    }).catch(err => logger.error('❌ [MERCHANT] Reschedule notification failed:', err));
   }
 
   // Send SMS confirmation to customer
@@ -670,7 +671,7 @@ export const rescheduleStoreVisit = asyncHandler(async (req: Request, res: Respo
       store?.location?.address
     );
   } catch (smsError) {
-    console.error('❌ [SMS] Failed to send reschedule notification:', smsError);
+    logger.error('❌ [SMS] Failed to send reschedule notification:', smsError);
   }
 
   sendSuccess(res, populatedVisit, 'Visit rescheduled successfully');
@@ -815,7 +816,7 @@ export const updateVisitStatusByMerchant = asyncHandler(async (req: Request, res
   const previousStatus = visit.status;
   await visit.updateStatus(status as VisitStatus);
 
-  console.log('✅ [MERCHANT] Visit status updated:', {
+  logger.info('✅ [MERCHANT] Visit status updated:', {
     visitNumber: visit.visitNumber,
     from: previousStatus,
     to: status
@@ -843,7 +844,7 @@ export const updateVisitStatusByMerchant = asyncHandler(async (req: Request, res
       );
     }
   } catch (smsError) {
-    console.error('❌ [SMS] Failed to send status change notification:', smsError);
+    logger.error('❌ [SMS] Failed to send status change notification:', smsError);
   }
 
   sendSuccess(res, visit, 'Visit status updated successfully');

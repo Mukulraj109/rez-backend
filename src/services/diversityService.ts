@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Types } from 'mongoose';
 
 /**
@@ -138,7 +139,7 @@ export function balanceByCategory(
   products: DiversityProduct[],
   maxPerCategory: number = 2
 ): DiversityProduct[] {
-  console.log('🎨 [DIVERSITY] Balancing by category. Input:', products.length, 'Max per category:', maxPerCategory);
+  logger.info('🎨 [DIVERSITY] Balancing by category. Input:', products.length, 'Max per category:', maxPerCategory);
 
   const categoryCount = new Map<string, number>();
   const balanced: DiversityProduct[] = [];
@@ -153,8 +154,8 @@ export function balanceByCategory(
     }
   }
 
-  console.log('✅ [DIVERSITY] Category balance complete. Output:', balanced.length);
-  console.log('📊 [DIVERSITY] Categories represented:', Array.from(categoryCount.keys()).length);
+  logger.info('✅ [DIVERSITY] Category balance complete. Output:', balanced.length);
+  logger.info('📊 [DIVERSITY] Categories represented:', Array.from(categoryCount.keys()).length);
 
   return balanced;
 }
@@ -178,7 +179,7 @@ export function balanceByBrand(
   products: DiversityProduct[],
   maxPerBrand: number = 2
 ): DiversityProduct[] {
-  console.log('🎨 [DIVERSITY] Balancing by brand. Input:', products.length, 'Max per brand:', maxPerBrand);
+  logger.info('🎨 [DIVERSITY] Balancing by brand. Input:', products.length, 'Max per brand:', maxPerBrand);
 
   const brandCount = new Map<string, number>();
   const balanced: DiversityProduct[] = [];
@@ -193,8 +194,8 @@ export function balanceByBrand(
     }
   }
 
-  console.log('✅ [DIVERSITY] Brand balance complete. Output:', balanced.length);
-  console.log('📊 [DIVERSITY] Brands represented:', Array.from(brandCount.keys()).length);
+  logger.info('✅ [DIVERSITY] Brand balance complete. Output:', balanced.length);
+  logger.info('📊 [DIVERSITY] Brands represented:', Array.from(brandCount.keys()).length);
 
   return balanced;
 }
@@ -219,7 +220,7 @@ export function balanceByPriceRange(
   products: DiversityProduct[],
   ranges: number = 3
 ): DiversityProduct[] {
-  console.log('🎨 [DIVERSITY] Balancing by price range. Input:', products.length, 'Ranges:', ranges);
+  logger.info('🎨 [DIVERSITY] Balancing by price range. Input:', products.length, 'Ranges:', ranges);
 
   if (products.length === 0) return [];
 
@@ -231,11 +232,11 @@ export function balanceByPriceRange(
   const minPrice = prices[0];
   const maxPrice = prices[prices.length - 1];
 
-  console.log('💰 [DIVERSITY] Price range:', minPrice, '-', maxPrice);
+  logger.info('💰 [DIVERSITY] Price range:', minPrice, '-', maxPrice);
 
   // If all products have same price, return as-is
   if (minPrice === maxPrice) {
-    console.log('⚠️ [DIVERSITY] All products have same price');
+    logger.info('⚠️ [DIVERSITY] All products have same price');
     return products;
   }
 
@@ -260,7 +261,7 @@ export function balanceByPriceRange(
   // Calculate items per bucket to maintain balance
   const targetPerBucket = Math.ceil(products.length / ranges);
 
-  console.log('📊 [DIVERSITY] Price buckets:', rangeBuckets.map(b => b.length));
+  logger.info('📊 [DIVERSITY] Price buckets:', rangeBuckets.map(b => b.length));
 
   // Round-robin selection from each bucket
   const balanced: DiversityProduct[] = [];
@@ -282,7 +283,7 @@ export function balanceByPriceRange(
     round++;
   }
 
-  console.log('✅ [DIVERSITY] Price balance complete. Output:', balanced.length);
+  logger.info('✅ [DIVERSITY] Price balance complete. Output:', balanced.length);
 
   return balanced;
 }
@@ -301,11 +302,11 @@ export function balanceByPriceRange(
  * @example
  * ```typescript
  * const score = calculateDiversityScore(products);
- * console.log('Diversity score:', score); // 0.75 = good diversity
+ * logger.info('Diversity score:', score); // 0.75 = good diversity
  * ```
  */
 export function calculateDiversityScore(products: DiversityProduct[]): number {
-  console.log('📊 [DIVERSITY] Calculating diversity score for', products.length, 'products');
+  logger.info('📊 [DIVERSITY] Calculating diversity score for', products.length, 'products');
 
   if (products.length === 0) return 0;
   if (products.length === 1) return 1;
@@ -368,7 +369,7 @@ export function calculateDiversityScore(products: DiversityProduct[]): number {
     priceRangeScore * 0.3       // 30% weight on price diversity
   );
 
-  console.log('📈 [DIVERSITY] Score breakdown:', {
+  logger.info('📈 [DIVERSITY] Score breakdown:', {
     categories: categoryCount.size,
     brands: brandCount.size,
     priceRanges: priceRanges.size,
@@ -433,12 +434,12 @@ export async function applyDiversityMode(
   mode: 'balanced' | 'category_diverse' | 'price_diverse',
   options: DiversityOptions = {}
 ): Promise<DiversityProduct[]> {
-  console.log('🎨 [DIVERSITY] Applying diversity mode:', mode);
-  console.log('📦 [DIVERSITY] Input products:', products.length);
-  console.log('⚙️ [DIVERSITY] Options:', options);
+  logger.info('🎨 [DIVERSITY] Applying diversity mode:', mode);
+  logger.info('📦 [DIVERSITY] Input products:', products.length);
+  logger.info('⚙️ [DIVERSITY] Options:', options);
 
   if (products.length === 0) {
-    console.log('⚠️ [DIVERSITY] No products to diversify');
+    logger.info('⚠️ [DIVERSITY] No products to diversify');
     return [];
   }
 
@@ -457,7 +458,7 @@ export async function applyDiversityMode(
       return rating === 0 || rating >= minRating; // Include unrated products
     });
 
-    console.log('⭐ [DIVERSITY] Filtered by rating ≥', minRating, ':', filtered.length, 'remaining');
+    logger.info('⭐ [DIVERSITY] Filtered by rating ≥', minRating, ':', filtered.length, 'remaining');
   }
 
   let result: DiversityProduct[] = [];
@@ -483,15 +484,15 @@ export async function applyDiversityMode(
       break;
 
     default:
-      console.warn('⚠️ [DIVERSITY] Unknown mode:', mode);
+      logger.warn('⚠️ [DIVERSITY] Unknown mode:', mode);
       result = filtered;
   }
 
   const diversityScore = calculateDiversityScore(result);
 
-  console.log('✅ [DIVERSITY] Applied mode:', mode);
-  console.log('📊 [DIVERSITY] Output:', result.length, 'products');
-  console.log('🎯 [DIVERSITY] Score:', diversityScore);
+  logger.info('✅ [DIVERSITY] Applied mode:', mode);
+  logger.info('📊 [DIVERSITY] Output:', result.length, 'products');
+  logger.info('🎯 [DIVERSITY] Score:', diversityScore);
 
   return result;
 }

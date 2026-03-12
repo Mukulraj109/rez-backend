@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose, { Types } from 'mongoose';
 import SpecialProgramConfig, {
   ISpecialProgramConfig,
@@ -14,6 +15,7 @@ import { reputationService } from './reputationService';
 import redisService from './redisService';
 import { NotificationService } from './notificationService';
 import { escapeRegex } from '../utils/sanitize';
+import { BRAND } from '../config/brand';
 
 /**
  * Special Program Service
@@ -516,7 +518,7 @@ class SpecialProgramService {
         }
       }
       default:
-        console.warn(`[SPECIAL PROGRAMS] Unknown custom rule type: ${type}. Treating as unmet.`);
+        logger.warn(`[SPECIAL PROGRAMS] Unknown custom rule type: ${type}. Treating as unmet.`);
         return false;
     }
   }
@@ -860,7 +862,7 @@ class SpecialProgramService {
       } catch (e: any) {
         if (e.message.startsWith('Cannot reactivate')) throw e;
         // If eligibility check fails, allow admin to proceed (fail-open for admin actions)
-        console.warn(`[SPECIAL PROGRAMS] Eligibility check failed during admin reactivation for ${userId}:`, e.message);
+        logger.warn(`[SPECIAL PROGRAMS] Eligibility check failed during admin reactivation for ${userId}:`, e.message);
       }
     }
 
@@ -1051,7 +1053,7 @@ class SpecialProgramService {
       }
     );
 
-    console.log(`[SPECIAL PROGRAMS] Monthly reset: ${activeResult.modifiedCount} active earners, ${inactiveResult.modifiedCount} idle members`);
+    logger.info(`[SPECIAL PROGRAMS] Monthly reset: ${activeResult.modifiedCount} active earners, ${inactiveResult.modifiedCount} idle members`);
     return activeResult.modifiedCount + inactiveResult.modifiedCount;
   }
 
@@ -1094,7 +1096,7 @@ class SpecialProgramService {
           // Notify the user about suspension
           await NotificationService.createNotification({
             userId: member.user.toString(),
-            title: 'Nuqta Privé Membership Suspended',
+            title: `${BRAND.PRIVE_NAME} Membership Suspended`,
             message: `Your Privé score has dropped below the required ${minScore} points. Improve your activity to regain membership.`,
             type: 'warning',
             category: 'system',
@@ -1108,7 +1110,7 @@ class SpecialProgramService {
               },
             },
             source: 'automated',
-          }).catch(e => console.error(`[SPECIAL PROGRAMS] Failed to notify user ${member.user} about Privé suspension:`, e));
+          }).catch(e => logger.error(`[SPECIAL PROGRAMS] Failed to notify user ${member.user} about Privé suspension:`, e));
 
           suspended++;
         } else {
@@ -1119,11 +1121,11 @@ class SpecialProgramService {
           maintained++;
         }
       } catch (e) {
-        console.error(`[SPECIAL PROGRAMS] Failed to recheck Privé for user ${member.user}:`, e);
+        logger.error(`[SPECIAL PROGRAMS] Failed to recheck Privé for user ${member.user}:`, e);
       }
     }
 
-    console.log(`[SPECIAL PROGRAMS] Privé recheck: ${suspended} suspended, ${maintained} maintained`);
+    logger.info(`[SPECIAL PROGRAMS] Privé recheck: ${suspended} suspended, ${maintained} maintained`);
     return { suspended, maintained };
   }
 
@@ -1150,7 +1152,7 @@ class SpecialProgramService {
     );
 
     if (result.modifiedCount > 0) {
-      console.log(`[SPECIAL PROGRAMS] Expired ${result.modifiedCount} memberships`);
+      logger.info(`[SPECIAL PROGRAMS] Expired ${result.modifiedCount} memberships`);
     }
 
     return result.modifiedCount;
@@ -1219,7 +1221,7 @@ class SpecialProgramService {
                 },
               },
               source: 'automated',
-            }).catch(e => console.error(`[SPECIAL PROGRAMS] Failed to notify user ${member.user} about ${zone} suspension:`, e));
+            }).catch(e => logger.error(`[SPECIAL PROGRAMS] Failed to notify user ${member.user} about ${zone} suspension:`, e));
 
             suspended++;
           } else {
@@ -1230,12 +1232,12 @@ class SpecialProgramService {
             maintained++;
           }
         } catch (e) {
-          console.error(`[SPECIAL PROGRAMS] Failed to recheck ${zone} for user ${member.user}:`, e);
+          logger.error(`[SPECIAL PROGRAMS] Failed to recheck ${zone} for user ${member.user}:`, e);
         }
       }
     }
 
-    console.log(`[SPECIAL PROGRAMS] Verification recheck: ${suspended} suspended, ${maintained} maintained`);
+    logger.info(`[SPECIAL PROGRAMS] Verification recheck: ${suspended} suspended, ${maintained} maintained`);
     return { suspended, maintained };
   }
 
@@ -1271,7 +1273,7 @@ class SpecialProgramService {
       }
       return cleared;
     } catch (e) {
-      console.warn('[SPECIAL PROGRAMS] Bulk cache invalidation failed:', e);
+      logger.warn('[SPECIAL PROGRAMS] Bulk cache invalidation failed:', e);
       return 0;
     }
   }

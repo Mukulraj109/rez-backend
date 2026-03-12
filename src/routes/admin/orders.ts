@@ -13,6 +13,7 @@ import cashbackService from '../../services/cashbackService';
 import userProductService from '../../services/userProductService';
 import achievementService from '../../services/achievementService';
 import { calculatePromoCoinsEarned, calculatePromoCoinsWithTierBonus } from '../../config/promoCoins.config';
+import { logger } from '../../config/logger';
 import { escapeRegex } from '../../utils/sanitize';
 import merchantWalletService from '../../services/merchantWalletService';
 import orderSocketService from '../../services/orderSocketService';
@@ -106,7 +107,7 @@ router.get('/', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN ORDERS] Error fetching orders:', error);
+    logger.error('❌ [ADMIN ORDERS] Error fetching orders:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch orders'
@@ -231,7 +232,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN ORDERS] Error fetching stats:', error);
+    logger.error('❌ [ADMIN ORDERS] Error fetching stats:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch order stats'
@@ -316,7 +317,7 @@ router.get('/reconciliation', requireSeniorAdmin, async (req: Request, res: Resp
       },
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN ORDERS] Reconciliation error:', error);
+    logger.error('❌ [ADMIN ORDERS] Reconciliation error:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to run reconciliation' });
   }
 });
@@ -364,7 +365,7 @@ router.get('/stuck', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN ORDERS] Error fetching stuck orders:', error);
+    logger.error('[ADMIN ORDERS] Error fetching stuck orders:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to fetch stuck orders' });
   }
 });
@@ -447,7 +448,7 @@ router.get('/sla-summary', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN ORDERS] Error fetching SLA summary:', error);
+    logger.error('[ADMIN ORDERS] Error fetching SLA summary:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to fetch SLA summary' });
   }
 });
@@ -476,7 +477,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       data: order
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN ORDERS] Error fetching order:', error);
+    logger.error('❌ [ADMIN ORDERS] Error fetching order:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch order'
@@ -551,7 +552,7 @@ router.post('/:id/refund', requireSeniorAdmin, async (req: Request, res: Respons
         { new: true }
       );
       if (updatedUser) {
-        console.log(`💰 [ADMIN ORDERS] Refunded ${refundAmount} to user ${updatedUser._id} wallet`);
+        logger.info(`💰 [ADMIN ORDERS] Refunded ${refundAmount} to user ${updatedUser._id} wallet`);
       }
     }
 
@@ -574,9 +575,9 @@ router.post('/:id/refund', requireSeniorAdmin, async (req: Request, res: Respons
           idempotencyKey: `refund_${String(order._id)}`,
         },
       });
-      console.log(`✅ [ORDER:LEDGER] Refund ledger entry created: ${refundAmount}, order ${order.orderNumber}`);
+      logger.info(`✅ [ORDER:LEDGER] Refund ledger entry created: ${refundAmount}, order ${order.orderNumber}`);
     } catch (ledgerErr) {
-      console.error('[ORDER:LEDGER] Failed to create refund ledger entry (non-blocking):', ledgerErr);
+      logger.error('[ORDER:LEDGER] Failed to create refund ledger entry (non-blocking):', ledgerErr);
     }
 
     // Re-read order to add timeline (claimed already updated status/payment)
@@ -617,7 +618,7 @@ router.post('/:id/refund', requireSeniorAdmin, async (req: Request, res: Respons
       });
     }
 
-    console.log(`[ORDER:REFUND] orderId=${order._id} orderNumber=${order.orderNumber} userId=${order.user} refundAmount=${refundAmount} paymentMethod=${order.payment.method} adminId=${(req as any).userId}`);
+    logger.info(`[ORDER:REFUND] orderId=${order._id} orderNumber=${order.orderNumber} userId=${order.user} refundAmount=${refundAmount} paymentMethod=${order.payment.method} adminId=${(req as any).userId}`);
 
     res.json({
       success: true,
@@ -631,7 +632,7 @@ router.post('/:id/refund', requireSeniorAdmin, async (req: Request, res: Respons
       }
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN ORDERS] Error processing refund:', error);
+    logger.error('❌ [ADMIN ORDERS] Error processing refund:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to process refund'
@@ -674,16 +675,19 @@ router.post('/:id/cancel', requireSeniorAdmin, async (req: Request, res: Respons
       });
     }
 
+    // Batch-load all products in one query instead of N individual queries
+    const productIds = order.items.map((item: any) => item.product);
+    const products = await Product.find({ _id: { $in: productIds } });
+    const productMap = new Map(products.map(p => [p._id.toString(), p]));
+
     // Restore inventory stock for each item
     const stockRestorePromises = order.items.map(async (item) => {
       try {
-        const product = await Product.findById(item.product);
+        const product = productMap.get(item.product.toString());
         if (product && !product.inventory.unlimited) {
-          // Restore the stock
           product.inventory.stock += item.quantity;
           product.inventory.isAvailable = true;
 
-          // If item has variant, restore variant stock too
           if (item.variant && product.inventory.variants) {
             const variant = product.inventory.variants.find(
               (v: { type: string; value: string }) => v.type === item.variant?.type && v.value === item.variant?.value
@@ -695,10 +699,10 @@ router.post('/:id/cancel', requireSeniorAdmin, async (req: Request, res: Respons
           }
 
           await product.save();
-          console.log(`📦 [ADMIN ORDERS] Restored ${item.quantity} units to product ${product._id}`);
+          logger.info(`[ADMIN ORDERS] Restored ${item.quantity} units to product ${product._id}`);
         }
       } catch (err) {
-        console.error(`⚠️ [ADMIN ORDERS] Failed to restore stock for product ${item.product}:`, err);
+        logger.error(`[ADMIN ORDERS] Failed to restore stock for product ${item.product}:`, err);
       }
     });
 
@@ -731,7 +735,7 @@ router.post('/:id/cancel', requireSeniorAdmin, async (req: Request, res: Respons
 
     await order.save();
 
-    console.log(`✅ [ADMIN ORDERS] Order ${order.orderNumber} cancelled successfully`);
+    logger.info(`✅ [ADMIN ORDERS] Order ${order.orderNumber} cancelled successfully`);
 
     res.json({
       success: true,
@@ -746,7 +750,7 @@ router.post('/:id/cancel', requireSeniorAdmin, async (req: Request, res: Respons
       }
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN ORDERS] Error cancelling order:', error);
+    logger.error('❌ [ADMIN ORDERS] Error cancelling order:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to cancel order'
@@ -801,7 +805,7 @@ router.post('/:id/escalate', async (req: Request, res: Response) => {
       });
     }
 
-    console.log(`[ADMIN ORDERS] Order ${order.orderNumber} escalated: ${reason.trim()}`);
+    logger.info(`[ADMIN ORDERS] Order ${order.orderNumber} escalated: ${reason.trim()}`);
 
     res.json({
       success: true,
@@ -813,7 +817,7 @@ router.post('/:id/escalate', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[ADMIN ORDERS] Error escalating order:', error);
+    logger.error('[ADMIN ORDERS] Error escalating order:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to escalate order' });
   }
 });
@@ -925,7 +929,7 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
       await order.save();
     }
 
-    console.log(`[ORDER:STATUS] orderId=${order._id} orderNumber=${order.orderNumber} from=${previousStatus} to=${status} adminId=${(req as any).userId}`);
+    logger.info(`[ORDER:STATUS] orderId=${order._id} orderNumber=${order.orderNumber} from=${previousStatus} to=${status} adminId=${(req as any).userId}`);
 
     // Record metrics
     recordStatusTransition(previousStatus, status);
@@ -956,7 +960,7 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
             storeName
           );
         } catch (err) {
-          console.error('[ADMIN ORDERS] Activity logging failed:', err);
+          logger.error('[ADMIN ORDERS] Activity logging failed:', err);
         }
 
         // 2. Referral rewards
@@ -971,7 +975,7 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
             await referralService.processMilestoneBonus(userIdObj as Types.ObjectId, deliveredOrdersCount);
           }
         } catch (err) {
-          console.error('[ADMIN ORDERS] Referral rewards failed:', err);
+          logger.error('[ADMIN ORDERS] Referral rewards failed:', err);
         }
 
         // 3. Award 5% purchase reward coins (5% of subtotal)
@@ -986,24 +990,24 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
               `5% purchase reward for order ${populatedOrder.orderNumber}`,
               { orderId: populatedOrder._id }
             );
-            console.log(`[ADMIN ORDERS] Awarded ${coinsToAward} purchase reward coins`);
+            logger.info(`[ADMIN ORDERS] Awarded ${coinsToAward} purchase reward coins`);
           }
         } catch (err) {
-          console.error('[ADMIN ORDERS] Purchase reward coins failed:', err);
+          logger.error('[ADMIN ORDERS] Purchase reward coins failed:', err);
         }
 
         // 4. Create cashback
         try {
           await cashbackService.createCashbackFromOrder(populatedOrder._id as Types.ObjectId);
         } catch (err) {
-          console.error('[ADMIN ORDERS] Cashback creation failed:', err);
+          logger.error('[ADMIN ORDERS] Cashback creation failed:', err);
         }
 
         // 5. Create user products
         try {
           await userProductService.createUserProductsFromOrder(populatedOrder._id as Types.ObjectId);
         } catch (err) {
-          console.error('[ADMIN ORDERS] User products creation failed:', err);
+          logger.error('[ADMIN ORDERS] User products creation failed:', err);
         }
 
         // 6. Award store branded coins
@@ -1032,14 +1036,14 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
             }
           }
         } catch (err) {
-          console.error('[ADMIN ORDERS] Branded coins failed:', err);
+          logger.error('[ADMIN ORDERS] Branded coins failed:', err);
         }
 
         // 7. Achievement update
         try {
           await achievementService.triggerAchievementUpdate(populatedOrder.user, 'order_delivered');
         } catch (err) {
-          console.error('[ADMIN ORDERS] Achievement update failed:', err);
+          logger.error('[ADMIN ORDERS] Achievement update failed:', err);
         }
 
         // 8. Partner progress
@@ -1050,7 +1054,7 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
             (populatedOrder._id as Types.ObjectId).toString()
           );
         } catch (err) {
-          console.error('[ADMIN ORDERS] Partner progress failed:', err);
+          logger.error('[ADMIN ORDERS] Partner progress failed:', err);
         }
 
         // 9. Credit merchant wallet (subtotal minus 15% platform fee)
@@ -1075,7 +1079,7 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
                 storeId
               );
 
-              console.log(`[ADMIN ORDERS] Merchant wallet credited: gross=${grossAmount}, fee=${platformFee}, net=${grossAmount - platformFee}`);
+              logger.info(`[ADMIN ORDERS] Merchant wallet credited: gross=${grossAmount}, fee=${platformFee}, net=${grossAmount - platformFee}`);
 
               // Record ledger entry for merchant payout (non-blocking)
               try {
@@ -1096,7 +1100,7 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
                       idempotencyKey: `merchant_payout_${String(populatedOrder._id)}`,
                     },
                   });
-                  console.log(`✅ [ORDER:LEDGER] Merchant payout ledger entry: ${netPayout}, order ${populatedOrder.orderNumber}`);
+                  logger.info(`✅ [ORDER:LEDGER] Merchant payout ledger entry: ${netPayout}, order ${populatedOrder.orderNumber}`);
                 }
 
                 // Record platform fee ledger entry
@@ -1115,10 +1119,10 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
                       idempotencyKey: `platform_fee_${String(populatedOrder._id)}`,
                     },
                   });
-                  console.log(`✅ [ORDER:LEDGER] Platform fee ledger entry: ${platformFee}, order ${populatedOrder.orderNumber}`);
+                  logger.info(`✅ [ORDER:LEDGER] Platform fee ledger entry: ${platformFee}, order ${populatedOrder.orderNumber}`);
                 }
               } catch (ledgerErr) {
-                console.error('[ORDER:LEDGER] Failed to create merchant payout ledger entry (non-blocking):', ledgerErr);
+                logger.error('[ORDER:LEDGER] Failed to create merchant payout ledger entry (non-blocking):', ledgerErr);
               }
 
               if (walletResult) {
@@ -1141,7 +1145,7 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
             }
           }
         } catch (err) {
-          console.error('[ADMIN ORDERS] Merchant wallet credit failed:', err);
+          logger.error('[ADMIN ORDERS] Merchant wallet credit failed:', err);
         }
 
         // 10. Credit 5% admin commission (5% of subtotal)
@@ -1155,13 +1159,13 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
               populatedOrder.orderNumber,
               subtotal
             );
-            console.log(`[ADMIN ORDERS] Admin wallet credited: ${adminCommission}`);
+            logger.info(`[ADMIN ORDERS] Admin wallet credited: ${adminCommission}`);
           }
         } catch (err) {
-          console.error('[ADMIN ORDERS] Admin commission credit failed:', err);
+          logger.error('[ADMIN ORDERS] Admin commission credit failed:', err);
         }
 
-        console.log(`[ORDER:DELIVERED] orderId=${order._id} orderNumber=${order.orderNumber} userId=${userIdObj} total=${populatedOrder.totals.total} subtotal=${populatedOrder.totals.subtotal} platformFee=${populatedOrder.totals.platformFee || 0}`);
+        logger.info(`[ORDER:DELIVERED] orderId=${order._id} orderNumber=${order.orderNumber} userId=${userIdObj} total=${populatedOrder.totals.total} subtotal=${populatedOrder.totals.subtotal} platformFee=${populatedOrder.totals.platformFee || 0}`);
       }
     }
 
@@ -1178,7 +1182,7 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
       }
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN ORDERS] Error updating order status:', error);
+    logger.error('❌ [ADMIN ORDERS] Error updating order status:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to update order status'

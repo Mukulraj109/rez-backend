@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Mall Affiliate Service
  *
@@ -101,7 +102,7 @@ class MallAffiliateService {
       if (recentClick) {
         // Return existing click instead of creating duplicate
         const trackingUrl = this.generateTrackingUrl(brand.externalUrl, recentClick.clickId, data.userId);
-        console.log(`♻️ [AFFILIATE] Returning existing click: ${recentClick.clickId} (dedup)`);
+        logger.info(`♻️ [AFFILIATE] Returning existing click: ${recentClick.clickId} (dedup)`);
         return {
           clickId: recentClick.clickId,
           trackingUrl,
@@ -137,7 +138,7 @@ class MallAffiliateService {
       // Generate tracking URL
       const trackingUrl = this.generateTrackingUrl(brand.externalUrl, click.clickId, data.userId);
 
-      console.log(`✅ [AFFILIATE] Click tracked: ${click.clickId} for brand ${brand.name}`);
+      logger.info(`✅ [AFFILIATE] Click tracked: ${click.clickId} for brand ${brand.name}`);
 
       return {
         clickId: click.clickId,
@@ -146,7 +147,7 @@ class MallAffiliateService {
         cashbackPercentage: brand.cashback.percentage,
       };
     } catch (error) {
-      console.error('❌ [AFFILIATE] Error tracking click:', error);
+      logger.error('❌ [AFFILIATE] Error tracking click:', error);
       throw error;
     }
   }
@@ -205,7 +206,7 @@ class MallAffiliateService {
       }).lean();
 
       if (existingPurchase) {
-        console.log(`⚠️ [AFFILIATE] Duplicate order: ${data.externalOrderId}`);
+        logger.info(`⚠️ [AFFILIATE] Duplicate order: ${data.externalOrderId}`);
         return existingPurchase;
       }
 
@@ -263,7 +264,7 @@ class MallAffiliateService {
         : (data.status || 'pending');
 
       if (fraudFlags.length > 0) {
-        console.warn(`⚠️ [AFFILIATE] Fraud flags detected for click ${data.clickId}: ${fraudFlags.join(', ')}`);
+        logger.warn(`⚠️ [AFFILIATE] Fraud flags detected for click ${data.clickId}: ${fraudFlags.join(', ')}`);
       }
 
       // Use purchasedAt from webhook if provided, otherwise now
@@ -307,10 +308,10 @@ class MallAffiliateService {
         try {
           await (brand as any).recordPurchase(actualCashback);
         } catch (analyticsError) {
-          console.warn(`⚠️ [AFFILIATE] Brand analytics update failed (non-blocking):`, analyticsError);
+          logger.warn(`⚠️ [AFFILIATE] Brand analytics update failed (non-blocking):`, analyticsError);
         }
 
-        console.log(`✅ [AFFILIATE] Conversion processed: ${purchase.purchaseId}, cashback: ₹${actualCashback}${fraudFlags.length > 0 ? ` (FLAGGED: ${fraudFlags.join(', ')})` : ''}`);
+        logger.info(`✅ [AFFILIATE] Conversion processed: ${purchase.purchaseId}, cashback: ₹${actualCashback}${fraudFlags.length > 0 ? ` (FLAGGED: ${fraudFlags.join(', ')})` : ''}`);
 
         return purchase;
       } catch (txError: any) {
@@ -323,7 +324,7 @@ class MallAffiliateService {
             brand: click.brand,
           }).lean();
           if (existingDup) {
-            console.log(`⚠️ [AFFILIATE] Duplicate order (concurrent): ${data.externalOrderId}`);
+            logger.info(`⚠️ [AFFILIATE] Duplicate order (concurrent): ${data.externalOrderId}`);
             return existingDup;
           }
         }
@@ -333,7 +334,7 @@ class MallAffiliateService {
         session.endSession();
       }
     } catch (error) {
-      console.error('❌ [AFFILIATE] Error processing conversion:', error);
+      logger.error('❌ [AFFILIATE] Error processing conversion:', error);
       throw error;
     }
   }
@@ -351,7 +352,7 @@ class MallAffiliateService {
 
       // Idempotent: if already confirmed, return without error
       if (purchase.status === 'confirmed') {
-        console.log(`⚠️ [AFFILIATE] Purchase already confirmed: ${purchaseId}`);
+        logger.info(`⚠️ [AFFILIATE] Purchase already confirmed: ${purchaseId}`);
         return purchase;
       }
 
@@ -361,11 +362,11 @@ class MallAffiliateService {
 
       await purchase.updateStatus('confirmed', reason || 'Confirmed by brand', 'webhook');
 
-      console.log(`✅ [AFFILIATE] Purchase confirmed: ${purchaseId}`);
+      logger.info(`✅ [AFFILIATE] Purchase confirmed: ${purchaseId}`);
 
       return purchase;
     } catch (error) {
-      console.error('❌ [AFFILIATE] Error confirming purchase:', error);
+      logger.error('❌ [AFFILIATE] Error confirming purchase:', error);
       throw error;
     }
   }
@@ -383,7 +384,7 @@ class MallAffiliateService {
 
       // Idempotent: if already rejected, return without error
       if (purchase.status === 'rejected') {
-        console.log(`⚠️ [AFFILIATE] Purchase already rejected: ${purchaseId}`);
+        logger.info(`⚠️ [AFFILIATE] Purchase already rejected: ${purchaseId}`);
         return purchase;
       }
 
@@ -397,11 +398,11 @@ class MallAffiliateService {
 
       await purchase.updateStatus('rejected', reason, 'webhook');
 
-      console.log(`❌ [AFFILIATE] Purchase rejected: ${purchaseId}, reason: ${reason}`);
+      logger.info(`❌ [AFFILIATE] Purchase rejected: ${purchaseId}, reason: ${reason}`);
 
       return purchase;
     } catch (error) {
-      console.error('❌ [AFFILIATE] Error rejecting purchase:', error);
+      logger.error('❌ [AFFILIATE] Error rejecting purchase:', error);
       throw error;
     }
   }
@@ -429,7 +430,7 @@ class MallAffiliateService {
 
       // Idempotent: if already refunded, return without error
       if (purchase.status === 'refunded') {
-        console.log(`⚠️ [AFFILIATE] Purchase already refunded: ${purchaseId}`);
+        logger.info(`⚠️ [AFFILIATE] Purchase already refunded: ${purchaseId}`);
         return purchase;
       }
 
@@ -530,10 +531,10 @@ class MallAffiliateService {
           try {
             await deductResult.syncWithUser();
           } catch (syncError) {
-            console.warn(`⚠️ [AFFILIATE] User wallet sync failed after refund (non-blocking):`, syncError);
+            logger.warn(`⚠️ [AFFILIATE] User wallet sync failed after refund (non-blocking):`, syncError);
           }
 
-          console.log(`💸 [AFFILIATE] Deducted ₹${deductAmount} from wallet for user ${purchase.user} (refund)`);
+          logger.info(`💸 [AFFILIATE] Deducted ₹${deductAmount} from wallet for user ${purchase.user} (refund)`);
         } catch (txError) {
           await session.abortTransaction();
           throw txError;
@@ -545,11 +546,11 @@ class MallAffiliateService {
         await purchase.updateStatus('refunded', reason, 'webhook');
       }
 
-      console.log(`💸 [AFFILIATE] Purchase refunded: ${purchaseId}`);
+      logger.info(`💸 [AFFILIATE] Purchase refunded: ${purchaseId}`);
 
       return purchase;
     } catch (error) {
-      console.error('❌ [AFFILIATE] Error handling refund:', error);
+      logger.error('❌ [AFFILIATE] Error handling refund:', error);
       throw error;
     }
   }
@@ -583,7 +584,7 @@ class MallAffiliateService {
 
         if (processable.length === 0 && batch.length > 0) {
           // All remaining purchases are known failures — stop processing
-          console.warn(`⚠️ [AFFILIATE] All ${batch.length} purchases in batch are known failures, stopping.`);
+          logger.warn(`⚠️ [AFFILIATE] All ${batch.length} purchases in batch are known failures, stopping.`);
           break;
         }
 
@@ -594,24 +595,24 @@ class MallAffiliateService {
           } catch (error: any) {
             failed++;
             failedPurchaseIds.add(purchase._id.toString());
-            console.error(`Failed to credit cashback for purchase ${purchase.purchaseId}: ${error.message}`);
+            logger.error(`Failed to credit cashback for purchase ${purchase.purchaseId}: ${error.message}`);
           }
         }
 
         if (batch.length > 0) {
-          console.log(`💰 [AFFILIATE] Batch ${batchCount} processed: ${processable.length} attempted, ${credited} credited, ${failed} failed`);
+          logger.info(`💰 [AFFILIATE] Batch ${batchCount} processed: ${processable.length} attempted, ${credited} credited, ${failed} failed`);
         }
       } while (batch.length === BATCH_SIZE && batchCount < MAX_BATCHES);
 
       if (batchCount >= MAX_BATCHES) {
-        console.warn(`⚠️ [AFFILIATE] Hit max batch limit (${MAX_BATCHES}). Some purchases may remain unprocessed.`);
+        logger.warn(`⚠️ [AFFILIATE] Hit max batch limit (${MAX_BATCHES}). Some purchases may remain unprocessed.`);
       }
 
-      console.log(`💰 [AFFILIATE] Credit job complete: ${credited}/${total} credited, ${failed} failed`);
+      logger.info(`💰 [AFFILIATE] Credit job complete: ${credited}/${total} credited, ${failed} failed`);
 
       return { credited, total, failed };
     } catch (error) {
-      console.error('❌ [AFFILIATE] Error in credit pending cashback job:', error);
+      logger.error('❌ [AFFILIATE] Error in credit pending cashback job:', error);
       throw error;
     }
   }
@@ -641,7 +642,7 @@ class MallAffiliateService {
     );
 
     if (!claimed) {
-      console.log(`⚠️ [AFFILIATE] Purchase ${purchase.purchaseId} already claimed/credited, skipping`);
+      logger.info(`⚠️ [AFFILIATE] Purchase ${purchase.purchaseId} already claimed/credited, skipping`);
       return;
     }
 
@@ -744,10 +745,10 @@ class MallAffiliateService {
       try {
         await MallPurchase.findByIdAndUpdate(purchase._id, { $set: { status: 'confirmed' } });
       } catch (resetError) {
-        console.error('❌ [AFFILIATE] Failed to reset purchase status:', resetError);
+        logger.error('❌ [AFFILIATE] Failed to reset purchase status:', resetError);
       }
 
-      console.error('❌ [AFFILIATE] Error crediting cashback:', error);
+      logger.error('❌ [AFFILIATE] Error crediting cashback:', error);
       throw error;
     } finally {
       session.endSession();

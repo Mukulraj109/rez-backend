@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * MallPurchase Model
  *
@@ -393,7 +394,7 @@ MallPurchaseSchema.methods.updateStatus = async function(
   }
 
   await this.save(session ? { session } : undefined);
-  console.log(`📦 [PURCHASE] ${this.purchaseId} status updated to ${newStatus}`);
+  logger.info(`📦 [PURCHASE] ${this.purchaseId} status updated to ${newStatus}`);
 };
 
 // Instance method to calculate days until credit

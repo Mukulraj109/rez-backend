@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose from 'mongoose';
 import EventRewardConfig, { EventRewardAction, IEventRewardRule } from '../models/EventRewardConfig';
 import EventAttendance, { EventRewardActionType } from '../models/EventAttendance';
@@ -190,7 +191,7 @@ async function grantEventReward(
       });
     } catch (err) {
       // Non-critical — booking summary update failure shouldn't block reward
-      console.error('[EventRewardService] Failed to update booking rewards summary:', err);
+      logger.error('[EventRewardService] Failed to update booking rewards summary:', err);
     }
 
     return {
@@ -219,7 +220,7 @@ async function grantEventReward(
         { $pull: { rewardsGranted: { action: rewardAction } } }
       );
     } catch (cleanupErr) {
-      console.error('[EventRewardService] Failed to cleanup placeholder reward:', cleanupErr);
+      logger.error('[EventRewardService] Failed to cleanup placeholder reward:', cleanupErr);
     }
 
     throw error;

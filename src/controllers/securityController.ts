@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Security Controller
 // Handles device verification, fraud detection, and security checks
 
@@ -94,7 +95,7 @@ export const verifyDevice = asyncHandler(async (req: Request, res: Response) => 
   const userId = req.userId!;
   const { deviceId, platform, osVersion, appVersion, deviceModel, deviceName } = req.body;
 
-  console.log('🔒 [SECURITY] Verifying device:', { userId, deviceId: deviceId?.substring(0, 10) + '...' });
+  logger.info('🔒 [SECURITY] Verifying device:', { userId, deviceId: deviceId?.substring(0, 10) + '...' });
 
   try {
     const suspiciousFlags: string[] = [];
@@ -167,7 +168,7 @@ export const verifyDevice = asyncHandler(async (req: Request, res: Response) => 
     });
 
   } catch (error) {
-    console.error('[SECURITY] Device verification error:', error);
+    logger.error('[SECURITY] Device verification error:', error);
     sendSuccess(res, {
       passed: true,
       isBlacklisted: false,
@@ -184,7 +185,7 @@ export const checkBlacklist = asyncHandler(async (req: Request, res: Response) =
   const { deviceId, ip } = req.body;
   const clientIp = ip || req.ip || req.socket.remoteAddress;
 
-  console.log('🔒 [SECURITY] Checking blacklist:', { deviceId: deviceId?.substring(0, 10), ip: clientIp });
+  logger.info('🔒 [SECURITY] Checking blacklist:', { deviceId: deviceId?.substring(0, 10), ip: clientIp });
 
   try {
     const deviceBlocked = deviceId ? await isDeviceBlacklisted(deviceId) : false;
@@ -198,7 +199,7 @@ export const checkBlacklist = asyncHandler(async (req: Request, res: Response) =
     });
 
   } catch (error) {
-    console.error('[SECURITY] Blacklist check error:', error);
+    logger.error('[SECURITY] Blacklist check error:', error);
     sendSuccess(res, {
       isBlacklisted: false,
       deviceBlacklisted: false,
@@ -214,7 +215,7 @@ export const reportSuspicious = asyncHandler(async (req: Request, res: Response)
   const { type, details } = req.body;
   const clientIp = req.ip || req.socket.remoteAddress;
 
-  console.log('⚠️ [SECURITY] Suspicious activity reported:', { userId, type });
+  logger.info('⚠️ [SECURITY] Suspicious activity reported:', { userId, type });
 
   try {
     const redisKey = `${REDIS_KEYS.SUSPICIOUS_PREFIX}${userId}_${type}`;
@@ -257,7 +258,7 @@ export const reportSuspicious = asyncHandler(async (req: Request, res: Response)
     });
 
   } catch (error) {
-    console.error('❌ [SECURITY] Report suspicious error:', error);
+    logger.error('❌ [SECURITY] Report suspicious error:', error);
     sendSuccess(res, {
       reported: true,
       reportId: `report_${Date.now()}`,
@@ -270,7 +271,7 @@ export const reportSuspicious = asyncHandler(async (req: Request, res: Response)
 export const verifyCaptcha = asyncHandler(async (req: Request, res: Response) => {
   const { token, action } = req.body;
 
-  console.log('🔒 [SECURITY] Verifying captcha:', { action });
+  logger.info('🔒 [SECURITY] Verifying captcha:', { action });
 
   try {
     // In production, verify token with reCAPTCHA or hCaptcha API
@@ -299,7 +300,7 @@ export const verifyCaptcha = asyncHandler(async (req: Request, res: Response) =>
     });
 
   } catch (error) {
-    console.error('❌ [SECURITY] Captcha verification error:', error);
+    logger.error('❌ [SECURITY] Captcha verification error:', error);
     sendSuccess(res, {
       success: true, // Fail open to not block users
       score: 0.5,
@@ -315,7 +316,7 @@ export const getIpInfo = asyncHandler(async (req: Request, res: Response) => {
   const { ip } = req.body;
   const clientIp = ip || req.ip || req.socket.remoteAddress || 'unknown';
 
-  console.log('🔒 [SECURITY] Getting IP info:', { ip: clientIp });
+  logger.info('🔒 [SECURITY] Getting IP info:', { ip: clientIp });
 
   try {
     // In production, use IP geolocation service (ipinfo.io, maxmind, etc.)
@@ -346,7 +347,7 @@ export const getIpInfo = asyncHandler(async (req: Request, res: Response) => {
     });
 
   } catch (error) {
-    console.error('❌ [SECURITY] IP info error:', error);
+    logger.error('❌ [SECURITY] IP info error:', error);
     sendSuccess(res, {
       ip: clientIp,
       country: 'UNKNOWN',
@@ -364,7 +365,7 @@ export const checkMultiAccount = asyncHandler(async (req: Request, res: Response
   const { deviceId, ip } = req.body;
   const clientIp = ip || req.ip || req.socket.remoteAddress;
 
-  console.log('🔒 [SECURITY] Checking multi-account:', { userId });
+  logger.info('🔒 [SECURITY] Checking multi-account:', { userId });
 
   try {
     const warnings: string[] = [];
@@ -411,7 +412,7 @@ export const checkMultiAccount = asyncHandler(async (req: Request, res: Response
     });
 
   } catch (error) {
-    console.error('❌ [SECURITY] Multi-account check error:', error);
+    logger.error('❌ [SECURITY] Multi-account check error:', error);
     sendSuccess(res, {
       isMultiAccount: false,
       riskScore: 0,

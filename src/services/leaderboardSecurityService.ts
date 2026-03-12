@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import mongoose from 'mongoose';
 import { CoinTransaction } from '../models/CoinTransaction';
 import { ILeaderboardConfig, LeaderboardPeriod } from '../models/LeaderboardConfig';
@@ -99,7 +100,7 @@ class LeaderboardSecurityService {
           checks.duplicateDevices++;
         }
       } catch (error: any) {
-        console.error('[LEADERBOARD SECURITY] Duplicate device check failed:', error.message);
+        logger.error('[LEADERBOARD SECURITY] Duplicate device check failed:', error.message);
       }
     }
 

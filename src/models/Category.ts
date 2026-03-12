@@ -589,6 +589,9 @@ CategorySchema.index({ 'pageConfig.isMainCategory': 1, isActive: 1, sortOrder: 1
 CategorySchema.index({ isBestDiscount: 1, isActive: 1, maxCashback: -1, sortOrder: 1 });
 CategorySchema.index({ isBestSeller: 1, isActive: 1, productCount: -1, sortOrder: 1 });
 
+// Compound index for subcategory listing queries
+CategorySchema.index({ parentCategory: 1, isActive: 1, sortOrder: 1 });
+
 // Virtual for level (root = 0, child = 1, etc.)
 CategorySchema.virtual('level').get(function () {
   return this.parentCategory ? 1 : 0; // Simplified - could be recursive for deeper levels

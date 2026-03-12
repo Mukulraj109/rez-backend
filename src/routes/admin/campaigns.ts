@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
@@ -105,7 +106,7 @@ router.get('/', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN CAMPAIGNS] Error fetching campaigns:', error);
+    logger.error('❌ [ADMIN CAMPAIGNS] Error fetching campaigns:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch campaigns'
@@ -200,7 +201,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN CAMPAIGNS] Error fetching stats:', error);
+    logger.error('❌ [ADMIN CAMPAIGNS] Error fetching stats:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch campaign stats'
@@ -233,7 +234,7 @@ router.get('/stores', async (req: Request, res: Response) => {
       data: stores
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN CAMPAIGNS] Error fetching stores:', error);
+    logger.error('❌ [ADMIN CAMPAIGNS] Error fetching stores:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch stores'
@@ -281,7 +282,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       data: enrichedCampaign
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN CAMPAIGNS] Error fetching campaign:', error);
+    logger.error('❌ [ADMIN CAMPAIGNS] Error fetching campaign:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to fetch campaign'
@@ -402,7 +403,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     await campaign.save();
 
-    console.log(`✅ [ADMIN CAMPAIGNS] Campaign created: ${campaign.campaignId} by admin ${req.userId}`);
+    logger.info(`✅ [ADMIN CAMPAIGNS] Campaign created: ${campaign.campaignId} by admin ${req.userId}`);
 
     res.status(201).json({
       success: true,
@@ -410,7 +411,7 @@ router.post('/', async (req: Request, res: Response) => {
       data: campaign
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN CAMPAIGNS] Error creating campaign:', error);
+    logger.error('❌ [ADMIN CAMPAIGNS] Error creating campaign:', error);
 
     if (error.code === 11000) {
       return res.status(400).json({
@@ -539,7 +540,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     await campaign.save();
 
-    console.log(`✅ [ADMIN CAMPAIGNS] Campaign updated: ${campaign.campaignId} by admin ${req.userId}`);
+    logger.info(`✅ [ADMIN CAMPAIGNS] Campaign updated: ${campaign.campaignId} by admin ${req.userId}`);
 
     res.json({
       success: true,
@@ -547,7 +548,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       data: campaign
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN CAMPAIGNS] Error updating campaign:', error);
+    logger.error('❌ [ADMIN CAMPAIGNS] Error updating campaign:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to update campaign'
@@ -602,13 +603,13 @@ router.delete('/:id', async (req: Request, res: Response) => {
         { campaign: campaign._id, status: { $in: ['active', 'pending'] } },
         { $set: { status: 'cancelled' } }
       );
-      console.log(`⚠️ [ADMIN CAMPAIGNS] Force delete: cancelled ${activeRedemptionsCount} redemptions`);
+      logger.info(`⚠️ [ADMIN CAMPAIGNS] Force delete: cancelled ${activeRedemptionsCount} redemptions`);
     }
 
     // Now delete the campaign
     await Campaign.findByIdAndDelete(campaign._id);
 
-    console.log(`✅ [ADMIN CAMPAIGNS] Campaign deleted: ${campaign.campaignId} by admin ${req.userId}`);
+    logger.info(`✅ [ADMIN CAMPAIGNS] Campaign deleted: ${campaign.campaignId} by admin ${req.userId}`);
 
     res.json({
       success: true,
@@ -619,7 +620,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN CAMPAIGNS] Error deleting campaign:', error);
+    logger.error('❌ [ADMIN CAMPAIGNS] Error deleting campaign:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to delete campaign'
@@ -655,7 +656,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
     campaign.isActive = !campaign.isActive;
     await campaign.save();
 
-    console.log(`✅ [ADMIN CAMPAIGNS] Campaign ${campaign.isActive ? 'activated' : 'deactivated'}: ${campaign.campaignId} by admin ${req.userId}`);
+    logger.info(`✅ [ADMIN CAMPAIGNS] Campaign ${campaign.isActive ? 'activated' : 'deactivated'}: ${campaign.campaignId} by admin ${req.userId}`);
 
     res.json({
       success: true,
@@ -663,7 +664,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
       data: { isActive: campaign.isActive }
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN CAMPAIGNS] Error toggling campaign:', error);
+    logger.error('❌ [ADMIN CAMPAIGNS] Error toggling campaign:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to toggle campaign status'
@@ -739,7 +740,7 @@ router.post('/:id/deals', async (req: Request, res: Response) => {
     campaign.deals.push(newDeal);
     await campaign.save();
 
-    console.log(`✅ [ADMIN CAMPAIGNS] ${isPaidDeal ? 'Paid' : 'Free'} deal added to campaign: ${campaign.campaignId} by admin ${req.userId}`, {
+    logger.info(`✅ [ADMIN CAMPAIGNS] ${isPaidDeal ? 'Paid' : 'Free'} deal added to campaign: ${campaign.campaignId} by admin ${req.userId}`, {
       price: isPaidDeal ? `${price} ${currency}` : 'FREE',
       purchaseLimit: purchaseLimit || 'unlimited',
     });
@@ -750,7 +751,7 @@ router.post('/:id/deals', async (req: Request, res: Response) => {
       data: campaign
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN CAMPAIGNS] Error adding deal:', error);
+    logger.error('❌ [ADMIN CAMPAIGNS] Error adding deal:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to add deal'
@@ -832,7 +833,7 @@ router.put('/:id/deals/:dealIndex', async (req: Request, res: Response) => {
 
     const isPaidDeal = (deal.price || 0) > 0;
 
-    console.log(`✅ [ADMIN CAMPAIGNS] Deal ${index} updated in campaign: ${campaign.campaignId} by admin ${req.userId}`, {
+    logger.info(`✅ [ADMIN CAMPAIGNS] Deal ${index} updated in campaign: ${campaign.campaignId} by admin ${req.userId}`, {
       isPaid: isPaidDeal,
       price: isPaidDeal ? `${deal.price} ${deal.currency}` : 'FREE',
     });
@@ -846,7 +847,7 @@ router.put('/:id/deals/:dealIndex', async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN CAMPAIGNS] Error updating deal:', error);
+    logger.error('❌ [ADMIN CAMPAIGNS] Error updating deal:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to update deal'
@@ -897,7 +898,7 @@ router.delete('/:id/deals/:dealIndex', async (req: Request, res: Response) => {
     campaign.deals.splice(index, 1);
     await campaign.save();
 
-    console.log(`✅ [ADMIN CAMPAIGNS] Deal removed from campaign: ${campaign.campaignId} by admin ${req.userId}`);
+    logger.info(`✅ [ADMIN CAMPAIGNS] Deal removed from campaign: ${campaign.campaignId} by admin ${req.userId}`);
 
     res.json({
       success: true,
@@ -905,7 +906,7 @@ router.delete('/:id/deals/:dealIndex', async (req: Request, res: Response) => {
       data: campaign
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN CAMPAIGNS] Error removing deal:', error);
+    logger.error('❌ [ADMIN CAMPAIGNS] Error removing deal:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to remove deal'
@@ -955,7 +956,7 @@ router.post('/:id/duplicate', async (req: Request, res: Response) => {
 
     await duplicateCampaign.save();
 
-    console.log(`✅ [ADMIN CAMPAIGNS] Campaign duplicated: ${originalCampaign.campaignId} -> ${newCampaignId} by admin ${req.userId}`);
+    logger.info(`✅ [ADMIN CAMPAIGNS] Campaign duplicated: ${originalCampaign.campaignId} -> ${newCampaignId} by admin ${req.userId}`);
 
     res.status(201).json({
       success: true,
@@ -963,7 +964,7 @@ router.post('/:id/duplicate', async (req: Request, res: Response) => {
       data: duplicateCampaign
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN CAMPAIGNS] Error duplicating campaign:', error);
+    logger.error('❌ [ADMIN CAMPAIGNS] Error duplicating campaign:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to duplicate campaign'
@@ -1016,7 +1017,7 @@ router.post('/bulk-action', async (req: Request, res: Response) => {
         break;
     }
 
-    console.log(`✅ [ADMIN CAMPAIGNS] Bulk action '${action}' on ${campaignIds.length} campaigns by admin ${req.userId}`);
+    logger.info(`✅ [ADMIN CAMPAIGNS] Bulk action '${action}' on ${campaignIds.length} campaigns by admin ${req.userId}`);
 
     const count = (result as any)?.modifiedCount || (result as any)?.deletedCount || 0;
     res.json({
@@ -1025,7 +1026,7 @@ router.post('/bulk-action', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error: any) {
-    console.error('❌ [ADMIN CAMPAIGNS] Error performing bulk action:', error);
+    logger.error('❌ [ADMIN CAMPAIGNS] Error performing bulk action:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to perform bulk action'

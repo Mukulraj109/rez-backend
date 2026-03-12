@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { EmergencyContact, EmergencyBooking } from '../models/EmergencyContact';
@@ -10,7 +11,7 @@ import { asyncHandler } from '../middleware/asyncHandler';
 export const getEmergencyContacts = asyncHandler(async (req: Request, res: Response) => {
   const { type, city, state, isNational } = req.query;
 
-  console.log('📋 [EMERGENCY] Fetching emergency contacts:', {
+  logger.info('📋 [EMERGENCY] Fetching emergency contacts:', {
     type,
     city,
     state,
@@ -56,7 +57,7 @@ export const getEmergencyContacts = asyncHandler(async (req: Request, res: Respo
       groupedContacts[contact.type].push(contact);
     });
 
-    console.log('✅ [EMERGENCY] Emergency contacts retrieved:', {
+    logger.info('✅ [EMERGENCY] Emergency contacts retrieved:', {
       count: contacts.length
     });
 
@@ -67,7 +68,7 @@ export const getEmergencyContacts = asyncHandler(async (req: Request, res: Respo
     }, 'Emergency contacts retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [EMERGENCY] Error fetching emergency contacts:', error);
+    logger.error('❌ [EMERGENCY] Error fetching emergency contacts:', error);
     return sendError(res, error.message || 'Failed to fetch emergency contacts', 500);
   }
 });
@@ -90,7 +91,7 @@ export const getNearbyContacts = asyncHandler(async (req: Request, res: Response
     return sendError(res, 'Invalid coordinates', 400);
   }
 
-  console.log('📋 [EMERGENCY] Fetching nearby emergency services:', {
+  logger.info('📋 [EMERGENCY] Fetching nearby emergency services:', {
     latitude: lat,
     longitude: lng,
     maxDistance: maxDist,
@@ -133,7 +134,7 @@ export const getNearbyContacts = asyncHandler(async (req: Request, res: Response
       .sort({ priority: 1 })
       .lean();
 
-    console.log('✅ [EMERGENCY] Nearby contacts found:', {
+    logger.info('✅ [EMERGENCY] Nearby contacts found:', {
       nearbyCount: nearbyContacts.length,
       nationalCount: nationalContacts.length
     });
@@ -146,7 +147,7 @@ export const getNearbyContacts = asyncHandler(async (req: Request, res: Response
     }, 'Nearby emergency services retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [EMERGENCY] Error fetching nearby contacts:', error);
+    logger.error('❌ [EMERGENCY] Error fetching nearby contacts:', error);
     return sendError(res, error.message || 'Failed to fetch nearby contacts', 500);
   }
 });
@@ -173,7 +174,7 @@ export const bookEmergencyService = asyncHandler(async (req: Request, res: Respo
     notes
   } = req.body;
 
-  console.log('📋 [EMERGENCY] Booking emergency service:', {
+  logger.info('📋 [EMERGENCY] Booking emergency service:', {
     userId,
     serviceType,
     emergencyType,
@@ -224,7 +225,7 @@ export const bookEmergencyService = asyncHandler(async (req: Request, res: Respo
 
     await emergencyBooking.save();
 
-    console.log('✅ [EMERGENCY] Emergency booking created:', {
+    logger.info('✅ [EMERGENCY] Emergency booking created:', {
       bookingNumber: emergencyBooking.bookingNumber,
       bookingId: emergencyBooking._id
     });
@@ -234,7 +235,7 @@ export const bookEmergencyService = asyncHandler(async (req: Request, res: Respo
     return sendCreated(res, emergencyBooking, 'Emergency service booked successfully. Help is on the way!');
 
   } catch (error: any) {
-    console.error('❌ [EMERGENCY] Error booking emergency service:', error);
+    logger.error('❌ [EMERGENCY] Error booking emergency service:', error);
     return sendError(res, error.message || 'Failed to book emergency service', 500);
   }
 });
@@ -254,7 +255,7 @@ export const getEmergencyBookingStatus = asyncHandler(async (req: Request, res: 
     return sendError(res, 'Invalid booking ID format', 400);
   }
 
-  console.log('📋 [EMERGENCY] Fetching emergency booking status:', {
+  logger.info('📋 [EMERGENCY] Fetching emergency booking status:', {
     bookingId: id,
     userId
   });
@@ -263,11 +264,11 @@ export const getEmergencyBookingStatus = asyncHandler(async (req: Request, res: 
     const booking = await EmergencyBooking.findOne({ _id: id, userId }).lean();
 
     if (!booking) {
-      console.error('❌ [EMERGENCY] Emergency booking not found:', id);
+      logger.error('❌ [EMERGENCY] Emergency booking not found:', id);
       return sendNotFound(res, 'Emergency booking not found');
     }
 
-    console.log('✅ [EMERGENCY] Emergency booking found:', {
+    logger.info('✅ [EMERGENCY] Emergency booking found:', {
       bookingNumber: booking.bookingNumber,
       status: booking.status
     });
@@ -275,7 +276,7 @@ export const getEmergencyBookingStatus = asyncHandler(async (req: Request, res: 
     return sendSuccess(res, booking, 'Emergency booking status retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [EMERGENCY] Error fetching booking status:', error);
+    logger.error('❌ [EMERGENCY] Error fetching booking status:', error);
     return sendError(res, error.message || 'Failed to fetch booking status', 500);
   }
 });
@@ -292,7 +293,7 @@ export const getUserEmergencyBookings = asyncHandler(async (req: Request, res: R
 
   const { status, limit = 20, offset = 0 } = req.query;
 
-  console.log('📋 [EMERGENCY] Fetching user emergency bookings:', {
+  logger.info('📋 [EMERGENCY] Fetching user emergency bookings:', {
     userId,
     status,
     limit,
@@ -319,7 +320,7 @@ export const getUserEmergencyBookings = asyncHandler(async (req: Request, res: R
       ['pending', 'confirmed', 'dispatched', 'en_route'].includes(b.status)
     );
 
-    console.log('✅ [EMERGENCY] User emergency bookings retrieved:', {
+    logger.info('✅ [EMERGENCY] User emergency bookings retrieved:', {
       count: bookings.length,
       total,
       hasActive: !!activeBooking
@@ -335,7 +336,7 @@ export const getUserEmergencyBookings = asyncHandler(async (req: Request, res: R
     }, 'Emergency bookings retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [EMERGENCY] Error fetching user bookings:', error);
+    logger.error('❌ [EMERGENCY] Error fetching user bookings:', error);
     return sendError(res, error.message || 'Failed to fetch emergency bookings', 500);
   }
 });
@@ -356,7 +357,7 @@ export const cancelEmergencyBooking = asyncHandler(async (req: Request, res: Res
     return sendError(res, 'Invalid booking ID format', 400);
   }
 
-  console.log('📋 [EMERGENCY] Cancelling emergency booking:', {
+  logger.info('📋 [EMERGENCY] Cancelling emergency booking:', {
     bookingId: id,
     userId,
     reason
@@ -366,7 +367,7 @@ export const cancelEmergencyBooking = asyncHandler(async (req: Request, res: Res
     const booking = await EmergencyBooking.findOne({ _id: id, userId }).lean();
 
     if (!booking) {
-      console.error('❌ [EMERGENCY] Emergency booking not found:', id);
+      logger.error('❌ [EMERGENCY] Emergency booking not found:', id);
       return sendNotFound(res, 'Emergency booking not found');
     }
 
@@ -384,14 +385,14 @@ export const cancelEmergencyBooking = asyncHandler(async (req: Request, res: Res
 
     await booking.updateStatus('cancelled', { reason });
 
-    console.log('✅ [EMERGENCY] Emergency booking cancelled:', {
+    logger.info('✅ [EMERGENCY] Emergency booking cancelled:', {
       bookingNumber: booking.bookingNumber
     });
 
     return sendSuccess(res, booking, 'Emergency booking cancelled successfully');
 
   } catch (error: any) {
-    console.error('❌ [EMERGENCY] Error cancelling booking:', error);
+    logger.error('❌ [EMERGENCY] Error cancelling booking:', error);
     return sendError(res, error.message || 'Failed to cancel emergency booking', 500);
   }
 });
@@ -407,7 +408,7 @@ export const updateEmergencyBookingStatus = asyncHandler(async (req: Request, re
     return sendError(res, 'Invalid booking ID format', 400);
   }
 
-  console.log('📋 [EMERGENCY] Updating emergency booking status:', {
+  logger.info('📋 [EMERGENCY] Updating emergency booking status:', {
     bookingId: id,
     status,
     assignedUnit
@@ -417,7 +418,7 @@ export const updateEmergencyBookingStatus = asyncHandler(async (req: Request, re
     const booking = await EmergencyBooking.findById(id).lean();
 
     if (!booking) {
-      console.error('❌ [EMERGENCY] Emergency booking not found:', id);
+      logger.error('❌ [EMERGENCY] Emergency booking not found:', id);
       return sendNotFound(res, 'Emergency booking not found');
     }
 
@@ -437,7 +438,7 @@ export const updateEmergencyBookingStatus = asyncHandler(async (req: Request, re
 
     await booking.updateStatus(status, updateData);
 
-    console.log('✅ [EMERGENCY] Emergency booking status updated:', {
+    logger.info('✅ [EMERGENCY] Emergency booking status updated:', {
       bookingNumber: booking.bookingNumber,
       newStatus: status
     });
@@ -447,7 +448,7 @@ export const updateEmergencyBookingStatus = asyncHandler(async (req: Request, re
     return sendSuccess(res, booking, 'Emergency booking status updated successfully');
 
   } catch (error: any) {
-    console.error('❌ [EMERGENCY] Error updating booking status:', error);
+    logger.error('❌ [EMERGENCY] Error updating booking status:', error);
     return sendError(res, error.message || 'Failed to update booking status', 500);
   }
 });
@@ -462,7 +463,7 @@ export const getActiveEmergencyBooking = asyncHandler(async (req: Request, res: 
     return sendError(res, 'Authentication required', 401);
   }
 
-  console.log('📋 [EMERGENCY] Fetching active emergency booking:', { userId });
+  logger.info('📋 [EMERGENCY] Fetching active emergency booking:', { userId });
 
   try {
     const activeBooking = await EmergencyBooking.findOne({
@@ -470,7 +471,7 @@ export const getActiveEmergencyBooking = asyncHandler(async (req: Request, res: 
       status: { $in: ['pending', 'confirmed', 'dispatched', 'en_route'] }
     }).lean();
 
-    console.log('✅ [EMERGENCY] Active booking check:', {
+    logger.info('✅ [EMERGENCY] Active booking check:', {
       hasActive: !!activeBooking
     });
 
@@ -480,7 +481,7 @@ export const getActiveEmergencyBooking = asyncHandler(async (req: Request, res: 
     }, 'Active booking status retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [EMERGENCY] Error fetching active booking:', error);
+    logger.error('❌ [EMERGENCY] Error fetching active booking:', error);
     return sendError(res, error.message || 'Failed to fetch active booking', 500);
   }
 });

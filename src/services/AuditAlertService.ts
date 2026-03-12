@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Audit Alert Service
 // Sends notifications for critical audit events
 
@@ -98,7 +99,7 @@ export class AuditAlertService {
       // Get merchant info
       const merchant = await Merchant.findById(log.merchantId).lean();
       if (!merchant) {
-        console.error('❌ [ALERT] Merchant not found:', log.merchantId);
+        logger.error('❌ [ALERT] Merchant not found:', log.merchantId);
         return;
       }
 
@@ -107,7 +108,7 @@ export class AuditAlertService {
         await this.sendAlert(merchant, log, rule);
       }
     } catch (error) {
-      console.error('❌ [ALERT] Failed to check/send alert:', error);
+      logger.error('❌ [ALERT] Failed to check/send alert:', error);
     }
   }
 
@@ -120,7 +121,7 @@ export class AuditAlertService {
     rule: AlertRule
   ): Promise<void> {
     try {
-      console.log(`🚨 [ALERT] Triggering: ${rule.name} (${rule.severity})`);
+      logger.info(`🚨 [ALERT] Triggering: ${rule.name} (${rule.severity})`);
 
       // Send email notification
       if (rule.notification.email) {
@@ -132,7 +133,7 @@ export class AuditAlertService {
         await this.sendSMSAlert(merchant, log, rule);
       }
     } catch (error) {
-      console.error('❌ [ALERT] Failed to send alert:', error);
+      logger.error('❌ [ALERT] Failed to send alert:', error);
     }
   }
 
@@ -154,9 +155,9 @@ export class AuditAlertService {
         html: body
       });
 
-      console.log('✅ [ALERT] Email sent to:', merchant.email);
+      logger.info('✅ [ALERT] Email sent to:', merchant.email);
     } catch (error) {
-      console.error('❌ [ALERT] Failed to send email:', error);
+      logger.error('❌ [ALERT] Failed to send email:', error);
     }
   }
 
@@ -172,10 +173,10 @@ export class AuditAlertService {
       const message = this.formatSMSBody(merchant, log, rule);
 
       // TODO: Integrate with SMS service (Twilio, SNS, etc.)
-      console.log('📱 [ALERT] SMS would be sent to: ***' + (merchant.phone ? merchant.phone.slice(-4) : 'N/A'));
-      console.log('📱 [ALERT] Message:', message);
+      logger.info('📱 [ALERT] SMS would be sent to: ***' + (merchant.phone ? merchant.phone.slice(-4) : 'N/A'));
+      logger.info('📱 [ALERT] Message:', message);
     } catch (error) {
-      console.error('❌ [ALERT] Failed to send SMS:', error);
+      logger.error('❌ [ALERT] Failed to send SMS:', error);
     }
   }
 

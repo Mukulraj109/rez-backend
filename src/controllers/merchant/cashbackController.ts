@@ -11,6 +11,7 @@ import { CashbackRequest } from '../../types/shared';
 import { createRazorpayPayout } from '../../services/razorpayService';
 import { UserCashback } from '../../models/UserCashback';
 import merchantNotificationService from '../../services/merchantNotificationService';
+import { logger } from '../../config/logger';
 
 /**
  * Calculate total cashback earned by a user
@@ -24,7 +25,7 @@ async function calculateTotalCashbackEarned(userId: string): Promise<number> {
     
     return cashbackRecords.reduce((total, record) => total + (record.amount || 0), 0);
   } catch (error) {
-    console.error('❌ [CASHBACK] Error calculating total cashback:', error);
+    logger.error('❌ [CASHBACK] Error calculating total cashback:', error);
     return 0;
   }
 }
@@ -42,10 +43,10 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
  * List all cashback requests for merchant
  */
 export const listCashbackRequests = asyncHandler(async (req: Request, res: Response) => {
-  console.log('🔍 [CASHBACK] listCashbackRequests called');
+  logger.info('🔍 [CASHBACK] listCashbackRequests called');
   const merchantId = (req as any).merchantId;
-  console.log('🔍 [CASHBACK] merchantId:', merchantId);
-  console.log('🔍 [CASHBACK] query params:', req.query);
+  logger.info('🔍 [CASHBACK] merchantId:', merchantId);
+  logger.info('🔍 [CASHBACK] query params:', req.query);
 
   try {
     const page = parseInt(req.query.page as string) || 1;
@@ -58,7 +59,7 @@ export const listCashbackRequests = asyncHandler(async (req: Request, res: Respo
     if (status) {
       query.status = status;
     }
-    console.log('🔍 [CASHBACK] MongoDB query:', query);
+    logger.info('🔍 [CASHBACK] MongoDB query:', query);
 
     const [cashbackRequests, total] = await Promise.all([
       CashbackMongoModel.find(query)
@@ -69,7 +70,7 @@ export const listCashbackRequests = asyncHandler(async (req: Request, res: Respo
       CashbackMongoModel.countDocuments(query)
     ]);
 
-    console.log('🔍 [CASHBACK] Found', cashbackRequests.length, 'cashback requests, total:', total);
+    logger.info('🔍 [CASHBACK] Found', cashbackRequests.length, 'cashback requests, total:', total);
 
     return sendSuccess(res, {
       cashbacks: cashbackRequests,
@@ -82,7 +83,7 @@ export const listCashbackRequests = asyncHandler(async (req: Request, res: Respo
     }, 'Cashback requests retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT CASHBACK] Error listing cashback requests:', error);
+    logger.error('❌ [MERCHANT CASHBACK] Error listing cashback requests:', error);
     return sendInternalError(res, error.message);
   }
 });
@@ -92,10 +93,10 @@ export const listCashbackRequests = asyncHandler(async (req: Request, res: Respo
  * Get cashback statistics (alias for metrics)
  */
 export const getCashbackStats = asyncHandler(async (req: Request, res: Response) => {
-  console.log('🔍 [CASHBACK] getCashbackStats called');
+  logger.info('🔍 [CASHBACK] getCashbackStats called');
   const merchantId = (req as any).merchantId;
-  console.log('🔍 [CASHBACK] merchantId:', merchantId);
-  console.log('🔍 [CASHBACK] query params:', req.query);
+  logger.info('🔍 [CASHBACK] merchantId:', merchantId);
+  logger.info('🔍 [CASHBACK] query params:', req.query);
 
   try {
     const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
@@ -109,7 +110,7 @@ export const getCashbackStats = asyncHandler(async (req: Request, res: Response)
     if (endDate) {
       query.createdAt = { ...query.createdAt, $lte: endDate };
     }
-    console.log('🔍 [CASHBACK] Stats query:', query);
+    logger.info('🔍 [CASHBACK] Stats query:', query);
 
     const stats = await CashbackMongoModel.aggregate([
       { $match: query },
@@ -143,11 +144,11 @@ export const getCashbackStats = asyncHandler(async (req: Request, res: Response)
       paid: 0
     };
 
-    console.log('🔍 [CASHBACK] Stats result:', result);
+    logger.info('🔍 [CASHBACK] Stats result:', result);
     return sendSuccess(res, { stats: result }, 'Cashback statistics retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT CASHBACK] Error getting cashback stats:', error);
+    logger.error('❌ [MERCHANT CASHBACK] Error getting cashback stats:', error);
     return sendInternalError(res, error.message);
   }
 });
@@ -161,7 +162,7 @@ export const getCashbackRequest = asyncHandler(async (req: Request, res: Respons
   const merchantId = (req as any).merchantId;
 
   try {
-    console.log('📋 [MERCHANT CASHBACK] Fetching cashback request:', id);
+    logger.info('📋 [MERCHANT CASHBACK] Fetching cashback request:', id);
 
     // Find cashback request
     const cashbackRequest = await CashbackModel.findById(id);
@@ -181,7 +182,7 @@ export const getCashbackRequest = asyncHandler(async (req: Request, res: Respons
     }, 'Cashback request retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT CASHBACK] Error fetching cashback request:', error);
+    logger.error('❌ [MERCHANT CASHBACK] Error fetching cashback request:', error);
     return sendInternalError(res, error.message);
   }
 });
@@ -195,7 +196,7 @@ export const createCashbackRequest = asyncHandler(async (req: Request, res: Resp
   const merchantId = (req as any).merchantId;
 
   try {
-    console.log('💰 [MERCHANT CASHBACK] Creating cashback request:', {
+    logger.info('💰 [MERCHANT CASHBACK] Creating cashback request:', {
       orderId,
       customerId,
       amount,
@@ -320,7 +321,7 @@ export const createCashbackRequest = asyncHandler(async (req: Request, res: Resp
         `
       });
     } catch (emailError) {
-      console.warn('⚠️ [MERCHANT CASHBACK] Failed to send email notification:', emailError);
+      logger.warn('⚠️ [MERCHANT CASHBACK] Failed to send email notification:', emailError);
     }
 
     // Clear pending count cache
@@ -329,7 +330,7 @@ export const createCashbackRequest = asyncHandler(async (req: Request, res: Resp
     return sendSuccess(res, { cashback }, 'Cashback request created successfully', 201);
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT CASHBACK] Error creating cashback request:', error);
+    logger.error('❌ [MERCHANT CASHBACK] Error creating cashback request:', error);
     return sendInternalError(res, error.message);
   }
 });
@@ -344,7 +345,7 @@ export const markCashbackAsPaid = asyncHandler(async (req: Request, res: Respons
   const merchantId = (req as any).merchantId;
 
   try {
-    console.log('💳 [MERCHANT CASHBACK] Marking cashback as paid:', {
+    logger.info('💳 [MERCHANT CASHBACK] Marking cashback as paid:', {
       id,
       paymentMethod,
       paymentReference
@@ -379,7 +380,7 @@ export const markCashbackAsPaid = asyncHandler(async (req: Request, res: Respons
         });
         payoutId = payout.id;
       } catch (payoutError: any) {
-        console.error('❌ [MERCHANT CASHBACK] Payout failed:', payoutError);
+        logger.error('❌ [MERCHANT CASHBACK] Payout failed:', payoutError);
         return sendBadRequest(res, `Payout failed: ${payoutError.message}`);
       }
     }
@@ -431,7 +432,7 @@ export const markCashbackAsPaid = asyncHandler(async (req: Request, res: Respons
         });
       }
     } catch (emailError) {
-      console.warn('⚠️ [MERCHANT CASHBACK] Failed to send confirmation email:', emailError);
+      logger.warn('⚠️ [MERCHANT CASHBACK] Failed to send confirmation email:', emailError);
     }
 
     // Clear pending count cache
@@ -447,7 +448,7 @@ export const markCashbackAsPaid = asyncHandler(async (req: Request, res: Respons
     return sendSuccess(res, { cashback: transformedCashback }, 'Cashback marked as paid successfully');
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT CASHBACK] Error marking cashback as paid:', error);
+    logger.error('❌ [MERCHANT CASHBACK] Error marking cashback as paid:', error);
     return sendInternalError(res, error.message);
   }
 });
@@ -461,7 +462,7 @@ export const bulkCashbackAction = asyncHandler(async (req: Request, res: Respons
   const merchantId = (req as any).merchantId;
 
   try {
-    console.log('📦 [MERCHANT CASHBACK] Bulk action:', {
+    logger.info('📦 [MERCHANT CASHBACK] Bulk action:', {
       action,
       count: cashbackIds.length
     });
@@ -550,7 +551,7 @@ export const bulkCashbackAction = asyncHandler(async (req: Request, res: Respons
                 });
               }
             } catch (emailError) {
-              console.warn('⚠️ [MERCHANT CASHBACK] Failed to send notification:', emailError);
+              logger.warn('⚠️ [MERCHANT CASHBACK] Failed to send notification:', emailError);
             }
           } else {
             results.push({
@@ -600,7 +601,7 @@ export const bulkCashbackAction = asyncHandler(async (req: Request, res: Respons
     }, `Bulk ${action} completed: ${successCount} succeeded, ${failedCount} failed`);
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT CASHBACK] Error in bulk action:', error);
+    logger.error('❌ [MERCHANT CASHBACK] Error in bulk action:', error);
     return sendInternalError(res, error.message);
   }
 });
@@ -610,14 +611,14 @@ export const bulkCashbackAction = asyncHandler(async (req: Request, res: Respons
  * Export cashback data to CSV/Excel
  */
 export const exportCashbackData = asyncHandler(async (req: Request, res: Response) => {
-  console.log('🔍 [CASHBACK] exportCashbackData called');
+  logger.info('🔍 [CASHBACK] exportCashbackData called');
   const { startDate, endDate, status, format } = req.query;
   const merchantId = (req as any).merchantId;
-  console.log('🔍 [CASHBACK] merchantId:', merchantId);
-  console.log('🔍 [CASHBACK] query params:', req.query);
+  logger.info('🔍 [CASHBACK] merchantId:', merchantId);
+  logger.info('🔍 [CASHBACK] query params:', req.query);
 
   try {
-    console.log('📊 [MERCHANT CASHBACK] Exporting data:', {
+    logger.info('📊 [MERCHANT CASHBACK] Exporting data:', {
       startDate,
       endDate,
       status,
@@ -696,7 +697,7 @@ export const exportCashbackData = asyncHandler(async (req: Request, res: Respons
       try {
         // Store export job metadata (in a real implementation, use Redis/Bull queue)
         // For now, we'll log and return job info
-        console.log(`📊 [CASHBACK EXPORT] Large export job created: ${jobId}`, {
+        logger.info(`📊 [CASHBACK EXPORT] Large export job created: ${jobId}`, {
           merchantId,
           recordCount: cashbackData.length,
           createdAt: new Date()
@@ -717,7 +718,7 @@ export const exportCashbackData = asyncHandler(async (req: Request, res: Respons
           status: 'queued'
         }, 'Export job queued');
       } catch (jobError) {
-        console.error('❌ [CASHBACK EXPORT] Failed to create export job:', jobError);
+        logger.error('❌ [CASHBACK EXPORT] Failed to create export job:', jobError);
         // Fall through to immediate export for small datasets
       }
     }
@@ -734,7 +735,7 @@ export const exportCashbackData = asyncHandler(async (req: Request, res: Respons
     }, 'Export ready for download');
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT CASHBACK] Error exporting data:', error);
+    logger.error('❌ [MERCHANT CASHBACK] Error exporting data:', error);
     return sendInternalError(res, error.message);
   }
 });
@@ -748,7 +749,7 @@ export const getCashbackAnalytics = asyncHandler(async (req: Request, res: Respo
   const merchantId = (req as any).merchantId;
 
   try {
-    console.log('📈 [MERCHANT CASHBACK] Fetching analytics:', {
+    logger.info('📈 [MERCHANT CASHBACK] Fetching analytics:', {
       merchantId,
       startDate,
       endDate,
@@ -852,7 +853,7 @@ export const getCashbackAnalytics = asyncHandler(async (req: Request, res: Respo
     }, 'Analytics retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT CASHBACK] Error fetching analytics:', error);
+    logger.error('❌ [MERCHANT CASHBACK] Error fetching analytics:', error);
     return sendInternalError(res, error.message);
   }
 });
@@ -866,7 +867,7 @@ export const getCashbackMetrics = asyncHandler(async (req: Request, res: Respons
   const merchantId = (req as any).merchantId;
 
   try {
-    console.log('📊 [MERCHANT CASHBACK] Fetching enhanced metrics:', {
+    logger.info('📊 [MERCHANT CASHBACK] Fetching enhanced metrics:', {
       merchantId,
       startDate,
       endDate
@@ -1057,7 +1058,7 @@ export const getCashbackMetrics = asyncHandler(async (req: Request, res: Respons
     }, 'Enhanced metrics retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT CASHBACK] Error fetching metrics:', error);
+    logger.error('❌ [MERCHANT CASHBACK] Error fetching metrics:', error);
     return sendInternalError(res, error.message);
   }
 });
@@ -1067,9 +1068,9 @@ export const getCashbackMetrics = asyncHandler(async (req: Request, res: Respons
  * Get count of pending cashback approvals (cached for 5 minutes)
  */
 export const getPendingCashbackCount = asyncHandler(async (req: Request, res: Response) => {
-  console.log('🔍 [CASHBACK] getPendingCashbackCount called');
+  logger.info('🔍 [CASHBACK] getPendingCashbackCount called');
   const merchantId = (req as any).merchantId;
-  console.log('🔍 [CASHBACK] merchantId:', merchantId);
+  logger.info('🔍 [CASHBACK] merchantId:', merchantId);
 
   try {
     // Check cache
@@ -1077,7 +1078,7 @@ export const getPendingCashbackCount = asyncHandler(async (req: Request, res: Re
     const now = Date.now();
 
     if (cached && (now - cached.timestamp) < CACHE_DURATION) {
-      console.log('📊 [MERCHANT CASHBACK] Returning cached pending count:', cached.count);
+      logger.info('📊 [MERCHANT CASHBACK] Returning cached pending count:', cached.count);
       return sendSuccess(res, {
         count: cached.count,
         cached: true
@@ -1103,7 +1104,7 @@ export const getPendingCashbackCount = asyncHandler(async (req: Request, res: Re
     }, 'Pending count retrieved successfully');
 
   } catch (error: any) {
-    console.error('❌ [MERCHANT CASHBACK] Error fetching pending count:', error);
+    logger.error('❌ [MERCHANT CASHBACK] Error fetching pending count:', error);
     return sendInternalError(res, error.message);
   }
 });

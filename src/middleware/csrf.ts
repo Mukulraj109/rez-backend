@@ -101,6 +101,11 @@ function shouldExemptFromCsrf(req: Request): boolean {
  * This should be applied globally to ensure all responses include a CSRF token
  */
 export function setCsrfToken(req: Request, res: Response, next: NextFunction): void {
+  // JWT is CSRF-resistant — skip token generation for authenticated API requests
+  if (req.headers.authorization?.startsWith('Bearer ')) {
+    return next();
+  }
+
   try {
     // Check if CSRF token cookie already exists
     let csrfToken = req.cookies?.[CSRF_COOKIE_NAME];

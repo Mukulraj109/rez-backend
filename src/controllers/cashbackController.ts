@@ -4,6 +4,7 @@
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import cashbackService from '../services/cashbackService';
+import { logger } from '../config/logger';
 
 /**
  * Get cashback summary
@@ -13,11 +14,11 @@ export const getCashbackSummary = async (req: Request, res: Response): Promise<v
   try {
     const userId = (req as any).userId;
 
-    console.log('📊 [CASHBACK CONTROLLER] getCashbackSummary called');
-    console.log('📊 [CASHBACK CONTROLLER] userId:', userId);
+    logger.info('[CASHBACK CONTROLLER] getCashbackSummary called');
+    logger.info('[CASHBACK CONTROLLER] userId:', { userId });
 
     if (!userId) {
-      console.log('❌ [CASHBACK CONTROLLER] No userId found - unauthorized');
+      logger.warn('[CASHBACK CONTROLLER] No userId found - unauthorized');
       res.status(401).json({
         success: false,
         message: 'Unauthorized',
@@ -25,17 +26,17 @@ export const getCashbackSummary = async (req: Request, res: Response): Promise<v
       return;
     }
 
-    console.log('📊 [CASHBACK CONTROLLER] Fetching summary for user:', userId);
+    logger.info('[CASHBACK CONTROLLER] Fetching summary for user:', { userId });
     const summary = await cashbackService.getUserSummary(new Types.ObjectId(userId));
 
-    console.log('📊 [CASHBACK CONTROLLER] Summary result:', JSON.stringify(summary, null, 2));
+    logger.info('[CASHBACK CONTROLLER] Summary result', { data: summary });
 
     res.status(200).json({
       success: true,
       data: summary,
     });
   } catch (error: any) {
-    console.error('❌ [CASHBACK CONTROLLER] Error getting summary:', error);
+    logger.error('[CASHBACK CONTROLLER] Error getting summary:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get cashback summary',
@@ -79,7 +80,7 @@ export const getCashbackHistory = async (req: Request, res: Response): Promise<v
       data: result,
     });
   } catch (error: any) {
-    console.error('❌ [CASHBACK CONTROLLER] Error getting history:', error);
+    logger.error('[CASHBACK CONTROLLER] Error getting history:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get cashback history',
@@ -119,7 +120,7 @@ export const getPendingCashback = async (req: Request, res: Response): Promise<v
       },
     });
   } catch (error: any) {
-    console.error('❌ [CASHBACK CONTROLLER] Error getting pending:', error);
+    logger.error('[CASHBACK CONTROLLER] Error getting pending:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get pending cashback',
@@ -161,7 +162,7 @@ export const getExpiringSoon = async (req: Request, res: Response): Promise<void
       },
     });
   } catch (error: any) {
-    console.error('❌ [CASHBACK CONTROLLER] Error getting expiring soon:', error);
+    logger.error('[CASHBACK CONTROLLER] Error getting expiring soon:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get expiring cashback',
@@ -204,7 +205,7 @@ export const redeemCashback = async (req: Request, res: Response): Promise<void>
       data: result,
     });
   } catch (error: any) {
-    console.error('❌ [CASHBACK CONTROLLER] Error redeeming cashback:', error);
+    logger.error('[CASHBACK CONTROLLER] Error redeeming cashback:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to redeem cashback',
@@ -226,7 +227,7 @@ export const getCashbackCampaigns = async (req: Request, res: Response): Promise
       data: { campaigns },
     });
   } catch (error: any) {
-    console.error('❌ [CASHBACK CONTROLLER] Error getting campaigns:', error);
+    logger.error('[CASHBACK CONTROLLER] Error getting campaigns:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get cashback campaigns',
@@ -258,7 +259,7 @@ export const forecastCashback = async (req: Request, res: Response): Promise<voi
       data: forecast,
     });
   } catch (error: any) {
-    console.error('❌ [CASHBACK CONTROLLER] Error forecasting cashback:', error);
+    logger.error('[CASHBACK CONTROLLER] Error forecasting cashback:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to forecast cashback',
@@ -303,7 +304,7 @@ export const getCashbackStatistics = async (req: Request, res: Response): Promis
       data: statistics,
     });
   } catch (error: any) {
-    console.error('❌ [CASHBACK CONTROLLER] Error getting statistics:', error);
+    logger.error('[CASHBACK CONTROLLER] Error getting statistics:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get cashback statistics',

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Mall Service
  *
@@ -604,7 +605,7 @@ class MallService {
       // Invalidate brand cache
       await redisService.del(`${CACHE_KEYS.BRAND}:${brandId}`);
     } catch (error) {
-      console.error('Error tracking brand click:', error);
+      logger.error('Error tracking brand click:', error);
     }
   }
 
@@ -617,7 +618,7 @@ class MallService {
         $inc: { 'analytics.views': 1 }
       });
     } catch (error) {
-      console.error('Error tracking brand view:', error);
+      logger.error('Error tracking brand view:', error);
     }
   }
 
@@ -636,7 +637,7 @@ class MallService {
       // Invalidate brand cache
       await redisService.del(`${CACHE_KEYS.BRAND}:${brandId}`);
     } catch (error) {
-      console.error('Error tracking brand purchase:', error);
+      logger.error('Error tracking brand purchase:', error);
     }
   }
 
@@ -1296,7 +1297,7 @@ class MallService {
       try {
         return await fn();
       } catch (err) {
-        console.error(`[MallService] getMallHomepageBatch - ${label} failed:`, err);
+        logger.error(`[MallService] getMallHomepageBatch - ${label} failed:`, err);
         return fallback;
       }
     };

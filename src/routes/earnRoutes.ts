@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { sendSuccess, sendBadRequest, sendError } from '../utils/response';
@@ -33,7 +34,7 @@ router.get('/nearby', async (req: Request, res: Response) => {
 
     sendSuccess(res, { stores });
   } catch (error: any) {
-    console.error('[EARN] Error fetching nearby stores:', error);
+    logger.error('[EARN] Error fetching nearby stores:', error);
     sendError(res, error.message || 'Failed to fetch nearby stores');
   }
 });

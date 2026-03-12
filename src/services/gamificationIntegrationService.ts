@@ -2,6 +2,7 @@ import challengeService from './challengeService';
 import achievementService from './achievementService';
 import streakService from './streakService';
 import gameService from './gameService';
+import { logger } from '../config/logger';
 
 /**
  * Integration service to trigger gamification features from existing app actions
@@ -64,9 +65,9 @@ class GamificationIntegrationService {
         await achievementService.checkAndAwardAchievements(userId, 'weekend_order');
       }
 
-      console.log(`✅ Gamification updated for order ${orderData.id}`);
+      logger.info(`✅ Gamification updated for order ${orderData.id}`);
     } catch (error) {
-      console.error('Error in onOrderPlaced gamification:', error);
+      logger.error('Error in onOrderPlaced gamification:', error);
     }
   }
 
@@ -83,9 +84,9 @@ class GamificationIntegrationService {
         );
       }
 
-      console.log(`✅ Gamification updated for delivered order ${orderData.id}`);
+      logger.info(`✅ Gamification updated for delivered order ${orderData.id}`);
     } catch (error) {
-      console.error('Error in onOrderDelivered gamification:', error);
+      logger.error('Error in onOrderDelivered gamification:', error);
     }
   }
 
@@ -118,9 +119,9 @@ class GamificationIntegrationService {
         );
       }
 
-      console.log(`✅ Gamification updated for review ${reviewData.id}`);
+      logger.info(`✅ Gamification updated for review ${reviewData.id}`);
     } catch (error) {
-      console.error('Error in onReviewSubmitted gamification:', error);
+      logger.error('Error in onReviewSubmitted gamification:', error);
     }
   }
 
@@ -133,9 +134,9 @@ class GamificationIntegrationService {
         reviewId
       });
 
-      console.log(`✅ Gamification updated for helpful vote on review ${reviewId}`);
+      logger.info(`✅ Gamification updated for helpful vote on review ${reviewId}`);
     } catch (error) {
-      console.error('Error in onReviewHelpfulVote gamification:', error);
+      logger.error('Error in onReviewHelpfulVote gamification:', error);
     }
   }
 
@@ -156,9 +157,9 @@ class GamificationIntegrationService {
         referralId: referralData.id
       });
 
-      console.log(`✅ Gamification updated for referral ${referralData.id}`);
+      logger.info(`✅ Gamification updated for referral ${referralData.id}`);
     } catch (error) {
-      console.error('Error in onReferralCompleted gamification:', error);
+      logger.error('Error in onReferralCompleted gamification:', error);
     }
   }
 
@@ -179,9 +180,9 @@ class GamificationIntegrationService {
         billId: billData.id
       });
 
-      console.log(`✅ Gamification updated for bill upload ${billData.id}`);
+      logger.info(`✅ Gamification updated for bill upload ${billData.id}`);
     } catch (error) {
-      console.error('Error in onBillUploaded gamification:', error);
+      logger.error('Error in onBillUploaded gamification:', error);
     }
   }
 
@@ -209,9 +210,9 @@ class GamificationIntegrationService {
         await achievementService.checkAndAwardAchievements(userId, 'login_streak');
       }
 
-      console.log(`✅ Gamification updated for user login ${userId}`);
+      logger.info(`✅ Gamification updated for user login ${userId}`);
     } catch (error) {
-      console.error('Error in onUserLogin gamification:', error);
+      logger.error('Error in onUserLogin gamification:', error);
     }
   }
 
@@ -226,9 +227,9 @@ class GamificationIntegrationService {
         itemId: itemData.id
       });
 
-      console.log(`✅ Gamification updated for wishlist add ${itemData.id}`);
+      logger.info(`✅ Gamification updated for wishlist add ${itemData.id}`);
     } catch (error) {
-      console.error('Error in onWishlistAdded gamification:', error);
+      logger.error('Error in onWishlistAdded gamification:', error);
     }
   }
 
@@ -243,9 +244,9 @@ class GamificationIntegrationService {
         challengeId
       });
 
-      console.log(`✅ Achievement updated for challenge completion ${challengeId}`);
+      logger.info(`✅ Achievement updated for challenge completion ${challengeId}`);
     } catch (error) {
-      console.error('Error in onChallengeCompleted gamification:', error);
+      logger.error('Error in onChallengeCompleted gamification:', error);
     }
   }
 
@@ -266,9 +267,9 @@ class GamificationIntegrationService {
         await achievementService.checkAndAwardAchievements(userId, 'jackpot');
       }
 
-      console.log(`✅ Achievement updated for game win ${gameType}`);
+      logger.info(`✅ Achievement updated for game win ${gameType}`);
     } catch (error) {
-      console.error('Error in onGameWon gamification:', error);
+      logger.error('Error in onGameWon gamification:', error);
     }
   }
 
@@ -283,9 +284,9 @@ class GamificationIntegrationService {
         await achievementService.checkAndAwardAchievements(userId, 'perfect_score');
       }
 
-      console.log(`✅ Achievement updated for quiz score ${score}`);
+      logger.info(`✅ Achievement updated for quiz score ${score}`);
     } catch (error) {
-      console.error('Error in onQuizCorrectAnswer gamification:', error);
+      logger.error('Error in onQuizCorrectAnswer gamification:', error);
     }
   }
 
@@ -300,9 +301,9 @@ class GamificationIntegrationService {
         dealId: dealData.id
       });
 
-      console.log(`✅ Achievement updated for deal use ${dealData.id}`);
+      logger.info(`✅ Achievement updated for deal use ${dealData.id}`);
     } catch (error) {
-      console.error('Error in onDealUsed gamification:', error);
+      logger.error('Error in onDealUsed gamification:', error);
     }
   }
 
@@ -317,9 +318,9 @@ class GamificationIntegrationService {
         dealId
       });
 
-      console.log(`✅ Challenge updated for deal share ${dealId}`);
+      logger.info(`✅ Challenge updated for deal share ${dealId}`);
     } catch (error) {
-      console.error('Error in onDealShared gamification:', error);
+      logger.error('Error in onDealShared gamification:', error);
     }
   }
 
@@ -334,9 +335,9 @@ class GamificationIntegrationService {
         category
       });
 
-      console.log(`✅ Challenge updated for category exploration ${category}`);
+      logger.info(`✅ Challenge updated for category exploration ${category}`);
     } catch (error) {
-      console.error('Error in onCategoryExplored gamification:', error);
+      logger.error('Error in onCategoryExplored gamification:', error);
     }
   }
 
@@ -351,9 +352,9 @@ class GamificationIntegrationService {
         storeId
       });
 
-      console.log(`✅ Challenge updated for store visit ${storeId}`);
+      logger.info(`✅ Challenge updated for store visit ${storeId}`);
     } catch (error) {
-      console.error('Error in onStoreVisited gamification:', error);
+      logger.error('Error in onStoreVisited gamification:', error);
     }
   }
 
@@ -368,9 +369,9 @@ class GamificationIntegrationService {
         itemId: itemData.id
       });
 
-      console.log(`✅ Challenge updated for favorite add ${itemData.id}`);
+      logger.info(`✅ Challenge updated for favorite add ${itemData.id}`);
     } catch (error) {
-      console.error('Error in onFavoriteAdded gamification:', error);
+      logger.error('Error in onFavoriteAdded gamification:', error);
     }
   }
 
@@ -384,9 +385,9 @@ class GamificationIntegrationService {
       // Initialize achievements
       await achievementService.initializeUserAchievements(userId);
 
-      console.log(`✅ Gamification initialized for new user ${userId}`);
+      logger.info(`✅ Gamification initialized for new user ${userId}`);
     } catch (error) {
-      console.error('Error in onUserRegistered gamification:', error);
+      logger.error('Error in onUserRegistered gamification:', error);
     }
   }
 }

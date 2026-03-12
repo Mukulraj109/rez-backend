@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 // Support Controller
 // Handles customer support and FAQ API endpoints
 
@@ -57,7 +58,7 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
       data: { ticket: populatedTicket || ticket },
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error creating ticket for user:', (req as any).userId, 'error:', error.message);
+    logger.error('❌ [SUPPORT CONTROLLER] Error creating ticket for user:', (req as any).userId, 'error:', error.message);
     res.status(500).json({
       success: false,
       message: 'Failed to create support ticket',
@@ -102,7 +103,7 @@ export const getMyTickets = async (req: Request, res: Response): Promise<void> =
       data: result,
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error getting tickets:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error getting tickets:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get tickets',
@@ -152,7 +153,7 @@ export const getTicketById = async (req: Request, res: Response): Promise<void> 
       data: { ticket },
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error getting ticket:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error getting ticket:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get ticket',
@@ -224,7 +225,7 @@ export const addMessageToTicket = async (req: Request, res: Response): Promise<v
       // Do NOT also emit to ticket room or personal agent room to avoid duplicate delivery
       supportSocketService.emitToSupportAgents('support_message_received', messagePayload);
 
-      console.log(`[SupportController] Emitted user message to support-agents room for ticket ${id}`);
+      logger.info(`[SupportController] Emitted user message to support-agents room for ticket ${id}`);
     }
 
     res.status(200).json({
@@ -233,7 +234,7 @@ export const addMessageToTicket = async (req: Request, res: Response): Promise<v
       data: { ticket },
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error adding message:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error adding message:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to add message',
@@ -278,7 +279,7 @@ export const closeTicket = async (req: Request, res: Response): Promise<void> =>
       data: { ticket },
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error closing ticket:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error closing ticket:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to close ticket',
@@ -333,7 +334,7 @@ export const reopenTicket = async (req: Request, res: Response): Promise<void> =
       data: { ticket },
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error reopening ticket:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error reopening ticket:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to reopen ticket',
@@ -389,7 +390,7 @@ export const rateTicket = async (req: Request, res: Response): Promise<void> => 
       data: { ticket },
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error rating ticket:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error rating ticket:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to rate ticket',
@@ -423,7 +424,7 @@ export const getTicketsSummary = async (req: Request, res: Response): Promise<vo
       data: summary,
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error getting summary:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error getting summary:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get tickets summary',
@@ -458,7 +459,7 @@ export const getAllFAQs = async (req: Request, res: Response): Promise<void> => 
       data: { faqs, total: faqs.length },
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error getting FAQs:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error getting FAQs:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get FAQs',
@@ -490,7 +491,7 @@ export const searchFAQs = async (req: Request, res: Response): Promise<void> => 
       data: { faqs, total: faqs.length },
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error searching FAQs:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error searching FAQs:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to search FAQs',
@@ -512,7 +513,7 @@ export const getFAQCategories = async (req: Request, res: Response): Promise<voi
       data: { categories },
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error getting categories:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error getting categories:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get FAQ categories',
@@ -536,7 +537,7 @@ export const getPopularFAQs = async (req: Request, res: Response): Promise<void>
       data: { faqs, total: faqs.length },
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error getting popular FAQs:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error getting popular FAQs:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get popular FAQs',
@@ -565,7 +566,7 @@ export const markFAQHelpful = async (req: Request, res: Response): Promise<void>
       message: 'Feedback recorded successfully',
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error marking FAQ helpful:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error marking FAQ helpful:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to record feedback',
@@ -589,7 +590,7 @@ export const trackFAQView = async (req: Request, res: Response): Promise<void> =
       message: 'View tracked',
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error tracking view:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error tracking view:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to track view',
@@ -643,7 +644,7 @@ export const createOrderIssueTicket = async (req: Request, res: Response): Promi
       data: { ticket },
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error creating order issue:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error creating order issue:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to create order issue ticket',
@@ -696,7 +697,7 @@ export const reportProductIssue = async (req: Request, res: Response): Promise<v
       data: { ticket },
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error reporting product:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error reporting product:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to report product issue',
@@ -738,7 +739,7 @@ export const getPublicSupportConfig = async (req: Request, res: Response): Promi
       },
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error getting public config:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error getting public config:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get support config',
@@ -859,7 +860,7 @@ export const requestCallback = async (req: Request, res: Response): Promise<void
       },
     });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error requesting callback:', error);
+    logger.error('❌ [SUPPORT CONTROLLER] Error requesting callback:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to request callback',
@@ -899,7 +900,7 @@ export const markTicketAsRead = async (req: Request, res: Response): Promise<voi
 
     res.json({ success: true, message: 'Messages marked as read' });
   } catch (error: any) {
-    console.error('❌ [SUPPORT CONTROLLER] Error marking as read:', error.message);
+    logger.error('❌ [SUPPORT CONTROLLER] Error marking as read:', error.message);
     res.status(500).json({
       success: false,
       message: 'Failed to mark messages as read',

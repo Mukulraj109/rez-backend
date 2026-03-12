@@ -177,7 +177,7 @@ export class NotificationService {
       // Also emit unread count update
       this.emitUnreadCount(userId);
     } catch (error) {
-      console.error('Failed to emit notification via Socket.IO:', error);
+      logger.error('Failed to emit notification via Socket.IO:', error);
     }
   }
 
@@ -199,7 +199,7 @@ export class NotificationService {
         timestamp: new Date()
       });
     } catch (error) {
-      console.error('Failed to emit unread count:', error);
+      logger.error('Failed to emit unread count:', error);
     }
   }
 
@@ -474,7 +474,7 @@ export class NotificationService {
           timestamp: new Date()
         });
       } catch (error) {
-        console.error('Socket emit error:', error);
+        logger.error('Socket emit error:', error);
       }
       return true;
     }

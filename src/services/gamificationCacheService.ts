@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Gamification Cache Service
  *
@@ -197,7 +198,7 @@ class GamificationCacheService {
       this.invalidateAvailableGames(),
       this.invalidateChallenges(),
     ]);
-    console.log('🗑️ [GAMIFICATION CACHE] All gamification caches invalidated');
+    logger.info('🗑️ [GAMIFICATION CACHE] All gamification caches invalidated');
   }
 }
 

@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 /**
  * Price Alert Model
  *
@@ -271,7 +272,7 @@ priceAlertSchema.methods.cancel = function () {
  * Check and trigger alerts for a price change
  */
 priceAlertSchema.statics.checkAndTriggerAlerts = async function (productId: string, variantId: string | null, newPrice: number) {
-  console.log(`🔍 [PriceAlert] Checking alerts for product ${productId}, new price: ${newPrice}`);
+  logger.info(`🔍 [PriceAlert] Checking alerts for product ${productId}, new price: ${newPrice}`);
 
   const activeAlerts = await (this as any).findActiveForProduct(productId, variantId);
 
@@ -339,7 +340,7 @@ priceAlertSchema.statics.expireOldAlerts = async function () {
     }
   );
 
-  console.log(`🧹 [PriceAlert] Expired ${result.modifiedCount} old alerts`);
+  logger.info(`🧹 [PriceAlert] Expired ${result.modifiedCount} old alerts`);
 
   return result.modifiedCount;
 };

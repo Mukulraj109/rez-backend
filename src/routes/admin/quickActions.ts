@@ -1,3 +1,4 @@
+import { logger } from '../../config/logger';
 /**
  * Admin Routes - Quick Actions
  * CRUD endpoints for managing QuickAction model
@@ -55,7 +56,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     return sendPaginated(res, actions, page, limit, total, 'Quick actions fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching quick actions:', error);
+    logger.error('[Admin] Error fetching quick actions:', error);
     return sendError(res, 'Failed to fetch quick actions', 500);
   }
 });
@@ -72,7 +73,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
     return sendSuccess(res, action, 'Quick action fetched');
   } catch (error) {
-    console.error('[Admin] Error fetching quick action:', error);
+    logger.error('[Admin] Error fetching quick action:', error);
     return sendError(res, 'Failed to fetch quick action', 500);
   }
 });
@@ -104,7 +105,7 @@ router.put('/reorder', async (req: Request, res: Response) => {
       totalOrdered: orderedIds.length,
     }, `Reordered ${result.modifiedCount} quick actions`);
   } catch (error) {
-    console.error('[Admin] Error reordering quick actions:', error);
+    logger.error('[Admin] Error reordering quick actions:', error);
     return sendError(res, 'Failed to reorder quick actions', 500);
   }
 });
@@ -147,7 +148,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     return sendCreated(res, action, 'Quick action created');
   } catch (error: any) {
-    console.error('[Admin] Error creating quick action:', error);
+    logger.error('[Admin] Error creating quick action:', error);
     if (error.name === 'ValidationError') {
       return sendBadRequest(res, error.message);
     }
@@ -195,7 +196,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     return sendSuccess(res, action, 'Quick action updated');
   } catch (error: any) {
-    console.error('[Admin] Error updating quick action:', error);
+    logger.error('[Admin] Error updating quick action:', error);
     if (error.name === 'ValidationError') {
       return sendBadRequest(res, error.message);
     }
@@ -218,7 +219,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
     return sendSuccess(res, null, 'Quick action deleted');
   } catch (error) {
-    console.error('[Admin] Error deleting quick action:', error);
+    logger.error('[Admin] Error deleting quick action:', error);
     return sendError(res, 'Failed to delete quick action', 500);
   }
 });
@@ -239,7 +240,7 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
 
     return sendSuccess(res, action, `Quick action ${action.isActive ? 'activated' : 'deactivated'}`);
   } catch (error) {
-    console.error('[Admin] Error toggling quick action:', error);
+    logger.error('[Admin] Error toggling quick action:', error);
     return sendError(res, 'Failed to toggle quick action', 500);
   }
 });

@@ -8,6 +8,7 @@ import Program from '../models/Program';
 import { SponsorAllocation } from '../models/SponsorAllocation';
 import { Merchant } from '../models/Merchant';
 import { connectDatabase } from '../config/database';
+import { BRAND } from '../config/brand';
 
 // Sponsor seed data
 const sponsorSeeds = [
@@ -186,7 +187,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Free health checkup',
         'Refreshments provided',
         'Donation certificate',
-        'Nuqta Coins + Tata Coins'
+        `${BRAND.COIN_NAME} + Tata Coins`
       ],
       schedule: [
         { time: '9:00 AM', activity: 'Registration & Health Screening' },
@@ -238,7 +239,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Tree planting kit provided',
         'Breakfast included',
         'Certificate of appreciation',
-        'Nuqta Coins + Reliance Coins'
+        `${BRAND.COIN_NAME} + Reliance Coins`
       ],
       schedule: [
         { time: '7:00 AM', activity: 'Arrival & Briefing' },
@@ -290,7 +291,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Cleanup kit provided',
         'Breakfast included',
         'Eco-warrior badge',
-        'Nuqta Coins + Infosys Coins'
+        `${BRAND.COIN_NAME} + Infosys Coins`
       ],
       schedule: [
         { time: '6:00 AM', activity: 'Registration' },
@@ -341,7 +342,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Teaching materials provided',
         'Lunch included',
         'Volunteer certificate',
-        'Nuqta Coins + Wipro Coins'
+        `${BRAND.COIN_NAME} + Wipro Coins`
       ],
       schedule: [
         { time: '10:00 AM', activity: 'Volunteer Orientation' },
@@ -391,7 +392,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Apron & gloves provided',
         'Lunch included',
         'Appreciation certificate',
-        'Nuqta Coins + ITC Coins'
+        `${BRAND.COIN_NAME} + ITC Coins`
       ],
       schedule: [
         { time: '11:00 AM', activity: 'Registration & Hygiene Kit' },
@@ -441,7 +442,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Training materials provided',
         'Meals included',
         'Trainer certificate',
-        'Nuqta Coins + HDFC Coins'
+        `${BRAND.COIN_NAME} + HDFC Coins`
       ],
       schedule: [
         { time: '10:00 AM', activity: 'Trainer Briefing' },
@@ -492,7 +493,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Medical kit provided',
         'Meals included',
         'Healthcare volunteer certificate',
-        'Nuqta Coins + Sun Pharma Coins'
+        `${BRAND.COIN_NAME} + Sun Pharma Coins`
       ],
       schedule: [
         { time: '8:00 AM', activity: 'Registration & Setup' },
@@ -542,7 +543,7 @@ const createSocialImpactEvents = (sponsors: Map<string, any>) => {
         'Free health screening',
         'Refreshments provided',
         'Donation certificate',
-        'Nuqta Coins'
+        `${BRAND.COIN_NAME}`
       ],
       schedule: [
         { time: '8:00 AM', activity: 'Registration Opens' },

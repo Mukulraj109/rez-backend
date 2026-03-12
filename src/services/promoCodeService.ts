@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Types } from 'mongoose';
 import { PromoCode, IPromoCodeValidationResult } from '../models/PromoCode';
 import { SubscriptionTier, BillingCycle, Subscription } from '../models/Subscription';
@@ -54,7 +55,7 @@ export const validatePromoCode = async (
       message: result.message
     };
   } catch (error: any) {
-    console.error('[PROMO_CODE_SERVICE] Error validating promo code:', error);
+    logger.error('[PROMO_CODE_SERVICE] Error validating promo code:', error);
     return {
       valid: false,
       message: 'Error validating promo code'
@@ -111,7 +112,7 @@ export const applyPromoCode = async (
       message: `Promo code applied! You saved ₹${validation.discount}`
     };
   } catch (error: any) {
-    console.error('[PROMO_CODE_SERVICE] Error applying promo code:', error);
+    logger.error('[PROMO_CODE_SERVICE] Error applying promo code:', error);
     return {
       success: false,
       message: 'Error applying promo code'
@@ -129,7 +130,7 @@ export const getActivePromoCodes = async (
   try {
     return await PromoCode.getActivePromoCodes(tier, billingCycle);
   } catch (error: any) {
-    console.error('[PROMO_CODE_SERVICE] Error fetching active promo codes:', error);
+    logger.error('[PROMO_CODE_SERVICE] Error fetching active promo codes:', error);
     return [];
   }
 };
@@ -152,7 +153,7 @@ export const hasUserUsedPromoCode = async (
     const canUse = await promoCode.canBeUsedBy(userId);
     return !canUse; // If can't use, means already used
   } catch (error: any) {
-    console.error('[PROMO_CODE_SERVICE] Error checking user promo usage:', error);
+    logger.error('[PROMO_CODE_SERVICE] Error checking user promo usage:', error);
     return false;
   }
 };
@@ -182,7 +183,7 @@ export const getPromoCodeStats = async (code: string): Promise<any> => {
       uniqueUsers: new Set(promoCode.usedBy.map(u => u.user.toString())).size
     };
   } catch (error: any) {
-    console.error('[PROMO_CODE_SERVICE] Error fetching promo code stats:', error);
+    logger.error('[PROMO_CODE_SERVICE] Error fetching promo code stats:', error);
     return null;
   }
 };
@@ -213,7 +214,7 @@ export const createPromoCode = async (promoData: {
     await promoCode.save();
     return promoCode;
   } catch (error: any) {
-    console.error('[PROMO_CODE_SERVICE] Error creating promo code:', error);
+    logger.error('[PROMO_CODE_SERVICE] Error creating promo code:', error);
     throw error;
   }
 };
@@ -230,7 +231,7 @@ export const deactivatePromoCode = async (code: string): Promise<boolean> => {
     );
     return result.modifiedCount > 0;
   } catch (error: any) {
-    console.error('[PROMO_CODE_SERVICE] Error deactivating promo code:', error);
+    logger.error('[PROMO_CODE_SERVICE] Error deactivating promo code:', error);
     return false;
   }
 };

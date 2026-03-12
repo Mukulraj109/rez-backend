@@ -1,3 +1,4 @@
+import { logger } from '../config/logger';
 import { Store } from '../models/Store';
 import BonusCampaign from '../models/BonusCampaign';
 import mongoose from 'mongoose';
@@ -240,7 +241,7 @@ class NearbyEarnService {
 
       return results;
     } catch (error) {
-      console.error('[NearbyEarnService] getStoresNearby error:', error);
+      logger.error('[NearbyEarnService] getStoresNearby error:', error);
       throw error;
     }
   }
