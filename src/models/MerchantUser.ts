@@ -34,6 +34,14 @@ export interface IMerchantUser extends Document {
   accountLockedUntil?: Date;
   lastLoginIP?: string;
 
+  // Push Notifications
+  pushTokens: Array<{
+    token: string;
+    platform: 'ios' | 'android' | 'web';
+    deviceName?: string;
+    lastUsed?: Date;
+  }>;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -126,7 +134,13 @@ const MerchantUserSchema = new Schema<IMerchantUser>({
   },
   lastLoginIP: {
     type: String
-  }
+  },
+  pushTokens: [{
+    token: { type: String, required: true },
+    platform: { type: String, enum: ['ios', 'android', 'web'], required: true },
+    deviceName: { type: String },
+    lastUsed: { type: Date, default: Date.now }
+  }]
 }, {
   timestamps: true,
   toJSON: {

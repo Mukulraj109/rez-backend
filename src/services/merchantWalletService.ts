@@ -3,6 +3,8 @@ import { Types } from 'mongoose';
 import { MerchantWallet, IMerchantWallet, IMerchantWalletTransaction } from '../models/MerchantWallet';
 import { Store } from '../models/Store';
 import merchantNotificationService from './merchantNotificationService';
+import { runFinancialTxn } from '../utils/financialTransactionWrapper';
+import { ledgerService } from './ledgerService';
 
 interface WalletSummary {
   balance: {
@@ -197,15 +199,21 @@ class MerchantWalletService {
     transactionReference: string
   ): Promise<void> {
     const merchantObjectId = typeof merchantId === 'string' ? new Types.ObjectId(merchantId) : merchantId;
+    const txnObjectId = new Types.ObjectId(transactionId);
 
-    const wallet = await MerchantWallet.findOne({ merchant: merchantObjectId }).lean();
+    // Look up the pending withdrawal transaction (without .lean() so we can read subdoc data)
+    const walletDoc = await MerchantWallet.findOne({
+      merchant: merchantObjectId,
+      'transactions._id': txnObjectId,
+      'transactions.type': 'withdrawal',
+      'transactions.status': 'pending',
+    });
 
-    if (!wallet) {
-      throw new Error('Wallet not found');
+    if (!walletDoc) {
+      throw new Error('Withdrawal transaction not found or already processed');
     }
 
-    // Find the pending withdrawal transaction
-    const transaction = wallet.transactions.find(
+    const transaction = walletDoc.transactions.find(
       t => t._id?.toString() === transactionId && t.type === 'withdrawal' && t.status === 'pending'
     );
 
@@ -213,31 +221,62 @@ class MerchantWalletService {
       throw new Error('Withdrawal transaction not found or already processed');
     }
 
-    // Update transaction status
-    transaction.status = 'completed';
-    if (transaction.withdrawalDetails) {
-      transaction.withdrawalDetails.transactionId = transactionReference;
-      transaction.withdrawalDetails.processedAt = new Date();
-    }
+    const amount = transaction.amount;
 
-    // Update balances
-    wallet.balance.pending -= transaction.amount;
-    wallet.balance.withdrawn += transaction.amount;
-    wallet.statistics.totalWithdrawals += transaction.amount;
+    await runFinancialTxn(async ({ session, recordLedger }) => {
+      // Atomic update: deduct pending, increment withdrawn + stats, set transaction status
+      const updated = await MerchantWallet.findOneAndUpdate(
+        {
+          merchant: merchantObjectId,
+          'transactions._id': txnObjectId,
+          'transactions.status': 'pending',
+          'balance.pending': { $gte: amount },
+        },
+        {
+          $inc: {
+            'balance.pending': -amount,
+            'balance.withdrawn': amount,
+            'statistics.totalWithdrawals': amount,
+          },
+          $set: {
+            'transactions.$.status': 'completed',
+            'transactions.$.withdrawalDetails.transactionId': transactionReference,
+            'transactions.$.withdrawalDetails.processedAt': new Date(),
+          },
+        },
+        { new: true, session }
+      );
 
-    await wallet.save();
+      if (!updated) {
+        throw new Error('Failed to process withdrawal (concurrent update or insufficient pending balance)');
+      }
 
-    logger.info(`✅ [MERCHANT WALLET SERVICE] Processed withdrawal: ₹${transaction.amount}`);
+      // Ledger: merchant_wallet debit -> platform_float credit (money leaves merchant)
+      await recordLedger({
+        debitAccount: { type: 'merchant_wallet', id: merchantObjectId },
+        creditAccount: { type: 'platform_float', id: ledgerService.getPlatformAccountId('platform_float') },
+        amount,
+        operationType: 'withdrawal',
+        referenceId: transactionId,
+        referenceModel: 'MerchantWallet',
+        metadata: {
+          description: `Merchant withdrawal processed: ${amount}`,
+          idempotencyKey: `merchant-withdrawal:${transactionId}`,
+        },
+      });
+    });
+
+    logger.info(`[MERCHANT WALLET SERVICE] Processed withdrawal: ${amount}`);
 
     // Send notification to merchant about successful withdrawal
     try {
       await merchantNotificationService.notifyWithdrawalStatus({
         merchantId: merchantObjectId.toString(),
         withdrawalId: transactionId,
-        amount: transaction.amount,
+        amount,
         status: 'completed',
       });
-      logger.info('📬 [MERCHANT WALLET SERVICE] Sent withdrawal completion notification');
+      logger.info('[MERCHANT WALLET SERVICE] Sent withdrawal completion notification');
     } catch (notifyError) {
       logger.warn('Failed to send withdrawal notification:', notifyError);
     }
@@ -252,15 +291,21 @@ class MerchantWalletService {
     reason: string
   ): Promise<void> {
     const merchantObjectId = typeof merchantId === 'string' ? new Types.ObjectId(merchantId) : merchantId;
+    const txnObjectId = new Types.ObjectId(transactionId);
 
-    const wallet = await MerchantWallet.findOne({ merchant: merchantObjectId }).lean();
+    // Look up the pending withdrawal transaction (without .lean())
+    const walletDoc = await MerchantWallet.findOne({
+      merchant: merchantObjectId,
+      'transactions._id': txnObjectId,
+      'transactions.type': 'withdrawal',
+      'transactions.status': 'pending',
+    });
 
-    if (!wallet) {
-      throw new Error('Wallet not found');
+    if (!walletDoc) {
+      throw new Error('Withdrawal transaction not found or already processed');
     }
 
-    // Find the pending withdrawal transaction
-    const transaction = wallet.transactions.find(
+    const transaction = walletDoc.transactions.find(
       t => t._id?.toString() === transactionId && t.type === 'withdrawal' && t.status === 'pending'
     );
 
@@ -268,28 +313,60 @@ class MerchantWalletService {
       throw new Error('Withdrawal transaction not found or already processed');
     }
 
-    // Update transaction status
-    transaction.status = 'failed';
-    transaction.description = `${transaction.description} - Rejected: ${reason}`;
+    const amount = transaction.amount;
 
-    // Return the pending amount to available balance
-    wallet.balance.pending -= transaction.amount;
-    wallet.balance.available += transaction.amount;
+    await runFinancialTxn(async ({ session, recordLedger }) => {
+      // Atomic update: return pending to available, set transaction status to failed
+      const updated = await MerchantWallet.findOneAndUpdate(
+        {
+          merchant: merchantObjectId,
+          'transactions._id': txnObjectId,
+          'transactions.status': 'pending',
+        },
+        {
+          $inc: {
+            'balance.pending': -amount,
+            'balance.available': amount,
+          },
+          $set: {
+            'transactions.$.status': 'failed',
+            'transactions.$.description': `${transaction.description} - Rejected: ${reason}`,
+          },
+        },
+        { new: true, session }
+      );
 
-    await wallet.save();
+      if (!updated) {
+        throw new Error('Failed to reject withdrawal (concurrent update)');
+      }
 
-    logger.info(`❌ [MERCHANT WALLET SERVICE] Rejected withdrawal: ₹${transaction.amount} - ${reason}`);
+      // Ledger: platform_float debit -> merchant_wallet credit (funds returned to merchant)
+      await recordLedger({
+        debitAccount: { type: 'platform_float', id: ledgerService.getPlatformAccountId('platform_float') },
+        creditAccount: { type: 'merchant_wallet', id: merchantObjectId },
+        amount,
+        operationType: 'refund',
+        referenceId: transactionId,
+        referenceModel: 'MerchantWallet',
+        metadata: {
+          description: `Withdrawal rejected: ${reason}`,
+          idempotencyKey: `merchant-withdrawal-reject:${transactionId}`,
+        },
+      });
+    });
+
+    logger.info(`[MERCHANT WALLET SERVICE] Rejected withdrawal: ${amount} - ${reason}`);
 
     // Send notification to merchant about rejected withdrawal
     try {
       await merchantNotificationService.notifyWithdrawalStatus({
         merchantId: merchantObjectId.toString(),
         withdrawalId: transactionId,
-        amount: transaction.amount,
+        amount,
         status: 'rejected',
         reason,
       });
-      logger.info('📬 [MERCHANT WALLET SERVICE] Sent withdrawal rejection notification');
+      logger.info('[MERCHANT WALLET SERVICE] Sent withdrawal rejection notification');
     } catch (notifyError) {
       logger.warn('Failed to send withdrawal rejection notification:', notifyError);
     }
@@ -407,12 +484,6 @@ class MerchantWalletService {
     const merchantObjectId = typeof merchantId === 'string' ? new Types.ObjectId(merchantId) : merchantId;
     const orderObjectId = typeof orderId === 'string' ? new Types.ObjectId(orderId) : orderId;
 
-    const wallet = await MerchantWallet.findOne({ merchant: merchantObjectId }).lean();
-
-    if (!wallet) {
-      throw new Error('Wallet not found');
-    }
-
     const netRefund = refundAmount - platformFeeRefund;
 
     // Create refund transaction
@@ -428,16 +499,48 @@ class MerchantWalletService {
       createdAt: new Date()
     };
 
-    // Update balances
-    wallet.balance.available -= netRefund;
-    wallet.statistics.totalRefunds += refundAmount;
+    await runFinancialTxn(async ({ session, recordLedger }) => {
+      // Atomic update with $gte guard to prevent negative balance
+      const updated = await MerchantWallet.findOneAndUpdate(
+        {
+          merchant: merchantObjectId,
+          'balance.available': { $gte: netRefund },
+        },
+        {
+          $inc: {
+            'balance.available': -netRefund,
+            'statistics.totalRefunds': refundAmount,
+          },
+          $push: { transactions: transaction },
+        },
+        { new: true, session }
+      );
 
-    // Add transaction
-    wallet.transactions.push(transaction);
+      if (!updated) {
+        // Check if wallet exists to provide better error
+        const exists = await MerchantWallet.exists({ merchant: merchantObjectId }).session(session);
+        if (!exists) {
+          throw new Error('Wallet not found');
+        }
+        throw new Error(`Insufficient merchant wallet balance for refund of ${netRefund}`);
+      }
 
-    await wallet.save();
+      // Ledger: merchant_wallet debit -> platform_float credit (refund deducted from merchant)
+      await recordLedger({
+        debitAccount: { type: 'merchant_wallet', id: merchantObjectId },
+        creditAccount: { type: 'platform_float', id: ledgerService.getPlatformAccountId('platform_float') },
+        amount: netRefund,
+        operationType: 'order_refund',
+        referenceId: orderObjectId.toString(),
+        referenceModel: 'Order',
+        metadata: {
+          description: `Refund for order ${orderNumber}: gross ${refundAmount}, fee refund ${platformFeeRefund}, net ${netRefund}`,
+          idempotencyKey: `merchant-refund:${orderObjectId}`,
+        },
+      });
+    });
 
-    logger.info(`🔄 [MERCHANT WALLET SERVICE] Processed refund: ₹${netRefund} for order ${orderNumber}`);
+    logger.info(`[MERCHANT WALLET SERVICE] Processed refund: ${netRefund} for order ${orderNumber}`);
   }
 
   /**

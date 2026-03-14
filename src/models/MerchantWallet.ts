@@ -2,6 +2,7 @@ import { logger } from '../config/logger';
 import mongoose, { Schema, Document, Types, Model } from 'mongoose';
 import { logTransaction } from './TransactionAuditLog';
 import { div } from '../utils/currency';
+import { ledgerService } from '../services/ledgerService';
 
 // Merchant Wallet Transaction interface
 export interface IMerchantWalletTransaction {
@@ -372,7 +373,45 @@ MerchantWalletSchema.methods.creditOrder = async function(
     status: 'success',
   });
 
-  logger.info(`💰 [MERCHANT WALLET] Credited order ${orderNumber}:`, {
+  // Ledger entry: platform_float debit -> merchant_wallet credit (net payout)
+  try {
+    await ledgerService.recordEntry({
+      debitAccount: { type: 'platform_float', id: ledgerService.getPlatformAccountId('platform_float') },
+      creditAccount: { type: 'merchant_wallet', id: this.merchant },
+      amount: netAmount,
+      operationType: 'merchant_payout',
+      referenceId: orderId.toString(),
+      referenceModel: 'Order',
+      metadata: {
+        description: `Order credit: gross ${grossAmount}, fee ${platformFee}, net ${netAmount}`,
+        idempotencyKey: `merchant-credit:${orderId}`,
+      },
+    });
+  } catch (err) {
+    logger.error('[MERCHANT WALLET] Ledger entry failed for creditOrder', err);
+  }
+
+  // Ledger entry: platform fee recording
+  if (platformFee > 0) {
+    try {
+      await ledgerService.recordEntry({
+        debitAccount: { type: 'platform_float', id: ledgerService.getPlatformAccountId('platform_float') },
+        creditAccount: { type: 'platform_fees', id: ledgerService.getPlatformAccountId('platform_fees') },
+        amount: platformFee,
+        operationType: 'merchant_payout',
+        referenceId: orderId.toString(),
+        referenceModel: 'Order',
+        metadata: {
+          description: `Platform fee for order ${orderNumber}`,
+          idempotencyKey: `platform-fee:${orderId}`,
+        },
+      });
+    } catch (err) {
+      logger.error('[MERCHANT WALLET] Platform fee ledger entry failed', err);
+    }
+  }
+
+  logger.info(`[MERCHANT WALLET] Credited order ${orderNumber}:`, {
     gross: grossAmount,
     platformFee: platformFee,
     net: netAmount,

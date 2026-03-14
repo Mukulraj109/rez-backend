@@ -248,59 +248,24 @@ export async function spin(sessionId: string): Promise<any> {
  */
 export async function awardSpinPrize(userId: string, prize: SpinResult): Promise<any | null> {
   if (prize.type === 'coins') {
-    // 1. Add to CoinTransaction (for gamification tracking)
-    await CoinTransaction.createTransaction(
+    // Credit via rewardEngine (unified: CoinTransaction + Wallet + LedgerEntry + audit)
+    const { rewardEngine } = await import('../core/rewardEngine');
+    await rewardEngine.issue({
       userId,
-      'earned',
-      prize.value,
-      'spin_wheel',
-      `Won ${prize.value} coins from Spin Wheel`
-    );
-
-    // 2. Atomic wallet update (prevents race conditions on concurrent spins)
-    const { Wallet } = await import('../models/Wallet');
-    const updated = await Wallet.findOneAndUpdate(
-      { user: userId, 'coins.type': 'rez' },
-      {
-        $inc: {
-          'balance.available': prize.value,
-          'balance.total': prize.value,
-          'statistics.totalEarned': prize.value,
-          'coins.$.amount': prize.value
-        },
-        $set: {
-          'coins.$.lastUsed': new Date(),
-          lastTransactionAt: new Date()
-        }
+      amount: prize.value,
+      rewardType: 'spin_wheel',
+      source: 'spin_wheel',
+      description: `Won ${prize.value} coins from Spin Wheel`,
+      operationType: 'game_prize',
+      referenceId: `spin:${userId}:${Date.now()}`,
+      referenceModel: 'SpinSession',
+      metadata: {
+        prizeType: prize.type,
+        prizeValue: prize.value,
       },
-      { new: true }
-    );
+    });
 
-    if (updated) {
-      logger.info(`💰 [SPIN_WHEEL] Added ${prize.value} coins to wallet atomically. New balance: ${updated.balance.total}`);
-    } else {
-      // Wallet might not exist or no rez coin entry — try creating
-      const wallet = await Wallet.findOne({ user: userId }).lean();
-      if (!wallet) {
-        const newWallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
-        if (newWallet) {
-          await Wallet.findOneAndUpdate(
-            { _id: newWallet._id, 'coins.type': 'rez' },
-            {
-              $inc: {
-                'balance.available': prize.value,
-                'balance.total': prize.value,
-                'statistics.totalEarned': prize.value,
-                'coins.$.amount': prize.value
-              },
-              $set: { lastTransactionAt: new Date() }
-            }
-          );
-        }
-      }
-      logger.warn(`⚠️ [SPIN_WHEEL] Wallet atomic update returned null for user ${userId}, created/retried`);
-    }
-
+    logger.info(`[SPIN_WHEEL] Awarded ${prize.value} coins via rewardEngine`, { userId });
     return null;
   } else if (prize.type === 'cashback') {
     // ✅ NEW: Award cashback with smart store assignment (always store-wide for better UX)

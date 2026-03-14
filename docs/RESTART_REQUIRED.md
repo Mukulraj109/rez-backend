@@ -52,14 +52,14 @@ Expected: 12 offers with full details
 ### 2. Referral Code (will return code)
 ```bash
 curl http://localhost:5001/api/referral/code \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGVmNGQ0MTA2MWZhYWYwNDUyMjI1MDYiLCJyb2xlIjoidXNlciIsImlhdCI6MTc2MTI4NDA4NiwiZXhwIjoxNzYxMzcwNDg2fQ.Egd9J4T-i-mOrH2qPqUWpJew4MjKOFCQluepqnhuSm4"
+  -H "Authorization: Bearer <JWT_TOKEN_REDACTED>"
 ```
 Expected: Referral code and link
 
 ### 3. Referral Stats (will return statistics)
 ```bash
 curl http://localhost:5001/api/referral/stats \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGVmNGQ0MTA2MWZhYWYwNDUyMjI1MDYiLCJyb2xlIjoidXNlciIsImlhdCI6MTc2MTI4NDA4NiwiZXhwIjoxNzYxMzcwNDg2fQ.Egd9J4T-i-mOrH2qPqUWpJew4MjKOFCQluepqnhuSm4"
+  -H "Authorization: Bearer <JWT_TOKEN_REDACTED>"
 ```
 Expected: Referral statistics
 

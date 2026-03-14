@@ -120,6 +120,23 @@ export async function merchantApprovePick(
     }
   }
 
+  // Track merchant liability for creator rewards (fire-and-forget)
+  if (rewardData && rewardOptions && rewardOptions.amount > 0) {
+    import('./liabilityService').then(({ liabilityService }) => {
+      liabilityService.recordIssuance({
+        merchantId,
+        storeId,
+        campaignType: 'creator_reward',
+        amount: rewardOptions.amount,
+        referenceId: `creator-pick-reward:${pick._id}`,
+        referenceModel: 'CreatorPick',
+      }).catch((err: any) => {
+        const { logger: svcLogger } = require('../config/logger');
+        svcLogger.error('Liability tracking failed for creator reward', err);
+      });
+    });
+  }
+
   // Update pick status
   pick.status = 'pending_review';
   pick.merchantApproval = {

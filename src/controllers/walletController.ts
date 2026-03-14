@@ -15,6 +15,7 @@ import Stripe from 'stripe';
 import { validateAmount, sanitizeErrorMessage, validatePagination } from '../utils/walletValidation';
 import { logger } from '../config/logger';
 import { ledgerService } from '../services/ledgerService';
+import { runFinancialTxn } from '../utils/financialTransactionWrapper';
 
 /**
  * @swagger
@@ -104,22 +105,48 @@ export const getWalletBalance = asyncHandler(async (req: Request, res: Response)
         await redisService.set(balanceCacheKey, actualRezBalance, 120);
       }
 
-      const currentBalance = wallet.balance.available || 0;
-      if (Math.abs(actualRezBalance - currentBalance) > 0.01) {
-        // Update wallet balance (ReZ coins only, branded tracked separately)
-        // balance.total is recalculated by the pre-save hook
-        wallet.balance.available = actualRezBalance;
+      const currentBalance = wallet.balance?.available || 0;
+      const delta = actualRezBalance - currentBalance;
+      if (Math.abs(delta) > 0.01) {
+        // Atomic findOneAndUpdate instead of .save() to avoid race conditions
+        await Wallet.findOneAndUpdate(
+          { user: userId, 'coins.type': 'rez' },
+          {
+            $set: {
+              'balance.available': actualRezBalance,
+              'coins.$.amount': actualRezBalance,
+              'coins.$.lastUsed': new Date(),
+            },
+          }
+        );
 
-        // Update ReZ coin amount
-        const rezCoinToUpdate = wallet.coins.find((c: any) => c.type === 'rez');
-        if (rezCoinToUpdate) {
-          rezCoinToUpdate.amount = actualRezBalance;
-          rezCoinToUpdate.lastUsed = new Date();
-        }
-
-        await wallet.save();
         // Also sync to User model so profile page shows correct balance
         await wallet.syncWithUser();
+
+        // Fire-and-forget corrective ledger entry
+        const userAccountId = new mongoose.Types.ObjectId(userId);
+        const platformAccountId = ledgerService.getPlatformAccountId('platform_float');
+        if (delta > 0) {
+          ledgerService.recordEntry({
+            debitAccount: { type: 'platform_float', id: platformAccountId },
+            creditAccount: { type: 'user_wallet', id: userAccountId },
+            amount: delta,
+            operationType: 'correction',
+            referenceId: `auto-sync:${userId}:${Date.now()}`,
+            referenceModel: 'WalletAutoSync',
+            metadata: { description: `Auto-sync correction in getBalance` },
+          }).catch(err => logger.error('Auto-sync ledger entry failed', err));
+        } else {
+          ledgerService.recordEntry({
+            debitAccount: { type: 'user_wallet', id: userAccountId },
+            creditAccount: { type: 'platform_float', id: platformAccountId },
+            amount: Math.abs(delta),
+            operationType: 'correction',
+            referenceId: `auto-sync:${userId}:${Date.now()}`,
+            referenceModel: 'WalletAutoSync',
+            metadata: { description: `Auto-sync correction in getBalance` },
+          }).catch(err => logger.error('Auto-sync ledger entry failed', err));
+        }
       }
     } catch (syncError) {
       logger.error('⚠️ [WALLET] Auto-sync failed:', syncError);
@@ -2047,33 +2074,44 @@ export const devTopup = asyncHandler(async (req: Request, res: Response) => {
       return sendError(res, 'Failed to create wallet', 500);
     }
 
-    // Add to appropriate coin type
+    // Add to appropriate coin type via walletService (atomic $inc + CoinTransaction + LedgerEntry)
+    const { walletService: devWalletService } = await import('../services/walletService');
     if (type === 'promo') {
-      const promoCoin = wallet.coins.find((c: any) => c.type === 'promo');
-      if (promoCoin) {
-        promoCoin.amount += devAmount;
-      }
+      // Promo coins: direct wallet update (no CoinTransaction for promo type)
+      await Wallet.findOneAndUpdate(
+        { user: userId, 'coins.type': 'promo' },
+        { $inc: { 'coins.$.amount': devAmount, 'balance.total': devAmount } }
+      );
     } else if (type === 'cashback') {
-      wallet.balance.cashback = (wallet.balance.cashback || 0) + devAmount;
+      // Cashback: direct wallet update
+      await Wallet.findOneAndUpdate(
+        { user: userId },
+        { $inc: { 'balance.cashback': devAmount, 'balance.total': devAmount } }
+      );
     } else {
-      // Default to ReZ Coins
-      const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-      if (rezCoin) {
-        rezCoin.amount += devAmount;
-      }
-      wallet.balance.available = (wallet.balance.available || 0) + devAmount;
+      // Default to ReZ Coins — use walletService.credit for proper ledger tracking
+      await devWalletService.credit({
+        userId: String(wallet.user),
+        amount: devAmount,
+        source: 'admin',
+        description: 'Dev topup',
+        operationType: 'topup',
+        referenceId: `dev-topup:${wallet.user}:${Date.now()}`,
+        referenceModel: 'DevTopup',
+        metadata: { devTopup: true },
+      });
     }
 
-    wallet.balance.total = (wallet.balance.total || 0) + devAmount;
-    await wallet.save();
+    // Re-fetch wallet for response
+    wallet = await Wallet.findOne({ user: userId }).lean();
 
-    logger.info('[DEV TOPUP] Test funds added:', wallet.balance);
+    logger.info('[DEV TOPUP] Test funds added:', wallet?.balance);
 
     sendSuccess(res, {
       wallet: {
-        balance: wallet.balance,
-        coins: wallet.coins,
-        currency: wallet.currency
+        balance: wallet?.balance ?? { total: 0, available: 0 },
+        coins: wallet?.coins ?? [],
+        currency: wallet?.currency ?? 'RC'
       },
       addedAmount: devAmount,
       type: type
@@ -2166,30 +2204,73 @@ export const syncWalletBalance = asyncHandler(async (req: Request, res: Response
       return sendError(res, 'Failed to create wallet', 500);
     }
 
-    const oldBalance = wallet.balance.available;
+    const oldBalance = wallet.balance.available || 0;
+    const delta = actualRezBalance - oldBalance;
 
-    // Update ReZ coins in the coins array (branded coins tracked separately)
-    const rezCoin = wallet.coins.find((c: any) => c.type === 'rez');
-    if (rezCoin) {
-      rezCoin.amount = actualRezBalance;
-      rezCoin.lastUsed = new Date();
+    if (Math.abs(delta) > 0.01) {
+      await runFinancialTxn(async ({ session, recordLedger }) => {
+        await Wallet.findOneAndUpdate(
+          { user: userId },
+          {
+            $set: {
+              'balance.available': actualRezBalance,
+              'balance.total': actualRezBalance + (wallet!.balance.pending || 0) + (wallet!.balance.cashback || 0),
+            },
+          },
+          { session }
+        );
+
+        // Also update ReZ coin amount in coins array
+        await Wallet.findOneAndUpdate(
+          { user: userId, 'coins.type': 'rez' },
+          {
+            $set: {
+              'coins.$.amount': actualRezBalance,
+              'coins.$.lastUsed': new Date(),
+            },
+          },
+          { session }
+        );
+
+        const userAccountId = new mongoose.Types.ObjectId(userId);
+        const platformAccountId = ledgerService.getPlatformAccountId('platform_float');
+
+        if (delta > 0) {
+          await recordLedger({
+            debitAccount: { type: 'platform_float', id: platformAccountId },
+            creditAccount: { type: 'user_wallet', id: userAccountId },
+            amount: delta,
+            operationType: 'correction',
+            referenceId: `sync:${userId}:${Date.now()}`,
+            referenceModel: 'WalletSync',
+            metadata: { description: `Sync correction: ${oldBalance} -> ${actualRezBalance}` },
+          });
+        } else {
+          await recordLedger({
+            debitAccount: { type: 'user_wallet', id: userAccountId },
+            creditAccount: { type: 'platform_float', id: platformAccountId },
+            amount: Math.abs(delta),
+            operationType: 'correction',
+            referenceId: `sync:${userId}:${Date.now()}`,
+            referenceModel: 'WalletSync',
+            metadata: { description: `Sync correction: ${oldBalance} -> ${actualRezBalance}` },
+          });
+        }
+      });
     }
 
-    // Update wallet balance to match (ReZ only, branded tracked separately)
-    wallet.balance.available = actualRezBalance;
-    wallet.balance.total = actualRezBalance + (wallet.balance.pending || 0) + (wallet.balance.cashback || 0);
-
-    await wallet.save();
-
     logger.info(`✅ [WALLET SYNC] Balance synced: ${oldBalance} → ${actualRezBalance}`);
+
+    // Re-fetch wallet for accurate response
+    const updatedSyncWallet = await Wallet.findOne({ user: userId }).lean();
 
     sendSuccess(res, {
       previousBalance: oldBalance,
       newBalance: actualRezBalance,
       wallet: {
-        balance: wallet.balance,
-        coins: wallet.coins,
-        currency: wallet.currency
+        balance: updatedSyncWallet?.balance || wallet.balance,
+        coins: updatedSyncWallet?.coins || wallet.coins,
+        currency: updatedSyncWallet?.currency || wallet.currency
       },
       synced: true
     }, 'Wallet balance synced successfully');

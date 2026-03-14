@@ -643,6 +643,92 @@ export class InvoiceService {
       }
     });
   }
+
+  /**
+   * Generate a liability statement PDF for a merchant and cycle.
+   * Returns the PDF as a Buffer.
+   */
+  static async generateLiabilityStatement(merchantId: string, cycleId: string): Promise<Buffer> {
+    const { liabilityService } = await import('./liabilityService');
+    const merchant = await Merchant.findById(merchantId).lean();
+    if (!merchant) throw new Error('Merchant not found');
+
+    const statement = await liabilityService.getStatement(merchantId, { cycleId, limit: 50 });
+
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({ margin: 50 });
+        const chunks: Buffer[] = [];
+
+        doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', (err: Error) => reject(err));
+
+        // Header
+        doc.fontSize(20).font('Helvetica-Bold').text('MERCHANT LIABILITY STATEMENT', { align: 'center' });
+        doc.moveDown(0.5);
+
+        doc.fontSize(10).font('Helvetica');
+        doc.text(`Merchant: ${merchant.businessName || 'Unknown'}`);
+        doc.text(`Merchant ID: ${merchantId}`);
+        doc.text(`Cycle: ${cycleId}`);
+        doc.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`);
+        doc.moveDown(1);
+
+        // Totals summary
+        doc.fontSize(12).font('Helvetica-Bold').text('Summary');
+        doc.fontSize(10).font('Helvetica');
+        doc.text(`Total Issued: ${statement.totals.totalIssued.toFixed(2)} NC`);
+        doc.text(`Total Redeemed: ${statement.totals.totalRedeemed.toFixed(2)} NC`);
+        doc.text(`Pending Settlement: ${statement.totals.totalPending.toFixed(2)} NC`);
+        doc.text(`Settled: ${statement.totals.totalSettled.toFixed(2)} NC`);
+        doc.moveDown(1);
+
+        // Separator
+        doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+        doc.moveDown(0.5);
+
+        // Table header
+        const tableTop = doc.y;
+        doc.fontSize(9).font('Helvetica-Bold');
+        doc.text('Campaign Type', 50, tableTop, { width: 100 });
+        doc.text('Issued', 160, tableTop, { width: 70 });
+        doc.text('Redeemed', 230, tableTop, { width: 70 });
+        doc.text('Pending', 310, tableTop, { width: 70 });
+        doc.text('Settled', 390, tableTop, { width: 70 });
+        doc.text('Status', 470, tableTop, { width: 80 });
+
+        doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).stroke();
+
+        let position = tableTop + 25;
+        doc.font('Helvetica').fontSize(8);
+
+        for (const record of statement.records) {
+          if (position > 720) {
+            doc.addPage();
+            position = 50;
+          }
+
+          doc.text(record.campaignType, 50, position, { width: 100 });
+          doc.text(record.rewardIssued.toFixed(2), 160, position, { width: 70 });
+          doc.text(record.rewardRedeemed.toFixed(2), 230, position, { width: 70 });
+          doc.text(record.pendingAmount.toFixed(2), 310, position, { width: 70 });
+          doc.text(record.settledAmount.toFixed(2), 390, position, { width: 70 });
+          doc.text(record.status.toUpperCase(), 470, position, { width: 80 });
+
+          position += 20;
+        }
+
+        if (statement.records.length === 0) {
+          doc.text('No liability records found for this cycle.', 50, position);
+        }
+
+        doc.end();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
 }
 
 export default InvoiceService;

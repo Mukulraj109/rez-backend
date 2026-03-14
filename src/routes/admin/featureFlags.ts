@@ -9,6 +9,17 @@ import { requireAuth, requireAdmin } from '../../middleware/auth';
 import FeatureFlag from '../../models/FeatureFlag';
 import EarningConfig from '../../models/EarningConfig';
 import { sendSuccess, sendError } from '../../utils/response';
+import { featureFlagService } from '../../services/featureFlagService';
+import redisService from '../../services/redisService';
+
+// Clear Redis config cache when flags change so /api/config/feature-flags returns fresh data
+async function clearConfigRedisCache() {
+  try {
+    await redisService.delPattern('config:feature-flags*');
+  } catch {
+    // Non-blocking
+  }
+}
 
 const router = Router();
 
@@ -64,7 +75,7 @@ router.get('/flags/:key', async (req: Request, res: Response) => {
  */
 router.post('/flags', async (req: Request, res: Response) => {
   try {
-    const { key, label, group, enabled, sortOrder, metadata } = req.body;
+    const { key, label, group, enabled, scope, configJson, sortOrder, metadata } = req.body;
 
     if (!key || !label || !group) {
       return sendError(res, 'key, label, and group are required', 400);
@@ -81,10 +92,14 @@ router.post('/flags', async (req: Request, res: Response) => {
       label,
       group,
       enabled: enabled !== undefined ? enabled : true,
+      scope: scope || 'global',
+      configJson: configJson || {},
       sortOrder: sortOrder || 0,
       metadata: metadata || {}
     });
 
+    featureFlagService.invalidateCache(key);
+    await clearConfigRedisCache();
     return sendSuccess(res, flag, 'Feature flag created', 201);
   } catch (error) {
     logger.error('[Admin] Error creating feature flag:', error);
@@ -138,11 +153,20 @@ router.post('/flags/seed', async (req: Request, res: Response) => {
  */
 router.put('/flags/:key', async (req: Request, res: Response) => {
   try {
-    const { label, group, enabled, sortOrder, metadata } = req.body;
+    const { label, group, enabled, scope, configJson, sortOrder, metadata } = req.body;
+
+    const updateFields: Record<string, any> = {};
+    if (label !== undefined) updateFields.label = label;
+    if (group !== undefined) updateFields.group = group;
+    if (enabled !== undefined) updateFields.enabled = enabled;
+    if (scope !== undefined) updateFields.scope = scope;
+    if (configJson !== undefined) updateFields.configJson = configJson;
+    if (sortOrder !== undefined) updateFields.sortOrder = sortOrder;
+    if (metadata !== undefined) updateFields.metadata = metadata;
 
     const flag = await FeatureFlag.findOneAndUpdate(
       { key: req.params.key },
-      { $set: { label, group, enabled, sortOrder, metadata } },
+      { $set: updateFields },
       { new: true, runValidators: true }
     );
 
@@ -150,6 +174,8 @@ router.put('/flags/:key', async (req: Request, res: Response) => {
       return sendError(res, 'Feature flag not found', 404);
     }
 
+    featureFlagService.invalidateCache(req.params.key);
+    await clearConfigRedisCache();
     return sendSuccess(res, flag, 'Feature flag updated');
   } catch (error) {
     logger.error('[Admin] Error updating feature flag:', error);
@@ -171,6 +197,8 @@ router.patch('/flags/:key/toggle', async (req: Request, res: Response) => {
     flag.enabled = !flag.enabled;
     await flag.save();
 
+    featureFlagService.invalidateCache(req.params.key);
+    await clearConfigRedisCache();
     return sendSuccess(res, flag, `Feature flag ${flag.enabled ? 'enabled' : 'disabled'}`);
   } catch (error) {
     logger.error('[Admin] Error toggling feature flag:', error);
@@ -217,6 +245,8 @@ router.delete('/flags/:key', async (req: Request, res: Response) => {
       return sendError(res, 'Feature flag not found', 404);
     }
 
+    featureFlagService.invalidateCache(req.params.key);
+    await clearConfigRedisCache();
     return sendSuccess(res, null, 'Feature flag deleted');
   } catch (error) {
     logger.error('[Admin] Error deleting feature flag:', error);

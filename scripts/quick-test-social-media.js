@@ -5,7 +5,7 @@ const axios = require('axios');
 
 const API_BASE_URL = 'http://localhost:5001';
 const API_PREFIX = '/api';
-const TEST_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGMxNDVkNWYwMTY1MTVkOGViMzFjMGMiLCJyb2xlIjoidXNlciIsImlhdCI6MTc1OTQxOTI4MCwiZXhwIjoxNzU5NTA1NjgwfQ.vVfct5QO5-Xwnc_tart_vCeDcFIz4XXg8NUoV82OMQM';
+const TEST_TOKEN = '<JWT_TOKEN_REDACTED>';
 
 async function checkHealth() {
   console.log('🏥 Checking server health...');
@@ -148,3 +148,4 @@ runTests().catch(error => {
   console.error('\n💥 Test suite crashed:', error.message);
   process.exit(1);
 });
+

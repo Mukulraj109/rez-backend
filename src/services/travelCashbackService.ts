@@ -174,11 +174,12 @@ class TravelCashbackService {
         isRedeemed: false,
       }], { session });
 
-      // Credit to wallet via walletService (atomic $inc + CoinTransaction + LedgerEntry)
-      const { walletService } = await import('./walletService');
-      await walletService.credit({
+      // Credit to wallet via rewardEngine (unified reward issuance)
+      const { rewardEngine } = await import('../core/rewardEngine');
+      await rewardEngine.issue({
         userId: booking.user.toString(),
         amount: cashbackAmount,
+        rewardType: 'travel_cashback',
         source: 'cashback',
         description: `Travel cashback from ${categoryName} booking`,
         operationType: 'travel_cashback',
@@ -192,6 +193,8 @@ class TravelCashbackService {
           cashbackRate: booking.pricing.cashbackPercentage,
         },
         category: 'travel-experiences',
+        skipCap: true,
+        skipMultiplier: true,
         session,
       });
 

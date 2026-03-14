@@ -9,6 +9,7 @@
 import Expo, { ExpoPushMessage, ExpoPushTicket, ExpoPushReceipt } from 'expo-server-sdk';
 import twilio from 'twilio';
 import { User } from '../models/User';
+import { MerchantUser } from '../models/MerchantUser';
 import { createServiceLogger } from '../config/logger';
 import { BRAND } from '../config/brand';
 
@@ -122,6 +123,85 @@ class PushNotificationService {
       return true;
     } catch (error: any) {
       logger.error('sendPushToUser failed', { userId, error: error.message });
+      return false;
+    }
+  }
+
+  /**
+   * Send push notification to ALL team members of a merchant (by Merchant._id)
+   * Looks up all MerchantUser records with matching merchantId and sends to all their devices
+   */
+  public async sendPushToMerchant(merchantId: string, payload: PushPayload): Promise<boolean> {
+    try {
+      // Find ALL merchant team members with push tokens (merchantId references the Merchant model)
+      const merchantUsers = await MerchantUser.find({
+        merchantId,
+        status: 'active',
+        'pushTokens.0': { $exists: true }
+      }).select('pushTokens').lean();
+
+      if (!merchantUsers.length) {
+        logger.debug(`No merchant users with push tokens for merchant ${merchantId}`);
+        return false;
+      }
+
+      const messages: ExpoPushMessage[] = [];
+      const tokenUserMap: Array<{ token: string; merchantUserId: string }> = [];
+
+      for (const mu of merchantUsers) {
+        for (const t of (mu.pushTokens || [])) {
+          if (t.token && Expo.isExpoPushToken(t.token)) {
+            messages.push({
+              to: t.token,
+              title: payload.title,
+              body: payload.body,
+              data: payload.data || {},
+              channelId: payload.channelId || 'merchant-alerts',
+              sound: payload.sound ?? 'default',
+              priority: payload.priority || 'high',
+            });
+            tokenUserMap.push({ token: t.token, merchantUserId: (mu as any)._id.toString() });
+          }
+        }
+      }
+
+      if (messages.length === 0) {
+        logger.debug(`No valid Expo push tokens for merchant ${merchantId}`);
+        return false;
+      }
+
+      const chunks = this.expo.chunkPushNotifications(messages);
+      let tokenIndex = 0;
+
+      for (const chunk of chunks) {
+        try {
+          const tickets = await this.expo.sendPushNotificationsAsync(chunk);
+          for (let i = 0; i < tickets.length; i++) {
+            const ticket = tickets[i];
+            const mapping = tokenUserMap[tokenIndex + i];
+            if (!mapping) continue;
+            if (ticket.status === 'ok' && ticket.id) {
+              this.pendingTickets.push({ ticketId: ticket.id, token: mapping.token, userId: mapping.merchantUserId });
+            } else if (ticket.status === 'error') {
+              const details = (ticket as any).details;
+              if (details?.error === 'DeviceNotRegistered') {
+                MerchantUser.findByIdAndUpdate(mapping.merchantUserId, {
+                  $pull: { pushTokens: { token: mapping.token } }
+                }).catch(err => logger.error('Failed to remove invalid merchant token', { error: err.message }));
+                logger.info(`Removed DeviceNotRegistered token for merchant user ${mapping.merchantUserId}`);
+              }
+            }
+          }
+          tokenIndex += chunk.length;
+        } catch (error: any) {
+          logger.error('Failed to send merchant push notification chunk', { merchantId, error: error.message });
+          tokenIndex += chunk.length;
+        }
+      }
+
+      return true;
+    } catch (error: any) {
+      logger.error('sendPushToMerchant failed', { merchantId, error: error.message });
       return false;
     }
   }
@@ -491,6 +571,7 @@ export default pushNotificationService;
 // Export individual functions for easier use
 export const {
   sendPushToUser,
+  sendPushToMerchant,
   sendPushToMultiple,
   handleReceipts,
   sendOrderConfirmed,

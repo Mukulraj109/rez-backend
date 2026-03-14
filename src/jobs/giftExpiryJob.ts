@@ -4,6 +4,7 @@ import { CoinTransaction } from '../models/CoinTransaction';
 import { User } from '../models/User';
 import { logTransaction } from '../models/TransactionAuditLog';
 import { ledgerService } from '../services/ledgerService';
+import { runFinancialTxn } from '../utils/financialTransactionWrapper';
 import { createServiceLogger } from '../config/logger';
 import redisService from '../services/redisService';
 import { invalidateWalletCache } from '../services/walletCacheService';
@@ -59,36 +60,37 @@ export async function runGiftExpiry(): Promise<void> {
 
         if (!updated) continue; // Already processed
 
-        // Refund sender wallet atomically
-        const senderWallet = await Wallet.findOneAndUpdate(
-          { user: gift.sender },
-          {
-            $inc: {
-              'balance.available': gift.amount,
-              'balance.total': gift.amount,
+        // Refund sender wallet + ledger atomically within a transaction
+        let senderWallet: any = null;
+        await runFinancialTxn(async ({ session, recordLedger }) => {
+          senderWallet = await Wallet.findOneAndUpdate(
+            { user: gift.sender },
+            {
+              $inc: {
+                'balance.available': gift.amount,
+                'balance.total': gift.amount,
+              },
+              $set: { lastTransactionAt: new Date() },
             },
-            $set: { lastTransactionAt: new Date() },
-          },
-          { new: true }
-        );
+            { new: true, session }
+          );
+
+          await recordLedger({
+            debitAccount: { type: 'platform_float', id: ledgerService.getPlatformAccountId('platform_float') },
+            creditAccount: { type: 'user_wallet', id: gift.sender },
+            amount: gift.amount,
+            coinType: (gift.coinType as any) || 'nuqta',
+            operationType: 'gift_refund',
+            referenceId: String(gift._id),
+            referenceModel: 'CoinGift',
+            metadata: {
+              description: 'Gift expired - refund to sender',
+            },
+          });
+        });
 
         // Invalidate sender's wallet cache so they see the refund immediately
         await invalidateWalletCache(String(gift.sender));
-
-        // Create reversing ledger entry (platform_float → sender wallet)
-        const platformFloatId = ledgerService.getPlatformAccountId('platform_float');
-        await ledgerService.recordEntry({
-          debitAccount: { type: 'platform_float', id: platformFloatId },
-          creditAccount: { type: 'user_wallet', id: gift.sender },
-          amount: gift.amount,
-          coinType: (gift.coinType as any) || 'nuqta',
-          operationType: 'gift',
-          referenceId: String(gift._id),
-          referenceModel: 'CoinGift',
-          metadata: {
-            description: `Gift expired — refund to sender`,
-          },
-        });
 
         // Create CoinTransaction (source of truth for auto-sync)
         try {

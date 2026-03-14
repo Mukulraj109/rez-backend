@@ -85,7 +85,7 @@ class SocialImpactService {
     const eventsWithStatus = events.map((event: any) => {
       const enrollment = userEnrollments.get((event._id as mongoose.Types.ObjectId).toString());
       return {
-        ...event.toObject(),
+        ...event,
         isEnrolled: !!enrollment,
         enrollmentStatus: enrollment?.status || null,
         enrollmentId: enrollment?._id || null

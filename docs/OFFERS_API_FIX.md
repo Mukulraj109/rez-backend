@@ -173,7 +173,7 @@ After making the fix, test the endpoint:
 
 ```bash
 curl -X GET "http://localhost:5001/api/offers" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGVmNGQ0MTA2MWZhYWYwNDUyMjI1MDYiLCJyb2xlIjoidXNlciIsImlhdCI6MTc2MTI4NDA4NiwiZXhwIjoxNzYxMzcwNDg2fQ.Egd9J4T-i-mOrH2qPqUWpJew4MjKOFCQluepqnhuSm4"
+  -H "Authorization: Bearer <JWT_TOKEN_REDACTED>"
 ```
 
 Expected response:
@@ -228,3 +228,4 @@ With this fix:
 **Estimated Fix Time:** 2 minutes
 **Impact:** Critical for offers feature
 **Priority:** Medium (has workaround with direct DB query)
+

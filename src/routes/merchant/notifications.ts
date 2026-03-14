@@ -19,7 +19,9 @@ import {
   subscribeToEmail,
   unsubscribeFromEmail,
   subscribeToSMS,
-  unsubscribeFromSMS
+  unsubscribeFromSMS,
+  registerPushToken,
+  unregisterPushToken
 } from '../../controllers/merchantNotificationController';
 import { authMiddleware as authenticateMerchant } from '../../middleware/merchantauth';
 import { validate, validateParams, validateQuery, commonSchemas } from '../../middleware/validation';
@@ -242,6 +244,34 @@ router.delete(
 router.post(
   '/test',
   sendTestNotification
+);
+
+/**
+ * @route   POST /api/merchant/notifications/register-token
+ * @desc    Register push notification token for merchant device
+ * @access  Private (Merchant)
+ */
+router.post(
+  '/register-token',
+  validate(Joi.object({
+    token: Joi.string().required(),
+    platform: Joi.string().valid('ios', 'android', 'web').required(),
+    deviceName: Joi.string().max(100).optional()
+  })),
+  registerPushToken
+);
+
+/**
+ * @route   POST /api/merchant/notifications/unregister-token
+ * @desc    Unregister push notification token
+ * @access  Private (Merchant)
+ */
+router.post(
+  '/unregister-token',
+  validate(Joi.object({
+    token: Joi.string().required()
+  })),
+  unregisterPushToken
 );
 
 /**

@@ -14,7 +14,7 @@ import { Product } from '../src/models/Product';
 import mongoose from 'mongoose';
 
 const API_URL = process.env.API_URL || 'http://localhost:5001/api';
-const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGMxNDVkNWYwMTY1MTVkOGViMzFjMGMiLCJyb2xlIjoidXNlciIsImlhdCI6MTc1OTk4OTQ2NCwiZXhwIjoxNzYwMDc1ODY0fQ.OR1XTLRQotQ-XX9b-o7lJrzDrlG0I1SpzLkw2XoGCUw';
+const TOKEN = '<JWT_TOKEN_REDACTED>';
 
 // MongoDB connection
 const MONGODB_URI = 'mongodb+srv://mukulraj756:O71qVcqwpJQvXzWi@cluster0.aulqar3.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';

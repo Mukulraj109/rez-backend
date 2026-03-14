@@ -1,4 +1,5 @@
 import { logger } from '../config/logger';
+import pushNotificationService from './pushNotificationService';
 /**
  * Merchant Notification Service
  * Handles all notifications sent to merchants for their business operations
@@ -128,7 +129,7 @@ class MerchantNotificationService {
    */
   async createNotification(params: CreateNotificationParams): Promise<any> {
     try {
-      const deliveryChannels = ['in_app'];
+      const deliveryChannels = ['in_app', 'push'];
 
       // Add email/sms channels for high priority notifications
       if (params.priority === 'high' || params.priority === 'urgent') {
@@ -161,6 +162,22 @@ class MerchantNotificationService {
 
       // Emit real-time notification via Socket.IO
       this.emitNotification(params.merchantId.toString(), notification);
+
+      // Send push notification (non-blocking)
+      if (deliveryChannels.includes('in_app') || params.priority === 'high' || params.priority === 'urgent') {
+        pushNotificationService.sendPushToMerchant(params.merchantId.toString(), {
+          title: params.title,
+          body: params.message,
+          data: {
+            notificationId: notification._id?.toString(),
+            category: params.category,
+            deepLink: params.data?.deepLink,
+            ...params.data?.metadata,
+          },
+          channelId: 'merchant-alerts',
+          priority: params.priority === 'urgent' ? 'high' : 'default',
+        }).catch(err => logger.error('Error sending merchant push:', err));
+      }
 
       // Send SMS/Email for critical notifications (non-blocking)
       this.sendCriticalChannels(

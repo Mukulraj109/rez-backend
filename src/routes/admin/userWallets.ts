@@ -224,6 +224,93 @@ router.post('/:userId/adjust', async (req: Request, res: Response) => {
 });
 
 /**
+ * @route   POST /api/admin/user-wallets/:userId/reverse-cashback
+ * @desc    Reverse/clawback cashback from a user's wallet
+ * @access  Admin (super_admin recommended)
+ */
+router.post('/:userId/reverse-cashback', async (req: Request, res: Response) => {
+  try {
+    const { amount, originalTransactionId, reason } = req.body;
+    if (!amount || !reason?.trim()) {
+      return res.status(400).json({ success: false, message: 'Amount and reason are required' });
+    }
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0 || parsedAmount > 100000) {
+      return res.status(400).json({ success: false, message: 'Amount must be between 0 and 100,000 NC' });
+    }
+
+    const wallet = await Wallet.findOne({ user: req.params.userId });
+    if (!wallet) {
+      return res.status(404).json({ success: false, message: 'Wallet not found' });
+    }
+
+    const balanceBefore = {
+      total: wallet.balance.total,
+      available: wallet.balance.available,
+      pending: 0,
+      cashback: 0,
+    };
+
+    const adminUserId = String((req as any).userId);
+    let reversalTransactionId: string | undefined;
+
+    if (originalTransactionId) {
+      // Exact reversal via rewardEngine — handles idempotency + multiplier cleanup
+      const { rewardEngine } = await import('../../core/rewardEngine');
+      try {
+        const result = await rewardEngine.reverseReward(originalTransactionId, reason.trim(), {
+          partialAmount: parsedAmount,
+        });
+        reversalTransactionId = result?.reversalTransactionId?.toString();
+      } catch (rewardErr: any) {
+        const msg = rewardErr.message || 'Reversal failed';
+        const status = msg.includes('not found') ? 404 : msg.includes('already') ? 409 : 400;
+        return res.status(status).json({ success: false, message: msg });
+      }
+    } else {
+      // Manual clawback without linking to specific transaction
+      const { walletService } = await import('../../services/walletService');
+      try {
+        await walletService.debit({
+          userId: req.params.userId,
+          amount: parsedAmount,
+          source: 'admin',
+          description: `Cashback reversal by admin: ${reason.trim()}`,
+          operationType: 'cashback_reversal',
+          referenceId: `cashback-reversal:${req.params.userId}:${Date.now()}`,
+          referenceModel: 'AdminAction',
+          metadata: { adminUserId, reason: reason.trim(), idempotencyKey: `cashback-rev:${req.params.userId}:${Date.now()}` },
+        });
+      } catch (walletErr: any) {
+        return res.status(400).json({ success: false, message: walletErr.message || 'Insufficient balance for reversal' });
+      }
+    }
+
+    const updated = await Wallet.findOne({ user: req.params.userId }).lean();
+
+    logTransaction({
+      userId: new mongoose.Types.ObjectId(req.params.userId),
+      walletId: wallet._id as mongoose.Types.ObjectId,
+      walletType: 'user',
+      operation: 'debit',
+      amount: parsedAmount,
+      balanceBefore,
+      balanceAfter: { total: updated?.balance.total || 0, available: updated?.balance.available || 0, pending: 0, cashback: 0 },
+      reference: { type: 'adjustment', description: `Cashback reversal by admin: ${reason.trim()}` },
+      metadata: { source: 'admin', adminUserId },
+    });
+
+    res.json({
+      success: true,
+      message: `Reversed ${parsedAmount} NC cashback`,
+      data: { amount: parsedAmount, newBalance: updated?.balance, reversalTransactionId },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'Failed to reverse cashback' });
+  }
+});
+
+/**
  * @route   GET /api/admin/user-wallets/:userId/audit-trail
  * @desc    Get audit trail for a user's wallet
  * @access  Admin

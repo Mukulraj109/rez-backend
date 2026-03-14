@@ -329,6 +329,10 @@ class WalletService {
 
       return pairId;
     } catch (error) {
+      if (session) {
+        // Within a transaction — propagate to trigger rollback
+        throw error;
+      }
       logger.error('Failed to record ledger entry (non-blocking)', error, {
         userId, amount, operationType, referenceId,
       });

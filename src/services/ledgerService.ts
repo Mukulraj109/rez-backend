@@ -20,6 +20,7 @@ export interface RecordEntryParams {
   operationType: LedgerOperationType;
   referenceId: string;
   referenceModel: string;
+  reversalReferenceId?: string;  // pairId of the original entry being reversed
   metadata?: {
     requestId?: string;
     idempotencyKey?: string;
@@ -34,7 +35,7 @@ class LedgerService {
    * Returns the pairId linking both entries.
    */
   async recordEntry(params: RecordEntryParams, session?: ClientSession): Promise<string> {
-    const { debitAccount, creditAccount, amount, coinType = 'nuqta', operationType, referenceId, referenceModel, metadata } = params;
+    const { debitAccount, creditAccount, amount, coinType = 'nuqta', operationType, referenceId, referenceModel, reversalReferenceId, metadata } = params;
 
     if (amount <= 0) {
       throw new Error('Ledger entry amount must be positive');
@@ -61,6 +62,7 @@ class LedgerService {
         operationType,
         referenceId,
         referenceModel,
+        ...(reversalReferenceId && { reversalReferenceId }),
         metadata: metadata || {},
         createdAt: now,
       },
@@ -75,6 +77,7 @@ class LedgerService {
         operationType,
         referenceId,
         referenceModel,
+        ...(reversalReferenceId && { reversalReferenceId }),
         metadata: metadata || {},
         createdAt: now,
       }

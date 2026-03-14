@@ -136,38 +136,31 @@ class PartnerService {
         logger.error('❌ [LEVEL UP] Error adding new offers:', error);
       }
       
-      // Add bonus to wallet via CoinTransaction (single source of truth — no direct wallet mutation)
+      // Credit bonus via rewardEngine (unified: wallet + CoinTransaction + ledger)
       try {
-        const { Wallet } = require('../models/Wallet');
-        const mongoose = require('mongoose');
-        // Ensure wallet exists before CoinTransaction
-        let wallet = await Wallet.findOne({ user: userId }).lean();
-        if (!wallet) {
-          logger.info(`⚠️ [LEVEL UP] Wallet not found, creating for user ${userId}`);
-          wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
-        }
-
-        if (wallet) {
-          const { CoinTransaction } = require('../models/CoinTransaction');
-          await CoinTransaction.createTransaction(
-            userId.toString(), 'earned', levelBonus, 'bonus',
-            `Partner level up bonus (Level ${oldLevel} → ${newLevel})`,
-            {
-              partnerEarning: true,
-              partnerEarningType: 'milestone',
-              partnerLevel: newLevel,
-              oldLevel,
-              idempotencyKey: `partner:levelup:${userId}:${oldLevel}:${newLevel}`,
-            }
-          );
-          // Invalidate partner earnings cache
-          invalidatePartnerEarningsCache(userId).catch(() => {});
-          logger.info(`✅ [LEVEL UP] Upgraded Level ${oldLevel} → ${newLevel}, Added ₹${levelBonus} to wallet`);
-        } else {
-          logger.error('❌ [LEVEL UP] Failed to create wallet for bonus');
-        }
+        const { rewardEngine } = await import('../core/rewardEngine');
+        await rewardEngine.issue({
+          userId: userId.toString(),
+          amount: levelBonus,
+          rewardType: 'partner_bonus',
+          source: 'bonus',
+          description: `Partner level up bonus (Level ${oldLevel} → ${newLevel})`,
+          operationType: 'loyalty_credit',
+          referenceId: `partner-levelup:${userId}:${oldLevel}:${newLevel}`,
+          referenceModel: 'Partner',
+          metadata: {
+            partnerEarning: true,
+            partnerEarningType: 'milestone',
+            partnerLevel: newLevel,
+            oldLevel,
+            idempotencyKey: `partner:levelup:${userId}:${oldLevel}:${newLevel}`,
+          },
+        });
+        // Invalidate partner earnings cache
+        invalidatePartnerEarningsCache(userId).catch(() => {});
+        logger.info(`[LEVEL UP] Upgraded Level ${oldLevel} → ${newLevel}, Added ${levelBonus} to wallet`);
       } catch (error) {
-        logger.error('❌ [LEVEL UP] Error adding bonus to wallet:', error);
+        logger.error('[LEVEL UP] Error adding bonus to wallet:', error);
         // Don't fail the upgrade if wallet update fails
       }
     }

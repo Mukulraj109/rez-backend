@@ -6,7 +6,9 @@ import { ReportService } from '../merchantservices/ReportService';
 import { Order } from '../models/Order';
 import { Product } from '../models/Product';
 import { Store } from '../models/Store';
-import { CashbackModel } from '../models/Cashback';
+import { CashbackModel, CashbackMongoModel } from '../models/Cashback';
+import { StorePayment } from '../models/StorePayment';
+import { User } from '../models/User';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger';
 
@@ -1398,6 +1400,474 @@ router.post('/reports/sample-schedules', async (req, res) => {
       message: 'Failed to create sample schedules',
       error: error instanceof Error ? error.message : 'Unknown error'
     });
+  }
+});
+
+// @route   GET /api/merchant/dashboard/customer-payments
+// @desc    Recent customer payments with customer details for the dashboard
+// @access  Private
+router.get('/customer-payments', async (req, res) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) {
+      return res.status(400).json({ success: false, message: 'Merchant ID required' });
+    }
+
+    const storeId = req.query.storeId as string | undefined;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+
+    // Get merchant's stores
+    const storeFilter: any = { merchantId };
+    if (storeId) {
+      storeFilter._id = storeId;
+    }
+    const stores = await Store.find(storeFilter).select('_id name').lean();
+    const storeIds = stores.map(s => s._id);
+    const storeMap = new Map(stores.map(s => [s._id.toString(), s.name]));
+
+    if (storeIds.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          payments: [],
+          pagination: { currentPage: page, totalPages: 0, totalItems: 0, hasNextPage: false, hasPrevPage: false }
+        }
+      });
+    }
+
+    // Get recent orders with customer details
+    const orderFilter: any = {
+      store: { $in: storeIds },
+      'payment.status': 'paid'
+    };
+
+    // StorePayment uses storeId (not store) and userId (not user)
+    const storePaymentFilter: any = {
+      storeId: { $in: storeIds },
+      status: 'completed'
+    };
+
+    // Count both sources for accurate pagination
+    const [orderCount, storePaymentCount] = await Promise.all([
+      Order.countDocuments(orderFilter),
+      StorePayment.countDocuments(storePaymentFilter)
+    ]);
+    const totalItems = orderCount + storePaymentCount;
+
+    // Fetch both with double the limit, then merge-sort and slice
+    const halfLimit = Math.ceil(limit / 2) + 2; // fetch extra to ensure enough after merge
+    const skip = (page - 1) * limit;
+
+    const [orders, storePayments] = await Promise.all([
+      Order.find(orderFilter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('user', 'fullName phoneNumber profileImage')
+        .select('orderNumber user store totals payment createdAt fulfillmentType status')
+        .lean(),
+      StorePayment.find(storePaymentFilter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('userId', 'fullName phoneNumber profileImage')
+        .select('userId storeId storeName billAmount paymentMethod createdAt completedAt coinRedemption')
+        .lean()
+    ]);
+
+    // Merge and sort by date
+    const payments = [
+      ...orders.map((o: any) => ({
+        type: 'order' as const,
+        id: o._id.toString(),
+        orderNumber: o.orderNumber,
+        customerName: o.user?.fullName || 'Customer',
+        customerPhone: o.user?.phoneNumber || '',
+        customerImage: o.user?.profileImage || null,
+        storeName: storeMap.get(o.store?.toString()) || 'Unknown Store',
+        storeId: o.store?.toString(),
+        amount: o.totals?.total || 0,
+        merchantPayout: o.totals?.merchantPayout || 0,
+        paymentMethod: o.payment?.method || 'unknown',
+        coinsUsed: o.payment?.coinsUsed?.totalCoinsValue || 0,
+        status: o.status,
+        fulfillmentType: o.fulfillmentType,
+        createdAt: o.createdAt,
+      })),
+      ...storePayments.map((sp: any) => ({
+        type: 'store_payment' as const,
+        id: sp._id.toString(),
+        orderNumber: null,
+        customerName: sp.userId?.fullName || 'Customer',
+        customerPhone: sp.userId?.phoneNumber || '',
+        customerImage: sp.userId?.profileImage || null,
+        storeName: sp.storeName || storeMap.get(sp.storeId?.toString()) || 'Unknown Store',
+        storeId: sp.storeId?.toString(),
+        amount: sp.billAmount || 0,
+        merchantPayout: sp.billAmount || 0,
+        paymentMethod: sp.paymentMethod || 'unknown',
+        coinsUsed: (sp.coinRedemption?.rezCoins || 0) + (sp.coinRedemption?.promoCoins || 0),
+        status: 'completed',
+        fulfillmentType: 'in_store',
+        createdAt: sp.completedAt || sp.createdAt,
+      }))
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+     .slice(0, limit);
+
+    const totalPages = Math.ceil(totalItems / limit);
+
+    res.json({
+      success: true,
+      data: {
+        payments,
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalItems,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1
+        }
+      }
+    });
+  } catch (error: any) {
+    logger.error('Error fetching customer payments:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch customer payments' });
+  }
+});
+
+// ==================== STORE PERFORMANCE ====================
+
+// @route   GET /api/merchant/dashboard/store-performance
+// @desc    Per-store performance breakdown for all merchant stores
+// @access  Private
+router.get('/store-performance', async (req, res) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) {
+      return res.status(400).json({ success: false, message: 'Merchant ID required' });
+    }
+
+    // Get all merchant stores
+    const stores = await Store.find({ merchantId: new mongoose.Types.ObjectId(merchantId) })
+      .select('name logo slug isActive ratings category location offers')
+      .lean();
+
+    if (stores.length === 0) {
+      return res.json({ success: true, data: { stores: [] } });
+    }
+
+    const storeIds = stores.map(s => s._id);
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // Get per-store order aggregation (this month)
+    const [orderStats, todayStats, productStats, pendingCashback] = await Promise.all([
+      // Monthly order stats per store
+      Order.aggregate([
+        { $match: { store: { $in: storeIds }, createdAt: { $gte: startOfMonth } } },
+        { $group: {
+          _id: '$store',
+          totalOrders: { $sum: 1 },
+          totalRevenue: { $sum: '$totals.total' },
+          merchantPayout: { $sum: '$totals.merchantPayout' },
+          pendingOrders: { $sum: { $cond: [{ $in: ['$status', ['placed', 'confirmed']] }, 1, 0] } },
+          completedOrders: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } },
+          cancelledOrders: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+          avgOrderValue: { $avg: '$totals.total' },
+          uniqueCustomers: { $addToSet: '$user' }
+        }}
+      ]),
+      // Today's stats per store
+      Order.aggregate([
+        { $match: { store: { $in: storeIds }, createdAt: { $gte: startOfToday } } },
+        { $group: {
+          _id: '$store',
+          todayOrders: { $sum: 1 },
+          todayRevenue: { $sum: '$totals.total' }
+        }}
+      ]),
+      // Product counts per store
+      Product.aggregate([
+        { $match: { store: { $in: storeIds } } },
+        { $group: {
+          _id: '$store',
+          totalProducts: { $sum: 1 },
+          activeProducts: { $sum: { $cond: ['$isActive', 1, 0] } },
+          lowStockProducts: { $sum: { $cond: [{ $and: [{ $lte: ['$inventory.stock', '$inventory.lowStockThreshold'] }, { $gt: ['$inventory.stock', 0] }] }, 1, 0] } },
+          outOfStockProducts: { $sum: { $cond: [{ $lte: ['$inventory.stock', 0] }, 1, 0] } }
+        }}
+      ]),
+      // Pending cashback per store
+      CashbackMongoModel.aggregate([
+        { $match: { merchantId: new mongoose.Types.ObjectId(merchantId), status: 'pending' } },
+        { $group: {
+          _id: '$storeId',
+          pendingCount: { $sum: 1 },
+          pendingAmount: { $sum: '$amount' }
+        }}
+      ])
+    ]);
+
+    // Build lookup maps
+    const orderMap = new Map(orderStats.map((s: any) => [s._id.toString(), s]));
+    const todayMap = new Map(todayStats.map((s: any) => [s._id.toString(), s]));
+    const productMap = new Map(productStats.map((s: any) => [s._id.toString(), s]));
+    const cashbackMap = new Map(pendingCashback.map((s: any) => [s._id?.toString(), s]));
+
+    // Assemble per-store data
+    const storePerformance = stores.map(store => {
+      const sid = store._id.toString();
+      const orders = orderMap.get(sid) || {};
+      const today = todayMap.get(sid) || {};
+      const products = productMap.get(sid) || {};
+      const cashback = cashbackMap.get(sid) || {};
+
+      return {
+        storeId: sid,
+        name: store.name,
+        logo: store.logo || null,
+        slug: store.slug,
+        isActive: store.isActive,
+        rating: (store as any).ratings?.average || 0,
+        ratingCount: (store as any).ratings?.count || 0,
+        category: typeof store.category === 'object' ? (store.category as any)?.name : store.category,
+        location: (store as any).location?.city || (store as any).location?.address || '',
+        cashbackPercent: (store as any).offers?.cashback || 0,
+        // Monthly metrics
+        monthlyOrders: (orders as any).totalOrders || 0,
+        monthlyRevenue: (orders as any).totalRevenue || 0,
+        monthlyPayout: (orders as any).merchantPayout || 0,
+        pendingOrders: (orders as any).pendingOrders || 0,
+        completedOrders: (orders as any).completedOrders || 0,
+        cancelledOrders: (orders as any).cancelledOrders || 0,
+        avgOrderValue: (orders as any).avgOrderValue || 0,
+        uniqueCustomers: (orders as any).uniqueCustomers?.length || 0,
+        // Today's metrics
+        todayOrders: (today as any).todayOrders || 0,
+        todayRevenue: (today as any).todayRevenue || 0,
+        // Product metrics
+        totalProducts: (products as any).totalProducts || 0,
+        activeProducts: (products as any).activeProducts || 0,
+        lowStockProducts: (products as any).lowStockProducts || 0,
+        outOfStockProducts: (products as any).outOfStockProducts || 0,
+        // Cashback
+        pendingCashbackCount: (cashback as any).pendingCount || 0,
+        pendingCashbackAmount: (cashback as any).pendingAmount || 0,
+      };
+    });
+
+    // Sort by monthly revenue descending (best performing first)
+    storePerformance.sort((a, b) => b.monthlyRevenue - a.monthlyRevenue);
+
+    res.json({
+      success: true,
+      data: {
+        stores: storePerformance,
+        summary: {
+          totalStores: stores.length,
+          activeStores: stores.filter(s => s.isActive).length,
+          totalMonthlyRevenue: storePerformance.reduce((sum, s) => sum + s.monthlyRevenue, 0),
+          totalMonthlyOrders: storePerformance.reduce((sum, s) => sum + s.monthlyOrders, 0),
+          totalPendingOrders: storePerformance.reduce((sum, s) => sum + s.pendingOrders, 0),
+        }
+      }
+    });
+  } catch (error: any) {
+    logger.error('Error fetching store performance:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch store performance' });
+  }
+});
+
+// ==================== ACTION ITEMS ====================
+
+// @route   GET /api/merchant/dashboard/action-items
+// @desc    Prioritized action items / to-do list for the merchant
+// @access  Private
+router.get('/action-items', async (req, res) => {
+  try {
+    const merchantId = req.merchantId;
+    if (!merchantId) {
+      return res.status(400).json({ success: false, message: 'Merchant ID required' });
+    }
+
+    const storeId = req.query.storeId as string | undefined;
+
+    // Get merchant stores
+    const storeFilter: any = { merchantId: new mongoose.Types.ObjectId(merchantId) };
+    if (storeId) storeFilter._id = new mongoose.Types.ObjectId(storeId);
+    const stores = await Store.find(storeFilter).select('_id name').lean();
+    const storeIds = stores.map(s => s._id);
+    const storeNameMap = new Map(stores.map(s => [s._id.toString(), s.name]));
+
+    if (storeIds.length === 0) {
+      return res.json({ success: true, data: { actionItems: [], summary: { total: 0, urgent: 0, high: 0, medium: 0 } } });
+    }
+
+    const actionItems: Array<{
+      id: string;
+      type: string;
+      priority: 'urgent' | 'high' | 'medium' | 'low';
+      title: string;
+      description: string;
+      storeName: string;
+      storeId: string;
+      count: number;
+      deepLink: string;
+      icon: string;
+      color: string;
+    }> = [];
+
+    // 1. Pending orders that need confirmation (URGENT)
+    const pendingOrders = await Order.find({
+      store: { $in: storeIds },
+      status: 'placed'
+    }).select('store orderNumber createdAt').sort({ createdAt: 1 }).limit(50).lean();
+
+    // Group by store
+    const pendingByStore = new Map<string, number>();
+    for (const order of pendingOrders) {
+      const sid = order.store?.toString() || '';
+      pendingByStore.set(sid, (pendingByStore.get(sid) || 0) + 1);
+    }
+    for (const [sid, count] of pendingByStore) {
+      actionItems.push({
+        id: `pending-orders-${sid}`,
+        type: 'pending_orders',
+        priority: 'urgent',
+        title: `${count} order${count > 1 ? 's' : ''} awaiting confirmation`,
+        description: `Confirm orders at ${storeNameMap.get(sid) || 'your store'} to start preparing`,
+        storeName: storeNameMap.get(sid) || '',
+        storeId: sid,
+        count,
+        deepLink: '/orders?filter=pending',
+        icon: 'time',
+        color: '#EF4444',
+      });
+    }
+
+    // 2. Out of stock products (HIGH)
+    const outOfStock = await Product.find({
+      store: { $in: storeIds },
+      isActive: true,
+      'inventory.stock': { $lte: 0 }
+    }).select('store name').limit(50).lean();
+
+    const oosbyStore = new Map<string, number>();
+    for (const p of outOfStock) {
+      const sid = (p as any).store?.toString() || '';
+      oosbyStore.set(sid, (oosbyStore.get(sid) || 0) + 1);
+    }
+    for (const [sid, count] of oosbyStore) {
+      actionItems.push({
+        id: `out-of-stock-${sid}`,
+        type: 'out_of_stock',
+        priority: 'high',
+        title: `${count} product${count > 1 ? 's' : ''} out of stock`,
+        description: `Restock items at ${storeNameMap.get(sid) || 'your store'} to avoid lost sales`,
+        storeName: storeNameMap.get(sid) || '',
+        storeId: sid,
+        count,
+        deepLink: '/products?filter=out-of-stock',
+        icon: 'alert-circle',
+        color: '#DC2626',
+      });
+    }
+
+    // 3. Low stock products (MEDIUM)
+    const lowStock = await Product.find({
+      store: { $in: storeIds },
+      isActive: true,
+      'inventory.stock': { $gt: 0 },
+      $expr: { $lte: ['$inventory.stock', { $ifNull: ['$inventory.lowStockThreshold', 5] }] }
+    }).select('store name inventory.stock').limit(50).lean();
+
+    const lsByStore = new Map<string, number>();
+    for (const p of lowStock) {
+      const sid = (p as any).store?.toString() || '';
+      lsByStore.set(sid, (lsByStore.get(sid) || 0) + 1);
+    }
+    for (const [sid, count] of lsByStore) {
+      actionItems.push({
+        id: `low-stock-${sid}`,
+        type: 'low_stock',
+        priority: 'medium',
+        title: `${count} product${count > 1 ? 's' : ''} running low`,
+        description: `Low stock at ${storeNameMap.get(sid) || 'your store'} — restock soon`,
+        storeName: storeNameMap.get(sid) || '',
+        storeId: sid,
+        count,
+        deepLink: '/products?filter=low-stock',
+        icon: 'warning',
+        color: '#F59E0B',
+      });
+    }
+
+    // 4. Pending cashback requests (HIGH)
+    try {
+      const pendingCashback = await CashbackMongoModel.aggregate([
+        { $match: { merchantId: new mongoose.Types.ObjectId(merchantId), status: 'pending' } },
+        { $group: { _id: '$storeId', count: { $sum: 1 }, totalAmount: { $sum: '$amount' } } }
+      ]);
+      for (const cb of pendingCashback) {
+        const sid = cb._id?.toString() || '';
+        actionItems.push({
+          id: `pending-cashback-${sid}`,
+          type: 'pending_cashback',
+          priority: 'high',
+          title: `${cb.count} cashback request${cb.count > 1 ? 's' : ''} pending`,
+          description: `₹${(cb.totalAmount || 0).toLocaleString()} in cashback requests at ${storeNameMap.get(sid) || 'your store'}`,
+          storeName: storeNameMap.get(sid) || '',
+          storeId: sid,
+          count: cb.count,
+          deepLink: '/cashback',
+          icon: 'cash',
+          color: '#7C3AED',
+        });
+      }
+    } catch (err) {
+      // Cashback model may not exist — skip
+    }
+
+    // 5. Orders being prepared too long (> 2 hours) (HIGH)
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const slowOrders = await Order.countDocuments({
+      store: { $in: storeIds },
+      status: { $in: ['confirmed', 'preparing'] },
+      updatedAt: { $lt: twoHoursAgo }
+    });
+    if (slowOrders > 0) {
+      actionItems.push({
+        id: 'slow-orders',
+        type: 'slow_orders',
+        priority: 'high',
+        title: `${slowOrders} order${slowOrders > 1 ? 's' : ''} delayed`,
+        description: 'Orders stuck in preparation for over 2 hours — update status or notify customer',
+        storeName: 'All stores',
+        storeId: '',
+        count: slowOrders,
+        deepLink: '/orders?filter=preparing',
+        icon: 'hourglass',
+        color: '#DC2626',
+      });
+    }
+
+    // Sort by priority
+    const priorityOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
+    actionItems.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+
+    const summary = {
+      total: actionItems.length,
+      urgent: actionItems.filter(a => a.priority === 'urgent').length,
+      high: actionItems.filter(a => a.priority === 'high').length,
+      medium: actionItems.filter(a => a.priority === 'medium').length,
+    };
+
+    res.json({ success: true, data: { actionItems, summary } });
+  } catch (error: any) {
+    logger.error('Error fetching action items:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch action items' });
   }
 });
 

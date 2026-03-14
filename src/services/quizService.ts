@@ -318,16 +318,20 @@ export async function submitAnswer(
     quiz.completedAt = new Date();
     quiz.reward = { coins: quiz.metadata.score ?? 0 };
 
-    // Award coins
+    // Award coins via rewardEngine (unified: wallet + CoinTransaction + ledger)
     if ((quiz.metadata.score ?? 0) > 0) {
-      await CoinTransaction.createTransaction(
-        quiz.user.toString(),
-        'earned',
-        quiz.metadata.score ?? 0,
-        'quiz_game',
-        `Earned ${quiz.metadata.score ?? 0} coins from Quiz (${quiz.difficulty ?? 'easy'})`,
-        { quizId: quiz._id }
-      );
+      const { rewardEngine } = await import('../core/rewardEngine');
+      await rewardEngine.issue({
+        userId: quiz.user.toString(),
+        amount: quiz.metadata.score ?? 0,
+        rewardType: 'quiz_game',
+        source: 'quiz_game',
+        description: `Earned ${quiz.metadata.score ?? 0} coins from Quiz (${quiz.difficulty ?? 'easy'})`,
+        operationType: 'game_prize',
+        referenceId: `quiz:${quiz._id}:answer`,
+        referenceModel: 'MiniGame',
+        metadata: { quizId: quiz._id },
+      });
     }
   }
 
@@ -385,16 +389,20 @@ export async function completeQuiz(quizId: string): Promise<any> {
   quiz.completedAt = new Date();
   quiz.reward = { coins: quiz.metadata?.score || 0 };
 
-  // Award coins if any
+  // Award coins via rewardEngine (unified: wallet + CoinTransaction + ledger)
   if (quiz.metadata?.score && quiz.metadata.score > 0) {
-    await CoinTransaction.createTransaction(
-      quiz.user.toString(),
-      'earned',
-      quiz.metadata.score,
-      'quiz_game',
-      `Earned ${quiz.metadata.score} coins from Quiz (${quiz.difficulty})`,
-      { quizId: quiz._id }
-    );
+    const { rewardEngine } = await import('../core/rewardEngine');
+    await rewardEngine.issue({
+      userId: quiz.user.toString(),
+      amount: quiz.metadata.score,
+      rewardType: 'quiz_game',
+      source: 'quiz_game',
+      description: `Earned ${quiz.metadata.score} coins from Quiz (${quiz.difficulty})`,
+      operationType: 'game_prize',
+      referenceId: `quiz:${quiz._id}:complete`,
+      referenceModel: 'MiniGame',
+      metadata: { quizId: quiz._id },
+    });
   }
 
   await quiz.save();

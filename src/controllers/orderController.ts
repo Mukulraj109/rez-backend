@@ -24,6 +24,7 @@ import couponService from '../services/couponService';
 import achievementService from '../services/achievementService';
 import gamificationEventBus from '../events/gamificationEventBus';
 import { reputationService } from '../services/reputationService';
+import { walletService } from '../services/walletService';
 import { processConversion } from '../services/creatorService';
 // Note: StorePromoCoin removed - using wallet.brandedCoins instead
 import { Wallet } from '../models/Wallet';
@@ -999,71 +1000,18 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       appliedOfferRedemption.usedAmount = offerRedemptionCashback;
       await appliedOfferRedemption.save({ session });
 
-      // Credit cashback to user's wallet (create wallet if doesn't exist)
-      let userWallet = await Wallet.findOne({ user: userId }).session(session);
-      if (!userWallet) {
-        userWallet = new Wallet({
-          user: userId,
-          balance: { total: 0, available: 0, pending: 0 },
-          coins: [],
-          currency: 'INR',
-          isActive: true
-        });
-        await userWallet.save({ session });
-      }
-
-      const balanceBefore = userWallet.balance.total;
-      userWallet.balance.total += offerRedemptionCashback;
-      userWallet.balance.available += offerRedemptionCashback;
-
-      // Add to rez coins
-      const rezCoin = userWallet.coins.find((c: any) => c.type === 'rez');
-      if (rezCoin) {
-        rezCoin.amount += offerRedemptionCashback;
-        rezCoin.lastEarned = new Date();
-      } else {
-        userWallet.coins.push({
-          type: 'rez',
-          amount: offerRedemptionCashback,
-          lastEarned: new Date()
-        } as any);
-      }
-
-      await userWallet.save({ session });
-
-      // Create transaction record for cashback
-      const { Transaction } = require('../models/Transaction');
-      const cashbackTransaction = new Transaction({
-        user: userId,
-        type: 'credit',
+      // Credit cashback to user's wallet via walletService (handles wallet creation, CoinTransaction, ledger, audit)
+      await walletService.credit({
+        userId: String(order.user),
         amount: offerRedemptionCashback,
-        currency: userWallet.currency || 'INR',
-        category: 'cashback',
-        description: `Cashback from order #${order.orderNumber}`,
-        status: {
-          current: 'completed',
-          history: [{
-            status: 'completed',
-            timestamp: new Date(),
-            reason: 'Offer cashback credited on order placement',
-          }],
-        },
-        source: {
-          type: 'cashback',
-          reference: appliedOfferRedemption._id,
-          description: `Order cashback - ${(appliedOfferRedemption.offer as any)?.title || 'Offer'}`,
-          metadata: {
-            orderId: order._id,
-            orderNumber: order.orderNumber,
-            offerId: appliedOfferRedemption.offer?._id || appliedOfferRedemption.offer,
-            redemptionCode: appliedOfferRedemption.redemptionCode,
-          },
-        },
-        balanceBefore,
-        balanceAfter: userWallet.balance.total,
+        source: 'purchase_reward',
+        description: `Offer cashback from order #${order.orderNumber}`,
+        operationType: 'offer_cashback',
+        referenceId: String(order._id),
+        referenceModel: 'Order',
+        metadata: { orderId: order._id, orderNumber: order.orderNumber },
+        session,
       });
-
-      await cashbackTransaction.save({ session });
       // Send push notification (async, don't wait)
       try {
         const NotificationService = require('../services/notificationService').default;
@@ -2019,16 +1967,19 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
       const promoCoins = (order.payment.coinsUsed as any).promoCoins || 0;
       const storePromoCoins = (order.payment.coinsUsed as any).storePromoCoins || 0;
 
-      // Refund REZ coins via coinService (single path — avoids double-crediting wallet)
+      // Refund REZ coins via refundService (centralized refund pipeline)
       if (rezCoins > 0) {
         try {
-          const coinService = require('../services/coinService').default;
-          await coinService.awardCoins(
-            userId.toString(),
-            rezCoins,
-            'refund',
-            `Refund for cancelled order: ${order.orderNumber}`
-          );
+          const { refundService } = await import('../services/refundService');
+          await refundService.processRefund({
+            userId: userId.toString(),
+            amount: rezCoins,
+            reason: `Order cancelled: ${order.orderNumber}`,
+            refundType: 'order_cancel',
+            referenceId: `order:${order._id}:rez`,
+            referenceModel: 'Order',
+            skipNotification: true, // Notification sent at end of cancel flow
+          });
         } catch (coinError) {
           logger.error('[CANCEL ORDER] Failed to refund REZ coins:', coinError);
         }
@@ -2110,7 +2061,6 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
           // Deduct cashback from user's wallet if it was credited
           if (cashbackAmount > 0) {
             // Use walletService for atomic debit + CoinTransaction + LedgerEntry
-            const { walletService } = await import('../services/walletService');
             await walletService.debit({
               userId,
               amount: cashbackAmount,

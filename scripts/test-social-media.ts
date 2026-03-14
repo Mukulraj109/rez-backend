@@ -12,7 +12,7 @@ const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:5001';
 const API_PREFIX = '/api';
 
 // Test user token (provided by user)
-const TEST_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGMxNDVkNWYwMTY1MTVkOGViMzFjMGMiLCJyb2xlIjoidXNlciIsImlhdCI6MTc1OTQxOTI4MCwiZXhwIjoxNzU5NTA1NjgwfQ.vVfct5QO5-Xwnc_tart_vCeDcFIz4XXg8NUoV82OMQM';
+const TEST_TOKEN = '<JWT_TOKEN_REDACTED>';
 
 interface TestResult {
   name: string;
@@ -385,3 +385,4 @@ async function runTests() {
 
 // Run the tests
 runTests();
+

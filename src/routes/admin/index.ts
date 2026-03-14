@@ -58,3 +58,4 @@ export { default as adminNotificationMgmtRoutes } from './notificationManagement
 export { default as adminFraudReportsRoutes } from './fraudReports';
 export { default as adminMembershipRoutes } from './membership';
 export { default as adminAdminUsersRoutes } from './adminUsers';
+export { default as adminEconomicsRoutes } from './economics';

@@ -5,6 +5,7 @@ import { CoinTransaction } from '../models/CoinTransaction';
 import Partner from '../models/Partner';
 import { logTransaction } from '../models/TransactionAuditLog';
 import { ledgerService } from './ledgerService';
+import { runFinancialTxn } from '../utils/financialTransactionWrapper';
 import { createServiceLogger } from '../config/logger';
 import { walletBalanceDriftTotal } from '../config/walletMetrics';
 
@@ -247,48 +248,50 @@ class ReconciliationService {
       return { dryRun: true, drift: result.drift, correctionApplied: false };
     }
 
-    // Apply correction
+    // Apply correction atomically: ledger + wallet in a single transaction
     const correctionAmount = result.expected - result.actual;
 
-    // Create corrective ledger entry
-    const platformAccountId = ledgerService.getPlatformAccountId('platform_fees');
-    if (correctionAmount > 0) {
-      // User should have more — credit user from platform_fees
-      await ledgerService.recordEntry({
-        debitAccount: { type: 'platform_fees', id: platformAccountId },
-        creditAccount: { type: 'user_wallet', id: new Types.ObjectId(userId) },
-        amount: correctionAmount,
-        operationType: 'correction',
-        referenceId: `recon:${userId}:${Date.now()}`,
-        referenceModel: 'Reconciliation',
-        metadata: {
-          adminUserId: opts.adminUserId,
-          requestId: opts.requestId,
-          description: `Auto-correction: drift of ${result.drift} NC (expected ${result.expected}, actual ${result.actual})`,
-        },
-      });
-    } else {
-      // User has too much — debit user to platform_fees
-      await ledgerService.recordEntry({
-        debitAccount: { type: 'user_wallet', id: new Types.ObjectId(userId) },
-        creditAccount: { type: 'platform_fees', id: platformAccountId },
-        amount: Math.abs(correctionAmount),
-        operationType: 'correction',
-        referenceId: `recon:${userId}:${Date.now()}`,
-        referenceModel: 'Reconciliation',
-        metadata: {
-          adminUserId: opts.adminUserId,
-          requestId: opts.requestId,
-          description: `Auto-correction: drift of ${result.drift} NC (expected ${result.expected}, actual ${result.actual})`,
-        },
-      });
-    }
+    await runFinancialTxn(async ({ session, recordLedger }) => {
+      const platformFeesAccountId = ledgerService.getPlatformAccountId('platform_fees');
+      const userAccountId = new Types.ObjectId(userId);
+      const refId = `recon:${userId}:${Date.now()}`;
+      const metadataObj = {
+        adminUserId: opts.adminUserId,
+        requestId: opts.requestId,
+        description: `Auto-correction: drift of ${result.drift} NC (expected ${result.expected}, actual ${result.actual})`,
+      };
 
-    // Atomically fix wallet balance
-    await Wallet.findOneAndUpdate(
-      { user: userId },
-      { $inc: { 'balance.available': correctionAmount, 'balance.total': correctionAmount } }
-    );
+      if (correctionAmount > 0) {
+        // User should have more — credit user from platform_fees
+        await recordLedger({
+          debitAccount: { type: 'platform_fees', id: platformFeesAccountId },
+          creditAccount: { type: 'user_wallet', id: userAccountId },
+          amount: correctionAmount,
+          operationType: 'correction',
+          referenceId: refId,
+          referenceModel: 'Reconciliation',
+          metadata: metadataObj,
+        });
+      } else {
+        // User has too much — debit user to platform_fees
+        await recordLedger({
+          debitAccount: { type: 'user_wallet', id: userAccountId },
+          creditAccount: { type: 'platform_fees', id: platformFeesAccountId },
+          amount: Math.abs(correctionAmount),
+          operationType: 'correction',
+          referenceId: refId,
+          referenceModel: 'Reconciliation',
+          metadata: metadataObj,
+        });
+      }
+
+      // Atomically fix wallet balance within the same transaction
+      await Wallet.findOneAndUpdate(
+        { user: userId },
+        { $inc: { 'balance.available': correctionAmount, 'balance.total': correctionAmount } },
+        { session }
+      );
+    });
 
     logger.info('Balance correction applied', {
       userId,
@@ -392,6 +395,89 @@ class ReconciliationService {
       checked: partners.length,
       drifts,
     };
+  }
+
+  /**
+   * Reconcile merchant liability: compare LedgerEntry sums (merchant_liability_issuance)
+   * vs MerchantLiability.rewardIssued, and MerchantWallet debits vs settledAmount.
+   */
+  async reconcileMerchantLiability(opts?: { limit?: number }): Promise<{
+    totalMerchants: number;
+    checked: number;
+    drifts: Array<{
+      merchantId: string;
+      ledgerIssuanceTotal: number;
+      liabilityIssuanceTotal: number;
+      drift: number;
+      status: 'ok' | 'minor' | 'critical';
+    }>;
+  }> {
+    const limit = opts?.limit || 500;
+
+    // Get distinct merchants from MerchantLiability
+    const merchants = await (await import('../models/MerchantLiability')).MerchantLiability.aggregate([
+      { $group: { _id: '$merchant', totalIssued: { $sum: '$rewardIssued' }, totalSettled: { $sum: '$settledAmount' } } },
+      { $limit: limit },
+    ]);
+
+    const drifts: Array<{
+      merchantId: string;
+      ledgerIssuanceTotal: number;
+      liabilityIssuanceTotal: number;
+      drift: number;
+      status: 'ok' | 'minor' | 'critical';
+    }> = [];
+
+    for (const merchant of merchants) {
+      try {
+        const merchantId = merchant._id.toString();
+
+        // Sum ledger entries for merchant_liability_issuance
+        const ledgerAgg = await LedgerEntry.aggregate([
+          {
+            $match: {
+              accountId: merchant._id,
+              accountType: 'merchant_wallet',
+              operationType: 'merchant_liability_issuance',
+              direction: 'debit',
+            },
+          },
+          { $group: { _id: null, total: { $sum: '$amount' } } },
+        ]);
+
+        const ledgerIssuanceTotal = ledgerAgg[0]?.total || 0;
+        const liabilityIssuanceTotal = merchant.totalIssued || 0;
+        const drift = Math.abs(ledgerIssuanceTotal - liabilityIssuanceTotal);
+
+        let status: 'ok' | 'minor' | 'critical' = 'ok';
+        if (drift > 100) {
+          status = 'critical';
+          walletBalanceDriftTotal.inc({ severity: 'critical' });
+        } else if (drift > 1) {
+          status = 'minor';
+          walletBalanceDriftTotal.inc({ severity: 'minor' });
+        }
+
+        if (status !== 'ok') {
+          drifts.push({ merchantId, ledgerIssuanceTotal, liabilityIssuanceTotal, drift, status });
+          logger.warn('Merchant liability drift detected', {
+            merchantId, ledgerIssuanceTotal, liabilityIssuanceTotal, drift, status,
+          });
+        }
+      } catch (error) {
+        logger.error('Failed to reconcile merchant liability', error, {
+          merchantId: merchant._id.toString(),
+        });
+      }
+    }
+
+    logger.info('Merchant liability reconciliation complete', {
+      totalMerchants: merchants.length,
+      checked: merchants.length,
+      driftsFound: drifts.length,
+    });
+
+    return { totalMerchants: merchants.length, checked: merchants.length, drifts };
   }
 }
 

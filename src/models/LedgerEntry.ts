@@ -12,7 +12,10 @@ export type LedgerOperationType =
   | 'daily_login' | 'review_reward' | 'tournament_prize' | 'learning_reward'
   | 'lock_fee' | 'lock_fee_refund' | 'social_impact' | 'creator_reward'
   | 'coin_expiry' | 'store_payment_reward' | 'travel_cashback' | 'mall_affiliate'
-  | 'voucher_cashback' | 'offer_cashback' | 'cashback_reversal';
+  | 'voucher_cashback' | 'offer_cashback' | 'cashback_reversal'
+  | 'gift_refund'
+  | 'merchant_liability_issuance'
+  | 'merchant_liability_settlement';
 export type LedgerCoinType = 'nuqta' | 'promo' | 'branded';
 
 export interface ILedgerEntry extends Document {
@@ -26,6 +29,7 @@ export interface ILedgerEntry extends Document {
   operationType: LedgerOperationType;
   referenceId: string;
   referenceModel: string;
+  reversalReferenceId?: string;  // pairId of the original ledger entry being reversed
   metadata: {
     requestId?: string;
     idempotencyKey?: string;
@@ -48,10 +52,11 @@ const LedgerEntrySchema = new Schema<ILedgerEntry>({
   runningBalance: { type: Number, required: true },
   operationType: {
     type: String, required: true,
-    enum: ['transfer', 'gift', 'topup', 'withdrawal', 'payment', 'refund', 'cashback', 'loyalty_credit', 'admin_adjustment', 'expiry', 'gift_card_purchase', 'scratch_card_prize', 'correction', 'order_payment', 'order_coin_deduction', 'merchant_payout', 'order_refund', 'subscription_payment', 'subscription_refund', 'game_prize', 'achievement_reward', 'referral_bonus', 'bonus_campaign', 'daily_login', 'review_reward', 'tournament_prize', 'learning_reward', 'lock_fee', 'lock_fee_refund', 'social_impact', 'creator_reward', 'coin_expiry', 'store_payment_reward', 'travel_cashback', 'mall_affiliate', 'voucher_cashback', 'offer_cashback', 'cashback_reversal']
+    enum: ['transfer', 'gift', 'topup', 'withdrawal', 'payment', 'refund', 'cashback', 'loyalty_credit', 'admin_adjustment', 'expiry', 'gift_card_purchase', 'scratch_card_prize', 'correction', 'order_payment', 'order_coin_deduction', 'merchant_payout', 'order_refund', 'subscription_payment', 'subscription_refund', 'game_prize', 'achievement_reward', 'referral_bonus', 'bonus_campaign', 'daily_login', 'review_reward', 'tournament_prize', 'learning_reward', 'lock_fee', 'lock_fee_refund', 'social_impact', 'creator_reward', 'coin_expiry', 'store_payment_reward', 'travel_cashback', 'mall_affiliate', 'voucher_cashback', 'offer_cashback', 'cashback_reversal', 'gift_refund', 'merchant_liability_issuance', 'merchant_liability_settlement']
   },
   referenceId: { type: String, required: true },
   referenceModel: { type: String, required: true },
+  reversalReferenceId: { type: String, default: null },
   metadata: {
     requestId: String,
     idempotencyKey: String,
@@ -68,5 +73,6 @@ LedgerEntrySchema.index({ accountType: 1, operationType: 1 });
 LedgerEntrySchema.index({ referenceId: 1, referenceModel: 1 });
 LedgerEntrySchema.index({ accountId: 1, coinType: 1, createdAt: -1 });
 LedgerEntrySchema.index({ pairId: 1, direction: 1 }, { unique: true }); // Each pair has exactly 1 debit + 1 credit
+LedgerEntrySchema.index({ reversalReferenceId: 1 }, { sparse: true }); // Reversal chain lookups
 
 export const LedgerEntry = mongoose.model<ILedgerEntry>('LedgerEntry', LedgerEntrySchema);

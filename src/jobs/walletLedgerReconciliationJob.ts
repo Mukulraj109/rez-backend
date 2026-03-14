@@ -46,6 +46,23 @@ async function runLedgerReconciliation(): Promise<void> {
         durationMs: duration,
       });
     }
+    // Merchant liability reconciliation
+    try {
+      const merchantLiabilityReport = await reconciliationService.reconcileMerchantLiability();
+      if (merchantLiabilityReport.drifts.length > 0) {
+        logger.warn('Merchant liability drifts detected', {
+          driftsFound: merchantLiabilityReport.drifts.length,
+          checked: merchantLiabilityReport.checked,
+        });
+      } else {
+        logger.info('Merchant liability reconciliation complete — no drifts', {
+          checked: merchantLiabilityReport.checked,
+        });
+      }
+      await redisService.set('merchant-liability-reconciliation:latest', merchantLiabilityReport, RESULT_TTL);
+    } catch (err) {
+      logger.error('Merchant liability reconciliation failed', err);
+    }
   } catch (error) {
     logger.error('Wallet-ledger reconciliation job failed', error);
   }

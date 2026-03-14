@@ -5,6 +5,7 @@ import { PartnerEarningsConfig } from '../../models/PartnerEarningsConfig';
 import { CoinTransaction } from '../../models/CoinTransaction';
 import Partner from '../../models/Partner';
 import { Wallet } from '../../models/Wallet';
+import { walletService } from '../../services/walletService';
 import mongoose from 'mongoose';
 
 const router = Router();
@@ -297,34 +298,30 @@ router.post('/:userId/adjust', async (req: Request, res: Response) => {
 
     const adminUserId = (req.user as any)?._id?.toString() || 'unknown';
 
-    // Atomic wallet update
+    // Use walletService for atomic wallet + CoinTransaction + ledger entry
     if (type === 'credit') {
-      await Wallet.updateOne(
-        { user: userId },
-        { $inc: { 'balance.available': amount, 'balance.total': amount, 'statistics.totalEarned': amount } }
-      );
+      await walletService.credit({
+        userId: String(userId),
+        amount,
+        source: 'admin',
+        description: `Admin partner earnings adjustment: ${reason}`,
+        operationType: 'admin_adjustment',
+        referenceId: `partner-adj:${userId}:${Date.now()}`,
+        referenceModel: 'Partner',
+        metadata: { partnerEarning: true, adjustmentType: type, reason, adminUserId },
+      });
     } else {
-      await Wallet.updateOne(
-        { user: userId, 'balance.available': { $gte: amount } },
-        { $inc: { 'balance.available': -amount, 'balance.total': -amount } }
-      );
+      await walletService.debit({
+        userId: String(userId),
+        amount,
+        source: 'admin',
+        description: `Admin partner earnings deduction: ${reason}`,
+        operationType: 'admin_adjustment',
+        referenceId: `partner-adj:${userId}:${Date.now()}`,
+        referenceModel: 'Partner',
+        metadata: { partnerEarning: true, adjustmentType: type, reason, adminUserId },
+      });
     }
-
-    // Create CoinTransaction record
-    await CoinTransaction.create({
-      user: userId,
-      type: type === 'credit' ? 'earned' : 'spent',
-      amount,
-      source: 'admin',
-      description: `Admin partner earnings adjustment: ${reason}`,
-      metadata: {
-        partnerEarning: true,
-        partnerEarningType: 'cashback',
-        adminUserId,
-        adjustmentType: type,
-        reason,
-      },
-    });
 
     // Update Partner.earnings
     const partner = await Partner.findOne({ userId });

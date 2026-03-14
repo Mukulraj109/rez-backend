@@ -97,21 +97,21 @@ After restarting, run these commands:
 #### Test Offers Endpoint:
 ```bash
 curl -X GET "http://localhost:5001/api/offers" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGVmNGQ0MTA2MWZhYWYwNDUyMjI1MDYiLCJyb2xlIjoidXNlciIsImlhdCI6MTc2MTI4NDA4NiwiZXhwIjoxNzYxMzcwNDg2fQ.Egd9J4T-i-mOrH2qPqUWpJew4MjKOFCQluepqnhuSm4"
+  -H "Authorization: Bearer <JWT_TOKEN_REDACTED>"
 ```
 **Expected:** Should return 11 offers
 
 #### Test Referral Code Endpoint:
 ```bash
 curl -X GET "http://localhost:5001/api/referral/code" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGVmNGQ0MTA2MWZhYWYwNDUyMjI1MDYiLCJyb2xlIjoidXNlciIsImlhdCI6MTc2MTI4NDA4NiwiZXhwIjoxNzYxMzcwNDg2fQ.Egd9J4T-i-mOrH2qPqUWpJew4MjKOFCQluepqnhuSm4"
+  -H "Authorization: Bearer <JWT_TOKEN_REDACTED>"
 ```
 **Expected:** Should return referral code and link
 
 #### Test Referral Stats Endpoint:
 ```bash
 curl -X GET "http://localhost:5001/api/referral/stats" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGVmNGQ0MTA2MWZhYWYwNDUyMjI1MDYiLCJyb2xlIjoidXNlciIsImlhdCI6MTc2MTI4NDA4NiwiZXhwIjoxNzYxMzcwNDg2fQ.Egd9J4T-i-mOrH2qPqUWpJew4MjKOFCQluepqnhuSm4"
+  -H "Authorization: Bearer <JWT_TOKEN_REDACTED>"
 ```
 **Expected:** Should return referral statistics
 
@@ -255,3 +255,4 @@ After restarting, all endpoints should work perfectly!
 **Date:** October 24, 2025
 **Fixed By:** Claude Code
 **Status:** ✅ COMPLETE - Ready for Testing After Restart
+

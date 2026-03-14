@@ -539,16 +539,18 @@ async function creditRewardToWallet(
     } catch { /* fallback handled by backfill job */ }
   }
 
-  // Use walletService for atomic CoinTransaction + Wallet $inc + LedgerEntry
-  const { walletService } = await import('./walletService');
-  const result = await walletService.credit({
+  // Use rewardEngine for unified reward issuance
+  const { rewardEngine } = await import('../core/rewardEngine');
+  const result = await rewardEngine.issue({
     userId,
     amount,
+    rewardType: 'bonus_campaign',
     source: 'bonus_campaign',
     description: `Bonus: ${campaign.title}`,
     operationType: 'bonus_campaign',
     referenceId: `bonus:${claimId}`,
     referenceModel: 'BonusClaim',
+    coinType: coinType as 'rez' | 'prive' | 'promo' | 'branded',
     metadata: {
       bonusCampaignId: campaign._id,
       bonusClaimId: claimId,
@@ -559,7 +561,24 @@ async function creditRewardToWallet(
       idempotencyKey: `bonus-campaign:${claimId}`,
     },
     category,
+    skipCap: true,
+    skipMultiplier: true,
   });
+
+  // Track merchant liability for non-platform campaigns (fire-and-forget)
+  if (campaign.fundingSource?.type !== 'platform' && campaign.fundingSource?.partnerId) {
+    import('./liabilityService').then(({ liabilityService }) => {
+      liabilityService.recordIssuance({
+        merchantId: campaign.fundingSource.partnerId!.toString(),
+        storeId: campaign.fundingSource.partnerId!.toString(), // Partner acts as store
+        campaignId: campaign._id.toString(),
+        campaignType: 'bonus_campaign',
+        amount: result.amount,
+        referenceId: `bonus:${claimId}`,
+        referenceModel: 'BonusClaim',
+      }).catch(() => {});
+    });
+  }
 
   // Return a compatible object for callers that read ._id
   return { _id: result.transactionId, amount: result.amount, balance: result.newBalance };

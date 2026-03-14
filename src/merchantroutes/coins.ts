@@ -157,6 +157,18 @@ router.post('/award', async (req: Request, res: Response) => {
       }
     );
 
+    // Track merchant liability (fire-and-forget)
+    import('../services/liabilityService').then(({ liabilityService }) => {
+      liabilityService.recordIssuance({
+        merchantId,
+        storeId,
+        campaignType: 'branded_coin_award',
+        amount: coinAmount,
+        referenceId: `merchant-coin-award:${merchantId}:${userId}:${Date.now()}`,
+        referenceModel: 'CoinTransaction',
+      }).catch((err: any) => logger.error('Liability tracking failed for coin award', err));
+    });
+
     logger.info(`🎁 [MERCHANT COINS] ${store.name} awarded ${coinAmount} branded coins to user ${userId}`);
 
     return res.json({

@@ -348,10 +348,10 @@ async function processExpiredCoins(): Promise<ExpiryStats> {
           }
         );
 
-        // Deduct expired amount from Wallet.balance.available atomically
+        // Deduct expired amount from Wallet balance atomically
         await Wallet.findOneAndUpdate(
           { user: new mongoose.Types.ObjectId(userId) },
-          { $inc: { 'balance.available': -expiryData.expiredAmount } }
+          { $inc: { 'balance.available': -expiryData.expiredAmount, 'balance.total': -expiryData.expiredAmount } }
         );
         invalidateWalletCache(userId).catch(() => {});
 

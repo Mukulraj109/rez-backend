@@ -29,11 +29,11 @@ The referral endpoints `/api/referral/code` and `/api/referral/stats` have been 
 ```bash
 # Test Referral Code
 curl http://localhost:5001/api/referral/code \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGVmNGQ0MTA2MWZhYWYwNDUyMjI1MDYiLCJyb2xlIjoidXNlciIsImlhdCI6MTc2MTI4NDA4NiwiZXhwIjoxNzYxMzcwNDg2fQ.Egd9J4T-i-mOrH2qPqUWpJew4MjKOFCQluepqnhuSm4"
+  -H "Authorization: Bearer <JWT_TOKEN_REDACTED>"
 
 # Test Referral Stats
 curl http://localhost:5001/api/referral/stats \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGVmNGQ0MTA2MWZhYWYwNDUyMjI1MDYiLCJyb2xlIjoidXNlciIsImlhdCI6MTc2MTI4NDA4NiwiZXhwIjoxNzYxMzcwNDg2fQ.Egd9J4T-i-mOrH2qPqUWpJew4MjKOFCQluepqnhuSm4"
+  -H "Authorization: Bearer <JWT_TOKEN_REDACTED>"
 
 # Test Offers (should return 12 offers)
 curl http://localhost:5001/api/offers

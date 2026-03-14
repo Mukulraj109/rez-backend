@@ -1,7 +1,7 @@
 // Quick test to verify endpoints
 import axios from 'axios';
 
-const TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGVmNGQ0MTA2MWZhYWYwNDUyMjI1MDYiLCJyb2xlIjoidXNlciIsImlhdCI6MTc2MTI4NDA4NiwiZXhwIjoxNzYxMzcwNDg2fQ.Egd9J4T-i-mOrH2qPqUWpJew4MjKOFCQluepqnhuSm4';
+const TOKEN = '<JWT_TOKEN_REDACTED>';
 
 async function quickTest() {
   console.log('\n🧪 QUICK ENDPOINT TEST\n');

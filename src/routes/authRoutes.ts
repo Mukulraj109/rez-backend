@@ -43,6 +43,7 @@ router.post('/refresh-token',
 
 // Protected routes
 router.post('/logout', 
+  authenticate,
   logout
 );
 

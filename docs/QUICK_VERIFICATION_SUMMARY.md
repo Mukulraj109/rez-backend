@@ -93,7 +93,7 @@ Also update lines 45-55 to use nested paths:
 
 ### Test Token Used
 ```
-Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGVmNGQ0MTA2MWZhYWYwNDUyMjI1MDYiLCJyb2xlIjoidXNlciIsImlhdCI6MTc2MTI4NDA4NiwiZXhwIjoxNzYxMzcwNDg2fQ.Egd9J4T-i-mOrH2qPqUWpJew4MjKOFCQluepqnhuSm4
+Bearer <JWT_TOKEN_REDACTED>
 ```
 
 ### Endpoint Test Results
@@ -165,3 +165,4 @@ What needs 2 minutes:
 2. Optional: Fix offers filter (5-line code change)
 
 **After restart → 100% production ready! 🎉**
+

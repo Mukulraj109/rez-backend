@@ -7,6 +7,7 @@ import { walletService } from './walletService';
 import { createServiceLogger } from '../config/logger';
 import { getCachedWalletConfig } from './walletCacheService';
 import { CURRENCY_RULES } from '../config/currencyRules';
+import { rewardEngine, RewardType } from '../core/rewardEngine';
 
 const logger = createServiceLogger('coin-service');
 
@@ -130,7 +131,9 @@ export async function getCoinTransactions(
 }
 
 /**
- * Award coins to user (optionally to a specific MainCategory balance)
+ * Award coins to user (optionally to a specific MainCategory balance).
+ * Delegates to the central rewardEngine for unified eligibility, caps, multipliers,
+ * wallet mutation, ledger, and event emission.
  */
 export async function awardCoins(
   userId: string,
@@ -145,102 +148,23 @@ export async function awardCoins(
     throw new Error('Amount must be positive');
   }
 
-  // Program cap enforcement (fail-open: if service fails, award proceeds)
-  let adjustedAmount = amount;
-  try {
-    const capCheck = await specialProgramService.checkEarningCap(userId, amount, source);
-    if (!capCheck.allowed && capCheck.adjustedAmount === 0) {
-      return {
-        transactionId: null,
-        amount: 0,
-        newBalance: await getCoinBalance(userId),
-        source,
-        description,
-        category: category || null,
-        cappedReason: capCheck.reason,
-      };
-    }
-    adjustedAmount = capCheck.adjustedAmount;
-  } catch (capError) {
-    logger.error('Program cap check failed (proceeding with original amount)', capError, { userId, amount, source });
-  }
-
-  // Set expiresAt for promo/branded/prive coins based on admin-configurable rules
-  const effectiveCoinType = coinType || (metadata?.coinType as 'rez' | 'prive' | 'promo' | 'branded') || 'rez';
-  if (effectiveCoinType !== 'rez') {
-    const expiresAt = await calculateExpiryDate(effectiveCoinType);
-    if (expiresAt) {
-      metadata = { ...metadata, expiresAt };
-    }
-  }
-
-  // Use walletService for atomic CoinTransaction + Wallet $inc + LedgerEntry
-  const result = await walletService.credit({
+  const result = await rewardEngine.issue({
     userId,
-    amount: adjustedAmount,
+    amount,
+    rewardType: mapSourceToRewardType(source),
     source,
     description,
     operationType: 'loyalty_credit',
     referenceId: metadata?.referenceId || `coin-award:${userId}:${Date.now()}`,
     referenceModel: metadata?.referenceModel || 'CoinTransaction',
-    metadata,
     category,
+    coinType: coinType || (metadata?.coinType as 'rez' | 'prive' | 'promo' | 'branded') || 'rez',
+    metadata,
   });
-  logger.info(`Wallet credited: +${adjustedAmount} coins${category ? ` (${category})` : ''}`, { userId, source });
 
-  // Also update UserLoyalty categoryCoins if category is provided
-  if (category) {
-    try {
-      const loyalty = await UserLoyalty.findOne({ userId });
-      if (loyalty) {
-        const catCoins = loyalty.categoryCoins?.get(category) || { available: 0, expiring: 0 };
-        catCoins.available += adjustedAmount;
-        if (!loyalty.categoryCoins) {
-          (loyalty as any).categoryCoins = new Map();
-        }
-        loyalty.categoryCoins!.set(category, catCoins);
-        loyalty.markModified('categoryCoins');
-        await loyalty.save();
-      }
-    } catch (loyaltyError) {
-      logger.error('Failed to update UserLoyalty categoryCoins', loyaltyError, { userId, category });
-    }
-  }
+  logger.info(`Wallet credited via rewardEngine: +${result.amount} coins${category ? ` (${category})` : ''}`, { userId, source });
 
-  // Program multiplier bonus (fail-open: if bonus fails, base award still succeeded)
-  let multiplierBonus = 0;
-  try {
-    const { bonus, programSlug, programBonuses } = await specialProgramService.calculateMultiplierBonus(userId, adjustedAmount, source);
-    if (bonus > 0) {
-      const slugLabel = programBonuses.map(pb => pb.slug).join('+');
-      // Use walletService for bonus (creates CoinTransaction + Wallet $inc + LedgerEntry)
-      await walletService.credit({
-        userId,
-        amount: bonus,
-        source: 'program_multiplier_bonus',
-        description: `${slugLabel} multiplier bonus on ${source}`,
-        operationType: 'loyalty_credit',
-        referenceId: `multiplier-bonus:${result.transactionId}`,
-        referenceModel: 'CoinTransaction',
-        metadata: { originalTransactionId: result.transactionId, programSlug: slugLabel, programBonuses },
-        category,
-      });
-
-      multiplierBonus = bonus;
-      logger.info(`Multiplier bonus: +${bonus} coins (${slugLabel})`, { userId });
-
-      // Track bonus per program in each membership
-      for (const pb of programBonuses) {
-        await specialProgramService.incrementMultiplierBonus(userId, pb.slug, pb.bonus).catch(() => {});
-      }
-    }
-
-    // Track monthly earnings for active memberships
-    await specialProgramService.incrementMonthlyEarnings(userId, adjustedAmount + multiplierBonus).catch(() => {});
-  } catch (multiplierError) {
-    logger.error('Program multiplier calculation failed', multiplierError, { userId, source });
-  }
-
+  // Return backward-compatible shape
   return {
     transactionId: result.transactionId,
     amount: result.amount,
@@ -248,8 +172,50 @@ export async function awardCoins(
     source: result.source,
     description: result.description,
     category: category || null,
-    ...(multiplierBonus > 0 && { multiplierBonus }),
+    ...(result.cappedReason && { cappedReason: result.cappedReason }),
+    ...(result.multiplierBonus && { multiplierBonus: result.multiplierBonus }),
   };
+}
+
+/** Map CoinTransaction source strings to RewardType enum values */
+function mapSourceToRewardType(source: string): RewardType {
+  const map: Record<string, RewardType> = {
+    spin_wheel: 'spin_wheel',
+    scratch_card: 'scratch_card',
+    quiz_game: 'quiz_game',
+    memory_match: 'game_prize',
+    coin_hunt: 'game_prize',
+    guess_price: 'game_prize',
+    achievement: 'achievement',
+    referral: 'referral',
+    survey: 'survey',
+    review: 'engagement',
+    bill_upload: 'engagement',
+    daily_login: 'engagement',
+    social_share_reward: 'engagement',
+    poll_vote: 'engagement',
+    photo_upload: 'engagement',
+    offer_comment: 'engagement',
+    ugc_reel: 'engagement',
+    creator_pick_reward: 'creator_earning',
+    bonus_campaign: 'bonus_campaign',
+    leaderboard_prize: 'leaderboard_prize',
+    tournament_prize: 'tournament_prize',
+    learning_reward: 'learning_reward',
+    social_impact_reward: 'social_impact',
+    challenge_reward: 'challenge_reward',
+    prive_invite_reward: 'prive_invite',
+    event_booking: 'event_reward',
+    event_checkin: 'event_reward',
+    event_participation: 'event_reward',
+    event_sharing: 'event_reward',
+    event_entry: 'event_reward',
+    merchant_award: 'pick_approval',
+    admin: 'admin_adjustment',
+    cashback: 'cashback',
+    purchase_reward: 'cashback',
+  };
+  return map[source] || 'engagement';
 }
 
 /**

@@ -681,11 +681,12 @@ class MallAffiliateService {
         isRedeemed: false,
       }], { session });
 
-      // Credit to wallet via walletService (atomic $inc + CoinTransaction + LedgerEntry)
-      const { walletService } = await import('./walletService');
-      await walletService.credit({
+      // Credit to wallet via rewardEngine (unified reward issuance)
+      const { rewardEngine } = await import('../core/rewardEngine');
+      await rewardEngine.issue({
         userId: purchase.user.toString(),
         amount: purchase.actualCashback,
+        rewardType: 'mall_affiliate',
         source: 'cashback',
         description: `Affiliate cashback from ${brand?.name || 'Mall'} purchase`,
         operationType: 'mall_affiliate',
@@ -697,6 +698,8 @@ class MallAffiliateService {
           orderAmount: purchase.orderAmount,
           cashbackRate: purchase.cashbackRate,
         },
+        skipCap: true,
+        skipMultiplier: true,
         session,
       });
 

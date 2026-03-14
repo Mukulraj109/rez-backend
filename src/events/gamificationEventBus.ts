@@ -38,11 +38,15 @@ export type ActivityEventType =
   | 'social_share' | 'social_media_submitted' | 'social_media_approved' | 'social_media_credited'
   | 'favorite_added' | 'wishlist_added'
   | 'challenge_completed'
-  | 'invite_applied';
+  | 'invite_applied'
+  | 'reward_issued'
+  | 'refund_processed';
 
 export type EventCategory =
   | 'order' | 'review' | 'referral' | 'video' | 'bill'
-  | 'game' | 'social' | 'login' | 'project' | 'offer' | 'event';
+  | 'game' | 'social' | 'login' | 'project' | 'offer' | 'event'
+  | 'reward'
+  | 'refund';
 
 /**
  * Gamification Event Bus — central dispatcher for all gamification events.
@@ -186,6 +190,8 @@ class GamificationEventBus {
     if (type.startsWith('offer')) return 'offer';
     if (type.startsWith('challenge')) return 'event';
     if (type.startsWith('invite')) return 'referral';
+    if (type.startsWith('reward')) return 'reward';
+    if (type.startsWith('refund')) return 'refund';
     return 'event';
   }
 }

@@ -538,46 +538,29 @@ router.post('/:id/refund', requireSeniorAdmin, async (req: Request, res: Respons
     // Calculate refund amount
     const refundAmount = order.calculateRefund ? order.calculateRefund() : order.totals.paidAmount;
 
-    // If paid with wallet, credit back to user's wallet (atomic to prevent race conditions)
-    if (order.payment.method === 'wallet' && order.user) {
-      const updatedUser = await User.findByIdAndUpdate(
-        order.user,
-        {
-          $inc: {
-            'wallet.balance': refundAmount,
-            'wallet.totalEarned': refundAmount,
-            'walletBalance': refundAmount
-          }
-        },
-        { new: true }
-      );
-      if (updatedUser) {
-        logger.info(`💰 [ADMIN ORDERS] Refunded ${refundAmount} to user ${updatedUser._id} wallet`);
-      }
-    }
-
-    // Record ledger entry for refund (non-blocking)
-    try {
-      const ledgerService = require('../../services/ledgerService').default || require('../../services/ledgerService');
-      const { Types: MongoTypes } = require('mongoose');
-      const PLATFORM_FLOAT_ID = new MongoTypes.ObjectId('000000000000000000000002');
-      await ledgerService.recordEntry({
-        debitAccount: { type: 'platform_float', id: PLATFORM_FLOAT_ID },
-        creditAccount: { type: 'user_wallet', id: order.user as any },
-        amount: refundAmount,
-        coinType: 'nuqta',
-        operationType: 'order_refund',
-        referenceId: String(order._id),
-        referenceModel: 'Order',
-        metadata: {
-          description: `Admin refund for order ${order.orderNumber}. Reason: ${reason.trim()}`,
+    // Process refund via centralized refundService (wallet credit + ledger + notification + event)
+    if (order.user && refundAmount > 0) {
+      try {
+        const { refundService } = await import('../../services/refundService');
+        await refundService.processRefund({
+          userId: order.user.toString(),
+          amount: refundAmount,
+          reason: reason.trim(),
+          refundType: 'admin_manual',
+          referenceId: `admin-refund:${order._id}`,
+          referenceModel: 'Order',
           adminUserId: (req as any).userId,
-          idempotencyKey: `refund_${String(order._id)}`,
-        },
-      });
-      logger.info(`✅ [ORDER:LEDGER] Refund ledger entry created: ${refundAmount}, order ${order.orderNumber}`);
-    } catch (ledgerErr) {
-      logger.error('[ORDER:LEDGER] Failed to create refund ledger entry (non-blocking):', ledgerErr);
+        });
+        logger.info(`[ADMIN ORDERS] Refund processed via refundService: ${refundAmount} for order ${order.orderNumber}`);
+      } catch (refundErr) {
+        logger.error('[ADMIN ORDERS] RefundService failed, falling back to direct wallet credit:', refundErr);
+        // Fallback: direct User wallet increment (legacy path)
+        if (order.payment.method === 'wallet') {
+          await User.findByIdAndUpdate(order.user, {
+            $inc: { 'wallet.balance': refundAmount, 'wallet.totalEarned': refundAmount, 'walletBalance': refundAmount }
+          });
+        }
+      }
     }
 
     // Re-read order to add timeline (claimed already updated status/payment)

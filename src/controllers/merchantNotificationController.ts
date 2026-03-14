@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { Notification } from '../models/Notification';
 import { UserSettings } from '../models/UserSettings';
+import { MerchantUser } from '../models/MerchantUser';
 import { sendSuccess, sendNotFound, sendError } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
@@ -1129,3 +1130,95 @@ export const markAllAsRead = asyncHandler(async (req: Request, res: Response) =>
     throw new AppError(error.message || 'Failed to mark all notifications as read', 500);
   }
 });
+
+/**
+ * Register push notification token for merchant
+ */
+export const registerPushToken = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const merchantId = (req as any).merchantId; // Merchant model's _id
+    const merchantUser = (req as any).merchantUser; // MerchantUser document (if team member)
+    const { token, platform, deviceName } = req.body;
+
+    if (!token || !platform) {
+      res.status(400).json({ success: false, message: 'Token and platform are required' });
+      return;
+    }
+
+    // Remove token from any other merchant user (in case device was reassigned)
+    await MerchantUser.updateMany(
+      { 'pushTokens.token': token },
+      { $pull: { pushTokens: { token } } }
+    );
+
+    // Find the MerchantUser to update: use merchantUser._id if available, else find owner by merchantId
+    let targetUserId = merchantUser?._id;
+    if (!targetUserId) {
+      // Fallback: find the owner MerchantUser for this merchant
+      const owner = await MerchantUser.findOne({ merchantId, role: 'owner' }).select('_id').lean();
+      if (!owner) {
+        // No MerchantUser exists yet — create one for this merchant
+        const merchant = (req as any).merchant;
+        const newUser = await MerchantUser.create({
+          merchantId,
+          email: merchant?.email || 'owner@merchant.local',
+          name: merchant?.ownerName || merchant?.businessName || 'Owner',
+          role: 'owner',
+          status: 'active',
+          invitedBy: merchantId,
+          pushTokens: [{ token, platform, deviceName: deviceName || undefined, lastUsed: new Date() }]
+        });
+        res.json({ success: true, message: 'Push token registered successfully' });
+        return;
+      }
+      targetUserId = owner._id;
+    }
+
+    // Remove old entry then add new
+    await MerchantUser.findByIdAndUpdate(targetUserId, {
+      $pull: { pushTokens: { token } }
+    });
+
+    await MerchantUser.findByIdAndUpdate(targetUserId, {
+      $push: {
+        pushTokens: {
+          token,
+          platform,
+          deviceName: deviceName || undefined,
+          lastUsed: new Date()
+        }
+      }
+    });
+
+    res.json({ success: true, message: 'Push token registered successfully' });
+  } catch (error: any) {
+    logger.error('Failed to register push token:', error);
+    res.status(500).json({ success: false, message: 'Failed to register push token' });
+  }
+};
+
+/**
+ * Unregister push notification token for merchant
+ */
+export const unregisterPushToken = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const merchantId = (req as any).merchantId;
+    const { token } = req.body;
+
+    if (!token) {
+      res.status(400).json({ success: false, message: 'Token is required' });
+      return;
+    }
+
+    // Remove from ALL MerchantUsers under this merchant (covers all team members)
+    await MerchantUser.updateMany(
+      { merchantId, 'pushTokens.token': token },
+      { $pull: { pushTokens: { token } } }
+    );
+
+    res.json({ success: true, message: 'Push token unregistered successfully' });
+  } catch (error: any) {
+    logger.error('Failed to unregister push token:', error);
+    res.status(500).json({ success: false, message: 'Failed to unregister push token' });
+  }
+};

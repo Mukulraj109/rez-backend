@@ -203,19 +203,22 @@ class CashbackService {
         throw createError;
       }
 
-      // Credit cashback to wallet as ReZ coins immediately via walletService
+      // Credit cashback to wallet via rewardEngine (unified reward issuance)
       if (amount > 0) {
         try {
-          const { walletService } = await import('./walletService');
-          await walletService.credit({
+          const { rewardEngine } = await import('../core/rewardEngine');
+          await rewardEngine.issue({
             userId: order.user.toString(),
             amount,
+            rewardType: 'cashback',
             source: 'cashback',
             description: `${rate}% cashback on order #${order.orderNumber}`,
             operationType: 'cashback',
             referenceId: `cashback:${order._id}`,
             referenceModel: 'Order',
             metadata: { orderId: order._id, orderAmount: order.totals.total },
+            skipCap: true,
+            skipMultiplier: true,
           });
 
           // Atomic status transition — use findOneAndUpdate to avoid stale-document overwrites

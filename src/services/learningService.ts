@@ -113,62 +113,28 @@ class LearningService {
       await progress.save();
     }
 
-    // Award coins
+    // Award coins via rewardEngine (unified: wallet + CoinTransaction + ledger)
     const coinsReward = content.coinReward || 0;
     if (coinsReward > 0) {
-      // Atomic wallet update
-      const updatedWallet = await Wallet.findOneAndUpdate(
-        { user: userId, 'coins.type': 'rez' },
-        {
-          $inc: {
-            'balance.available': coinsReward,
-            'balance.total': coinsReward,
-            'statistics.totalEarned': coinsReward,
-            'coins.$.amount': coinsReward
-          },
-          $set: {
-            'coins.$.lastEarned': new Date(),
-            lastTransactionAt: new Date()
-          }
-        },
-        { new: true }
-      );
-
-      if (!updatedWallet) {
-        // Create wallet if not exists
-        const wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
-        if (wallet) {
-          await Wallet.findOneAndUpdate(
-            { _id: wallet._id, 'coins.type': 'rez' },
-            {
-              $inc: {
-                'balance.available': coinsReward,
-                'balance.total': coinsReward,
-                'statistics.totalEarned': coinsReward,
-                'coins.$.amount': coinsReward
-              },
-              $set: { lastTransactionAt: new Date() }
-            }
-          );
-        }
-      }
-
-      // Create CoinTransaction record
       try {
-        await CoinTransaction.createTransaction(
+        const { rewardEngine } = await import('../core/rewardEngine');
+        await rewardEngine.issue({
           userId,
-          'earned',
-          coinsReward,
-          'learning_reward',
-          `Learning completed: ${content.title}`,
-          {
+          amount: coinsReward,
+          rewardType: 'learning_reward',
+          source: 'learning_reward',
+          description: `Learning completed: ${content.title}`,
+          operationType: 'learning_reward',
+          referenceId: `learning:${content._id}:${userId}`,
+          referenceModel: 'LearningProgress',
+          metadata: {
             contentId: String(content._id),
             contentSlug: content.slug,
             contentTitle: content.title,
-          }
-        );
+          },
+        });
       } catch (err) {
-        logger.error('[LEARNING SERVICE] Failed to create CoinTransaction:', err);
+        logger.error('[LEARNING SERVICE] Failed to credit learning reward:', err);
       }
 
       // Mark reward as claimed

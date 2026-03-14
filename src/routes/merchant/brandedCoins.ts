@@ -299,6 +299,18 @@ router.post('/stores/:storeId/branded-campaigns/award', async (req: Request, res
       // Don't fail the request -- the coins were already awarded
     }
 
+    // Track merchant liability (fire-and-forget)
+    import('../../services/liabilityService').then(({ liabilityService }) => {
+      liabilityService.recordIssuance({
+        merchantId,
+        storeId,
+        campaignType: 'branded_coin_award',
+        amount,
+        referenceId: `branded-coin-award:${merchantId}:${userId}:${Date.now()}`,
+        referenceModel: 'CoinTransaction',
+      }).catch((err: any) => logger.error('[Merchant BrandedCoins] Liability tracking failed', err));
+    });
+
     // Get the updated branded coin balance for this store
     const updatedWallet = await Wallet.findOne({ user: userId });
     const brandedCoin = updatedWallet?.brandedCoins?.find(

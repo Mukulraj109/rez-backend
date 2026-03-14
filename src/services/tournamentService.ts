@@ -79,40 +79,23 @@ class TournamentService {
 
     // Enforce entry fee
     if (tournament.entryFee > 0) {
-      const wallet = await Wallet.findOne({ user: userId }).lean();
-      if (!wallet || wallet.balance.available < tournament.entryFee) {
-        throw new Error(`Insufficient coins. Entry fee is ${tournament.entryFee} coins.`);
-      }
-
-      // Deduct entry fee atomically
-      const deducted = await Wallet.findOneAndUpdate(
-        { user: userId, 'balance.available': { $gte: tournament.entryFee } },
-        {
-          $inc: {
-            'balance.available': -tournament.entryFee,
-            'balance.total': -tournament.entryFee,
-          },
-          $set: { lastTransactionAt: new Date() }
-        },
-        { new: true }
-      );
-
-      if (!deducted) {
-        throw new Error('Failed to deduct entry fee. Please try again.');
-      }
-
-      // Record the transaction
+      const { walletService } = await import('./walletService');
       try {
-        await CoinTransaction.createTransaction(
+        await walletService.debit({
           userId,
-          'spent',
-          tournament.entryFee,
-          'tournament_entry',
-          `Tournament entry fee: ${tournament.name}`,
-          { tournamentId: String(tournament._id), tournamentName: tournament.name }
-        );
-      } catch (txErr) {
-        logger.error('[TOURNAMENT] Failed to record entry fee transaction:', txErr);
+          amount: tournament.entryFee,
+          source: 'tournament_entry',
+          description: `Tournament entry fee: ${tournament.name}`,
+          operationType: 'payment',
+          referenceId: `tournament-entry:${tournament._id}:${userId}`,
+          referenceModel: 'Tournament',
+          metadata: { tournamentId: String(tournament._id), tournamentName: tournament.name },
+        });
+      } catch (err: any) {
+        if (err.message?.includes('Insufficient') || err.message?.includes('concurrent')) {
+          throw new Error(`Insufficient coins. Entry fee is ${tournament.entryFee} coins.`);
+        }
+        throw err;
       }
     }
 
@@ -362,27 +345,24 @@ class TournamentService {
         logger.info(`⚠️ [TOURNAMENT] Skipping prize distribution for "${tournament.name}" - only ${tournament.participants.length}/${tournament.minParticipants} participants`);
         // Refund entry fees if applicable
         if (tournament.entryFee > 0) {
+          const { rewardEngine } = await import('../core/rewardEngine');
           for (const participant of tournament.participants) {
             try {
-              await Wallet.findOneAndUpdate(
-                { user: participant.user },
-                {
-                  $inc: {
-                    'balance.available': tournament.entryFee,
-                    'balance.total': tournament.entryFee,
-                  }
-                }
-              );
-              await CoinTransaction.createTransaction(
-                participant.user.toString(),
-                'earned',
-                tournament.entryFee,
-                'tournament_refund',
-                `Entry fee refund: ${tournament.name} (minimum participants not met)`,
-                { tournamentId: String(tournament._id) }
-              );
+              await rewardEngine.issue({
+                userId: participant.user.toString(),
+                amount: tournament.entryFee,
+                rewardType: 'tournament_prize',
+                source: 'tournament_refund' as any,
+                description: `Entry fee refund: ${tournament.name} (minimum participants not met)`,
+                operationType: 'refund',
+                referenceId: `tournament-refund:${tournament._id}:${participant.user}`,
+                referenceModel: 'Tournament',
+                metadata: { tournamentId: String(tournament._id) },
+                skipCap: true,
+                skipMultiplier: true,
+              });
             } catch (refundErr) {
-              logger.error(`❌ [TOURNAMENT] Failed to refund entry fee for user ${participant.user}:`, refundErr);
+              logger.error(`[TOURNAMENT] Failed to refund entry fee for user ${participant.user}:`, refundErr);
             }
           }
         }
@@ -428,65 +408,28 @@ class TournamentService {
         const coinsReward = prize.coins || 0;
 
         if (coinsReward > 0) {
-          // Fix #2: Atomic wallet update using $inc (matches challengeService pattern)
-          let updatedWallet = await Wallet.findOneAndUpdate(
-            { user: userId, 'coins.type': 'rez' },
-            {
-              $inc: {
-                'balance.available': coinsReward,
-                'balance.total': coinsReward,
-                'statistics.totalEarned': coinsReward,
-                'coins.$.amount': coinsReward
-              },
-              $set: {
-                'coins.$.lastEarned': new Date(),
-                lastTransactionAt: new Date()
-              }
+          // Use rewardEngine for unified wallet + CoinTransaction + ledger
+          const { rewardEngine } = await import('../core/rewardEngine');
+          await rewardEngine.issue({
+            userId,
+            amount: coinsReward,
+            rewardType: 'tournament_prize',
+            source: 'tournament_prize',
+            description: `Tournament prize: Rank ${i + 1} in ${tournament.name}`,
+            operationType: 'tournament_prize',
+            referenceId: `tournament-prize:${tournament._id}:rank${i + 1}`,
+            referenceModel: 'Tournament',
+            metadata: {
+              tournamentId: String(tournament._id),
+              tournamentName: tournament.name,
+              rank: i + 1,
+              badge: prize.badge || null,
             },
-            { new: true }
-          );
+            skipCap: true,
+            skipMultiplier: true,
+          });
 
-          if (!updatedWallet) {
-            // Wallet doesn't exist — create and retry
-            const wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
-            if (wallet) {
-              updatedWallet = await Wallet.findOneAndUpdate(
-                { _id: wallet._id, 'coins.type': 'rez' },
-                {
-                  $inc: {
-                    'balance.available': coinsReward,
-                    'balance.total': coinsReward,
-                    'statistics.totalEarned': coinsReward,
-                    'coins.$.amount': coinsReward
-                  },
-                  $set: { lastTransactionAt: new Date() }
-                },
-                { new: true }
-              );
-            }
-          }
-
-          // Fix #1: Create CoinTransaction record (source of truth for earnings)
-          try {
-            await CoinTransaction.createTransaction(
-              userId,
-              'earned',
-              coinsReward,
-              'tournament_prize',
-              `Tournament prize: Rank ${i + 1} in ${tournament.name}`,
-              {
-                tournamentId: String(tournament._id),
-                tournamentName: tournament.name,
-                rank: i + 1,
-                badge: prize.badge || null
-              }
-            );
-          } catch (coinTxError) {
-            logger.error(`❌ [TOURNAMENT] Failed to create CoinTransaction for rank ${i + 1}:`, coinTxError);
-            // Don't fail - wallet was already updated atomically
-          }
-
-          logger.info(`✅ [TOURNAMENT] Awarded ${coinsReward} coins to rank ${i + 1} (${userId})`);
+          logger.info(`[TOURNAMENT] Awarded ${coinsReward} coins to rank ${i + 1} (${userId})`);
         }
 
         // Fix #4: Set prizeAwarded AFTER successful wallet update + CoinTransaction

@@ -951,7 +951,7 @@ async function handleStripeRefund(event: any) {
     logger.info('[STRIPE WEBHOOK] Refund processed for charge:', charge.id);
 
     // Find order by payment intent ID
-    const order = await Order.findOne({ 'payment.transactionId': paymentIntentId }).lean();
+    const order = await Order.findOne({ 'payment.transactionId': paymentIntentId });
 
     if (!order) {
       logger.error('[STRIPE WEBHOOK] Order not found for payment intent:', paymentIntentId);

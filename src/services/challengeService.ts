@@ -457,116 +457,28 @@ class ChallengeService {
       multiplier: challenge.rewards.multiplier
     };
 
-    // Credit coins to wallet
-    let newWalletBalance: number | undefined;
+    // Credit coins to wallet via rewardEngine (unified: wallet + CoinTransaction + ledger)
     if (coinsReward > 0) {
       try {
-        logger.info(`💰 [CHALLENGE SERVICE] Crediting ${coinsReward} coins to user ${userId} for challenge ${challenge.title}`);
-
-        // Atomic wallet update (prevents race conditions on concurrent claims)
-        const updatedWallet = await Wallet.findOneAndUpdate(
-          { user: userId, 'coins.type': 'rez' },
-          {
-            $inc: {
-              'balance.available': coinsReward,
-              'balance.total': coinsReward,
-              'statistics.totalEarned': coinsReward,
-              'coins.$.amount': coinsReward
-            },
-            $set: {
-              'coins.$.lastUsed': new Date(),
-              lastTransactionAt: new Date()
-            }
+        const { rewardEngine } = await import('../core/rewardEngine');
+        await rewardEngine.issue({
+          userId,
+          amount: coinsReward,
+          rewardType: 'challenge_reward',
+          source: 'challenge_reward',
+          description: `Challenge reward: ${challenge.title}`,
+          operationType: 'achievement_reward',
+          referenceId: `challenge:${challenge._id}:${progress._id}`,
+          referenceModel: 'ChallengeProgress',
+          metadata: {
+            challengeId: String(challenge._id),
+            challengeTitle: challenge.title,
+            progressId: String(progress._id),
           },
-          { new: true }
-        );
-
-        if (!updatedWallet) {
-          // Wallet doesn't exist — create and retry
-          let wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
-          if (wallet) {
-            await Wallet.findOneAndUpdate(
-              { _id: wallet._id, 'coins.type': 'rez' },
-              {
-                $inc: {
-                  'balance.available': coinsReward,
-                  'balance.total': coinsReward,
-                  'statistics.totalEarned': coinsReward,
-                  'coins.$.amount': coinsReward
-                },
-                $set: { lastTransactionAt: new Date() }
-              },
-              { new: true }
-            );
-            newWalletBalance = (wallet.balance?.available || 0) + coinsReward;
-          }
-        } else {
-          newWalletBalance = updatedWallet.balance.available;
-        }
-
-        logger.info(`✅ [CHALLENGE SERVICE] Coins credited atomically. New balance: ${newWalletBalance}`);
-
-        // Create transaction record
-        try {
-          await Transaction.create({
-            user: userId,
-            type: 'credit',
-            category: 'earning',
-            amount: coinsReward,
-            currency: 'RC',
-            description: `Challenge reward: ${challenge.title}`,
-            source: {
-              type: 'bonus',
-              reference: challenge._id,
-              description: `Earned ${coinsReward} coins from completing challenge: ${challenge.title}`,
-              metadata: {
-                challengeId: String(challenge._id),
-                challengeTitle: challenge.title,
-                progressId: String(progress._id)
-              }
-            },
-            status: {
-              current: 'completed',
-              history: [{
-                status: 'completed',
-                timestamp: new Date(),
-                reason: 'Challenge reward credited successfully'
-              }]
-            },
-            balanceBefore: (newWalletBalance || 0) - coinsReward,
-            balanceAfter: newWalletBalance || 0,
-            netAmount: coinsReward,
-            isReversible: false
-          });
-
-          logger.info('✅ [CHALLENGE SERVICE] Transaction record created');
-        } catch (txError) {
-          logger.error('❌ [CHALLENGE SERVICE] Failed to create transaction:', txError);
-          // Don't fail the whole operation if transaction creation fails
-        }
-
-        // CRITICAL: Also create CoinTransaction record for auto-sync to work
-        try {
-          await CoinTransaction.createTransaction(
-            userId,
-            'earned',
-            coinsReward,
-            'challenge_reward',
-            `Challenge reward: ${challenge.title}`,
-            {
-              challengeId: String(challenge._id),
-              challengeTitle: challenge.title,
-              progressId: String(progress._id)
-            }
-          );
-          logger.info('✅ [CHALLENGE SERVICE] CoinTransaction record created for auto-sync');
-        } catch (coinTxError) {
-          logger.error('❌ [CHALLENGE SERVICE] Failed to create CoinTransaction:', coinTxError);
-          // Don't fail - wallet was already updated atomically
-        }
+        });
+        logger.info(`[CHALLENGE SERVICE] Credited ${coinsReward} coins via rewardEngine for challenge ${challenge.title}`);
       } catch (walletError) {
-        logger.error('❌ [CHALLENGE SERVICE] Error crediting coins to wallet:', walletError);
-        // Don't fail the claim if wallet credit fails - user can contact support
+        logger.error('[CHALLENGE SERVICE] Error crediting coins to wallet:', walletError);
       }
     }
 
@@ -582,7 +494,7 @@ class ChallengeService {
       }).catch(() => {});
     });
 
-    return { progress, rewards, walletBalance: newWalletBalance };
+    return { progress, rewards, walletBalance: undefined };
     } finally {
       // Release Redis lock
       if (lockToken) {

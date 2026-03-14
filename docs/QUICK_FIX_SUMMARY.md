@@ -32,21 +32,21 @@ The TypeScript has been recompiled, but your running server is still using the o
 ### Test 1: Offers
 ```bash
 curl -X GET "http://localhost:5001/api/offers" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGVmNGQ0MTA2MWZhYWYwNDUyMjI1MDYiLCJyb2xlIjoidXNlciIsImlhdCI6MTc2MTI4NDA4NiwiZXhwIjoxNzYxMzcwNDg2fQ.Egd9J4T-i-mOrH2qPqUWpJew4MjKOFCQluepqnhuSm4"
+  -H "Authorization: Bearer <JWT_TOKEN_REDACTED>"
 ```
 Expected: 11 offers
 
 ### Test 2: Referral Code
 ```bash
 curl -X GET "http://localhost:5001/api/referral/code" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGVmNGQ0MTA2MWZhYWYwNDUyMjI1MDYiLCJyb2xlIjoidXNlciIsImlhdCI6MTc2MTI4NDA4NiwiZXhwIjoxNzYxMzcwNDg2fQ.Egd9J4T-i-mOrH2qPqUWpJew4MjKOFCQluepqnhuSm4"
+  -H "Authorization: Bearer <JWT_TOKEN_REDACTED>"
 ```
 Expected: Referral code and link
 
 ### Test 3: Referral Stats
 ```bash
 curl -X GET "http://localhost:5001/api/referral/stats" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OGVmNGQ0MTA2MWZhYWYwNDUyMjI1MDYiLCJyb2xlIjoidXNlciIsImlhdCI6MTc2MTI4NDA4NiwiZXhwIjoxNzYxMzcwNDg2fQ.Egd9J4T-i-mOrH2qPqUWpJew4MjKOFCQluepqnhuSm4"
+  -H "Authorization: Bearer <JWT_TOKEN_REDACTED>"
 ```
 Expected: Referral statistics
 
@@ -91,3 +91,4 @@ The issue was:
 All issues resolved. **Restart your backend and test!**
 
 See `ENDPOINT_FIXES_COMPLETE.md` for detailed analysis.
+

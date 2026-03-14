@@ -48,8 +48,9 @@ const passthrough = (_req: Request, _res: Response, next: NextFunction) => next(
 // Solution: return a lazy wrapper that creates the real RedisStore on first use.
 let redisStoreWarningLogged = false;
 
-function makeStore(prefix: string) {
+function makeStore(prefix: string, options?: { failOpen?: boolean }) {
   if (isRateLimitDisabled) return undefined; // MemoryStore fallback
+  const failOpen = options?.failOpen ?? true;
 
   let innerStore: InstanceType<typeof RedisStore> | null = null;
   let initFailed = false;
@@ -100,7 +101,11 @@ function makeStore(prefix: string) {
         }
         return store.increment(key);
       }
-      // No Redis — permit the request (no rate limiting)
+      // No Redis. For critical routes, fail closed.
+      if (!failOpen) {
+        throw new Error('Rate limiter backend unavailable');
+      }
+      // No Redis — permit the request (legacy behavior for low-risk routes)
       if (!redisStoreWarningLogged) {
         logger.warn('[RateLimit] Redis not ready — rate limiting disabled until connected');
         redisStoreWarningLogged = true;
@@ -129,11 +134,17 @@ function makeStore(prefix: string) {
 }
 
 // ─── Safe rate limiter factory — catches store errors, passes request through ─
-function makeLimiter(options: Parameters<typeof rateLimit>[0]) {
+function makeLimiter(options: Parameters<typeof rateLimit>[0], failOpen = true) {
   const limiter = rateLimit(options);
   return (req: Request, res: Response, next: NextFunction) => {
     limiter(req, res, (err?: any) => {
       if (err) {
+        if (!failOpen) {
+          return res.status(503).json({
+            success: false,
+            message: 'Rate limiter unavailable. Please try again later.',
+          });
+        }
         if (!redisStoreWarningLogged) {
           logger.warn('[RateLimit] Store error, passing request through:', err.message);
           redisStoreWarningLogged = true;
@@ -175,7 +186,7 @@ export const authLimiter = isRateLimitDisabled
       windowMs: 15 * 60 * 1000,
       max: 5,
       keyGenerator,
-      store: makeStore('auth'),
+      store: makeStore('auth', { failOpen: false }),
       message: (_req: Request, res: Response) => {
         res.status(429).json({
           success: false,
@@ -186,7 +197,7 @@ export const authLimiter = isRateLimitDisabled
       standardHeaders: true,
       legacyHeaders: false,
       skipSuccessfulRequests: true,
-    });
+    }, false);
 
 export const registrationLimiter = isRateLimitDisabled
   ? passthrough
@@ -230,11 +241,11 @@ export const passwordResetLimiter = isRateLimitDisabled
       windowMs: 60 * 60 * 1000,
       max: 3,
       keyGenerator,
-      store: makeStore('pwd-reset'),
+      store: makeStore('pwd-reset', { failOpen: false }),
       message: rateLimitResponse,
       standardHeaders: true,
       legacyHeaders: false,
-    });
+    }, false);
 
 export const securityLimiter = isRateLimitDisabled
   ? passthrough
@@ -242,11 +253,11 @@ export const securityLimiter = isRateLimitDisabled
       windowMs: 15 * 60 * 1000,
       max: 3,
       keyGenerator,
-      store: makeStore('security'),
+      store: makeStore('security', { failOpen: false }),
       message: rateLimitResponse,
       standardHeaders: true,
       legacyHeaders: false,
-    });
+    }, false);
 
 export const uploadLimiter = isRateLimitDisabled
   ? passthrough

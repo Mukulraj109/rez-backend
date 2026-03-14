@@ -23,7 +23,7 @@ export const GAMIFICATION_FLAGS = {
   challenges: false,
   leaderboard: false,
   activityFeed: false,
-  miniGames: false,     // spin wheel, scratch card, quiz
+  miniGames: true,      // spin wheel, scratch card, quiz
   badges: false,
   tournaments: false,
   affiliate: false,

@@ -253,24 +253,32 @@ async function awardScratchCardPrize(userId: string, prize: ScratchCardPrize, se
   const idempotencyKey = `scratch_card:${sessionId}:${prize.type}`;
 
   if (prize.type === 'coins') {
-    await CoinTransaction.createTransaction(
+    const { rewardEngine } = await import('../core/rewardEngine');
+    await rewardEngine.issue({
       userId,
-      'earned',
-      prize.value,
-      'scratch_card',
-      `Won ${prize.value} coins from Scratch Card`,
-      { idempotencyKey, sessionId }
-    );
+      amount: prize.value,
+      rewardType: 'scratch_card',
+      source: 'scratch_card',
+      description: `Won ${prize.value} coins from Scratch Card`,
+      operationType: 'scratch_card_prize',
+      referenceId: `scratch:${sessionId}:coins`,
+      referenceModel: 'ScratchCardSession',
+      metadata: { idempotencyKey, sessionId },
+    });
   } else if (prize.type === 'cashback') {
     const cashbackAmount = prize.value;
-    await CoinTransaction.createTransaction(
+    const { rewardEngine } = await import('../core/rewardEngine');
+    await rewardEngine.issue({
       userId,
-      'earned',
-      cashbackAmount,
-      'scratch_card',
-      `Won ${prize.value}% cashback from Scratch Card (${cashbackAmount} NC credited)`,
-      { prizeType: 'cashback', cashbackPercentage: prize.value, idempotencyKey, sessionId }
-    );
+      amount: cashbackAmount,
+      rewardType: 'scratch_card',
+      source: 'scratch_card',
+      description: `Won ${prize.value}% cashback from Scratch Card (${cashbackAmount} NC credited)`,
+      operationType: 'scratch_card_prize',
+      referenceId: `scratch:${sessionId}:cashback`,
+      referenceModel: 'ScratchCardSession',
+      metadata: { prizeType: 'cashback', cashbackPercentage: prize.value, idempotencyKey, sessionId },
+    });
   } else if (prize.type === 'discount') {
     // Idempotency: check if coupon already created for this session
     const existingCoupon = await UserCoupon.findOne({

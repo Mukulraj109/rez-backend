@@ -42,6 +42,7 @@ import { initializeSessionCleanupJob } from './jobs/cleanupExpiredSessions';
 import { initializeCoinExpiryJob } from './jobs/expireCoins';
 import { initializeCashbackJobs } from './jobs/cashbackJobs';
 import { initializeTravelCashbackJobs } from './jobs/travelCashbackJobs';
+import { startRefundReversalJob } from './jobs/refundReversalJob';
 import { initializeInventoryAlertJob } from './jobs/inventoryAlerts';
 import { initializeDealExpiryJob } from './jobs/expireDealRedemptions';
 import { initializeVoucherExpiryJob } from './jobs/expireVoucherRedemptions';
@@ -272,6 +273,7 @@ import {
   adminFraudReportsRoutes,
   adminMembershipRoutes,
   adminAdminUsersRoutes,
+  adminEconomicsRoutes,
 } from './routes/admin';
 import campaignRoutes from './routes/campaignRoutes';  // Campaign routes for homepage
 import rechargeRoutes from './routes/rechargeRoutes';  // Mobile/DTH/Broadband recharge routes
@@ -1110,6 +1112,11 @@ app.use(`${API_PREFIX}/admin/tournaments`, adminTournamentsRoutes);
 logger.info('✅ Admin tournament routes registered at /api/admin/tournaments');
 app.use(`${API_PREFIX}/admin/feature-flags`, adminFeatureFlagsRoutes);
 logger.info('✅ Admin feature flags routes registered at /api/admin/feature-flags');
+
+// Public feature flag config (for frontend remote config)
+import featureFlagConfigRoutes from './routes/featureFlagConfig';
+app.use(`${API_PREFIX}/config/feature-flags`, featureFlagConfigRoutes);
+logger.info('✅ Feature flag config routes registered at /api/config/feature-flags');
 app.use(`${API_PREFIX}/admin/achievements`, adminAchievementsRoutes);
 logger.info('✅ Admin achievements routes registered at /api/admin/achievements');
 app.use(`${API_PREFIX}/admin/gamification-stats`, adminGamificationStatsRoutes);
@@ -1182,6 +1189,15 @@ app.use(`${API_PREFIX}/admin/membership`, adminMembershipRoutes);
 logger.info('✅ Admin membership routes registered at /api/admin/membership');
 app.use(`${API_PREFIX}/admin/admin-users`, adminAdminUsersRoutes);
 logger.info('✅ Admin user management routes registered at /api/admin/admin-users');
+
+// Admin Merchant Liability Routes
+import adminMerchantLiabilityRoutes from './routes/admin/merchantLiability';
+app.use(`${API_PREFIX}/admin/merchant-liability`, adminMerchantLiabilityRoutes);
+logger.info('✅ Admin merchant liability routes registered at /api/admin/merchant-liability');
+
+// Admin Economics Dashboard Routes
+app.use(`${API_PREFIX}/admin/economics`, adminEconomicsRoutes);
+logger.info('✅ Admin economics routes registered at /api/admin/economics');
 
 // Admin Engagement Config Routes
 import { Router as EngagementConfigRouter } from 'express';
@@ -1372,6 +1388,11 @@ logger.info('✅ Merchant creator analytics routes registered');
 // Merchant Social Impact Routes - Social impact event management for merchants
 app.use('/api/merchant/programs/social-impact', merchantSocialImpactRoutes);
 logger.info('✅ Merchant social impact routes registered');
+
+// Merchant Liability Routes
+import merchantLiabilityRoutes from './merchantroutes/liability';
+app.use('/api/merchant/liability', merchantLiabilityRoutes);
+logger.info('✅ Merchant liability routes registered at /api/merchant/liability');
 
 // Root endpoint (MUST be before 404 handler)
 app.get('/', (req, res) => {
@@ -1604,6 +1625,11 @@ async function startServer() {
     initializeTravelCashbackJobs();
     logger.info('✅ Travel cashback jobs started (credit: 2h, expire: 15m, complete: daily 3AM)');
 
+    // Initialize refund reversal job (processes pending refunds)
+    logger.info('Initializing refund reversal job...');
+    startRefundReversalJob();
+    logger.info('Refund reversal job started (every 5 minutes)');
+
     // Initialize inventory alert job (sends low stock / out of stock notifications)
     logger.info('🔄 Initializing inventory alert job...');
     initializeInventoryAlertJob();
@@ -1751,6 +1777,11 @@ async function startServer() {
     const { initializeLedgerReconciliationJob } = await import('./jobs/walletLedgerReconciliationJob');
     initializeLedgerReconciliationJob();
     logger.info('✅ Wallet-ledger reconciliation job started (runs daily at 4:00 AM)');
+
+    // Merchant liability settlement — daily at 5 AM
+    const { initializeMerchantLiabilitySettlementJob } = await import('./jobs/merchantLiabilitySettlementJob');
+    initializeMerchantLiabilitySettlementJob();
+    logger.info('✅ Merchant liability settlement job started (runs daily at 5:00 AM)');
     // Referral expiry — daily at 3 AM
     initializeReferralExpiryJob();
     logger.info('✅ Referral expiry job started (runs daily at 3 AM)');

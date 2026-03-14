@@ -138,19 +138,23 @@ class ReferralService {
       const rewardAmount = rewards.referrerAmount || 0;
 
       if (rewardAmount > 0) {
-        // Use CoinTransaction (single source of truth for coin earnings)
-        await CoinTransaction.createTransaction(
-          String(referral.referrer),
-          'earned',
-          rewardAmount,
-          'referral',
-          'Referral reward - Friend completed first order',
-          {
+        // Credit via rewardEngine (wallet + CoinTransaction + ledger)
+        const { rewardEngine } = await import('../core/rewardEngine');
+        await rewardEngine.issue({
+          userId: String(referral.referrer),
+          amount: rewardAmount,
+          rewardType: 'referral',
+          source: 'referral',
+          description: 'Referral reward - Friend completed first order',
+          operationType: 'referral_bonus',
+          referenceId: `referral:${referral._id}:first_order`,
+          referenceModel: 'Referral',
+          metadata: {
             referralId: referral._id,
             referredUser: String(refereeId),
             level: 'first_order',
-          }
-        );
+          },
+        });
 
         // Create activity for referrer
         await activityService.referral.onReferralCompleted(
@@ -222,19 +226,23 @@ class ReferralService {
     const bonusAmount = rewards.milestoneBonus || 20;
 
     if (bonusAmount > 0) {
-      // Use CoinTransaction (single source of truth for coin earnings)
-      await CoinTransaction.createTransaction(
-        String(referral.referrer),
-        'earned',
-        bonusAmount,
-        'referral',
-        'Referral milestone bonus - Friend completed 3 orders',
-        {
+      // Credit via rewardEngine (wallet + CoinTransaction + ledger)
+      const { rewardEngine } = await import('../core/rewardEngine');
+      await rewardEngine.issue({
+        userId: String(referral.referrer),
+        amount: bonusAmount,
+        rewardType: 'referral',
+        source: 'referral',
+        description: 'Referral milestone bonus - Friend completed 3 orders',
+        operationType: 'referral_bonus',
+        referenceId: `referral:${referral._id}:milestone_3`,
+        referenceModel: 'Referral',
+        metadata: {
           referralId: referral._id,
           referredUser: String(refereeId),
           level: 'milestone_3',
-        }
-      );
+        },
+      });
 
       // Create activity for milestone
       await activityService.referral.onReferralCompleted(
