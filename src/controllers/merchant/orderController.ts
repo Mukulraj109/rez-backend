@@ -640,10 +640,17 @@ export const bulkOrderAction = asyncHandler(async (req: Request, res: Response) 
       return sendBadRequest(res, `Invalid action: ${action}`);
     }
 
+    // Batch-fetch all orders (1 query instead of N)
+    const orders = await Order.find({ _id: { $in: orderIds } }).session(session);
+    const orderMap = new Map(orders.map(o => [(o._id as any).toString(), o]));
+
+    // Collect inventory restoration ops for batch execution
+    const inventoryOps: any[] = [];
+
     // Process each order
     for (const orderId of orderIds) {
       try {
-        const order = await Order.findById(orderId).session(session);
+        const order = orderMap.get(orderId.toString());
 
         if (!order) {
           results.failed++;
@@ -685,41 +692,41 @@ export const bulkOrderAction = asyncHandler(async (req: Request, res: Response) 
               timestamp: new Date()
             });
 
-            // Restore inventory for cancelled items
+            // Collect inventory restoration ops (executed in batch after loop)
             for (const item of order.items) {
               if (item.variant) {
-                await Product.findOneAndUpdate(
-                  {
-                    _id: item.product,
-                    'inventory.variants': {
-                      $elemMatch: {
-                        type: item.variant.type,
-                        value: item.variant.value
+                inventoryOps.push({
+                  updateOne: {
+                    filter: {
+                      _id: item.product,
+                      'inventory.variants': {
+                        $elemMatch: {
+                          type: item.variant.type,
+                          value: item.variant.value
+                        }
                       }
-                    }
-                  },
-                  {
-                    $inc: {
-                      'inventory.variants.$[variant].stock': item.quantity
-                    }
-                  },
-                  {
-                    session,
+                    },
+                    update: {
+                      $inc: {
+                        'inventory.variants.$[variant].stock': item.quantity
+                      }
+                    },
                     arrayFilters: [{
                       'variant.type': item.variant.type,
                       'variant.value': item.variant.value
                     }]
                   }
-                );
+                });
               } else {
-                await Product.findByIdAndUpdate(
-                  item.product,
-                  {
-                    $inc: { 'inventory.stock': item.quantity },
-                    $set: { 'inventory.isAvailable': true }
-                  },
-                  { session }
-                );
+                inventoryOps.push({
+                  updateOne: {
+                    filter: { _id: item.product },
+                    update: {
+                      $inc: { 'inventory.stock': item.quantity },
+                      $set: { 'inventory.isAvailable': true }
+                    }
+                  }
+                });
               }
             }
             break;
@@ -773,6 +780,12 @@ export const bulkOrderAction = asyncHandler(async (req: Request, res: Response) 
           error: error.message
         });
       }
+    }
+
+    // Batch inventory restoration (1 bulkWrite instead of N*M individual updates)
+    if (inventoryOps.length > 0) {
+      await Product.bulkWrite(inventoryOps, { session });
+      logger.info(`✅ [BULK ACTION] Restored inventory for ${inventoryOps.length} items in 1 batch`);
     }
 
     // Commit transaction

@@ -6,6 +6,7 @@
 
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import { logger } from '../../config/logger';
 import PriveAccess from '../../models/PriveAccess';
 import PriveInviteCode from '../../models/PriveInviteCode';
@@ -20,7 +21,7 @@ import { escapeRegex } from '../../utils/sanitize';
  * GET /api/admin/prive/access
  * List all Privé access records (paginated, filterable)
  */
-export const getAccessList = async (req: Request, res: Response) => {
+export const getAccessList = asyncHandler(async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
@@ -64,13 +65,13 @@ export const getAccessList = async (req: Request, res: Response) => {
     logger.error('[AdminPriveInvite] Error getting access list:', error);
     return sendError(res, 'Failed to load access list');
   }
-};
+});
 
 /**
  * POST /api/admin/prive/access/grant
  * Grant Privé access to a user (whitelist)
  */
-export const grantAccess = async (req: Request, res: Response) => {
+export const grantAccess = asyncHandler(async (req: Request, res: Response) => {
   try {
     const adminId = req.user?.id;
     if (!adminId) return sendError(res, 'Authentication required', 401);
@@ -114,13 +115,13 @@ export const grantAccess = async (req: Request, res: Response) => {
     logger.error('[AdminPriveInvite] Error granting access:', error);
     return sendBadRequest(res, error.message || 'Failed to grant access');
   }
-};
+});
 
 /**
  * POST /api/admin/prive/access/revoke
  * Revoke a user's Privé access
  */
-export const revokeAccess = async (req: Request, res: Response) => {
+export const revokeAccess = asyncHandler(async (req: Request, res: Response) => {
   try {
     const adminId = req.user?.id;
     if (!adminId) return sendError(res, 'Authentication required', 401);
@@ -148,13 +149,13 @@ export const revokeAccess = async (req: Request, res: Response) => {
     logger.error('[AdminPriveInvite] Error revoking access:', error);
     return sendBadRequest(res, error.message || 'Failed to revoke access');
   }
-};
+});
 
 /**
  * GET /api/admin/prive/invite-codes
  * List all invite codes (filterable)
  */
-export const getInviteCodes = async (req: Request, res: Response) => {
+export const getInviteCodes = asyncHandler(async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
@@ -180,13 +181,13 @@ export const getInviteCodes = async (req: Request, res: Response) => {
     logger.error('[AdminPriveInvite] Error getting codes:', error);
     return sendError(res, 'Failed to load invite codes');
   }
-};
+});
 
 /**
  * PATCH /api/admin/prive/invite-codes/:id/deactivate
  * Deactivate an invite code
  */
-export const deactivateCode = async (req: Request, res: Response) => {
+export const deactivateCode = asyncHandler(async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
@@ -206,13 +207,13 @@ export const deactivateCode = async (req: Request, res: Response) => {
     logger.error('[AdminPriveInvite] Error deactivating code:', error);
     return sendError(res, 'Failed to deactivate code');
   }
-};
+});
 
 /**
  * GET /api/admin/prive/invite-analytics
  * Get invite system analytics
  */
-export const getInviteAnalytics = async (req: Request, res: Response) => {
+export const getInviteAnalytics = asyncHandler(async (req: Request, res: Response) => {
   try {
     const [
       totalAccess,
@@ -276,13 +277,13 @@ export const getInviteAnalytics = async (req: Request, res: Response) => {
     logger.error('[AdminPriveInvite] Error getting analytics:', error);
     return sendError(res, 'Failed to load analytics');
   }
-};
+});
 
 /**
  * GET /api/admin/prive/invite-config
  * Get invite system configuration
  */
-export const getInviteConfig = async (req: Request, res: Response) => {
+export const getInviteConfig = asyncHandler(async (req: Request, res: Response) => {
   try {
     const config = await priveAccessService.getInviteConfig();
     return sendSuccess(res, config);
@@ -290,13 +291,13 @@ export const getInviteConfig = async (req: Request, res: Response) => {
     logger.error('[AdminPriveInvite] Error getting config:', error);
     return sendError(res, 'Failed to load configuration');
   }
-};
+});
 
 /**
  * PUT /api/admin/prive/invite-config
  * Update invite system configuration
  */
-export const updateInviteConfig = async (req: Request, res: Response) => {
+export const updateInviteConfig = asyncHandler(async (req: Request, res: Response) => {
   try {
     const updates = req.body;
 
@@ -325,4 +326,4 @@ export const updateInviteConfig = async (req: Request, res: Response) => {
     logger.error('[AdminPriveInvite] Error updating config:', error);
     return sendError(res, 'Failed to update configuration');
   }
-};
+});

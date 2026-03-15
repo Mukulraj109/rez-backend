@@ -73,7 +73,7 @@ export const CacheTTL = {
   STATIC_DATA: 60 * 60 * 24, // 24 hours
 
   // Sensitive / PII data — keep very short to limit exposure window (P-15)
-  WALLET_DATA: 30, // 30 seconds (P-15: contains financial PII — balance, transactions)
+  WALLET_DATA: 300, // 5 minutes (invalidated on mutation via walletCacheService)
   SENSITIVE_DATA: 30, // 30 seconds (P-15: generic sensitive-data TTL)
 
   // Very short-lived cache

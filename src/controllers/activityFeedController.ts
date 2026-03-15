@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { asyncHandler } from '../middleware/asyncHandler';
 import { logger } from '../config/logger';
 import * as activityFeedService from '../services/activityFeedService';
 
@@ -6,7 +7,7 @@ import * as activityFeedService from '../services/activityFeedService';
  * Get activity feed for authenticated user
  * GET /api/social/feed
  */
-export async function getFeed(req: Request, res: Response) {
+export const getFeed = asyncHandler(async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const page = parseInt(req.query.page as string) || 1;
@@ -30,13 +31,13 @@ export async function getFeed(req: Request, res: Response) {
       error: error.message || 'Failed to fetch activity feed'
     });
   }
-}
+});
 
 /**
  * Get user's own activities
  * GET /api/social/users/:userId/activities
  */
-export async function getUserActivities(req: Request, res: Response) {
+export const getUserActivities = asyncHandler(async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
@@ -60,13 +61,13 @@ export async function getUserActivities(req: Request, res: Response) {
       error: error.message || 'Failed to fetch user activities'
     });
   }
-}
+});
 
 /**
  * Create a new activity
  * POST /api/social/activities
  */
-export async function createActivity(req: Request, res: Response) {
+export const createActivity = asyncHandler(async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const { type, title, description, amount, icon, color, relatedEntity, metadata } = req.body;
@@ -93,17 +94,17 @@ export async function createActivity(req: Request, res: Response) {
       try {
         const Partner = require('../models/Partner').default;
         const partner = await Partner.findOne({ userId });
-        
+
         if (partner) {
           const socialTask = partner.tasks.find((t: any) => t.type === 'social');
           if (socialTask && socialTask.progress.current < socialTask.progress.target) {
             socialTask.progress.current += 1;
-            
+
             if (socialTask.progress.current >= socialTask.progress.target) {
               socialTask.completed = true;
               socialTask.completedAt = new Date();
             }
-            
+
             await partner.save();
             logger.info('✅ [SOCIAL] Partner social task updated:', socialTask.progress.current, '/', socialTask.progress.target);
           }
@@ -124,13 +125,13 @@ export async function createActivity(req: Request, res: Response) {
       error: error.message || 'Failed to create activity'
     });
   }
-}
+});
 
 /**
  * Like/Unlike an activity
  * POST /api/social/activities/:activityId/like
  */
-export async function likeActivity(req: Request, res: Response) {
+export const likeActivity = asyncHandler(async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const { activityId } = req.params;
@@ -148,13 +149,13 @@ export async function likeActivity(req: Request, res: Response) {
       error: error.message || 'Failed to like activity'
     });
   }
-}
+});
 
 /**
  * Get comments for an activity
  * GET /api/social/activities/:activityId/comments
  */
-export async function getComments(req: Request, res: Response) {
+export const getComments = asyncHandler(async (req: Request, res: Response) => {
   try {
     const { activityId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
@@ -178,13 +179,13 @@ export async function getComments(req: Request, res: Response) {
       error: error.message || 'Failed to fetch comments'
     });
   }
-}
+});
 
 /**
  * Comment on an activity
  * POST /api/social/activities/:activityId/comment
  */
-export async function commentOnActivity(req: Request, res: Response) {
+export const commentOnActivity = asyncHandler(async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const { activityId } = req.params;
@@ -210,13 +211,13 @@ export async function commentOnActivity(req: Request, res: Response) {
       error: error.message || 'Failed to add comment'
     });
   }
-}
+});
 
 /**
  * Follow/Unfollow a user
  * POST /api/social/users/:userId/follow
  */
-export async function followUser(req: Request, res: Response) {
+export const followUser = asyncHandler(async (req: Request, res: Response) => {
   try {
     const followerId = req.user!.id;
     const { userId } = req.params;
@@ -241,13 +242,13 @@ export async function followUser(req: Request, res: Response) {
       error: error.message || 'Failed to follow/unfollow user'
     });
   }
-}
+});
 
 /**
  * Check if following a user
  * GET /api/social/users/:userId/is-following
  */
-export async function checkFollowStatus(req: Request, res: Response) {
+export const checkFollowStatus = asyncHandler(async (req: Request, res: Response) => {
   try {
     const followerId = req.user!.id;
     const { userId } = req.params;
@@ -265,13 +266,13 @@ export async function checkFollowStatus(req: Request, res: Response) {
       error: error.message || 'Failed to check follow status'
     });
   }
-}
+});
 
 /**
  * Get user's followers
  * GET /api/social/users/:userId/followers
  */
-export async function getFollowers(req: Request, res: Response) {
+export const getFollowers = asyncHandler(async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
@@ -295,13 +296,13 @@ export async function getFollowers(req: Request, res: Response) {
       error: error.message || 'Failed to fetch followers'
     });
   }
-}
+});
 
 /**
  * Get user's following list
  * GET /api/social/users/:userId/following
  */
-export async function getFollowing(req: Request, res: Response) {
+export const getFollowing = asyncHandler(async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
@@ -325,13 +326,13 @@ export async function getFollowing(req: Request, res: Response) {
       error: error.message || 'Failed to fetch following list'
     });
   }
-}
+});
 
 /**
  * Get follow counts for a user
  * GET /api/social/users/:userId/follow-counts
  */
-export async function getFollowCounts(req: Request, res: Response) {
+export const getFollowCounts = asyncHandler(async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
 
@@ -348,13 +349,13 @@ export async function getFollowCounts(req: Request, res: Response) {
       error: error.message || 'Failed to fetch follow counts'
     });
   }
-}
+});
 
 /**
  * Get suggested users to follow
  * GET /api/social/suggested-users
  */
-export async function getSuggestedUsers(req: Request, res: Response) {
+export const getSuggestedUsers = asyncHandler(async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const limit = parseInt(req.query.limit as string) || 10;
@@ -372,13 +373,13 @@ export async function getSuggestedUsers(req: Request, res: Response) {
       error: error.message || 'Failed to fetch suggested users'
     });
   }
-}
+});
 
 /**
  * Share an activity
  * POST /api/social/activities/:activityId/share
  */
-export async function shareActivity(req: Request, res: Response) {
+export const shareActivity = asyncHandler(async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const { activityId } = req.params;
@@ -396,13 +397,13 @@ export async function shareActivity(req: Request, res: Response) {
       error: error.message || 'Failed to share activity'
     });
   }
-}
+});
 
 /**
  * Get activity statistics
  * GET /api/social/activities/:activityId/stats
  */
-export async function getActivityStats(req: Request, res: Response) {
+export const getActivityStats = asyncHandler(async (req: Request, res: Response) => {
   try {
     const { activityId } = req.params;
 
@@ -419,4 +420,4 @@ export async function getActivityStats(req: Request, res: Response) {
       error: error.message || 'Failed to fetch activity stats'
     });
   }
-}
+});

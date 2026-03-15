@@ -6,6 +6,7 @@
 
 import { Request, Response } from 'express';
 import mongoose, { Types } from 'mongoose';
+import { asyncHandler } from '../../middleware/asyncHandler';
 import { logger } from '../../config/logger';
 import PriveOffer from '../../models/PriveOffer';
 import PriveVoucher, { calculateVoucherValue, getDefaultExpiry, VoucherType } from '../../models/PriveVoucher';
@@ -22,7 +23,7 @@ import { reputationService } from '../../services/reputationService';
  * GET /api/admin/prive/offers
  * Paginated offers with analytics (views, clicks, redemptions)
  */
-export const getOffers = async (req: Request, res: Response) => {
+export const getOffers = asyncHandler(async (req: Request, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
@@ -89,13 +90,13 @@ export const getOffers = async (req: Request, res: Response) => {
     logger.error('[Admin Privé] Error fetching offers:', error);
     return sendError(res, 'Failed to fetch Privé offers', 500);
   }
-};
+});
 
 /**
  * POST /api/admin/prive/offers
  * Create a new Privé offer
  */
-export const createOffer = async (req: Request, res: Response) => {
+export const createOffer = asyncHandler(async (req: Request, res: Response) => {
   try {
     const {
       title,
@@ -128,13 +129,13 @@ export const createOffer = async (req: Request, res: Response) => {
     }
     return sendError(res, 'Failed to create Privé offer', 500);
   }
-};
+});
 
 /**
  * PUT /api/admin/prive/offers/:id
  * Update a Privé offer
  */
-export const updateOffer = async (req: Request, res: Response) => {
+export const updateOffer = asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid offer ID', 400);
@@ -163,13 +164,13 @@ export const updateOffer = async (req: Request, res: Response) => {
     }
     return sendError(res, 'Failed to update Privé offer', 500);
   }
-};
+});
 
 /**
  * DELETE /api/admin/prive/offers/:id
  * Soft delete (set isActive=false)
  */
-export const deleteOffer = async (req: Request, res: Response) => {
+export const deleteOffer = asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid offer ID', 400);
@@ -190,13 +191,13 @@ export const deleteOffer = async (req: Request, res: Response) => {
     logger.error('[Admin Privé] Error deleting offer:', error);
     return sendError(res, 'Failed to delete Privé offer', 500);
   }
-};
+});
 
 /**
  * PATCH /api/admin/prive/offers/:id/status
  * Toggle offer active/inactive
  */
-export const toggleOfferStatus = async (req: Request, res: Response) => {
+export const toggleOfferStatus = asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid offer ID', 400);
@@ -215,7 +216,7 @@ export const toggleOfferStatus = async (req: Request, res: Response) => {
     logger.error('[Admin Privé] Error toggling offer status:', error);
     return sendError(res, 'Failed to toggle offer status', 500);
   }
-};
+});
 
 // ─── Vouchers ────────────────────────────────────────────────────────────────
 
@@ -223,7 +224,7 @@ export const toggleOfferStatus = async (req: Request, res: Response) => {
  * GET /api/admin/prive/vouchers
  * All vouchers with filters (status, userId, type, search)
  */
-export const getVouchers = async (req: Request, res: Response) => {
+export const getVouchers = asyncHandler(async (req: Request, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
@@ -274,13 +275,13 @@ export const getVouchers = async (req: Request, res: Response) => {
     logger.error('[Admin Privé] Error fetching vouchers:', error);
     return sendError(res, 'Failed to fetch Privé vouchers', 500);
   }
-};
+});
 
 /**
  * PATCH /api/admin/prive/vouchers/:id/invalidate
  * Cancel/invalidate a voucher and refund coins to user wallet
  */
-export const invalidateVoucher = async (req: Request, res: Response) => {
+export const invalidateVoucher = asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid voucher ID', 400);
@@ -350,13 +351,13 @@ export const invalidateVoucher = async (req: Request, res: Response) => {
     logger.error('[Admin Privé] Error invalidating voucher:', error);
     return sendError(res, 'Failed to invalidate voucher', 500);
   }
-};
+});
 
 /**
  * PATCH /api/admin/prive/vouchers/:id/extend
  * Extend voucher expiry date
  */
-export const extendVoucher = async (req: Request, res: Response) => {
+export const extendVoucher = asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid voucher ID', 400);
@@ -429,13 +430,13 @@ export const extendVoucher = async (req: Request, res: Response) => {
     logger.error('[Admin Privé] Error extending voucher:', error);
     return sendError(res, 'Failed to extend voucher', 500);
   }
-};
+});
 
 /**
  * POST /api/admin/prive/vouchers
  * Admin-issued voucher (no coin deduction). For support resolution, promotions, etc.
  */
-export const issueVoucher = async (req: Request, res: Response) => {
+export const issueVoucher = asyncHandler(async (req: Request, res: Response) => {
   try {
     const { userId, type, coinAmount, category, partnerName, partnerLogo, reason } = req.body;
     const adminId = (req as any).userId || 'unknown';
@@ -502,7 +503,7 @@ export const issueVoucher = async (req: Request, res: Response) => {
     }
     return sendError(res, 'Failed to issue voucher', 500);
   }
-};
+});
 
 // ─── User Reputation ─────────────────────────────────────────────────────────
 
@@ -510,7 +511,7 @@ export const issueVoucher = async (req: Request, res: Response) => {
  * GET /api/admin/prive/users/:userId/reputation
  * View a user's reputation details
  */
-export const getUserReputation = async (req: Request, res: Response) => {
+export const getUserReputation = asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!Types.ObjectId.isValid(req.params.userId)) {
       return sendError(res, 'Invalid user ID', 400);
@@ -544,7 +545,7 @@ export const getUserReputation = async (req: Request, res: Response) => {
     logger.error('[Admin Privé] Error fetching user reputation:', error);
     return sendError(res, 'Failed to fetch user reputation', 500);
   }
-};
+});
 
 /**
  * PATCH /api/admin/prive/users/:userId/reputation
@@ -552,7 +553,7 @@ export const getUserReputation = async (req: Request, res: Response) => {
  *
  * Body: { pillars: { engagement?: number, trust?: number, ... }, reason: string }
  */
-export const overrideUserReputation = async (req: Request, res: Response) => {
+export const overrideUserReputation = asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!Types.ObjectId.isValid(req.params.userId)) {
       return sendError(res, 'Invalid user ID', 400);
@@ -629,13 +630,13 @@ export const overrideUserReputation = async (req: Request, res: Response) => {
     logger.error('[Admin Privé] Error overriding reputation:', error);
     return sendError(res, 'Failed to override user reputation', 500);
   }
-};
+});
 
 /**
  * POST /api/admin/prive/users/:userId/recalculate
  * Trigger a full reputation recalculation from real data
  */
-export const recalculateUserReputation = async (req: Request, res: Response) => {
+export const recalculateUserReputation = asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!Types.ObjectId.isValid(req.params.userId)) {
       return sendError(res, 'Invalid user ID', 400);
@@ -667,7 +668,7 @@ export const recalculateUserReputation = async (req: Request, res: Response) => 
     logger.error('[Admin Privé] Error recalculating reputation:', error);
     return sendError(res, 'Failed to recalculate reputation', 500);
   }
-};
+});
 
 // ─── Analytics ───────────────────────────────────────────────────────────────
 
@@ -675,7 +676,7 @@ export const recalculateUserReputation = async (req: Request, res: Response) => 
  * GET /api/admin/prive/analytics
  * Offer CTR, redemption stats, tier distribution
  */
-export const getAnalytics = async (req: Request, res: Response) => {
+export const getAnalytics = asyncHandler(async (req: Request, res: Response) => {
   try {
     // 1. Offer performance (CTR, views, clicks, redemptions)
     const offerStats = await PriveOffer.aggregate([
@@ -803,4 +804,4 @@ export const getAnalytics = async (req: Request, res: Response) => {
     logger.error('[Admin Privé] Error fetching analytics:', error);
     return sendError(res, 'Failed to fetch Privé analytics', 500);
   }
-};
+});

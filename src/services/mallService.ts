@@ -587,6 +587,7 @@ class MallService {
       .populate('ctaCategory', 'name slug')
       .populate('ctaCollection', 'name slug')
       .sort({ position: 1, priority: -1 })
+      .limit(50)
       .lean();
 
     await redisService.set(cacheKey, banners, CACHE_TTL.BANNERS);
