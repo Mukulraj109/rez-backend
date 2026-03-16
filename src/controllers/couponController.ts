@@ -487,8 +487,8 @@ export const getCouponDetails = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    // Increment view count
-    await (coupon as any).incrementViewCount();
+    // Increment view count (atomic — .lean() returns plain object, can't use instance methods)
+    await Coupon.updateOne({ _id: id }, { $inc: { 'analytics.views': 1 } });
 
     res.status(200).json({
       success: true,

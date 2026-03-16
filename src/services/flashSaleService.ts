@@ -800,7 +800,7 @@ class FlashSaleService {
   }> {
     try {
       // 1. Get purchase record
-      const purchase = await FlashSalePurchase.findById(purchaseId).lean();
+      let purchase = await FlashSalePurchase.findById(purchaseId).lean() as any;
       if (!purchase) {
         throw new Error('Purchase record not found');
       }
@@ -832,19 +832,41 @@ class FlashSaleService {
         throw new Error('Payment verification failed: Session not paid');
       }
 
-      // 5. Update purchase record
-      purchase.paymentStatus = 'paid';
-      purchase.razorpayPaymentId = sessionStatus.paymentIntentId || paymentDetails.stripeSessionId;
-      purchase.paidAt = new Date();
-      purchase.purchasedAt = new Date();
-      await purchase.save();
-
-      // 6. Update flash sale stock and counters
-      await this.updateSoldQuantity(
-        purchase.flashSale.toString(),
-        purchase.quantity,
-        purchase.user.toString()
+      // 5. Atomically mark as paid (prevents double-completion race condition)
+      const updatedPurchase = await FlashSalePurchase.findOneAndUpdate(
+        { _id: purchase._id, paymentStatus: { $ne: 'paid' } },
+        {
+          $set: {
+            paymentStatus: 'paid',
+            razorpayPaymentId: sessionStatus.paymentIntentId || paymentDetails.stripeSessionId,
+            paidAt: new Date(),
+            purchasedAt: new Date(),
+          },
+        },
+        { new: true }
       );
+
+      if (!updatedPurchase) {
+        // Already completed by a concurrent request — return existing data
+        const existing = await FlashSalePurchase.findById(purchase._id).lean();
+        return {
+          success: true,
+          purchase: existing as any,
+          voucherCode: existing?.voucherCode || '',
+          promoCode: existing?.promoCode || '',
+          expiresAt: existing?.voucherExpiresAt || new Date(),
+        };
+      }
+
+      // 6. Update flash sale stock and counters (only runs once due to atomic guard above)
+      await this.updateSoldQuantity(
+        updatedPurchase.flashSale.toString(),
+        updatedPurchase.quantity,
+        updatedPurchase.user.toString()
+      );
+
+      // Use updatedPurchase from here
+      purchase = updatedPurchase;
 
       logger.info('✅ [FlashSaleService] Flash sale purchase completed:', {
         purchaseId: purchase._id,

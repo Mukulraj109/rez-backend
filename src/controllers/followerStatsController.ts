@@ -71,7 +71,7 @@ export const getFollowersList = asyncHandler(async (req: Request, res: Response)
       'items.itemType': 'Store',
       'items.itemId': storeId
     })
-      .populate('user', 'profile.firstName profile.lastName profile.avatar phoneNumber email')
+      .populate('user', 'profile.firstName profile.lastName profile.avatar')
       .sort({ 'items.addedAt': -1 })
       .skip(skip)
       .limit(Number(limit))
@@ -87,8 +87,6 @@ export const getFollowersList = asyncHandler(async (req: Request, res: Response)
         userId: wishlist.user._id,
         name: `${wishlist.user.profile?.firstName || ''} ${wishlist.user.profile?.lastName || ''}`.trim() || 'User',
         profilePicture: wishlist.user.profile?.avatar || null,
-        email: wishlist.user.email || null,
-        phone: wishlist.user.phoneNumber || null,
         followedAt: storeItem?.addedAt || wishlist.createdAt
       };
     });
@@ -259,7 +257,7 @@ export const getTopFollowers = asyncHandler(async (req: Request, res: Response) 
       'items.itemType': 'Store',
       'items.itemId': storeId
     })
-      .populate('user', 'profile.firstName profile.lastName profile.avatar phoneNumber email')
+      .populate('user', 'profile.firstName profile.lastName profile.avatar')
       .lean();
 
     if (wishlists.length === 0) {
@@ -312,8 +310,6 @@ export const getTopFollowers = asyncHandler(async (req: Request, res: Response) 
         userId: wishlist.user._id,
         name: `${wishlist.user.profile?.firstName || ''} ${wishlist.user.profile?.lastName || ''}`.trim() || 'User',
         profilePicture: wishlist.user.profile?.avatar || null,
-        email: wishlist.user.email || null,
-        phone: wishlist.user.phoneNumber || null,
         followedAt: storeItem?.addedAt || wishlist.createdAt,
         engagement: {
           orderCount,

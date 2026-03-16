@@ -245,6 +245,9 @@ export interface IOrder extends Document {
 
   idempotencyKey?: string;
 
+  // Dispute hold — locks reward issuance while dispute is active
+  disputeHold?: boolean;
+
   // Methods
   updateStatus(newStatus: string, message?: string, updatedBy?: string): Promise<void>;
   calculateRefund(): number;
@@ -655,6 +658,13 @@ const OrderSchema = new Schema<IOrder>({
     maxlength: 128
   },
 
+  // Dispute hold — locks reward issuance while dispute is active
+  disputeHold: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+
   // Payment gateway details
   paymentGateway: {
     gatewayOrderId: String,
@@ -679,6 +689,7 @@ const OrderSchema = new Schema<IOrder>({
 });
 
 // Indexes for performance
+OrderSchema.index({ orderNumber: 1 }, { unique: true }); // Prevent duplicate order numbers
 OrderSchema.index({ user: 1, createdAt: -1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
 OrderSchema.index({ 'payment.status': 1 });

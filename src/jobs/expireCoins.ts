@@ -527,7 +527,7 @@ export function startCoinExpiryJob(): void {
     // Distributed lock: prevents multiple server instances from running simultaneously
     let lockToken: string | null = null;
     try {
-      lockToken = await redisService.acquireLock('job:coin-expiry', 300); // 5 min TTL
+      lockToken = await redisService.acquireLock('job:coin-expiry', 3600); // 1 hour TTL (daily job processes all users + notifications)
     } catch {
       // Redis unavailable — fall through to local-only guard
     }

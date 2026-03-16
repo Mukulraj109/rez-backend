@@ -101,7 +101,7 @@ router.put('/:reviewId/moderate',
 
 // Update a review
 router.put('/:reviewId',
-  // reviewLimiter,, // Disabled for development
+  reviewLimiter,
   requireAuth,
   validateParams(Joi.object({
     reviewId: commonSchemas.objectId()
@@ -117,7 +117,7 @@ router.put('/:reviewId',
 
 // Delete a review
 router.delete('/:reviewId',
-  // reviewLimiter,, // Disabled for development
+  reviewLimiter,
   requireAuth,
   validateParams(Joi.object({
     reviewId: commonSchemas.objectId()
@@ -127,7 +127,7 @@ router.delete('/:reviewId',
 
 // Mark review as helpful
 router.post('/:reviewId/helpful',
-  // reviewLimiter,, // Disabled for development
+  reviewLimiter,
   requireAuth,
   validateParams(Joi.object({
     reviewId: commonSchemas.objectId()
@@ -137,7 +137,7 @@ router.post('/:reviewId/helpful',
 
 // Get user's reviews
 router.get('/user/my-reviews',
-  // generalLimiter,, // Disabled for development
+  generalLimiter,
   requireAuth,
   validateQuery(Joi.object({
     page: Joi.number().integer().min(1).default(1),

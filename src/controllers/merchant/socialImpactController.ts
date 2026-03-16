@@ -32,7 +32,7 @@ export const getMerchantEvents = async (req: Request, res: Response) => {
     if (eventStatus) query.eventStatus = eventStatus;
     if (eventType) query.eventType = eventType;
     if (sponsorId) query.sponsor = sponsorId;
-    if (city) query['location.city'] = { $regex: city, $options: 'i' };
+    if (city) query['location.city'] = { $regex: escapeRegex(city as string), $options: 'i' };
 
     const pg = {
       page: Math.max(1, parseInt(page as string) || 1),

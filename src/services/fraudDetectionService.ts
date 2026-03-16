@@ -47,6 +47,7 @@ class FraudDetectionService {
       this.checkAmountSuspicion(billData, result),
       this.checkBillAge(billData, result),
       this.checkMultipleMerchants(billData, result),
+      this.checkMerchantSelfBilling(billData, result),
     ]);
 
     // Calculate final fraud score
@@ -363,6 +364,35 @@ class FraudDetectionService {
         avgFraudScore: 0,
         recentFlags: [],
       };
+    }
+  }
+  /**
+   * Check if bill submitter is the store owner (merchant self-billing fraud).
+   * Store owners paying themselves to generate infinite cashback.
+   */
+  private async checkMerchantSelfBilling(
+    billData: BillData,
+    result: FraudCheckResult
+  ): Promise<void> {
+    try {
+      const Store = (await import('../models/Store')).Store;
+      const store = await Store.findOne({ _id: billData.merchantId })
+        .select('merchantId')
+        .lean();
+
+      if (store && (store as any).merchantId) {
+        const storeOwnerId = (store as any).merchantId.toString();
+        const billUserId = billData.userId.toString();
+
+        if (storeOwnerId === billUserId) {
+          result.fraudScore += 60;
+          result.flags.push('merchant_self_billing');
+          result.warnings.push('Bill submitted by store owner — possible self-billing fraud');
+          return;
+        }
+      }
+    } catch (error) {
+      logger.error('Error checking merchant self-billing:', error);
     }
   }
 }

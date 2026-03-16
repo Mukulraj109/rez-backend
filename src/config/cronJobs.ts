@@ -33,12 +33,16 @@ import { runGiftDelivery } from '../jobs/giftDeliveryJob';
 import { runGiftExpiry } from '../jobs/giftExpiryJob';
 import { runSurpriseDropExpiry } from '../jobs/surpriseDropExpiryJob';
 import { runPartnerEarningsSnapshot } from '../jobs/partnerEarningsSnapshotJob';
+import { runDevicePatternAnalysis } from '../jobs/devicePatternAnalysisJob';
 import { initializeReferralExpiryJob } from '../jobs/referralExpiryJob';
 import { initializePriveInviteExpiryJob } from '../jobs/priveInviteExpiryJob';
 import { runPushReceiptProcessing } from '../jobs/pushReceiptJob';
 import { initializeNearbyFlashSaleNotificationJob } from '../jobs/nearbyFlashSaleNotificationJob';
 import { initializeWeeklySummaryJob } from '../jobs/weeklySummaryJob';
 import { seedWalletFeatureFlags } from '../services/walletFeatureService';
+import { featureFlagService } from '../services/featureFlagService';
+import { initializeSLABreachJob } from '../jobs/slaBreachJob';
+import { initializeIntegrationReconciliationJob } from '../jobs/integrationReconciliationJob';
 import { ScheduledJobService } from '../services/ScheduledJobService';
 import AuditRetentionService from '../services/AuditRetentionService';
 import { ReportService } from '../merchantservices/ReportService';
@@ -199,6 +203,15 @@ export async function initializeCronJobs(): Promise<void> {
     finally { await redisService.releaseLock('push_receipt_processing', lock); }
   });
 
+  // Device pattern analysis — every 15 min, one pod only
+  cron.schedule('*/15 * * * *', async () => {
+    const lock = await redisService.acquireLock('device_pattern_analysis', 600);
+    if (!lock) return;
+    try { await runDevicePatternAnalysis(); }
+    catch (e) { logger.error('[JOB] devicePatternAnalysis:', e); }
+    finally { await redisService.releaseLock('device_pattern_analysis', lock); }
+  });
+
   logger.info('Wallet production jobs started with distributed locks');
 
   // Nearby flash sale notifications — every 30 min, location-filtered
@@ -226,9 +239,21 @@ export async function initializeCronJobs(): Promise<void> {
   // Prive invite code expiry — daily at 3:30 AM
   initializePriveInviteExpiryJob();
 
+  // SLA breach detection — every 5 minutes
+  initializeSLABreachJob();
+  logger.info('SLA breach detection job started (runs every 5 min)');
+
+  // Integration reconciliation — daily at 2 AM
+  initializeIntegrationReconciliationJob();
+  logger.info('Integration reconciliation job started (runs daily at 2 AM)');
+
   // Seed wallet feature flags
   await seedWalletFeatureFlags();
   logger.info('Wallet feature flags seeded');
+
+  // Seed gamification + games feature flags
+  await featureFlagService.seedDefaultFlags();
+  logger.info('Feature flags seeded');
 
   // Initialize Bull-based scheduled job service
   logger.info('Initializing Bull scheduled job service...');
@@ -245,6 +270,21 @@ export async function initializeCronJobs(): Promise<void> {
     initializePrizeDistributionJob();
     logger.info('Leaderboard prize distribution job started (runs hourly)');
   }
+
+  // Customer lifecycle automation — daily at 10:00 AM (nudge dormant/lapsed/at-risk users)
+  const { initializeLifecycleAutomationJob } = await import('../jobs/lifecycleAutomationJob');
+  initializeLifecycleAutomationJob();
+  logger.info('Lifecycle automation job started (runs daily at 10:00 AM)');
+
+  // Archive old records — daily at 3:00 AM (Activity → ArchivedActivity, LedgerEntry → gzip export)
+  const { initializeArchiveJob } = await import('../jobs/archiveJob');
+  initializeArchiveJob();
+  logger.info('Archive job started (runs daily at 3:00 AM)');
+
+  // Dispute timeout resolution job (every 30 minutes)
+  const { initializeDisputeTimeoutJob } = await import('../jobs/disputeTimeoutJob');
+  initializeDisputeTimeoutJob();
+  logger.info('Dispute timeout resolution job started (runs every 30 min)');
 
   // Order lifecycle background jobs
   const { initializeOrderLifecycleJobs } = await import('../jobs/orderLifecycleJobs');

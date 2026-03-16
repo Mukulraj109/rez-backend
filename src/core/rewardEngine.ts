@@ -160,6 +160,17 @@ class RewardEngine {
       merchantId, merchantLiability,
     } = request;
 
+    // Step 0: Global reward kill-switch (checked via cached WalletConfig)
+    try {
+      const config = await getCachedWalletConfig();
+      if (config && (config as any).rewardIssuanceEnabled === false) {
+        logger.warn('Reward issuance DISABLED via kill-switch', { userId, amount, source });
+        return this.emptyResult(source, description, category || null, `killswitch:${userId}:${Date.now()}`);
+      }
+    } catch {
+      // Config fetch failure — proceed (fail-open on config, fail-closed on cap)
+    }
+
     // Step 1: Deterministic idempotency key
     const idempotencyKey = metadata?.idempotencyKey
       || generateIdempotencyKey(userId, referenceId, rewardType, source);
@@ -210,7 +221,9 @@ class RewardEngine {
           cappedReason = capCheck.reason;
         }
       } catch (capError) {
-        logger.error('Program cap check failed (proceeding with original amount)', capError as Error, { userId, amount, source });
+        // FAIL-CLOSED: If cap check service is down, block reward issuance to prevent runaway inflation
+        logger.error('Program cap check failed — BLOCKING reward issuance (fail-closed)', capError as Error, { userId, amount, source });
+        return this.emptyResult(source, description, category || null, idempotencyKey);
       }
     }
 

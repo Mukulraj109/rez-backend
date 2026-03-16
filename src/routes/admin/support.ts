@@ -5,6 +5,7 @@ import { logger } from '../../config/logger';
 import { Router, Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { SupportTicket } from '../../models/SupportTicket';
+import { SupportMacro } from '../../models/SupportMacro';
 import { User } from '../../models/User';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { sendSuccess, sendError } from '../../utils/response';
@@ -232,11 +233,13 @@ router.post('/tickets/:id/messages', async (req: Request, res: Response) => {
 
 /**
  * PUT /admin/support/tickets/:id/status — change status
+ * When resolving: accepts optional `resolution` (note) and `walletAdjustment` (credit/debit user)
  */
 router.put('/tickets/:id/status', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, resolution, walletAdjustment } = req.body;
+    const adminId = (req as any).userId;
 
     if (!Types.ObjectId.isValid(id)) {
       return sendError(res, 'Invalid ticket ID', 400);
@@ -250,6 +253,14 @@ router.put('/tickets/:id/status', async (req: Request, res: Response) => {
     const update: any = { status };
     if (status === 'resolved') {
       update.resolvedAt = new Date();
+      if (resolution && typeof resolution === 'string') {
+        update.resolution = resolution.trim().substring(0, 2000);
+      }
+      // Calculate resolution time
+      const ticketDoc = await SupportTicket.findById(id).select('createdAt').lean();
+      if (ticketDoc) {
+        update.resolutionTime = Math.round((Date.now() - new Date((ticketDoc as any).createdAt).getTime()) / 60000);
+      }
     }
     if (status === 'closed') {
       update.closedAt = new Date();
@@ -264,13 +275,53 @@ router.put('/tickets/:id/status', async (req: Request, res: Response) => {
       return sendError(res, 'Ticket not found', 404);
     }
 
+    // Wallet adjustment on resolution (optional)
+    let walletResult: any = null;
+    if (status === 'resolved' && walletAdjustment) {
+      const { amount, type, reason } = walletAdjustment;
+      const parsedAmount = Number(amount);
+      if (
+        parsedAmount > 0 &&
+        parsedAmount <= 100000 &&
+        ['credit', 'debit'].includes(type) &&
+        reason?.trim()
+      ) {
+        const userId = (ticket as any).user?._id?.toString();
+        if (userId) {
+          try {
+            const { walletService } = await import('../../services/walletService');
+            const walletParams = {
+              userId,
+              amount: parsedAmount,
+              source: 'admin' as const,
+              description: `Ticket ${(ticket as any).ticketNumber} resolution: ${reason.trim()}`,
+              operationType: 'admin_adjustment' as const,
+              referenceId: `ticket-resolve:${id}:${Date.now()}`,
+              referenceModel: 'SupportTicket' as const,
+              metadata: { adminUserId: adminId, ticketId: id, ticketNumber: (ticket as any).ticketNumber, reason: reason.trim() },
+            };
+            if (type === 'credit') {
+              await walletService.credit(walletParams);
+            } else {
+              await walletService.debit(walletParams);
+            }
+            walletResult = { success: true, amount: parsedAmount, type };
+            logger.info(`[Admin Support] Wallet ${type} of ${parsedAmount} for ticket ${(ticket as any).ticketNumber}`);
+          } catch (walletErr: any) {
+            logger.error('[Admin Support] Wallet adjustment failed:', walletErr.message);
+            walletResult = { success: false, error: walletErr.message };
+          }
+        }
+      }
+    }
+
     // Emit status change event to user
     const userId = (ticket as any).user?._id?.toString();
     if (userId) {
       supportSocketService.emitStatusChanged(userId, id, status);
     }
 
-    sendSuccess(res, { ticket });
+    sendSuccess(res, { ticket, walletResult });
   } catch (error: any) {
     logger.error('[Admin Support] Error updating status:', error.message);
     sendError(res, 'Failed to update status', 500);
@@ -376,6 +427,162 @@ router.post('/tickets/:id/read', requireAdmin, async (req: Request, res: Respons
   } catch (error: any) {
     logger.error('[Admin Support] Error marking messages as read:', error.message);
     sendError(res, 'Failed to mark messages as read', 500);
+  }
+});
+
+// ==================== ESCALATION ====================
+
+/**
+ * POST /admin/support/tickets/:id/escalate — Escalate ticket to specialist team
+ */
+router.post('/tickets/:id/escalate', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { team, reason } = req.body;
+    const adminId = (req as any).userId;
+
+    if (!Types.ObjectId.isValid(id)) {
+      return sendError(res, 'Invalid ticket ID', 400);
+    }
+    const validTeams = ['technical', 'finance', 'fraud', 'merchant_ops'];
+    if (!team || !validTeams.includes(team)) {
+      return sendError(res, `Team must be one of: ${validTeams.join(', ')}`, 400);
+    }
+    if (!reason?.trim()) {
+      return sendError(res, 'Escalation reason is required', 400);
+    }
+
+    const ticket = await SupportTicket.findById(id);
+    if (!ticket) return sendError(res, 'Ticket not found', 404);
+
+    const currentLevel = ticket.escalation?.level || 1;
+    ticket.escalation = {
+      level: Math.min(currentLevel + 1, 3),
+      team,
+      escalatedAt: new Date(),
+      escalatedBy: new Types.ObjectId(adminId),
+      escalationReason: reason.trim(),
+    };
+    ticket.priority = 'urgent';
+    await ticket.save();
+
+    // Notify agents of escalation
+    supportSocketService.emitToSupportAgents('ticket:escalated', {
+      ticketId: id,
+      ticketNumber: ticket.ticketNumber,
+      team,
+      level: ticket.escalation.level,
+    });
+
+    sendSuccess(res, { ticket, message: `Ticket escalated to ${team} team (L${ticket.escalation.level})` });
+  } catch (error: any) {
+    logger.error('[Admin Support] Error escalating ticket:', error.message);
+    sendError(res, 'Failed to escalate ticket', 500);
+  }
+});
+
+// ==================== MACROS ====================
+
+/**
+ * GET /admin/support/macros — List all macros
+ */
+router.get('/macros', async (req: Request, res: Response) => {
+  try {
+    const { category, audience } = req.query;
+    const query: any = {};
+    if (category) query.category = category;
+    if (audience) query.audience = audience;
+
+    const macros = await SupportMacro.find(query)
+      .sort({ category: 1, sortOrder: 1 })
+      .lean();
+
+    sendSuccess(res, { macros });
+  } catch (error: any) {
+    logger.error('[Admin Support] Error fetching macros:', error.message);
+    sendError(res, 'Failed to fetch macros', 500);
+  }
+});
+
+/**
+ * POST /admin/support/macros — Create a macro
+ */
+router.post('/macros', async (req: Request, res: Response) => {
+  try {
+    const { title, content, category, audience, shortcut, tags } = req.body;
+    const adminId = (req as any).userId;
+
+    if (!title?.trim() || !content?.trim()) {
+      return sendError(res, 'Title and content are required', 400);
+    }
+
+    const macro = await SupportMacro.create({
+      title: title.trim(),
+      content: content.trim(),
+      category: category || 'all',
+      audience: audience || 'all',
+      shortcut: shortcut?.trim() || undefined,
+      tags: tags || [],
+      createdBy: new Types.ObjectId(adminId),
+    });
+
+    res.status(201).json({ success: true, data: { macro } });
+  } catch (error: any) {
+    if (error.code === 11000) {
+      return sendError(res, 'A macro with this shortcut already exists', 409);
+    }
+    logger.error('[Admin Support] Error creating macro:', error.message);
+    sendError(res, 'Failed to create macro', 500);
+  }
+});
+
+/**
+ * PUT /admin/support/macros/:id — Update a macro
+ */
+router.put('/macros/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!Types.ObjectId.isValid(id)) return sendError(res, 'Invalid macro ID', 400);
+
+    const updates: any = {};
+    const { title, content, category, audience, shortcut, tags, isActive, sortOrder } = req.body;
+    if (title !== undefined) updates.title = title.trim();
+    if (content !== undefined) updates.content = content.trim();
+    if (category !== undefined) updates.category = category;
+    if (audience !== undefined) updates.audience = audience;
+    if (shortcut !== undefined) updates.shortcut = shortcut?.trim() || null;
+    if (tags !== undefined) updates.tags = tags;
+    if (isActive !== undefined) updates.isActive = isActive;
+    if (sortOrder !== undefined) updates.sortOrder = sortOrder;
+
+    const macro = await SupportMacro.findByIdAndUpdate(id, updates, { new: true });
+    if (!macro) return sendError(res, 'Macro not found', 404);
+
+    sendSuccess(res, { macro });
+  } catch (error: any) {
+    if (error.code === 11000) {
+      return sendError(res, 'A macro with this shortcut already exists', 409);
+    }
+    logger.error('[Admin Support] Error updating macro:', error.message);
+    sendError(res, 'Failed to update macro', 500);
+  }
+});
+
+/**
+ * DELETE /admin/support/macros/:id — Delete a macro
+ */
+router.delete('/macros/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!Types.ObjectId.isValid(id)) return sendError(res, 'Invalid macro ID', 400);
+
+    const macro = await SupportMacro.findByIdAndDelete(id);
+    if (!macro) return sendError(res, 'Macro not found', 404);
+
+    sendSuccess(res, { message: 'Macro deleted' });
+  } catch (error: any) {
+    logger.error('[Admin Support] Error deleting macro:', error.message);
+    sendError(res, 'Failed to delete macro', 500);
   }
 });
 

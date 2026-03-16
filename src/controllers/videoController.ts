@@ -626,59 +626,58 @@ export const getVideosByCreator = asyncHandler(async (req: Request, res: Respons
   }
 });
 
-// Like/Unlike video
+// Like/Unlike video (atomic — prevents race conditions and double-likes)
 export const toggleVideoLike = asyncHandler(async (req: Request, res: Response) => {
   const { videoId } = req.params;
   const userId = req.userId!;
+  const userObjectId = new mongoose.Types.ObjectId(userId);
 
   try {
-    const video = await Video.findById(videoId).lean();
+    // Check if user already liked (read-only)
+    const existing = await Video.findOne(
+      { _id: videoId, likedBy: userObjectId },
+      { _id: 1 }
+    ).lean();
 
-    if (!video) {
-      return sendNotFound(res, 'Video not found');
-    }
+    let updated;
+    let isLiked: boolean;
 
-    const userObjectId = new mongoose.Types.ObjectId(userId);
-
-    // Initialize arrays if they don't exist
-    if (!video.likedBy) {
-      video.likedBy = [];
-    }
-    if (!video.engagement) {
-      video.engagement = { views: 0, likes: [], shares: 0, comments: 0, saves: 0, reports: 0 };
-    }
-
-    // Use likedBy as single source of truth (avoids dual-array divergence)
-    const wasLiked = video.likedBy.some(id => id && id.equals(userObjectId));
-
-    let isLiked = false;
-
-    if (wasLiked) {
-      video.likedBy = video.likedBy.filter(id => !id || !id.equals(userObjectId));
+    if (existing) {
+      // Unlike: atomic $pull
+      updated = await Video.findByIdAndUpdate(
+        videoId,
+        {
+          $pull: { likedBy: userObjectId, 'engagement.likes': userObjectId },
+          $inc: { 'analytics.likes': -1 },
+        },
+        { new: true, select: 'likedBy analytics.likes' }
+      );
+      isLiked = false;
     } else {
-      video.likedBy.push(userObjectId);
+      // Like: atomic $addToSet (prevents duplicates even on race condition)
+      updated = await Video.findByIdAndUpdate(
+        videoId,
+        {
+          $addToSet: { likedBy: userObjectId, 'engagement.likes': userObjectId },
+          $inc: { 'analytics.likes': 1 },
+        },
+        { new: true, select: 'likedBy analytics.likes' }
+      );
       isLiked = true;
     }
 
-    // Sync engagement.likes from likedBy for backward compatibility
-    video.engagement.likes = [...video.likedBy];
-
-    // Update analytics.likes count
-    if (!video.analytics) {
-      video.analytics = {} as any;
+    if (!updated) {
+      return sendNotFound(res, 'Video not found');
     }
-    video.analytics.likes = video.likedBy.length;
 
-    const totalLikes = video.likedBy.length;
-
-    await video.save();
+    const totalLikes = updated.likedBy?.length || 0;
 
     logger.info(`✅ [toggleVideoLike] User ${userId} ${isLiked ? 'liked' : 'unliked'} video ${videoId}. Total likes: ${totalLikes}`);
 
     sendSuccess(res, {
-      videoId: video._id,
+      videoId: updated._id,
       isLiked,
-      totalLikes
+      totalLikes,
     }, isLiked ? 'Video liked successfully' : 'Video unliked successfully');
 
   } catch (error) {
@@ -693,9 +692,21 @@ export const addVideoComment = asyncHandler(async (req: Request, res: Response) 
   const { comment } = req.body;
   const userId = req.userId!;
 
+  // Validate comment input
+  if (!comment || typeof comment !== 'string') {
+    return res.status(400).json({ success: false, message: 'Comment text is required' });
+  }
+  const trimmedComment = comment.trim();
+  if (trimmedComment.length === 0) {
+    return res.status(400).json({ success: false, message: 'Comment cannot be empty' });
+  }
+  if (trimmedComment.length > 1000) {
+    return res.status(400).json({ success: false, message: 'Comment must be 1000 characters or less' });
+  }
+
   try {
     const video = await Video.findById(videoId);
-    
+
     if (!video) {
       return sendNotFound(res, 'Video not found');
     }
@@ -703,7 +714,7 @@ export const addVideoComment = asyncHandler(async (req: Request, res: Response) 
     // Add comment
     video.comments.push({
       user: new mongoose.Types.ObjectId(userId),
-      content: comment,
+      content: trimmedComment,
       timestamp: new Date()
     });
 
@@ -1097,51 +1108,56 @@ export const shareVideo = asyncHandler(async (req: Request, res: Response) => {
   }
 });
 
-// Toggle like on a comment
+// Toggle like on a comment (atomic — prevents race conditions)
 export const toggleCommentLike = asyncHandler(async (req: Request, res: Response) => {
   const { videoId, commentId } = req.params;
   const userId = req.userId!;
+  const userObjectId = new mongoose.Types.ObjectId(userId);
+  const commentObjectId = new mongoose.Types.ObjectId(commentId);
 
   try {
-    const video = await Video.findById(videoId).lean();
+    // Check if already liked
+    const existing = await Video.findOne(
+      { _id: videoId, 'comments._id': commentObjectId, 'comments.likes': userObjectId },
+      { _id: 1 }
+    ).lean();
 
-    if (!video) {
-      return sendNotFound(res, 'Video not found');
-    }
+    let updated;
+    let isLiked: boolean;
 
-    const comment = (video.comments as any[])?.find(
-      (c: any) => c._id.toString() === commentId
-    );
-
-    if (!comment) {
-      return sendNotFound(res, 'Comment not found');
-    }
-
-    const userObjectId = new mongoose.Types.ObjectId(userId);
-
-    // Initialize likes array if it doesn't exist
-    if (!comment.likes) {
-      comment.likes = [];
-    }
-
-    const wasLiked = comment.likes.some((id: any) => id && id.equals(userObjectId));
-    let isLiked = false;
-
-    if (wasLiked) {
-      comment.likes = comment.likes.filter((id: any) => !id || !id.equals(userObjectId));
+    if (existing) {
+      // Unlike: atomic $pull from comment's likes array
+      updated = await Video.findOneAndUpdate(
+        { _id: videoId, 'comments._id': commentObjectId },
+        { $pull: { 'comments.$.likes': userObjectId } },
+        { new: true, select: 'comments' }
+      );
+      isLiked = false;
     } else {
-      comment.likes.push(userObjectId);
+      // Like: atomic $addToSet
+      updated = await Video.findOneAndUpdate(
+        { _id: videoId, 'comments._id': commentObjectId },
+        { $addToSet: { 'comments.$.likes': userObjectId } },
+        { new: true, select: 'comments' }
+      );
       isLiked = true;
     }
 
-    await video.save();
+    if (!updated) {
+      return sendNotFound(res, 'Video or comment not found');
+    }
+
+    const comment = (updated.comments as any[])?.find(
+      (c: any) => c._id.toString() === commentId
+    );
+    const likesCount = comment?.likes?.length || 0;
 
     logger.info(`✅ [VIDEO] Comment ${commentId} ${isLiked ? 'liked' : 'unliked'} by user ${userId}`);
 
     sendSuccess(res, {
       commentId,
       isLiked,
-      likesCount: comment.likes.length
+      likesCount,
     }, isLiked ? 'Comment liked' : 'Comment unliked');
 
   } catch (error) {

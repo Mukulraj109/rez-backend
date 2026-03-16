@@ -5,6 +5,8 @@ import { Types } from 'mongoose';
 import { SupportTicket, ISupportTicket } from '../models/SupportTicket';
 import { FAQ, IFAQ } from '../models/FAQ';
 import { User } from '../models/User';
+import { Order } from '../models/Order';
+import { Product } from '../models/Product';
 import supportSocketService from './supportSocketService';
 import { logger } from '../config/logger';
 
@@ -60,9 +62,30 @@ class SupportService {
 
       const ticketNumber = await this.generateTicketNumber();
 
+      // Auto-resolve merchant from related entity
+      let merchantId: Types.ObjectId | undefined;
+      if (data.relatedEntity?.id) {
+        try {
+          if (data.relatedEntity.type === 'order') {
+            const order = await Order.findById(data.relatedEntity.id).select('items.store').lean();
+            if (order && (order as any).items?.[0]?.store) {
+              merchantId = (order as any).items[0].store;
+            }
+          } else if (data.relatedEntity.type === 'product') {
+            const product = await Product.findById(data.relatedEntity.id).select('store').lean();
+            if (product && (product as any).store) {
+              merchantId = (product as any).store;
+            }
+          }
+        } catch (err) {
+          logger.warn('[SUPPORT SERVICE] Could not resolve merchant from related entity:', err);
+        }
+      }
+
       const ticket = await SupportTicket.create({
         ticketNumber,
         user: data.userId,
+        ...(merchantId ? { merchant: merchantId } : {}),
         subject: data.subject,
         category: data.category,
         priority: data.priority || 'medium',

@@ -134,18 +134,8 @@ export class Database {
       this.isConnected = true;
     });
     
-    // Handle application termination
-    process.on('SIGINT', async () => {
-      logger.info('\n🛑 Received SIGINT. Gracefully closing MongoDB connection...');
-      await this.disconnect();
-      process.exit(0);
-    });
-    
-    process.on('SIGTERM', async () => {
-      logger.info('\n🛑 Received SIGTERM. Gracefully closing MongoDB connection...');
-      await this.disconnect();
-      process.exit(0);
-    });
+    // Note: SIGINT/SIGTERM handlers are in server.ts (single source of truth for graceful shutdown)
+    // Database disconnection is handled by server.ts shutdown sequence.
   }
   
   // Convert readyState number to text

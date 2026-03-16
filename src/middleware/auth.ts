@@ -3,6 +3,7 @@ import { Request, Response, NextFunction } from 'express';
 import { User } from '../models/User';
 import redisService from '../services/redisService';
 import { logger } from '../config/logger';
+import * as deviceFingerprintService from '../services/deviceFingerprintService';
 
 // Token blacklist helpers (Redis-backed)
 const TOKEN_BLACKLIST_PREFIX = 'blacklist:token:';
@@ -211,6 +212,36 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       // Attach user to request
       req.user = user;
       req.userId = String(user._id);
+
+      // Device fingerprint check (non-blocking for old app versions without header)
+      const deviceHash = req.headers['x-device-fingerprint'] as string | undefined;
+      if (deviceHash) {
+        try {
+          const deviceStatus = await deviceFingerprintService.checkDeviceStatus(deviceHash);
+          if (deviceStatus.isBlocked) {
+            return res.status(423).json({
+              success: false,
+              blocked: true,
+              message: 'This device has been blocked due to suspicious activity.',
+            });
+          }
+          // Attach risk level for downstream handlers
+          (req as any).deviceRisk = deviceStatus.riskLevel;
+          (req as any).deviceHash = deviceHash;
+
+          // Fire-and-forget: register device usage
+          const osHeader = req.headers['x-device-os'] as string || '';
+          const parts = osHeader.split(' ');
+          const platform = parts[0] || 'web';
+          const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
+          deviceFingerprintService.registerDevice(
+            deviceHash, parts.slice(1).join(' ') || '', '', platform, String(user._id), ip
+          ).catch(() => {});
+        } catch (deviceErr) {
+          // Graceful degradation — don't block auth on device service failure
+          logger.warn('[AUTH] Device fingerprint check failed, allowing request', { error: (deviceErr as Error).message });
+        }
+      }
 
       next();
     } catch (tokenError: any) {

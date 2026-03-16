@@ -327,7 +327,7 @@ export async function getFollowers(
     const skip = (page - 1) * limit;
 
     const followers = await Follow.find({ following: userId })
-      .populate('follower', 'name profilePicture email')
+      .populate('follower', 'profile.firstName profile.lastName profile.avatar')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)

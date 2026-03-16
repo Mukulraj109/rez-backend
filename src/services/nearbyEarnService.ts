@@ -239,11 +239,118 @@ class NearbyEarnService {
         };
       });
 
+      // Sort by composite relevance score (not just distance)
+      results.sort((a, b) => {
+        const scoreA = this.computeRankingScore(a);
+        const scoreB = this.computeRankingScore(b);
+        return scoreB - scoreA; // Higher score = better rank
+      });
+
       return results;
     } catch (error) {
       logger.error('[NearbyEarnService] getStoresNearby error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Cold-start fallback: when no stores within radius, return trending/featured stores
+   * from any location, sorted by rating. Prevents empty "nothing nearby" screens.
+   */
+  async getColdStartStores(limit: number = 10): Promise<NearbyStoreWithEarnings[]> {
+    try {
+      const trendingStores = await Store.find({
+        isActive: true,
+        $or: [
+          { isFeatured: true },
+          { 'ratings.average': { $gte: 4.0 } },
+          { 'analytics.totalOrders': { $gte: 10 } },
+        ],
+      })
+        .sort({ isFeatured: -1, 'ratings.average': -1 })
+        .limit(limit)
+        .select('_id name slug logo image description category location ratings tags isVerified isFeatured offers rewardRules')
+        .lean();
+
+      return trendingStores.map((store: any) => ({
+        store: {
+          _id: store._id,
+          name: store.name,
+          slug: store.slug,
+          logo: store.logo,
+          image: store.image,
+          description: store.description,
+          category: store.category,
+          categorySlug: '',
+          location: store.location,
+          ratings: store.ratings,
+          tags: store.tags,
+          isVerified: store.isVerified,
+          isFeatured: store.isFeatured,
+          isPartner: store.offers?.isPartner || false,
+          partnerLevel: store.offers?.partnerLevel,
+        },
+        distance: -1, // Unknown — cold-start result
+        earningOpportunities: [],
+        baseCashbackPercent: store.rewardRules?.baseCashbackPercent || store.offers?.cashback || 0,
+      }));
+    } catch (error) {
+      logger.error('[NearbyEarnService] getColdStartStores error:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Smart nearby: tries geo first, falls back to cold-start if empty.
+   */
+  async getStoresNearbyWithFallback(
+    lat: number,
+    lng: number,
+    radiusKm: number = 10,
+    limit: number = 20
+  ): Promise<{ stores: NearbyStoreWithEarnings[]; isColdStart: boolean }> {
+    const nearbyResults = await this.getStoresNearby(lat, lng, radiusKm, limit);
+
+    if (nearbyResults.length > 0) {
+      return { stores: nearbyResults, isColdStart: false };
+    }
+
+    // Cold-start fallback
+    const coldStartResults = await this.getColdStartStores(limit);
+    return { stores: coldStartResults, isColdStart: true };
+  }
+
+  /**
+   * Composite ranking score for a store result.
+   * Factors: distance (inverse), rating, featured boost, partner boost, earning opportunities.
+   */
+  private computeRankingScore(result: NearbyStoreWithEarnings): number {
+    let score = 0;
+
+    // Distance factor (closer = higher, max 40 points at 0km, 0 at 10km)
+    const distKm = Math.max(0, result.distance);
+    score += Math.max(0, 40 - (distKm * 4));
+
+    // Rating factor (0-25 points)
+    const avgRating = result.store.ratings?.average || 0;
+    score += (avgRating / 5) * 25;
+
+    // Featured / sponsored boost (+15 points)
+    if (result.store.isFeatured) score += 15;
+
+    // Partner store boost (+10 points)
+    if (result.store.isPartner) score += 10;
+
+    // Has earning opportunities boost (+5 per opportunity, max +15)
+    score += Math.min(result.earningOpportunities.length * 5, 15);
+
+    // Cashback boost (higher cashback = +5 max)
+    score += Math.min(result.baseCashbackPercent, 5);
+
+    // Verified store boost (+5)
+    if (result.store.isVerified) score += 5;
+
+    return score;
   }
 }
 

@@ -4,9 +4,14 @@ import { UserSettings } from '../models/UserSettings';
 import { getIO } from '../config/socket';
 import { SocketRoom } from '../types/socket';
 import pushNotificationService from './pushNotificationService';
+import redisService from './redisService';
 import { createServiceLogger } from '../config/logger';
 
 const logger = createServiceLogger('notification-service');
+
+// ── Reward push throttle config ──────────────────────────
+const MAX_REWARD_PUSH_PER_DAY = 3;
+const REWARD_PUSH_COOLDOWN_SECONDS = 60; // 1 minute between reward pushes
 
 /**
  * Notification Service
@@ -82,17 +87,24 @@ export class NotificationService {
 
       // Send push notification if channel is enabled
       if (finalDeliveryChannels.includes('push')) {
-        pushNotificationService.sendPushToUser(userId.toString(), {
-          title,
-          body: message,
-          data: {
-            notificationId: notification._id?.toString(),
-            type: category,
-            ...data
-          },
-          channelId: category === 'order' ? 'orders' : category === 'earning' ? 'earnings' : 'default',
-          priority: priority === 'urgent' || priority === 'high' ? 'high' : 'default'
-        }).catch(err => logger.error('Push delivery failed', { userId: userId.toString(), error: err.message }));
+        // Throttle reward push notifications (max 3/day + 60s cooldown)
+        const shouldSkipPush = category === 'earning'
+          ? await this.shouldThrottleRewardPush(userId.toString())
+          : false;
+
+        if (!shouldSkipPush) {
+          pushNotificationService.sendPushToUser(userId.toString(), {
+            title,
+            body: message,
+            data: {
+              notificationId: notification._id?.toString(),
+              type: category,
+              ...data
+            },
+            channelId: category === 'order' ? 'orders' : category === 'earning' ? 'earnings' : 'default',
+            priority: priority === 'urgent' || priority === 'high' ? 'high' : 'default'
+          }).catch(err => logger.error('Push delivery failed', { userId: userId.toString(), error: err.message }));
+        }
       }
     }
 
@@ -119,6 +131,39 @@ export class NotificationService {
     );
 
     return notifications;
+  }
+
+  /**
+   * Check if a reward push notification should be throttled.
+   * Enforces max 3 reward pushes per day + 60s cooldown between pushes.
+   * Fail-open: returns false (allow) if Redis is unavailable.
+   */
+  private static async shouldThrottleRewardPush(userId: string): Promise<boolean> {
+    try {
+      // 1. Cooldown check — minimum gap between reward pushes
+      const cooldownKey = `notify:cooldown:earning:${userId}`;
+      const inCooldown = await redisService.get(cooldownKey);
+      if (inCooldown) {
+        logger.info('Reward push throttled (cooldown)', { userId });
+        return true;
+      }
+
+      // 2. Daily limit check — max N reward pushes per 24h
+      const dailyKey = `notify:daily:earning:${userId}`;
+      const count = await redisService.atomicIncr(dailyKey, 86400);
+      if (count !== null && count > MAX_REWARD_PUSH_PER_DAY) {
+        logger.info('Reward push throttled (daily limit)', { userId, count });
+        return true;
+      }
+
+      // 3. Set cooldown for this push (only if we're allowing it)
+      await redisService.set(cooldownKey, '1', REWARD_PUSH_COOLDOWN_SECONDS);
+
+      return false;
+    } catch {
+      // Fail-open: don't block notifications if Redis is down
+      return false;
+    }
   }
 
   /**

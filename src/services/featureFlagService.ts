@@ -149,6 +149,51 @@ class FeatureFlagService {
         return true;
     }
   }
+
+  /**
+   * Seed default feature flags into the DB if they don't already exist.
+   * Uses $setOnInsert so existing flags (with admin-modified values) are not overwritten.
+   * Called once on server startup.
+   */
+  async seedDefaultFlags(): Promise<void> {
+    const defaults = [
+      // Games
+      { key: 'games.mini_games', label: 'Mini Games (Spin/Scratch/Quiz)', group: 'games', enabled: true },
+      { key: 'games.spin_wheel', label: 'Spin Wheel', group: 'games', enabled: true },
+      { key: 'games.scratch_card', label: 'Scratch Card', group: 'games', enabled: true },
+      { key: 'games.quiz', label: 'Quiz Game', group: 'games', enabled: true },
+      { key: 'games.memory_match', label: 'Memory Match', group: 'games', enabled: true },
+      // Gamification
+      { key: 'gamification.coins', label: 'Coins on Purchase', group: 'gamification', enabled: true },
+      { key: 'gamification.streaks', label: 'Daily Streaks', group: 'gamification', enabled: true },
+      { key: 'gamification.daily_checkin', label: 'Daily Check-in', group: 'gamification', enabled: true },
+      { key: 'gamification.bonus_zones', label: 'Bonus Zones', group: 'gamification', enabled: true },
+      { key: 'gamification.achievements', label: 'Achievements', group: 'gamification', enabled: true },
+      { key: 'gamification.challenges', label: 'Challenges', group: 'gamification', enabled: true },
+      { key: 'gamification.leaderboard', label: 'Leaderboard', group: 'gamification', enabled: true },
+      { key: 'gamification.activity_feed', label: 'Activity Feed', group: 'gamification', enabled: true },
+      { key: 'gamification.badges', label: 'Badges', group: 'gamification', enabled: true },
+      { key: 'gamification.tournaments', label: 'Tournaments', group: 'gamification', enabled: true },
+      { key: 'gamification.affiliate', label: 'Affiliate Program', group: 'gamification', enabled: true },
+    ];
+
+    const bulkOps = defaults.map(flag => ({
+      updateOne: {
+        filter: { key: flag.key },
+        update: {
+          $setOnInsert: { ...flag, scope: 'global', configJson: {}, sortOrder: 0, metadata: {} },
+        },
+        upsert: true,
+      },
+    }));
+
+    try {
+      await FeatureFlag.bulkWrite(bulkOps, { ordered: false });
+      logger.info(`Feature flags seeded: ${defaults.length} flags`);
+    } catch (error) {
+      logger.error('Failed to seed feature flags', error as Error);
+    }
+  }
 }
 
 export const featureFlagService = new FeatureFlagService();

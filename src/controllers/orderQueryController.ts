@@ -13,6 +13,7 @@ import { Refund } from '../models/Refund';
 import { logger } from '../config/logger';
 import { ACTIVE_STATUSES, PAST_STATUSES, getOrderProgress } from '../config/orderStateMachine';
 import etaService from '../services/etaService';
+import { escapeRegex } from '../utils/sanitize';
 
 // ─── getUserOrders ──────────────────────────────────────────────────────────
 
@@ -134,10 +135,11 @@ export const getUserOrders = asyncHandler(async (req: Request, res: Response) =>
     // Server-side search: order number, item name, store name
     if (search && (search as string).trim()) {
       const searchStr = (search as string).trim();
+      const safeSearch = escapeRegex(searchStr);
       query.$or = [
-        { orderNumber: { $regex: searchStr, $options: 'i' } },
-        { 'items.name': { $regex: searchStr, $options: 'i' } },
-        { 'items.storeName': { $regex: searchStr, $options: 'i' } },
+        { orderNumber: { $regex: safeSearch, $options: 'i' } },
+        { 'items.name': { $regex: safeSearch, $options: 'i' } },
+        { 'items.storeName': { $regex: safeSearch, $options: 'i' } },
       ];
     }
 

@@ -554,25 +554,33 @@ export const useVoucher = async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { usageLocation } = req.body;
 
-    // Find voucher
+    // Find voucher (no .lean() — need instance methods: isValid, markAsUsed)
     const voucher = await UserVoucher.findOne({
       _id: id,
       user: userId,
-    }).lean();
+    });
 
     if (!voucher) {
       return sendError(res, 'Voucher not found', 404);
     }
 
     // Check if valid
-    if (!voucher.isValid()) {
+    if (typeof voucher.isValid === 'function' && !voucher.isValid()) {
       return sendError(res, 'Voucher is not valid or has expired', 400);
     }
 
     // Mark as used
-    await voucher.markAsUsed(usageLocation);
+    if (typeof voucher.markAsUsed === 'function') {
+      await voucher.markAsUsed(usageLocation);
+    } else {
+      // Fallback: manual update if instance method unavailable
+      voucher.set('status', 'used');
+      voucher.set('usedAt', new Date());
+      if (usageLocation) voucher.set('usageLocation', usageLocation);
+      await voucher.save();
+    }
 
-    sendSuccess(res, voucher, 'Voucher marked as used successfully');
+    sendSuccess(res, voucher.toObject(), 'Voucher marked as used successfully');
   } catch (error) {
     logger.error('Error using voucher:', error);
     sendError(res, 'Failed to use voucher', 500);

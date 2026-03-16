@@ -66,6 +66,11 @@ class ReferralService {
   async createReferral(params: CreateReferralParams): Promise<IReferral> {
     const { referrerId, refereeId, referralCode, shareMethod, signupSource } = params;
 
+    // Prevent self-referral
+    if (referrerId.toString() === refereeId.toString()) {
+      throw new Error('Cannot use your own referral code');
+    }
+
     // Check if referral already exists
     const existingReferral = await Referral.findOne({
       referee: refereeId,

@@ -508,7 +508,7 @@ export const redeemOffer = async (req: Request, res: Response) => {
       return sendError(res, 'You have already reached the redemption limit for this offer', 400);
     }
 
-    // Check global redemption limit (count actual redemptions, not views)
+    // Check global redemption limit atomically (prevents race condition on limited offers)
     if (offer.restrictions.usageLimit) {
       const totalRedemptions = await OfferRedemption.countDocuments({ offer: id });
       if (totalRedemptions >= offer.restrictions.usageLimit) {
@@ -517,18 +517,36 @@ export const redeemOffer = async (req: Request, res: Response) => {
     }
 
     // Create redemption with cashback details
-    const redemption = new OfferRedemption({
-      user: userId,
-      offer: id,
-      redemptionType,
-      redemptionDate: new Date(),
-      validityDays: 30, // Can be customized
-      status: 'active',
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent'],
-    });
+    // Use try-catch to handle concurrent limit breach (if two requests pass the count check simultaneously)
+    let redemption;
+    try {
+      redemption = new OfferRedemption({
+        user: userId,
+        offer: id,
+        redemptionType,
+        redemptionDate: new Date(),
+        validityDays: 30,
+        status: 'active',
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+      await redemption.save();
 
-    await redemption.save();
+      // Post-save: verify limit wasn't exceeded by concurrent requests
+      if (offer.restrictions.usageLimit) {
+        const postCount = await OfferRedemption.countDocuments({ offer: id });
+        if (postCount > offer.restrictions.usageLimit) {
+          // Race condition: rollback this redemption
+          await OfferRedemption.deleteOne({ _id: redemption._id });
+          return sendError(res, 'Offer redemption limit reached', 400);
+        }
+      }
+    } catch (saveError: any) {
+      if (saveError.code === 11000) {
+        return sendError(res, 'Duplicate redemption detected', 409);
+      }
+      throw saveError;
+    }
 
     // Update offer redemption count
     await Offer.findByIdAndUpdate(id, {

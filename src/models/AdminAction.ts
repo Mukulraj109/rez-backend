@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
-export type AdminActionType = 'manual_adjustment' | 'bulk_credit' | 'freeze_override' | 'config_change';
+export type AdminActionType = 'manual_adjustment' | 'bulk_credit' | 'freeze_override' | 'config_change' | 'cashback_reversal';
 export type AdminActionStatus = 'pending_approval' | 'approved' | 'rejected' | 'executed';
 
 export interface IAdminAction extends Document {
@@ -12,6 +12,7 @@ export interface IAdminAction extends Document {
   reason: string;
   threshold: number;
   rejectionReason?: string;
+  failureReason?: string;
   executedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -21,7 +22,7 @@ const AdminActionSchema = new Schema<IAdminAction>({
   actionType: {
     type: String,
     required: true,
-    enum: ['manual_adjustment', 'bulk_credit', 'freeze_override', 'config_change'],
+    enum: ['manual_adjustment', 'bulk_credit', 'freeze_override', 'config_change', 'cashback_reversal'],
   },
   initiatorId: {
     type: Schema.Types.ObjectId,
@@ -54,6 +55,7 @@ const AdminActionSchema = new Schema<IAdminAction>({
     required: true,
   },
   rejectionReason: String,
+  failureReason: String,
   executedAt: Date,
 }, {
   timestamps: true,

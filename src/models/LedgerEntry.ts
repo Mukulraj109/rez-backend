@@ -36,6 +36,7 @@ export interface ILedgerEntry extends Document {
     adminUserId?: string;
     description?: string;
   };
+  yearMonth: string; // e.g. "2026-03" — partition-like bucketing for efficient range queries
   createdAt: Date;
 }
 
@@ -62,9 +63,21 @@ const LedgerEntrySchema = new Schema<ILedgerEntry>({
     idempotencyKey: String,
     adminUserId: String,
     description: String,
-  }
+  },
+  yearMonth: { type: String, index: true },
 }, {
   timestamps: { createdAt: true, updatedAt: false } // Immutable — no updates
+});
+
+// Pre-save: auto-compute yearMonth from createdAt
+LedgerEntrySchema.pre('save', function (next) {
+  if (this.isNew && !this.yearMonth) {
+    const d = this.createdAt || new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    this.yearMonth = `${y}-${m}`;
+  }
+  next();
 });
 
 // Indexes for reconciliation and querying
@@ -74,5 +87,6 @@ LedgerEntrySchema.index({ referenceId: 1, referenceModel: 1 });
 LedgerEntrySchema.index({ accountId: 1, coinType: 1, createdAt: -1 });
 LedgerEntrySchema.index({ pairId: 1, direction: 1 }, { unique: true }); // Each pair has exactly 1 debit + 1 credit
 LedgerEntrySchema.index({ reversalReferenceId: 1 }, { sparse: true }); // Reversal chain lookups
+LedgerEntrySchema.index({ yearMonth: 1, accountType: 1 }); // Month-based partition queries
 
 export const LedgerEntry = mongoose.model<ILedgerEntry>('LedgerEntry', LedgerEntrySchema);

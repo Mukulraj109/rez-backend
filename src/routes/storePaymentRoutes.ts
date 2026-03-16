@@ -24,6 +24,7 @@ import {
 import { authenticate } from '../middleware/auth';
 import { authMiddleware as merchantAuth } from '../middleware/merchantauth';
 import { createRateLimiter } from '../middleware/rateLimiter';
+import { qrCooldown, validateDistance, merchantScanAnomaly } from '../middleware/qrAbuseProtection';
 
 const router = express.Router();
 
@@ -61,8 +62,8 @@ router.patch('/qr/:storeId/toggle', merchantAuth, toggleQRStatus);
 
 // ==================== QR CODE ROUTES (CUSTOMER) ====================
 
-// Lookup store by QR code (customer - authenticated)
-router.post('/lookup', authenticate, lookupStoreByQR);
+// Lookup store by QR code (customer - authenticated, with QR cooldown)
+router.post('/lookup', authenticate, qrCooldown(), lookupStoreByQR);
 
 // Lookup store by QR code (public - for initial scan)
 router.get('/lookup/:qrCode', lookupStoreByQR);
@@ -96,8 +97,8 @@ router.get('/offers/:storeId', authenticate, getStorePaymentOffers);
 
 // ==================== PAYMENT ROUTES (CUSTOMER) ====================
 
-// Initiate store payment (rate limited)
-router.post('/initiate', authenticate, paymentInitLimiter, initiateStorePayment);
+// Initiate store payment (rate limited + QR abuse protection)
+router.post('/initiate', authenticate, paymentInitLimiter, qrCooldown(), validateDistance(5), merchantScanAnomaly(), initiateStorePayment);
 
 // Confirm store payment
 router.post('/confirm', authenticate, confirmStorePayment);

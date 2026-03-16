@@ -33,6 +33,7 @@ export interface ISupportTicket extends Document {
   status: 'open' | 'in_progress' | 'waiting_customer' | 'resolved' | 'closed';
   relatedEntity: IRelatedEntity;
   messages: ITicketMessage[];
+  merchant?: Types.ObjectId; // Store the ticket relates to
   assignedTo?: Types.ObjectId; // Agent/Admin
   createdAt: Date;
   updatedAt: Date;
@@ -52,6 +53,13 @@ export interface ISupportTicket extends Document {
   firstResponseAt?: Date;
   responseTime?: number; // in minutes
   resolutionTime?: number; // in minutes
+  escalation?: {
+    level: number;
+    team: 'support' | 'technical' | 'finance' | 'fraud' | 'merchant_ops';
+    escalatedAt: Date;
+    escalatedBy: Types.ObjectId;
+    escalationReason: string;
+  };
 
   // Instance methods
   addMessage(senderId: Types.ObjectId, senderType: 'user' | 'agent' | 'system', message: string, attachments?: string[]): Promise<void>;
@@ -104,6 +112,11 @@ const SupportTicketSchema = new Schema<ISupportTicket>(
       type: Schema.Types.ObjectId,
       ref: 'User',
       required: true,
+      index: true,
+    },
+    merchant: {
+      type: Schema.Types.ObjectId,
+      ref: 'Store',
       index: true,
     },
     subject: {
@@ -215,6 +228,13 @@ const SupportTicketSchema = new Schema<ISupportTicket>(
     resolutionTime: {
       type: Number, // Minutes from creation to resolution
     },
+    escalation: {
+      level: { type: Number, default: 1 },
+      team: { type: String, enum: ['support', 'technical', 'finance', 'fraud', 'merchant_ops'] },
+      escalatedAt: Date,
+      escalatedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+      escalationReason: { type: String, trim: true },
+    },
   },
   {
     timestamps: true,
@@ -227,6 +247,7 @@ SupportTicketSchema.index({ ticketNumber: 1, user: 1 });
 SupportTicketSchema.index({ createdAt: -1 });
 SupportTicketSchema.index({ status: 1, priority: -1 });
 SupportTicketSchema.index({ isPriveTicket: 1, slaBreached: 1, status: 1 });
+SupportTicketSchema.index({ merchant: 1, status: 1 });
 
 // Virtual for unread message count (for user)
 SupportTicketSchema.virtual('unreadCount').get(function(this: ISupportTicket) {

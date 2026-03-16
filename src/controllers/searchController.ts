@@ -89,6 +89,11 @@ const normalizeProductName = (name: string, brand?: string): string => {
  */
 const searchProducts = async (query: string, limit: number, mode?: ModeId, region?: RegionId): Promise<any> => {
   try {
+    // Validate query length to prevent DoS via complex text search
+    if (query.length > 200) {
+      return { items: [], total: 0, hasMore: false };
+    }
+
     // Build base filter (shared by both text and regex paths)
     const baseFilter: any = { isActive: true };
 
@@ -145,6 +150,11 @@ const searchProducts = async (query: string, limit: number, mode?: ModeId, regio
     }
 
     // Fallback to regex if text search returns nothing (handles partial words)
+    // Cache regex results to avoid repeated expensive scans
+    const regexCacheKey = `search:regex:${escapeRegex(query)}:${mode || ''}:${region || ''}:${limit}`;
+    const cachedRegex = await redisService.get<any>(regexCacheKey);
+    if (cachedRegex) return cachedRegex;
+
     const regexQuery = {
       ...baseFilter,
       $or: [
@@ -160,7 +170,7 @@ const searchProducts = async (query: string, limit: number, mode?: ModeId, regio
         .populate('category', 'name slug')
         .populate('store', 'name logo')
         .select('name slug images pricing ratings inventory brand tags')
-        .limit(limit + 10)
+        .limit(limit * 2)
         .lean(),
       Product.countDocuments(regexQuery)
     ]);
@@ -172,7 +182,7 @@ const searchProducts = async (query: string, limit: number, mode?: ModeId, regio
       ['name', 'brand', 'description']
     ).slice(0, limit);
 
-    return {
+    const regexResult = {
       items: sortedProducts.map(p => ({
         ...p,
         type: 'product',
@@ -181,6 +191,11 @@ const searchProducts = async (query: string, limit: number, mode?: ModeId, regio
       total: regexTotal,
       hasMore: regexTotal > limit
     };
+
+    // Cache regex results for 5 minutes
+    await redisService.set(regexCacheKey, regexResult, 300);
+
+    return regexResult;
   } catch (error) {
     logger.error('Error searching products:', error);
     return { items: [], total: 0, hasMore: false };

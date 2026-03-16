@@ -3,7 +3,7 @@ import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
 import { Response } from 'express';
-import { IOrder } from '../models/Order';
+import { IOrder, Order } from '../models/Order';
 import { Merchant } from '../models/Merchant';
 import { Store } from '../models/Store';
 
@@ -671,6 +671,8 @@ export class InvoiceService {
         doc.fontSize(10).font('Helvetica');
         doc.text(`Merchant: ${merchant.businessName || 'Unknown'}`);
         doc.text(`Merchant ID: ${merchantId}`);
+        if ((merchant as any).gstin) doc.text(`GSTIN: ${(merchant as any).gstin}`);
+        if ((merchant as any).pan) doc.text(`PAN: ${(merchant as any).pan}`);
         doc.text(`Cycle: ${cycleId}`);
         doc.text(`Generated: ${new Date().toLocaleDateString('en-IN')}`);
         doc.moveDown(1);
@@ -723,11 +725,243 @@ export class InvoiceService {
           doc.text('No liability records found for this cycle.', 50, position);
         }
 
+        // Footer
+        doc.moveDown(2);
+        doc.fontSize(8).font('Helvetica').fillColor('#999999');
+        doc.text('This is a computer-generated document and does not require a signature.', { align: 'center' });
+
         doc.end();
       } catch (error) {
         reject(error);
       }
     });
+  }
+
+  /**
+   * Generate a payout statement PDF with GST split for a merchant and cycle.
+   * Includes: gross sales, platform fees, GST breakdown (CGST/SGST), net payout, settlement status.
+   */
+  static async generatePayoutStatement(merchantId: string, cycleId: string): Promise<Buffer> {
+    const { liabilityService } = await import('./liabilityService');
+    const merchant = await Merchant.findById(merchantId).lean();
+    if (!merchant) throw new Error('Merchant not found');
+
+    const statement = await liabilityService.getStatement(merchantId, { cycleId, limit: 100 });
+
+    // Determine date range from cycleId for order query
+    const dateRange = this.parseCycleDateRange(cycleId);
+
+    // Fetch merchant stores for order lookup
+    const stores = await Store.find({ merchantId }).select('_id').lean();
+    const storeIds = stores.map((s: any) => s._id);
+
+    // Aggregate order financials for this cycle
+    let grossSales = 0;
+    let totalPlatformFees = 0;
+    let totalRefunds = 0;
+    let totalMerchantPayout = 0;
+    let orderCount = 0;
+
+    if (storeIds.length > 0 && dateRange) {
+      const orderAgg = await Order.aggregate([
+        {
+          $match: {
+            'items.store': { $in: storeIds },
+            createdAt: { $gte: dateRange.start, $lte: dateRange.end },
+            status: { $in: ['delivered', 'completed', 'confirmed'] },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            grossSales: { $sum: '$totals.subtotal' },
+            platformFees: { $sum: '$totals.platformFee' },
+            refunds: { $sum: { $cond: [{ $eq: ['$payment.status', 'refunded'] }, '$totals.subtotal', 0] } },
+            merchantPayout: { $sum: '$totals.merchantPayout' },
+            count: { $sum: 1 },
+          },
+        },
+      ]);
+
+      if (orderAgg.length > 0) {
+        grossSales = orderAgg[0].grossSales || 0;
+        totalPlatformFees = orderAgg[0].platformFees || 0;
+        totalRefunds = orderAgg[0].refunds || 0;
+        totalMerchantPayout = orderAgg[0].merchantPayout || 0;
+        orderCount = orderAgg[0].count || 0;
+      }
+    }
+
+    // GST calculation on platform fees (18% GST = 9% CGST + 9% SGST)
+    const GST_RATE = 0.18;
+    const gstOnFees = totalPlatformFees * GST_RATE;
+    const cgst = gstOnFees / 2;
+    const sgst = gstOnFees / 2;
+    const netPayable = totalMerchantPayout - gstOnFees;
+
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({ margin: 50 });
+        const chunks: Buffer[] = [];
+
+        doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+        doc.on('end', () => resolve(Buffer.concat(chunks)));
+        doc.on('error', (err: Error) => reject(err));
+
+        // ── HEADER ──
+        doc.fontSize(20).font('Helvetica-Bold').text('PAYOUT STATEMENT', { align: 'center' });
+        doc.moveDown(0.3);
+        doc.fontSize(10).font('Helvetica').fillColor('#666666').text(`Settlement Period: ${cycleId}`, { align: 'center' });
+        doc.fillColor('#000000');
+        doc.moveDown(1);
+
+        // Merchant details
+        doc.fontSize(11).font('Helvetica-Bold').text('Merchant Details');
+        doc.fontSize(10).font('Helvetica');
+        doc.text(`Business Name: ${merchant.businessName || 'N/A'}`);
+        if ((merchant as any).gstin) doc.text(`GSTIN: ${(merchant as any).gstin}`);
+        if ((merchant as any).pan) doc.text(`PAN: ${(merchant as any).pan}`);
+        doc.text(`Settlement Cycle: ${cycleId}`);
+        doc.text(`Generated: ${new Date().toLocaleDateString('en-IN')} at ${new Date().toLocaleTimeString('en-IN')}`);
+        doc.moveDown(1);
+
+        // ── PAYOUT SUMMARY ──
+        doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+        doc.moveDown(0.5);
+        doc.fontSize(12).font('Helvetica-Bold').text('Payout Summary');
+        doc.moveDown(0.3);
+
+        const summaryData = [
+          ['Gross Sales', `${grossSales.toFixed(2)}`],
+          ['Total Orders', `${orderCount}`],
+          ['Platform Commission (15%)', `(${totalPlatformFees.toFixed(2)})`],
+          ['Refunds', `(${totalRefunds.toFixed(2)})`],
+          ['Merchant Payout (before tax)', `${totalMerchantPayout.toFixed(2)}`],
+        ];
+
+        doc.fontSize(10).font('Helvetica');
+        for (const [label, value] of summaryData) {
+          doc.text(label, 50, doc.y, { continued: true, width: 300 });
+          doc.text(value, { align: 'right' });
+        }
+        doc.moveDown(1);
+
+        // ── GST BREAKDOWN ──
+        doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+        doc.moveDown(0.5);
+        doc.fontSize(12).font('Helvetica-Bold').text('GST Breakdown (on Platform Commission)');
+        doc.moveDown(0.3);
+
+        doc.fontSize(10).font('Helvetica');
+        doc.text(`Taxable Amount (Commission)`, 50, doc.y, { continued: true, width: 300 });
+        doc.text(`${totalPlatformFees.toFixed(2)}`, { align: 'right' });
+
+        doc.text(`CGST @ 9%`, 50, doc.y, { continued: true, width: 300 });
+        doc.text(`${cgst.toFixed(2)}`, { align: 'right' });
+
+        doc.text(`SGST @ 9%`, 50, doc.y, { continued: true, width: 300 });
+        doc.text(`${sgst.toFixed(2)}`, { align: 'right' });
+
+        doc.font('Helvetica-Bold');
+        doc.text(`Total GST`, 50, doc.y, { continued: true, width: 300 });
+        doc.text(`${gstOnFees.toFixed(2)}`, { align: 'right' });
+        doc.moveDown(0.5);
+
+        doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+        doc.moveDown(0.3);
+        doc.fontSize(13).font('Helvetica-Bold');
+        doc.text(`Net Payable`, 50, doc.y, { continued: true, width: 300 });
+        doc.text(`${netPayable.toFixed(2)}`, { align: 'right' });
+        doc.moveDown(1.5);
+
+        // ── SETTLEMENT STATUS ──
+        doc.fontSize(12).font('Helvetica-Bold').text('Settlement Records');
+        doc.moveDown(0.3);
+
+        doc.fontSize(10).font('Helvetica');
+        doc.text(`Total Issued: ${statement.totals.totalIssued.toFixed(2)} NC`);
+        doc.text(`Total Settled: ${statement.totals.totalSettled.toFixed(2)} NC`);
+        doc.text(`Pending: ${statement.totals.totalPending.toFixed(2)} NC`);
+        doc.moveDown(0.5);
+
+        // Table
+        if (statement.records.length > 0) {
+          const tblTop = doc.y;
+          doc.fontSize(8).font('Helvetica-Bold');
+          doc.text('Type', 50, tblTop, { width: 90 });
+          doc.text('Issued', 145, tblTop, { width: 60 });
+          doc.text('Redeemed', 210, tblTop, { width: 60 });
+          doc.text('Pending', 275, tblTop, { width: 60 });
+          doc.text('Settled', 340, tblTop, { width: 60 });
+          doc.text('Status', 405, tblTop, { width: 65 });
+          doc.text('Settled On', 475, tblTop, { width: 75 });
+
+          doc.moveTo(50, tblTop + 12).lineTo(550, tblTop + 12).stroke();
+          let pos = tblTop + 18;
+          doc.font('Helvetica').fontSize(7);
+
+          for (const r of statement.records) {
+            if (pos > 720) { doc.addPage(); pos = 50; }
+            doc.text(r.campaignType, 50, pos, { width: 90 });
+            doc.text(r.rewardIssued.toFixed(2), 145, pos, { width: 60 });
+            doc.text(r.rewardRedeemed.toFixed(2), 210, pos, { width: 60 });
+            doc.text(r.pendingAmount.toFixed(2), 275, pos, { width: 60 });
+            doc.text(r.settledAmount.toFixed(2), 340, pos, { width: 60 });
+            doc.text(r.status.toUpperCase(), 405, pos, { width: 65 });
+            doc.text(r.settlementDate ? new Date(r.settlementDate).toLocaleDateString('en-IN') : '-', 475, pos, { width: 75 });
+            pos += 16;
+          }
+        } else {
+          doc.text('No settlement records for this cycle.', 50, doc.y);
+        }
+
+        // ── FOOTER ──
+        doc.moveDown(2);
+        doc.fontSize(8).font('Helvetica').fillColor('#999999');
+        doc.text('This is a computer-generated document and does not require a signature.', { align: 'center' });
+
+        doc.end();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  /**
+   * Parse a cycleId into a date range for querying orders.
+   */
+  private static parseCycleDateRange(cycleId: string): { start: Date; end: Date } | null {
+    try {
+      // Monthly: "2026-03"
+      if (/^\d{4}-\d{2}$/.test(cycleId)) {
+        const [year, month] = cycleId.split('-').map(Number);
+        const start = new Date(year, month - 1, 1);
+        const end = new Date(year, month, 0, 23, 59, 59, 999);
+        return { start, end };
+      }
+      // Weekly: "2026-W11"
+      if (/^\d{4}-W\d{2}$/.test(cycleId)) {
+        const [yearStr, weekStr] = cycleId.split('-W');
+        const year = parseInt(yearStr, 10);
+        const week = parseInt(weekStr, 10);
+        const jan1 = new Date(year, 0, 1);
+        const dayOffset = (week - 1) * 7 - jan1.getDay() + 1;
+        const start = new Date(year, 0, 1 + dayOffset);
+        const end = new Date(start);
+        end.setDate(end.getDate() + 6);
+        end.setHours(23, 59, 59, 999);
+        return { start, end };
+      }
+      // Daily: "2026-03-16"
+      if (/^\d{4}-\d{2}-\d{2}$/.test(cycleId)) {
+        const start = new Date(cycleId + 'T00:00:00.000Z');
+        const end = new Date(cycleId + 'T23:59:59.999Z');
+        return { start, end };
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 }
 

@@ -339,6 +339,14 @@ export const getStoreById = asyncHandler(async (req: Request, res: Response) => 
       Product.countDocuments({ store: store._id, isActive: true })
     ]);
 
+    // Track device → merchant access (fire-and-forget)
+    const deviceHash = req.headers['x-device-fingerprint'] as string;
+    if (deviceHash) {
+      import('../services/deviceFingerprintService').then(svc =>
+        svc.trackMerchantAccess(deviceHash, String(store._id), store.name)
+      ).catch(() => {});
+    }
+
     sendSuccess(res, {
       store: { ...store, mainCategorySlug },
       products,

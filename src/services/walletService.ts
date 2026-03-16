@@ -333,10 +333,35 @@ class WalletService {
         // Within a transaction — propagate to trigger rollback
         throw error;
       }
-      logger.error('Failed to record ledger entry (non-blocking)', error, {
-        userId, amount, operationType, referenceId,
-      });
-      return undefined;
+
+      // Retry once with 100ms delay before giving up (reduces drift from transient failures)
+      try {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const userAccountId2 = new Types.ObjectId(userId);
+        const platformAccountId2 = ledgerService.getPlatformAccountId('platform_float');
+
+        const debitAccount2 = direction === 'credit'
+          ? { type: 'platform_float' as const, id: platformAccountId2 }
+          : { type: 'user_wallet' as const, id: userAccountId2 };
+        const creditAccount2 = direction === 'credit'
+          ? { type: 'user_wallet' as const, id: userAccountId2 }
+          : { type: 'platform_float' as const, id: platformAccountId2 };
+
+        const retryPairId = await ledgerService.recordEntry({
+          debitAccount: debitAccount2,
+          creditAccount: creditAccount2,
+          amount, coinType, operationType,
+          referenceId, referenceModel,
+          metadata: { description },
+        });
+        logger.warn('Ledger entry succeeded on retry', { userId, amount, operationType });
+        return retryPairId;
+      } catch (retryError) {
+        logger.error('Ledger entry FAILED after retry — wallet-to-ledger drift possible', retryError, {
+          userId, amount, operationType, referenceId,
+        });
+        return undefined;
+      }
     }
   }
 

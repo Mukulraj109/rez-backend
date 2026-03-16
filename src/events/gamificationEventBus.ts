@@ -170,6 +170,11 @@ class GamificationEventBus {
         handlerCount++;
       }
 
+      // Analytics stream handler — always enabled (persists events for warehouse export)
+      const { registerAnalyticsStreamHandler } = await import('./handlers/analyticsStreamHandler');
+      registerAnalyticsStreamHandler(this);
+      handlerCount++;
+
       this.initialized = true;
       logger.info(`[EVENT BUS] Gamification event bus initialized with ${handlerCount} handler(s)`);
     } catch (error) {

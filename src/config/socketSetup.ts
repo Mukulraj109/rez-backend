@@ -75,8 +75,13 @@ export function setupSocket(httpServer: HttpServer): SocketIOServer {
       logger.info(`[Socket] Admin ${userId} joined support-agents room`);
     }
 
+    // Validate socket input is a valid ID string (ObjectId-like: 24 hex chars or alphanumeric up to 50)
+    const isValidSocketId = (val: unknown): val is string =>
+      typeof val === 'string' && val.length > 0 && val.length <= 50 && /^[a-zA-Z0-9_-]+$/.test(val);
+
     // Join merchant room (only if merchant/admin role)
     socket.on('join-merchant-room', (merchantId: string) => {
+      if (!isValidSocketId(merchantId)) return;
       if (userRole === 'merchant' || userRole === 'admin' || userRole === 'superadmin') {
         socket.join(`merchant-${merchantId}`);
       }
@@ -84,28 +89,29 @@ export function setupSocket(httpServer: HttpServer): SocketIOServer {
 
     // Join a specific support ticket room (any authenticated user)
     const handleJoinTicket = (ticketId: string) => {
-      if (ticketId) {
-        socket.join(`support-ticket-${ticketId}`);
-        logger.info(`[Socket] User ${userId} (${userRole}) joined support-ticket-${ticketId}`);
-      }
+      if (!isValidSocketId(ticketId)) return;
+      socket.join(`support-ticket-${ticketId}`);
+      logger.info(`[Socket] User ${userId} (${userRole}) joined support-ticket-${ticketId}`);
     };
     socket.on('join-support-ticket', handleJoinTicket);
     socket.on('join_ticket', (data: any) => {
       const tid = typeof data === 'string' ? data : data?.ticketId;
-      if (tid) handleJoinTicket(tid);
+      if (isValidSocketId(tid)) handleJoinTicket(tid);
     });
 
     // Leave a specific support ticket room
     socket.on('leave-support-ticket', (ticketId: string) => {
+      if (!isValidSocketId(ticketId)) return;
       socket.leave(`support-ticket-${ticketId}`);
     });
     socket.on('leave_ticket', (data: any) => {
       const tid = typeof data === 'string' ? data : data?.ticketId;
-      if (tid) socket.leave(`support-ticket-${tid}`);
+      if (isValidSocketId(tid)) socket.leave(`support-ticket-${tid}`);
     });
 
     // Admin typing indicator for support chat
     socket.on('support-agent-typing', (data: { ticketId: string; isTyping: boolean }) => {
+      if (!data || !isValidSocketId(data.ticketId)) return;
       if (userRole === 'admin' || userRole === 'super_admin' || userRole === 'superadmin') {
         const event = data.isTyping ? 'support_agent_typing_start' : 'support_agent_typing_stop';
         socket.to(`support-ticket-${data.ticketId}`).emit(event, {
@@ -117,6 +123,7 @@ export function setupSocket(httpServer: HttpServer): SocketIOServer {
 
     // User typing indicator for support chat
     socket.on('support-user-typing', (data: { ticketId: string; isTyping: boolean }) => {
+      if (!data || !isValidSocketId(data.ticketId)) return;
       const event = data.isTyping ? 'support_user_typing_start' : 'support_user_typing_stop';
       socket.to(`support-ticket-${data.ticketId}`).emit(event, {
         ticketId: data.ticketId,

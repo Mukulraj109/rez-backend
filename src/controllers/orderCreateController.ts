@@ -824,9 +824,10 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     let total = subtotal + tax + deliveryFee - discount - lockFeeDiscount - coinDiscount;
     if (total < 0) total = 0;
 
-    // Generate order number
-    const orderCount = await Order.countDocuments().session(session);
-    const orderNumber = `ORD${Date.now()}${String(orderCount + 1).padStart(4, '0')}`;
+    // Generate collision-safe order number (timestamp + random suffix)
+    const crypto = require('crypto');
+    const randomSuffix = crypto.randomInt(100000, 999999);
+    const orderNumber = `ORD${Date.now()}${randomSuffix}`;
 
     // Get primary store - use storeId from request (for multi-store orders) or extract from first item
     const primaryStoreId = storeId || orderItems[0]?.store;
@@ -1040,15 +1041,12 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
             return sendBadRequest(res, 'Stock became unavailable. Please try again.');
           }
 
-          // Emit real-time stock update
-          if (stockSocketService) {
-            const product = await Product.findById(stockUpdate.productId).select('inventory').lean() as any;
-            if (product) {
-              stockSocketService.emitStockUpdate(
-                stockUpdate.productId.toString(),
-                product.inventory?.stock || 0
-              );
-            }
+          // Emit real-time stock update (reuse updateResult instead of separate query)
+          if (stockSocketService && updateResult) {
+            stockSocketService.emitStockUpdate(
+              stockUpdate.productId.toString(),
+              (updateResult as any).inventory?.stock || 0
+            );
           }
         } catch (stockError) {
           logger.error('[CREATE ORDER] Failed to deduct stock:', stockError);

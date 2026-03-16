@@ -464,12 +464,13 @@ export const confirmBalancePayment = asyncHandler(async (req: Request, res: Resp
       return sendBadRequest(res, 'Payment verification mismatch');
     }
 
-    // 2. Update UserLockDeal
+    // 2. Update UserLockDeal (also verify lock hasn't expired)
     const userLock = await UserLockDeal.findOneAndUpdate(
       {
         _id: lockId,
         user: userId,
         status: 'locked',
+        expiresAt: { $gt: new Date() }, // Atomic expiry check — prevents payment on expired locks
       },
       {
         $set: {
@@ -483,7 +484,7 @@ export const confirmBalancePayment = asyncHandler(async (req: Request, res: Resp
     );
 
     if (!userLock) {
-      return sendNotFound(res, 'Active lock not found or already paid');
+      return sendNotFound(res, 'Lock not found, already paid, or expired. If you were charged, a refund will be processed.');
     }
 
     logger.info(`[LOCK DEALS] Balance paid for lock ${lockId} by user ${userId}`);

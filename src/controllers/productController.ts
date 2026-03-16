@@ -13,6 +13,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import redisService from '../services/redisService';
 import { CacheTTL } from '../config/redis';
+import { escapeRegex } from '../utils/sanitize';
 import { CacheKeys, generateQueryCacheKey, withCache } from '../utils/cacheHelper';
 import { logProductSearch } from '../services/searchHistoryService';
 import { modeService, ModeId } from '../services/modeService';
@@ -141,10 +142,10 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
     const tagList = (tags as string).split(',').map(t => t.trim().toLowerCase());
     if (tagList.length === 1) {
       // Single tag - use $regex for case-insensitive search
-      query.tags = { $regex: tagList[0], $options: 'i' };
+      query.tags = { $regex: escapeRegex(tagList[0]), $options: 'i' };
     } else {
       // Multiple tags - use $or with regex for each tag
-      const tagConditions = tagList.map(t => ({ tags: { $regex: t, $options: 'i' } }));
+      const tagConditions = tagList.map(t => ({ tags: { $regex: escapeRegex(t), $options: 'i' } }));
       if (query.$or) {
         // If $or already exists, combine with $and
         query.$and = query.$and || [];
@@ -159,9 +160,9 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
   if (occasion) {
     // Products may have occasion field or be tagged with occasion names
     const occasionConditions = [
-      { occasion: { $regex: occasion as string, $options: 'i' } },
-      { tags: { $regex: occasion as string, $options: 'i' } },
-      { 'metadata.occasion': { $regex: occasion as string, $options: 'i' } }
+      { occasion: { $regex: escapeRegex(occasion as string), $options: 'i' } },
+      { tags: { $regex: escapeRegex(occasion as string), $options: 'i' } },
+      { 'metadata.occasion': { $regex: escapeRegex(occasion as string), $options: 'i' } }
     ];
 
     if (query.$or) {
@@ -175,7 +176,7 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
 
   // Brand filtering
   if (brand) {
-    query.brand = { $regex: brand as string, $options: 'i' };
+    query.brand = { $regex: escapeRegex(brand as string), $options: 'i' };
   }
 
   // Price range filter
@@ -1005,7 +1006,7 @@ export const searchProducts = asyncHandler(async (req: Request, res: Response) =
       // Fallback to regex search for partial matches (e.g. "ch" -> "chicken")
       const regexQuery: any = {
         isActive: true,
-        name: { $regex: searchText as string, $options: 'i' },
+        name: { $regex: escapeRegex(searchText as string), $options: 'i' },
       };
       if (filters.category) regexQuery.category = filters.category;
       if (filters.store) regexQuery.store = filters.store;
@@ -1167,7 +1168,10 @@ export const getProductAnalytics = asyncHandler(async (req: Request, res: Respon
     const cashbackAmount = product.calculateCashback();
 
     // Get estimated delivery based on user location (if available)
-    const userLocation = req.query.location ? JSON.parse(req.query.location as string) : null;
+    let userLocation = null;
+    try {
+      userLocation = req.query.location ? JSON.parse(req.query.location as string) : null;
+    } catch { /* ignore malformed location JSON */ }
     const estimatedDelivery = product.getEstimatedDelivery(userLocation);
 
     const analytics = {
@@ -1317,7 +1321,7 @@ export const getSearchSuggestions = asyncHandler(async (req: Request, res: Respo
     const products = await Product.find({
       isActive: true,
       'inventory.isAvailable': true,
-      name: { $regex: searchQuery, $options: 'i' }
+      name: { $regex: escapeRegex(searchQuery), $options: 'i' }
     })
       .select('name')
       .sort({ 'analytics.views': -1, 'analytics.purchases': -1 })
@@ -2031,9 +2035,9 @@ export const getSimilarProducts = asyncHandler(async (req: Request, res: Respons
         isActive: true,
         'inventory.isAvailable': true,
         $or: [
-          { name: { $regex: searchQuery, $options: 'i' } },
+          { name: { $regex: escapeRegex(searchQuery), $options: 'i' } },
           { tags: { $in: searchTerms } },
-          { 'shortDescription': { $regex: searchQuery, $options: 'i' } }
+          { 'shortDescription': { $regex: escapeRegex(searchQuery), $options: 'i' } }
         ]
       };
 

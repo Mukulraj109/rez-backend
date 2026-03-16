@@ -91,6 +91,8 @@ const ActivitySchema = new Schema<IActivity>({
 // Indexes
 ActivitySchema.index({ user: 1, createdAt: -1 });
 ActivitySchema.index({ user: 1, type: 1, createdAt: -1 });
+// TTL: auto-delete activity records after 90 days (archived by archiveJob before expiry)
+ActivitySchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
 
 // Static method to create activity
 ActivitySchema.statics.createActivity = async function(

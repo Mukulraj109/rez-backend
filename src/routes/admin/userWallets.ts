@@ -5,6 +5,7 @@ import { User } from '../../models/User';
 import { TransactionAuditLog, logTransaction } from '../../models/TransactionAuditLog';
 import mongoose from 'mongoose';
 import { escapeRegex } from '../../utils/sanitize';
+import adminActionService from '../../services/adminActionService';
 
 const router = Router();
 
@@ -157,6 +158,23 @@ router.post('/:userId/adjust', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Amount must be between 0 and 100,000 NC' });
     }
 
+    // Threshold check — high-value operations require maker-checker approval
+    const threshold = await adminActionService.getApprovalThreshold();
+    if (adminActionService.requiresApproval(parsedAmount, threshold)) {
+      const action = await adminActionService.createAction(
+        String((req as any).userId),
+        'manual_adjustment',
+        { userId: req.params.userId, amount: parsedAmount, type, reason: reason.trim() },
+        reason.trim(),
+        threshold,
+      );
+      return res.status(202).json({
+        success: true,
+        message: `Amount exceeds threshold (${threshold} NC). Pending approval from another admin.`,
+        data: { actionId: action._id, status: 'pending_approval' },
+      });
+    }
+
     const wallet = await Wallet.findOne({ user: req.params.userId });
     if (!wallet) {
       return res.status(404).json({ success: false, message: 'Wallet not found' });
@@ -237,6 +255,23 @@ router.post('/:userId/reverse-cashback', async (req: Request, res: Response) => 
     const parsedAmount = Number(amount);
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0 || parsedAmount > 100000) {
       return res.status(400).json({ success: false, message: 'Amount must be between 0 and 100,000 NC' });
+    }
+
+    // Threshold check — high-value reversals require maker-checker approval
+    const threshold = await adminActionService.getApprovalThreshold();
+    if (adminActionService.requiresApproval(parsedAmount, threshold)) {
+      const action = await adminActionService.createAction(
+        String((req as any).userId),
+        'cashback_reversal',
+        { userId: req.params.userId, amount: parsedAmount, originalTransactionId: originalTransactionId || undefined, reason: reason.trim() },
+        reason.trim(),
+        threshold,
+      );
+      return res.status(202).json({
+        success: true,
+        message: `Amount exceeds threshold (${threshold} NC). Pending approval from another admin.`,
+        data: { actionId: action._id, status: 'pending_approval' },
+      });
     }
 
     const wallet = await Wallet.findOne({ user: req.params.userId });

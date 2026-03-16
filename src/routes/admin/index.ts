@@ -59,3 +59,7 @@ export { default as adminFraudReportsRoutes } from './fraudReports';
 export { default as adminMembershipRoutes } from './membership';
 export { default as adminAdminUsersRoutes } from './adminUsers';
 export { default as adminEconomicsRoutes } from './economics';
+export { default as adminActionsRoutes } from './adminActions';
+export { default as adminDisputesRoutes } from './disputes';
+export { default as adminDeviceFingerprintRoutes } from './deviceFingerprint';
+export { default as adminIntegrationsRoutes } from './integrations';

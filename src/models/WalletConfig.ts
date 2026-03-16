@@ -178,6 +178,7 @@ export interface IPriveProgramConfig {
 
 export interface IWalletConfig extends Document {
   singleton: boolean;
+  rewardIssuanceEnabled: boolean; // Global kill-switch: if false, rewardEngine.issue() returns 0
   transferLimits: ITransferLimits;
   giftLimits: IGiftLimits;
   rechargeConfig: IRechargeConfig;
@@ -200,6 +201,10 @@ export interface IWalletConfigModel extends mongoose.Model<IWalletConfig> {
 }
 
 const WalletConfigSchema = new Schema<IWalletConfig>({
+  rewardIssuanceEnabled: {
+    type: Boolean,
+    default: true,
+  },
   singleton: {
     type: Boolean,
     default: true,

@@ -189,6 +189,20 @@ CoinTransactionSchema.index(
   }
 );
 
+// Purchase reward idempotency: prevents duplicate purchase rewards per user+orderId
+CoinTransactionSchema.index(
+  { user: 1, source: 1, 'metadata.orderId': 1 },
+  {
+    unique: true,
+    sparse: true,
+    partialFilterExpression: {
+      source: { $in: ['purchase_reward', 'smart_spend_reward'] },
+      'metadata.orderId': { $exists: true, $ne: null }
+    },
+    name: 'purchase_reward_idempotency_idx'
+  }
+);
+
 // Privé invite reward idempotency: prevents duplicate invite rewards per user+code+role
 CoinTransactionSchema.index(
   { user: 1, source: 1, 'metadata.priveInviteCodeId': 1, 'metadata.priveInviteRole': 1 },

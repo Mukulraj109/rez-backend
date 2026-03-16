@@ -204,7 +204,13 @@ import {
   adminMembershipRoutes,
   adminAdminUsersRoutes,
   adminEconomicsRoutes,
+  adminActionsRoutes,
+  adminDisputesRoutes,
+  adminDeviceFingerprintRoutes,
+  adminIntegrationsRoutes,
 } from '../routes/admin';
+import disputeRoutes from '../routes/disputeRoutes';
+import integrationWebhookRoutes from '../routes/integrationWebhook';
 import adminBonusZoneRoutes from '../routes/admin/bonusZone';
 import adminOffersSectionRoutes from '../routes/admin/offersSectionConfig';
 import adminStoreCollectionRoutes from '../routes/admin/storeCollectionConfig';
@@ -238,6 +244,8 @@ import merchantBrandedCoinRoutes from '../routes/merchant/brandedCoins';
 import merchantEarningAnalyticsRoutes from '../routes/merchant/earningAnalytics';
 import merchantCreatorAnalyticsRoutes from '../routes/merchant/creatorAnalytics';
 import merchantSocialImpactRoutes from '../routes/merchant/socialImpact';
+import merchantSupportRoutes from '../merchantroutes/support';
+import campaignSimulatorRoutes from '../merchantroutes/campaignSimulator';
 import bulkRoutes from '../merchantroutes/bulk';
 import storeRoutesM from '../merchantroutes/stores';
 import merchantOfferRoutes from '../merchantroutes/offers';
@@ -255,6 +263,7 @@ import merchantStoreVisitRoutes from '../merchantroutes/storeVisits';
 import merchantDealRedemptionRoutes from '../merchantroutes/dealRedemptions';
 import merchantVoucherRedemptionRoutes from '../merchantroutes/voucherRedemptions';
 import merchantLiabilityRoutes from '../merchantroutes/liability';
+import merchantDisputeRoutes from '../merchantroutes/disputes';
 
 // ────────────────────────────────────────────────────────────────────
 // Register all routes
@@ -373,6 +382,7 @@ export function registerRoutes(app: Express): void {
   app.use(`${API_PREFIX}/platform`, platformRoutes);
   app.use(`${API_PREFIX}/explore`, exploreRoutes);
   app.use(`${API_PREFIX}/test`, testRoutes);
+  app.use(`${API_PREFIX}/disputes`, disputeRoutes);
 
   // ── Admin Routes ──
   app.use(`${API_PREFIX}/admin`, adminAuditMiddleware);
@@ -445,6 +455,13 @@ export function registerRoutes(app: Express): void {
   app.use(`${API_PREFIX}/admin/admin-users`, adminAdminUsersRoutes);
   app.use(`${API_PREFIX}/admin/merchant-liability`, adminMerchantLiabilityRoutes);
   app.use(`${API_PREFIX}/admin/economics`, adminEconomicsRoutes);
+  app.use(`${API_PREFIX}/admin/admin-actions`, adminActionsRoutes);
+  app.use(`${API_PREFIX}/admin/disputes`, adminDisputesRoutes);
+  app.use(`${API_PREFIX}/admin/devices`, adminDeviceFingerprintRoutes);
+  app.use(`${API_PREFIX}/admin/integrations`, adminIntegrationsRoutes);
+
+  // Integration webhook (public — secured by HMAC signature)
+  app.use(`${API_PREFIX}/integrations`, integrationWebhookRoutes);
 
   // Admin Engagement Config Routes (inline router)
   const engagementConfigRouter = EngagementConfigRouter();
@@ -516,6 +533,9 @@ export function registerRoutes(app: Express): void {
   app.use('/api/merchant/stores', merchantCreatorAnalyticsRoutes);
   app.use('/api/merchant/programs/social-impact', merchantSocialImpactRoutes);
   app.use('/api/merchant/liability', merchantLiabilityRoutes);
+  app.use('/api/merchant/disputes', merchantDisputeRoutes);
+  app.use('/api/merchant/support', merchantSupportRoutes);
+  app.use('/api/merchant/campaign-simulator', campaignSimulatorRoutes);
 
   // ── Root endpoint ──
   app.get('/', (req, res) => {

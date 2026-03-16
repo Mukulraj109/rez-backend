@@ -100,7 +100,11 @@ export const strictCorsOptions: CorsOptions = {
     'X-API-Key',
     'Accept',
     'Origin',
-    'X-Rez-Region'
+    'X-Rez-Region',
+    'X-Device-OS',
+    'X-Device-Fingerprint',
+    'X-Rez-Signature',
+    'X-Provider-Name',
   ],
   exposedHeaders: [
     'X-Total-Count',
@@ -122,8 +126,15 @@ export const strictCorsOptions: CorsOptions = {
 export const developmentCorsOptions: CorsOptions = {
   origin: corsOriginValidator,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
-  allowedHeaders: '*',
-  exposedHeaders: '*',
+  allowedHeaders: [
+    'Content-Type', 'Authorization', 'X-Requested-With', 'X-API-Key',
+    'Accept', 'Origin', 'X-Rez-Region', 'X-Device-OS', 'X-Device-Fingerprint',
+    'X-Rez-Signature', 'X-Provider-Name', 'Cache-Control', 'Pragma',
+  ],
+  exposedHeaders: [
+    'X-Total-Count', 'X-Page-Count', 'X-Current-Page',
+    'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset',
+  ],
   credentials: true,
   maxAge: 86400,
   optionsSuccessStatus: 200,
@@ -186,7 +197,7 @@ export const dynamicCors = (customOrigins?: string[]) => {
       }
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Rez-Region'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Rez-Region', 'X-Device-OS', 'X-Device-Fingerprint'],
     credentials: true,
     maxAge: 86400
   });

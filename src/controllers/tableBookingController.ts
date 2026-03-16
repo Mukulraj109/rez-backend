@@ -51,7 +51,7 @@ export const createTableBooking = async (req: Request, res: Response) => {
     // Validate booking date is not in the past
     const bookingDateTime = new Date(bookingDate);
     const now = new Date();
-    now.setHours(0, 0, 0, 0); // Reset time to start of day for comparison
+    now.setUTCHours(0, 0, 0, 0); // Reset time to start of day for comparison
 
     if (bookingDateTime < now) {
       logger.error('❌ [TABLE BOOKING] Booking date is in the past');
@@ -62,7 +62,7 @@ export const createTableBooking = async (req: Request, res: Response) => {
     if (bookingConfig?.advanceBookingDays) {
       const maxDate = new Date();
       maxDate.setDate(maxDate.getDate() + bookingConfig.advanceBookingDays);
-      maxDate.setHours(23, 59, 59, 999);
+      maxDate.setUTCHours(23, 59, 59, 999);
       if (bookingDateTime > maxDate) {
         return sendBadRequest(res, `Bookings can only be made up to ${bookingConfig.advanceBookingDays} days in advance`);
       }
@@ -86,9 +86,9 @@ export const createTableBooking = async (req: Request, res: Response) => {
 
     // Check for duplicate booking (same user, store, date, time)
     const startOfBookingDay = new Date(bookingDateTime);
-    startOfBookingDay.setHours(0, 0, 0, 0);
+    startOfBookingDay.setUTCHours(0, 0, 0, 0);
     const endOfBookingDay = new Date(bookingDateTime);
-    endOfBookingDay.setHours(23, 59, 59, 999);
+    endOfBookingDay.setUTCHours(23, 59, 59, 999);
 
     const duplicateBooking = await TableBooking.findOne({
       userId: new Types.ObjectId(userId),
@@ -308,10 +308,10 @@ export const getStoreTableBookings = async (req: Request, res: Response) => {
     if (date) {
       const bookingDate = new Date(date as string);
       const startOfDay = new Date(bookingDate);
-      startOfDay.setHours(0, 0, 0, 0);
+      startOfDay.setUTCHours(0, 0, 0, 0);
 
       const endOfDay = new Date(bookingDate);
-      endOfDay.setHours(23, 59, 59, 999);
+      endOfDay.setUTCHours(23, 59, 59, 999);
 
       query.bookingDate = {
         $gte: startOfDay,
@@ -389,9 +389,9 @@ export const getMerchantTableBookings = async (req: Request, res: Response) => {
     if (date) {
       const bookingDate = new Date(date as string);
       const startOfDay = new Date(bookingDate);
-      startOfDay.setHours(0, 0, 0, 0);
+      startOfDay.setUTCHours(0, 0, 0, 0);
       const endOfDay = new Date(bookingDate);
-      endOfDay.setHours(23, 59, 59, 999);
+      endOfDay.setUTCHours(23, 59, 59, 999);
       query.bookingDate = { $gte: startOfDay, $lte: endOfDay };
     }
 
@@ -628,10 +628,10 @@ export const checkAvailability = async (req: Request, res: Response) => {
     // Get bookings for the specified date
     const bookingDate = new Date(date as string);
     const startOfDay = new Date(bookingDate);
-    startOfDay.setHours(0, 0, 0, 0);
+    startOfDay.setUTCHours(0, 0, 0, 0);
 
     const endOfDay = new Date(bookingDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    endOfDay.setUTCHours(23, 59, 59, 999);
 
     const bookings = await TableBooking.find({
       storeId: new Types.ObjectId(storeId),

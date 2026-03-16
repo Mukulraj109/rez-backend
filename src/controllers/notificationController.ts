@@ -174,14 +174,17 @@ export const registerPushToken = asyncHandler(async (req: Request, res: Response
   );
 
   if (!user) {
-    // Token doesn't exist yet — add it
+    // Token doesn't exist yet — add it (cap at 10 devices per user)
     await User.findByIdAndUpdate(userId, {
       $push: {
         pushTokens: {
-          token,
-          platform: platform || 'android',
-          deviceInfo: deviceInfo || {},
-          lastUsed: new Date()
+          $each: [{
+            token,
+            platform: platform || 'android',
+            deviceInfo: deviceInfo || {},
+            lastUsed: new Date()
+          }],
+          $slice: -10,
         }
       }
     });

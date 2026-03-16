@@ -197,6 +197,14 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         // Don't fail the order update if referral processing fails
       }
 
+      // Skip reward issuance if order has an active dispute hold
+      if ((populatedOrder as any).disputeHold) {
+        logger.warn('[ORDER] Skipping reward issuance — dispute hold active', {
+          orderId: populatedOrder._id,
+          orderNumber: populatedOrder.orderNumber,
+        });
+      } else {
+
       // Award purchase reward coins on delivery
       // Smart Spend items get enhanced rate; regular items get default 5%
       try {
@@ -229,7 +237,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
               smartSpendCoins,
               'smart_spend_reward',
               `${ratePercent}% Smart Spend reward for order ${populatedOrder.orderNumber}`,
-              { orderId: populatedOrder._id, smartSpendItemId: smartSpendItems[0]!.smartSpendSource!.smartSpendItemId },
+              { orderId: populatedOrder._id.toString(), smartSpendItemId: smartSpendItems[0]!.smartSpendSource!.smartSpendItemId, idempotencyKey: `smart_spend:${populatedOrder._id}` },
               rewardCategory
             );
             // Increment purchases count on SmartSpendItem
@@ -260,7 +268,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
             regularCoins,
             'purchase_reward',
             `5% purchase reward for order ${populatedOrder.orderNumber}`,
-            { orderId: populatedOrder._id },
+            { orderId: populatedOrder._id.toString(), idempotencyKey: `purchase_reward:${populatedOrder._id}` },
             rewardCategory
           );
         }
@@ -307,6 +315,8 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
       } catch (bonusErr) {
         logger.error('[ORDER] Bonus campaign auto-claim failed (non-blocking):', bonusErr);
       }
+
+      } // end disputeHold else block
 
       // Credit merchant wallet on delivery (merchant gets subtotal minus 15% platform fee)
       try {
