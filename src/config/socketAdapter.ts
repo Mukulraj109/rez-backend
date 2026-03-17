@@ -10,6 +10,9 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import redisService from '../services/redisService';
 import { logger } from './logger';
 
+/** Holds the duplicated sub-client so it can be closed on shutdown */
+let _subClient: any = null;
+
 export async function attachRedisAdapter(io: SocketIOServer): Promise<void> {
   const pubClient = redisService.getClient();
   if (!pubClient) {
@@ -18,12 +21,23 @@ export async function attachRedisAdapter(io: SocketIOServer): Promise<void> {
   }
 
   // Socket.IO needs a separate sub connection — duplicate the shared client
-  const subClient = (pubClient as any).duplicate();
-  subClient.on('error', (err: Error) =>
+  _subClient = (pubClient as any).duplicate();
+  _subClient.on('error', (err: Error) =>
     logger.error('[Socket.IO Redis Adapter] sub client error:', err.message)
   );
-  await subClient.connect();
+  await _subClient.connect();
 
-  io.adapter(createAdapter(pubClient, subClient));
+  io.adapter(createAdapter(pubClient, _subClient));
   logger.info('✅ [Socket.IO] Redis adapter attached — events shared across all pods');
+}
+
+/** Disconnect the duplicated sub-client (called during graceful shutdown) */
+export async function disconnectRedisAdapter(): Promise<void> {
+  if (_subClient) {
+    try {
+      await _subClient.quit();
+      _subClient = null;
+      logger.info('✅ [Socket.IO] Redis adapter sub-client disconnected');
+    } catch { /* already closed */ }
+  }
 }

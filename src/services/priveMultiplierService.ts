@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 import PriveAccess from '../models/PriveAccess';
 import { getCachedWalletConfig } from './walletCacheService';
+import { logger } from '../config/logger';
 
 interface MultiplierResult {
   multiplier: number;
@@ -32,7 +33,7 @@ class PriveMultiplierService {
       if (tierConfig) {
         return { multiplier: tierConfig.coinMultiplier, tier };
       }
-    } catch (_) {}
+    } catch (err) { logger.warn('[PriveMultiplier] Failed to load tier config', { error: (err as Error).message }); }
 
     // Fallback defaults
     const defaultMultipliers: Record<string, number> = {

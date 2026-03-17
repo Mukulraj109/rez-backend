@@ -57,7 +57,7 @@ export function initializeReferralExpiryJob(): void {
   }
 
   expiryJob = cron.schedule(CRON_SCHEDULE, () => {
-    runReferralExpiry().catch(console.error);
+    runReferralExpiry().catch(err => logger.error('[REFERRAL_EXPIRY] Unhandled error:', err));
   });
 
   logger.info('🔄 [REFERRAL_EXPIRY] Scheduled: daily at 3:00 AM');

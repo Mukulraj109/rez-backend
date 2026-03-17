@@ -2,12 +2,13 @@ import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import flashSaleService from '../services/flashSaleService';
 import offerService from '../services/offerService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 class FlashSaleController {
   /**
    * Get all active flash sales
    */
-  async getActiveFlashSales(req: Request, res: Response): Promise<void> {
+  getActiveFlashSales = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const flashSales = await flashSaleService.getActiveFlashSales();
 
@@ -24,12 +25,12 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   /**
    * Get upcoming flash sales
    */
-  async getUpcomingFlashSales(req: Request, res: Response): Promise<void> {
+  getUpcomingFlashSales = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const flashSales = await flashSaleService.getUpcomingFlashSales();
 
@@ -46,12 +47,12 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   /**
    * Get flash sales expiring soon
    */
-  async getExpiringSoonFlashSales(req: Request, res: Response): Promise<void> {
+  getExpiringSoonFlashSales = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const minutes = parseInt(req.query.minutes as string) || 5;
       const flashSales = await flashSaleService.getExpiringSoonFlashSales(minutes);
@@ -69,12 +70,12 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   /**
    * Get flash sale by ID
    */
-  async getFlashSaleById(req: Request, res: Response): Promise<void> {
+  getFlashSaleById = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
       const flashSale = await flashSaleService.getFlashSaleById(id);
@@ -102,12 +103,12 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   /**
    * Get flash sales by product
    */
-  async getFlashSalesByProduct(req: Request, res: Response): Promise<void> {
+  getFlashSalesByProduct = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const { productId } = req.params;
       const flashSales = await flashSaleService.getFlashSalesByProduct(productId);
@@ -125,12 +126,12 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   /**
    * Get flash sales by category
    */
-  async getFlashSalesByCategory(req: Request, res: Response): Promise<void> {
+  getFlashSalesByCategory = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const { categoryId } = req.params;
       const flashSales = await flashSaleService.getFlashSalesByCategory(categoryId);
@@ -148,12 +149,12 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   /**
    * Create flash sale (admin only)
    */
-  async createFlashSale(req: Request, res: Response): Promise<void> {
+  createFlashSale = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const {
         title, description, image, banner,
@@ -193,12 +194,12 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   /**
    * Update flash sale (admin only)
    */
-  async updateFlashSale(req: Request, res: Response): Promise<void> {
+  updateFlashSale = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
 
@@ -257,12 +258,12 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   /**
    * Delete flash sale (admin only)
    */
-  async deleteFlashSale(req: Request, res: Response): Promise<void> {
+  deleteFlashSale = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
       await flashSaleService.deleteFlashSale(id);
@@ -279,12 +280,12 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   /**
    * Validate flash sale purchase
    */
-  async validateFlashSalePurchase(req: Request, res: Response): Promise<void> {
+  validateFlashSalePurchase = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const { flashSaleId, productId, quantity } = req.body;
       const userId = (req as any).user.userId;
@@ -308,12 +309,12 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   /**
    * Track flash sale click
    */
-  async trackClick(req: Request, res: Response): Promise<void> {
+  trackClick = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
       await flashSaleService.trackClick(id);
@@ -330,12 +331,12 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   /**
    * Get flash sale statistics (admin only)
    */
-  async getFlashSaleStats(req: Request, res: Response): Promise<void> {
+  getFlashSaleStats = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
       const stats = await flashSaleService.getFlashSaleStats(id);
@@ -360,12 +361,12 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   /**
    * Find best offer for cart
    */
-  async findBestOffer(req: Request, res: Response): Promise<void> {
+  findBestOffer = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const { cartTotal, items } = req.body;
       const userId = (req as any).user.userId;
@@ -384,12 +385,12 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   /**
    * Apply specific offer to cart
    */
-  async applyOffer(req: Request, res: Response): Promise<void> {
+  applyOffer = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const { offerId, cartTotal, items } = req.body;
       const userId = (req as any).user.userId;
@@ -416,12 +417,12 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   /**
    * Validate promo code
    */
-  async validatePromoCode(req: Request, res: Response): Promise<void> {
+  validatePromoCode = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const { promoCode, cartTotal } = req.body;
       const userId = (req as any).user.userId;
@@ -448,7 +449,7 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   // ============================================
   // FLASH SALE PURCHASE ENDPOINTS
@@ -458,7 +459,7 @@ class FlashSaleController {
    * Initiate flash sale purchase - creates Stripe checkout session
    * POST /api/flash-sales/purchase/initiate
    */
-  async initiateFlashSalePurchase(req: Request, res: Response): Promise<void> {
+  initiateFlashSalePurchase = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const { flashSaleId, quantity = 1, successUrl, cancelUrl } = req.body;
       const userId = (req as any).user.userId;
@@ -500,13 +501,13 @@ class FlashSaleController {
         message: error instanceof Error ? error.message : 'Failed to initiate flash sale purchase',
       });
     }
-  }
+  });
 
   /**
    * Verify flash sale payment - completes the purchase (for Stripe)
    * POST /api/flash-sales/purchase/verify
    */
-  async verifyFlashSalePayment(req: Request, res: Response): Promise<void> {
+  verifyFlashSalePayment = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const { purchaseId, stripeSessionId } = req.body;
 
@@ -539,13 +540,13 @@ class FlashSaleController {
         message: error instanceof Error ? error.message : 'Failed to verify payment',
       });
     }
-  }
+  });
 
   /**
    * Mark flash sale purchase as failed
    * POST /api/flash-sales/purchase/fail
    */
-  async failFlashSalePurchase(req: Request, res: Response): Promise<void> {
+  failFlashSalePurchase = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const { purchaseId, reason } = req.body;
 
@@ -570,13 +571,13 @@ class FlashSaleController {
         message: error instanceof Error ? error.message : 'Failed to update purchase status',
       });
     }
-  }
+  });
 
   /**
    * Get user's flash sale purchases
    * GET /api/flash-sales/purchases
    */
-  async getUserFlashSalePurchases(req: Request, res: Response): Promise<void> {
+  getUserFlashSalePurchases = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = (req as any).user.userId;
 
@@ -595,13 +596,13 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 
   /**
    * Get flash sale purchase by ID
    * GET /api/flash-sales/purchases/:purchaseId
    */
-  async getFlashSalePurchaseById(req: Request, res: Response): Promise<void> {
+  getFlashSalePurchaseById = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       const { purchaseId } = req.params;
       const userId = (req as any).user.userId;
@@ -637,7 +638,7 @@ class FlashSaleController {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
-  }
+  });
 }
 
 export default new FlashSaleController();

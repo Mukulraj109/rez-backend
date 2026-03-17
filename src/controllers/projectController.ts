@@ -38,7 +38,7 @@ export const submitProject = asyncHandler(async (req: Request, res: Response) =>
     const isStarting = !content;
 
     // Check if project exists
-    const project = await Project.findById(projectId).lean();
+    const project = await Project.findById(projectId);
     if (!project) {
       return sendNotFound(res, 'Project not found');
     }
@@ -523,33 +523,55 @@ export const toggleProjectLike = asyncHandler(async (req: Request, res: Response
   const userId = req.userId!;
 
   try {
-    const project = await Project.findById(projectId).lean();
-    
-    if (!project) {
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    // Check if user already liked this project
+    const alreadyLiked = await Project.exists({ _id: projectId, likedBy: userObjectId });
+    let updatedProject;
+
+    if (alreadyLiked) {
+      // Unlike: atomic pull + decrement
+      updatedProject = await Project.findByIdAndUpdate(
+        projectId,
+        {
+          $pull: { likedBy: userObjectId },
+          $inc: { 'analytics.likes': -1 }
+        },
+        { new: true }
+      );
+    } else {
+      // Like: atomic addToSet + increment
+      updatedProject = await Project.findByIdAndUpdate(
+        projectId,
+        {
+          $addToSet: { likedBy: userObjectId },
+          $inc: { 'analytics.likes': 1 }
+        },
+        { new: true }
+      );
+    }
+
+    if (!updatedProject) {
       return sendNotFound(res, 'Project not found');
     }
 
-    const userObjectId = new mongoose.Types.ObjectId(userId);
-    const likedIndex = project.likedBy.findIndex(id => id.equals(userObjectId));
-    let isLiked = false;
-
-    if (likedIndex > -1) {
-      project.likedBy.splice(likedIndex, 1);
-      project.analytics.likes = Math.max(0, project.analytics.likes - 1);
-    } else {
-      project.likedBy.push(userObjectId);
-      project.analytics.likes += 1;
-      isLiked = true;
+    // Fix engagement count and prevent negative likes
+    const safeLikes = Math.max(0, updatedProject.analytics.likes);
+    if (updatedProject.analytics.likes !== safeLikes || updatedProject.analytics.engagement !== safeLikes + updatedProject.analytics.comments) {
+      await Project.findByIdAndUpdate(projectId, {
+        $set: {
+          'analytics.likes': safeLikes,
+          'analytics.engagement': safeLikes + updatedProject.analytics.comments
+        }
+      });
     }
 
-    project.analytics.engagement = project.analytics.likes + project.analytics.comments;
-
-    await project.save();
+    const isLiked = !alreadyLiked;
 
     sendSuccess(res, {
-      projectId: project._id,
+      projectId: updatedProject._id,
       isLiked,
-      totalLikes: project.analytics.likes
+      totalLikes: safeLikes
     }, isLiked ? 'Project liked successfully' : 'Project unliked successfully');
 
   } catch (error) {

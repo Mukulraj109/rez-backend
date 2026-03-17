@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
 import challengeService from '../services/challengeService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 class ChallengeController {
   // GET /api/challenges/daily
-  async getDailyChallenges(req: Request, res: Response) {
+  getDailyChallenges = asyncHandler(async (req: Request, res: Response) => {
     try {
       const challenges = await challengeService.getDailyChallenges();
 
@@ -17,10 +18,10 @@ class ChallengeController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/challenges/active
-  async getActiveChallenges(req: Request, res: Response) {
+  getActiveChallenges = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { type } = req.query;
 
@@ -38,10 +39,10 @@ class ChallengeController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/challenges/my-progress
-  async getMyProgress(req: Request, res: Response) {
+  getMyProgress = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { includeCompleted } = req.query;
@@ -61,10 +62,10 @@ class ChallengeController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/challenges/:id/join
-  async joinChallenge(req: Request, res: Response) {
+  joinChallenge = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { id } = req.params;
@@ -82,10 +83,10 @@ class ChallengeController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/challenges/:id/claim
-  async claimRewards(req: Request, res: Response) {
+  claimRewards = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { id } = req.params;
@@ -103,10 +104,10 @@ class ChallengeController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/challenges/:id/leaderboard
-  async getChallengeLeaderboard(req: Request, res: Response) {
+  getChallengeLeaderboard = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const limit = parseInt(req.query.limit as string) || 10;
@@ -123,10 +124,10 @@ class ChallengeController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/challenges/statistics
-  async getStatistics(req: Request, res: Response) {
+  getStatistics = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
 
@@ -142,10 +143,10 @@ class ChallengeController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/challenges/generate-daily (Admin only)
-  async generateDailyChallenges(req: Request, res: Response) {
+  generateDailyChallenges = asyncHandler(async (req: Request, res: Response) => {
     try {
       const challenges = await challengeService.generateDailyChallenges();
 
@@ -160,7 +161,7 @@ class ChallengeController {
         message: error.message
       });
     }
-  }
+  });
 }
 
 export default new ChallengeController();

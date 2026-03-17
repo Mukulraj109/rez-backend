@@ -199,6 +199,25 @@ export const authLimiter = isRateLimitDisabled
       skipSuccessfulRequests: true,
     }, false);
 
+export const adminAuthLimiter = isRateLimitDisabled
+  ? passthrough
+  : makeLimiter({
+      windowMs: 15 * 60 * 1000,
+      max: 3,
+      keyGenerator,
+      store: makeStore('admin-auth', { failOpen: false }),
+      message: (_req: Request, res: Response) => {
+        res.status(429).json({
+          success: false,
+          error: 'Too many admin login attempts. Please try again after 15 minutes.',
+          retryAfter: 15 * 60,
+        });
+      },
+      standardHeaders: true,
+      legacyHeaders: false,
+      skipSuccessfulRequests: true,
+    }, false);
+
 export const registrationLimiter = isRateLimitDisabled
   ? passthrough
   : makeLimiter({

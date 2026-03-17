@@ -293,7 +293,7 @@ export const adminToggleProgram = asyncHandler(async (req: Request, res: Respons
     }
 
     const SpecialProgramConfig = (await import('../models/SpecialProgramConfig')).default;
-    const config = await SpecialProgramConfig.findOne({ slug }).lean();
+    const config = await SpecialProgramConfig.findOne({ slug });
     if (!config) {
       return sendNotFound(res, 'Program not found');
     }

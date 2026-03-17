@@ -81,6 +81,10 @@ export function validateEnvironment(): EnvConfig {
     errors.push('JWT_SECRET must be at least 32 characters long for security');
   }
 
+  if (process.env.JWT_REFRESH_SECRET && process.env.JWT_REFRESH_SECRET.length < 32) {
+    errors.push('JWT_REFRESH_SECRET must be at least 32 characters long for security');
+  }
+
   if (process.env.JWT_MERCHANT_SECRET && process.env.JWT_MERCHANT_SECRET.length < 32) {
     errors.push('JWT_MERCHANT_SECRET must be at least 32 characters long for security');
   }

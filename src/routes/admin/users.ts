@@ -5,6 +5,8 @@ import { User } from '../../models/User';
 import { Wallet } from '../../models/Wallet';
 import { escapeRegex } from '../../utils/sanitize';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { validateQuery } from '../../middleware/validation';
+import { adminUserSearchSchema } from '../../validators/financialValidators';
 
 const router = Router();
 
@@ -17,7 +19,7 @@ router.use(requireAdmin);
  * @desc    Get all users with pagination, filters, and search
  * @access  Admin
  */
-router.get('/', asyncHandler(async (req: Request, res: Response) => {
+router.get('/', validateQuery(adminUserSearchSchema), asyncHandler(async (req: Request, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const skip = (page - 1) * limit;

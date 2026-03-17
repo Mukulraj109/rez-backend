@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
 import surveyService from '../services/surveyService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 class SurveyController {
   // GET /api/surveys
-  async getSurveys(req: Request, res: Response) {
+  getSurveys = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { category, status, featured, limit, offset } = req.query;
 
@@ -25,10 +26,10 @@ class SurveyController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/surveys/categories
-  async getCategories(req: Request, res: Response) {
+  getCategories = asyncHandler(async (req: Request, res: Response) => {
     try {
       const categories = await surveyService.getSurveyCategories();
 
@@ -42,10 +43,10 @@ class SurveyController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/surveys/stats
-  async getUserStats(req: Request, res: Response) {
+  getUserStats = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
 
@@ -68,10 +69,10 @@ class SurveyController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/surveys/history
-  async getUserHistory(req: Request, res: Response) {
+  getUserHistory = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { limit, offset } = req.query;
@@ -99,10 +100,10 @@ class SurveyController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/surveys/:id
-  async getSurveyById(req: Request, res: Response) {
+  getSurveyById = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const userId = req.user?.id;
@@ -119,10 +120,10 @@ class SurveyController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/surveys/:id/start
-  async startSurvey(req: Request, res: Response) {
+  startSurvey = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { id } = req.params;
@@ -147,10 +148,10 @@ class SurveyController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/surveys/:id/submit
-  async submitSurvey(req: Request, res: Response) {
+  submitSurvey = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { id } = req.params;
@@ -183,10 +184,10 @@ class SurveyController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/surveys/:id/save-progress
-  async saveProgress(req: Request, res: Response) {
+  saveProgress = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { id } = req.params;
@@ -217,10 +218,10 @@ class SurveyController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/surveys/:id/abandon
-  async abandonSurvey(req: Request, res: Response) {
+  abandonSurvey = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { id } = req.params;
@@ -244,7 +245,7 @@ class SurveyController {
         message: error.message
       });
     }
-  }
+  });
 }
 
 export default new SurveyController();

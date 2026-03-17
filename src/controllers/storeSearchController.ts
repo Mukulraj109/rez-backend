@@ -377,68 +377,84 @@ export const searchStoresByCategory = asyncHandler(async (req: Request, res: Res
         .limit(Number(limit))
         .lean();
 
-      // Populate products for each store
-      for (const store of stores) {
-        // Use aggregation to safely populate category and filter out invalid category references
-        const products = await Product.aggregate([
-          {
-            $match: {
-              store: store._id,
-              isActive: true,
-              category: { $exists: true, $type: 'objectId' } // Only include products with valid ObjectId category
-            }
-          },
-          {
-            $project: {
-              name: 1,
-              title: 1,
-              slug: 1,
-              pricing: 1,
-              price: 1,
-              images: 1,
-              image: 1,
-              ratings: 1,
-              rating: 1,
-              inventory: 1,
-              tags: 1,
-              brand: 1,
-              category: 1,
-              variants: 1,
-              description: 1,
-              subcategory: 1
-            }
-          },
-          {
-            $lookup: {
-              from: 'categories',
-              let: { categoryId: '$category' },
-              pipeline: [
-                {
-                  $match: {
-                    $expr: {
-                      $eq: ['$_id', '$$categoryId']
-                    },
-                    isActive: true
-                  }
-                },
-                {
-                  $project: {
-                    name: 1,
-                    slug: 1
-                  }
+      // Batch-fetch products for all stores in a single aggregation (avoids N+1)
+      const storeIds = stores.map((s: any) => s._id);
+      const productsPerStore = await Product.aggregate([
+        {
+          $match: {
+            store: { $in: storeIds },
+            isActive: true,
+            category: { $exists: true, $type: 'objectId' }
+          }
+        },
+        {
+          $project: {
+            name: 1,
+            title: 1,
+            slug: 1,
+            pricing: 1,
+            price: 1,
+            images: 1,
+            image: 1,
+            ratings: 1,
+            rating: 1,
+            inventory: 1,
+            tags: 1,
+            brand: 1,
+            category: 1,
+            variants: 1,
+            description: 1,
+            subcategory: 1,
+            store: 1
+          }
+        },
+        {
+          $lookup: {
+            from: 'categories',
+            let: { categoryId: '$category' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $eq: ['$_id', '$$categoryId']
+                  },
+                  isActive: true
                 }
-              ],
-              as: 'category'
-            }
-          },
-          {
-            $unwind: {
-              path: '$category',
-              preserveNullAndEmptyArrays: true
-            }
-          },
-          { $limit: 4 }
-        ]);
+              },
+              {
+                $project: {
+                  name: 1,
+                  slug: 1
+                }
+              }
+            ],
+            as: 'category'
+          }
+        },
+        {
+          $unwind: {
+            path: '$category',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $group: {
+            _id: '$store',
+            products: { $push: '$$ROOT' }
+          }
+        },
+        {
+          $project: {
+            _id: 1,
+            products: { $slice: ['$products', 4] }
+          }
+        }
+      ]);
+
+      const productMap = new Map(productsPerStore.map((p: any) => [String(p._id), p.products]));
+
+      for (const store of stores) {
+        const products = productMap.get(String(store._id)) || [];
 
         // Transform products to match frontend ProductItem type
         const transformedProducts = products.map((product: any) => {

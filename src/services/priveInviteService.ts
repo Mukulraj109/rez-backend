@@ -268,10 +268,10 @@ class PriveInviteService {
     setImmediate(async () => {
       try {
         await reputationService.recalculateReputation(inviteCode.creatorId, 'invite_reward');
-      } catch {}
+      } catch (err) { logger.warn('[PriveInvite] Failed to recalculate creator reputation', { creatorId: inviteCode.creatorId, error: (err as Error).message }); }
       try {
         await reputationService.recalculateReputation(applicantUserId, 'invite_join');
-      } catch {}
+      } catch (err) { logger.warn('[PriveInvite] Failed to recalculate applicant reputation', { applicantId: applicantUserId, error: (err as Error).message }); }
     });
 
     return {

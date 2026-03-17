@@ -120,7 +120,10 @@ const deviceFingerprintSchema = new Schema<IDeviceFingerprint>(
 deviceFingerprintSchema.index({ 'users.userId': 1 });
 deviceFingerprintSchema.index({ 'merchantsAccessed.merchantId': 1 });
 deviceFingerprintSchema.index({ riskLevel: 1 });
-deviceFingerprintSchema.index({ updatedAt: -1 });
+// TTL index: auto-delete device fingerprints after 90 days of inactivity.
+// `updatedAt` is refreshed on every save/update (via timestamps: true),
+// so active devices keep getting extended while stale ones expire.
+deviceFingerprintSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 }); // 90 days
 
 // Cap arrays to prevent unbounded growth
 deviceFingerprintSchema.pre('save', function () {

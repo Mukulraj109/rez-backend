@@ -109,6 +109,11 @@ const UserOfferInteractionSchema = new Schema<IUserOfferInteraction>({
 
 // Compound indexes for efficient queries
 UserOfferInteractionSchema.index({ user: 1, offer: 1, action: 1 });
+// Prevent duplicate like/favorite/claim per user per offer (views/clicks/shares are allowed multiple times)
+UserOfferInteractionSchema.index(
+  { user: 1, offer: 1, action: 1 },
+  { unique: true, partialFilterExpression: { action: { $in: ['like', 'favorite', 'claim'] } } }
+);
 UserOfferInteractionSchema.index({ offer: 1, action: 1, timestamp: -1 });
 UserOfferInteractionSchema.index({ user: 1, action: 1, timestamp: -1 });
 UserOfferInteractionSchema.index({ timestamp: -1 });

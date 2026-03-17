@@ -22,6 +22,7 @@ import redisService from './services/redisService';
 import { initializeCronJobs } from './config/cronJobs';
 import { ScheduledJobService } from './services/ScheduledJobService';
 import { logger } from './config/logger';
+import { QueueService } from './services/QueueService';
 
 async function startWorker() {
   logger.info('[WORKER] Starting background worker process...');
@@ -41,6 +42,11 @@ async function startWorker() {
   logger.info('[WORKER] Initializing cron jobs and background services...');
   await initializeCronJobs();
 
+  // Initialize Bull queue processors (email, SMS, push, analytics, etc.)
+  logger.info('[WORKER] Initializing queue service...');
+  await QueueService.initialize();
+  logger.info('[WORKER] Queue service initialized');
+
   logger.info('[WORKER] Worker process started — all cron jobs and background services active');
 
   // ── Graceful shutdown handling ──
@@ -54,6 +60,11 @@ async function startWorker() {
       try {
         await ScheduledJobService.shutdown();
         logger.info('[WORKER] Scheduled job service shut down');
+      } catch { /* May not be initialized */ }
+
+      try {
+        await QueueService.shutdown();
+        logger.info('[WORKER] Queue service shut down');
       } catch { /* May not be initialized */ }
 
       try {

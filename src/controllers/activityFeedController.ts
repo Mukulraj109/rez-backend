@@ -11,17 +11,20 @@ export const getFeed = asyncHandler(async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
 
-    const activities = await activityFeedService.getActivityFeed(userId, page, limit);
+    const { activities, total } = await activityFeedService.getActivityFeed(userId, page, limit);
+    const totalPages = Math.ceil(total / limit);
 
     res.json({
       success: true,
       data: activities,
       pagination: {
-        page,
-        limit,
-        hasMore: activities.length === limit
+        currentPage: page,
+        totalPages,
+        totalItems: total,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
       }
     });
   } catch (error: any) {
@@ -41,17 +44,20 @@ export const getUserActivities = asyncHandler(async (req: Request, res: Response
   try {
     const { userId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
 
-    const activities = await activityFeedService.getUserActivities(userId, page, limit);
+    const { activities, total } = await activityFeedService.getUserActivities(userId, page, limit);
+    const totalPages = Math.ceil(total / limit);
 
     res.json({
       success: true,
       data: activities,
       pagination: {
-        page,
-        limit,
-        hasMore: activities.length === limit
+        currentPage: page,
+        totalPages,
+        totalItems: total,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
       }
     });
   } catch (error: any) {
@@ -159,17 +165,20 @@ export const getComments = asyncHandler(async (req: Request, res: Response) => {
   try {
     const { activityId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
 
-    const comments = await activityFeedService.getActivityComments(activityId, page, limit);
+    const { comments, total } = await activityFeedService.getActivityComments(activityId, page, limit);
+    const totalPages = Math.ceil(total / limit);
 
     res.json({
       success: true,
       data: comments,
       pagination: {
-        page,
-        limit,
-        hasMore: comments.length === limit
+        currentPage: page,
+        totalPages,
+        totalItems: total,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
       }
     });
   } catch (error: any) {
@@ -276,17 +285,20 @@ export const getFollowers = asyncHandler(async (req: Request, res: Response) => 
   try {
     const { userId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 50;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
 
-    const followers = await activityFeedService.getFollowers(userId, page, limit);
+    const { followers, total } = await activityFeedService.getFollowers(userId, page, limit);
+    const totalPages = Math.ceil(total / limit);
 
     res.json({
       success: true,
       data: followers,
       pagination: {
-        page,
-        limit,
-        hasMore: followers.length === limit
+        currentPage: page,
+        totalPages,
+        totalItems: total,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
       }
     });
   } catch (error: any) {
@@ -306,17 +318,20 @@ export const getFollowing = asyncHandler(async (req: Request, res: Response) => 
   try {
     const { userId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 50;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
 
-    const following = await activityFeedService.getFollowing(userId, page, limit);
+    const { following, total } = await activityFeedService.getFollowing(userId, page, limit);
+    const totalPages = Math.ceil(total / limit);
 
     res.json({
       success: true,
       data: following,
       pagination: {
-        page,
-        limit,
-        hasMore: following.length === limit
+        currentPage: page,
+        totalPages,
+        totalItems: total,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
       }
     });
   } catch (error: any) {

@@ -237,7 +237,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
             : 'Store';
 
           if (storeId) {
-            const wallet = await Wallet.findOne({ user: orderUserId }).session(session).lean();
+            const wallet = await Wallet.findOne({ user: orderUserId }).session(session);
             if (wallet) {
               await wallet.addBrandedCoins(
                 new Types.ObjectId(storeId.toString()),

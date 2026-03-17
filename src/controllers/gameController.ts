@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import gameService, { RequestMeta } from '../services/gameService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 class GameController {
   /**
@@ -14,10 +15,19 @@ class GameController {
     return obj;
   }
 
+  /** Extract request metadata for audit/fraud logging */
+  private extractRequestMeta(req: Request): RequestMeta {
+    return {
+      ip: req.ip || req.headers['x-forwarded-for'] as string || undefined,
+      userAgent: req.headers['user-agent'] || undefined,
+      deviceFingerprint: req.headers['x-device-fingerprint'] as string || undefined,
+    };
+  }
+
   // ======== SPIN WHEEL ========
 
   // POST /api/games/spin-wheel/create
-  async createSpinWheel(req: Request, res: Response) {
+  createSpinWheel = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { earnedFrom } = req.body;
@@ -35,10 +45,10 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/games/spin-wheel/play
-  async playSpinWheel(req: Request, res: Response) {
+  playSpinWheel = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { sessionId } = req.body;
@@ -62,21 +72,12 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // ======== SCRATCH CARD ========
 
-  /** Extract request metadata for audit/fraud logging */
-  private extractRequestMeta(req: Request): RequestMeta {
-    return {
-      ip: req.ip || req.headers['x-forwarded-for'] as string || undefined,
-      userAgent: req.headers['user-agent'] || undefined,
-      deviceFingerprint: req.headers['x-device-fingerprint'] as string || undefined,
-    };
-  }
-
   // GET /api/games/scratch-card/eligibility
-  async getScratchCardEligibility(req: Request, res: Response) {
+  getScratchCardEligibility = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       if (!userId) {
@@ -96,10 +97,10 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/games/scratch-card/create
-  async createScratchCard(req: Request, res: Response) {
+  createScratchCard = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { earnedFrom } = req.body;
@@ -118,10 +119,10 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/games/scratch-card/play
-  async playScratchCard(req: Request, res: Response) {
+  playScratchCard = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { sessionId } = req.body;
@@ -140,10 +141,10 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/games/scratch-card/retry-claim
-  async retryScratchCardClaim(req: Request, res: Response) {
+  retryScratchCardClaim = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { sessionId } = req.body;
@@ -165,12 +166,12 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // ======== QUIZ ========
 
   // POST /api/games/quiz/create
-  async createQuiz(req: Request, res: Response) {
+  createQuiz = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { questions } = req.body;
@@ -188,10 +189,10 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/games/quiz/submit
-  async submitQuiz(req: Request, res: Response) {
+  submitQuiz = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { sessionId, answers, correctAnswers } = req.body;
@@ -221,12 +222,12 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // ======== DAILY TRIVIA ========
 
   // GET /api/games/daily-trivia
-  async getDailyTrivia(req: Request, res: Response) {
+  getDailyTrivia = asyncHandler(async (req: Request, res: Response) => {
     try {
       const trivia = await gameService.getDailyTrivia();
 
@@ -240,10 +241,10 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/games/daily-trivia/answer
-  async answerDailyTrivia(req: Request, res: Response) {
+  answerDailyTrivia = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { questionId, answer } = req.body;
@@ -261,12 +262,12 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // ======== GENERAL ========
 
   // GET /api/games/my-games
-  async getMyGames(req: Request, res: Response) {
+  getMyGames = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { gameType, limit } = req.query;
@@ -287,10 +288,10 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/games/pending
-  async getPendingGames(req: Request, res: Response) {
+  getPendingGames = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
 
@@ -306,10 +307,10 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/games/statistics
-  async getGameStatistics(req: Request, res: Response) {
+  getGameStatistics = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
 
@@ -325,12 +326,12 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // ======== MEMORY MATCH ========
 
   // POST /api/games/memory-match/start
-  async startMemoryMatch(req: Request, res: Response) {
+  startMemoryMatch = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { difficulty = 'easy' } = req.body;
@@ -355,10 +356,10 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/games/memory-match/complete
-  async completeMemoryMatch(req: Request, res: Response) {
+  completeMemoryMatch = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { sessionId, score, timeSpent, moves } = req.body;
@@ -376,12 +377,12 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // ======== COIN HUNT ========
 
   // POST /api/games/coin-hunt/start
-  async startCoinHunt(req: Request, res: Response) {
+  startCoinHunt = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
 
@@ -398,10 +399,10 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/games/coin-hunt/complete
-  async completeCoinHunt(req: Request, res: Response) {
+  completeCoinHunt = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { sessionId, coinsCollected, score } = req.body;
@@ -419,12 +420,12 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // ======== GUESS THE PRICE ========
 
   // POST /api/games/guess-price/start
-  async startGuessPrice(req: Request, res: Response) {
+  startGuessPrice = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
 
@@ -441,10 +442,10 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/games/guess-price/submit
-  async submitGuessPrice(req: Request, res: Response) {
+  submitGuessPrice = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { sessionId, guessedPrice } = req.body;
@@ -462,12 +463,12 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // ======== DAILY LIMITS ========
 
   // GET /api/games/daily-limits
-  async getDailyLimits(req: Request, res: Response) {
+  getDailyLimits = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
 
@@ -483,11 +484,11 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/games/available
   // Returns all available games with play status (supports optional auth)
-  async getAvailableGames(req: Request, res: Response) {
+  getAvailableGames = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
 
@@ -508,11 +509,11 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/games/:gameType/status
   // Returns play status for a specific game type (Phase 4: Frontend Polish)
-  async getGameStatus(req: Request, res: Response) {
+  getGameStatus = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { gameType } = req.params;
@@ -533,7 +534,7 @@ class GameController {
         message: error.message
       });
     }
-  }
+  });
 }
 
 export default new GameController();

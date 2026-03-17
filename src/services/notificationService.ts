@@ -4,6 +4,7 @@ import { UserSettings } from '../models/UserSettings';
 import { getIO } from '../config/socket';
 import { SocketRoom } from '../types/socket';
 import pushNotificationService from './pushNotificationService';
+import { QueueService } from './QueueService';
 import redisService from './redisService';
 import { createServiceLogger } from '../config/logger';
 
@@ -93,17 +94,21 @@ export class NotificationService {
           : false;
 
         if (!shouldSkipPush) {
-          pushNotificationService.sendPushToUser(userId.toString(), {
+          const pushData = {
+            notificationId: notification._id?.toString() || '',
+            type: category,
+            ...data
+          };
+          // Enqueue push via Bull queue (retries + persistence). Falls back to direct send if Redis is down.
+          QueueService.sendPushNotification({
+            notificationId: notification._id?.toString() || '',
+            userId: userId.toString(),
             title,
             body: message,
-            data: {
-              notificationId: notification._id?.toString(),
-              type: category,
-              ...data
-            },
+            data: pushData,
             channelId: category === 'order' ? 'orders' : category === 'earning' ? 'earnings' : 'default',
             priority: priority === 'urgent' || priority === 'high' ? 'high' : 'default'
-          }).catch(err => logger.error('Push delivery failed', { userId: userId.toString(), error: err.message }));
+          }).catch(err => logger.error('Push enqueue failed', { userId: userId.toString(), error: err.message }));
         }
       }
     }
@@ -485,7 +490,7 @@ export class NotificationService {
     const notification = await Notification.findOne({
       _id: notificationId,
       user: userId
-    }).lean();
+    });
 
     if (!notification) {
       return null;

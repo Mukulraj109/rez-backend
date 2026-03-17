@@ -12,6 +12,7 @@ import referralAnalyticsService from '../services/referralAnalyticsService';
 import referralFraudDetection from '../services/referralFraudDetection';
 import Referral, { ReferralStatus } from '../models/Referral';
 import { User } from '../models/User';
+import { Wallet } from '../models/Wallet';
 // @ts-ignore - qrcode package may not have TypeScript definitions
 import QRCode from 'qrcode';
 
@@ -175,23 +176,28 @@ export const claimReward = asyncHandler(async (req: Request, res: Response) => {
         return sendBadRequest(res, 'Referral not yet qualified for reward');
       }
 
-      // Credit coins to wallet
-      const user = await User.findById(userId);
-      if (!user) {
-        return sendNotFound(res, 'User not found');
+      // Atomic: mark reward as claimed (prevents race condition on concurrent requests)
+      const updated = await Referral.findOneAndUpdate(
+        { _id: referralId, referrerRewarded: { $ne: true } },
+        { $set: { referrerRewarded: true, referrerRewardedAt: new Date() } },
+        { new: true }
+      );
+      if (!updated) {
+        return sendBadRequest(res, 'Reward already claimed');
       }
 
-      user.walletBalance = (user.walletBalance || 0) + reward.referrerAmount;
-      await user.save();
-
-      referral.referrerRewarded = true;
-      await referral.save();
+      // Atomic wallet credit
+      const updatedWallet = await Wallet.findOneAndUpdate(
+        { user: userId },
+        { $inc: { 'balance.available': reward.referrerAmount, 'balance.total': reward.referrerAmount } },
+        { new: true }
+      );
 
       sendSuccess(res, {
         success: true,
         rewardType: 'referrer_bonus',
         amount: reward.referrerAmount,
-        newBalance: user.walletBalance
+        newBalance: updatedWallet?.balance?.total || 0
       }, 'Referrer bonus claimed successfully');
     } else if (rewardType === 'milestone_bonus') {
       if (referral.milestoneRewarded) {
@@ -206,23 +212,28 @@ export const claimReward = asyncHandler(async (req: Request, res: Response) => {
         return sendBadRequest(res, 'Referee has not completed 3 orders yet');
       }
 
-      // Credit milestone bonus to wallet
-      const user = await User.findById(userId);
-      if (!user) {
-        return sendNotFound(res, 'User not found');
+      // Atomic: mark milestone as claimed (prevents race condition on concurrent requests)
+      const updated = await Referral.findOneAndUpdate(
+        { _id: referralId, milestoneRewarded: { $ne: true } },
+        { $set: { milestoneRewarded: true, milestoneRewardedAt: new Date() } },
+        { new: true }
+      );
+      if (!updated) {
+        return sendBadRequest(res, 'Milestone bonus already claimed');
       }
 
-      user.walletBalance = (user.walletBalance || 0) + reward.milestoneBonus;
-      await user.save();
-
-      referral.milestoneRewarded = true;
-      await referral.save();
+      // Atomic wallet credit
+      const updatedWallet = await Wallet.findOneAndUpdate(
+        { user: userId },
+        { $inc: { 'balance.available': reward.milestoneBonus, 'balance.total': reward.milestoneBonus } },
+        { new: true }
+      );
 
       sendSuccess(res, {
         success: true,
         rewardType: 'milestone_bonus',
         amount: reward.milestoneBonus,
-        newBalance: user.walletBalance
+        newBalance: updatedWallet?.balance?.total || 0
       }, 'Milestone bonus claimed successfully');
     } else if (rewardType === 'voucher') {
       // Claim voucher

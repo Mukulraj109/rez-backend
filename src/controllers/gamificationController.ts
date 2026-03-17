@@ -74,7 +74,7 @@ export const joinChallenge = asyncHandler(async (req: Request, res: Response) =>
   const userId = (req.user._id as Types.ObjectId).toString();
 
   // Validate challenge exists and is active
-  const challenge = await Challenge.findById(id).lean();
+  const challenge = await Challenge.findById(id);
   if (!challenge) {
     return sendNotFound(res, 'Challenge not found');
   }

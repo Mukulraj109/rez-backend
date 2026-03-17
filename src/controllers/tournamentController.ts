@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
 import tournamentService from '../services/tournamentService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 class TournamentController {
   // GET /api/tournaments
-  async getTournaments(req: Request, res: Response) {
+  getTournaments = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { status, type, limit = 20, offset = 0 } = req.query;
 
@@ -29,10 +30,10 @@ class TournamentController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/tournaments/featured
-  async getFeaturedTournaments(req: Request, res: Response) {
+  getFeaturedTournaments = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { limit = 5 } = req.query;
 
@@ -50,10 +51,10 @@ class TournamentController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/tournaments/:id
-  async getTournamentById(req: Request, res: Response) {
+  getTournamentById = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
 
@@ -69,10 +70,10 @@ class TournamentController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/tournaments/:id/join
-  async joinTournament(req: Request, res: Response) {
+  joinTournament = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const userId = req.user?.id;
@@ -94,10 +95,10 @@ class TournamentController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/tournaments/:id/leave
-  async leaveTournament(req: Request, res: Response) {
+  leaveTournament = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const userId = req.user?.id;
@@ -114,10 +115,10 @@ class TournamentController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/tournaments/:id/leaderboard
-  async getTournamentLeaderboard(req: Request, res: Response) {
+  getTournamentLeaderboard = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { limit = 100 } = req.query;
@@ -137,10 +138,10 @@ class TournamentController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/tournaments/:id/my-rank
-  async getMyRankInTournament(req: Request, res: Response) {
+  getMyRankInTournament = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const userId = req.user?.id;
@@ -164,10 +165,10 @@ class TournamentController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/tournaments/my-tournaments
-  async getMyTournaments(req: Request, res: Response) {
+  getMyTournaments = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
 
@@ -183,11 +184,11 @@ class TournamentController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/tournaments/live
   // Returns live and upcoming tournaments (supports optional auth)
-  async getLiveTournaments(req: Request, res: Response) {
+  getLiveTournaments = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { limit = 5 } = req.query;
@@ -211,7 +212,7 @@ class TournamentController {
         message: error.message
       });
     }
-  }
+  });
 }
 
 export default new TournamentController();

@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { UserSettings, IUserSettings } from '../models/UserSettings';
 import { asyncHandler } from '../utils/asyncHandler';
-import { sendSuccess, sendNotFound } from '../utils/response';
+import { sendSuccess, sendNotFound, sendBadRequest } from '../utils/response';
 import { AppError } from '../middleware/errorHandler';
 
 // Get user settings
@@ -28,9 +29,18 @@ export const updateGeneralSettings = asyncHandler(async (req: Request, res: Resp
     throw new AppError('Authentication required', 401);
   }
 
+  const { language, timezone, currency, dateFormat, timeFormat, theme } = req.body;
+  const updates: Record<string, any> = {};
+  if (language !== undefined) updates['general.language'] = language;
+  if (timezone !== undefined) updates['general.timezone'] = timezone;
+  if (currency !== undefined) updates['general.currency'] = currency;
+  if (dateFormat !== undefined) updates['general.dateFormat'] = dateFormat;
+  if (timeFormat !== undefined) updates['general.timeFormat'] = timeFormat;
+  if (theme !== undefined) updates['general.theme'] = theme;
+
   const settings = await UserSettings.findOneAndUpdate(
     { user: req.user._id },
-    { $set: { 'general': req.body } },
+    { $set: updates },
     { new: true, upsert: true }
   );
 
@@ -43,9 +53,41 @@ export const updateNotificationPreferences = asyncHandler(async (req: Request, r
     throw new AppError('Authentication required', 401);
   }
 
+  const { push, email, sms, inApp } = req.body;
+  const updates: Record<string, any> = {};
+
+  // Whitelist push notification fields
+  if (push) {
+    const pushFields = ['enabled', 'orderUpdates', 'promotions', 'recommendations', 'priceAlerts', 'deliveryUpdates', 'paymentUpdates', 'securityAlerts', 'chatMessages'];
+    for (const field of pushFields) {
+      if (push[field] !== undefined) updates[`notifications.push.${field}`] = push[field];
+    }
+  }
+  // Whitelist email notification fields
+  if (email) {
+    const emailFields = ['enabled', 'newsletters', 'orderReceipts', 'weeklyDigest', 'promotions', 'securityAlerts', 'accountUpdates'];
+    for (const field of emailFields) {
+      if (email[field] !== undefined) updates[`notifications.email.${field}`] = email[field];
+    }
+  }
+  // Whitelist sms notification fields
+  if (sms) {
+    const smsFields = ['enabled', 'orderUpdates', 'deliveryAlerts', 'paymentConfirmations', 'securityAlerts', 'otpMessages'];
+    for (const field of smsFields) {
+      if (sms[field] !== undefined) updates[`notifications.sms.${field}`] = sms[field];
+    }
+  }
+  // Whitelist inApp notification fields
+  if (inApp) {
+    const inAppFields = ['enabled', 'showBadges', 'soundEnabled', 'vibrationEnabled', 'bannerStyle'];
+    for (const field of inAppFields) {
+      if (inApp[field] !== undefined) updates[`notifications.inApp.${field}`] = inApp[field];
+    }
+  }
+
   const settings = await UserSettings.findOneAndUpdate(
     { user: req.user._id },
-    { $set: { 'notifications': req.body } },
+    { $set: updates },
     { new: true, upsert: true }
   );
 
@@ -58,9 +100,31 @@ export const updatePrivacySettings = asyncHandler(async (req: Request, res: Resp
     throw new AppError('Authentication required', 401);
   }
 
+  const { profileVisibility, showActivity, showPurchaseHistory, allowMessaging, allowFriendRequests, dataSharing, analytics } = req.body;
+  const updates: Record<string, any> = {};
+
+  if (profileVisibility !== undefined) updates['privacy.profileVisibility'] = profileVisibility;
+  if (showActivity !== undefined) updates['privacy.showActivity'] = showActivity;
+  if (showPurchaseHistory !== undefined) updates['privacy.showPurchaseHistory'] = showPurchaseHistory;
+  if (allowMessaging !== undefined) updates['privacy.allowMessaging'] = allowMessaging;
+  if (allowFriendRequests !== undefined) updates['privacy.allowFriendRequests'] = allowFriendRequests;
+
+  if (dataSharing) {
+    const dsFields = ['shareWithPartners', 'shareForMarketing', 'shareForRecommendations', 'shareForAnalytics', 'sharePurchaseData'];
+    for (const field of dsFields) {
+      if (dataSharing[field] !== undefined) updates[`privacy.dataSharing.${field}`] = dataSharing[field];
+    }
+  }
+  if (analytics) {
+    const aFields = ['allowUsageTracking', 'allowCrashReporting', 'allowPerformanceTracking', 'allowLocationTracking'];
+    for (const field of aFields) {
+      if (analytics[field] !== undefined) updates[`privacy.analytics.${field}`] = analytics[field];
+    }
+  }
+
   const settings = await UserSettings.findOneAndUpdate(
     { user: req.user._id },
-    { $set: { 'privacy': req.body } },
+    { $set: updates },
     { new: true, upsert: true }
   );
 
@@ -73,9 +137,21 @@ export const updateSecuritySettings = asyncHandler(async (req: Request, res: Res
     throw new AppError('Authentication required', 401);
   }
 
+  const { sessionManagement, loginAlerts } = req.body;
+  const updates: Record<string, any> = {};
+
+  // Only allow sessionManagement and loginAlerts — twoFactorAuth and biometric have dedicated endpoints
+  if (sessionManagement) {
+    const smFields = ['autoLogoutTime', 'allowMultipleSessions', 'rememberMe'];
+    for (const field of smFields) {
+      if (sessionManagement[field] !== undefined) updates[`security.sessionManagement.${field}`] = sessionManagement[field];
+    }
+  }
+  if (loginAlerts !== undefined) updates['security.loginAlerts'] = loginAlerts;
+
   const settings = await UserSettings.findOneAndUpdate(
     { user: req.user._id },
-    { $set: { 'security': req.body } },
+    { $set: updates },
     { new: true, upsert: true }
   );
 
@@ -94,31 +170,31 @@ export const enableTwoFactorAuth = asyncHandler(async (req: Request, res: Respon
     throw new AppError('Invalid 2FA method', 400);
   }
 
-  // Generate backup codes
-  const backupCodes = Array.from({ length: 10 }, () => 
-    Math.random().toString(36).substring(2, 8).toUpperCase()
+  // Generate cryptographically secure backup codes
+  const backupCodes = Array.from({ length: 10 }, () =>
+    crypto.randomBytes(4).toString('hex').toUpperCase()
   );
 
   const settings = await UserSettings.findOneAndUpdate(
     { user: req.user._id },
-    { 
-      $set: { 
+    {
+      $set: {
         'security.twoFactorAuth': {
           enabled: true,
           method,
           backupCodes,
           lastUpdated: new Date()
         }
-      } 
+      }
     },
     { new: true, upsert: true }
   );
 
-  sendSuccess(res, { 
-    enabled: true, 
-    method, 
+  sendSuccess(res, {
+    enabled: true,
+    method,
     backupCodes,
-    message: 'Two-factor authentication enabled successfully' 
+    message: 'Two-factor authentication enabled successfully'
   }, '2FA enabled successfully');
 });
 
@@ -175,12 +251,14 @@ export const verifyTwoFactorCode = asyncHandler(async (req: Request, res: Respon
 
     sendSuccess(res, { verified: true, usedBackupCode: true }, 'Backup code verified successfully');
   } else {
-    // In a real app, you would verify the TOTP code here
-    // For demo purposes, we'll accept any 6-digit code
-    if (code.length === 6 && /^\d+$/.test(code)) {
-      sendSuccess(res, { verified: true, usedBackupCode: false }, '2FA code verified successfully');
-    } else {
+    if (process.env.NODE_ENV === 'development' && code.length === 6 && /^\d+$/.test(code)) {
+      // Dev-only: accept any valid 6-digit code
+      sendSuccess(res, { verified: true, usedBackupCode: false }, '2FA code verified (dev mode)');
+    } else if (process.env.NODE_ENV === 'development') {
       throw new AppError('Invalid 2FA code', 400);
+    } else {
+      // In production, real TOTP verification is not implemented yet
+      sendBadRequest(res, '2FA verification is not yet available. Please disable 2FA in settings.');
     }
   }
 });
@@ -196,9 +274,9 @@ export const generateBackupCodes = asyncHandler(async (req: Request, res: Respon
     throw new AppError('2FA is not enabled', 400);
   }
 
-  // Generate new backup codes
-  const backupCodes = Array.from({ length: 10 }, () => 
-    Math.random().toString(36).substring(2, 8).toUpperCase()
+  // Generate cryptographically secure backup codes
+  const backupCodes = Array.from({ length: 10 }, () =>
+    crypto.randomBytes(4).toString('hex').toUpperCase()
   );
 
   await UserSettings.findOneAndUpdate(
@@ -267,9 +345,21 @@ export const updateDeliveryPreferences = asyncHandler(async (req: Request, res: 
     throw new AppError('Authentication required', 401);
   }
 
+  const { defaultAddressId, deliveryInstructions, deliveryTime, contactlessDelivery, deliveryNotifications } = req.body;
+  const updates: Record<string, any> = {};
+
+  if (defaultAddressId !== undefined) updates['delivery.defaultAddressId'] = defaultAddressId;
+  if (deliveryInstructions !== undefined) updates['delivery.deliveryInstructions'] = deliveryInstructions;
+  if (deliveryTime) {
+    if (deliveryTime.preferred !== undefined) updates['delivery.deliveryTime.preferred'] = deliveryTime.preferred;
+    if (deliveryTime.workingDays !== undefined) updates['delivery.deliveryTime.workingDays'] = deliveryTime.workingDays;
+  }
+  if (contactlessDelivery !== undefined) updates['delivery.contactlessDelivery'] = contactlessDelivery;
+  if (deliveryNotifications !== undefined) updates['delivery.deliveryNotifications'] = deliveryNotifications;
+
   const settings = await UserSettings.findOneAndUpdate(
     { user: req.user._id },
-    { $set: { 'delivery': req.body } },
+    { $set: updates },
     { new: true, upsert: true }
   );
 
@@ -282,9 +372,23 @@ export const updatePaymentPreferences = asyncHandler(async (req: Request, res: R
     throw new AppError('Authentication required', 401);
   }
 
+  const { defaultPaymentMethodId, autoPayEnabled, paymentPinEnabled, biometricPaymentEnabled, transactionLimits } = req.body;
+  const updates: Record<string, any> = {};
+
+  if (defaultPaymentMethodId !== undefined) updates['payment.defaultPaymentMethodId'] = defaultPaymentMethodId;
+  if (autoPayEnabled !== undefined) updates['payment.autoPayEnabled'] = autoPayEnabled;
+  if (paymentPinEnabled !== undefined) updates['payment.paymentPinEnabled'] = paymentPinEnabled;
+  if (biometricPaymentEnabled !== undefined) updates['payment.biometricPaymentEnabled'] = biometricPaymentEnabled;
+  if (transactionLimits) {
+    const tlFields = ['dailyLimit', 'weeklyLimit', 'monthlyLimit', 'singleTransactionLimit'];
+    for (const field of tlFields) {
+      if (transactionLimits[field] !== undefined) updates[`payment.transactionLimits.${field}`] = transactionLimits[field];
+    }
+  }
+
   const settings = await UserSettings.findOneAndUpdate(
     { user: req.user._id },
-    { $set: { 'payment': req.body } },
+    { $set: updates },
     { new: true, upsert: true }
   );
 
@@ -297,9 +401,38 @@ export const updateAppPreferences = asyncHandler(async (req: Request, res: Respo
     throw new AppError('Authentication required', 401);
   }
 
+  const { startupScreen, defaultView, autoRefresh, offlineMode, dataSaver, highQualityImages, animations, sounds, hapticFeedback, activeMode, modeSettings } = req.body;
+  const updates: Record<string, any> = {};
+
+  if (startupScreen !== undefined) updates['preferences.startupScreen'] = startupScreen;
+  if (defaultView !== undefined) updates['preferences.defaultView'] = defaultView;
+  if (autoRefresh !== undefined) updates['preferences.autoRefresh'] = autoRefresh;
+  if (offlineMode !== undefined) updates['preferences.offlineMode'] = offlineMode;
+  if (dataSaver !== undefined) updates['preferences.dataSaver'] = dataSaver;
+  if (highQualityImages !== undefined) updates['preferences.highQualityImages'] = highQualityImages;
+  if (animations !== undefined) updates['preferences.animations'] = animations;
+  if (sounds !== undefined) updates['preferences.sounds'] = sounds;
+  if (hapticFeedback !== undefined) updates['preferences.hapticFeedback'] = hapticFeedback;
+  if (activeMode !== undefined) updates['preferences.activeMode'] = activeMode;
+  if (modeSettings) {
+    if (modeSettings.nearU) {
+      if (modeSettings.nearU.radius !== undefined) updates['preferences.modeSettings.nearU.radius'] = modeSettings.nearU.radius;
+      if (modeSettings.nearU.showNotifications !== undefined) updates['preferences.modeSettings.nearU.showNotifications'] = modeSettings.nearU.showNotifications;
+    }
+    if (modeSettings.mall) {
+      if (modeSettings.mall.preferredCategories !== undefined) updates['preferences.modeSettings.mall.preferredCategories'] = modeSettings.mall.preferredCategories;
+    }
+    if (modeSettings.cash) {
+      if (modeSettings.cash.minCashbackPercent !== undefined) updates['preferences.modeSettings.cash.minCashbackPercent'] = modeSettings.cash.minCashbackPercent;
+    }
+    if (modeSettings.prive) {
+      if (modeSettings.prive.tier !== undefined) updates['preferences.modeSettings.prive.tier'] = modeSettings.prive.tier;
+    }
+  }
+
   const settings = await UserSettings.findOneAndUpdate(
     { user: req.user._id },
-    { $set: { 'preferences': req.body } },
+    { $set: updates },
     { new: true, upsert: true }
   );
 
@@ -344,9 +477,40 @@ export const updateCourierPreferences = asyncHandler(async (req: Request, res: R
     throw new AppError('Authentication required', 401);
   }
 
+  const { preferredCourier, deliveryTimePreference, deliveryInstructions, alternateContact, courierNotifications } = req.body;
+  const updates: Record<string, any> = {};
+
+  if (preferredCourier !== undefined) updates['courier.preferredCourier'] = preferredCourier;
+  if (deliveryTimePreference) {
+    if (deliveryTimePreference.weekdays !== undefined) updates['courier.deliveryTimePreference.weekdays'] = deliveryTimePreference.weekdays;
+    if (deliveryTimePreference.preferredTimeSlot) {
+      if (deliveryTimePreference.preferredTimeSlot.start !== undefined) updates['courier.deliveryTimePreference.preferredTimeSlot.start'] = deliveryTimePreference.preferredTimeSlot.start;
+      if (deliveryTimePreference.preferredTimeSlot.end !== undefined) updates['courier.deliveryTimePreference.preferredTimeSlot.end'] = deliveryTimePreference.preferredTimeSlot.end;
+    }
+    if (deliveryTimePreference.avoidWeekends !== undefined) updates['courier.deliveryTimePreference.avoidWeekends'] = deliveryTimePreference.avoidWeekends;
+  }
+  if (deliveryInstructions) {
+    const diFields = ['contactlessDelivery', 'leaveAtDoor', 'signatureRequired', 'callBeforeDelivery', 'specificInstructions'];
+    for (const field of diFields) {
+      if (deliveryInstructions[field] !== undefined) updates[`courier.deliveryInstructions.${field}`] = deliveryInstructions[field];
+    }
+  }
+  if (alternateContact) {
+    const acFields = ['name', 'phone', 'relation'];
+    for (const field of acFields) {
+      if (alternateContact[field] !== undefined) updates[`courier.alternateContact.${field}`] = alternateContact[field];
+    }
+  }
+  if (courierNotifications) {
+    const cnFields = ['smsUpdates', 'emailUpdates', 'whatsappUpdates', 'callUpdates'];
+    for (const field of cnFields) {
+      if (courierNotifications[field] !== undefined) updates[`courier.courierNotifications.${field}`] = courierNotifications[field];
+    }
+  }
+
   const settings = await UserSettings.findOneAndUpdate(
     { user: req.user._id },
-    { $set: { 'courier': req.body } },
+    { $set: updates },
     { new: true, upsert: true }
   );
 
@@ -378,9 +542,15 @@ export const updatePushNotifications = asyncHandler(async (req: Request, res: Re
     throw new AppError('Authentication required', 401);
   }
 
+  const allowedFields = ['enabled', 'orderUpdates', 'promotions', 'recommendations', 'priceAlerts', 'deliveryUpdates', 'paymentUpdates', 'securityAlerts', 'chatMessages'];
+  const updates: Record<string, any> = {};
+  for (const field of allowedFields) {
+    if (req.body[field] !== undefined) updates[`notifications.push.${field}`] = req.body[field];
+  }
+
   const settings = await UserSettings.findOneAndUpdate(
     { user: req.user._id },
-    { $set: { 'notifications.push': req.body } },
+    { $set: updates },
     { new: true, upsert: true }
   );
 
@@ -393,9 +563,15 @@ export const updateEmailNotifications = asyncHandler(async (req: Request, res: R
     throw new AppError('Authentication required', 401);
   }
 
+  const allowedFields = ['enabled', 'newsletters', 'orderReceipts', 'weeklyDigest', 'promotions', 'securityAlerts', 'accountUpdates'];
+  const updates: Record<string, any> = {};
+  for (const field of allowedFields) {
+    if (req.body[field] !== undefined) updates[`notifications.email.${field}`] = req.body[field];
+  }
+
   const settings = await UserSettings.findOneAndUpdate(
     { user: req.user._id },
-    { $set: { 'notifications.email': req.body } },
+    { $set: updates },
     { new: true, upsert: true }
   );
 
@@ -408,9 +584,15 @@ export const updateSMSNotifications = asyncHandler(async (req: Request, res: Res
     throw new AppError('Authentication required', 401);
   }
 
+  const allowedFields = ['enabled', 'orderUpdates', 'deliveryAlerts', 'paymentConfirmations', 'securityAlerts', 'otpMessages'];
+  const updates: Record<string, any> = {};
+  for (const field of allowedFields) {
+    if (req.body[field] !== undefined) updates[`notifications.sms.${field}`] = req.body[field];
+  }
+
   const settings = await UserSettings.findOneAndUpdate(
     { user: req.user._id },
-    { $set: { 'notifications.sms': req.body } },
+    { $set: updates },
     { new: true, upsert: true }
   );
 
@@ -423,9 +605,15 @@ export const updateInAppNotifications = asyncHandler(async (req: Request, res: R
     throw new AppError('Authentication required', 401);
   }
 
+  const allowedFields = ['enabled', 'showBadges', 'soundEnabled', 'vibrationEnabled', 'bannerStyle'];
+  const updates: Record<string, any> = {};
+  for (const field of allowedFields) {
+    if (req.body[field] !== undefined) updates[`notifications.inApp.${field}`] = req.body[field];
+  }
+
   const settings = await UserSettings.findOneAndUpdate(
     { user: req.user._id },
-    { $set: { 'notifications.inApp': req.body } },
+    { $set: updates },
     { new: true, upsert: true }
   );
 

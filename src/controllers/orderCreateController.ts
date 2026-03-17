@@ -266,8 +266,9 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     }
 
     // Create a virtual cart object with filtered items for order processing
+    // Cart is fetched with .lean() so it's already a plain JS object
     const orderCart = {
-      ...cart.toObject(),
+      ...cart,
       items: itemsToProcess
     };
 
@@ -682,7 +683,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       const redemption = await DealRedemption.findOne({
         redemptionCode: redemptionCode.toUpperCase(),
         user: new mongoose.Types.ObjectId(userId),
-      }).session(session).lean();
+      }).session(session);
 
       if (redemption) {
         // Check if redemption is active - return error if not
@@ -749,7 +750,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
           { verificationCode: offerRedemptionCode }
         ],
         user: new mongoose.Types.ObjectId(userId),
-      }).populate('offer', 'title cashbackPercentage restrictions').session(session).lean();
+      }).populate('offer', 'title cashbackPercentage restrictions').session(session);
 
       if (offerRedemption) {
         // Check if redemption is active

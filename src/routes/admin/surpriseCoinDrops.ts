@@ -11,6 +11,7 @@ import { SurpriseCoinDrop } from '../../models/SurpriseCoinDrop';
 import { User } from '../../models/User';
 import { sendSuccess, sendError, sendBadRequest } from '../../utils/response';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -47,7 +48,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
       const searchStr = (req.query.search as string).replace(/\D/g, '');
       if (searchStr.length >= 7) {
         const users = await User.find({
-          phoneNumber: { $regex: searchStr, $options: 'i' },
+          phoneNumber: { $regex: escapeRegex(searchStr), $options: 'i' },
         }).select('_id').limit(20).lean();
         const userIds = users.map(u => u._id);
         if (userIds.length) {

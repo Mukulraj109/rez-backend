@@ -15,8 +15,10 @@ export const securityHeaders = helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for React/CSS-in-JS
-      imgSrc: ["'self'", "data:", "https:", "blob:"], // Allow external images and data URIs
+      // 'unsafe-inline' is needed for inline styles from React Native Web / CSS-in-JS
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      // Restrict to known CDN domains instead of blanket https:
+      imgSrc: ["'self'", "data:", "blob:", "https://res.cloudinary.com", "https://via.placeholder.com", "https://*.amazonaws.com"],
       fontSrc: ["'self'", "data:"],
       connectSrc: ["'self'", "https://api.cloudinary.com", "https://res.cloudinary.com"],
       mediaSrc: ["'self'", "https:", "blob:"],

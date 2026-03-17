@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import Referral, { ReferralStatus } from '../models/Referral';
 import { User } from '../models/User';
 import { REFERRAL_TIERS } from '../types/referral.types';
@@ -191,7 +192,7 @@ export class ReferralTierService {
     // TODO: Integrate with actual voucher provider API (Amazon, etc.)
     // For now, generate a placeholder code
     const prefix = type.substring(0, 3).toUpperCase();
-    const random = Math.random().toString(36).substring(2, 10).toUpperCase();
+    const random = crypto.randomBytes(4).toString('hex').toUpperCase();
     return `${prefix}-${amount}-${random}`;
   }
 

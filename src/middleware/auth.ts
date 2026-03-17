@@ -183,7 +183,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         return res.status(401).json({ success: false, message: 'Session invalidated. Please login again.' });
       }
 
-      const user = await User.findById(decoded.userId).select('-auth.refreshToken');
+      const user = await User.findById(decoded.userId).select('-auth.refreshToken -auth.otpCode -auth.otpExpiry -__v');
 
       if (!user) {
         logger.warn('⚠️ [AUTH] User not found:', decoded.userId);
@@ -273,8 +273,8 @@ export const optionalAuth = async (req: Request, res: Response, next: NextFuncti
     if (token) {
       try {
         const decoded = verifyToken(token);
-        const user = await User.findById(decoded.userId).select('-auth.refreshToken');
-        
+        const user = await User.findById(decoded.userId).select('-auth.refreshToken -auth.otpCode -auth.otpExpiry -__v');
+
         if (user && user.isActive && !user.isAccountLocked()) {
           req.user = user;
           req.userId = String(user._id);

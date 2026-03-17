@@ -9,7 +9,7 @@ import { Wallet } from '../../models/Wallet';
 import { Subscription } from '../../models/Subscription';
 import activityService from '../../services/activityService';
 import referralService from '../../services/referralService';
-import cashbackService from '../../services/cashbackService';
+import { QueueService } from '../../services/QueueService';
 import userProductService from '../../services/userProductService';
 import achievementService from '../../services/achievementService';
 import { calculatePromoCoinsEarned, calculatePromoCoinsWithTierBonus } from '../../config/promoCoins.config';
@@ -30,6 +30,14 @@ import {
 } from '../../config/orderStateMachine';
 import { recordStatusTransition, recordStatusDuration } from '../../utils/orderMetrics';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { validateQuery, validate } from '../../middleware/validation';
+import {
+  adminOrderSearchSchema,
+  adminOrderRefundSchema,
+  adminOrderCancelSchema,
+  adminOrderStatusSchema,
+  adminOrderEscalateSchema,
+} from '../../validators/financialValidators';
 
 const router = Router();
 
@@ -42,7 +50,7 @@ router.use(requireAdmin);
  * @desc    Get all platform orders with filters
  * @access  Admin
  */
-router.get('/', asyncHandler(async (req: Request, res: Response) => {
+router.get('/', validateQuery(adminOrderSearchSchema), asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -452,7 +460,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  * @desc    Process refund for an order
  * @access  Admin
  */
-router.post('/:id/refund', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.post('/:id/refund', requireSeniorAdmin, validate(adminOrderRefundSchema), asyncHandler(async (req: Request, res: Response) => {
     const { reason } = req.body;
 
     // Validate required fields
@@ -582,7 +590,7 @@ router.post('/:id/refund', requireSeniorAdmin, asyncHandler(async (req: Request,
  * @desc    Cancel an order
  * @access  Admin
  */
-router.post('/:id/cancel', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.post('/:id/cancel', requireSeniorAdmin, validate(adminOrderCancelSchema), asyncHandler(async (req: Request, res: Response) => {
     const { reason } = req.body;
 
     // Validate required fields
@@ -692,7 +700,7 @@ router.post('/:id/cancel', requireSeniorAdmin, asyncHandler(async (req: Request,
  * @desc    Manually escalate an order (adds timeline entry, notifies merchant)
  * @access  Admin
  */
-router.post('/:id/escalate', asyncHandler(async (req: Request, res: Response) => {
+router.post('/:id/escalate', validate(adminOrderEscalateSchema), asyncHandler(async (req: Request, res: Response) => {
     const { reason, priority } = req.body;
 
     if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
@@ -751,7 +759,7 @@ router.post('/:id/escalate', asyncHandler(async (req: Request, res: Response) =>
  * @desc    Update order status
  * @access  Admin
  */
-router.put('/:id/status', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.put('/:id/status', requireSeniorAdmin, validate(adminOrderStatusSchema), asyncHandler(async (req: Request, res: Response) => {
     const { status, notes } = req.body;
 
     // Validate required fields
@@ -919,11 +927,15 @@ router.put('/:id/status', requireSeniorAdmin, asyncHandler(async (req: Request, 
           logger.error('[ADMIN ORDERS] Purchase reward coins failed:', err);
         }
 
-        // 4. Create cashback
+        // 4. Enqueue cashback (processed async by worker)
         try {
-          await cashbackService.createCashbackFromOrder(populatedOrder._id as Types.ObjectId);
+          await QueueService.enqueueCashback({
+            orderId: (populatedOrder._id as Types.ObjectId).toString(),
+            triggeredBy: 'admin_delivery',
+            idempotencyKey: `cashback:order:${populatedOrder._id}`,
+          });
         } catch (err) {
-          logger.error('[ADMIN ORDERS] Cashback creation failed:', err);
+          logger.error('[ADMIN ORDERS] Cashback enqueue failed:', err);
         }
 
         // 5. Create user products

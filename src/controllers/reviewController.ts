@@ -544,7 +544,7 @@ export const updateReview = asyncHandler(async (req: Request, res: Response) => 
       _id: reviewId,
       user: userId,
       isActive: true
-    }).lean();
+    });
 
     if (!review) {
       throw new AppError('Review not found or you are not authorized to update it', 404);
@@ -649,14 +649,14 @@ export const markReviewHelpful = asyncHandler(async (req: Request, res: Response
   }
 
   try {
-    const review = await Review.findById(reviewId);
-    if (!review || !review.isActive) {
+    const review = await Review.findOneAndUpdate(
+      { _id: reviewId, isActive: true },
+      { $inc: { helpful: 1 } },
+      { new: true }
+    );
+    if (!review) {
       throw new AppError('Review not found', 404);
     }
-
-    // Increment helpful count
-    review.helpful += 1;
-    await review.save();
 
     sendSuccess(res, {
       helpful: review.helpful
@@ -772,12 +772,12 @@ export const getFeaturedReviews = asyncHandler(async (req: Request, res: Respons
       }
     }
 
-    let reviewQuery = Review.find(query)
+    const reviewQuery = Review.find(query)
       .populate('user', 'profile.firstName profile.lastName profile.avatar isVerified')
       .populate('store', 'name logo slug category')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(Number(limit)).lean();
+      .limit(Number(limit));
 
     const [reviews, total] = await Promise.all([
       reviewQuery.lean(),

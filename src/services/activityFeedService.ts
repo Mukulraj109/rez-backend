@@ -2,8 +2,14 @@ import { logger } from '../config/logger';
 import { Activity } from '../models/Activity';
 import Follow from '../models/Follow';
 import ActivityInteraction from '../models/ActivityInteraction';
-import { User } from '../models/User';
 import mongoose from 'mongoose';
+import redisService from './redisService';
+
+// Cache TTLs (seconds)
+const FEED_CACHE_TTL = 60;        // 60s for user-specific feeds
+const PROFILE_CACHE_TTL = 60;     // 60s for user's own activities
+const SUGGESTED_CACHE_TTL = 300;  // 5min for suggested users (shared/expensive)
+const FOLLOW_COUNT_CACHE_TTL = 120; // 2min for follow counts
 
 /**
  * Get activity feed for user (activities from people they follow)
@@ -12,8 +18,15 @@ export async function getActivityFeed(
   userId: string,
   page: number = 1,
   limit: number = 20
-): Promise<any[]> {
+): Promise<{ activities: any[]; total: number }> {
   try {
+    // Check cache first
+    const cacheKey = `feed:user:${userId}:${page}:${limit}`;
+    try {
+      const cached = await redisService.get<{ activities: any[]; total: number }>(cacheKey);
+      if (cached) return cached;
+    } catch { /* Redis unavailable — continue with DB */ }
+
     // Get list of users this user follows
     const following = await Follow.find({ follower: userId }).select('following').lean();
     const followingIds = following.map(f => f.following);
@@ -22,17 +35,19 @@ export async function getActivityFeed(
     followingIds.push(new mongoose.Types.ObjectId(userId));
 
     const skip = (page - 1) * limit;
+    const filter = { user: { $in: followingIds } };
 
-    // Fetch activities
-    const activities = await Activity.find({
-      user: { $in: followingIds }
-    })
-      .populate('user', 'name profilePicture email')
-      .populate('relatedEntity.id')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    // Fetch activities and total count in parallel
+    const [activities, total] = await Promise.all([
+      Activity.find(filter)
+        .populate('user', 'name profilePicture email')
+        .populate('relatedEntity.id')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Activity.countDocuments(filter),
+    ]);
 
     // Get interaction status for current user
     const activityIds = activities.map(a => a._id);
@@ -48,7 +63,7 @@ export async function getActivityFeed(
     });
 
     // Add interaction flags and transform for social feed
-    return activities.map(activity => ({
+    const enriched = activities.map(activity => ({
       ...activity,
       hasLiked: interactionMap.has(`${activity._id}_like`),
       hasCommented: interactionMap.has(`${activity._id}_comment`),
@@ -62,6 +77,13 @@ export async function getActivityFeed(
         type: activity.type
       }
     }));
+
+    const result = { activities: enriched, total };
+
+    // Cache result (fire-and-forget)
+    redisService.set(cacheKey, result, FEED_CACHE_TTL).catch(() => {});
+
+    return result;
   } catch (error) {
     logger.error('Error fetching activity feed:', error);
     throw error;
@@ -75,18 +97,31 @@ export async function getUserActivities(
   userId: string,
   page: number = 1,
   limit: number = 20
-): Promise<any[]> {
+): Promise<{ activities: any[]; total: number }> {
   try {
+    const cacheKey = `feed:profile:${userId}:${page}:${limit}`;
+    try {
+      const cached = await redisService.get<{ activities: any[]; total: number }>(cacheKey);
+      if (cached) return cached;
+    } catch { /* Redis unavailable */ }
+
     const skip = (page - 1) * limit;
+    const filter = { user: userId };
 
-    const activities = await Activity.find({ user: userId })
-      .populate('relatedEntity.id')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    const [activities, total] = await Promise.all([
+      Activity.find(filter)
+        .populate('relatedEntity.id')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Activity.countDocuments(filter),
+    ]);
 
-    return activities;
+    const result = { activities, total };
+    redisService.set(cacheKey, result, PROFILE_CACHE_TTL).catch(() => {});
+
+    return result;
   } catch (error) {
     logger.error('Error fetching user activities:', error);
     throw error;
@@ -126,6 +161,9 @@ export async function createSocialActivity(
       .populate('user', 'name profilePicture email')
       .lean();
 
+    // Invalidate feed caches for this user
+    invalidateFeedCache(userId).catch(() => {});
+
     return populatedActivity;
   } catch (error) {
     logger.error('Error creating social activity:', error);
@@ -156,6 +194,7 @@ export async function toggleLike(activityId: string, userId: string): Promise<{ 
         type: 'like'
       });
 
+      invalidateFeedCache(userId).catch(() => {});
       return { liked: false, likesCount };
     } else {
       // Like
@@ -171,6 +210,7 @@ export async function toggleLike(activityId: string, userId: string): Promise<{ 
         type: 'like'
       });
 
+      invalidateFeedCache(userId).catch(() => {});
       return { liked: true, likesCount };
     }
   } catch (error) {
@@ -201,21 +241,22 @@ export async function getActivityComments(
   activityId: string,
   page: number = 1,
   limit: number = 20
-): Promise<any[]> {
+): Promise<{ comments: any[]; total: number }> {
   try {
     const skip = (page - 1) * limit;
+    const filter = { activity: activityId, type: 'comment' as const };
 
-    const comments = await ActivityInteraction.find({
-      activity: activityId,
-      type: 'comment'
-    })
-      .populate('user', 'name profilePicture')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    const [comments, total] = await Promise.all([
+      ActivityInteraction.find(filter)
+        .populate('user', 'name profilePicture')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      ActivityInteraction.countDocuments(filter),
+    ]);
 
-    return comments;
+    return { comments, total };
   } catch (error) {
     logger.error('Error fetching comments:', error);
     throw error;
@@ -245,6 +286,8 @@ export async function addComment(
     const populatedComment = await ActivityInteraction.findById(interaction._id)
       .populate('user', 'name profilePicture')
       .lean();
+
+    invalidateFeedCache(userId).catch(() => {});
 
     return populatedComment;
   } catch (error) {
@@ -279,6 +322,10 @@ export async function toggleFollow(
       // Get updated follower count
       followersCount = await Follow.countDocuments({ following: followingId });
 
+      // Invalidate caches for both users
+      invalidateFeedCache(followerId).catch(() => {});
+      invalidateFollowCache(followerId, followingId).catch(() => {});
+
       return { following: false, followersCount };
     } else {
       // Follow
@@ -289,6 +336,10 @@ export async function toggleFollow(
 
       // Get updated follower count
       followersCount = await Follow.countDocuments({ following: followingId });
+
+      // Invalidate caches for both users
+      invalidateFeedCache(followerId).catch(() => {});
+      invalidateFollowCache(followerId, followingId).catch(() => {});
 
       return { following: true, followersCount };
     }
@@ -322,18 +373,22 @@ export async function getFollowers(
   userId: string,
   page: number = 1,
   limit: number = 50
-): Promise<any[]> {
+): Promise<{ followers: any[]; total: number }> {
   try {
     const skip = (page - 1) * limit;
+    const filter = { following: userId };
 
-    const followers = await Follow.find({ following: userId })
-      .populate('follower', 'profile.firstName profile.lastName profile.avatar')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    const [followerDocs, total] = await Promise.all([
+      Follow.find(filter)
+        .populate('follower', 'profile.firstName profile.lastName profile.avatar')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Follow.countDocuments(filter),
+    ]);
 
-    return followers.map(f => f.follower);
+    return { followers: followerDocs.map(f => f.follower), total };
   } catch (error) {
     logger.error('Error fetching followers:', error);
     throw error;
@@ -347,18 +402,22 @@ export async function getFollowing(
   userId: string,
   page: number = 1,
   limit: number = 50
-): Promise<any[]> {
+): Promise<{ following: any[]; total: number }> {
   try {
     const skip = (page - 1) * limit;
+    const filter = { follower: userId };
 
-    const following = await Follow.find({ follower: userId })
-      .populate('following', 'name profilePicture email')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    const [followingDocs, total] = await Promise.all([
+      Follow.find(filter)
+        .populate('following', 'name profilePicture email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Follow.countDocuments(filter),
+    ]);
 
-    return following.map(f => f.following);
+    return { following: followingDocs.map(f => f.following), total };
   } catch (error) {
     logger.error('Error fetching following:', error);
     throw error;
@@ -370,12 +429,21 @@ export async function getFollowing(
  */
 export async function getFollowCounts(userId: string): Promise<{ followersCount: number; followingCount: number }> {
   try {
+    const cacheKey = `follow:counts:${userId}`;
+    try {
+      const cached = await redisService.get<{ followersCount: number; followingCount: number }>(cacheKey);
+      if (cached) return cached;
+    } catch { /* Redis unavailable */ }
+
     const [followersCount, followingCount] = await Promise.all([
       Follow.countDocuments({ following: userId }),
       Follow.countDocuments({ follower: userId })
     ]);
 
-    return { followersCount, followingCount };
+    const result = { followersCount, followingCount };
+    redisService.set(cacheKey, result, FOLLOW_COUNT_CACHE_TTL).catch(() => {});
+
+    return result;
   } catch (error) {
     logger.error('Error fetching follow counts:', error);
     throw error;
@@ -387,6 +455,12 @@ export async function getFollowCounts(userId: string): Promise<{ followersCount:
  */
 export async function getSuggestedUsers(userId: string, limit: number = 10): Promise<any[]> {
   try {
+    const cacheKey = `feed:suggested:${userId}:${limit}`;
+    try {
+      const cached = await redisService.get<any[]>(cacheKey);
+      if (cached) return cached;
+    } catch { /* Redis unavailable */ }
+
     // Get users current user already follows
     const following = await Follow.find({ follower: userId }).select('following').lean();
     const followingIds = following.map(f => f.following.toString());
@@ -433,6 +507,8 @@ export async function getSuggestedUsers(userId: string, limit: number = 10): Pro
       }
     ]);
 
+    redisService.set(cacheKey, suggestedUsers, SUGGESTED_CACHE_TTL).catch(() => {});
+
     return suggestedUsers;
   } catch (error) {
     logger.error('Error fetching suggested users:', error);
@@ -475,5 +551,39 @@ export async function getActivityStats(activityId: string): Promise<{
   } catch (error) {
     logger.error('Error fetching activity stats:', error);
     throw error;
+  }
+}
+
+// ============================================================================
+// Cache Invalidation Helpers
+// ============================================================================
+
+/**
+ * Invalidate all feed-related caches for a user.
+ * Called after creating activities, liking, commenting, or following.
+ */
+async function invalidateFeedCache(userId: string): Promise<void> {
+  try {
+    await Promise.all([
+      redisService.delPattern(`feed:user:${userId}:*`),
+      redisService.delPattern(`feed:profile:${userId}:*`),
+    ]);
+  } catch {
+    // Redis unavailable — caches will expire via TTL
+  }
+}
+
+/**
+ * Invalidate follow-related caches for both follower and followee.
+ */
+async function invalidateFollowCache(followerId: string, followingId: string): Promise<void> {
+  try {
+    await Promise.all([
+      redisService.del(`follow:counts:${followerId}`),
+      redisService.del(`follow:counts:${followingId}`),
+      redisService.delPattern(`feed:suggested:${followerId}:*`),
+    ]);
+  } catch {
+    // Redis unavailable — caches will expire via TTL
   }
 }

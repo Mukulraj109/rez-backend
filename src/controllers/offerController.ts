@@ -115,6 +115,20 @@ export const getOffers = asyncHandler(async (req: Request, res: Response) => {
     const limitNum = Math.min(50, Math.max(1, Number(limit)));
     const skip = (pageNum - 1) * limitNum;
 
+    // Cache key for public (non-user-specific) offer queries
+    const userId = req.user?.id;
+    const cacheKey = !userId
+      ? `offers:${region || 'all'}:${category || ''}:${type || ''}:${sortField}:${order}:${pageNum}:${limitNum}`
+      : null;
+
+    // Try cache for anonymous/public requests
+    if (cacheKey) {
+      const cached = await redisService.get<{ offers: any[]; total: number }>(cacheKey);
+      if (cached) {
+        return sendPaginated(res, cached.offers, pageNum, limitNum, cached.total, 'Offers fetched successfully');
+      }
+    }
+
     // Execute query
     const [offers, total] = await Promise.all([
       Offer.find(filter)
@@ -126,9 +140,13 @@ export const getOffers = asyncHandler(async (req: Request, res: Response) => {
     ]);
 
     // Filter exclusive offers based on user follow status
-    const userId = req.user?.id;
     const followedStores = userId ? await getUserFollowedStores(userId) : [];
     const filteredOffers = await filterExclusiveOffers(offers, userId, followedStores);
+
+    // Cache public results (60s TTL)
+    if (cacheKey) {
+      redisService.set(cacheKey, { offers: filteredOffers, total }, 60).catch(() => {});
+    }
 
     sendPaginated(res, filteredOffers, pageNum, limitNum, total, 'Offers fetched successfully');
 });

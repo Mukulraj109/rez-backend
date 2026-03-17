@@ -8,6 +8,7 @@ import { Wallet } from '../../models/Wallet';
 import { walletService } from '../../services/walletService';
 import mongoose from 'mongoose';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -172,7 +173,7 @@ router.get('/users', asyncHandler(async (req: Request, res: Response) => {
 
     const query: any = { isActive: true };
     if (search) {
-      const searchRegex = new RegExp(String(search), 'i');
+      const searchRegex = new RegExp(escapeRegex(String(search)), 'i');
       query.$or = [
         { name: searchRegex },
         { email: searchRegex },

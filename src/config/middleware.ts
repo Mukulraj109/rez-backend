@@ -84,9 +84,11 @@ export function setupMiddleware(app: Express): void {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
+        // 'unsafe-inline' is needed for inline styles from React Native Web / CSS-in-JS
         styleSrc: ["'self'", "'unsafe-inline'"],
         scriptSrc: ["'self'"],
-        imgSrc: ["'self'", "data:", "https:"],
+        // Restrict to known CDN domains instead of blanket https:
+        imgSrc: ["'self'", "data:", "https://res.cloudinary.com", "https://via.placeholder.com", "https://*.amazonaws.com"],
         connectSrc: ["'self'"],
         fontSrc: ["'self'", "data:"],
         objectSrc: ["'none'"],
@@ -132,6 +134,20 @@ export function setupMiddleware(app: Express): void {
   };
 
   app.use(cors(corsOptions));
+
+  // Mutation requests must have either Origin (browser) or Authorization (mobile/API)
+  // This prevents CSRF from non-browser contexts that omit the Origin header
+  app.use((req, res, next) => {
+    const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+    const hasOrigin = !!req.headers.origin;
+    const hasAuth = !!req.headers.authorization;
+    const isHealthCheck = req.path === '/health' || req.path === '/api/health';
+
+    if (isMutation && !hasOrigin && !hasAuth && !isHealthCheck) {
+      return res.status(403).json({ success: false, message: 'Origin or authorization required' });
+    }
+    next();
+  });
 
   // IP Blocker — blocks IPs flagged for suspicious activity (Redis-backed)
   app.use(ipBlocker);

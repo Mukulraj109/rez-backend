@@ -553,31 +553,74 @@ export const sendTestNotification = asyncHandler(async (req: Request, res: Respo
 
 /**
  * Get notification preferences
- * Returns user's notification preferences
+ * Returns user's notification preferences from UserSettings
  */
 export const getNotificationPreferences = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.merchantId!;
 
   try {
-    // This would typically come from a UserSettings or NotificationPreferences model
-    // For now, returning a mock structure
+    const userSettings = await UserSettings.findOne({ user: userId }).lean();
+
+    const notifPrefs = userSettings?.notifications;
+
+    // Build preferences from real DB data, falling back to defaults
     const preferences = {
       userId,
       channels: {
-        email: true,
-        push: true,
-        sms: false,
-        inApp: true
+        email: notifPrefs?.email?.enabled ?? true,
+        push: notifPrefs?.push?.enabled ?? true,
+        sms: notifPrefs?.sms?.enabled ?? false,
+        inApp: notifPrefs?.inApp?.enabled ?? true
       },
       categories: {
-        order: { email: true, push: true, sms: false, inApp: true },
-        earning: { email: true, push: true, sms: false, inApp: true },
-        general: { email: false, push: true, sms: false, inApp: true },
-        promotional: { email: false, push: false, sms: false, inApp: true },
-        social: { email: false, push: true, sms: false, inApp: true },
-        security: { email: true, push: true, sms: true, inApp: true },
-        system: { email: false, push: true, sms: false, inApp: true },
-        reminder: { email: true, push: true, sms: false, inApp: true }
+        order: {
+          email: notifPrefs?.email?.orderReceipts ?? true,
+          push: notifPrefs?.push?.orderUpdates ?? true,
+          sms: notifPrefs?.sms?.orderUpdates ?? false,
+          inApp: notifPrefs?.inApp?.enabled ?? true
+        },
+        earning: {
+          email: notifPrefs?.email?.enabled ?? true,
+          push: notifPrefs?.push?.paymentUpdates ?? true,
+          sms: notifPrefs?.sms?.paymentConfirmations ?? false,
+          inApp: notifPrefs?.inApp?.enabled ?? true
+        },
+        general: {
+          email: notifPrefs?.email?.newsletters ?? false,
+          push: notifPrefs?.push?.recommendations ?? true,
+          sms: false,
+          inApp: notifPrefs?.inApp?.enabled ?? true
+        },
+        promotional: {
+          email: notifPrefs?.email?.promotions ?? false,
+          push: notifPrefs?.push?.promotions ?? false,
+          sms: false,
+          inApp: notifPrefs?.inApp?.enabled ?? true
+        },
+        social: {
+          email: false,
+          push: notifPrefs?.push?.chatMessages ?? true,
+          sms: false,
+          inApp: notifPrefs?.inApp?.enabled ?? true
+        },
+        security: {
+          email: notifPrefs?.email?.securityAlerts ?? true,
+          push: notifPrefs?.push?.securityAlerts ?? true,
+          sms: notifPrefs?.sms?.securityAlerts ?? true,
+          inApp: notifPrefs?.inApp?.enabled ?? true
+        },
+        system: {
+          email: notifPrefs?.email?.accountUpdates ?? false,
+          push: notifPrefs?.push?.enabled ?? true,
+          sms: false,
+          inApp: notifPrefs?.inApp?.enabled ?? true
+        },
+        reminder: {
+          email: notifPrefs?.email?.enabled ?? true,
+          push: notifPrefs?.push?.enabled ?? true,
+          sms: false,
+          inApp: notifPrefs?.inApp?.enabled ?? true
+        }
       },
       quietHours: {
         enabled: false,
@@ -586,7 +629,7 @@ export const getNotificationPreferences = asyncHandler(async (req: Request, res:
         timezone: 'Asia/Kolkata'
       },
       frequency: {
-        digest: 'daily', // 'immediate', 'daily', 'weekly'
+        digest: 'daily',
         maxPerDay: 50
       }
     };

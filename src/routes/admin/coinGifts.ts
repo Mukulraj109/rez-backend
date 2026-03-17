@@ -10,6 +10,7 @@ import { logTransaction } from '../../models/TransactionAuditLog';
 import { User } from '../../models/User';
 import mongoose from 'mongoose';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 router.use(requireAuth);
@@ -53,7 +54,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     } else {
       // Search by phone number
       const users = await User.find({
-        phoneNumber: { $regex: searchStr.replace(/\D/g, ''), $options: 'i' }
+        phoneNumber: { $regex: escapeRegex(searchStr.replace(/\D/g, '')), $options: 'i' }
       }).select('_id').limit(20).lean();
       const userIds = users.map(u => u._id);
       if (userIds.length) {

@@ -1199,7 +1199,7 @@ export async function confirmPendingConversions(): Promise<{ confirmed: number; 
       // Revert to pending so it can be retried next run
       try {
         await CreatorConversion.updateOne({ _id, status: 'confirming' }, { $set: { status: 'pending' } });
-      } catch {}
+      } catch (revertErr) { logger.warn('[Creator] Failed to revert conversion to pending', { conversionId: _id, error: (revertErr as Error).message }); }
       failed++;
     }
   }

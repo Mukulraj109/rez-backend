@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
 import leaderboardService from '../services/leaderboardService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 class LeaderboardController {
   // GET /api/leaderboard/spending
-  async getSpendingLeaderboard(req: Request, res: Response) {
+  getSpendingLeaderboard = asyncHandler(async (req: Request, res: Response) => {
     try {
       const period = (req.query.period as 'day' | 'week' | 'month' | 'all') || 'month';
       const limit = parseInt(req.query.limit as string) || 10;
@@ -21,10 +22,10 @@ class LeaderboardController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/leaderboard/reviews
-  async getReviewLeaderboard(req: Request, res: Response) {
+  getReviewLeaderboard = asyncHandler(async (req: Request, res: Response) => {
     try {
       const period = (req.query.period as 'day' | 'week' | 'month' | 'all') || 'month';
       const limit = parseInt(req.query.limit as string) || 10;
@@ -42,10 +43,10 @@ class LeaderboardController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/leaderboard/referrals
-  async getReferralLeaderboard(req: Request, res: Response) {
+  getReferralLeaderboard = asyncHandler(async (req: Request, res: Response) => {
     try {
       const period = (req.query.period as 'day' | 'week' | 'month' | 'all') || 'month';
       const limit = parseInt(req.query.limit as string) || 10;
@@ -63,10 +64,10 @@ class LeaderboardController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/leaderboard/cashback
-  async getCashbackLeaderboard(req: Request, res: Response) {
+  getCashbackLeaderboard = asyncHandler(async (req: Request, res: Response) => {
     try {
       const period = (req.query.period as 'day' | 'week' | 'month' | 'all') || 'month';
       const limit = parseInt(req.query.limit as string) || 10;
@@ -84,10 +85,10 @@ class LeaderboardController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/leaderboard/streak
-  async getStreakLeaderboard(req: Request, res: Response) {
+  getStreakLeaderboard = asyncHandler(async (req: Request, res: Response) => {
     try {
       const type = (req.query.type as 'login' | 'order' | 'review') || 'login';
       const limit = parseInt(req.query.limit as string) || 10;
@@ -105,10 +106,10 @@ class LeaderboardController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/leaderboard/all
-  async getAllLeaderboards(req: Request, res: Response) {
+  getAllLeaderboards = asyncHandler(async (req: Request, res: Response) => {
     try {
       const stats = await leaderboardService.getLeaderboardStats();
 
@@ -122,10 +123,10 @@ class LeaderboardController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/leaderboard/my-rank
-  async getMyRank(req: Request, res: Response) {
+  getMyRank = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const period = (req.query.period as 'day' | 'week' | 'month' | 'all') || 'month';
@@ -143,7 +144,7 @@ class LeaderboardController {
         message: error.message
       });
     }
-  }
+  });
 }
 
 export default new LeaderboardController();

@@ -181,33 +181,31 @@ export const getDiscountsForProduct = asyncHandler(async (req: Request, res: Res
       ]
     };
 
-    let discounts = await Discount.find(filter)
-      .sort({ priority: -1, value: -1 })
-      .lean();
+    let discountDocs = await Discount.find(filter)
+      .sort({ priority: -1, value: -1 });
 
     // If user is authenticated, filter by user-specific rules
+    let discounts: any[];
     if (userObjId) {
       const availableDiscounts = [];
 
-      for (const discount of discounts) {
-        const discountDoc = await Discount.findById(discount._id).lean();
-        if (discountDoc) {
-          const canUse = await discountDoc.canUserUse(userObjId);
-          if (canUse.can) {
-            // Add calculated discount amount
-            const discountAmount = discountDoc.calculateDiscount(Number(orderValue));
-            availableDiscounts.push({
-              ...discount,
-              discountAmount,
-              canApply: discountAmount > 0
-            });
-          }
+      for (const discountDoc of discountDocs) {
+        const canUse = await discountDoc.canUserUse(userObjId);
+        if (canUse.can) {
+          // Add calculated discount amount
+          const discountAmount = discountDoc.calculateDiscount(Number(orderValue));
+          availableDiscounts.push({
+            ...discountDoc.toObject(),
+            discountAmount,
+            canApply: discountAmount > 0
+          });
         }
       }
       discounts = availableDiscounts;
     } else {
       // For non-authenticated users, just add discount amount
-      discounts = discounts.map((discount: any) => {
+      discounts = discountDocs.map((doc) => {
+        const discount = doc.toObject();
         let discountAmount = 0;
         if (discount.type === 'percentage') {
           discountAmount = (Number(orderValue) * discount.value) / 100;

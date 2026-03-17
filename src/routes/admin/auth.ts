@@ -6,8 +6,9 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { User } from '../../models/User';
-import { generateToken, verifyToken, authenticate, logoutAllDevices } from '../../middleware/auth';
-import { authLimiter } from '../../middleware/rateLimiter';
+import { generateToken, generateRefreshToken, verifyToken, authenticate, logoutAllDevices } from '../../middleware/auth';
+import jwt from 'jsonwebtoken';
+import { adminAuthLimiter } from '../../middleware/rateLimiter';
 import { generateTotpSecret, verifyTotp, enableTotp, disableTotp, isTotpEnabled } from '../../services/adminTotpService';
 import { logger } from '../../config/logger';
 import { asyncHandler } from '../../utils/asyncHandler';
@@ -26,7 +27,7 @@ const ROLE_HIERARCHY: Record<string, number> = {
  * POST /api/auth/login
  * Admin login with email and password
  */
-router.post('/login', authLimiter, asyncHandler(async (req: Request, res: Response) => {
+router.post('/login', adminAuthLimiter, asyncHandler(async (req: Request, res: Response) => {
   const { email, password, totpCode } = req.body;
 
   if (!email || !password) {
@@ -101,6 +102,10 @@ router.post('/login', authLimiter, asyncHandler(async (req: Request, res: Respon
 
   // Generate JWT token with actual role (critical for RBAC + socket.io auth)
   const token = generateToken((user._id as string).toString(), user.role);
+  const refreshToken = generateRefreshToken((user._id as string).toString());
+
+  // Store refresh token hash on user for validation
+  user.auth.refreshToken = refreshToken;
 
   // Update last login
   user.auth.lastLogin = new Date();
@@ -120,10 +125,98 @@ router.post('/login', authLimiter, asyncHandler(async (req: Request, res: Respon
         lastLogin: user.auth.lastLogin,
         createdAt: user.createdAt
       },
-      token
+      token,
+      refreshToken
     }
   });
 
+}));
+
+/**
+ * POST /api/admin/auth/refresh-token
+ * Refresh an expired admin access token using a valid refresh token
+ */
+router.post('/refresh-token', asyncHandler(async (req: Request, res: Response) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({
+      success: false,
+      message: 'Refresh token is required'
+    });
+  }
+
+  // Verify the refresh token
+  if (!process.env.JWT_REFRESH_SECRET) {
+    return res.status(500).json({
+      success: false,
+      message: 'Server configuration error'
+    });
+  }
+
+  let decoded: { userId: string };
+  try {
+    decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, { algorithms: ['HS256'] }) as { userId: string };
+  } catch {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid or expired refresh token'
+    });
+  }
+
+  // Find user and validate
+  const user = await User.findById(decoded.userId);
+  const adminRoles = ['admin', 'support', 'operator', 'super_admin'];
+
+  if (!user || !adminRoles.includes(user.role)) {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid refresh token or not an admin'
+    });
+  }
+
+  if (!user.isActive) {
+    return res.status(403).json({
+      success: false,
+      message: 'Account is deactivated'
+    });
+  }
+
+  // Verify the refresh token matches the stored one
+  if (user.auth.refreshToken !== refreshToken) {
+    return res.status(401).json({
+      success: false,
+      message: 'Refresh token has been revoked'
+    });
+  }
+
+  // Generate new tokens
+  const newToken = generateToken((user._id as string).toString(), user.role);
+  const newRefreshToken = generateRefreshToken((user._id as string).toString());
+
+  // Update stored refresh token (rotate)
+  user.auth.refreshToken = newRefreshToken;
+  await user.save();
+
+  logger.info(`[Admin Auth] Token refreshed for admin: ${user.email}`);
+
+  res.json({
+    success: true,
+    data: {
+      user: {
+        _id: user._id,
+        email: user.email,
+        name: user.fullName || `${user.profile?.firstName || ''} ${user.profile?.lastName || ''}`.trim() || 'Admin',
+        role: user.role,
+        level: ROLE_HIERARCHY[user.role] || ROLE_HIERARCHY['admin'],
+        permissions: user.role === 'super_admin' ? ['*'] : [],
+        lastLogin: user.auth.lastLogin,
+        createdAt: user.createdAt
+      },
+      token: newToken,
+      refreshToken: newRefreshToken
+    }
+  });
 }));
 
 /**

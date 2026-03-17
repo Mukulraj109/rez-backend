@@ -12,7 +12,7 @@ export const getUserActivities = asyncHandler(async (req: Request, res: Response
   }
 
   const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 20;
+  const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
   const skip = (page - 1) * limit;
 
   const type = req.query.type as ActivityType | undefined;
@@ -32,14 +32,18 @@ export const getUserActivities = asyncHandler(async (req: Request, res: Response
     Activity.countDocuments(query)
   ]);
 
-  const pagination = {
-    page,
-    limit,
-    total,
-    pages: Math.ceil(total / limit)
-  };
+  const totalPages = Math.ceil(total / limit);
 
-  sendSuccess(res, { activities, pagination }, 'Activities retrieved successfully');
+  sendSuccess(res, {
+    activities,
+    pagination: {
+      currentPage: page,
+      totalPages,
+      totalItems: total,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1,
+    },
+  }, 'Activities retrieved successfully');
 });
 
 // Get activity by ID

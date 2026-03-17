@@ -188,7 +188,9 @@ export const addToCart = asyncHandler(async (req: Request, res: Response) => {
       // Handle variant stock checking
       if (variant && product.inventory.variants) {
         logger.info('🛒 [ADD TO CART] Checking variant:', variant);
-        const variantObj = product.getVariantByType(variant.type, variant.value);
+        const variantObj = product.inventory.variants.find(
+          (v: any) => v.type === variant.type && v.value === variant.value
+        );
 
         if (!variantObj) {
           logger.info('❌ [ADD TO CART] Product variant not found');
@@ -444,7 +446,9 @@ export const updateCartItem = asyncHandler(async (req: Request, res: Response) =
       let variantInfo = '';
 
       if (variantObj && product.inventory.variants) {
-        const variantData = product.getVariantByType(variantObj.type, variantObj.value);
+        const variantData = product.inventory.variants.find(
+          (v: any) => v.type === variantObj.type && v.value === variantObj.value
+        );
 
         if (!variantData) {
           logger.info('❌ [UPDATE CART] Product variant not found');

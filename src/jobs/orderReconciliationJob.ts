@@ -174,7 +174,7 @@ async function runOrderReconciliation(): Promise<void> {
  */
 export function initializeOrderReconciliationJob(): void {
   cron.schedule('0 3 * * *', () => {
-    runOrderReconciliation().catch(console.error);
+    runOrderReconciliation().catch(err => logger.error('[ORDER RECONCILIATION] Unhandled error:', err));
   });
   logger.info('  Order reconciliation job started (runs daily at 3 AM)');
 }

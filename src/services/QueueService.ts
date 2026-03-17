@@ -62,6 +62,22 @@ interface CacheWarmupJobData {
   priority?: 'high' | 'normal' | 'low';
 }
 
+interface PushNotificationJobData {
+  notificationId: string;
+  userId: string;
+  title: string;
+  body: string;
+  data?: Record<string, any>;
+  channelId?: string;
+  priority?: 'high' | 'default';
+}
+
+interface CashbackJobData {
+  orderId: string;
+  triggeredBy: 'order_delivery' | 'admin_delivery';
+  idempotencyKey: string;
+}
+
 export class QueueService {
   private static emailQueue: Queue<EmailJobData> | null = null;
   private static smsQueue: Queue<SMSJobData> | null = null;
@@ -69,6 +85,8 @@ export class QueueService {
   private static analyticsQueue: Queue<AnalyticsJobData> | null = null;
   private static auditLogQueue: Queue<AuditLogJobData> | null = null;
   private static cacheWarmupQueue: Queue<CacheWarmupJobData> | null = null;
+  private static pushNotificationQueue: Queue<PushNotificationJobData> | null = null;
+  private static cashbackQueue: Queue<CashbackJobData> | null = null;
 
   private static isInitialized = false;
 
@@ -107,6 +125,8 @@ export class QueueService {
       this.analyticsQueue = new Bull('analytics', redisOptions);
       this.auditLogQueue = new Bull('auditLog', redisOptions);
       this.cacheWarmupQueue = new Bull('cacheWarmup', redisOptions);
+      this.pushNotificationQueue = new Bull('pushNotification', redisOptions);
+      this.cashbackQueue = new Bull('cashback', redisOptions);
 
       // Setup processors
       this.setupEmailProcessor();
@@ -115,6 +135,8 @@ export class QueueService {
       this.setupAnalyticsProcessor();
       this.setupAuditLogProcessor();
       this.setupCacheWarmupProcessor();
+      this.setupPushNotificationProcessor();
+      this.setupCashbackProcessor();
 
       // Setup event listeners
       this.setupEventListeners();
@@ -250,6 +272,76 @@ export class QueueService {
   }
 
   /**
+   * Add push notification job to queue.
+   * Falls back to direct send if queue is unavailable.
+   */
+  static async sendPushNotification(
+    data: PushNotificationJobData,
+    options?: JobOptions
+  ): Promise<Job<PushNotificationJobData> | null> {
+    if (!this.pushNotificationQueue) {
+      // Fallback: direct send if queue not initialized (Redis down)
+      try {
+        const pushNotificationService = (await import('./pushNotificationService')).default;
+        await pushNotificationService.sendPushToUser(data.userId, {
+          title: data.title,
+          body: data.body,
+          data: data.data,
+          channelId: data.channelId,
+          priority: data.priority,
+        });
+      } catch (err) {
+        logger.error('Push notification fallback failed', { userId: data.userId, error: err });
+      }
+      return null;
+    }
+
+    return await this.pushNotificationQueue.add(data, {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 5000
+      },
+      removeOnComplete: true,
+      removeOnFail: false,
+      ...options
+    });
+  }
+
+  /**
+   * Enqueue cashback processing for a delivered order.
+   * Falls back to synchronous processing if queue is unavailable.
+   */
+  static async enqueueCashback(
+    data: CashbackJobData,
+    options?: JobOptions
+  ): Promise<Job<CashbackJobData> | null> {
+    if (!this.cashbackQueue) {
+      // Fallback: direct synchronous processing if queue not initialized
+      try {
+        const cashbackService = (await import('./cashbackService')).default;
+        const { Types } = await import('mongoose');
+        await cashbackService.createCashbackFromOrder(new Types.ObjectId(data.orderId));
+      } catch (err) {
+        logger.error('Cashback fallback (sync) failed', { orderId: data.orderId, error: err });
+      }
+      return null;
+    }
+
+    return await this.cashbackQueue.add(data, {
+      attempts: 3,
+      backoff: {
+        type: 'exponential',
+        delay: 10000,
+      },
+      removeOnComplete: true,
+      removeOnFail: false,
+      jobId: data.idempotencyKey,
+      ...options,
+    });
+  }
+
+  /**
    * Get queue health status
    */
   static async getHealthStatus(): Promise<any> {
@@ -259,7 +351,9 @@ export class QueueService {
       { name: 'Report', queue: this.reportQueue },
       { name: 'Analytics', queue: this.analyticsQueue },
       { name: 'AuditLog', queue: this.auditLogQueue },
-      { name: 'CacheWarmup', queue: this.cacheWarmupQueue }
+      { name: 'CacheWarmup', queue: this.cacheWarmupQueue },
+      { name: 'PushNotification', queue: this.pushNotificationQueue },
+      { name: 'Cashback', queue: this.cashbackQueue }
     ];
 
     const health = await Promise.all(
@@ -465,6 +559,63 @@ export class QueueService {
   }
 
   /**
+   * Setup push notification processor
+   */
+  private static setupPushNotificationProcessor(): void {
+    this.pushNotificationQueue?.process(async (job: Job<PushNotificationJobData>) => {
+      const { notificationId, userId, title, body, data, channelId, priority } = job.data;
+
+      try {
+        const pushNotificationService = (await import('./pushNotificationService')).default;
+        await pushNotificationService.sendPushToUser(userId, {
+          title,
+          body,
+          data,
+          channelId,
+          priority,
+        });
+
+        // Mark notification push as delivered
+        const { Notification } = await import('../models/Notification');
+        await Notification.findByIdAndUpdate(notificationId, {
+          $set: { 'deliveryStatus.push.delivered': true, 'deliveryStatus.push.deliveredAt': new Date() }
+        });
+
+        return { success: true, userId, notificationId };
+      } catch (error) {
+        logger.error('Push notification delivery failed', { error, jobId: job.id, userId, notificationId });
+        throw error;
+      }
+    });
+  }
+
+  /**
+   * Setup cashback processor
+   */
+  private static setupCashbackProcessor(): void {
+    this.cashbackQueue?.process(async (job: Job<CashbackJobData>) => {
+      const { orderId, triggeredBy } = job.data;
+      logger.info(`Processing cashback job ${job.id}`, { orderId, triggeredBy });
+
+      try {
+        const cashbackService = (await import('./cashbackService')).default;
+        const { Types } = await import('mongoose');
+        const result = await cashbackService.createCashbackFromOrder(new Types.ObjectId(orderId));
+
+        return {
+          success: true,
+          orderId,
+          cashbackId: result?._id?.toString() || null,
+          amount: result?.amount || 0,
+        };
+      } catch (error) {
+        logger.error('Cashback processing failed', { error, jobId: job.id, orderId });
+        throw error; // Let Bull retry
+      }
+    });
+  }
+
+  /**
    * Setup event listeners for all queues
    */
   private static setupEventListeners(): void {
@@ -474,7 +625,9 @@ export class QueueService {
       this.reportQueue,
       this.analyticsQueue,
       this.auditLogQueue,
-      this.cacheWarmupQueue
+      this.cacheWarmupQueue,
+      this.pushNotificationQueue,
+      this.cashbackQueue
     ];
 
     queues.forEach(queue => {
@@ -504,7 +657,9 @@ export class QueueService {
       this.reportQueue,
       this.analyticsQueue,
       this.auditLogQueue,
-      this.cacheWarmupQueue
+      this.cacheWarmupQueue,
+      this.pushNotificationQueue,
+      this.cashbackQueue
     ];
 
     await Promise.all(

@@ -215,6 +215,12 @@ async function startServer() {
     // Attach Socket.IO Redis adapter (needs Redis to be connected first)
     await attachSocketRedisAdapter(io);
 
+    // NOTE: QueueService is NOT initialized here — each Bull queue opens 3 Redis
+    // connections, and 8 queues would add 24 connections to the API server process,
+    // exceeding free-tier Redis client limits. The worker process (worker.ts) handles
+    // all queue processing. Enqueue methods (e.g., QueueService.enqueueCashback) use
+    // synchronous fallback when the queue is not initialized.
+
     // Validate Cloudinary configuration
     const cloudinaryConfigured = validateCloudinaryConfig();
     if (!cloudinaryConfigured) {
@@ -237,40 +243,36 @@ async function startServer() {
 
     // ── Graceful shutdown handling ──
     let isShuttingDown = false;
-    const shutdown = (signal: string) => {
+    const shutdown = async (signal: string) => {
       if (isShuttingDown) return;
       isShuttingDown = true;
       logger.info(`Received ${signal}. Graceful shutdown...`);
 
-      server.close(async () => {
-        logger.info('HTTP server closed (in-flight requests drained)');
-
-        try {
-          try {
-            await ScheduledJobService.shutdown();
-            logger.info('Scheduled job service shut down');
-          } catch { /* May not be initialized */ }
-
-          try {
-            const redisService = (await import('./services/redisService')).default;
-            await redisService.disconnect();
-            logger.info('Redis disconnected');
-          } catch { /* Redis may not be connected */ }
-
-          await database.disconnect();
-          logger.info('Database disconnected');
-          process.exit(0);
-        } catch (error) {
-          logger.error('Error during shutdown:', error);
-          process.exit(1);
-        }
-      });
-
-      // Force close after 15 seconds
-      setTimeout(() => {
+      // Force-exit safety net (nodemon sends SIGINT and expects fast exit)
+      const forceTimer = setTimeout(() => {
         logger.info('Could not close connections in time, forcefully shutting down');
         process.exit(1);
-      }, 15000);
+      }, 5000);
+      forceTimer.unref(); // Don't keep process alive just for the timer
+
+      try {
+        // Close HTTP server (stop accepting new connections)
+        server.close(() => {});
+
+        // Close all services in parallel — don't wait for HTTP drain
+        await Promise.allSettled([
+          ScheduledJobService.shutdown().catch(() => {}),
+          import('./config/socketAdapter').then(m => m.disconnectRedisAdapter()).catch(() => {}),
+          redisService.disconnect().catch(() => {}),
+          database.disconnect().catch(() => {}),
+        ]);
+
+        logger.info('All services disconnected');
+        process.exit(0);
+      } catch (error) {
+        logger.error('Error during shutdown:', error);
+        process.exit(1);
+      }
     };
 
     process.on('SIGTERM', () => shutdown('SIGTERM'));

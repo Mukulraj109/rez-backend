@@ -325,25 +325,25 @@ async function runReturnWindowCheck(): Promise<void> {
 export function initializeOrderLifecycleJobs(): void {
   // Stuck order detection — every 10 minutes
   cron.schedule('*/10 * * * *', () => {
-    runStuckOrderDetection().catch(console.error);
+    runStuckOrderDetection().catch(err => logger.error('[ORDER LIFECYCLE] Stuck order detection unhandled error:', err));
   });
   logger.info('  Order stuck detection job started (runs every 10 min)');
 
   // Payment verification recovery — every 15 minutes
   cron.schedule('*/15 * * * *', () => {
-    runPaymentVerificationRecovery().catch(console.error);
+    runPaymentVerificationRecovery().catch(err => logger.error('[ORDER LIFECYCLE] Payment verification recovery unhandled error:', err));
   });
   logger.info('  Payment verification recovery job started (runs every 15 min)');
 
   // Return window logging — daily at midnight
   cron.schedule('0 0 * * *', () => {
-    runReturnWindowCheck().catch(console.error);
+    runReturnWindowCheck().catch(err => logger.error('[ORDER LIFECYCLE] Return window check unhandled error:', err));
   });
   logger.info('  Return window check job started (runs daily at midnight)');
 
   // Order alert checks — every 30 minutes
   cron.schedule('*/30 * * * *', () => {
-    runOrderAlertChecks().catch(console.error);
+    runOrderAlertChecks().catch(err => logger.error('[ORDER LIFECYCLE] Order alert checks unhandled error:', err));
   });
   logger.info('  Order alert checks started (runs every 30 min)');
 }

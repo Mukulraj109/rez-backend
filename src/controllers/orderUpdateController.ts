@@ -9,7 +9,7 @@ import {
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import referralService from '../services/referralService';
-import cashbackService from '../services/cashbackService';
+import { QueueService } from '../services/QueueService';
 import challengeService from '../services/challengeService';
 import userProductService from '../services/userProductService';
 import activityService from '../services/activityService';
@@ -93,7 +93,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
   const { status, estimatedDeliveryTime, trackingInfo } = req.body;
 
   try {
-    const order = await Order.findById(orderId).lean();
+    const order = await Order.findById(orderId);
 
     if (!order) {
       return sendNotFound(res, 'Order not found');
@@ -393,8 +393,11 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
       // Run independent post-delivery tasks in parallel (cashback, user products, creator conversion)
       {
         const postDeliveryTasks: Promise<any>[] = [
-          cashbackService.createCashbackFromOrder(populatedOrder._id as Types.ObjectId)
-            .catch((err: any) => logger.error('[ORDER] Error creating cashback:', err)),
+          QueueService.enqueueCashback({
+            orderId: (populatedOrder._id as Types.ObjectId).toString(),
+            triggeredBy: 'order_delivery',
+            idempotencyKey: `cashback:order:${populatedOrder._id}`,
+          }).catch((err: any) => logger.error('[ORDER] Error enqueuing cashback:', err)),
           userProductService.createUserProductsFromOrder(populatedOrder._id as Types.ObjectId)
             .catch((err: any) => logger.error('[ORDER] Error creating user products:', err)),
         ];
@@ -446,7 +449,7 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
 
           if (storeId) {
             // Award branded coins (store-specific coins)
-            const wallet = await Wallet.findOne({ user: userIdObj }).lean();
+            const wallet = await Wallet.findOne({ user: userIdObj });
             if (wallet) {
               await wallet.addBrandedCoins(
                 new Types.ObjectId(storeId.toString()),

@@ -2,10 +2,11 @@ import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import streakService from '../services/streakService';
 import UserStreak from '../models/UserStreak';
+import { asyncHandler } from '../utils/asyncHandler';
 
 class StreakController {
   // GET /api/streaks
-  async getUserStreaks(req: Request, res: Response) {
+  getUserStreaks = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
 
@@ -21,10 +22,10 @@ class StreakController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/streaks/update
-  async updateStreak(req: Request, res: Response) {
+  updateStreak = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { type } = req.body;
@@ -44,10 +45,10 @@ class StreakController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/streaks/claim-milestone
-  async claimMilestone(req: Request, res: Response) {
+  claimMilestone = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { type, day } = req.body;
@@ -65,10 +66,10 @@ class StreakController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/streaks/freeze
-  async freezeStreak(req: Request, res: Response) {
+  freezeStreak = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { type, days } = req.body;
@@ -86,10 +87,10 @@ class StreakController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/streaks/statistics
-  async getStreakStatistics(req: Request, res: Response) {
+  getStreakStatistics = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
 
@@ -105,14 +106,14 @@ class StreakController {
         message: error.message
       });
     }
-  }
+  });
 
   /**
    * Get current user's login streak (JWT-based, no userId param)
    * GET /api/gamification/streaks
    * @returns User's login streak data with lastLogin timestamp
    */
-  async getCurrentUserStreak(req: Request, res: Response) {
+  getCurrentUserStreak = asyncHandler(async (req: Request, res: Response) => {
     try {
       if (!req.user) {
         return res.status(401).json({
@@ -170,7 +171,7 @@ class StreakController {
         message: error.message || 'Failed to fetch streak data'
       });
     }
-  }
+  });
 }
 
 export default new StreakController();

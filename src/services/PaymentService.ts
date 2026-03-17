@@ -393,45 +393,16 @@ class PaymentService {
         const storePromoCoins = (order.payment.coinsUsed as any).storePromoCoins || 0;
         const userId = order.user as Types.ObjectId;
 
-        // Deduct REZ coins from both Wallet model and CoinTransaction
+        // Deduct REZ coins via coinService (handles atomic $inc + CoinTransaction + LedgerEntry)
         if (rezCoins && rezCoins > 0) {
           try {
             logger.info('💰 [PAYMENT SERVICE] Deducting REZ coins:', rezCoins);
-
-            // Atomic update: decrement coins array + balance in one operation
-            const updatedWallet = await Wallet.findOneAndUpdate(
-              {
-                user: userId,
-                coins: { $elemMatch: { type: 'rez', amount: { $gte: rezCoins } } }
-              },
-              {
-                $inc: {
-                  'coins.$.amount': -rezCoins,
-                  'balance.available': -rezCoins,
-                  'balance.total': -rezCoins,
-                  'statistics.totalSpent': rezCoins,
-                  'limits.dailySpent': rezCoins,
-                },
-                $set: {
-                  'coins.$.lastUsed': new Date(),
-                  lastTransactionAt: new Date(),
-                }
-              },
-              { new: true }
-            );
-
-            if (updatedWallet) {
-              logger.info('✅ [PAYMENT SERVICE] Wallet rez coins updated:', rezCoins);
-            } else {
-              logger.warn('⚠️ [PAYMENT SERVICE] REZ coin deduction skipped — insufficient balance');
-            }
-
-            // Also create transaction record
             await coinService.deductCoins(
               userId.toString(),
               rezCoins,
               'purchase',
-              `Order payment: ${order.orderNumber}`
+              `Order payment: ${order.orderNumber}`,
+              { orderId: order._id, orderNumber: order.orderNumber, paymentMethod: 'online' }
             );
             logger.info('✅ [PAYMENT SERVICE] REZ coins deducted successfully:', rezCoins);
           } catch (coinError) {
@@ -440,41 +411,31 @@ class PaymentService {
           }
         }
 
-        // Deduct promo coins
+        // Deduct promo coins via walletService.debit (handles CoinTransaction + LedgerEntry)
         if (promoCoins && promoCoins > 0) {
           try {
             logger.info('💰 [PAYMENT SERVICE] Deducting promo coins:', promoCoins);
-
-            // Atomic update: decrement promo coins in one operation
-            const updatedWallet = await Wallet.findOneAndUpdate(
-              {
-                user: userId,
-                coins: { $elemMatch: { type: 'promo', amount: { $gte: promoCoins } } }
-              },
-              {
-                $inc: { 'coins.$.amount': -promoCoins },
-                $set: {
-                  'coins.$.lastUsed': new Date(),
-                  lastTransactionAt: new Date(),
-                }
-              },
-              { new: true }
-            );
-
-            if (updatedWallet) {
-              logger.info('✅ [PAYMENT SERVICE] Promo coins deducted:', promoCoins);
-            } else {
-              logger.warn('⚠️ [PAYMENT SERVICE] Promo coin deduction skipped — insufficient balance');
-            }
+            const { walletService } = await import('./walletService');
+            await walletService.debit({
+              userId: userId.toString(),
+              amount: promoCoins,
+              source: 'purchase',
+              description: `Promo coins for order ${order.orderNumber}`,
+              operationType: 'payment',
+              referenceId: String(order._id),
+              referenceModel: 'Order',
+              coinType: 'promo',
+              metadata: { orderId: order._id, orderNumber: order.orderNumber, paymentMethod: 'online' },
+            });
+            logger.info('✅ [PAYMENT SERVICE] Promo coins deducted:', promoCoins);
           } catch (coinError) {
             logger.error('❌ [PAYMENT SERVICE] Failed to deduct promo coins:', coinError);
           }
         }
 
-        // Deduct store promo coins
+        // Deduct store branded coins (atomic findOneAndUpdate, no instance method needed)
         if (storePromoCoins && storePromoCoins > 0) {
           try {
-            // Get store ID from first order item
             const firstItem = order.items[0];
             const storeId = typeof firstItem.store === 'object'
               ? (firstItem.store as any)._id
@@ -482,8 +443,7 @@ class PaymentService {
 
             if (storeId) {
               logger.info('💰 [PAYMENT SERVICE] Deducting branded coins:', storePromoCoins);
-              // Use branded coins from wallet
-              const wallet = await Wallet.findOne({ user: userId }).lean();
+              const wallet = await Wallet.findOne({ user: userId });
               if (wallet) {
                 await wallet.useBrandedCoins(
                   new Types.ObjectId(storeId.toString()),
@@ -497,31 +457,7 @@ class PaymentService {
             // Don't fail payment if coin deduction fails - coins already validated
           }
         }
-
-        // Record ledger entry for coin deduction on online payment (non-blocking)
-        const totalCoinsUsed = (rezCoins || 0) + (promoCoins || 0) + (storePromoCoins || 0);
-        if (totalCoinsUsed > 0) {
-          try {
-            const ledgerService = require('./ledgerService').default || require('./ledgerService');
-            const PLATFORM_FLOAT_ID = new Types.ObjectId('000000000000000000000002');
-            await ledgerService.recordEntry({
-              debitAccount: { type: 'user_wallet', id: new Types.ObjectId(userId.toString()) },
-              creditAccount: { type: 'platform_float', id: PLATFORM_FLOAT_ID },
-              amount: totalCoinsUsed,
-              coinType: 'nuqta',
-              operationType: 'order_coin_deduction',
-              referenceId: (order._id as Types.ObjectId).toString(),
-              referenceModel: 'Order',
-              metadata: {
-                description: `Coin payment for online order ${order.orderNumber}`,
-                idempotencyKey: `order_coin_${order._id}`,
-              },
-            });
-            logger.info(`✅ [ORDER:LEDGER] Ledger entry for coin deduction: ${totalCoinsUsed} coins, order ${order.orderNumber}`);
-          } catch (ledgerErr) {
-            logger.error('[ORDER:LEDGER] Failed to create ledger entry for coin deduction (non-blocking):', ledgerErr);
-          }
-        }
+        // Ledger entries are now handled internally by coinService.deductCoins / walletService.debit
       }
 
       const cart = await Cart.findOne({ user: order.user }).session(session);

@@ -660,21 +660,20 @@ export const getRecentOrders = asyncHandler(async (req: Request, res: Response) 
       return sendNotFound(res, 'Category not found');
     }
 
+    // First, find product IDs in this category to narrow down orders
+    const categoryProductIds = await Product.find(
+      { category: category._id, isActive: true },
+      { _id: 1 }
+    ).lean();
+    const productIdSet = categoryProductIds.map(p => p._id);
+
     const recentOrders = await Order.aggregate([
-      { $sort: { createdAt: -1 } },
-      {
-        $lookup: {
-          from: 'products',
-          localField: 'items.product',
-          foreignField: '_id',
-          as: 'orderProducts'
-        }
-      },
       {
         $match: {
-          'orderProducts.category': category._id
+          'items.product': { $in: productIdSet }
         }
       },
+      { $sort: { createdAt: -1 } },
       { $limit: limit },
       {
         $lookup: {

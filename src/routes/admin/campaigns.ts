@@ -5,6 +5,7 @@ import { requireAuth, requireAdmin } from '../../middleware/auth';
 import Campaign, { ICampaign, ICampaignDeal } from '../../models/Campaign';
 import { Store } from '../../models/Store';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = Router();
 
@@ -44,7 +45,8 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
   // Search filter
   if (req.query.search) {
-    const searchRegex = new RegExp(req.query.search as string, 'i');
+    const escaped = escapeRegex(req.query.search as string);
+    const searchRegex = new RegExp(escaped, 'i');
     filter.$or = [
       { title: searchRegex },
       { subtitle: searchRegex },
@@ -205,7 +207,7 @@ router.get('/stores', asyncHandler(async (req: Request, res: Response) => {
 
   const filter: any = { isActive: true };
   if (search) {
-    filter.name = new RegExp(search, 'i');
+    filter.name = new RegExp(escapeRegex(search), 'i');
   }
 
   const stores = await Store.find(filter)

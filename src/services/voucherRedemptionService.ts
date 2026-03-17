@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { logger } from '../config/logger';
 import axios from 'axios';
 import Referral from '../models/Referral';
@@ -77,7 +78,7 @@ export class VoucherRedemptionService {
   private generateFallbackVoucher(type: string, amount: number): VoucherGenerationResult {
     const prefix = type.substring(0, 3).toUpperCase();
     const timestamp = Date.now().toString(36).toUpperCase();
-    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const random = crypto.randomBytes(4).toString('hex').toUpperCase();
     const voucherCode = `REZ-${prefix}-${amount}-${timestamp}${random}`;
 
     return {

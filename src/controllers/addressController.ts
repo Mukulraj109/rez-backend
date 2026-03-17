@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Address, IAddress } from '../models/Address';
+import { Address } from '../models/Address';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess, sendNotFound } from '../utils/response';
 import { AppError } from '../middleware/errorHandler';
@@ -10,9 +10,29 @@ export const getUserAddresses = asyncHandler(async (req: Request, res: Response)
     throw new AppError('Authentication required', 401);
   }
 
-  const addresses = await Address.find({ user: req.user._id }).sort({ isDefault: -1, createdAt: -1 }).limit(50).lean();
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+  const skip = (page - 1) * limit;
 
-  sendSuccess(res, addresses, 'Addresses retrieved successfully');
+  const filter = { user: req.user._id };
+
+  const [addresses, total] = await Promise.all([
+    Address.find(filter).sort({ isDefault: -1, createdAt: -1 }).skip(skip).limit(limit).lean(),
+    Address.countDocuments(filter),
+  ]);
+
+  const totalPages = Math.ceil(total / limit);
+
+  sendSuccess(res, {
+    addresses,
+    pagination: {
+      currentPage: page,
+      totalPages,
+      totalItems: total,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1,
+    },
+  }, 'Addresses retrieved successfully');
 });
 
 // Get single address by ID

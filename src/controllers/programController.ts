@@ -2,10 +2,11 @@ import { Request, Response } from 'express';
 import Program from '../models/Program';
 import programService from '../services/programService';
 import socialImpactService from '../services/socialImpactService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 class ProgramController {
   // GET /api/programs/college
-  async getCollegePrograms(req: Request, res: Response) {
+  getCollegePrograms = asyncHandler(async (req: Request, res: Response) => {
     try {
       const programs = await programService.getProgramsByType('college_ambassador');
 
@@ -19,10 +20,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/programs/college/join
-  async joinCollegeProgram(req: Request, res: Response) {
+  joinCollegeProgram = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { programId, collegeName, collegeId } = req.body;
@@ -46,10 +47,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/programs/college/submit
-  async submitCollegeTask(req: Request, res: Response) {
+  submitCollegeTask = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { programId, taskId, submissionUrl } = req.body;
@@ -73,10 +74,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/programs/corporate
-  async getCorporatePrograms(req: Request, res: Response) {
+  getCorporatePrograms = asyncHandler(async (req: Request, res: Response) => {
     try {
       const programs = await programService.getProgramsByType('corporate_employee');
 
@@ -90,10 +91,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/programs/corporate/join
-  async joinCorporateProgram(req: Request, res: Response) {
+  joinCorporateProgram = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { programId, companyName, employeeId } = req.body;
@@ -117,10 +118,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/programs/social-impact
-  async getSocialImpactEvents(req: Request, res: Response) {
+  getSocialImpactEvents = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { eventStatus, eventType, sponsorId, city, page, limit } = req.query;
@@ -155,10 +156,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/programs/social-impact/my-stats
-  async getSocialImpactMyStats(req: Request, res: Response) {
+  getSocialImpactMyStats = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const stats = await socialImpactService.getUserStats(userId);
@@ -173,10 +174,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/programs/social-impact/my-events
-  async getSocialImpactMyEvents(req: Request, res: Response) {
+  getSocialImpactMyEvents = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { status } = req.query;
@@ -193,10 +194,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/programs/social-impact/leaderboard
-  async getSocialImpactLeaderboard(req: Request, res: Response) {
+  getSocialImpactLeaderboard = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { metric, limit } = req.query;
 
@@ -215,10 +216,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/programs/social-impact/:id
-  async getSocialImpactEventById(req: Request, res: Response) {
+  getSocialImpactEventById = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const userId = req.user?.id;
@@ -242,10 +243,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/programs/social-impact/:id/register
-  async registerForSocialImpact(req: Request, res: Response) {
+  registerForSocialImpact = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { id } = req.params;
@@ -263,10 +264,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // DELETE /api/programs/social-impact/:id/register
-  async cancelSocialImpactRegistration(req: Request, res: Response) {
+  cancelSocialImpactRegistration = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { id } = req.params;
@@ -284,10 +285,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/programs/social-impact/:id/check-in (admin only)
-  async checkInSocialImpact(req: Request, res: Response) {
+  checkInSocialImpact = asyncHandler(async (req: Request, res: Response) => {
     try {
       const adminId = req.user?.id;
       const { id } = req.params;
@@ -313,10 +314,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/programs/social-impact/:id/complete (admin only)
-  async completeSocialImpact(req: Request, res: Response) {
+  completeSocialImpact = asyncHandler(async (req: Request, res: Response) => {
     try {
       const adminId = req.user?.id;
       const { id } = req.params;
@@ -347,10 +348,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/programs/social-impact/:id/bulk-complete (admin only)
-  async bulkCompleteSocialImpact(req: Request, res: Response) {
+  bulkCompleteSocialImpact = asyncHandler(async (req: Request, res: Response) => {
     try {
       const adminId = req.user?.id;
       const { id } = req.params;
@@ -376,10 +377,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/programs/social-impact/:id/participants (admin only)
-  async getSocialImpactParticipants(req: Request, res: Response) {
+  getSocialImpactParticipants = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { status } = req.query;
@@ -396,10 +397,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/programs/social-impact (admin only - create event)
-  async createSocialImpactEvent(req: Request, res: Response) {
+  createSocialImpactEvent = asyncHandler(async (req: Request, res: Response) => {
     try {
       const {
         name, description, status, startDate, endDate,
@@ -434,10 +435,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // PUT /api/programs/social-impact/:id (admin only - update event)
-  async updateSocialImpactEvent(req: Request, res: Response) {
+  updateSocialImpactEvent = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
 
@@ -489,12 +490,12 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // ========== ATTENDANCE VERIFICATION ENDPOINTS ==========
 
   // POST /api/programs/social-impact/:id/generate-qr (admin)
-  async generateQRCheckIn(req: Request, res: Response) {
+  generateQRCheckIn = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { userId } = req.body;
@@ -513,10 +514,10 @@ class ProgramController {
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message });
     }
-  }
+  });
 
   // POST /api/programs/social-impact/:id/my-qr (user generates own QR)
-  async generateMyQRCheckIn(req: Request, res: Response) {
+  generateMyQRCheckIn = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { id } = req.params;
@@ -531,10 +532,10 @@ class ProgramController {
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message });
     }
-  }
+  });
 
   // POST /api/programs/social-impact/:id/verify-qr (admin scans)
-  async verifyQRCheckIn(req: Request, res: Response) {
+  verifyQRCheckIn = asyncHandler(async (req: Request, res: Response) => {
     try {
       const adminId = req.user?.id;
       const { qrToken } = req.body;
@@ -553,10 +554,10 @@ class ProgramController {
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message });
     }
-  }
+  });
 
   // POST /api/programs/social-impact/:id/generate-otp (admin)
-  async generateOTPCheckIn(req: Request, res: Response) {
+  generateOTPCheckIn = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { userId } = req.body;
@@ -575,10 +576,10 @@ class ProgramController {
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message });
     }
-  }
+  });
 
   // POST /api/programs/social-impact/:id/verify-otp (user self check-in)
-  async verifyOTPCheckIn(req: Request, res: Response) {
+  verifyOTPCheckIn = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { id } = req.params;
@@ -598,10 +599,10 @@ class ProgramController {
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message });
     }
-  }
+  });
 
   // POST /api/programs/social-impact/:id/verify-geo (user self check-in)
-  async verifyGeoCheckIn(req: Request, res: Response) {
+  verifyGeoCheckIn = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { id } = req.params;
@@ -621,10 +622,10 @@ class ProgramController {
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message });
     }
-  }
+  });
 
   // GET /api/programs/my-programs
-  async getMyPrograms(req: Request, res: Response) {
+  getMyPrograms = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
 
@@ -640,10 +641,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/programs/:id/tasks
-  async getMyProgramTasks(req: Request, res: Response) {
+  getMyProgramTasks = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { id } = req.params;
@@ -660,10 +661,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/programs/:id
-  async getProgramById(req: Request, res: Response) {
+  getProgramById = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
 
@@ -686,9 +687,10 @@ class ProgramController {
         message: error.message
       });
     }
-  }
+  });
+
   // POST /social-impact/:id/approve — Admin approves a merchant-created event
-  async approveSocialImpactEvent(req: Request, res: Response) {
+  approveSocialImpactEvent = asyncHandler(async (req: Request, res: Response) => {
     try {
       const event = await Program.findOne({
         _id: req.params.id,
@@ -704,10 +706,10 @@ class ProgramController {
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });
     }
-  }
+  });
 
   // POST /social-impact/:id/reject — Admin rejects a merchant-created event
-  async rejectSocialImpactEvent(req: Request, res: Response) {
+  rejectSocialImpactEvent = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { reason } = req.body;
       const event = await Program.findOne({
@@ -724,10 +726,10 @@ class ProgramController {
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });
     }
-  }
+  });
 
   // GET /social-impact/pending — Admin lists events pending approval
-  async getPendingApprovalEvents(req: Request, res: Response) {
+  getPendingApprovalEvents = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { page, limit } = req.query;
       const pg = {
@@ -755,7 +757,7 @@ class ProgramController {
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });
     }
-  }
+  });
 }
 
 export default new ProgramController();

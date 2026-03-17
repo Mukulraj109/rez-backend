@@ -1,6 +1,9 @@
 import { logger } from '../config/logger';
 // Cashback Service
 // Business logic for user cashback management
+// NOTE: Multiplier calculation now delegates to the entitlement cashbackEngine
+// for subscription + Prive tier multipliers. Category/threshold base rate logic
+// remains here as the domain-specific rate source.
 
 import { Types } from 'mongoose';
 import { UserCashback, IUserCashback } from '../models/UserCashback';
@@ -9,6 +12,7 @@ import { User } from '../models/User';
 import subscriptionBenefitsService from './subscriptionBenefitsService';
 import DoubleCashbackCampaign from '../models/DoubleCashbackCampaign';
 import { pct } from '../utils/currency';
+import { calculateCashback, type CashbackResult } from './entitlement/cashbackEngine';
 
 interface CreateCashbackData {
   userId: Types.ObjectId;
@@ -46,8 +50,8 @@ class CashbackService {
     productCategories: string[],
     userId?: Types.ObjectId,
     storeId?: Types.ObjectId
-  ): Promise<{ amount: number; rate: number; description: string; multiplier: number }> {
-    // Base cashback rate
+  ): Promise<{ amount: number; rate: number; description: string; multiplier: number; engineBreakdown?: CashbackResult['breakdown'] }> {
+    // Base cashback rate (category-specific)
     let cashbackRate = 5; // 5% base rate (ReZ coin reward)
 
     // Category-specific bonuses
@@ -75,25 +79,45 @@ class CashbackService {
       cashbackRate += 0.5; // Extra 0.5% for orders above ₹10000
     }
 
-    // Apply subscription tier multiplier
-    let tierMultiplier = 1;
+    // Use entitlement cashback engine for subscription + Prive multipliers
+    // This replaces the old manual subscriptionBenefitsService.getCashbackMultiplier() call
     if (userId) {
-      tierMultiplier = await subscriptionBenefitsService.getCashbackMultiplier(userId);
+      try {
+        const engineResult = await calculateCashback({
+          userId: userId.toString(),
+          billAmount: orderAmount,
+          baseRate: cashbackRate,
+        });
+
+        const { breakdown } = engineResult;
+        const totalMultiplier = breakdown.subscriptionMultiplier * breakdown.priveCoinMultiplier;
+
+        const description = totalMultiplier > 1
+          ? `${engineResult.effectiveRate}% cashback (${cashbackRate}% base × ${breakdown.subscriptionMultiplier}x tier${breakdown.priveCoinMultiplier > 1 ? ` × ${breakdown.priveCoinMultiplier}x Prive` : ''}) on order of ₹${orderAmount}`
+          : `${cashbackRate}% cashback on order of ₹${orderAmount}`;
+
+        return {
+          amount: engineResult.cashbackAmount,
+          rate: engineResult.effectiveRate,
+          description,
+          multiplier: totalMultiplier,
+          engineBreakdown: breakdown,
+        };
+      } catch (error) {
+        logger.warn('[CASHBACK SERVICE] Engine failed, falling back to legacy calculation:', error);
+        // Fall through to legacy calculation below
+      }
     }
 
-    // Calculate final rate and amount
-    const finalRate = cashbackRate * tierMultiplier;
-    const cashbackAmount = pct(orderAmount, finalRate);
-
-    const description = tierMultiplier > 1
-      ? `${finalRate}% cashback (${cashbackRate}% × ${tierMultiplier}x tier bonus) on order of ₹${orderAmount}`
-      : `${cashbackRate}% cashback on order of ₹${orderAmount}`;
+    // Legacy fallback (no userId or engine failure)
+    const cashbackAmount = pct(orderAmount, cashbackRate);
+    const description = `${cashbackRate}% cashback on order of ₹${orderAmount}`;
 
     return {
       amount: cashbackAmount,
-      rate: finalRate,
+      rate: cashbackRate,
       description,
-      multiplier: tierMultiplier
+      multiplier: 1,
     };
   }
 
@@ -336,7 +360,7 @@ class CashbackService {
    */
   async creditCashbackToWallet(cashbackId: Types.ObjectId): Promise<IUserCashback> {
     try {
-      const cashback = await UserCashback.findById(cashbackId).lean();
+      const cashback = await UserCashback.findById(cashbackId);
 
       if (!cashback) {
         throw new Error('Cashback not found');
@@ -415,13 +439,14 @@ class CashbackService {
     cashbackRate: number;
     description: string;
     multiplier: number;
+    engineBreakdown?: CashbackResult['breakdown'];
   }> {
     try {
       const categories = cartData.items
         .map(item => item.product?.category)
         .filter(Boolean);
 
-      const { amount, rate, description, multiplier } = await this.calculateOrderCashback(
+      const { amount, rate, description, multiplier, engineBreakdown } = await this.calculateOrderCashback(
         cartData.subtotal,
         categories,
         userId
@@ -431,7 +456,8 @@ class CashbackService {
         estimatedCashback: amount,
         cashbackRate: rate,
         description,
-        multiplier
+        multiplier,
+        engineBreakdown,
       };
     } catch (error) {
       logger.error('❌ [CASHBACK SERVICE] Error forecasting cashback:', error);

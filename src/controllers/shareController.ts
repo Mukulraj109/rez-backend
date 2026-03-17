@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
 import shareService from '../services/shareService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 class ShareController {
   // GET /api/share/content
-  async getShareableContent(req: Request, res: Response) {
+  getShareableContent = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
 
@@ -19,10 +20,10 @@ class ShareController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/share/track
-  async createShare(req: Request, res: Response) {
+  createShare = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { contentType, contentId, platform } = req.body;
@@ -51,10 +52,10 @@ class ShareController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/share/click/:trackingCode (public endpoint)
-  async trackClick(req: Request, res: Response) {
+  trackClick = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { trackingCode } = req.params;
 
@@ -68,10 +69,10 @@ class ShareController {
     } catch (error: any) {
       res.redirect('/');
     }
-  }
+  });
 
   // POST /api/share/conversion (internal webhook)
-  async trackConversion(req: Request, res: Response) {
+  trackConversion = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { trackingCode } = req.body;
 
@@ -94,10 +95,10 @@ class ShareController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/share/history
-  async getShareHistory(req: Request, res: Response) {
+  getShareHistory = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { contentType, limit = 20, offset = 0 } = req.query;
@@ -124,10 +125,10 @@ class ShareController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/share/stats
-  async getShareStats(req: Request, res: Response) {
+  getShareStats = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
 
@@ -143,10 +144,10 @@ class ShareController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/share/daily-limits
-  async getDailyLimits(req: Request, res: Response) {
+  getDailyLimits = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
 
@@ -162,10 +163,10 @@ class ShareController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/share/purchase - Share a purchase and earn 5% coins
-  async sharePurchase(req: Request, res: Response) {
+  sharePurchase = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { orderId, platform } = req.body;
@@ -199,10 +200,10 @@ class ShareController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/share/can-share/:orderId - Check if an order can be shared
-  async canShareOrder(req: Request, res: Response) {
+  canShareOrder = asyncHandler(async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
       const { orderId } = req.params;
@@ -226,7 +227,7 @@ class ShareController {
         message: error.message
       });
     }
-  }
+  });
 }
 
 export default new ShareController();

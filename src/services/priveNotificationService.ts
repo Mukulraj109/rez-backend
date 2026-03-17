@@ -6,6 +6,7 @@ import { PriveMission } from '../models/PriveMission';
 import PriveInviteCode from '../models/PriveInviteCode';
 import { UserReputation } from '../models/UserReputation';
 import { getCachedWalletConfig } from './walletCacheService';
+import { logger } from '../config/logger';
 
 interface NotificationItem {
   id: string;
@@ -29,7 +30,7 @@ class PriveNotificationService {
     try {
       const config = await getCachedWalletConfig();
       warningDays = config?.priveProgramConfig?.notificationConfig?.expiryWarningDays || 7;
-    } catch (_) {}
+    } catch (err) { logger.warn('[PriveNotification] Failed to load notification config', { error: (err as Error).message }); }
 
     const warningDate = new Date(Date.now() + warningDays * 24 * 60 * 60 * 1000);
     const now = new Date();

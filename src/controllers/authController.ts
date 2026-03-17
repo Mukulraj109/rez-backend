@@ -11,6 +11,7 @@ import {
   verifyRefreshToken,
   verifyToken,
   blacklistToken,
+  isTokenBlacklisted,
   logoutAllDevices
 } from '../middleware/auth';
 import {
@@ -359,7 +360,7 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Development bypass: Accept OTP starting with "123" for testing
-  const isDevelopmentBypass = isDev && otp.startsWith('123');
+  const isDevelopmentBypass = process.env.NODE_ENV === 'development' && otp.startsWith('123');
 
   if (isDevelopmentBypass) {
     logger.debug('[DEV_BYPASS] Development OTP bypass', { phone: `***${phoneNumber.slice(-4)}` });
@@ -573,6 +574,11 @@ export const refreshToken = asyncHandler(async (req: Request, res: Response) => 
   }
 
   const decoded = verifyRefreshToken(refreshToken);
+
+  // Check if refresh token (by its hash) has been revoked (e.g., after logout)
+  if (await isTokenBlacklisted(hashRefreshToken(refreshToken), true)) {
+    return sendUnauthorized(res, 'Refresh token has been revoked');
+  }
 
   const user = await User.findById(decoded.userId).select('+auth.refreshToken').lean();
 

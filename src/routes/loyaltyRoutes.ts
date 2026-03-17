@@ -10,6 +10,19 @@ import {
   syncBrandLoyalty,
   getHomepageLoyaltySummary
 } from '../controllers/loyaltyController';
+import {
+  getPointBalance,
+  getRewardsCatalog,
+  getTierInfo,
+  getRedemptionHistory,
+  getChallenges,
+  dailyCheckInGame,
+  getCheckInStatus,
+  getExpiringPoints,
+  claimChallengeReward,
+  getPointHistory,
+  redeemReward,
+} from '../controllers/loyaltyRedemptionController';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validateParams } from '../middleware/validation';
 import { Joi } from '../middleware/validation';
@@ -77,5 +90,45 @@ router.get('/coins', getCoinBalance);
 
 // Sync brand loyalty from order history
 router.post('/sync-brands', syncBrandLoyalty);
+
+// --- Loyalty Redemption Endpoints ---
+
+// Get point balance with tier info
+router.get('/points/balance', getPointBalance);
+
+// Get rewards catalog (milestones as rewards)
+router.get('/catalog', getRewardsCatalog);
+
+// Get tier information
+router.get('/tier', getTierInfo);
+
+// Get redemption history (paginated)
+router.get('/redemptions', getRedemptionHistory);
+
+// Get active challenges with user progress
+router.get('/challenges', getChallenges);
+
+// Daily check-in game
+router.post('/games/check-in', checkInLimiter, dailyCheckInGame);
+
+// Get check-in status (7-day calendar + streak)
+router.get('/games/check-in/status', getCheckInStatus);
+
+// Get expiring points
+router.get('/points/expiring', getExpiringPoints);
+
+// Claim challenge reward
+router.post('/challenges/:challengeId/claim',
+  validateParams(Joi.object({
+    challengeId: Joi.string().required()
+  })),
+  claimChallengeReward
+);
+
+// Point transaction history (paginated)
+router.get('/points/history', getPointHistory);
+
+// Redeem a reward
+router.post('/redeem', redeemReward);
 
 export default router;

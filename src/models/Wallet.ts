@@ -1,5 +1,5 @@
 import { logger } from '../config/logger';
-import mongoose, { Schema, Document, Types, Model } from 'mongoose';
+import mongoose, { Schema, Document, Types, Model, ClientSession } from 'mongoose';
 import { logTransaction } from './TransactionAuditLog';
 
 // Wallet Model interface with static methods
@@ -125,8 +125,8 @@ export interface IWallet extends Document {
   canSpend(amount: number): boolean;
   addFunds(amount: number, type: string): Promise<void>;
   deductFunds(amount: number, options?: { trackWithdrawal?: boolean }): Promise<void>;
-  addBrandedCoins(merchantId: Types.ObjectId, merchantName: string, amount: number, merchantLogo?: string, merchantColor?: string): Promise<void>;
-  useBrandedCoins(merchantId: Types.ObjectId, amount: number): Promise<void>;
+  addBrandedCoins(merchantId: Types.ObjectId, merchantName: string, amount: number, merchantLogo?: string, merchantColor?: string, session?: ClientSession): Promise<void>;
+  useBrandedCoins(merchantId: Types.ObjectId, amount: number, session?: ClientSession): Promise<void>;
   freeze(reason: string): Promise<void>;
   unfreeze(): Promise<void>;
   resetDailyLimit(): Promise<void>;
@@ -649,7 +649,8 @@ WalletSchema.methods.addBrandedCoins = async function(
   merchantName: string,
   amount: number,
   merchantLogo?: string,
-  merchantColor?: string
+  merchantColor?: string,
+  session?: ClientSession
 ): Promise<void> {
   if (!this.isActive) {
     throw new Error('Wallet is not active');
@@ -663,6 +664,9 @@ WalletSchema.methods.addBrandedCoins = async function(
   // balance.total only tracks ReZ coins, cashback, and promo coins
 
   // Try atomic $inc on existing branded coin entry
+  const opts: any = { new: true };
+  if (session) opts.session = session;
+
   const updated = await (this.constructor as any).findOneAndUpdate(
     {
       _id: this._id,
@@ -675,7 +679,7 @@ WalletSchema.methods.addBrandedCoins = async function(
         lastTransactionAt: new Date(),
       },
     },
-    { new: true }
+    opts
   );
 
   if (!updated) {
@@ -695,7 +699,7 @@ WalletSchema.methods.addBrandedCoins = async function(
         },
         $set: { lastTransactionAt: new Date() },
       },
-      { new: true }
+      opts
     );
 
     if (!pushed) {
@@ -718,7 +722,8 @@ WalletSchema.methods.addBrandedCoins = async function(
 // Method to use Branded Coins (at specific merchant)
 WalletSchema.methods.useBrandedCoins = async function(
   merchantId: Types.ObjectId,
-  amount: number
+  amount: number,
+  session?: ClientSession
 ): Promise<void> {
   if (!this.isActive) {
     throw new Error('Wallet is not active');
@@ -729,6 +734,9 @@ WalletSchema.methods.useBrandedCoins = async function(
   }
 
   // Atomic update: decrement branded coin with balance guard
+  const opts: any = { new: true };
+  if (session) opts.session = session;
+
   const updated = await (this.constructor as any).findOneAndUpdate(
     {
       _id: this._id,
@@ -746,7 +754,7 @@ WalletSchema.methods.useBrandedCoins = async function(
         lastTransactionAt: new Date(),
       }
     },
-    { new: true }
+    opts
   );
 
   if (!updated) {
@@ -758,13 +766,15 @@ WalletSchema.methods.useBrandedCoins = async function(
     (coin: any) => coin.merchantId.toString() === merchantId.toString() && coin.amount <= 0
   );
   if (zeroCoin) {
+    const cleanupOpts: any = {};
+    if (session) cleanupOpts.session = session;
     await (this.constructor as any).findByIdAndUpdate(this._id, {
       $pull: { brandedCoins: { merchantId: merchantId, amount: { $lte: 0 } } }
-    });
+    }, cleanupOpts);
   }
 
   // Refresh local document
-  const refreshed = await (this.constructor as any).findById(this._id);
+  const refreshed = await (this.constructor as any).findById(this._id).session(session || null);
   this.brandedCoins = refreshed.brandedCoins;
   this.lastTransactionAt = refreshed.lastTransactionAt;
 

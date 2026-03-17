@@ -78,8 +78,10 @@ export const initiateTransfer = asyncHandler(async (req: Request, res: Response)
       }
       // Failed — clear old idempotency key so a new transfer can be created
       if (existing.status === 'failed') {
-        existing.idempotencyKey = undefined;
-        await existing.save();
+        await Transfer.findOneAndUpdate(
+          { _id: existing._id },
+          { $unset: { idempotencyKey: 1 } }
+        );
         // Fall through to create a new transfer
       }
     }
@@ -396,12 +398,15 @@ async function executeTransfer(transferId: string): Promise<{ success: boolean; 
           { session }
         );
       } else if (transfer.coinType === 'branded' && transfer.merchantId) {
-        // Branded coin transfer
-        await senderWallet.useBrandedCoins(transfer.merchantId, amount);
+        // Branded coin transfer — pass session for transactional safety
+        await senderWallet.useBrandedCoins(transfer.merchantId, amount, session);
         await recipientWallet.addBrandedCoins(
           transfer.merchantId,
           (senderWallet.brandedCoins.find((bc: any) => bc.merchantId.toString() === transfer.merchantId?.toString()) as any)?.merchantName || 'Unknown',
-          amount
+          amount,
+          undefined,
+          undefined,
+          session
         );
       } else if (transfer.coinType === 'promo') {
         // Promo coin transfer: atomic debit sender promo with $gte guard

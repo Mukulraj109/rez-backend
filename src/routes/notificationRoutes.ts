@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import {
   getUserNotifications,
   getUnreadCount,
@@ -11,12 +11,28 @@ import { authenticate } from '../middleware/auth';
 import { validate, validateParams, validateQuery, notificationSchemas, commonSchemas } from '../middleware/validation';
 import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
+import { Notification } from '../models/Notification';
+import { sendSuccess, sendBadRequest } from '../utils/response';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 router.use(generalLimiter);
 
 // All notification routes require authentication
 router.use(authenticate);
+
+// Get notification statistics for the current user
+router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.userId!;
+  const baseQuery = { user: userId, deletedAt: { $exists: false } as any };
+
+  const [total, unread] = await Promise.all([
+    Notification.countDocuments(baseQuery),
+    Notification.countDocuments({ ...baseQuery, isRead: false }),
+  ]);
+
+  sendSuccess(res, { total, unread, read: total - unread });
+}));
 
 // Get unread notification count
 router.get('/unread-count', getUnreadCount);
@@ -66,5 +82,30 @@ router.post('/unregister-token',
   })),
   unregisterPushToken
 );
+
+// Send a test notification (dev/staging only)
+router.post('/test', asyncHandler(async (req: Request, res: Response) => {
+  if (process.env.NODE_ENV === 'production') {
+    return sendBadRequest(res, 'Test notifications are not available in production');
+  }
+
+  const userId = req.userId!;
+  const notification = await Notification.create({
+    user: userId,
+    title: req.body.title || 'Test Notification',
+    message: req.body.message || 'This is a test notification',
+    type: req.body.type || 'info',
+    category: req.body.category || 'system',
+    priority: req.body.priority || 'medium',
+    deliveryChannels: req.body.deliveryChannels || ['in_app'],
+    source: 'system',
+    isRead: false,
+    data: req.body.data || {
+      metadata: { isTest: true, createdVia: 'test-endpoint' }
+    },
+  });
+
+  sendSuccess(res, { notification }, 'Test notification created');
+}));
 
 export default router;

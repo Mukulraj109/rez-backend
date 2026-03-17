@@ -84,7 +84,7 @@ export async function merchantApprovePick(
       };
     } else if (rewardOptions.type === 'branded_coins') {
       // Award branded coins to creator
-      const wallet = await Wallet.findOne({ user: creatorUserId }).lean();
+      const wallet = await Wallet.findOne({ user: creatorUserId });
       if (!wallet) throw new Error('Creator wallet not found');
 
       await wallet.addBrandedCoins(

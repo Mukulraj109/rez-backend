@@ -1354,14 +1354,21 @@ export const getMyEvents = asyncHandler(async (req: Request, res: Response) => {
     .limit(50)
     .lean();
 
-  // For past bookings, enrich with reward info
-  if (tab === 'past') {
+  // For past bookings, enrich with reward info (batch query instead of N+1)
+  if (tab === 'past' && bookings.length > 0) {
+    const eventIds = bookings
+      .map(b => (b as any).eventId?._id)
+      .filter(Boolean);
+    const attendances = await EventAttendance.find({
+      eventId: { $in: eventIds },
+      userId,
+    }).lean();
+    const attendanceMap = new Map(
+      attendances.map(a => [String(a.eventId), a])
+    );
     for (const booking of bookings) {
-      const attendance = await EventAttendance.findOne({
-        eventId: (booking as any).eventId?._id,
-        userId,
-      }).lean();
-      (booking as any).attendance = attendance;
+      const eid = String((booking as any).eventId?._id);
+      (booking as any).attendance = attendanceMap.get(eid) || null;
     }
   }
 

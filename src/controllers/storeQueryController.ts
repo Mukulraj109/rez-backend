@@ -567,9 +567,9 @@ export const getNewStores = asyncHandler(async (req: Request, res: Response) => 
       slug: store.slug,
       category: store.category?.name || 'General',
       image: store.logo || store.banner?.[0] || `https://images.unsplash.com/photo-${1441984904996 + index}-e0b6ba687e04?w=400`,
-      people: Math.floor(Math.random() * 300) + 50, // Simulated active users
+      people: store.analytics?.viewCount || 0,
       cashback: `${store.offers?.cashback || 10}%`,
-      rating: store.ratings?.average || 4.0,
+      rating: store.ratings?.average || 0,
       distance: store.distance,
       isNew: true
     }));

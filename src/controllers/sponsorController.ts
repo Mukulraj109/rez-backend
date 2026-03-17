@@ -1,10 +1,11 @@
 import { Request, Response } from 'express';
 import sponsorService from '../services/sponsorService';
 import { SponsorAllocation } from '../models/SponsorAllocation';
+import { asyncHandler } from '../utils/asyncHandler';
 
 class SponsorController {
   // GET /api/sponsors
-  async getSponsors(req: Request, res: Response) {
+  getSponsors = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { page, limit, isActive, industry, search } = req.query;
 
@@ -37,10 +38,10 @@ class SponsorController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/sponsors
-  async createSponsor(req: Request, res: Response) {
+  createSponsor = asyncHandler(async (req: Request, res: Response) => {
     try {
       const {
         name,
@@ -82,10 +83,10 @@ class SponsorController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/sponsors/:id
-  async getSponsorById(req: Request, res: Response) {
+  getSponsorById = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
 
@@ -108,10 +109,10 @@ class SponsorController {
         message: error.message
       });
     }
-  }
+  });
 
   // PUT /api/sponsors/:id
-  async updateSponsor(req: Request, res: Response) {
+  updateSponsor = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const updateData = req.body;
@@ -136,10 +137,10 @@ class SponsorController {
         message: error.message
       });
     }
-  }
+  });
 
   // DELETE /api/sponsors/:id (soft delete)
-  async deactivateSponsor(req: Request, res: Response) {
+  deactivateSponsor = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
 
@@ -162,10 +163,10 @@ class SponsorController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/sponsors/:id/activate
-  async activateSponsor(req: Request, res: Response) {
+  activateSponsor = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
 
@@ -188,10 +189,10 @@ class SponsorController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/sponsors/:id/events
-  async getSponsorEvents(req: Request, res: Response) {
+  getSponsorEvents = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
 
@@ -207,10 +208,10 @@ class SponsorController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/sponsors/:id/analytics
-  async getSponsorAnalytics(req: Request, res: Response) {
+  getSponsorAnalytics = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
 
@@ -232,9 +233,10 @@ class SponsorController {
         message: error.message
       });
     }
-  }
+  });
+
   // POST /api/sponsors/:id/fund - Fund sponsor budget
-  async fundSponsor(req: Request, res: Response) {
+  fundSponsor = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const adminId = req.user?.id;
@@ -265,10 +267,10 @@ class SponsorController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/sponsors/:id/budget - Get budget summary
-  async getSponsorBudget(req: Request, res: Response) {
+  getSponsorBudget = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
 
@@ -306,10 +308,10 @@ class SponsorController {
         message: error.message
       });
     }
-  }
+  });
 
   // POST /api/sponsors/:id/allocate - Allocate budget to event
-  async allocateBudget(req: Request, res: Response) {
+  allocateBudget = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const adminId = req.user?.id;
@@ -335,10 +337,10 @@ class SponsorController {
         message: error.message
       });
     }
-  }
+  });
 
   // GET /api/sponsors/:id/ledger - Get allocation ledger
-  async getSponsorLedger(req: Request, res: Response) {
+  getSponsorLedger = asyncHandler(async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { page = '1', limit = '20', type } = req.query;
@@ -377,7 +379,7 @@ class SponsorController {
         message: error.message
       });
     }
-  }
+  });
 }
 
 export default new SponsorController();

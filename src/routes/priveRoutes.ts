@@ -58,6 +58,8 @@ import { strictLimiter, generalLimiter } from '../middleware/rateLimiter';
 import { requireReAuthForRedemption } from '../middleware/reAuth';
 import { getCachedWalletConfig } from '../services/walletCacheService';
 import { asyncHandler } from '../utils/asyncHandler';
+import { validate } from '../middleware/validation';
+import { redeemCoinsSchema } from '../validators/financialValidators';
 
 /**
  * Middleware factory: checks that a feature flag is enabled in WalletConfig
@@ -272,7 +274,7 @@ router.get('/catalog', getCatalog);
  * @desc    Redeem coins for a voucher
  * @access  Private
  */
-router.post('/redeem', strictLimiter, requireReAuthForRedemption(), redeemCoins);
+router.post('/redeem', strictLimiter, requireReAuthForRedemption(), validate(redeemCoinsSchema), redeemCoins);
 
 /**
  * @route   GET /api/prive/vouchers

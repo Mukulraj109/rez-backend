@@ -6,6 +6,8 @@ import { Store } from '../../models/Store';
 import { isSocketInitialized, getIO } from '../../config/socket';
 import { escapeRegex } from '../../utils/sanitize';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { validateQuery } from '../../middleware/validation';
+import { adminMerchantSearchSchema } from '../../validators/financialValidators';
 
 const router = Router();
 
@@ -18,7 +20,7 @@ router.use(requireAdmin);
  * @desc    Get all merchants with pagination, filters, and search
  * @access  Admin
  */
-router.get('/', asyncHandler(async (req: Request, res: Response) => {
+router.get('/', validateQuery(adminMerchantSearchSchema), asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;

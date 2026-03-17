@@ -7,6 +7,13 @@ import mongoose from 'mongoose';
 import { escapeRegex } from '../../utils/sanitize';
 import adminActionService from '../../services/adminActionService';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { validateQuery, validate } from '../../middleware/validation';
+import {
+  adminUserWalletSearchSchema,
+  adminWalletAdjustSchema,
+  adminWalletFreezeSchema,
+  adminReverseCashbackSchema,
+} from '../../validators/financialValidators';
 
 const router = Router();
 
@@ -18,7 +25,7 @@ router.use(requireAdmin);
  * @desc    Search user wallets
  * @access  Admin
  */
-router.get('/', asyncHandler(async (req: Request, res: Response) => {
+router.get('/', validateQuery(adminUserWalletSearchSchema), asyncHandler(async (req: Request, res: Response) => {
     const { search, page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, Number(page));
     const limitNum = Math.min(50, Math.max(1, Number(limit)));
@@ -66,7 +73,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  * @desc    Freeze a user's wallet
  * @access  Admin
  */
-router.post('/:userId/freeze', asyncHandler(async (req: Request, res: Response) => {
+router.post('/:userId/freeze', validate(adminWalletFreezeSchema), asyncHandler(async (req: Request, res: Response) => {
     const { reason } = req.body;
     if (!reason || !reason.trim()) {
       return res.status(400).json({ success: false, message: 'Reason is required to freeze a wallet' });
@@ -133,7 +140,7 @@ router.post('/:userId/unfreeze', asyncHandler(async (req: Request, res: Response
  * @desc    Manual credit/debit adjustment with audit reason
  * @access  Admin (super_admin recommended)
  */
-router.post('/:userId/adjust', asyncHandler(async (req: Request, res: Response) => {
+router.post('/:userId/adjust', validate(adminWalletAdjustSchema), asyncHandler(async (req: Request, res: Response) => {
     const { amount, type, reason } = req.body;
     if (!amount || !type || !reason?.trim()) {
       return res.status(400).json({ success: false, message: 'Amount, type (credit/debit), and reason are required' });
@@ -231,7 +238,7 @@ router.post('/:userId/adjust', asyncHandler(async (req: Request, res: Response) 
  * @desc    Reverse/clawback cashback from a user's wallet
  * @access  Admin (super_admin recommended)
  */
-router.post('/:userId/reverse-cashback', asyncHandler(async (req: Request, res: Response) => {
+router.post('/:userId/reverse-cashback', validate(adminReverseCashbackSchema), asyncHandler(async (req: Request, res: Response) => {
     const { amount, originalTransactionId, reason } = req.body;
     if (!amount || !reason?.trim()) {
       return res.status(400).json({ success: false, message: 'Amount and reason are required' });

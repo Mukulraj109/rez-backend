@@ -393,7 +393,7 @@ class SocialImpactService {
 
         if (budgetSufficient) {
           // Credit branded coins to user's wallet
-          let wallet = await Wallet.findOne({ user: userId }).lean();
+          let wallet = await Wallet.findOne({ user: userId });
           if (!wallet) {
             wallet = await (Wallet as any).createForUser(new mongoose.Types.ObjectId(userId));
           }
@@ -703,23 +703,22 @@ class SocialImpactService {
 
   // Generate OTP for event check-in (admin generates, displayed at event)
   async generateEventOTP(eventId: string, userId: string): Promise<{ otpCode: string }> {
-    const enrollment = await SocialImpactEnrollment.findOne({
-      user: userId,
-      program: eventId,
-      status: 'registered'
-    }).lean();
+    const otpCode = crypto.randomInt(100000, 999999).toString();
+
+    const enrollment = await SocialImpactEnrollment.findOneAndUpdate(
+      { user: userId, program: eventId, status: 'registered' },
+      {
+        $set: {
+          'verification.method': 'otp',
+          'verification.otpCode': otpCode,
+          'verification.otpExpiresAt': new Date(Date.now() + 30 * 60 * 1000) // 30 min expiry
+        }
+      },
+      { new: true }
+    );
     if (!enrollment) {
       throw new Error('No active registration found');
     }
-
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-    enrollment.verification = enrollment.verification || {} as any;
-    enrollment.verification!.method = 'otp';
-    enrollment.verification!.otpCode = otpCode;
-    enrollment.verification!.otpExpiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 min expiry
-    enrollment.markModified('verification');
-    await enrollment.save();
 
     return { otpCode };
   }

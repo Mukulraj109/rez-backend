@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 import { UserReputation, PillarId, PILLAR_WEIGHTS, ELIGIBILITY_THRESHOLDS } from '../models/UserReputation';
 import { getCachedWalletConfig } from './walletCacheService';
+import { logger } from '../config/logger';
 
 interface NextAction {
   id: string;
@@ -68,7 +69,7 @@ class PriveNextBestActionService {
         const t = config.priveProgramConfig.tierThresholds;
         thresholds = { entry: t.entryTier, signature: t.signatureTier, elite: t.eliteTier };
       }
-    } catch (_) {}
+    } catch (err) { logger.warn('[PriveNextBestAction] Failed to load tier thresholds', { error: (err as Error).message }); }
 
     const weights = PILLAR_WEIGHTS;
     const currentTier = reputation.tier;
