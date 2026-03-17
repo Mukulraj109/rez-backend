@@ -6,6 +6,7 @@ import Joi from 'joi';
 import mongoose from 'mongoose';
 import { sendSuccess, sendBadRequest, sendNotFound, sendError } from '../utils/response';
 import { validateQuery, validateParams } from '../middleware/validation';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 
@@ -26,8 +27,7 @@ router.get(
     sortBy: Joi.string().valid('order', 'uploadedAt', 'views').optional(),
     sortOrder: Joi.string().valid('asc', 'desc').optional(),
   })),
-  async (req: Request, res: Response) => {
-    try {
+  asyncHandler(async (req: Request, res: Response) => {
       const { productId } = req.params;
       const { category, variantId, type, limit = 50, offset = 0, sortBy = 'order', sortOrder = 'asc' } = req.query;
 
@@ -139,11 +139,7 @@ router.get(
         limit: parseInt(limit as string),
         offset: parseInt(offset as string),
       });
-    } catch (error: any) {
-      logger.error('Error fetching product gallery:', error);
-      return sendError(res, error.message || 'Failed to fetch product gallery', 500);
-    }
-  }
+  })
 );
 
 /**
@@ -154,8 +150,7 @@ router.get(
 router.get(
   '/:productId/gallery/categories',
   validateParams(Joi.object({ productId: Joi.string().required() })),
-  async (req: Request, res: Response) => {
-    try {
+  asyncHandler(async (req: Request, res: Response) => {
       const { productId } = req.params;
 
       // Verify product exists
@@ -214,11 +209,7 @@ router.get(
           coverImage: cat.coverImage,
         })),
       });
-    } catch (error: any) {
-      logger.error('Error fetching product gallery categories:', error);
-      return sendError(res, error.message || 'Failed to fetch gallery categories', 500);
-    }
-  }
+  })
 );
 
 /**
@@ -232,8 +223,7 @@ router.get(
     productId: Joi.string().required(),
     itemId: Joi.string().required(),
   })),
-  async (req: Request, res: Response) => {
-    try {
+  asyncHandler(async (req: Request, res: Response) => {
       const { productId, itemId } = req.params;
 
       // Verify product exists
@@ -283,11 +273,7 @@ router.get(
           uploadedAt: item.uploadedAt,
         },
       });
-    } catch (error: any) {
-      logger.error('Error fetching product gallery item:', error);
-      return sendError(res, error.message || 'Failed to fetch gallery item', 500);
-    }
-  }
+  })
 );
 
 export default router;

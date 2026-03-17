@@ -6,7 +6,7 @@
 
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
-import { asyncHandler } from '../../middleware/asyncHandler';
+import { asyncHandler } from '../../utils/asyncHandler';
 import { logger } from '../../config/logger';
 import PriveAccess from '../../models/PriveAccess';
 import PriveInviteCode from '../../models/PriveInviteCode';
@@ -16,6 +16,7 @@ import { CoinTransaction } from '../../models/CoinTransaction';
 import priveAccessService from '../../services/priveAccessService';
 import { sendSuccess, sendError, sendBadRequest, sendNotFound, sendPaginated } from '../../utils/response';
 import { escapeRegex } from '../../utils/sanitize';
+import { privilegeResolutionService } from '../../services/entitlement/privilegeResolutionService';
 
 /**
  * GET /api/admin/prive/access
@@ -110,6 +111,7 @@ export const grantAccess = asyncHandler(async (req: Request, res: Response) => {
       await access.save();
     }
 
+    privilegeResolutionService.invalidate(targetUser._id.toString()).catch(() => {});
     return sendSuccess(res, { access }, 'Privé access granted successfully');
   } catch (error: any) {
     logger.error('[AdminPriveInvite] Error granting access:', error);
@@ -137,12 +139,15 @@ export const revokeAccess = asyncHandler(async (req: Request, res: Response) => 
 
     if (action === 'suspend') {
       await priveAccessService.adminSuspendAccess(targetUserId, adminObjId, reason);
+      privilegeResolutionService.invalidate(userId).catch(() => {});
       return sendSuccess(res, null, 'Privé access suspended');
     } else if (action === 'remove_whitelist') {
       await priveAccessService.removeWhitelist(targetUserId, adminObjId, reason);
+      privilegeResolutionService.invalidate(userId).catch(() => {});
       return sendSuccess(res, null, 'Whitelist removed');
     } else {
       await priveAccessService.adminRevokeAccess(targetUserId, adminObjId, reason);
+      privilegeResolutionService.invalidate(userId).catch(() => {});
       return sendSuccess(res, null, 'Privé access revoked');
     }
   } catch (error: any) {

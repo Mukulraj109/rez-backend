@@ -13,6 +13,8 @@ import { SubscriptionTier } from '../../models/SubscriptionTier';
 import { Subscription } from '../../models/Subscription';
 import tierConfigService from '../../services/tierConfigService';
 import subscriptionAuditService from '../../services/subscriptionAuditService';
+import { privilegeResolutionService } from '../../services/entitlement/privilegeResolutionService';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -27,8 +29,7 @@ router.use(requireAdmin);
  * GET /plans
  * List all tiers sorted by sortOrder. Supports optional ?isActive=true|false filter.
  */
-router.get('/plans', async (req: Request, res: Response) => {
-  try {
+router.get('/plans', asyncHandler(async (req: Request, res: Response) => {
     const filter: Record<string, any> = {};
 
     if (req.query.isActive !== undefined) {
@@ -40,17 +41,13 @@ router.get('/plans', async (req: Request, res: Response) => {
       .lean();
 
     return sendSuccess(res, tiers, 'Subscription tiers fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching subscription tiers:', error);
-    return sendError(res, 'Failed to fetch subscription tiers', 500);
-  }
-});
+  }));
 
 /**
  * POST /plans
  * Create a new subscription tier.
  */
-router.post('/plans', async (req: Request, res: Response) => {
+router.post('/plans', asyncHandler(async (req: Request, res: Response) => {
   try {
     const {
       tier,
@@ -117,13 +114,13 @@ router.post('/plans', async (req: Request, res: Response) => {
     }
     return sendError(res, 'Failed to create subscription tier', 500);
   }
-});
+}));
 
 /**
  * PUT /plans/:id
  * Update an existing subscription tier.
  */
-router.put('/plans/:id', async (req: Request, res: Response) => {
+router.put('/plans/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendBadRequest(res, 'Invalid tier ID');
@@ -174,15 +171,14 @@ router.put('/plans/:id', async (req: Request, res: Response) => {
     }
     return sendError(res, 'Failed to update subscription tier', 500);
   }
-});
+}));
 
 /**
  * DELETE /plans/:id
  * Soft-delete (deactivate) a subscription tier.
  * Prevents deactivation if there are active subscribers.
  */
-router.delete('/plans/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/plans/:id', asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendBadRequest(res, 'Invalid tier ID');
     }
@@ -211,11 +207,7 @@ router.delete('/plans/:id', async (req: Request, res: Response) => {
     tierConfigService.invalidateCache();
 
     return sendSuccess(res, tierDoc, 'Subscription tier deactivated');
-  } catch (error) {
-    logger.error('[Admin] Error deactivating subscription tier:', error);
-    return sendError(res, 'Failed to deactivate subscription tier', 500);
-  }
-});
+  }));
 
 // ============================================
 // SUBSCRIBER MANAGEMENT ENDPOINTS
@@ -225,8 +217,7 @@ router.delete('/plans/:id', async (req: Request, res: Response) => {
  * GET /subscribers
  * List subscribers with pagination, filtering by tier/status/search.
  */
-router.get('/subscribers', async (req: Request, res: Response) => {
-  try {
+router.get('/subscribers', asyncHandler(async (req: Request, res: Response) => {
     const {
       tier,
       status,
@@ -265,18 +256,13 @@ router.get('/subscribers', async (req: Request, res: Response) => {
       totalPages: Math.ceil(total / limitNum),
       tierDistribution,
     }, 'Subscribers fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching subscribers:', error);
-    return sendError(res, 'Failed to fetch subscribers', 500);
-  }
-});
+  }));
 
 /**
  * POST /subscribers/:userId/override
  * Admin manual tier override (with audit logging)
  */
-router.post('/subscribers/:userId/override', async (req: Request, res: Response) => {
-  try {
+router.post('/subscribers/:userId/override', asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
     const { newTier, reason } = req.body;
     const adminUserId = (req as any).user?._id;
@@ -305,6 +291,7 @@ router.post('/subscribers/:userId/override', async (req: Request, res: Response)
     subscription.tier = newTier as any;
     subscription.benefits = newBenefits;
     await subscription.save();
+    privilegeResolutionService.invalidate(userId).catch(() => {});
 
     // Audit log
     await subscriptionAuditService.logChange({
@@ -321,10 +308,6 @@ router.post('/subscribers/:userId/override', async (req: Request, res: Response)
     });
 
     return sendSuccess(res, subscription, `Subscription overridden to ${newTier}`);
-  } catch (error) {
-    logger.error('[Admin] Error overriding subscription:', error);
-    return sendError(res, 'Failed to override subscription', 500);
-  }
-});
+  }));
 
 export default router;

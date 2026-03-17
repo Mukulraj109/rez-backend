@@ -9,13 +9,13 @@ import { priveConciergeService } from '../services/priveConciergeService';
 import { logger } from '../config/logger';
 import priveAccessService from '../services/priveAccessService';
 import mongoose from 'mongoose';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * POST /api/prive/concierge/tickets
  * Create a new concierge ticket
  */
-export const createTicket = async (req: Request, res: Response) => {
-  try {
+export const createTicket = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
@@ -44,19 +44,13 @@ export const createTicket = async (req: Request, res: Response) => {
       success: true,
       data: { ticket },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE_CONCIERGE] Error creating ticket:', error);
-    const status = error.message?.includes('Maximum') ? 429 : 500;
-    res.status(status).json({ success: false, error: error.message || 'Failed to create ticket' });
-  }
-};
+});
 
 /**
  * GET /api/prive/concierge/tickets
  * Get user's concierge tickets
  */
-export const getTickets = async (req: Request, res: Response) => {
-  try {
+export const getTickets = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
@@ -66,18 +60,13 @@ export const getTickets = async (req: Request, res: Response) => {
       success: true,
       data: { tickets },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE_CONCIERGE] Error fetching tickets:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch tickets' });
-  }
-};
+});
 
 /**
  * GET /api/prive/concierge/tickets/:id
  * Get single concierge ticket
  */
-export const getTicketById = async (req: Request, res: Response) => {
-  try {
+export const getTicketById = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
@@ -95,18 +84,13 @@ export const getTicketById = async (req: Request, res: Response) => {
       success: true,
       data: { ticket },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE_CONCIERGE] Error fetching ticket:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch ticket' });
-  }
-};
+});
 
 /**
  * POST /api/prive/concierge/tickets/:id/message
  * Add a message to a concierge ticket
  */
-export const addMessage = async (req: Request, res: Response) => {
-  try {
+export const addMessage = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
@@ -130,10 +114,4 @@ export const addMessage = async (req: Request, res: Response) => {
       success: true,
       data: { ticket },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE_CONCIERGE] Error adding message:', error);
-    const status = error.message?.includes('not found') ? 404 :
-                   error.message?.includes('Cannot add') ? 400 : 500;
-    res.status(status).json({ success: false, error: error.message || 'Failed to add message' });
-  }
-};
+});

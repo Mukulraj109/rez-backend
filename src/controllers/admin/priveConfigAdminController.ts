@@ -11,7 +11,7 @@ import { WalletConfig, IPriveProgramConfig, IPriveTierConfig } from '../../model
 import { PriveAuditLog } from '../../models/PriveAuditLog';
 import { getCachedWalletConfig, invalidateWalletConfigCache } from '../../services/walletCacheService';
 import { sendSuccess, sendError } from '../../utils/response';
-import { asyncHandler } from '../../middleware/errorHandler';
+import { asyncHandler } from '../../utils/asyncHandler';
 import { AppError } from '../../middleware/errorHandler';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

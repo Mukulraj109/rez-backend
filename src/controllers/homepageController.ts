@@ -227,6 +227,22 @@ export const getAvailableSections = asyncHandler(async (req: Request, res: Respo
  * Shared helper: fetch user-specific context data (wallet, cart, vouchers, etc.)
  * Used by both the homepage batch endpoint and the standalone user-context endpoint.
  */
+/** Global offer count — same for all users, cached separately (300s) */
+async function getCachedGlobalOfferCount(): Promise<number> {
+  const cacheKey = 'homepage:globalOfferCount';
+  const cached = await redisService.get<number>(cacheKey);
+  if (cached !== null) return cached;
+
+  const count = await Offer.countDocuments({
+    isActive: true,
+    startDate: { $lte: new Date() },
+    endDate: { $gte: new Date() },
+  }).catch(() => 0);
+
+  await redisService.set(cacheKey, count, 300).catch(() => {});
+  return count;
+}
+
 async function fetchUserContext(userId: string): Promise<{
   walletBalance: number;
   totalSaved: number;
@@ -236,15 +252,16 @@ async function fetchUserContext(userId: string): Promise<{
   subscription: { tier: string; status: string };
 } | null> {
   try {
+    // Short-cache per-user context (30s) to avoid 6 DB queries on every homepage load
+    const userContextCacheKey = `homepage:uc:${userId}`;
+    const cachedContext = await redisService.get<any>(userContextCacheKey);
+    if (cachedContext) return cachedContext;
+
     const [wallet, activeVoucherCount, activeRedemptionCount, totalOffersCount, cart, subscription] = await Promise.all([
       Wallet.findOne({ user: userId }).select('balance coins brandedCoins statistics').lean().catch(() => null),
       UserVoucher.countDocuments({ user: userId, status: 'active' }).catch(() => 0),
       OfferRedemption.countDocuments({ user: userId, status: 'active' }).catch(() => 0),
-      Offer.countDocuments({
-        isActive: true,
-        startDate: { $lte: new Date() },
-        endDate: { $gte: new Date() },
-      }).catch(() => 0),
+      getCachedGlobalOfferCount(),
       Cart.getActiveCart(String(userId)).then(c => c).catch(() => null),
       subscriptionBenefitsService.getUserSubscription(userId).catch(() => null),
     ]);
@@ -256,7 +273,7 @@ async function fetchUserContext(userId: string): Promise<{
       : 0;
     const cartItemCount = cart?.items?.reduce((sum: number, item: any) => sum + (item.quantity || 1), 0) || 0;
 
-    return {
+    const context = {
       walletBalance,
       totalSaved,
       voucherCount: activeVoucherCount + activeRedemptionCount,
@@ -267,6 +284,11 @@ async function fetchUserContext(userId: string): Promise<{
         status: subscription.status,
       } : { tier: 'free', status: 'active' },
     };
+
+    // Cache for 30s — acceptable staleness for display counts
+    await redisService.set(userContextCacheKey, context, 30).catch(() => {});
+
+    return context;
   } catch (error) {
     logger.error('Error fetching user context:', error);
     return null;

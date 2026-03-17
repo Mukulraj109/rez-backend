@@ -10,6 +10,7 @@ import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { SurpriseCoinDrop } from '../../models/SurpriseCoinDrop';
 import { User } from '../../models/User';
 import { sendSuccess, sendError, sendBadRequest } from '../../utils/response';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -20,8 +21,7 @@ router.use(requireAdmin);
  * GET /api/admin/surprise-coin-drops
  * List all surprise coin drops with pagination & filtering
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -86,18 +86,13 @@ router.get('/', async (req: Request, res: Response) => {
         totalPages: Math.ceil(total / limit),
       },
     }, 'Surprise coin drops fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching surprise coin drops:', error);
-    return sendError(res, 'Failed to fetch surprise coin drops', 500);
-  }
-});
+  }));
 
 /**
  * GET /api/admin/surprise-coin-drops/analytics
  * Analytics: breakdown by status, reason, daily volume
  */
-router.get('/analytics', async (req: Request, res: Response) => {
-  try {
+router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
     const days = parseInt(req.query.days as string) || 30;
     const since = new Date();
     since.setDate(since.getDate() - days);
@@ -159,18 +154,13 @@ router.get('/analytics', async (req: Request, res: Response) => {
       reasonBreakdown,
       dailyVolume,
     }, 'Analytics fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching surprise drop analytics:', error);
-    return sendError(res, 'Failed to fetch analytics', 500);
-  }
-});
+  }));
 
 /**
  * GET /api/admin/surprise-coin-drops/:id
  * Get single surprise coin drop
  */
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendBadRequest(res, 'Invalid drop ID');
     }
@@ -184,18 +174,13 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
 
     return sendSuccess(res, drop, 'Surprise coin drop fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching surprise coin drop:', error);
-    return sendError(res, 'Failed to fetch surprise coin drop', 500);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/surprise-coin-drops
  * Create a surprise coin drop for a specific user
  */
-router.post('/', async (req: Request, res: Response) => {
-  try {
+router.post('/', asyncHandler(async (req: Request, res: Response) => {
     const { userId, coins, reason, message, expiryHours, metadata } = req.body;
 
     if (!userId) return sendBadRequest(res, 'userId is required');
@@ -223,18 +208,13 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     return sendSuccess(res, drop, 'Surprise coin drop created');
-  } catch (error) {
-    logger.error('[Admin] Error creating surprise coin drop:', error);
-    return sendError(res, 'Failed to create surprise coin drop', 500);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/surprise-coin-drops/bulk
  * Create surprise coin drops for multiple users at once
  */
-router.post('/bulk', async (req: Request, res: Response) => {
-  try {
+router.post('/bulk', asyncHandler(async (req: Request, res: Response) => {
     const { userIds, coins, reason, message, expiryHours, metadata } = req.body;
 
     if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
@@ -279,18 +259,13 @@ router.post('/bulk', async (req: Request, res: Response) => {
       skipped: validUserIds.length - existingIds.length,
       invalidIds: userIds.length - validUserIds.length,
     }, `${result.length} surprise coin drops created`);
-  } catch (error) {
-    logger.error('[Admin] Error bulk creating surprise coin drops:', error);
-    return sendError(res, 'Failed to bulk create surprise coin drops', 500);
-  }
-});
+  }));
 
 /**
  * PUT /api/admin/surprise-coin-drops/:id
  * Update a surprise coin drop (only available/pending drops)
  */
-router.put('/:id', async (req: Request, res: Response) => {
-  try {
+router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendBadRequest(res, 'Invalid drop ID');
     }
@@ -313,18 +288,13 @@ router.put('/:id', async (req: Request, res: Response) => {
     await drop.save();
 
     return sendSuccess(res, drop, 'Surprise coin drop updated');
-  } catch (error) {
-    logger.error('[Admin] Error updating surprise coin drop:', error);
-    return sendError(res, 'Failed to update surprise coin drop', 500);
-  }
-});
+  }));
 
 /**
  * DELETE /api/admin/surprise-coin-drops/:id
  * Delete an unclaimed surprise coin drop
  */
-router.delete('/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendBadRequest(res, 'Invalid drop ID');
     }
@@ -338,18 +308,13 @@ router.delete('/:id', async (req: Request, res: Response) => {
     await SurpriseCoinDrop.findByIdAndDelete(req.params.id);
 
     return sendSuccess(res, null, 'Surprise coin drop deleted');
-  } catch (error) {
-    logger.error('[Admin] Error deleting surprise coin drop:', error);
-    return sendError(res, 'Failed to delete surprise coin drop', 500);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/surprise-coin-drops/expire-old
  * Manually trigger expiry of old unclaimed drops
  */
-router.post('/expire-old', async (req: Request, res: Response) => {
-  try {
+router.post('/expire-old', asyncHandler(async (req: Request, res: Response) => {
     const result = await SurpriseCoinDrop.updateMany(
       {
         status: 'available',
@@ -363,10 +328,6 @@ router.post('/expire-old', async (req: Request, res: Response) => {
     return sendSuccess(res, {
       expiredCount: result.modifiedCount,
     }, `${result.modifiedCount} drops expired`);
-  } catch (error) {
-    logger.error('[Admin] Error expiring old drops:', error);
-    return sendError(res, 'Failed to expire old drops', 500);
-  }
-});
+  }));
 
 export default router;

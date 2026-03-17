@@ -29,6 +29,7 @@ import {
   getOrderProgress
 } from '../../config/orderStateMachine';
 import { recordStatusTransition, recordStatusDuration } from '../../utils/orderMetrics';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -41,8 +42,7 @@ router.use(requireAdmin);
  * @desc    Get all platform orders with filters
  * @access  Admin
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -106,22 +106,14 @@ router.get('/', async (req: Request, res: Response) => {
         }
       }
     });
-  } catch (error: any) {
-    logger.error('❌ [ADMIN ORDERS] Error fetching orders:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch orders'
-    });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/orders/stats
  * @desc    Get order statistics
  * @access  Admin
  */
-router.get('/stats', async (req: Request, res: Response) => {
-  try {
+router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -231,22 +223,14 @@ router.get('/stats', async (req: Request, res: Response) => {
       success: true,
       data: result
     });
-  } catch (error: any) {
-    logger.error('❌ [ADMIN ORDERS] Error fetching stats:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch order stats'
-    });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/orders/reconciliation
  * @desc    Check for orders missing ledger entries (ledger drift detection)
  * @access  Senior Admin
  */
-router.get('/reconciliation', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
+router.get('/reconciliation', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : new Date();
 
@@ -316,19 +300,14 @@ router.get('/reconciliation', requireSeniorAdmin, async (req: Request, res: Resp
         driftAmount,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [ADMIN ORDERS] Reconciliation error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Failed to run reconciliation' });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/orders/stuck
  * @desc    Get orders exceeding SLA thresholds
  * @access  Admin
  */
-router.get('/stuck', async (req: Request, res: Response) => {
-  try {
+router.get('/stuck', asyncHandler(async (req: Request, res: Response) => {
     const now = new Date();
     const stuckOrders: any[] = [];
 
@@ -364,19 +343,14 @@ router.get('/stuck', async (req: Request, res: Response) => {
         timestamp: now,
       },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN ORDERS] Error fetching stuck orders:', error);
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch stuck orders' });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/orders/sla-summary
  * @desc    Average time per status transition (last 7 days)
  * @access  Admin
  */
-router.get('/sla-summary', async (req: Request, res: Response) => {
-  try {
+router.get('/sla-summary', asyncHandler(async (req: Request, res: Response) => {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     // Get delivered orders from last 7 days with their timelines
@@ -447,19 +421,14 @@ router.get('/sla-summary', async (req: Request, res: Response) => {
         slaBreaches24h: slaBreaches,
       },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN ORDERS] Error fetching SLA summary:', error);
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch SLA summary' });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/orders/:id
  * @desc    Get single order details
  * @access  Admin
  */
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     const order = await Order.findById(req.params.id)
       .populate('user', 'profile phoneNumber email')
       .populate('items.product', 'name images')
@@ -476,22 +445,14 @@ router.get('/:id', async (req: Request, res: Response) => {
       success: true,
       data: order
     });
-  } catch (error: any) {
-    logger.error('❌ [ADMIN ORDERS] Error fetching order:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch order'
-    });
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/orders/:id/refund
  * @desc    Process refund for an order
  * @access  Admin
  */
-router.post('/:id/refund', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
+router.post('/:id/refund', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { reason } = req.body;
 
     // Validate required fields
@@ -614,22 +575,14 @@ router.post('/:id/refund', requireSeniorAdmin, async (req: Request, res: Respons
         paymentStatus: order.payment.status
       }
     });
-  } catch (error: any) {
-    logger.error('❌ [ADMIN ORDERS] Error processing refund:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to process refund'
-    });
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/orders/:id/cancel
  * @desc    Cancel an order
  * @access  Admin
  */
-router.post('/:id/cancel', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
+router.post('/:id/cancel', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { reason } = req.body;
 
     // Validate required fields
@@ -732,22 +685,14 @@ router.post('/:id/cancel', requireSeniorAdmin, async (req: Request, res: Respons
         itemsRestored: order.items.length
       }
     });
-  } catch (error: any) {
-    logger.error('❌ [ADMIN ORDERS] Error cancelling order:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to cancel order'
-    });
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/orders/:id/escalate
  * @desc    Manually escalate an order (adds timeline entry, notifies merchant)
  * @access  Admin
  */
-router.post('/:id/escalate', async (req: Request, res: Response) => {
-  try {
+router.post('/:id/escalate', asyncHandler(async (req: Request, res: Response) => {
     const { reason, priority } = req.body;
 
     if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
@@ -799,19 +744,14 @@ router.post('/:id/escalate', async (req: Request, res: Response) => {
         status: order.status,
       },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN ORDERS] Error escalating order:', error);
-    res.status(500).json({ success: false, message: error.message || 'Failed to escalate order' });
-  }
-});
+  }));
 
 /**
  * @route   PUT /api/admin/orders/:id/status
  * @desc    Update order status
  * @access  Admin
  */
-router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
+router.put('/:id/status', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { status, notes } = req.body;
 
     // Validate required fields
@@ -1164,13 +1104,6 @@ router.put('/:id/status', requireSeniorAdmin, async (req: Request, res: Response
         notes: notes || null
       }
     });
-  } catch (error: any) {
-    logger.error('❌ [ADMIN ORDERS] Error updating order status:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to update order status'
-    });
-  }
-});
+  }));
 
 export default router;

@@ -19,13 +19,13 @@ import { regionService, isValidRegion, RegionId } from '../services/regionServic
 import { logger } from '../config/logger';
 import { getOffersPageData as getAggregatedData } from '../services/offersPageService';
 import { withCache } from '../utils/cacheHelper';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * GET /api/offers/hotspots
  * Get hotspot areas with active offers count
  */
-export const getHotspots = async (req: Request, res: Response) => {
-  try {
+export const getHotspots = asyncHandler(async (req: Request, res: Response) => {
     const { lat, lng, limit = 10 } = req.query;
 
     let query: any = { isActive: true };
@@ -64,18 +64,13 @@ export const getHotspots = async (req: Request, res: Response) => {
     const hotspots = allHotspots.slice(0, parseInt(limit as string));
 
     sendSuccess(res, hotspots, 'Hotspots retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching hotspots:', error);
-    sendError(res, 'Failed to fetch hotspots', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/hotspots/:slug/offers
  * Get offers for a specific hotspot area
  */
-export const getHotspotOffers = async (req: Request, res: Response) => {
-  try {
+export const getHotspotOffers = asyncHandler(async (req: Request, res: Response) => {
     const { slug } = req.params;
     const { limit = 20 } = req.query;
 
@@ -103,18 +98,13 @@ export const getHotspotOffers = async (req: Request, res: Response) => {
       .lean();
 
     sendSuccess(res, { hotspot, offers }, 'Hotspot offers retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching hotspot offers:', error);
-    sendError(res, 'Failed to fetch hotspot offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/bogo
  * Get Buy One Get One offers
  */
-export const getBOGOOffers = async (req: Request, res: Response) => {
-  try {
+export const getBOGOOffers = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 20, bogoType } = req.query;
 
     const filter: any = {
@@ -134,18 +124,13 @@ export const getBOGOOffers = async (req: Request, res: Response) => {
       .lean();
 
     sendSuccess(res, offers, 'BOGO offers retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching BOGO offers:', error);
-    sendError(res, 'Failed to fetch BOGO offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/sales-clearance
  * Get sale and clearance offers
  */
-export const getSaleOffers = async (req: Request, res: Response) => {
-  try {
+export const getSaleOffers = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 20, saleTag } = req.query;
 
     const filter: any = {
@@ -165,18 +150,13 @@ export const getSaleOffers = async (req: Request, res: Response) => {
       .lean();
 
     sendSuccess(res, offers, 'Sale offers retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching sale offers:', error);
-    sendError(res, 'Failed to fetch sale offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/free-delivery
  * Get free delivery offers
  */
-export const getFreeDeliveryOffers = async (req: Request, res: Response) => {
-  try {
+export const getFreeDeliveryOffers = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 20 } = req.query;
 
     const offers = await Offer.find({
@@ -190,18 +170,13 @@ export const getFreeDeliveryOffers = async (req: Request, res: Response) => {
       .lean();
 
     sendSuccess(res, offers, 'Free delivery offers retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching free delivery offers:', error);
-    sendError(res, 'Failed to fetch free delivery offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/bank-offers
  * Get bank and wallet offers
  */
-export const getBankOffers = async (req: Request, res: Response) => {
-  try {
+export const getBankOffers = asyncHandler(async (req: Request, res: Response) => {
     const { page = 1, limit = 10, cardType, sort } = req.query;
     const pageNum = Math.max(1, parseInt(page as string) || 1);
     const limitNum = Math.min(50, Math.max(1, parseInt(limit as string) || 10));
@@ -232,25 +207,20 @@ export const getBankOffers = async (req: Request, res: Response) => {
     ]);
 
     sendPaginated(res, offers, pageNum, limitNum, total, 'Bank offers retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching bank offers:', error);
-    sendError(res, 'Failed to fetch bank offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/exclusive-zones
  * Get exclusive zone categories with user eligibility status
  */
-export const getExclusiveZones = async (req: Request, res: Response) => {
-  try {
+export const getExclusiveZones = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?._id;
 
     if (!userId) {
       // Unauthenticated: cache for 5 minutes
       const zones = await withCache('offers:exclusiveZones:anon', 300, () =>
         ExclusiveZone.find({ isActive: true })
-          .select('name slug description icon image eligibilityType verificationRequired priority isActive')
+          .select('name slug description shortDescription icon iconColor backgroundColor image eligibilityType verificationRequired priority isActive cashbackBonusPercent offersCount')
           .sort({ priority: -1 })
           .lean()
       );
@@ -264,7 +234,7 @@ export const getExclusiveZones = async (req: Request, res: Response) => {
       // Run zone fetch and user fetch in parallel
       const [zones, user] = await Promise.all([
         ExclusiveZone.find({ isActive: true })
-          .select('name slug description icon image eligibilityType verificationRequired priority isActive')
+          .select('name slug description shortDescription icon iconColor backgroundColor image eligibilityType verificationRequired priority isActive cashbackBonusPercent offersCount')
           .sort({ priority: -1 })
           .lean(),
         User.findById(userId)
@@ -300,6 +270,12 @@ export const getExclusiveZones = async (req: Request, res: Response) => {
               isEligible = age >= 60;
             }
             break;
+          case 'profession':
+            isEligible = (user as any).verifications?.profession?.verified === true;
+            break;
+          case 'disability':
+            isEligible = (user as any).verifications?.disability?.verified === true;
+            break;
           case 'verification':
             isEligible = true;
             break;
@@ -315,18 +291,13 @@ export const getExclusiveZones = async (req: Request, res: Response) => {
     });
 
     sendSuccess(res, zonesWithEligibility, 'Exclusive zones retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching exclusive zones:', error);
-    sendError(res, 'Failed to fetch exclusive zones', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/exclusive-zones/:slug/offers
  * Get offers for a specific exclusive zone
  */
-export const getExclusiveZoneOffers = async (req: Request, res: Response) => {
-  try {
+export const getExclusiveZoneOffers = asyncHandler(async (req: Request, res: Response) => {
     const { slug } = req.params;
     const { limit = 20 } = req.query;
 
@@ -347,18 +318,13 @@ export const getExclusiveZoneOffers = async (req: Request, res: Response) => {
       .lean();
 
     sendSuccess(res, { zone, offers }, 'Exclusive zone offers retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching exclusive zone offers:', error);
-    sendError(res, 'Failed to fetch exclusive zone offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/special-profiles
  * Get special profile categories (Defence, Healthcare, etc.) with user eligibility
  */
-export const getSpecialProfiles = async (req: Request, res: Response) => {
-  try {
+export const getSpecialProfiles = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?._id;
 
     if (!userId) {
@@ -423,18 +389,13 @@ export const getSpecialProfiles = async (req: Request, res: Response) => {
     });
 
     sendSuccess(res, profilesWithEligibility, 'Special profiles retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching special profiles:', error);
-    sendError(res, 'Failed to fetch special profiles', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/special-profiles/:slug/offers
  * Get offers for a specific special profile
  */
-export const getSpecialProfileOffers = async (req: Request, res: Response) => {
-  try {
+export const getSpecialProfileOffers = asyncHandler(async (req: Request, res: Response) => {
     const { slug } = req.params;
     const { limit = 20 } = req.query;
 
@@ -456,18 +417,13 @@ export const getSpecialProfileOffers = async (req: Request, res: Response) => {
       .lean();
 
     sendSuccess(res, { profile, offers }, 'Special profile offers retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching special profile offers:', error);
-    sendError(res, 'Failed to fetch special profile offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/friends-redeemed
  * Get offers redeemed by user's friends (social proof)
  */
-export const getFriendsRedeemed = async (req: Request, res: Response) => {
-  try {
+export const getFriendsRedeemed = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 10, page = 1 } = req.query;
     const userId = (req as any).user?._id;
     const parsedLimit = parseInt(limit as string);
@@ -521,18 +477,13 @@ export const getFriendsRedeemed = async (req: Request, res: Response) => {
         hasPrevPage: parsedPage > 1,
       },
     }, 'Friends redemptions retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching friends redemptions:', error);
-    sendError(res, 'Failed to fetch friends redemptions', 500);
-  }
-};
+});
 
 /**
  * GET /api/cashback/double-campaigns
  * Get active double cashback campaigns (region-filtered)
  */
-export const getDoubleCashbackCampaigns = async (req: Request, res: Response) => {
-  try {
+export const getDoubleCashbackCampaigns = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 10 } = req.query;
 
     // Get region from header for filtering
@@ -561,18 +512,13 @@ export const getDoubleCashbackCampaigns = async (req: Request, res: Response) =>
       .lean();
 
     sendSuccess(res, campaigns, 'Double cashback campaigns retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching double cashback campaigns:', error);
-    sendError(res, 'Failed to fetch double cashback campaigns', 500);
-  }
-};
+});
 
 /**
  * GET /api/cashback/coin-drops
  * Get active coin drop events (region-filtered)
  */
-export const getCoinDrops = async (req: Request, res: Response) => {
-  try {
+export const getCoinDrops = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 20, category } = req.query;
 
     // Get region from header for filtering
@@ -606,18 +552,13 @@ export const getCoinDrops = async (req: Request, res: Response) => {
       .lean();
 
     sendSuccess(res, coinDrops, 'Coin drops retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching coin drops:', error);
-    sendError(res, 'Failed to fetch coin drops', 500);
-  }
-};
+});
 
 /**
  * GET /api/cashback/upload-bill-stores
  * Get stores that accept bill uploads for cashback (region-filtered)
  */
-export const getUploadBillStores = async (req: Request, res: Response) => {
-  try {
+export const getUploadBillStores = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 20, category } = req.query;
 
     // Get region from header for filtering
@@ -647,18 +588,13 @@ export const getUploadBillStores = async (req: Request, res: Response) => {
       .lean();
 
     sendSuccess(res, stores, 'Upload bill stores retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching upload bill stores:', error);
-    sendError(res, 'Failed to fetch upload bill stores', 500);
-  }
-};
+});
 
 /**
  * GET /api/loyalty/progress
  * Get user's loyalty milestone progress
  */
-export const getLoyaltyProgress = async (req: Request, res: Response) => {
-  try {
+export const getLoyaltyProgress = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?._id;
 
     const milestones = await LoyaltyMilestone.find({ isActive: true })
@@ -727,18 +663,13 @@ export const getLoyaltyProgress = async (req: Request, res: Response) => {
       }));
       sendSuccess(res, milestonesWithProgress, 'Loyalty progress retrieved successfully');
     }
-  } catch (error) {
-    logger.error('Error fetching loyalty progress:', error);
-    sendError(res, 'Failed to fetch loyalty progress', 500);
-  }
-};
+});
 
 /**
  * GET /api/loyalty/milestones
  * Get all loyalty milestones
  */
-export const getLoyaltyMilestones = async (req: Request, res: Response) => {
-  try {
+export const getLoyaltyMilestones = asyncHandler(async (req: Request, res: Response) => {
     const milestones = await withCache('offers:loyaltyMilestones', 3600, () =>
       LoyaltyMilestone.find({ isActive: true })
         .sort({ order: 1 })
@@ -746,19 +677,14 @@ export const getLoyaltyMilestones = async (req: Request, res: Response) => {
     );
 
     sendSuccess(res, milestones, 'Loyalty milestones retrieved successfully');
-  } catch (error) {
-    logger.error('Error fetching loyalty milestones:', error);
-    sendError(res, 'Failed to fetch loyalty milestones', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/discount-buckets
  * Get real-time aggregation of offers by discount ranges
  * Returns counts for 25% OFF, 50% OFF, 80% OFF, and Free Delivery
  */
-export const getDiscountBuckets = async (req: Request, res: Response) => {
-  try {
+export const getDiscountBuckets = asyncHandler(async (req: Request, res: Response) => {
     logger.info('📊 [DISCOUNT BUCKETS] Fetching discount bucket counts');
 
     const now = new Date();
@@ -833,18 +759,13 @@ export const getDiscountBuckets = async (req: Request, res: Response) => {
     logger.info('✅ [DISCOUNT BUCKETS] Counts:', discountBuckets.map(b => `${b.label}: ${b.count}`).join(', '));
 
     sendSuccess(res, discountBuckets, 'Discount buckets retrieved successfully');
-  } catch (error) {
-    logger.error('❌ [DISCOUNT BUCKETS] Error:', error);
-    sendError(res, 'Failed to fetch discount buckets', 500);
-  }
-};
+});
 
 /**
  * GET /api/cashback/super-cashback-stores
  * Get stores with high cashback percentage (10% or more)
  */
-export const getSuperCashbackStores = async (req: Request, res: Response) => {
-  try {
+export const getSuperCashbackStores = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 20, minCashback = 10 } = req.query;
     const { Store } = await import('../models/Store');
 
@@ -896,18 +817,13 @@ export const getSuperCashbackStores = async (req: Request, res: Response) => {
     logger.info(`✅ [SUPER CASHBACK] Found ${superCashbackStores.length} stores with high cashback`);
 
     sendSuccess(res, superCashbackStores, 'Super cashback stores retrieved successfully');
-  } catch (error) {
-    logger.error('❌ [SUPER CASHBACK] Error:', error);
-    sendError(res, 'Failed to fetch super cashback stores', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/flash-sales
  * Get active flash sale offers from the offers collection
  */
-export const getFlashSaleOffers = async (req: Request, res: Response) => {
-  try {
+export const getFlashSaleOffers = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 10, category } = req.query;
 
     // Find offers with active flash sale metadata
@@ -953,18 +869,13 @@ export const getFlashSaleOffers = async (req: Request, res: Response) => {
     }));
 
     sendSuccess(res, transformedOffers, 'Flash sale offers retrieved successfully');
-  } catch (error) {
-    logger.error('❌ [FLASH SALES] Error fetching flash sale offers:', error);
-    sendError(res, 'Failed to fetch flash sale offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/page-data-v2
  * Aggregated offers page data - single endpoint replaces 21 parallel calls
  */
-export const getAggregatedOffersPageData = async (req: Request, res: Response) => {
-  try {
+export const getAggregatedOffersPageData = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?._id?.toString();
     const { lat, lng, tab = 'all' } = req.query;
     const region = (req.headers['x-rez-region'] as string) || 'all';
@@ -978,8 +889,4 @@ export const getAggregatedOffersPageData = async (req: Request, res: Response) =
     });
 
     sendSuccess(res, response, 'Offers page data retrieved successfully');
-  } catch (error) {
-    logger.error('[OFFERS_PAGE] Error fetching aggregated data:', error);
-    sendError(res, 'Failed to fetch offers page data', 500);
-  }
-};
+});

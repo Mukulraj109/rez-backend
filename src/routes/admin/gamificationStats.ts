@@ -12,7 +12,7 @@ import UserAchievement from '../../models/UserAchievement';
 import UserChallengeProgress from '../../models/UserChallengeProgress';
 import GameSession from '../../models/GameSession';
 import { sendSuccess, sendError } from '../../utils/response';
-import mongoose from 'mongoose';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -23,8 +23,7 @@ router.use(requireAdmin);
  * GET /api/admin/gamification-stats/economy
  * Economy overview: coins in circulation, earned/spent today/week/month
  */
-router.get('/economy', async (req: Request, res: Response) => {
-  try {
+router.get('/economy', asyncHandler(async (req: Request, res: Response) => {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -91,18 +90,13 @@ router.get('/economy', async (req: Request, res: Response) => {
       coinsSpentThisMonth: spentMonth[0]?.total || 0,
       netFlowToday: coinsEarnedToday - coinsSpentToday,
     }, 'Economy stats fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching economy stats:', error);
-    return sendError(res, 'Failed to fetch economy stats', 500);
-  }
-});
+}));
 
 /**
  * GET /api/admin/gamification-stats/engagement
  * Engagement metrics: achievements, challenges, game sessions
  */
-router.get('/engagement', async (req: Request, res: Response) => {
-  try {
+router.get('/engagement', asyncHandler(async (req: Request, res: Response) => {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -127,18 +121,13 @@ router.get('/engagement', async (req: Request, res: Response) => {
       totalGameSessions,
       gameSessionsToday,
     }, 'Engagement stats fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching engagement stats:', error);
-    return sendError(res, 'Failed to fetch engagement stats', 500);
-  }
-});
+}));
 
 /**
  * GET /api/admin/gamification-stats/fraud-alerts
  * Potential fraud: users earning > 5000 coins in last 24h
  */
-router.get('/fraud-alerts', async (req: Request, res: Response) => {
-  try {
+router.get('/fraud-alerts', asyncHandler(async (req: Request, res: Response) => {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const suspiciousUsers = await CoinTransaction.aggregate([
@@ -191,10 +180,6 @@ router.get('/fraud-alerts', async (req: Request, res: Response) => {
       threshold: 5000,
       window: '24h',
     }, 'Fraud alerts fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching fraud alerts:', error);
-    return sendError(res, 'Failed to fetch fraud alerts', 500);
-  }
-});
+}));
 
 export default router;

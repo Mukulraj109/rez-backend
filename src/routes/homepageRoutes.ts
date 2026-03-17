@@ -32,7 +32,7 @@ router.get('/',
     region: Joi.string().optional(),
     userId: Joi.string().optional(),
   })),
-  cacheMiddleware({ ttl: 300, keyPrefix: 'homepage:batch', condition: () => true }),
+  cacheMiddleware({ ttl: 300, keyPrefix: 'homepage:batch' }),
   getHomepage
 );
 

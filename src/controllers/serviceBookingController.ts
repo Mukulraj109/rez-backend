@@ -10,6 +10,7 @@ import { createRefund as createRazorpayRefund } from '../services/razorpayServic
 import stripeService from '../services/stripeService';
 import { Refund } from '../models/Refund';
 import { pct } from '../utils/currency';
+import { asyncHandler } from '../utils/asyncHandler';
 
 // Use Express Request with user property (extended globally)
 
@@ -17,8 +18,7 @@ import { pct } from '../utils/currency';
  * Create a new service booking
  * POST /api/service-bookings
  */
-export const createBooking = async (req: Request, res: Response) => {
-  try {
+export const createBooking = asyncHandler(async (req: Request, res: Response) => {
     const {
       serviceId,
       bookingDate,
@@ -137,11 +137,11 @@ export const createBooking = async (req: Request, res: Response) => {
     // Calculate pricing
     const basePrice = service.pricing?.selling || service.pricing?.basePrice || service.price?.current || 0;
     const cashbackPercentage = service.cashback?.percentage || 0;
-    
+
     // Parse customerNotes to extract totalPrice if available
     let totalPrice = basePrice; // Default to base price
     let bookingDetails: any = {};
-    
+
     if (customerNotes) {
       try {
         bookingDetails = JSON.parse(customerNotes);
@@ -156,12 +156,12 @@ export const createBooking = async (req: Request, res: Response) => {
         logger.warn(`[CREATE BOOKING] Failed to parse customerNotes JSON, using basePrice: ${basePrice}`, parseError);
       }
     }
-    
+
     // Validate maximum passengers/guests/travelers if specified in booking details
     if (bookingDetails.passengers || bookingDetails.guests || bookingDetails.travelers) {
       const passengers = bookingDetails.passengers || bookingDetails.guests || bookingDetails.travelers;
       const totalPassengers = (passengers.adults || 0) + (passengers.children || 0);
-      
+
       // Check service-specific limits (if defined in serviceDetails)
       const maxPassengers = service.serviceDetails?.maxPassengers;
       if (maxPassengers && totalPassengers > maxPassengers) {
@@ -171,7 +171,7 @@ export const createBooking = async (req: Request, res: Response) => {
         });
       }
     }
-    
+
     // Validate minimum advance booking time (if specified)
     const minAdvanceHours = service.serviceDetails?.minAdvanceBookingHours;
     if (minAdvanceHours) {
@@ -183,7 +183,7 @@ export const createBooking = async (req: Request, res: Response) => {
         });
       }
     }
-    
+
     // Calculate cashback based on total price (not base price)
     const cashbackEarned = pct(totalPrice, cashbackPercentage);
 
@@ -198,7 +198,7 @@ export const createBooking = async (req: Request, res: Response) => {
       if (categorySlug === 'packages') return 'PKG';
       return 'SB';
     })();
-    
+
     const bookingNumber = await (ServiceBooking as any).generateBookingNumber(bookingNumberPrefix);
 
     // Get customer info (phoneNumber and email are on user object, not profile)
@@ -208,7 +208,7 @@ export const createBooking = async (req: Request, res: Response) => {
       : 'Customer';
     let customerPhone = req.user?.phoneNumber || '';
     let customerEmail = req.user?.email;
-    
+
     // Extract contact info from customerNotes if available (for packages, flights, etc. with custom contact)
     if (customerNotes && bookingDetails.contactInfo) {
       if (bookingDetails.contactInfo.name) {
@@ -311,22 +311,13 @@ export const createBooking = async (req: Request, res: Response) => {
       data: populatedBooking,
       requiresPayment: requiresPaymentUpfront,
     });
-  } catch (error: any) {
-    logger.error('Error creating booking:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create booking',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get user's bookings
  * GET /api/service-bookings
  */
-export const getUserBookings = async (req: Request, res: Response) => {
-  try {
+export const getUserBookings = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id;
     const { status, page = '1', limit = '20' } = req.query;
 
@@ -368,22 +359,13 @@ export const getUserBookings = async (req: Request, res: Response) => {
         pages: Math.ceil(total / limitNum)
       }
     });
-  } catch (error: any) {
-    logger.error('Error fetching user bookings:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch bookings',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get booking by ID
  * GET /api/service-bookings/:id
  */
-export const getBookingById = async (req: Request, res: Response) => {
-  try {
+export const getBookingById = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = req.user?._id;
 
@@ -421,22 +403,13 @@ export const getBookingById = async (req: Request, res: Response) => {
       success: true,
       data: booking
     });
-  } catch (error: any) {
-    logger.error('Error fetching booking:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch booking',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Cancel a booking
  * PUT /api/service-bookings/:id/cancel
  */
-export const cancelBooking = async (req: Request, res: Response) => {
-  try {
+export const cancelBooking = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { reason } = req.body;
     const userId = req.user?._id;
@@ -588,22 +561,13 @@ export const cancelBooking = async (req: Request, res: Response) => {
       message: 'Booking cancelled successfully',
       data: updatedBooking
     });
-  } catch (error: any) {
-    logger.error('Error cancelling booking:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to cancel booking',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Reschedule a booking
  * PUT /api/service-bookings/:id/reschedule
  */
-export const rescheduleBooking = async (req: Request, res: Response) => {
-  try {
+export const rescheduleBooking = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { bookingDate, timeSlot } = req.body;
     const userId = req.user?._id;
@@ -684,22 +648,13 @@ export const rescheduleBooking = async (req: Request, res: Response) => {
       message: 'Booking rescheduled successfully',
       data: updatedBooking
     });
-  } catch (error: any) {
-    logger.error('Error rescheduling booking:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to reschedule booking',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Add rating to a completed booking
  * POST /api/service-bookings/:id/rate
  */
-export const rateBooking = async (req: Request, res: Response) => {
-  try {
+export const rateBooking = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { score, review } = req.body;
     const userId = req.user?._id;
@@ -754,22 +709,13 @@ export const rateBooking = async (req: Request, res: Response) => {
         rating: booking.rating
       }
     });
-  } catch (error: any) {
-    logger.error('Error rating booking:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to add rating',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get available time slots for a service on a specific date
  * GET /api/service-bookings/available-slots
  */
-export const getAvailableSlots = async (req: Request, res: Response) => {
-  try {
+export const getAvailableSlots = asyncHandler(async (req: Request, res: Response) => {
     const { serviceId, date } = req.query;
 
     if (!serviceId || !date) {
@@ -836,15 +782,7 @@ export const getAvailableSlots = async (req: Request, res: Response) => {
         slots: availableSlots
       }
     });
-  } catch (error: any) {
-    logger.error('Error fetching available slots:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch available slots',
-      error: error.message
-    });
-  }
-};
+});
 
 // Export all controller functions
 export default {

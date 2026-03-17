@@ -4,13 +4,13 @@ import EventReview from '../models/EventReview';
 import { logger } from '../config/logger';
 import Event from '../models/Event';
 import EventBooking from '../models/EventBooking';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Get reviews for an event
  * GET /api/events/:id/reviews
  */
-export const getEventReviews = async (req: Request, res: Response) => {
-  try {
+export const getEventReviews = asyncHandler(async (req: Request, res: Response) => {
     const { id: eventId } = req.params;
     const { page = 1, limit = 10, sortBy = 'newest' } = req.query;
 
@@ -108,15 +108,7 @@ export const getEventReviews = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching event reviews:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch reviews',
-      message: error.message,
-    });
-  }
-};
+});
 
 /**
  * Submit a review for an event
@@ -282,8 +274,7 @@ export const submitReview = async (req: Request, res: Response) => {
  * Update a review
  * PUT /api/events/reviews/:reviewId
  */
-export const updateReview = async (req: Request, res: Response) => {
-  try {
+export const updateReview = asyncHandler(async (req: Request, res: Response) => {
     const { reviewId } = req.params;
     const userId = (req as any).user?.id || (req as any).user?._id;
     const { rating, title, review } = req.body;
@@ -365,22 +356,13 @@ export const updateReview = async (req: Request, res: Response) => {
         updatedAt: existingReview.updatedAt,
       },
     });
-  } catch (error: any) {
-    logger.error('Error updating review:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to update review',
-      message: error.message,
-    });
-  }
-};
+});
 
 /**
  * Delete a review
  * DELETE /api/events/reviews/:reviewId
  */
-export const deleteReview = async (req: Request, res: Response) => {
-  try {
+export const deleteReview = asyncHandler(async (req: Request, res: Response) => {
     const { reviewId } = req.params;
     const userId = (req as any).user?.id || (req as any).user?._id;
 
@@ -434,22 +416,13 @@ export const deleteReview = async (req: Request, res: Response) => {
       success: true,
       message: 'Review deleted successfully',
     });
-  } catch (error: any) {
-    logger.error('Error deleting review:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to delete review',
-      message: error.message,
-    });
-  }
-};
+});
 
 /**
  * Mark a review as helpful
  * PUT /api/events/reviews/:reviewId/helpful
  */
-export const markReviewHelpful = async (req: Request, res: Response) => {
-  try {
+export const markReviewHelpful = asyncHandler(async (req: Request, res: Response) => {
     const { reviewId } = req.params;
 
     // Validate reviewId
@@ -481,22 +454,13 @@ export const markReviewHelpful = async (req: Request, res: Response) => {
         helpfulCount: review.helpfulCount,
       },
     });
-  } catch (error: any) {
-    logger.error('Error marking review as helpful:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to mark review as helpful',
-      message: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get user's review for an event
  * GET /api/events/:id/my-review
  */
-export const getUserReview = async (req: Request, res: Response) => {
-  try {
+export const getUserReview = asyncHandler(async (req: Request, res: Response) => {
     const { id: eventId } = req.params;
     const userId = (req as any).user?.id || (req as any).user?._id;
 
@@ -544,15 +508,7 @@ export const getUserReview = async (req: Request, res: Response) => {
         hasBooking: !!booking,
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching user review:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch review',
-      message: error.message,
-    });
-  }
-};
+});
 
 export default {
   getEventReviews,

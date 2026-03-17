@@ -7,6 +7,7 @@ import Partner from '../../models/Partner';
 import { Wallet } from '../../models/Wallet';
 import { walletService } from '../../services/walletService';
 import mongoose from 'mongoose';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -18,8 +19,7 @@ router.use(requireAdmin);
  * @desc    Get partner earnings analytics dashboard data
  * @access  Admin
  */
-router.get('/analytics', async (req: Request, res: Response) => {
-  try {
+router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
     // Use $facet to compute multiple metrics in a single pass
     const [analyticsResult] = await CoinTransaction.aggregate([
       {
@@ -153,19 +153,14 @@ router.get('/analytics', async (req: Request, res: Response) => {
         })),
       },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Partner earnings analytics error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch analytics' });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/partner-earnings/users
  * @desc    Paginated list of partners with earnings data
  * @access  Admin
  */
-router.get('/users', async (req: Request, res: Response) => {
-  try {
+router.get('/users', asyncHandler(async (req: Request, res: Response) => {
     const {
       search,
       level,
@@ -214,33 +209,24 @@ router.get('/users', async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Partner users list error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch partners' });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/partner-earnings/config
  * @desc    Get partner earnings configuration
  * @access  Admin
  */
-router.get('/config', async (req: Request, res: Response) => {
-  try {
+router.get('/config', asyncHandler(async (req: Request, res: Response) => {
     const config = await PartnerEarningsConfig.getOrCreate();
     res.json({ success: true, data: config });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch config' });
-  }
-});
+  }));
 
 /**
  * @route   PUT /api/admin/partner-earnings/config
  * @desc    Update partner earnings configuration
  * @access  Admin
  */
-router.put('/config', async (req: Request, res: Response) => {
-  try {
+router.put('/config', asyncHandler(async (req: Request, res: Response) => {
     const config = await PartnerEarningsConfig.getOrCreate();
     const updates = req.body;
 
@@ -258,18 +244,14 @@ router.put('/config', async (req: Request, res: Response) => {
 
     await config.save();
     res.json({ success: true, data: config });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to update config' });
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/partner-earnings/:userId/adjust
  * @desc    Manual credit/debit partner earnings with audit trail
  * @access  Admin
  */
-router.post('/:userId/adjust', async (req: Request, res: Response) => {
-  try {
+router.post('/:userId/adjust', asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
     const { amount, type, reason } = req.body;
 
@@ -357,10 +339,6 @@ router.post('/:userId/adjust', async (req: Request, res: Response) => {
       success: true,
       message: `Successfully ${type}ed ${amount} to partner earnings`,
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Partner earnings adjust error:', error);
-    res.status(500).json({ success: false, message: error.message || 'Failed to adjust earnings' });
-  }
-});
+  }));
 
 export default router;

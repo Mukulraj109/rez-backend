@@ -10,6 +10,7 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import SmartSpendItem from '../models/SmartSpendItem';
 import { reputationService } from '../services/reputationService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const TIER_HIERARCHY: Record<string, number> = {
   none: 0,
@@ -22,8 +23,7 @@ const TIER_HIERARCHY: Record<string, number> = {
  * GET /api/prive/smart-spend
  * Paginated Smart Spend catalog with section filtering and tier-based access
  */
-export const getSmartSpendCatalog = async (req: Request, res: Response) => {
-  try {
+export const getSmartSpendCatalog = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.userId || (req as any).user?.id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -113,18 +113,13 @@ export const getSmartSpendCatalog = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error) {
-    logger.error('[SmartSpend] Error fetching catalog:', error);
-    return res.status(500).json({ success: false, error: 'Failed to fetch Smart Spend catalog' });
-  }
-};
+});
 
 /**
  * GET /api/prive/smart-spend/:id
  * Single Smart Spend item detail with populated store/product
  */
-export const getSmartSpendItem = async (req: Request, res: Response) => {
-  try {
+export const getSmartSpendItem = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.userId || (req as any).user?.id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -161,18 +156,13 @@ export const getSmartSpendItem = async (req: Request, res: Response) => {
       success: true,
       data: item,
     });
-  } catch (error) {
-    logger.error('[SmartSpend] Error fetching item:', error);
-    return res.status(500).json({ success: false, error: 'Failed to fetch Smart Spend item' });
-  }
-};
+});
 
 /**
  * POST /api/prive/smart-spend/:id/click
  * Track click analytics (fire-and-forget from frontend)
  */
-export const trackSmartSpendClick = async (req: Request, res: Response) => {
-  try {
+export const trackSmartSpendClick = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ success: false, error: 'Invalid item ID' });
@@ -182,8 +172,4 @@ export const trackSmartSpendClick = async (req: Request, res: Response) => {
     SmartSpendItem.findByIdAndUpdate(id, { $inc: { clicks: 1 } }).exec();
 
     return res.status(200).json({ success: true });
-  } catch (error) {
-    logger.error('[SmartSpend] Error tracking click:', error);
-    return res.status(200).json({ success: true }); // Don't fail on analytics
-  }
-};
+});

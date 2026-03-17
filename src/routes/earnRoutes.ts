@@ -1,8 +1,8 @@
-import { logger } from '../config/logger';
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
-import { sendSuccess, sendBadRequest, sendError } from '../utils/response';
+import { sendSuccess, sendBadRequest } from '../utils/response';
 import { requireGamificationFeature } from '../middleware/gamificationFeatureGate';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 
@@ -16,8 +16,7 @@ router.use(requireGamificationFeature('bonusZones', { stores: [] }));
  * GET /api/earn/nearby?lat=...&lng=...&radius=10&limit=20
  * Returns stores near a location with earning opportunities.
  */
-router.get('/nearby', async (req: Request, res: Response) => {
-  try {
+router.get('/nearby', asyncHandler(async (req: Request, res: Response) => {
     const { lat, lng, radius, limit } = req.query;
 
     if (!lat || !lng) {
@@ -33,10 +32,6 @@ router.get('/nearby', async (req: Request, res: Response) => {
     );
 
     sendSuccess(res, { stores });
-  } catch (error: any) {
-    logger.error('[EARN] Error fetching nearby stores:', error);
-    sendError(res, error.message || 'Failed to fetch nearby stores');
-  }
-});
+}));
 
 export default router;

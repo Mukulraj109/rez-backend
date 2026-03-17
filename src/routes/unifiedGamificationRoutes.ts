@@ -3,6 +3,7 @@ import express from 'express';
 import { authenticate, requireAdmin } from '../middleware/auth';
 import { createRateLimiter } from '../middleware/rateLimiter';
 import { requireGamificationFeature } from '../middleware/gamificationFeatureGate';
+import { asyncHandler } from '../utils/asyncHandler';
 
 // Rate limiters for sensitive gamification endpoints
 const checkInLimiter = createRateLimiter({
@@ -240,18 +241,12 @@ router.get('/reviewable-items', getReviewableItems);
 // QUICK ACTIONS (Personalized) — PHASE 3
 // ========================================
 const gateAchievements = requireGamificationFeature('achievements', { actions: [] });
-router.get('/quick-actions', gateAchievements, async (req, res) => {
-  try {
+router.get('/quick-actions', gateAchievements, asyncHandler(async (req, res) => {
     const userId = (req as any).userId;
     const quickActionService = (await import('../services/quickActionService')).default;
     const actions = await quickActionService.getPersonalized(userId);
     const { sendSuccess } = await import('../utils/response');
     sendSuccess(res, { actions });
-  } catch (error: any) {
-    logger.error('[QUICK ACTIONS] Error:', error);
-    const { sendError } = await import('../utils/response');
-    sendError(res, error.message || 'Failed to fetch quick actions');
-  }
-});
+}));
 
 export default router;

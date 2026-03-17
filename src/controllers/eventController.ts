@@ -6,7 +6,7 @@ import Payment from '../models/Payment';
 import EventCategory from '../models/EventCategory';
 import UserEventFavorite from '../models/UserEventFavorite';
 import EventAttendance from '../models/EventAttendance';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../utils/asyncHandler';
 import { IEvent } from '../models/Event';
 import { IEventBooking } from '../models/EventBooking';
 import paymentGatewayService from '../services/paymentGatewayService';

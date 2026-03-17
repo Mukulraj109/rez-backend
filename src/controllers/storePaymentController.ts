@@ -22,6 +22,9 @@ import Discount from '../models/Discount';
 import { Category } from '../models/Category';
 import { MainCategorySlug } from '../models/CoinTransaction';
 import { ledgerService } from '../services/ledgerService';
+import subscriptionBenefitsService from '../services/subscriptionBenefitsService';
+import { priveMultiplierService } from '../services/priveMultiplierService';
+import { asyncHandler } from '../utils/asyncHandler';
 // Note: StorePromoCoin model removed - using wallet.brandedCoins instead
 
 const VALID_MAIN_CATEGORY_SLUGS: MainCategorySlug[] = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
@@ -32,8 +35,7 @@ const VALID_MAIN_CATEGORY_SLUGS: MainCategorySlug[] = ['food-dining', 'beauty-we
  * Generate QR code for a store
  * POST /api/store-payment/generate-qr/:storeId
  */
-export const generateStoreQR = async (req: Request, res: Response) => {
-  try {
+export const generateStoreQR = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const merchantId = req.merchantId;
 
@@ -72,21 +74,13 @@ export const generateStoreQR = async (req: Request, res: Response) => {
       message: 'QR code generated successfully',
       data: result,
     });
-  } catch (error: any) {
-    logger.error('Error generating store QR:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to generate QR code',
-    });
-  }
-};
+});
 
 /**
  * Regenerate QR code for a store (invalidates old one)
  * POST /api/store-payment/regenerate-qr/:storeId
  */
-export const regenerateQR = async (req: Request, res: Response) => {
-  try {
+export const regenerateQR = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const merchantId = req.merchantId;
 
@@ -111,21 +105,13 @@ export const regenerateQR = async (req: Request, res: Response) => {
       message: 'QR code regenerated successfully. Old QR code is now invalid.',
       data: result,
     });
-  } catch (error: any) {
-    logger.error('Error regenerating store QR:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to regenerate QR code',
-    });
-  }
-};
+});
 
 /**
  * Get QR code details for a store
  * GET /api/store-payment/qr/:storeId
  */
-export const getStoreQRDetails = async (req: Request, res: Response) => {
-  try {
+export const getStoreQRDetails = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const merchantId = req.merchantId;
 
@@ -151,21 +137,13 @@ export const getStoreQRDetails = async (req: Request, res: Response) => {
         ...qrDetails,
       },
     });
-  } catch (error: any) {
-    logger.error('Error getting QR details:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get QR code details',
-    });
-  }
-};
+});
 
 /**
  * Toggle QR code active status
  * PATCH /api/store-payment/qr/:storeId/toggle
  */
-export const toggleQRStatus = async (req: Request, res: Response) => {
-  try {
+export const toggleQRStatus = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { isActive } = req.body;
     const merchantId = req.merchantId;
@@ -201,22 +179,14 @@ export const toggleQRStatus = async (req: Request, res: Response) => {
       message: `QR code ${isActive ? 'activated' : 'deactivated'} successfully`,
       data: { isActive },
     });
-  } catch (error: any) {
-    logger.error('Error toggling QR status:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to toggle QR status',
-    });
-  }
-};
+});
 
 /**
  * Lookup store by QR code (for customers)
  * POST /api/store-payment/lookup (authenticated)
  * GET /api/store-payment/lookup/:qrCode (public)
  */
-export const lookupStoreByQR = async (req: Request, res: Response) => {
-  try {
+export const lookupStoreByQR = asyncHandler(async (req: Request, res: Response) => {
     // Get QR code from body or params
     const qrCode = req.body?.qrCode || req.params?.qrCode;
 
@@ -251,14 +221,7 @@ export const lookupStoreByQR = async (req: Request, res: Response) => {
       success: true,
       data: result.store,
     });
-  } catch (error: any) {
-    logger.error('Error looking up store by QR:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to lookup store',
-    });
-  }
-};
+});
 
 // ==================== PAYMENT SETTINGS HANDLERS ====================
 
@@ -266,8 +229,7 @@ export const lookupStoreByQR = async (req: Request, res: Response) => {
  * Get payment settings for a store
  * GET /api/store-payment/settings/:storeId
  */
-export const getPaymentSettings = async (req: Request, res: Response) => {
-  try {
+export const getPaymentSettings = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const merchantId = req.merchantId;
 
@@ -316,21 +278,13 @@ export const getPaymentSettings = async (req: Request, res: Response) => {
         rewardRules: { ...defaultRewardRules, ...store.rewardRules },
       },
     });
-  } catch (error: any) {
-    logger.error('Error getting payment settings:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get payment settings',
-    });
-  }
-};
+});
 
 /**
  * Update payment settings for a store
  * PUT /api/store-payment/settings/:storeId
  */
-export const updatePaymentSettings = async (req: Request, res: Response) => {
-  try {
+export const updatePaymentSettings = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { paymentSettings, rewardRules } = req.body;
     const merchantId = req.merchantId;
@@ -397,14 +351,7 @@ export const updatePaymentSettings = async (req: Request, res: Response) => {
         rewardRules: updatedStore?.rewardRules,
       },
     });
-  } catch (error: any) {
-    logger.error('Error updating payment settings:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to update payment settings',
-    });
-  }
-};
+});
 
 // ==================== OFFERS HANDLERS ====================
 
@@ -412,8 +359,7 @@ export const updatePaymentSettings = async (req: Request, res: Response) => {
  * Get offers for store payment
  * GET /api/store-payment/offers/:storeId
  */
-export const getStorePaymentOffers = async (req: Request, res: Response) => {
-  try {
+export const getStorePaymentOffers = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { amount } = req.query;
     const userId = (req as any).user?.id;
@@ -582,14 +528,7 @@ export const getStorePaymentOffers = async (req: Request, res: Response) => {
         bestOffer,
       },
     });
-  } catch (error: any) {
-    logger.error('Error getting store payment offers:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get offers',
-    });
-  }
-};
+});
 
 // ==================== PAYMENT HANDLERS ====================
 
@@ -597,8 +536,7 @@ export const getStorePaymentOffers = async (req: Request, res: Response) => {
  * Initiate store payment
  * POST /api/store-payment/initiate
  */
-export const initiateStorePayment = async (req: Request, res: Response) => {
-  try {
+export const initiateStorePayment = asyncHandler(async (req: Request, res: Response) => {
     const {
       storeId,
       amount,
@@ -864,14 +802,7 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
         clientSecret,
       },
     });
-  } catch (error: any) {
-    logger.error('Error initiating store payment:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to initiate payment',
-    });
-  }
-};
+});
 
 /**
  * Confirm store payment
@@ -880,7 +811,7 @@ export const initiateStorePayment = async (req: Request, res: Response) => {
  * IMPORTANT: This function uses MongoDB sessions for atomic operations.
  * All coin deductions and payment updates happen within a single transaction.
  */
-export const confirmStorePayment = async (req: Request, res: Response) => {
+export const confirmStorePayment = asyncHandler(async (req: Request, res: Response) => {
   // Start a MongoDB session for atomic operations
   const session = await mongoose.startSession();
 
@@ -1278,9 +1209,46 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
         },
       };
 
-      // Calculate cashback (percentage of bill)
+      // Fetch subscription and Prive multipliers (non-blocking fallback to 1x)
+      let subscriptionMultiplier = 1;
+      let priveMultiplier = 1;
+      let priveTier = 'none';
+      try {
+        const [subMult, priveResult] = await Promise.all([
+          subscriptionBenefitsService.getCashbackMultiplier(userId),
+          priveMultiplierService.getMultiplier(userId),
+        ]);
+        subscriptionMultiplier = subMult;
+        priveMultiplier = priveResult.multiplier;
+        priveTier = priveResult.tier;
+      } catch (err) {
+        logger.warn('[STORE PAYMENT] Failed to fetch multipliers, defaulting to 1x:', err);
+      }
+
+      // Calculate cashback (percentage of bill) with tier multipliers
       if (rewardRules?.baseCashbackPercent && storePayment.billAmount >= (rewardRules.minimumAmountForReward || 0)) {
-        rewards.cashbackEarned = Math.floor((storePayment.billAmount * rewardRules.baseCashbackPercent) / 100);
+        const baseCashbackAmount = Math.floor((storePayment.billAmount * rewardRules.baseCashbackPercent) / 100);
+        const afterSubscription = Math.floor(baseCashbackAmount * subscriptionMultiplier);
+        const finalCashback = Math.floor(afterSubscription * priveMultiplier);
+
+        rewards.cashbackEarned = finalCashback;
+        rewards.cashbackBreakdown = {
+          baseCashbackPercent: rewardRules.baseCashbackPercent,
+          baseCashbackAmount,
+          subscriptionMultiplier,
+          priveMultiplier,
+          priveTier,
+          finalCashbackAmount: finalCashback,
+        };
+
+        if (subscriptionMultiplier > 1 || priveMultiplier > 1) {
+          logger.info('[STORE PAYMENT] Cashback multipliers applied:', {
+            base: baseCashbackAmount,
+            subMultiplier: subscriptionMultiplier,
+            priveMultiplier,
+            final: finalCashback,
+          });
+        }
       }
 
       // Calculate coins earned based on store's reward rules or default (1 coin per ₹10 spent)
@@ -1303,7 +1271,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
       }
 
       // Credit reward coins to user's wallet via walletService (atomic $inc + CoinTransaction + LedgerEntry)
-      const totalRewardCoins = rewards.coinsEarned + rewards.bonusCoins + (rewards.firstVisitBonus || 0);
+      const totalRewardCoins = rewards.cashbackEarned + rewards.coinsEarned + rewards.bonusCoins + (rewards.firstVisitBonus || 0);
       if (totalRewardCoins > 0) {
         {
           const { walletService } = await import('../services/walletService');
@@ -1319,6 +1287,7 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
               storeId: storePayment.storeId,
               storeName: storePayment.storeName,
               billAmount: storePayment.billAmount,
+              cashbackBreakdown: rewards.cashbackBreakdown || undefined,
             },
             category: paymentCategorySlug || undefined,
             session,
@@ -1372,6 +1341,12 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
       // Commit the transaction
       await session.commitTransaction();
       logger.info('[STORE PAYMENT] Payment completed (atomic):', paymentId);
+
+      // Track subscription cashback usage (non-blocking, outside transaction)
+      if (rewards.cashbackEarned > 0 && subscriptionMultiplier > 1) {
+        subscriptionBenefitsService.trackCashbackEarned(userId, rewards.cashbackEarned)
+          .catch(err => logger.error('[STORE PAYMENT] Failed to track subscription cashback:', err));
+      }
 
       // Notify merchant of in-store payment (non-blocking)
       if (store?.merchantId) {
@@ -1441,24 +1416,17 @@ export const confirmStorePayment = async (req: Request, res: Response) => {
     // If we reach here, transaction committed successfully — break out of retry loop
     break;
     } // end retry while loop
-  } catch (error: any) {
-    logger.error('Error confirming store payment:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to confirm payment',
-    });
   } finally {
     // End the session
     session.endSession();
   }
-};
+});
 
 /**
  * Cancel store payment
  * POST /api/store-payment/cancel
  */
-export const cancelStorePayment = async (req: Request, res: Response) => {
-  try {
+export const cancelStorePayment = asyncHandler(async (req: Request, res: Response) => {
     const { paymentId, reason } = req.body;
     const userId = (req as any).user?.id;
 
@@ -1524,21 +1492,13 @@ export const cancelStorePayment = async (req: Request, res: Response) => {
         cancelledAt: storePayment.cancelledAt,
       },
     });
-  } catch (error: any) {
-    logger.error('Error cancelling store payment:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to cancel payment',
-    });
-  }
-};
+});
 
 /**
  * Get store payment by ID
  * GET /api/store-payment/:paymentId
  */
-export const getStorePaymentById = async (req: Request, res: Response) => {
-  try {
+export const getStorePaymentById = asyncHandler(async (req: Request, res: Response) => {
     const { paymentId } = req.params;
     const userId = (req as any).user?.id;
 
@@ -1602,14 +1562,7 @@ export const getStorePaymentById = async (req: Request, res: Response) => {
         expiresAt: storePayment.expiresAt,
       },
     });
-  } catch (error: any) {
-    logger.error('Error getting store payment:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get payment details',
-    });
-  }
-};
+});
 
 /**
  * Get store payment history
@@ -1629,8 +1582,7 @@ export const getStorePaymentById = async (req: Request, res: Response) => {
  * 
  * Usage Order: Promo > Branded > ReZ (auto-applied for max savings)
  */
-export const getCoinsForStore = async (req: Request, res: Response) => {
-  try {
+export const getCoinsForStore = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const userId = (req as any).user?.id;
 
@@ -1812,21 +1764,13 @@ export const getCoinsForStore = async (req: Request, res: Response) => {
         usageOrderDescription: 'Promo Coins → Branded Coins → ReZ Coins (automatically applied for maximum savings)',
       },
     });
-  } catch (error: any) {
-    logger.error('Error getting coins for store:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get coins',
-    });
-  }
-};
+});
 
 /**
  * Get enhanced payment methods with bank-specific offers
  * GET /api/store-payment/payment-methods/:storeId
  */
-export const getEnhancedPaymentMethods = async (req: Request, res: Response) => {
-  try {
+export const getEnhancedPaymentMethods = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { amount } = req.query;
     const billAmount = amount ? parseFloat(amount as string) : 0;
@@ -1962,14 +1906,7 @@ export const getEnhancedPaymentMethods = async (req: Request, res: Response) => 
       success: true,
       data: paymentMethods,
     });
-  } catch (error: any) {
-    logger.error('Error getting enhanced payment methods:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get payment methods',
-    });
-  }
-};
+});
 
 /**
  * Auto-optimize coin allocation for maximum savings
@@ -1982,8 +1919,7 @@ export const getEnhancedPaymentMethods = async (req: Request, res: Response) => 
  * 
  * Automatically applied for maximum savings
  */
-export const autoOptimizeCoins = async (req: Request, res: Response) => {
-  try {
+export const autoOptimizeCoins = asyncHandler(async (req: Request, res: Response) => {
     const { storeId, billAmount } = req.body;
     const userId = (req as any).user?.id;
 
@@ -2166,21 +2102,13 @@ export const autoOptimizeCoins = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error auto-optimizing coins:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to auto-optimize coins',
-    });
-  }
-};
+});
 
 /**
  * Get user's membership tier for a store
  * GET /api/store-payment/membership/:storeId
  */
-export const getStoreMembership = async (req: Request, res: Response) => {
-  try {
+export const getStoreMembership = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const userId = (req as any).user?.id;
 
@@ -2246,17 +2174,9 @@ export const getStoreMembership = async (req: Request, res: Response) => {
         isEarningRewards: true,
       },
     });
-  } catch (error: any) {
-    logger.error('Error getting store membership:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get membership info',
-    });
-  }
-};
+});
 
-export const getStorePaymentHistory = async (req: Request, res: Response) => {
-  try {
+export const getStorePaymentHistory = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { page = 1, limit = 20 } = req.query;
     const userId = (req as any).user?.id;
@@ -2327,14 +2247,7 @@ export const getStorePaymentHistory = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error getting payment history:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get payment history',
-    });
-  }
-};
+});
 
 // ==================== MERCHANT PAYMENT STATS ====================
 
@@ -2342,8 +2255,7 @@ export const getStorePaymentHistory = async (req: Request, res: Response) => {
  * Get payment statistics for a store (merchant only)
  * GET /api/store-payment/stats/:storeId
  */
-export const getStorePaymentStats = async (req: Request, res: Response) => {
-  try {
+export const getStorePaymentStats = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
 
     if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
@@ -2397,11 +2309,4 @@ export const getStorePaymentStats = async (req: Request, res: Response) => {
         })),
       },
     });
-  } catch (error: any) {
-    logger.error('Error getting payment stats:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get payment statistics',
-    });
-  }
-};
+});

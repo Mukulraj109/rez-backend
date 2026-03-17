@@ -6,6 +6,7 @@ import { cacheInvalidationMiddleware } from '../../middleware/cacheMiddleware';
 import { Category } from '../../models/Category';
 import { Store } from '../../models/Store';
 import Joi from 'joi';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -36,94 +37,84 @@ router.param('id', (req: Request, res: Response, next, id: string) => {
 // ============================================
 // GET /admin/categories - List all main categories (including inactive)
 // ============================================
-router.get('/', async (req: Request, res: Response) => {
-  try {
-    const categories = await Category.find({
-      parentCategory: null,
-      // No isActive filter — admin sees all categories to manage them
-    })
-      .select('name slug icon image type sortOrder metadata pageConfig isActive maxCashback storeCount productCount updatedAt')
-      .sort({ sortOrder: 1 })
-      .lean();
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
+  const categories = await Category.find({
+    parentCategory: null,
+    // No isActive filter — admin sees all categories to manage them
+  })
+    .select('name slug icon image type sortOrder metadata pageConfig isActive maxCashback storeCount productCount updatedAt')
+    .sort({ sortOrder: 1 })
+    .lean();
 
-    // Compute live store counts via aggregation (include subcategory stores)
-    const categoryIds = categories.map((c: any) => c._id);
+  // Compute live store counts via aggregation (include subcategory stores)
+  const categoryIds = categories.map((c: any) => c._id);
 
-    // Get all child category IDs for each parent category
-    const parentWithChildren = await Category.find({ _id: { $in: categoryIds } })
-      .select('_id childCategories')
-      .lean();
-    const allCategoryIds = new Set<string>();
-    const parentToAllIds = new Map<string, mongoose.Types.ObjectId[]>();
-    parentWithChildren.forEach((cat: any) => {
-      const ids = [cat._id, ...((cat.childCategories || []).map((id: any) => new mongoose.Types.ObjectId(id.toString())))];
-      parentToAllIds.set(cat._id.toString(), ids);
-      ids.forEach(id => allCategoryIds.add(id.toString()));
-    });
+  // Get all child category IDs for each parent category
+  const parentWithChildren = await Category.find({ _id: { $in: categoryIds } })
+    .select('_id childCategories')
+    .lean();
+  const allCategoryIds = new Set<string>();
+  const parentToAllIds = new Map<string, mongoose.Types.ObjectId[]>();
+  parentWithChildren.forEach((cat: any) => {
+    const ids = [cat._id, ...((cat.childCategories || []).map((id: any) => new mongoose.Types.ObjectId(id.toString())))];
+    parentToAllIds.set(cat._id.toString(), ids);
+    ids.forEach(id => allCategoryIds.add(id.toString()));
+  });
 
-    // Single aggregation for ALL category IDs (parents + children)
-    const allIdObjects = Array.from(allCategoryIds).map(id => new mongoose.Types.ObjectId(id));
-    const storeStats = await Store.aggregate([
-      { $match: { category: { $in: allIdObjects }, isActive: true } },
-      { $group: { _id: '$category', count: { $sum: 1 } } },
-    ]);
+  // Single aggregation for ALL category IDs (parents + children)
+  const allIdObjects = Array.from(allCategoryIds).map(id => new mongoose.Types.ObjectId(id));
+  const storeStats = await Store.aggregate([
+    { $match: { category: { $in: allIdObjects }, isActive: true } },
+    { $group: { _id: '$category', count: { $sum: 1 } } },
+  ]);
 
-    const perCategoryCount = new Map<string, number>();
-    storeStats.forEach((s: any) => perCategoryCount.set(s._id.toString(), s.count));
+  const perCategoryCount = new Map<string, number>();
+  storeStats.forEach((s: any) => perCategoryCount.set(s._id.toString(), s.count));
 
-    // Sum parent + children counts
-    const storeCountMap = new Map<string, number>();
-    parentWithChildren.forEach((cat: any) => {
-      const ids = parentToAllIds.get(cat._id.toString()) || [cat._id];
-      const total = ids.reduce((sum, id) => sum + (perCategoryCount.get(id.toString()) || 0), 0);
-      storeCountMap.set(cat._id.toString(), total);
-    });
+  // Sum parent + children counts
+  const storeCountMap = new Map<string, number>();
+  parentWithChildren.forEach((cat: any) => {
+    const ids = parentToAllIds.get(cat._id.toString()) || [cat._id];
+    const total = ids.reduce((sum, id) => sum + (perCategoryCount.get(id.toString()) || 0), 0);
+    storeCountMap.set(cat._id.toString(), total);
+  });
 
-    // Enrich categories with live store counts (including subcategories)
-    const enriched = categories.map((cat: any) => ({
-      ...cat,
-      storeCount: storeCountMap.get(cat._id.toString()) || 0,
-    }));
+  // Enrich categories with live store counts (including subcategories)
+  const enriched = categories.map((cat: any) => ({
+    ...cat,
+    storeCount: storeCountMap.get(cat._id.toString()) || 0,
+  }));
 
-    res.json({ success: true, data: { categories: enriched } });
-  } catch (error) {
-    logger.error('Admin Get Categories Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch categories' });
-  }
-});
+  res.json({ success: true, data: { categories: enriched } });
+}));
 
 // ============================================
 // GET /admin/categories/:id - Get single category with full config
 // ============================================
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
-    const category = await Category.findById(req.params.id)
-      .populate('childCategories', 'name slug icon image sortOrder metadata isActive')
-      .lean();
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
+  const category = await Category.findById(req.params.id)
+    .populate('childCategories', 'name slug icon image sortOrder metadata isActive')
+    .lean();
 
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-
-    // Compute live store count (including subcategory stores)
-    const childIds = ((category as any).childCategories || []).map((c: any) => c._id || c);
-    const allIds = [(category as any)._id, ...childIds];
-    const liveStoreCount = await Store.countDocuments({
-      category: { $in: allIds },
-      isActive: true,
-    });
-
-    res.json({
-      success: true,
-      data: {
-        category: { ...category, storeCount: liveStoreCount },
-      },
-    });
-  } catch (error) {
-    logger.error('Admin Get Category Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch category' });
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
   }
-});
+
+  // Compute live store count (including subcategory stores)
+  const childIds = ((category as any).childCategories || []).map((c: any) => c._id || c);
+  const allIds = [(category as any)._id, ...childIds];
+  const liveStoreCount = await Store.countDocuments({
+    category: { $in: allIds },
+    isActive: true,
+  });
+
+  res.json({
+    success: true,
+    data: {
+      category: { ...category, storeCount: liveStoreCount },
+    },
+  });
+}));
 
 // ============================================
 // PUT /admin/categories/:id - Update category basic info (requires senior admin)
@@ -143,29 +134,24 @@ const updateCategorySchema = Joi.object({
   }),
 });
 
-router.put('/:id', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const { error, value } = updateCategorySchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-
-    const category = await Category.findByIdAndUpdate(
-      req.params.id,
-      { $set: value },
-      { new: true }
-    );
-
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-
-    res.json({ success: true, data: { category }, message: 'Category updated successfully' });
-  } catch (error) {
-    logger.error('Admin Update Category Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update category' });
+router.put('/:id', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const { error, value } = updateCategorySchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
   }
-});
+
+  const category = await Category.findByIdAndUpdate(
+    req.params.id,
+    { $set: value },
+    { new: true }
+  );
+
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
+  }
+
+  res.json({ success: true, data: { category }, message: 'Category updated successfully' });
+}));
 
 // ============================================
 // PUT /admin/categories/:id/page-config - Update entire pageConfig (requires senior admin)
@@ -286,318 +272,263 @@ const pageConfigSchema = Joi.object({
   })),
 });
 
-router.put('/:id/page-config', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const { error, value } = pageConfigSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-
-    const category = await Category.findById(req.params.id);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-
-    // Deep merge: only overwrite fields present in the payload, preserve existing config for unset fields
-    const existing = (category.pageConfig as any) || {};
-    category.pageConfig = { ...existing, ...value } as any;
-    category.markModified('pageConfig');
-    await category.save();
-
-    res.json({ success: true, data: { category }, message: 'Page config updated successfully' });
-  } catch (error) {
-    logger.error('Admin Update Page Config Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update page config' });
+router.put('/:id/page-config', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const { error, value } = pageConfigSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
   }
-});
+
+  const category = await Category.findById(req.params.id);
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
+  }
+
+  // Deep merge: only overwrite fields present in the payload, preserve existing config for unset fields
+  const existing = (category.pageConfig as any) || {};
+  category.pageConfig = { ...existing, ...value } as any;
+  category.markModified('pageConfig');
+  await category.save();
+
+  res.json({ success: true, data: { category }, message: 'Page config updated successfully' });
+}));
 
 // ============================================
 // PATCH /admin/categories/:id/tabs - Update tabs only (requires senior admin)
 // ============================================
-router.patch('/:id/tabs', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const tabsSchema = Joi.object({ tabs: pageConfigSchema.extract('tabs').required() });
-    const { error, value } = tabsSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-
-    const category = await Category.findById(req.params.id);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-
-    if (!category.pageConfig) {
-      category.pageConfig = { isMainCategory: true } as any;
-    }
-    (category.pageConfig as any).tabs = value.tabs;
-    category.markModified('pageConfig');
-    await category.save();
-
-    res.json({ success: true, data: { tabs: (category.pageConfig as any).tabs }, message: 'Tabs updated' });
-  } catch (error) {
-    logger.error('Admin Update Tabs Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update tabs' });
+router.patch('/:id/tabs', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const tabsSchema = Joi.object({ tabs: pageConfigSchema.extract('tabs').required() });
+  const { error, value } = tabsSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
   }
-});
+
+  const category = await Category.findById(req.params.id);
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
+  }
+
+  if (!category.pageConfig) {
+    category.pageConfig = { isMainCategory: true } as any;
+  }
+  (category.pageConfig as any).tabs = value.tabs;
+  category.markModified('pageConfig');
+  await category.save();
+
+  res.json({ success: true, data: { tabs: (category.pageConfig as any).tabs }, message: 'Tabs updated' });
+}));
 
 // ============================================
 // PATCH /admin/categories/:id/quick-actions - Update quickActions only (requires senior admin)
 // ============================================
-router.patch('/:id/quick-actions', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const quickActionsSchema = Joi.object({ quickActions: pageConfigSchema.extract('quickActions').required() });
-    const { error, value } = quickActionsSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-
-    const category = await Category.findById(req.params.id);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-
-    if (!category.pageConfig) {
-      category.pageConfig = { isMainCategory: true } as any;
-    }
-    (category.pageConfig as any).quickActions = value.quickActions;
-    category.markModified('pageConfig');
-    await category.save();
-
-    res.json({ success: true, data: { quickActions: (category.pageConfig as any).quickActions }, message: 'Quick actions updated' });
-  } catch (error) {
-    logger.error('Admin Update Quick Actions Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update quick actions' });
+router.patch('/:id/quick-actions', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const quickActionsSchema = Joi.object({ quickActions: pageConfigSchema.extract('quickActions').required() });
+  const { error, value } = quickActionsSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
   }
-});
+
+  const category = await Category.findById(req.params.id);
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
+  }
+
+  if (!category.pageConfig) {
+    category.pageConfig = { isMainCategory: true } as any;
+  }
+  (category.pageConfig as any).quickActions = value.quickActions;
+  category.markModified('pageConfig');
+  await category.save();
+
+  res.json({ success: true, data: { quickActions: (category.pageConfig as any).quickActions }, message: 'Quick actions updated' });
+}));
 
 // ============================================
 // PATCH /admin/categories/:id/sections - Update sections only (requires senior admin)
 // ============================================
-router.patch('/:id/sections', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const sectionsSchema = Joi.object({ sections: pageConfigSchema.extract('sections').required() });
-    const { error, value } = sectionsSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-
-    const category = await Category.findById(req.params.id);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-
-    if (!category.pageConfig) {
-      category.pageConfig = { isMainCategory: true } as any;
-    }
-    (category.pageConfig as any).sections = value.sections;
-    category.markModified('pageConfig');
-    await category.save();
-
-    res.json({ success: true, data: { sections: (category.pageConfig as any).sections }, message: 'Sections updated' });
-  } catch (error) {
-    logger.error('Admin Update Sections Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update sections' });
+router.patch('/:id/sections', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const sectionsSchema = Joi.object({ sections: pageConfigSchema.extract('sections').required() });
+  const { error, value } = sectionsSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
   }
-});
+
+  const category = await Category.findById(req.params.id);
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
+  }
+
+  if (!category.pageConfig) {
+    category.pageConfig = { isMainCategory: true } as any;
+  }
+  (category.pageConfig as any).sections = value.sections;
+  category.markModified('pageConfig');
+  await category.save();
+
+  res.json({ success: true, data: { sections: (category.pageConfig as any).sections }, message: 'Sections updated' });
+}));
 
 // ============================================
 // PATCH /admin/categories/:id/service-types - Update serviceTypes only (requires senior admin)
 // ============================================
-router.patch('/:id/service-types', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const serviceTypesSchema = Joi.object({ serviceTypes: pageConfigSchema.extract('serviceTypes').required() });
-    const { error, value } = serviceTypesSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-
-    const category = await Category.findById(req.params.id);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-
-    if (!category.pageConfig) {
-      category.pageConfig = { isMainCategory: true } as any;
-    }
-    (category.pageConfig as any).serviceTypes = value.serviceTypes;
-    category.markModified('pageConfig');
-    await category.save();
-
-    res.json({ success: true, data: { serviceTypes: (category.pageConfig as any).serviceTypes }, message: 'Service types updated' });
-  } catch (error) {
-    logger.error('Admin Update Service Types Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update service types' });
+router.patch('/:id/service-types', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const serviceTypesSchema = Joi.object({ serviceTypes: pageConfigSchema.extract('serviceTypes').required() });
+  const { error, value } = serviceTypesSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
   }
-});
+
+  const category = await Category.findById(req.params.id);
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
+  }
+
+  if (!category.pageConfig) {
+    category.pageConfig = { isMainCategory: true } as any;
+  }
+  (category.pageConfig as any).serviceTypes = value.serviceTypes;
+  category.markModified('pageConfig');
+  await category.save();
+
+  res.json({ success: true, data: { serviceTypes: (category.pageConfig as any).serviceTypes }, message: 'Service types updated' });
+}));
 
 // ============================================
 // PATCH /admin/categories/:id/banner - Update banner only (requires senior admin)
 // ============================================
-router.patch('/:id/banner', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const bannerSchema = Joi.object({ banner: pageConfigSchema.extract('banner').required() });
-    const { error, value } = bannerSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-
-    const category = await Category.findById(req.params.id);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-
-    if (!category.pageConfig) {
-      category.pageConfig = { isMainCategory: true } as any;
-    }
-    (category.pageConfig as any).banner = value.banner;
-    category.markModified('pageConfig');
-    await category.save();
-
-    res.json({ success: true, data: { banner: (category.pageConfig as any).banner }, message: 'Banner updated' });
-  } catch (error) {
-    logger.error('Admin Update Banner Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update banner' });
+router.patch('/:id/banner', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const bannerSchema = Joi.object({ banner: pageConfigSchema.extract('banner').required() });
+  const { error, value } = bannerSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
   }
-});
+
+  const category = await Category.findById(req.params.id);
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
+  }
+
+  if (!category.pageConfig) {
+    category.pageConfig = { isMainCategory: true } as any;
+  }
+  (category.pageConfig as any).banner = value.banner;
+  category.markModified('pageConfig');
+  await category.save();
+
+  res.json({ success: true, data: { banner: (category.pageConfig as any).banner }, message: 'Banner updated' });
+}));
 
 // ============================================
 // PATCH /admin/categories/:id/theme - Update theme only (requires senior admin)
 // ============================================
-router.patch('/:id/theme', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const themeSchema = Joi.object({ theme: pageConfigSchema.extract('theme').required() });
-    const { error, value } = themeSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-
-    const category = await Category.findById(req.params.id);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-
-    if (!category.pageConfig) {
-      category.pageConfig = { isMainCategory: true } as any;
-    }
-    (category.pageConfig as any).theme = value.theme;
-    category.markModified('pageConfig');
-    await category.save();
-
-    res.json({ success: true, data: { theme: (category.pageConfig as any).theme }, message: 'Theme updated' });
-  } catch (error) {
-    logger.error('Admin Update Theme Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update theme' });
+router.patch('/:id/theme', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const themeSchema = Joi.object({ theme: pageConfigSchema.extract('theme').required() });
+  const { error, value } = themeSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
   }
-});
+
+  const category = await Category.findById(req.params.id);
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
+  }
+
+  if (!category.pageConfig) {
+    category.pageConfig = { isMainCategory: true } as any;
+  }
+  (category.pageConfig as any).theme = value.theme;
+  category.markModified('pageConfig');
+  await category.save();
+
+  res.json({ success: true, data: { theme: (category.pageConfig as any).theme }, message: 'Theme updated' });
+}));
 
 // ============================================
 // PATCH /admin/categories/:id/dietary-options
 // ============================================
-router.patch('/:id/dietary-options', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const schema = Joi.object({ dietaryOptions: pageConfigSchema.extract('dietaryOptions').required() });
-    const { error, value } = schema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-    const category = await Category.findById(req.params.id);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-    if (!category.pageConfig) {
-      category.pageConfig = { isMainCategory: true } as any;
-    }
-    (category.pageConfig as any).dietaryOptions = value.dietaryOptions;
-    category.markModified('pageConfig');
-    await category.save();
-    res.json({ success: true, data: { dietaryOptions: (category.pageConfig as any).dietaryOptions }, message: 'Dietary options updated' });
-  } catch (error) {
-    logger.error('Admin Update Dietary Options Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update dietary options' });
+router.patch('/:id/dietary-options', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const schema = Joi.object({ dietaryOptions: pageConfigSchema.extract('dietaryOptions').required() });
+  const { error, value } = schema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
   }
-});
+  const category = await Category.findById(req.params.id);
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
+  }
+  if (!category.pageConfig) {
+    category.pageConfig = { isMainCategory: true } as any;
+  }
+  (category.pageConfig as any).dietaryOptions = value.dietaryOptions;
+  category.markModified('pageConfig');
+  await category.save();
+  res.json({ success: true, data: { dietaryOptions: (category.pageConfig as any).dietaryOptions }, message: 'Dietary options updated' });
+}));
 
 // ============================================
 // PATCH /admin/categories/:id/curated-collections
 // ============================================
-router.patch('/:id/curated-collections', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const schema = Joi.object({ curatedCollections: pageConfigSchema.extract('curatedCollections').required() });
-    const { error, value } = schema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-    const category = await Category.findById(req.params.id);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-    if (!category.pageConfig) {
-      category.pageConfig = { isMainCategory: true } as any;
-    }
-    (category.pageConfig as any).curatedCollections = value.curatedCollections;
-    category.markModified('pageConfig');
-    await category.save();
-    res.json({ success: true, data: { curatedCollections: (category.pageConfig as any).curatedCollections }, message: 'Curated collections updated' });
-  } catch (error) {
-    logger.error('Admin Update Curated Collections Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update curated collections' });
+router.patch('/:id/curated-collections', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const schema = Joi.object({ curatedCollections: pageConfigSchema.extract('curatedCollections').required() });
+  const { error, value } = schema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
   }
-});
+  const category = await Category.findById(req.params.id);
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
+  }
+  if (!category.pageConfig) {
+    category.pageConfig = { isMainCategory: true } as any;
+  }
+  (category.pageConfig as any).curatedCollections = value.curatedCollections;
+  category.markModified('pageConfig');
+  await category.save();
+  res.json({ success: true, data: { curatedCollections: (category.pageConfig as any).curatedCollections }, message: 'Curated collections updated' });
+}));
 
 // ============================================
 // PATCH /admin/categories/:id/search-placeholders
 // ============================================
-router.patch('/:id/search-placeholders', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const schema = Joi.object({ searchPlaceholders: pageConfigSchema.extract('searchPlaceholders').required() });
-    const { error, value } = schema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-    const category = await Category.findById(req.params.id);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-    if (!category.pageConfig) {
-      category.pageConfig = { isMainCategory: true } as any;
-    }
-    (category.pageConfig as any).searchPlaceholders = value.searchPlaceholders;
-    category.markModified('pageConfig');
-    await category.save();
-    res.json({ success: true, data: { searchPlaceholders: (category.pageConfig as any).searchPlaceholders }, message: 'Search placeholders updated' });
-  } catch (error) {
-    logger.error('Admin Update Search Placeholders Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update search placeholders' });
+router.patch('/:id/search-placeholders', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const schema = Joi.object({ searchPlaceholders: pageConfigSchema.extract('searchPlaceholders').required() });
+  const { error, value } = schema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
   }
-});
+  const category = await Category.findById(req.params.id);
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
+  }
+  if (!category.pageConfig) {
+    category.pageConfig = { isMainCategory: true } as any;
+  }
+  (category.pageConfig as any).searchPlaceholders = value.searchPlaceholders;
+  category.markModified('pageConfig');
+  await category.save();
+  res.json({ success: true, data: { searchPlaceholders: (category.pageConfig as any).searchPlaceholders }, message: 'Search placeholders updated' });
+}));
 
 // ============================================
 // PATCH /admin/categories/:id/value-prop-items
 // ============================================
-router.patch('/:id/value-prop-items', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const schema = Joi.object({ valuePropItems: pageConfigSchema.extract('valuePropItems').required() });
-    const { error, value } = schema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-    const category = await Category.findById(req.params.id);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-    if (!category.pageConfig) {
-      category.pageConfig = { isMainCategory: true } as any;
-    }
-    (category.pageConfig as any).valuePropItems = value.valuePropItems;
-    category.markModified('pageConfig');
-    await category.save();
-    res.json({ success: true, data: { valuePropItems: (category.pageConfig as any).valuePropItems }, message: 'Value prop items updated' });
-  } catch (error) {
-    logger.error('Admin Update Value Prop Items Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update value prop items' });
+router.patch('/:id/value-prop-items', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const schema = Joi.object({ valuePropItems: pageConfigSchema.extract('valuePropItems').required() });
+  const { error, value } = schema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
   }
-});
+  const category = await Category.findById(req.params.id);
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
+  }
+  if (!category.pageConfig) {
+    category.pageConfig = { isMainCategory: true } as any;
+  }
+  (category.pageConfig as any).valuePropItems = value.valuePropItems;
+  category.markModified('pageConfig');
+  await category.save();
+  res.json({ success: true, data: { valuePropItems: (category.pageConfig as any).valuePropItems }, message: 'Value prop items updated' });
+}));
 
 // ============================================
 // POST /admin/categories - Create new category (requires senior admin)
@@ -619,137 +550,122 @@ const createCategorySchema = Joi.object({
   }).optional(),
 });
 
-router.post('/', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const { error, value } = createCategorySchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-
-    // Auto-generate slug from name if not provided
-    if (!value.slug) {
-      value.slug = value.name
-        .toLowerCase()
-        .replace(/\s+/g, '-')
-        .replace(/[^a-z0-9-]/g, '')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
-    }
-
-    // Guard against empty slugs (e.g. pure unicode names)
-    if (!value.slug) {
-      return res.status(400).json({ success: false, message: 'Could not generate a valid slug. Please provide a slug manually using only letters, numbers, and hyphens.' });
-    }
-
-    // Check slug uniqueness
-    const existingSlug = await Category.findOne({ slug: value.slug });
-    if (existingSlug) {
-      return res.status(400).json({ success: false, message: `Slug "${value.slug}" is already in use` });
-    }
-
-    // If no sortOrder provided, set to max existing sortOrder + 1
-    if (value.sortOrder === undefined) {
-      const maxSortCategory = await Category.findOne({ parentCategory: value.parentCategory || null })
-        .sort({ sortOrder: -1 })
-        .select('sortOrder')
-        .lean();
-      value.sortOrder = maxSortCategory ? (maxSortCategory as any).sortOrder + 1 : 0;
-    }
-
-    // Create category
-    const category = new Category(value);
-    await category.save();
-
-    // If parentCategory provided, add to parent's childCategories array
-    if (value.parentCategory) {
-      await Category.findByIdAndUpdate(value.parentCategory, {
-        $addToSet: { childCategories: category._id },
-      });
-    }
-
-    res.status(201).json({ success: true, data: { category }, message: 'Category created successfully' });
-  } catch (error) {
-    logger.error('Admin Create Category Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to create category' });
+router.post('/', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const { error, value } = createCategorySchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
   }
-});
+
+  // Auto-generate slug from name if not provided
+  if (!value.slug) {
+    value.slug = value.name
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
+  // Guard against empty slugs (e.g. pure unicode names)
+  if (!value.slug) {
+    return res.status(400).json({ success: false, message: 'Could not generate a valid slug. Please provide a slug manually using only letters, numbers, and hyphens.' });
+  }
+
+  // Check slug uniqueness
+  const existingSlug = await Category.findOne({ slug: value.slug });
+  if (existingSlug) {
+    return res.status(400).json({ success: false, message: `Slug "${value.slug}" is already in use` });
+  }
+
+  // If no sortOrder provided, set to max existing sortOrder + 1
+  if (value.sortOrder === undefined) {
+    const maxSortCategory = await Category.findOne({ parentCategory: value.parentCategory || null })
+      .sort({ sortOrder: -1 })
+      .select('sortOrder')
+      .lean();
+    value.sortOrder = maxSortCategory ? (maxSortCategory as any).sortOrder + 1 : 0;
+  }
+
+  // Create category
+  const category = new Category(value);
+  await category.save();
+
+  // If parentCategory provided, add to parent's childCategories array
+  if (value.parentCategory) {
+    await Category.findByIdAndUpdate(value.parentCategory, {
+      $addToSet: { childCategories: category._id },
+    });
+  }
+
+  res.status(201).json({ success: true, data: { category }, message: 'Category created successfully' });
+}));
 
 // ============================================
 // DELETE /admin/categories/:id - Delete category with safety checks (requires senior admin)
 // ============================================
-router.delete('/:id', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const category = await Category.findById(req.params.id);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-
-    // Check for stores assigned to this category
-    const storeCount = await Store.countDocuments({ category: req.params.id });
-    if (storeCount > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot delete category with ${storeCount} stores. Reassign stores first.`,
-      });
-    }
-
-    // Check for child categories
-    const childCount = await Category.countDocuments({ parentCategory: req.params.id });
-    if (childCount > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot delete category with ${childCount} subcategories. Delete or move them first.`,
-      });
-    }
-
-    // If has parent, remove from parent's childCategories
-    if (category.parentCategory) {
-      await Category.findByIdAndUpdate(category.parentCategory, {
-        $pull: { childCategories: category._id },
-      });
-    }
-
-    // Delete the category
-    await Category.findByIdAndDelete(req.params.id);
-
-    res.json({ success: true, message: 'Category deleted successfully' });
-  } catch (error) {
-    logger.error('Admin Delete Category Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to delete category' });
+router.delete('/:id', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const category = await Category.findById(req.params.id);
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
   }
-});
+
+  // Check for stores assigned to this category
+  const storeCount = await Store.countDocuments({ category: req.params.id });
+  if (storeCount > 0) {
+    return res.status(400).json({
+      success: false,
+      message: `Cannot delete category with ${storeCount} stores. Reassign stores first.`,
+    });
+  }
+
+  // Check for child categories
+  const childCount = await Category.countDocuments({ parentCategory: req.params.id });
+  if (childCount > 0) {
+    return res.status(400).json({
+      success: false,
+      message: `Cannot delete category with ${childCount} subcategories. Delete or move them first.`,
+    });
+  }
+
+  // If has parent, remove from parent's childCategories
+  if (category.parentCategory) {
+    await Category.findByIdAndUpdate(category.parentCategory, {
+      $pull: { childCategories: category._id },
+    });
+  }
+
+  // Delete the category
+  await Category.findByIdAndDelete(req.params.id);
+
+  res.json({ success: true, message: 'Category deleted successfully' });
+}));
 
 // ============================================
 // GET /admin/categories/:id/subcategories - List subcategories
 // ============================================
-router.get('/:id/subcategories', async (req: Request, res: Response) => {
-  try {
-    const subcategories = await Category.find({ parentCategory: req.params.id })
-      .select('name slug icon image sortOrder isActive metadata storeCount')
-      .sort({ sortOrder: 1 })
-      .lean();
+router.get('/:id/subcategories', asyncHandler(async (req: Request, res: Response) => {
+  const subcategories = await Category.find({ parentCategory: req.params.id })
+    .select('name slug icon image sortOrder isActive metadata storeCount')
+    .sort({ sortOrder: 1 })
+    .lean();
 
-    // Compute live store counts via aggregation
-    const subIds = subcategories.map((s: any) => s._id);
-    const storeStats = await Store.aggregate([
-      { $match: { category: { $in: subIds }, isActive: true } },
-      { $group: { _id: '$category', count: { $sum: 1 } } },
-    ]);
+  // Compute live store counts via aggregation
+  const subIds = subcategories.map((s: any) => s._id);
+  const storeStats = await Store.aggregate([
+    { $match: { category: { $in: subIds }, isActive: true } },
+    { $group: { _id: '$category', count: { $sum: 1 } } },
+  ]);
 
-    const storeCountMap = new Map<string, number>();
-    storeStats.forEach((s: any) => storeCountMap.set(s._id.toString(), s.count));
+  const storeCountMap = new Map<string, number>();
+  storeStats.forEach((s: any) => storeCountMap.set(s._id.toString(), s.count));
 
-    const enriched = subcategories.map((sub: any) => ({
-      ...sub,
-      storeCount: storeCountMap.get(sub._id.toString()) || 0,
-    }));
+  const enriched = subcategories.map((sub: any) => ({
+    ...sub,
+    storeCount: storeCountMap.get(sub._id.toString()) || 0,
+  }));
 
-    res.json({ success: true, data: { subcategories: enriched } });
-  } catch (error) {
-    logger.error('Admin Get Subcategories Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch subcategories' });
-  }
-});
+  res.json({ success: true, data: { subcategories: enriched } });
+}));
 
 // ============================================
 // POST /admin/categories/:id/subcategories - Create subcategory
@@ -768,67 +684,62 @@ const createSubcategorySchema = Joi.object({
   }).optional(),
 });
 
-router.post('/:id/subcategories', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const parent = await Category.findById(req.params.id);
-    if (!parent) {
-      return res.status(404).json({ success: false, message: 'Parent category not found' });
-    }
-
-    const { error, value } = createSubcategorySchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-
-    // Auto-generate slug from name if not provided
-    if (!value.slug) {
-      value.slug = value.name
-        .toLowerCase()
-        .replace(/\s+/g, '-')
-        .replace(/[^a-z0-9-]/g, '')
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
-    }
-
-    // Guard against empty slugs (e.g. pure unicode names)
-    if (!value.slug) {
-      return res.status(400).json({ success: false, message: 'Could not generate a valid slug. Please provide a slug manually using only letters, numbers, and hyphens.' });
-    }
-
-    // Check slug uniqueness
-    const existingSlug = await Category.findOne({ slug: value.slug });
-    if (existingSlug) {
-      return res.status(400).json({ success: false, message: `Slug "${value.slug}" is already in use` });
-    }
-
-    // If no sortOrder provided, set to max existing sortOrder + 1
-    if (value.sortOrder === undefined) {
-      const maxSortSub = await Category.findOne({ parentCategory: req.params.id })
-        .sort({ sortOrder: -1 })
-        .select('sortOrder')
-        .lean();
-      value.sortOrder = maxSortSub ? (maxSortSub as any).sortOrder + 1 : 0;
-    }
-
-    // Create child category inheriting type from parent
-    const subcategory = new Category({
-      ...value,
-      type: parent.type,
-      parentCategory: req.params.id,
-    });
-    await subcategory.save();
-
-    // Add to parent's childCategories array
-    await Category.findByIdAndUpdate(req.params.id, {
-      $addToSet: { childCategories: subcategory._id },
-    });
-
-    res.status(201).json({ success: true, data: { subcategory }, message: 'Subcategory created successfully' });
-  } catch (error) {
-    logger.error('Admin Create Subcategory Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to create subcategory' });
+router.post('/:id/subcategories', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const parent = await Category.findById(req.params.id);
+  if (!parent) {
+    return res.status(404).json({ success: false, message: 'Parent category not found' });
   }
-});
+
+  const { error, value } = createSubcategorySchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
+  }
+
+  // Auto-generate slug from name if not provided
+  if (!value.slug) {
+    value.slug = value.name
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
+  // Guard against empty slugs (e.g. pure unicode names)
+  if (!value.slug) {
+    return res.status(400).json({ success: false, message: 'Could not generate a valid slug. Please provide a slug manually using only letters, numbers, and hyphens.' });
+  }
+
+  // Check slug uniqueness
+  const existingSlug = await Category.findOne({ slug: value.slug });
+  if (existingSlug) {
+    return res.status(400).json({ success: false, message: `Slug "${value.slug}" is already in use` });
+  }
+
+  // If no sortOrder provided, set to max existing sortOrder + 1
+  if (value.sortOrder === undefined) {
+    const maxSortSub = await Category.findOne({ parentCategory: req.params.id })
+      .sort({ sortOrder: -1 })
+      .select('sortOrder')
+      .lean();
+    value.sortOrder = maxSortSub ? (maxSortSub as any).sortOrder + 1 : 0;
+  }
+
+  // Create child category inheriting type from parent
+  const subcategory = new Category({
+    ...value,
+    type: parent.type,
+    parentCategory: req.params.id,
+  });
+  await subcategory.save();
+
+  // Add to parent's childCategories array
+  await Category.findByIdAndUpdate(req.params.id, {
+    $addToSet: { childCategories: subcategory._id },
+  });
+
+  res.status(201).json({ success: true, data: { subcategory }, message: 'Subcategory created successfully' });
+}));
 
 // ============================================
 // PUT /admin/categories/:id/subcategories/:subId - Update subcategory
@@ -847,98 +758,88 @@ const updateSubcategorySchema = Joi.object({
   }).optional(),
 });
 
-router.put('/:id/subcategories/:subId', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    // Validate subId format
-    if (!mongoose.Types.ObjectId.isValid(req.params.subId)) {
-      return res.status(400).json({ success: false, message: 'Invalid subcategory ID format' });
-    }
-
-    const { error, value } = updateSubcategorySchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-
-    // Verify subcategory exists and belongs to parent
-    const subcategory = await Category.findById(req.params.subId);
-    if (!subcategory) {
-      return res.status(404).json({ success: false, message: 'Subcategory not found' });
-    }
-    if (!subcategory.parentCategory || subcategory.parentCategory.toString() !== req.params.id) {
-      return res.status(400).json({ success: false, message: 'Subcategory does not belong to this parent category' });
-    }
-
-    // If slug is being changed, check uniqueness
-    if (value.slug && value.slug !== subcategory.slug) {
-      const existingSlug = await Category.findOne({ slug: value.slug, _id: { $ne: req.params.subId } });
-      if (existingSlug) {
-        return res.status(400).json({ success: false, message: `Slug "${value.slug}" is already in use` });
-      }
-    }
-
-    const updated = await Category.findByIdAndUpdate(
-      req.params.subId,
-      { $set: value },
-      { new: true }
-    );
-
-    res.json({ success: true, data: { subcategory: updated }, message: 'Subcategory updated successfully' });
-  } catch (error) {
-    logger.error('Admin Update Subcategory Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update subcategory' });
+router.put('/:id/subcategories/:subId', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  // Validate subId format
+  if (!mongoose.Types.ObjectId.isValid(req.params.subId)) {
+    return res.status(400).json({ success: false, message: 'Invalid subcategory ID format' });
   }
-});
+
+  const { error, value } = updateSubcategorySchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
+  }
+
+  // Verify subcategory exists and belongs to parent
+  const subcategory = await Category.findById(req.params.subId);
+  if (!subcategory) {
+    return res.status(404).json({ success: false, message: 'Subcategory not found' });
+  }
+  if (!subcategory.parentCategory || subcategory.parentCategory.toString() !== req.params.id) {
+    return res.status(400).json({ success: false, message: 'Subcategory does not belong to this parent category' });
+  }
+
+  // If slug is being changed, check uniqueness
+  if (value.slug && value.slug !== subcategory.slug) {
+    const existingSlug = await Category.findOne({ slug: value.slug, _id: { $ne: req.params.subId } });
+    if (existingSlug) {
+      return res.status(400).json({ success: false, message: `Slug "${value.slug}" is already in use` });
+    }
+  }
+
+  const updated = await Category.findByIdAndUpdate(
+    req.params.subId,
+    { $set: value },
+    { new: true }
+  );
+
+  res.json({ success: true, data: { subcategory: updated }, message: 'Subcategory updated successfully' });
+}));
 
 // ============================================
 // DELETE /admin/categories/:id/subcategories/:subId - Delete subcategory
 // ============================================
-router.delete('/:id/subcategories/:subId', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    // Validate subId format
-    if (!mongoose.Types.ObjectId.isValid(req.params.subId)) {
-      return res.status(400).json({ success: false, message: 'Invalid subcategory ID format' });
-    }
-
-    const subcategory = await Category.findById(req.params.subId);
-    if (!subcategory) {
-      return res.status(404).json({ success: false, message: 'Subcategory not found' });
-    }
-    if (!subcategory.parentCategory || subcategory.parentCategory.toString() !== req.params.id) {
-      return res.status(400).json({ success: false, message: 'Subcategory does not belong to this parent category' });
-    }
-
-    // Check for stores assigned to this subcategory
-    const storeCount = await Store.countDocuments({ category: req.params.subId });
-    if (storeCount > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot delete category with ${storeCount} stores. Reassign stores first.`,
-      });
-    }
-
-    // Check for child categories of this subcategory
-    const childCount = await Category.countDocuments({ parentCategory: req.params.subId });
-    if (childCount > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot delete category with ${childCount} subcategories. Delete or move them first.`,
-      });
-    }
-
-    // Remove from parent's childCategories
-    await Category.findByIdAndUpdate(req.params.id, {
-      $pull: { childCategories: subcategory._id },
-    });
-
-    // Delete the subcategory
-    await Category.findByIdAndDelete(req.params.subId);
-
-    res.json({ success: true, message: 'Subcategory deleted successfully' });
-  } catch (error) {
-    logger.error('Admin Delete Subcategory Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to delete subcategory' });
+router.delete('/:id/subcategories/:subId', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  // Validate subId format
+  if (!mongoose.Types.ObjectId.isValid(req.params.subId)) {
+    return res.status(400).json({ success: false, message: 'Invalid subcategory ID format' });
   }
-});
+
+  const subcategory = await Category.findById(req.params.subId);
+  if (!subcategory) {
+    return res.status(404).json({ success: false, message: 'Subcategory not found' });
+  }
+  if (!subcategory.parentCategory || subcategory.parentCategory.toString() !== req.params.id) {
+    return res.status(400).json({ success: false, message: 'Subcategory does not belong to this parent category' });
+  }
+
+  // Check for stores assigned to this subcategory
+  const storeCount = await Store.countDocuments({ category: req.params.subId });
+  if (storeCount > 0) {
+    return res.status(400).json({
+      success: false,
+      message: `Cannot delete category with ${storeCount} stores. Reassign stores first.`,
+    });
+  }
+
+  // Check for child categories of this subcategory
+  const childCount = await Category.countDocuments({ parentCategory: req.params.subId });
+  if (childCount > 0) {
+    return res.status(400).json({
+      success: false,
+      message: `Cannot delete category with ${childCount} subcategories. Delete or move them first.`,
+    });
+  }
+
+  // Remove from parent's childCategories
+  await Category.findByIdAndUpdate(req.params.id, {
+    $pull: { childCategories: subcategory._id },
+  });
+
+  // Delete the subcategory
+  await Category.findByIdAndDelete(req.params.subId);
+
+  res.json({ success: true, message: 'Subcategory deleted successfully' });
+}));
 
 // ============================================
 // POST /admin/categories/:id/subcategories/reorder - Reorder subcategories
@@ -950,44 +851,39 @@ const reorderSubcategoriesSchema = Joi.object({
     .required(),
 });
 
-router.post('/:id/subcategories/reorder', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const { error, value } = reorderSubcategoriesSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-
-    const { orderedIds } = value;
-
-    // Validate all IDs are actual subcategories of this parent
-    const validSubs = await Category.find({
-      _id: { $in: orderedIds },
-      parentCategory: req.params.id,
-    }).select('_id').lean();
-    const validIds = new Set(validSubs.map((s: any) => s._id.toString()));
-    const invalidIds = orderedIds.filter((id: string) => !validIds.has(id));
-    if (invalidIds.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `${invalidIds.length} ID(s) are not subcategories of this category`,
-      });
-    }
-
-    const bulkOps = orderedIds.map((id: string, index: number) => ({
-      updateOne: {
-        filter: { _id: id, parentCategory: req.params.id },
-        update: { $set: { sortOrder: index } },
-      },
-    }));
-
-    await Category.bulkWrite(bulkOps);
-
-    res.json({ success: true, message: 'Subcategories reordered successfully' });
-  } catch (error) {
-    logger.error('Admin Reorder Subcategories Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to reorder subcategories' });
+router.post('/:id/subcategories/reorder', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const { error, value } = reorderSubcategoriesSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
   }
-});
+
+  const { orderedIds } = value;
+
+  // Validate all IDs are actual subcategories of this parent
+  const validSubs = await Category.find({
+    _id: { $in: orderedIds },
+    parentCategory: req.params.id,
+  }).select('_id').lean();
+  const validIds = new Set(validSubs.map((s: any) => s._id.toString()));
+  const invalidIds = orderedIds.filter((id: string) => !validIds.has(id));
+  if (invalidIds.length > 0) {
+    return res.status(400).json({
+      success: false,
+      message: `${invalidIds.length} ID(s) are not subcategories of this category`,
+    });
+  }
+
+  const bulkOps = orderedIds.map((id: string, index: number) => ({
+    updateOne: {
+      filter: { _id: id, parentCategory: req.params.id },
+      update: { $set: { sortOrder: index } },
+    },
+  }));
+
+  await Category.bulkWrite(bulkOps);
+
+  res.json({ success: true, message: 'Subcategories reordered successfully' });
+}));
 
 // ============================================
 // PATCH /admin/categories/:id/sort-filter-options - Update sort/filter options (requires senior admin)
@@ -1031,39 +927,34 @@ const sortFilterOptionsSchema = Joi.object({
   })).optional(),
 }).min(1);
 
-router.patch('/:id/sort-filter-options', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const { error, value } = sortFilterOptionsSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
-
-    const category = await Category.findById(req.params.id);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-
-    if (!category.pageConfig) {
-      category.pageConfig = { isMainCategory: true } as any;
-    }
-
-    // Merge each provided field into pageConfig
-    const fields = ['sortOptions', 'filterOptions', 'storeDisplayConfig', 'trustBadges', 'loyaltyConfig', 'experienceBenefits'] as const;
-    for (const field of fields) {
-      if (value[field] !== undefined) {
-        (category.pageConfig as any)[field] = value[field];
-      }
-    }
-
-    category.markModified('pageConfig');
-    await category.save();
-
-    res.json({ success: true, data: { pageConfig: category.pageConfig }, message: 'Sort/filter options updated successfully' });
-  } catch (error) {
-    logger.error('Admin Update Sort/Filter Options Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to update sort/filter options' });
+router.patch('/:id/sort-filter-options', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const { error, value } = sortFilterOptionsSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
   }
-});
+
+  const category = await Category.findById(req.params.id);
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
+  }
+
+  if (!category.pageConfig) {
+    category.pageConfig = { isMainCategory: true } as any;
+  }
+
+  // Merge each provided field into pageConfig
+  const fields = ['sortOptions', 'filterOptions', 'storeDisplayConfig', 'trustBadges', 'loyaltyConfig', 'experienceBenefits'] as const;
+  for (const field of fields) {
+    if (value[field] !== undefined) {
+      (category.pageConfig as any)[field] = value[field];
+    }
+  }
+
+  category.markModified('pageConfig');
+  await category.save();
+
+  res.json({ success: true, data: { pageConfig: category.pageConfig }, message: 'Sort/filter options updated successfully' });
+}));
 
 // ============================================
 // POST /admin/categories/reorder - Reorder main categories (requires senior admin)
@@ -1075,78 +966,68 @@ const reorderSchema = Joi.object({
     .required(),
 });
 
-router.post('/reorder', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const { error, value } = reorderSchema.validate(req.body);
-    if (error) {
-      return res.status(400).json({ success: false, message: error.details[0].message });
-    }
+router.post('/reorder', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const { error, value } = reorderSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: error.details[0].message });
+  }
 
-    const { orderedIds } = value;
+  const { orderedIds } = value;
 
-    // Check for duplicates
-    if (new Set(orderedIds).size !== orderedIds.length) {
-      return res.status(400).json({ success: false, message: 'Duplicate IDs in orderedIds' });
-    }
+  // Check for duplicates
+  if (new Set(orderedIds).size !== orderedIds.length) {
+    return res.status(400).json({ success: false, message: 'Duplicate IDs in orderedIds' });
+  }
 
-    // Verify all IDs are valid main categories and all main categories are included
-    const mainCategories = await Category.find({ parentCategory: null }).select('_id').lean();
-    const mainCategoryIds = new Set(mainCategories.map((c: any) => c._id.toString()));
+  // Verify all IDs are valid main categories and all main categories are included
+  const mainCategories = await Category.find({ parentCategory: null }).select('_id').lean();
+  const mainCategoryIds = new Set(mainCategories.map((c: any) => c._id.toString()));
 
-    for (const id of orderedIds) {
-      if (!mainCategoryIds.has(id)) {
-        return res.status(400).json({
-          success: false,
-          message: `ID ${id} is not a valid main category`,
-        });
-      }
-    }
-
-    if (orderedIds.length !== mainCategoryIds.size) {
+  for (const id of orderedIds) {
+    if (!mainCategoryIds.has(id)) {
       return res.status(400).json({
         success: false,
-        message: `Expected ${mainCategoryIds.size} category IDs, received ${orderedIds.length}. All main categories must be included.`,
+        message: `ID ${id} is not a valid main category`,
       });
     }
-
-    const bulkOps = orderedIds.map((id: string, index: number) => ({
-      updateOne: {
-        filter: { _id: id },
-        update: { $set: { sortOrder: index } },
-      },
-    }));
-
-    await Category.bulkWrite(bulkOps);
-
-    res.json({ success: true, message: 'Categories reordered successfully' });
-  } catch (error) {
-    logger.error('Admin Reorder Categories Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to reorder categories' });
   }
-});
+
+  if (orderedIds.length !== mainCategoryIds.size) {
+    return res.status(400).json({
+      success: false,
+      message: `Expected ${mainCategoryIds.size} category IDs, received ${orderedIds.length}. All main categories must be included.`,
+    });
+  }
+
+  const bulkOps = orderedIds.map((id: string, index: number) => ({
+    updateOne: {
+      filter: { _id: id },
+      update: { $set: { sortOrder: index } },
+    },
+  }));
+
+  await Category.bulkWrite(bulkOps);
+
+  res.json({ success: true, message: 'Categories reordered successfully' });
+}));
 
 // ============================================
 // PATCH /admin/categories/:id/toggle - Toggle active/inactive (requires senior admin)
 // ============================================
-router.patch('/:id/toggle', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
-    const category = await Category.findById(req.params.id);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
-
-    category.isActive = !category.isActive;
-    await category.save();
-
-    res.json({
-      success: true,
-      data: { isActive: category.isActive },
-      message: `Category ${category.isActive ? 'activated' : 'deactivated'} successfully`,
-    });
-  } catch (error) {
-    logger.error('Admin Toggle Category Error:', error);
-    res.status(500).json({ success: false, message: 'Failed to toggle category' });
+router.patch('/:id/toggle', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const category = await Category.findById(req.params.id);
+  if (!category) {
+    return res.status(404).json({ success: false, message: 'Category not found' });
   }
-});
+
+  category.isActive = !category.isActive;
+  await category.save();
+
+  res.json({
+    success: true,
+    data: { isActive: category.isActive },
+    message: `Category ${category.isActive ? 'activated' : 'deactivated'} successfully`,
+  });
+}));
 
 export default router;

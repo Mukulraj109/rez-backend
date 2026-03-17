@@ -4,6 +4,7 @@ import { Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import UserLoyalty from '../../models/UserLoyalty';
 import { User } from '../../models/User';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -46,8 +47,7 @@ router.use(requireAdmin);
  * @desc    List user loyalty records with pagination, search, category filter, and sorting
  * @access  Admin
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -118,22 +118,14 @@ router.get('/', async (req: Request, res: Response) => {
         }
       }
     });
-  } catch (error: any) {
-    logger.error('[ADMIN LOYALTY] Error fetching loyalty records:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch loyalty records'
-    });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/loyalty/stats
  * @desc    Aggregate loyalty statistics
  * @access  Admin
  */
-router.get('/stats', async (req: Request, res: Response) => {
-  try {
+router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     const stats = await UserLoyalty.aggregate([
       {
         $facet: {
@@ -187,22 +179,14 @@ router.get('/stats', async (req: Request, res: Response) => {
       success: true,
       data: result
     });
-  } catch (error: any) {
-    logger.error('[ADMIN LOYALTY] Error fetching stats:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch loyalty stats'
-    });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/loyalty/missions
  * @desc    List missions grouped by category with completion counts
  * @access  Admin
  */
-router.get('/missions', async (req: Request, res: Response) => {
-  try {
+router.get('/missions', asyncHandler(async (req: Request, res: Response) => {
     const missionStats = await UserLoyalty.aggregate([
       { $unwind: '$missions' },
       {
@@ -258,22 +242,14 @@ router.get('/missions', async (req: Request, res: Response) => {
         totalUniqueMissions: missionStats.length
       }
     });
-  } catch (error: any) {
-    logger.error('[ADMIN LOYALTY] Error fetching missions:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch mission stats'
-    });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/loyalty/:userId
  * @desc    Get single user loyalty detail
  * @access  Admin
  */
-router.get('/:userId', async (req: Request, res: Response) => {
-  try {
+router.get('/:userId', asyncHandler(async (req: Request, res: Response) => {
     const loyalty = await UserLoyalty.findOne({ userId: req.params.userId })
       .populate('userId', 'profile.firstName profile.lastName phoneNumber email');
 
@@ -288,22 +264,14 @@ router.get('/:userId', async (req: Request, res: Response) => {
       success: true,
       data: loyalty
     });
-  } catch (error: any) {
-    logger.error('[ADMIN LOYALTY] Error fetching user loyalty:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch user loyalty'
-    });
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/loyalty/:userId/add-coins
  * @desc    Add bonus coins to a user (global or category-specific)
  * @access  Admin
  */
-router.post('/:userId/add-coins', async (req: Request, res: Response) => {
-  try {
+router.post('/:userId/add-coins', asyncHandler(async (req: Request, res: Response) => {
     const { amount, category, reason } = req.body;
 
     if (!amount || typeof amount !== 'number' || amount <= 0) {
@@ -360,22 +328,14 @@ router.post('/:userId/add-coins', async (req: Request, res: Response) => {
       message: `Successfully added ${amount} coins${category ? ` to ${category}` : ''}`,
       data: loyalty
     });
-  } catch (error: any) {
-    logger.error('[ADMIN LOYALTY] Error adding coins:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to add coins'
-    });
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/loyalty/:userId/reset-streak
  * @desc    Reset a user's streak
  * @access  Admin
  */
-router.post('/:userId/reset-streak', async (req: Request, res: Response) => {
-  try {
+router.post('/:userId/reset-streak', asyncHandler(async (req: Request, res: Response) => {
     const loyalty = await UserLoyalty.findOne({ userId: req.params.userId });
 
     if (!loyalty) {
@@ -394,22 +354,14 @@ router.post('/:userId/reset-streak', async (req: Request, res: Response) => {
       message: 'Streak reset successfully',
       data: loyalty
     });
-  } catch (error: any) {
-    logger.error('[ADMIN LOYALTY] Error resetting streak:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to reset streak'
-    });
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/loyalty/:userId/reset-missions
  * @desc    Reset user missions (all or by category prefix)
  * @access  Admin
  */
-router.post('/:userId/reset-missions', async (req: Request, res: Response) => {
-  try {
+router.post('/:userId/reset-missions', asyncHandler(async (req: Request, res: Response) => {
     const { category } = req.body;
 
     const loyalty = await UserLoyalty.findOne({ userId: req.params.userId });
@@ -440,13 +392,6 @@ router.post('/:userId/reset-missions', async (req: Request, res: Response) => {
       message: `Reset ${resetCount} mission(s)${category ? ` for category "${category}"` : ''}`,
       data: loyalty
     });
-  } catch (error: any) {
-    logger.error('[ADMIN LOYALTY] Error resetting missions:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to reset missions'
-    });
-  }
-});
+  }));
 
 export default router;

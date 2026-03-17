@@ -5,13 +5,13 @@ import { Request, Response } from 'express';
 import { logger } from '../config/logger';
 import { Types } from 'mongoose';
 import userProductService from '../services/userProductService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Get user's products
  * GET /api/user-products
  */
-export const getUserProducts = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getUserProducts = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { status, category, hasWarranty, hasAMC } = req.query;
 
@@ -38,22 +38,13 @@ export const getUserProducts = async (req: Request, res: Response): Promise<void
       success: true,
       data: products,
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error getting products:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get products',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get product details
  * GET /api/user-products/:id
  */
-export const getProductDetails = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getProductDetails = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -82,22 +73,13 @@ export const getProductDetails = async (req: Request, res: Response): Promise<vo
       success: true,
       data: product,
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error getting product details:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get product details',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get products with expiring warranties
  * GET /api/user-products/expiring-warranties
  */
-export const getExpiringWarranties = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getExpiringWarranties = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { days = 30 } = req.query;
 
@@ -121,22 +103,13 @@ export const getExpiringWarranties = async (req: Request, res: Response): Promis
         count: products.length,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error getting expiring warranties:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get expiring warranties',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get products with expiring AMC
  * GET /api/user-products/expiring-amc
  */
-export const getExpiringAMC = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getExpiringAMC = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { days = 30 } = req.query;
 
@@ -160,22 +133,13 @@ export const getExpiringAMC = async (req: Request, res: Response): Promise<void>
         count: products.length,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error getting expiring AMC:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get expiring AMC',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Register product
  * POST /api/user-products/:id/register
  */
-export const registerProduct = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const registerProduct = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
     const { serialNumber, registrationNumber } = req.body;
@@ -208,22 +172,13 @@ export const registerProduct = async (req: Request, res: Response): Promise<void
       message: 'Product registered successfully',
       data: product,
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error registering product:', error);
-    res.status(400).json({
-      success: false,
-      message: error.message || 'Failed to register product',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Schedule installation
  * POST /api/user-products/:id/schedule-installation
  */
-export const scheduleInstallation = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const scheduleInstallation = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
     const { scheduledDate, technician, notes } = req.body;
@@ -257,22 +212,13 @@ export const scheduleInstallation = async (req: Request, res: Response): Promise
       message: 'Installation scheduled successfully',
       data: product,
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error scheduling installation:', error);
-    res.status(400).json({
-      success: false,
-      message: error.message || 'Failed to schedule installation',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Renew AMC
  * POST /api/user-products/:id/renew-amc
  */
-export const renewAMC = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const renewAMC = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
     const { duration, amount } = req.body;
@@ -305,22 +251,13 @@ export const renewAMC = async (req: Request, res: Response): Promise<void> => {
       message: 'AMC renewed successfully',
       data: product,
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error renewing AMC:', error);
-    res.status(400).json({
-      success: false,
-      message: error.message || 'Failed to renew AMC',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get warranty details
  * GET /api/user-products/:id/warranty
  */
-export const getWarrantyDetails = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getWarrantyDetails = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -354,22 +291,13 @@ export const getWarrantyDetails = async (req: Request, res: Response): Promise<v
         isWarrantyExpiringSoon: product.isWarrantyExpiringSoon,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error getting warranty details:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get warranty details',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get AMC details
  * GET /api/user-products/:id/amc
  */
-export const getAMCDetails = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getAMCDetails = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -402,15 +330,7 @@ export const getAMCDetails = async (req: Request, res: Response): Promise<void> 
         isAMCExpiringSoon: product.isAMCExpiringSoon,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error getting AMC details:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get AMC details',
-      error: error.message,
-    });
-  }
-};
+});
 
 // ============================================================================
 // SERVICE REQUEST ENDPOINTS
@@ -420,8 +340,7 @@ export const getAMCDetails = async (req: Request, res: Response): Promise<void> 
  * Create service request
  * POST /api/service-requests
  */
-export const createServiceRequest = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const createServiceRequest = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const {
       userProductId,
@@ -461,22 +380,13 @@ export const createServiceRequest = async (req: Request, res: Response): Promise
       message: 'Service request created successfully',
       data: serviceRequest,
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error creating service request:', error);
-    res.status(400).json({
-      success: false,
-      message: error.message || 'Failed to create service request',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get service requests
  * GET /api/service-requests
  */
-export const getServiceRequests = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getServiceRequests = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { status, requestType, priority, dateFrom, dateTo, page = 1, limit = 20 } = req.query;
 
@@ -506,22 +416,13 @@ export const getServiceRequests = async (req: Request, res: Response): Promise<v
       success: true,
       data: result,
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error getting service requests:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get service requests',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get service request details
  * GET /api/service-requests/:id
  */
-export const getServiceRequestDetails = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getServiceRequestDetails = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -550,22 +451,13 @@ export const getServiceRequestDetails = async (req: Request, res: Response): Pro
       success: true,
       data: request,
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error getting service request details:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get service request details',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Cancel service request
  * POST /api/service-requests/:id/cancel
  */
-export const cancelServiceRequest = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const cancelServiceRequest = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
     const { reason } = req.body;
@@ -597,22 +489,13 @@ export const cancelServiceRequest = async (req: Request, res: Response): Promise
       message: 'Service request cancelled successfully',
       data: request,
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error cancelling service request:', error);
-    res.status(400).json({
-      success: false,
-      message: error.message || 'Failed to cancel service request',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Reschedule service request
  * POST /api/service-requests/:id/reschedule
  */
-export const rescheduleServiceRequest = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const rescheduleServiceRequest = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
     const { newDate, newTimeSlot } = req.body;
@@ -645,22 +528,13 @@ export const rescheduleServiceRequest = async (req: Request, res: Response): Pro
       message: 'Service request rescheduled successfully',
       data: request,
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error rescheduling service request:', error);
-    res.status(400).json({
-      success: false,
-      message: error.message || 'Failed to reschedule service request',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Rate service request
  * POST /api/service-requests/:id/rate
  */
-export const rateServiceRequest = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const rateServiceRequest = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
     const { rating, feedback } = req.body;
@@ -693,22 +567,13 @@ export const rateServiceRequest = async (req: Request, res: Response): Promise<v
       message: 'Service request rated successfully',
       data: request,
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error rating service request:', error);
-    res.status(400).json({
-      success: false,
-      message: error.message || 'Failed to rate service request',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get active service requests
  * GET /api/service-requests/active
  */
-export const getActiveServiceRequests = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getActiveServiceRequests = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
 
     if (!userId) {
@@ -730,12 +595,4 @@ export const getActiveServiceRequests = async (req: Request, res: Response): Pro
         count: requests.length,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [USER PRODUCT CONTROLLER] Error getting active service requests:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get active service requests',
-      error: error.message,
-    });
-  }
-};
+});

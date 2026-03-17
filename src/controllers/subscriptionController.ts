@@ -12,13 +12,13 @@ import { Types } from 'mongoose';
 import * as alertService from '../services/webhookSecurityAlertService';
 import { withCache } from '../utils/cacheHelper';
 import { logger } from '../config/logger';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Get all available subscription tiers
  * GET /api/subscriptions/tiers
  */
-export const getSubscriptionTiers = async (req: Request, res: Response) => {
-  try {
+export const getSubscriptionTiers = asyncHandler(async (req: Request, res: Response) => {
     // Import SubscriptionTier model
     const { SubscriptionTier } = await import('../models/SubscriptionTier');
 
@@ -45,22 +45,13 @@ export const getSubscriptionTiers = async (req: Request, res: Response) => {
       success: true,
       data: tierConfigs
     });
-  } catch (error: any) {
-    logger.error('Error fetching subscription tiers:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch subscription tiers',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get current user's subscription
  * GET /api/subscriptions/current
  */
-export const getCurrentSubscription = async (req: Request, res: Response) => {
-  try {
+export const getCurrentSubscription = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -96,22 +87,13 @@ export const getCurrentSubscription = async (req: Request, res: Response) => {
       success: true,
       data: subscription
     });
-  } catch (error: any) {
-    logger.error('Error fetching current subscription:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch current subscription',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Subscribe to a tier
  * POST /api/subscriptions/subscribe
  */
-export const subscribeToPlan = async (req: Request, res: Response) => {
-  try {
+export const subscribeToPlan = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       logger.error('[SUBSCRIBE] No user ID found - user not authenticated');
@@ -348,33 +330,22 @@ export const subscribeToPlan = async (req: Request, res: Response) => {
     });
 
     res.status(201).json(response);
-  } catch (error: any) {
-    logger.error('[SUBSCRIBE] ========== SUBSCRIPTION FAILED ==========');
-    logger.error('[SUBSCRIBE] Error:', error.message);
-    logger.error('[SUBSCRIBE] Stack:', error.stack);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to subscribe to plan',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Legacy upgrade endpoint - redirects to two-phase flow
  * POST /api/subscriptions/upgrade
  */
-export const upgradeSubscription = async (req: Request, res: Response) => {
-  // Redirect to new two-phase flow
-  return initiateUpgrade(req, res);
-};
+export const upgradeSubscription = asyncHandler(async (req: Request, res: Response) => {
+  // Redirect to new two-phase flow — call the inner async fn directly (not the wrapped handler)
+  return (initiateUpgrade as any)(req, res, () => {});
+});
 
 /**
  * Phase 1: Initiate upgrade - validate eligibility, calculate price, create pending upgrade
  * POST /api/subscriptions/upgrade/initiate
  */
-export const initiateUpgrade = async (req: Request, res: Response) => {
-  try {
+export const initiateUpgrade = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -510,22 +481,13 @@ export const initiateUpgrade = async (req: Request, res: Response) => {
         expiresAt: upgradeRecord.expiresAt,
       }
     });
-  } catch (error: any) {
-    logger.error('[UPGRADE] Error initiating upgrade:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to initiate upgrade',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Phase 2: Confirm upgrade - verify payment, update tier, activate benefits
  * POST /api/subscriptions/upgrade/confirm
  */
-export const confirmUpgrade = async (req: Request, res: Response) => {
-  try {
+export const confirmUpgrade = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -671,35 +633,13 @@ export const confirmUpgrade = async (req: Request, res: Response) => {
         },
       }
     });
-  } catch (error: any) {
-    logger.error('[UPGRADE] Error confirming upgrade:', error);
-
-    // Rollback: revert processing → pending_payment so user can retry
-    if (req.body.upgradeId) {
-      try {
-        await SubscriptionUpgrade.updateOne(
-          { _id: req.body.upgradeId, status: 'processing' },
-          { status: 'pending_payment' }
-        );
-      } catch (rollbackErr) {
-        logger.error('[UPGRADE] Rollback failed:', rollbackErr);
-      }
-    }
-
-    res.status(500).json({
-      success: false,
-      message: 'Failed to confirm upgrade',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Downgrade subscription tier
  * POST /api/subscriptions/downgrade
  */
-export const downgradeSubscription = async (req: Request, res: Response) => {
-  try {
+export const downgradeSubscription = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -799,22 +739,13 @@ export const downgradeSubscription = async (req: Request, res: Response) => {
         creditAmount: proratedCredit
       }
     });
-  } catch (error: any) {
-    logger.error('Error downgrading subscription:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to downgrade subscription',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Cancel subscription
  * POST /api/subscriptions/cancel
  */
-export const cancelSubscription = async (req: Request, res: Response) => {
-  try {
+export const cancelSubscription = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -885,22 +816,13 @@ export const cancelSubscription = async (req: Request, res: Response) => {
         reactivationEligibleUntil: reactivationDate
       }
     });
-  } catch (error: any) {
-    logger.error('Error cancelling subscription:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to cancel subscription',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Renew/reactivate subscription
  * POST /api/subscriptions/renew
  */
-export const renewSubscription = async (req: Request, res: Response) => {
-  try {
+export const renewSubscription = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -977,22 +899,13 @@ export const renewSubscription = async (req: Request, res: Response) => {
       message: 'Subscription renewed successfully',
       data: subscription
     });
-  } catch (error: any) {
-    logger.error('Error renewing subscription:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to renew subscription',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get subscription benefits
  * GET /api/subscriptions/benefits
  */
-export const getSubscriptionBenefits = async (req: Request, res: Response) => {
-  try {
+export const getSubscriptionBenefits = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -1007,22 +920,13 @@ export const getSubscriptionBenefits = async (req: Request, res: Response) => {
       success: true,
       data: benefits
     });
-  } catch (error: any) {
-    logger.error('Error fetching subscription benefits:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch subscription benefits',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get subscription usage statistics
  * GET /api/subscriptions/usage
  */
-export const getSubscriptionUsage = async (req: Request, res: Response) => {
-  try {
+export const getSubscriptionUsage = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -1066,22 +970,13 @@ export const getSubscriptionUsage = async (req: Request, res: Response) => {
         isActive: subscription.isActive()
       }
     });
-  } catch (error: any) {
-    logger.error('Error fetching subscription usage:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch subscription usage',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get value proposition for upgrading
  * GET /api/subscriptions/value-proposition/:tier
  */
-export const getValueProposition = async (req: Request, res: Response) => {
-  try {
+export const getValueProposition = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -1108,15 +1003,7 @@ export const getValueProposition = async (req: Request, res: Response) => {
       success: true,
       data: valueProposition
     });
-  } catch (error: any) {
-    logger.error('Error fetching value proposition:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch value proposition',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Handle Razorpay webhook with comprehensive security
@@ -1131,7 +1018,7 @@ export const getValueProposition = async (req: Request, res: Response) => {
  * - Comprehensive audit logging
  * - Alert on violations
  */
-export const handleWebhook = async (req: Request, res: Response) => {
+export const handleWebhook = asyncHandler(async (req: Request, res: Response) => {
   const webhookStartTime = Date.now();
   const webhookBody = req.body;
   const signature = req.headers['x-razorpay-signature'] as string;
@@ -1361,14 +1248,13 @@ export const handleWebhook = async (req: Request, res: Response) => {
       error: error.message,
     });
   }
-};
+});
 
 /**
  * Toggle auto-renewal
  * PATCH /api/subscriptions/auto-renew
  */
-export const toggleAutoRenew = async (req: Request, res: Response) => {
-  try {
+export const toggleAutoRenew = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -1417,22 +1303,13 @@ export const toggleAutoRenew = async (req: Request, res: Response) => {
       message: `Auto-renewal ${autoRenew ? 'enabled' : 'disabled'}`,
       data: subscription
     });
-  } catch (error: any) {
-    logger.error('Error toggling auto-renew:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to toggle auto-renew',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Validate promo code
  * POST /api/subscriptions/validate-promo
  */
-export const validatePromoCode = async (req: Request, res: Response) => {
-  try {
+export const validatePromoCode = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -1493,12 +1370,4 @@ export const validatePromoCode = async (req: Request, res: Response) => {
       },
       message: result.message || 'Promo code is valid'
     });
-  } catch (error: any) {
-    logger.error('Error validating promo code:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to validate promo code',
-      error: error.message
-    });
-  }
-};
+});

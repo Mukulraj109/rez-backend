@@ -6,6 +6,7 @@ import { TransactionAuditLog, logTransaction } from '../../models/TransactionAud
 import mongoose from 'mongoose';
 import { escapeRegex } from '../../utils/sanitize';
 import adminActionService from '../../services/adminActionService';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -17,8 +18,7 @@ router.use(requireAdmin);
  * @desc    Search user wallets
  * @access  Admin
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const { search, page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, Number(page));
     const limitNum = Math.min(50, Math.max(1, Number(limit)));
@@ -59,18 +59,14 @@ router.get('/', async (req: Request, res: Response) => {
         pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) },
       }
     });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to search user wallets' });
-  }
-});
+}));
 
 /**
  * @route   POST /api/admin/user-wallets/:userId/freeze
  * @desc    Freeze a user's wallet
  * @access  Admin
  */
-router.post('/:userId/freeze', async (req: Request, res: Response) => {
-  try {
+router.post('/:userId/freeze', asyncHandler(async (req: Request, res: Response) => {
     const { reason } = req.body;
     if (!reason || !reason.trim()) {
       return res.status(400).json({ success: false, message: 'Reason is required to freeze a wallet' });
@@ -99,18 +95,14 @@ router.post('/:userId/freeze', async (req: Request, res: Response) => {
     });
 
     res.json({ success: true, message: 'Wallet frozen', data: { isFrozen: true } });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Failed to freeze wallet' });
-  }
-});
+}));
 
 /**
  * @route   POST /api/admin/user-wallets/:userId/unfreeze
  * @desc    Unfreeze a user's wallet
  * @access  Admin
  */
-router.post('/:userId/unfreeze', async (req: Request, res: Response) => {
-  try {
+router.post('/:userId/unfreeze', asyncHandler(async (req: Request, res: Response) => {
     const wallet = await Wallet.findOneAndUpdate(
       { user: req.params.userId },
       { isFrozen: false, frozenReason: null, frozenAt: null },
@@ -134,18 +126,14 @@ router.post('/:userId/unfreeze', async (req: Request, res: Response) => {
     });
 
     res.json({ success: true, message: 'Wallet unfrozen', data: { isFrozen: false } });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Failed to unfreeze wallet' });
-  }
-});
+}));
 
 /**
  * @route   POST /api/admin/user-wallets/:userId/adjust
  * @desc    Manual credit/debit adjustment with audit reason
  * @access  Admin (super_admin recommended)
  */
-router.post('/:userId/adjust', async (req: Request, res: Response) => {
-  try {
+router.post('/:userId/adjust', asyncHandler(async (req: Request, res: Response) => {
     const { amount, type, reason } = req.body;
     if (!amount || !type || !reason?.trim()) {
       return res.status(400).json({ success: false, message: 'Amount, type (credit/debit), and reason are required' });
@@ -236,18 +224,14 @@ router.post('/:userId/adjust', async (req: Request, res: Response) => {
       message: `${type === 'credit' ? 'Credited' : 'Debited'} ${parsedAmount} NC`,
       data: { balance: updated?.balance }
     });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: 'Failed to adjust wallet' });
-  }
-});
+}));
 
 /**
  * @route   POST /api/admin/user-wallets/:userId/reverse-cashback
  * @desc    Reverse/clawback cashback from a user's wallet
  * @access  Admin (super_admin recommended)
  */
-router.post('/:userId/reverse-cashback', async (req: Request, res: Response) => {
-  try {
+router.post('/:userId/reverse-cashback', asyncHandler(async (req: Request, res: Response) => {
     const { amount, originalTransactionId, reason } = req.body;
     if (!amount || !reason?.trim()) {
       return res.status(400).json({ success: false, message: 'Amount and reason are required' });
@@ -340,18 +324,14 @@ router.post('/:userId/reverse-cashback', async (req: Request, res: Response) => 
       message: `Reversed ${parsedAmount} NC cashback`,
       data: { amount: parsedAmount, newBalance: updated?.balance, reversalTransactionId },
     });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to reverse cashback' });
-  }
-});
+}));
 
 /**
  * @route   GET /api/admin/user-wallets/:userId/audit-trail
  * @desc    Get audit trail for a user's wallet
  * @access  Admin
  */
-router.get('/:userId/audit-trail', async (req: Request, res: Response) => {
-  try {
+router.get('/:userId/audit-trail', asyncHandler(async (req: Request, res: Response) => {
     const { page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, Number(page));
     const limitNum = Math.min(50, Math.max(1, Number(limit)));
@@ -372,9 +352,6 @@ router.get('/:userId/audit-trail', async (req: Request, res: Response) => {
         pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) },
       }
     });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch audit trail' });
-  }
-});
+}));
 
 export default router;

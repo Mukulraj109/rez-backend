@@ -4,13 +4,13 @@ import StoreVoucher from '../models/StoreVoucher';
 import UserStoreVoucher from '../models/UserStoreVoucher';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import mongoose from 'mongoose';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * GET /api/store-vouchers/store/:storeId
  * Get available store vouchers for a specific store
  */
-export const getStoreVouchers = async (req: Request, res: Response) => {
-  try {
+export const getStoreVouchers = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { page = 1, limit = 20 } = req.query;
     const userId = req.user?.id;
@@ -77,18 +77,13 @@ export const getStoreVouchers = async (req: Request, res: Response) => {
     }
 
     sendPaginated(res, vouchers, pageNum, limitNum, total, 'Store vouchers fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching store vouchers:', error);
-    sendError(res, 'Failed to fetch store vouchers', 500);
-  }
-};
+});
 
 /**
  * GET /api/store-vouchers/:id
  * Get single store voucher by ID
  */
-export const getStoreVoucherById = async (req: Request, res: Response) => {
-  try {
+export const getStoreVoucherById = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.id;
 
@@ -128,18 +123,13 @@ export const getStoreVoucherById = async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, voucher, 'Store voucher fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching store voucher:', error);
-    sendError(res, 'Failed to fetch store voucher', 500);
-  }
-};
+});
 
 /**
  * POST /api/store-vouchers/:id/claim
  * Claim a store voucher (assign to user) - authenticated users only
  */
-export const claimStoreVoucher = async (req: Request, res: Response) => {
-  try {
+export const claimStoreVoucher = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { id } = req.params;
 
@@ -186,24 +176,13 @@ export const claimStoreVoucher = async (req: Request, res: Response) => {
       'Voucher claimed successfully',
       201
     );
-  } catch (error) {
-    logger.error('Error claiming store voucher:', error);
-
-    // Handle duplicate key error
-    if ((error as any).code === 11000) {
-      return sendError(res, 'You have already claimed this voucher', 400);
-    }
-
-    sendError(res, 'Failed to claim voucher', 500);
-  }
-};
+});
 
 /**
  * POST /api/store-vouchers/:id/redeem
  * Redeem a store voucher (mark as used) - authenticated users only
  */
-export const redeemStoreVoucher = async (req: Request, res: Response) => {
-  try {
+export const redeemStoreVoucher = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { id } = req.params;
     const { orderId, billAmount } = req.body;
@@ -272,18 +251,13 @@ export const redeemStoreVoucher = async (req: Request, res: Response) => {
       },
       'Voucher redeemed successfully'
     );
-  } catch (error) {
-    logger.error('Error redeeming store voucher:', error);
-    sendError(res, 'Failed to redeem voucher', 500);
-  }
-};
+});
 
 /**
  * POST /api/store-vouchers/validate
  * Validate a store voucher code
  */
-export const validateStoreVoucher = async (req: Request, res: Response) => {
-  try {
+export const validateStoreVoucher = asyncHandler(async (req: Request, res: Response) => {
     const { code, storeId, billAmount } = req.body;
     const userId = req.user?.id;
 
@@ -357,18 +331,13 @@ export const validateStoreVoucher = async (req: Request, res: Response) => {
       },
       'Voucher is valid'
     );
-  } catch (error) {
-    logger.error('Error validating store voucher:', error);
-    sendError(res, 'Failed to validate voucher', 500);
-  }
-};
+});
 
 /**
  * GET /api/store-vouchers/my-vouchers
  * Get user's claimed store vouchers (authenticated users only)
  */
-export const getMyStoreVouchers = async (req: Request, res: Response) => {
-  try {
+export const getMyStoreVouchers = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { status, page = 1, limit = 20 } = req.query;
 
@@ -402,18 +371,13 @@ export const getMyStoreVouchers = async (req: Request, res: Response) => {
     ]);
 
     sendPaginated(res, vouchers, pageNum, limitNum, total, 'My vouchers fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching my store vouchers:', error);
-    sendError(res, 'Failed to fetch vouchers', 500);
-  }
-};
+});
 
 /**
  * GET /api/store-vouchers/my-vouchers/:id
  * Get single user voucher details (authenticated users only)
  */
-export const getMyStoreVoucherById = async (req: Request, res: Response) => {
-  try {
+export const getMyStoreVoucherById = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { id } = req.params;
 
@@ -436,18 +400,13 @@ export const getMyStoreVoucherById = async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, voucher, 'Voucher details fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching voucher details:', error);
-    sendError(res, 'Failed to fetch voucher details', 500);
-  }
-};
+});
 
 /**
  * DELETE /api/store-vouchers/my-vouchers/:id
  * Remove a claimed voucher (only if not used) - authenticated users only
  */
-export const removeClaimedVoucher = async (req: Request, res: Response) => {
-  try {
+export const removeClaimedVoucher = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { id } = req.params;
 
@@ -467,8 +426,4 @@ export const removeClaimedVoucher = async (req: Request, res: Response) => {
     await userVoucher.deleteOne();
 
     sendSuccess(res, { success: true }, 'Voucher removed successfully');
-  } catch (error) {
-    logger.error('Error removing voucher:', error);
-    sendError(res, 'Failed to remove voucher', 500);
-  }
-};
+});

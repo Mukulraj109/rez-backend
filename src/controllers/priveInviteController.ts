@@ -11,13 +11,13 @@ import priveAccessService from '../services/priveAccessService';
 import priveInviteService from '../services/priveInviteService';
 import { sendSuccess, sendError, sendBadRequest, sendForbidden, sendPaginated } from '../utils/response';
 import gamificationEventBus from '../events/gamificationEventBus';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * GET /api/prive/access
  * Lightweight access check for navigation guard
  */
-export const checkAccessStatus = async (req: Request, res: Response) => {
-  try {
+export const checkAccessStatus = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) {
       return sendError(res, 'Authentication required', 401);
@@ -36,18 +36,13 @@ export const checkAccessStatus = async (req: Request, res: Response) => {
         isEligible: result.reputation.isEligible,
       },
     });
-  } catch (error: any) {
-    logger.error('[PriveInvite] Error checking access:', error);
-    return sendError(res, 'Failed to check access status');
-  }
-};
+});
 
 /**
  * POST /api/prive/invites/generate
  * Generate a new invite code
  */
-export const generateInviteCode = async (req: Request, res: Response) => {
-  try {
+export const generateInviteCode = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) {
       return sendError(res, 'Authentication required', 401);
@@ -69,18 +64,13 @@ export const generateInviteCode = async (req: Request, res: Response) => {
       maxUses: inviteCode.maxUses,
       usageCount: inviteCode.usageCount,
     }, 'Invite code generated successfully');
-  } catch (error: any) {
-    logger.error('[PriveInvite] Error generating code:', error);
-    return sendBadRequest(res, error.message || 'Failed to generate invite code');
-  }
-};
+});
 
 /**
  * POST /api/prive/invites/validate
  * Validate an invite code without applying
  */
-export const validateInviteCode = async (req: Request, res: Response) => {
-  try {
+export const validateInviteCode = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) {
       return sendError(res, 'Authentication required', 401);
@@ -97,18 +87,13 @@ export const validateInviteCode = async (req: Request, res: Response) => {
     );
 
     return sendSuccess(res, result);
-  } catch (error: any) {
-    logger.error('[PriveInvite] Error validating code:', error);
-    return sendError(res, 'Failed to validate invite code');
-  }
-};
+});
 
 /**
  * POST /api/prive/invites/apply
  * Apply an invite code to get Privé access
  */
-export const applyInviteCode = async (req: Request, res: Response) => {
-  try {
+export const applyInviteCode = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) {
       return sendError(res, 'Authentication required', 401);
@@ -147,18 +132,13 @@ export const applyInviteCode = async (req: Request, res: Response) => {
       inviterReward: result.inviterReward,
       inviteeReward: result.inviteeReward,
     }, 'Welcome to Privé! Your access has been activated.');
-  } catch (error: any) {
-    logger.error('[PriveInvite] Error applying code:', error);
-    return sendBadRequest(res, error.message || 'Failed to apply invite code');
-  }
-};
+});
 
 /**
  * GET /api/prive/invites/stats
  * Get invite dashboard stats for current user
  */
-export const getMyInviteStats = async (req: Request, res: Response) => {
-  try {
+export const getMyInviteStats = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) {
       return sendError(res, 'Authentication required', 401);
@@ -184,18 +164,13 @@ export const getMyInviteStats = async (req: Request, res: Response) => {
       tier: access.effectiveTier,
       isWhitelisted: access.isWhitelisted,
     });
-  } catch (error: any) {
-    logger.error('[PriveInvite] Error getting stats:', error);
-    return sendError(res, 'Failed to load invite stats');
-  }
-};
+});
 
 /**
  * GET /api/prive/invites/codes
  * Get user's active invite codes
  */
-export const getMyInviteCodes = async (req: Request, res: Response) => {
-  try {
+export const getMyInviteCodes = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) {
       return sendError(res, 'Authentication required', 401);
@@ -220,18 +195,13 @@ export const getMyInviteCodes = async (req: Request, res: Response) => {
         isActive: c.isActive,
       })),
     });
-  } catch (error: any) {
-    logger.error('[PriveInvite] Error getting codes:', error);
-    return sendError(res, 'Failed to load invite codes');
-  }
-};
+});
 
 /**
  * GET /api/prive/invites/leaderboard
  * Get invite leaderboard (paginated)
  */
-export const getInviteLeaderboard = async (req: Request, res: Response) => {
-  try {
+export const getInviteLeaderboard = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
@@ -243,8 +213,4 @@ export const getInviteLeaderboard = async (req: Request, res: Response) => {
     });
 
     return sendSuccess(res, result);
-  } catch (error: any) {
-    logger.error('[PriveInvite] Error getting leaderboard:', error);
-    return sendError(res, 'Failed to load leaderboard');
-  }
-};
+});

@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin, requireSeniorAdmin, requireOperator } from '../../middleware/auth';
 import { MerchantWallet } from '../../models/MerchantWallet';
 import merchantWalletService from '../../services/merchantWalletService';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -15,8 +16,7 @@ router.use(requireAdmin);
  * @desc    Get all merchant wallets with balances
  * @access  Admin
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const sortBy = (req.query.sortBy as string) || 'statistics.totalSales';
@@ -31,36 +31,21 @@ router.get('/', async (req: Request, res: Response) => {
         pagination: result.pagination
       }
     });
-  } catch (error: any) {
-    logger.error('❌ [ADMIN MERCHANT WALLETS] Error fetching wallets:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch merchant wallets'
-    });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/merchant-wallets/stats
  * @desc    Get platform-wide wallet statistics
  * @access  Admin
  */
-router.get('/stats', async (req: Request, res: Response) => {
-  try {
+router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     const stats = await merchantWalletService.getPlatformStats();
 
     res.json({
       success: true,
       data: stats
     });
-  } catch (error: any) {
-    logger.error('❌ [ADMIN MERCHANT WALLETS] Error fetching stats:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch platform stats'
-    });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/merchant-wallets/pending-withdrawals
@@ -68,8 +53,7 @@ router.get('/stats', async (req: Request, res: Response) => {
  * @access  Admin
  * NOTE: Must be defined BEFORE /:merchantId to avoid Express matching "pending-withdrawals" as a merchantId param
  */
-router.get('/pending-withdrawals', async (_req: Request, res: Response) => {
-  try {
+router.get('/pending-withdrawals', asyncHandler(async (_req: Request, res: Response) => {
     const walletsWithPending = await MerchantWallet.find({
       'balance.pending': { $gt: 0 }
     })
@@ -94,22 +78,14 @@ router.get('/pending-withdrawals', async (_req: Request, res: Response) => {
       success: true,
       data: pendingWithdrawals
     });
-  } catch (error: any) {
-    logger.error('❌ [ADMIN MERCHANT WALLETS] Error fetching pending withdrawals:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch pending withdrawals'
-    });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/merchant-wallets/:merchantId
  * @desc    Get single merchant wallet details
  * @access  Admin
  */
-router.get('/:merchantId', async (req: Request, res: Response) => {
-  try {
+router.get('/:merchantId', asyncHandler(async (req: Request, res: Response) => {
     const wallet = await MerchantWallet.findOne({ merchant: req.params.merchantId })
       .populate('merchant', 'profile.firstName profile.lastName phoneNumber email')
       .populate('store', 'name logo address');
@@ -125,22 +101,14 @@ router.get('/:merchantId', async (req: Request, res: Response) => {
       success: true,
       data: wallet
     });
-  } catch (error: any) {
-    logger.error('❌ [ADMIN MERCHANT WALLETS] Error fetching wallet:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch merchant wallet'
-    });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/merchant-wallets/:merchantId/transactions
  * @desc    Get merchant wallet transaction history
  * @access  Admin
  */
-router.get('/:merchantId/transactions', async (req: Request, res: Response) => {
-  try {
+router.get('/:merchantId/transactions', asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const type = req.query.type as 'credit' | 'debit' | 'withdrawal' | 'refund' | 'adjustment' | undefined;
@@ -157,22 +125,14 @@ router.get('/:merchantId/transactions', async (req: Request, res: Response) => {
       data: result.transactions,
       pagination: result.pagination
     });
-  } catch (error: any) {
-    logger.error('❌ [ADMIN MERCHANT WALLETS] Error fetching transactions:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch transaction history'
-    });
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/merchant-wallets/:merchantId/process-withdrawal
  * @desc    Process a pending withdrawal request
  * @access  Admin
  */
-router.post('/:merchantId/process-withdrawal', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
+router.post('/:merchantId/process-withdrawal', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { transactionId, transactionReference } = req.body;
 
     if (!transactionId || !transactionReference) {
@@ -192,22 +152,14 @@ router.post('/:merchantId/process-withdrawal', requireSeniorAdmin, async (req: R
       success: true,
       message: 'Withdrawal processed successfully'
     });
-  } catch (error: any) {
-    logger.error('❌ [ADMIN MERCHANT WALLETS] Error processing withdrawal:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to process withdrawal'
-    });
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/merchant-wallets/:merchantId/reject-withdrawal
  * @desc    Reject a pending withdrawal request
  * @access  Admin (Senior)
  */
-router.post('/:merchantId/reject-withdrawal', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
+router.post('/:merchantId/reject-withdrawal', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { transactionId, reason } = req.body;
 
     if (!transactionId || !reason) {
@@ -227,35 +179,20 @@ router.post('/:merchantId/reject-withdrawal', requireSeniorAdmin, async (req: Re
       success: true,
       message: 'Withdrawal rejected successfully'
     });
-  } catch (error: any) {
-    logger.error('❌ [ADMIN MERCHANT WALLETS] Error rejecting withdrawal:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to reject withdrawal'
-    });
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/merchant-wallets/:merchantId/verify-bank
  * @desc    Verify merchant bank details
  * @access  Admin
  */
-router.post('/:merchantId/verify-bank', requireOperator, async (req: Request, res: Response) => {
-  try {
+router.post('/:merchantId/verify-bank', requireOperator, asyncHandler(async (req: Request, res: Response) => {
     await merchantWalletService.verifyBankDetails(req.params.merchantId);
 
     res.json({
       success: true,
       message: 'Bank details verified successfully'
     });
-  } catch (error: any) {
-    logger.error('❌ [ADMIN MERCHANT WALLETS] Error verifying bank:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to verify bank details'
-    });
-  }
-});
+  }));
 
 export default router;

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../utils/asyncHandler';
 import { createRateLimiter } from '../middleware/rateLimiter';
 import * as controller from '../controllers/specialProgramController';
 

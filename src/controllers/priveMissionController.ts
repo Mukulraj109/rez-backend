@@ -5,13 +5,13 @@ import priveAccessService from '../services/priveAccessService';
 import { PriveMission } from '../models/PriveMission';
 import { UserMission } from '../models/UserMission';
 import mongoose from 'mongoose';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * GET /api/prive/missions
  * List available missions for user's tier
  */
-export const getMissions = async (req: Request, res: Response) => {
-  try {
+export const getMissions = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
@@ -27,18 +27,13 @@ export const getMissions = async (req: Request, res: Response) => {
       success: true,
       data: { missions },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error fetching missions:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch missions' });
-  }
-};
+});
 
 /**
  * GET /api/prive/missions/active
  * Get user's active/claimed missions
  */
-export const getActiveMissions = async (req: Request, res: Response) => {
-  try {
+export const getActiveMissions = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
@@ -53,18 +48,13 @@ export const getActiveMissions = async (req: Request, res: Response) => {
       success: true,
       data: { missions },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error fetching active missions:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch active missions' });
-  }
-};
+});
 
 /**
  * POST /api/prive/missions/:id/claim
  * Claim a mission
  */
-export const claimMission = async (req: Request, res: Response) => {
-  try {
+export const claimMission = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
@@ -84,21 +74,13 @@ export const claimMission = async (req: Request, res: Response) => {
       success: true,
       data: { userMission },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error claiming mission:', error);
-    const status = error.message?.includes('already claimed') ? 409 :
-                   error.message?.includes('full') ? 409 :
-                   error.message?.includes('not found') ? 404 : 500;
-    res.status(status).json({ success: false, error: error.message || 'Failed to claim mission' });
-  }
-};
+});
 
 /**
  * POST /api/prive/missions/:id/complete
  * Complete a mission and claim reward
  */
-export const completeMission = async (req: Request, res: Response) => {
-  try {
+export const completeMission = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
@@ -118,20 +100,13 @@ export const completeMission = async (req: Request, res: Response) => {
       success: true,
       data: { reward: result },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error completing mission:', error);
-    const status = error.message?.includes('not found') || error.message?.includes('not completed') ? 400 :
-                   error.message?.includes('already') ? 409 : 500;
-    res.status(status).json({ success: false, error: error.message || 'Failed to complete mission' });
-  }
-};
+});
 
 /**
  * GET /api/prive/missions/completed
  * Get completed missions
  */
-export const getCompletedMissions = async (req: Request, res: Response) => {
-  try {
+export const getCompletedMissions = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
@@ -146,8 +121,4 @@ export const getCompletedMissions = async (req: Request, res: Response) => {
       success: true,
       data: { missions },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error fetching completed missions:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch completed missions' });
-  }
-};
+});

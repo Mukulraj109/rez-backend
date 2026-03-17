@@ -5,6 +5,7 @@ import HomepageDealsSection from '../../models/HomepageDealsSection';
 import HomepageDealsItem from '../../models/HomepageDealsItem';
 import Joi from 'joi';
 import mongoose from 'mongoose';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -93,13 +94,7 @@ const reorderSchema = Joi.object({
 // GET SECTION CONFIG
 // ============================================
 
-/**
- * @route   GET /api/admin/homepage-deals/config
- * @desc    Get homepage deals section configuration
- * @access  Admin
- */
-router.get('/config', async (req: Request, res: Response) => {
-  try {
+router.get('/config', asyncHandler(async (req: Request, res: Response) => {
     let config = await HomepageDealsSection.findOne({ sectionId: 'deals-that-save-money' });
 
     // Create default config if it doesn't exist
@@ -111,27 +106,13 @@ router.get('/config', async (req: Request, res: Response) => {
       success: true,
       data: config,
     });
-  } catch (error: any) {
-    logger.error('[ADMIN HOMEPAGE DEALS] Get config error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch configuration',
-      error: error.message,
-    });
-  }
-});
+}));
 
 // ============================================
 // UPDATE SECTION CONFIG
 // ============================================
 
-/**
- * @route   PUT /api/admin/homepage-deals/config
- * @desc    Update homepage deals section configuration
- * @access  Admin
- */
-router.put('/config', async (req: Request, res: Response) => {
-  try {
+router.put('/config', asyncHandler(async (req: Request, res: Response) => {
     const { error, value } = updateConfigSchema.validate(req.body);
     if (error) {
       return res.status(400).json({
@@ -181,34 +162,20 @@ router.put('/config', async (req: Request, res: Response) => {
 
     await config.save();
 
-    logger.info(`✅ [ADMIN HOMEPAGE DEALS] Config updated: ${config.title}`);
+    logger.info(`[ADMIN HOMEPAGE DEALS] Config updated: ${config.title}`);
 
     return res.json({
       success: true,
       message: 'Configuration updated successfully',
       data: config,
     });
-  } catch (error: any) {
-    logger.error('[ADMIN HOMEPAGE DEALS] Update config error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to update configuration',
-      error: error.message,
-    });
-  }
-});
+}));
 
 // ============================================
 // GET STATS
 // ============================================
 
-/**
- * @route   GET /api/admin/homepage-deals/stats
- * @desc    Get homepage deals statistics
- * @access  Admin
- */
-router.get('/stats', async (req: Request, res: Response) => {
-  try {
+router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     const stats = await HomepageDealsItem.aggregate([
       {
         $facet: {
@@ -248,27 +215,13 @@ router.get('/stats', async (req: Request, res: Response) => {
         ctr: parseFloat(ctr),
       },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN HOMEPAGE DEALS] Stats error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch statistics',
-      error: error.message,
-    });
-  }
-});
+}));
 
 // ============================================
 // LIST ITEMS
 // ============================================
 
-/**
- * @route   GET /api/admin/homepage-deals/items
- * @desc    List all items with optional filtering
- * @access  Admin
- */
-router.get('/items', async (req: Request, res: Response) => {
-  try {
+router.get('/items', asyncHandler(async (req: Request, res: Response) => {
     const { error, value } = listItemsQuerySchema.validate(req.query);
     if (error) {
       return res.status(400).json({
@@ -279,7 +232,6 @@ router.get('/items', async (req: Request, res: Response) => {
 
     const { tabType, status, page, limit } = value;
 
-    // Build query
     const query: any = {};
 
     if (tabType) {
@@ -292,11 +244,9 @@ router.get('/items', async (req: Request, res: Response) => {
       query.isActive = false;
     }
 
-    // Get total count
     const total = await HomepageDealsItem.countDocuments(query);
     const totalPages = Math.ceil(total / limit);
 
-    // Get items
     const items = await HomepageDealsItem.find(query)
       .sort({ tabType: 1, sortOrder: 1 })
       .skip((page - 1) * limit)
@@ -317,27 +267,13 @@ router.get('/items', async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN HOMEPAGE DEALS] List items error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch items',
-      error: error.message,
-    });
-  }
-});
+}));
 
 // ============================================
 // GET SINGLE ITEM
 // ============================================
 
-/**
- * @route   GET /api/admin/homepage-deals/items/:id
- * @desc    Get single item by ID
- * @access  Admin
- */
-router.get('/items/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/items/:id', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -360,27 +296,13 @@ router.get('/items/:id', async (req: Request, res: Response) => {
       success: true,
       data: item,
     });
-  } catch (error: any) {
-    logger.error('[ADMIN HOMEPAGE DEALS] Get item error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch item',
-      error: error.message,
-    });
-  }
-});
+}));
 
 // ============================================
 // CREATE ITEM
 // ============================================
 
-/**
- * @route   POST /api/admin/homepage-deals/items
- * @desc    Create new item
- * @access  Admin
- */
-router.post('/items', async (req: Request, res: Response) => {
-  try {
+router.post('/items', asyncHandler(async (req: Request, res: Response) => {
     const { error, value } = createItemSchema.validate(req.body);
     if (error) {
       return res.status(400).json({
@@ -400,34 +322,20 @@ router.post('/items', async (req: Request, res: Response) => {
     const item = new HomepageDealsItem(value);
     await item.save();
 
-    logger.info(`✅ [ADMIN HOMEPAGE DEALS] Item created: ${item.title} (${item.tabType})`);
+    logger.info(`[ADMIN HOMEPAGE DEALS] Item created: ${item.title} (${item.tabType})`);
 
     return res.status(201).json({
       success: true,
       message: 'Item created successfully',
       data: item,
     });
-  } catch (error: any) {
-    logger.error('[ADMIN HOMEPAGE DEALS] Create item error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to create item',
-      error: error.message,
-    });
-  }
-});
+}));
 
 // ============================================
 // UPDATE ITEM
 // ============================================
 
-/**
- * @route   PUT /api/admin/homepage-deals/items/:id
- * @desc    Update item
- * @access  Admin
- */
-router.put('/items/:id', async (req: Request, res: Response) => {
-  try {
+router.put('/items/:id', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -458,34 +366,20 @@ router.put('/items/:id', async (req: Request, res: Response) => {
       });
     }
 
-    logger.info(`✅ [ADMIN HOMEPAGE DEALS] Item updated: ${item.title}`);
+    logger.info(`[ADMIN HOMEPAGE DEALS] Item updated: ${item.title}`);
 
     return res.json({
       success: true,
       message: 'Item updated successfully',
       data: item,
     });
-  } catch (error: any) {
-    logger.error('[ADMIN HOMEPAGE DEALS] Update item error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to update item',
-      error: error.message,
-    });
-  }
-});
+}));
 
 // ============================================
 // DELETE ITEM
 // ============================================
 
-/**
- * @route   DELETE /api/admin/homepage-deals/items/:id
- * @desc    Delete item
- * @access  Admin
- */
-router.delete('/items/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/items/:id', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -504,33 +398,19 @@ router.delete('/items/:id', async (req: Request, res: Response) => {
       });
     }
 
-    logger.info(`🗑️ [ADMIN HOMEPAGE DEALS] Item deleted: ${item.title}`);
+    logger.info(`[ADMIN HOMEPAGE DEALS] Item deleted: ${item.title}`);
 
     return res.json({
       success: true,
       message: 'Item deleted successfully',
     });
-  } catch (error: any) {
-    logger.error('[ADMIN HOMEPAGE DEALS] Delete item error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to delete item',
-      error: error.message,
-    });
-  }
-});
+}));
 
 // ============================================
 // TOGGLE ITEM VISIBILITY
 // ============================================
 
-/**
- * @route   PATCH /api/admin/homepage-deals/items/:id/toggle
- * @desc    Toggle item active status
- * @access  Admin
- */
-router.patch('/items/:id/toggle', async (req: Request, res: Response) => {
-  try {
+router.patch('/items/:id/toggle', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -552,34 +432,20 @@ router.patch('/items/:id/toggle', async (req: Request, res: Response) => {
     item.isActive = !item.isActive;
     await item.save();
 
-    logger.info(`🔄 [ADMIN HOMEPAGE DEALS] Item toggled: ${item.title} - isActive: ${item.isActive}`);
+    logger.info(`[ADMIN HOMEPAGE DEALS] Item toggled: ${item.title} - isActive: ${item.isActive}`);
 
     return res.json({
       success: true,
       message: `Item ${item.isActive ? 'activated' : 'deactivated'} successfully`,
       data: { isActive: item.isActive },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN HOMEPAGE DEALS] Toggle item error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to toggle item',
-      error: error.message,
-    });
-  }
-});
+}));
 
 // ============================================
 // REORDER ITEMS
 // ============================================
 
-/**
- * @route   PATCH /api/admin/homepage-deals/items/reorder
- * @desc    Bulk update sort order for items
- * @access  Admin
- */
-router.patch('/items/reorder', async (req: Request, res: Response) => {
-  try {
+router.patch('/items/reorder', asyncHandler(async (req: Request, res: Response) => {
     const { error, value } = reorderSchema.validate(req.body);
     if (error) {
       return res.status(400).json({
@@ -599,33 +465,19 @@ router.patch('/items/reorder', async (req: Request, res: Response) => {
 
     await HomepageDealsItem.bulkWrite(bulkOps);
 
-    logger.info(`📋 [ADMIN HOMEPAGE DEALS] Reordered ${items.length} items`);
+    logger.info(`[ADMIN HOMEPAGE DEALS] Reordered ${items.length} items`);
 
     return res.json({
       success: true,
       message: 'Items reordered successfully',
     });
-  } catch (error: any) {
-    logger.error('[ADMIN HOMEPAGE DEALS] Reorder error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to reorder items',
-      error: error.message,
-    });
-  }
-});
+}));
 
 // ============================================
 // MOVE ITEM UP
 // ============================================
 
-/**
- * @route   PATCH /api/admin/homepage-deals/items/:id/move-up
- * @desc    Move item up in sort order
- * @access  Admin
- */
-router.patch('/items/:id/move-up', async (req: Request, res: Response) => {
-  try {
+router.patch('/items/:id/move-up', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -664,33 +516,19 @@ router.patch('/items/:id/move-up', async (req: Request, res: Response) => {
 
     await Promise.all([item.save(), itemAbove.save()]);
 
-    logger.info(`⬆️ [ADMIN HOMEPAGE DEALS] Moved up: ${item.title}`);
+    logger.info(`[ADMIN HOMEPAGE DEALS] Moved up: ${item.title}`);
 
     return res.json({
       success: true,
       message: 'Item moved up successfully',
     });
-  } catch (error: any) {
-    logger.error('[ADMIN HOMEPAGE DEALS] Move up error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to move item',
-      error: error.message,
-    });
-  }
-});
+}));
 
 // ============================================
 // MOVE ITEM DOWN
 // ============================================
 
-/**
- * @route   PATCH /api/admin/homepage-deals/items/:id/move-down
- * @desc    Move item down in sort order
- * @access  Admin
- */
-router.patch('/items/:id/move-down', async (req: Request, res: Response) => {
-  try {
+router.patch('/items/:id/move-down', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -729,33 +567,19 @@ router.patch('/items/:id/move-down', async (req: Request, res: Response) => {
 
     await Promise.all([item.save(), itemBelow.save()]);
 
-    logger.info(`⬇️ [ADMIN HOMEPAGE DEALS] Moved down: ${item.title}`);
+    logger.info(`[ADMIN HOMEPAGE DEALS] Moved down: ${item.title}`);
 
     return res.json({
       success: true,
       message: 'Item moved down successfully',
     });
-  } catch (error: any) {
-    logger.error('[ADMIN HOMEPAGE DEALS] Move down error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to move item',
-      error: error.message,
-    });
-  }
-});
+}));
 
 // ============================================
 // UPDATE ITEM COUNT (for caching)
 // ============================================
 
-/**
- * @route   PATCH /api/admin/homepage-deals/items/:id/update-count
- * @desc    Update cached count for an item
- * @access  Admin
- */
-router.patch('/items/:id/update-count', async (req: Request, res: Response) => {
-  try {
+router.patch('/items/:id/update-count', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { count } = req.body;
 
@@ -791,14 +615,6 @@ router.patch('/items/:id/update-count', async (req: Request, res: Response) => {
       message: 'Count updated successfully',
       data: { cachedCount: item.cachedCount },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN HOMEPAGE DEALS] Update count error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to update count',
-      error: error.message,
-    });
-  }
-});
+}));
 
 export default router;

@@ -10,6 +10,7 @@ import {
 import mongoose from 'mongoose';
 import redisService from '../../services/redisService';
 import os from 'os';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -22,8 +23,7 @@ router.use(requireAdmin);
  * @desc    System health overview
  * @access  Admin
  */
-router.get('/health', async (req: Request, res: Response) => {
-  try {
+router.get('/health', asyncHandler(async (req: Request, res: Response) => {
     // Database status
     const dbState = mongoose.connection.readyState;
     const dbStateMap: Record<number, string> = {
@@ -125,19 +125,14 @@ router.get('/health', async (req: Request, res: Response) => {
     const overallStatus = isHealthy ? 'healthy' : isDegraded ? 'degraded' : 'unhealthy';
 
     return sendSuccess(res, { ...health, overallStatus }, 'System health retrieved');
-  } catch (error: any) {
-    logger.error('[ADMIN SYSTEM] Health check error:', error);
-    return sendError(res, error.message || 'Failed to get system health', 500);
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/system/reconciliation
  * @desc    Get latest reconciliation results
  * @access  Admin
  */
-router.get('/reconciliation', async (req: Request, res: Response) => {
-  try {
+router.get('/reconciliation', asyncHandler(async (req: Request, res: Response) => {
     const result = await getLatestReconciliationResult();
 
     if (!result) {
@@ -151,48 +146,29 @@ router.get('/reconciliation', async (req: Request, res: Response) => {
       hasResults: true,
       ...result,
     }, 'Reconciliation results retrieved');
-  } catch (error: any) {
-    logger.error('[ADMIN SYSTEM] Reconciliation results error:', error);
-    return sendError(res, error.message || 'Failed to get reconciliation results', 500);
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/system/reconciliation/trigger
  * @desc    Manually trigger reconciliation
  * @access  Admin
  */
-router.post('/reconciliation/trigger', async (req: Request, res: Response) => {
-  try {
+router.post('/reconciliation/trigger', asyncHandler(async (req: Request, res: Response) => {
     logger.info(`[ADMIN SYSTEM] Manual reconciliation triggered by admin user`);
     const result = await triggerManualReconciliation();
 
     return sendSuccess(res, result, 'Reconciliation completed successfully');
-  } catch (error: any) {
-    logger.error('[ADMIN SYSTEM] Manual reconciliation error:', error);
-
-    if (error.message?.includes('already in progress')) {
-      return sendError(res, 'Reconciliation job is already in progress. Please wait.', 409);
-    }
-
-    return sendError(res, error.message || 'Failed to trigger reconciliation', 500);
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/system/jobs
  * @desc    Get all scheduled job statuses
  * @access  Admin
  */
-router.get('/jobs', async (req: Request, res: Response) => {
-  try {
+router.get('/jobs', asyncHandler(async (req: Request, res: Response) => {
     const jobs = await getScheduledJobStatuses();
     return sendSuccess(res, { jobs }, 'Scheduled job statuses retrieved');
-  } catch (error: any) {
-    logger.error('[ADMIN SYSTEM] Jobs status error:', error);
-    return sendError(res, error.message || 'Failed to get job statuses', 500);
-  }
-});
+  }));
 
 // ---- Helpers ----
 

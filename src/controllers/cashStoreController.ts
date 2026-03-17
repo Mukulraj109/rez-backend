@@ -18,6 +18,7 @@ import mallService from '../services/mallService';
 import { logger } from '../config/logger';
 import { sendSuccess, sendError } from '../utils/response';
 import { MallOffer } from '../models/MallOffer';
+import { asyncHandler } from '../utils/asyncHandler';
 
 // Sort option mapping
 const SORT_OPTIONS: Record<string, Record<string, 1 | -1>> = {
@@ -78,8 +79,7 @@ const VIRTUAL_FILTERS = [
  * GET /api/cashstore/categories
  * Returns active MallCategories with virtual filters prepended
  */
-export const getCashStoreCategories = async (req: Request, res: Response) => {
-  try {
+export const getCashStoreCategories = asyncHandler(async (req: Request, res: Response) => {
     const dbCategories = await mallService.getCategories();
 
     // Map DB categories to include isSpecialFilter: false
@@ -101,18 +101,13 @@ export const getCashStoreCategories = async (req: Request, res: Response) => {
     const allCategories = [...VIRTUAL_FILTERS, ...mappedCategories];
 
     return sendSuccess(res, allCategories, 'Categories fetched');
-  } catch (error) {
-    logger.error('[CashStore] Error fetching categories:', error);
-    return sendError(res, 'Failed to fetch categories', 500);
-  }
-};
+});
 
 /**
  * GET /api/cashstore/brands?category=<slug>&filter=<popular|high-cashback>&sort=<option>&limit=12&page=1
  * Returns brands filtered by category slug or special filter, with optional sort
  */
-export const getCashStoreBrands = async (req: Request, res: Response) => {
-  try {
+export const getCashStoreBrands = asyncHandler(async (req: Request, res: Response) => {
     const { category, filter, sort, limit = '12', page = '1' } = req.query;
     const limitNum = Math.min(parseInt(limit as string) || 12, 50);
     const pageNum = parseInt(page as string) || 1;
@@ -166,18 +161,13 @@ export const getCashStoreBrands = async (req: Request, res: Response) => {
     const responseData = { brands, total, page: pageNum, limit: limitNum };
 
     return sendSuccess(res, responseData, 'Brands fetched');
-  } catch (error) {
-    logger.error('[CashStore] Error fetching brands:', error);
-    return sendError(res, 'Failed to fetch brands', 500);
-  }
-};
+});
 
 /**
  * GET /api/cashstore/brands/search?q=<query>&limit=20
  * Search brands by name
  */
-export const searchCashStoreBrands = async (req: Request, res: Response) => {
-  try {
+export const searchCashStoreBrands = asyncHandler(async (req: Request, res: Response) => {
     const { q, limit = '20' } = req.query;
     const limitNum = Math.min(parseInt(limit as string) || 20, 50);
 
@@ -192,19 +182,14 @@ export const searchCashStoreBrands = async (req: Request, res: Response) => {
       { brands, total: brands.length },
       'Search results'
     );
-  } catch (error) {
-    logger.error('[CashStore] Error searching brands:', error);
-    return sendError(res, 'Failed to search brands', 500);
-  }
-};
+});
 
 /**
  * GET /api/cashstore/homepage
  * Aggregated data for initial Cash Store load (single call instead of many)
  * Returns categories + top brands + trending brands + high cashback brands
  */
-export const getCashStoreHomepage = async (req: Request, res: Response) => {
-  try {
+export const getCashStoreHomepage = asyncHandler(async (req: Request, res: Response) => {
     const [
       dbCategories,
       topBrandsResult,
@@ -243,18 +228,13 @@ export const getCashStoreHomepage = async (req: Request, res: Response) => {
     };
 
     return sendSuccess(res, homepageData, 'Cash Store homepage data fetched');
-  } catch (error) {
-    logger.error('[CashStore] Error fetching homepage data:', error);
-    return sendError(res, 'Failed to fetch homepage data', 500);
-  }
-};
+});
 
 /**
  * GET /api/cashstore/gift-cards?category=<slug>&limit=20&page=1
  * Returns brands sorted by cashback rate for gift card browsing
  */
-export const getCashStoreGiftCards = async (req: Request, res: Response) => {
-  try {
+export const getCashStoreGiftCards = asyncHandler(async (req: Request, res: Response) => {
     const { category, limit = '20', page = '1' } = req.query;
     const limitNum = Math.min(parseInt(limit as string) || 20, 50);
     const pageNum = parseInt(page as string) || 1;
@@ -278,18 +258,13 @@ export const getCashStoreGiftCards = async (req: Request, res: Response) => {
     };
 
     return sendSuccess(res, responseData, 'Gift cards fetched');
-  } catch (error) {
-    logger.error('[CashStore] Error fetching gift cards:', error);
-    return sendError(res, 'Failed to fetch gift cards', 500);
-  }
-};
+});
 
 /**
  * GET /api/cashstore/trending
  * Aggregated trending data: popular brands + active offers + high cashback brands
  */
-export const getCashStoreTrending = async (req: Request, res: Response) => {
-  try {
+export const getCashStoreTrending = asyncHandler(async (req: Request, res: Response) => {
     const now = new Date();
 
     const [
@@ -328,8 +303,4 @@ export const getCashStoreTrending = async (req: Request, res: Response) => {
     };
 
     return sendSuccess(res, trendingData, 'Trending data fetched');
-  } catch (error) {
-    logger.error('[CashStore] Error fetching trending data:', error);
-    return sendError(res, 'Failed to fetch trending data', 500);
-  }
-};
+});

@@ -6,7 +6,7 @@
 
 import { Request, Response } from 'express';
 import mongoose, { Types } from 'mongoose';
-import { asyncHandler } from '../../middleware/asyncHandler';
+import { asyncHandler } from '../../utils/asyncHandler';
 import { logger } from '../../config/logger';
 import PriveOffer from '../../models/PriveOffer';
 import PriveVoucher, { calculateVoucherValue, getDefaultExpiry, VoucherType } from '../../models/PriveVoucher';

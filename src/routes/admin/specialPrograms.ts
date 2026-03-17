@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate, requireAdmin } from '../../middleware/auth';
-import { asyncHandler } from '../../middleware/asyncHandler';
+import { asyncHandler } from '../../utils/asyncHandler';
 import * as controller from '../../controllers/specialProgramController';
 
 const router = Router();

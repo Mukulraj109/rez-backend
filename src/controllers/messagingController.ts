@@ -10,13 +10,13 @@ import { Store } from '../models/Store';
 import { escapeRegex } from '../utils/sanitize';
 import { getIO } from '../config/socket';
 import { SocketRoom } from '../types/socket';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Get all conversations for a user
  * GET /api/messages/conversations
  */
-export const getConversations = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getConversations = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { status, search, page = 1, limit = 20 } = req.query;
 
@@ -89,22 +89,13 @@ export const getConversations = async (req: Request, res: Response): Promise<voi
         summary
       }
     });
-  } catch (error: any) {
-    logger.error('❌ [MESSAGING CONTROLLER] Error getting conversations:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get conversations',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get or create a conversation
  * POST /api/messages/conversations
  */
-export const getOrCreateConversation = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getOrCreateConversation = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { storeId, storeName, storeImage } = req.body;
 
@@ -139,22 +130,13 @@ export const getOrCreateConversation = async (req: Request, res: Response): Prom
       success: true,
       data: { conversation }
     });
-  } catch (error: any) {
-    logger.error('❌ [MESSAGING CONTROLLER] Error getting/creating conversation:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get or create conversation',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get conversation by ID
  * GET /api/messages/conversations/:id
  */
-export const getConversation = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getConversation = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -183,22 +165,13 @@ export const getConversation = async (req: Request, res: Response): Promise<void
       success: true,
       data: { conversation }
     });
-  } catch (error: any) {
-    logger.error('❌ [MESSAGING CONTROLLER] Error getting conversation:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get conversation',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get messages in a conversation
  * GET /api/messages/conversations/:id/messages
  */
-export const getMessages = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getMessages = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
     const { page = 1, limit = 50, before } = req.query;
@@ -269,22 +242,13 @@ export const getMessages = async (req: Request, res: Response): Promise<void> =>
         }
       }
     });
-  } catch (error: any) {
-    logger.error('❌ [MESSAGING CONTROLLER] Error getting messages:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get messages',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Send a message
  * POST /api/messages/conversations/:id/messages
  */
-export const sendMessage = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const sendMessage = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
     const { content, type = MessageType.TEXT, attachments, location, product, order } = req.body;
@@ -379,23 +343,13 @@ export const sendMessage = async (req: Request, res: Response): Promise<void> =>
     } catch (socketErr) {
       logger.error('⚠️ [MESSAGING CONTROLLER] Socket emit failed:', socketErr);
     }
-
-  } catch (error: any) {
-    logger.error('❌ [MESSAGING CONTROLLER] Error sending message:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to send message',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Mark conversation as read
  * PATCH /api/messages/conversations/:id/read
  */
-export const markConversationAsRead = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const markConversationAsRead = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -434,22 +388,13 @@ export const markConversationAsRead = async (req: Request, res: Response): Promi
       success: true,
       message: 'Conversation marked as read'
     });
-  } catch (error: any) {
-    logger.error('❌ [MESSAGING CONTROLLER] Error marking conversation as read:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to mark conversation as read',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Archive conversation
  * PATCH /api/messages/conversations/:id/archive
  */
-export const archiveConversation = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const archiveConversation = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -480,22 +425,13 @@ export const archiveConversation = async (req: Request, res: Response): Promise<
       success: true,
       message: 'Conversation archived successfully'
     });
-  } catch (error: any) {
-    logger.error('❌ [MESSAGING CONTROLLER] Error archiving conversation:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to archive conversation',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Unarchive conversation
  * PATCH /api/messages/conversations/:id/unarchive
  */
-export const unarchiveConversation = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const unarchiveConversation = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -526,22 +462,13 @@ export const unarchiveConversation = async (req: Request, res: Response): Promis
       success: true,
       message: 'Conversation unarchived successfully'
     });
-  } catch (error: any) {
-    logger.error('❌ [MESSAGING CONTROLLER] Error unarchiving conversation:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to unarchive conversation',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Delete conversation
  * DELETE /api/messages/conversations/:id
  */
-export const deleteConversation = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const deleteConversation = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -579,22 +506,13 @@ export const deleteConversation = async (req: Request, res: Response): Promise<v
       success: true,
       message: 'Conversation deleted successfully'
     });
-  } catch (error: any) {
-    logger.error('❌ [MESSAGING CONTROLLER] Error deleting conversation:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to delete conversation',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Search messages
  * GET /api/messages/search
  */
-export const searchMessages = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const searchMessages = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { query, conversationId, page = 1, limit = 20 } = req.query;
 
@@ -677,22 +595,13 @@ export const searchMessages = async (req: Request, res: Response): Promise<void>
         }
       }
     });
-  } catch (error: any) {
-    logger.error('❌ [MESSAGING CONTROLLER] Error searching messages:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to search messages',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Report a message
  * POST /api/messages/:id/report
  */
-export const reportMessage = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const reportMessage = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
     const { reason, details } = req.body;
@@ -770,23 +679,13 @@ export const reportMessage = async (req: Request, res: Response): Promise<void> 
     } catch (socketErr) {
       logger.error('⚠️ [MESSAGING CONTROLLER] Admin notification socket emit failed:', socketErr);
     }
-
-  } catch (error: any) {
-    logger.error('❌ [MESSAGING CONTROLLER] Error reporting message:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to report message',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get unread messages count
  * GET /api/messages/unread/count
  */
-export const getUnreadCount = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getUnreadCount = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
 
     if (!userId) {
@@ -807,22 +706,13 @@ export const getUnreadCount = async (req: Request, res: Response): Promise<void>
         unreadCount: totalUnread
       }
     });
-  } catch (error: any) {
-    logger.error('❌ [MESSAGING CONTROLLER] Error getting unread count:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get unread count',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get store availability (business hours)
  * GET /api/stores/:id/availability
  */
-export const getStoreAvailability = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getStoreAvailability = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     // Fetch actual store business hours from Store model
@@ -884,22 +774,13 @@ export const getStoreAvailability = async (req: Request, res: Response): Promise
       success: true,
       data: availability
     });
-  } catch (error: any) {
-    logger.error('❌ [MESSAGING CONTROLLER] Error getting store availability:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get store availability',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Block a store
  * POST /api/stores/:id/block
  */
-export const blockStore = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const blockStore = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -930,22 +811,13 @@ export const blockStore = async (req: Request, res: Response): Promise<void> => 
       success: true,
       message: 'Store blocked successfully'
     });
-  } catch (error: any) {
-    logger.error('❌ [MESSAGING CONTROLLER] Error blocking store:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to block store',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Unblock a store
  * POST /api/stores/:id/unblock
  */
-export const unblockStore = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const unblockStore = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -976,12 +848,4 @@ export const unblockStore = async (req: Request, res: Response): Promise<void> =
       success: true,
       message: 'Store unblocked successfully'
     });
-  } catch (error: any) {
-    logger.error('❌ [MESSAGING CONTROLLER] Error unblocking store:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to unblock store',
-      error: error.message,
-    });
-  }
-};
+});

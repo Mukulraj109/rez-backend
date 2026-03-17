@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import express from 'express';
 import { integrationService } from '../services/integrationService';
 import { createServiceLogger } from '../config/logger';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 const logger = createServiceLogger('integration-webhook');
@@ -23,8 +24,7 @@ router.use(express.json({
  *   x-rez-signature — HMAC-SHA256 signature
  *   x-provider-name — Provider identifier (e.g. 'petpooja', 'cloudbeds')
  */
-router.post('/webhook', async (req: Request, res: Response) => {
-  try {
+router.post('/webhook', asyncHandler(async (req: Request, res: Response) => {
     const provider = (req.headers['x-provider-name'] as string) || req.body?.provider;
     const signature = (req.headers['x-rez-signature'] as string) || '';
 
@@ -58,18 +58,6 @@ router.post('/webhook', async (req: Request, res: Response) => {
       id: extTxn._id,
       status: extTxn.status,
     });
-  } catch (error: any) {
-    const status = error.message.includes('signature') ? 401
-      : error.message.includes('No active integration') ? 404
-      : 500;
-
-    logger.error('Webhook processing failed', error, {
-      provider: req.headers['x-provider-name'],
-      ip: req.ip,
-    });
-
-    res.status(status).json({ success: false, message: error.message || 'Webhook processing failed' });
-  }
-});
+}));
 
 export default router;

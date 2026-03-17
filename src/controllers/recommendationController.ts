@@ -5,7 +5,7 @@ import {
   sendSuccess,
   sendBadRequest
 } from '../utils/response';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
 import { Store } from '../models/Store';

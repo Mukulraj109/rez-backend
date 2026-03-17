@@ -7,6 +7,7 @@ import { CoinTransaction } from '../../models/CoinTransaction';
 import CoinDrop from '../../models/CoinDrop';
 import { Order } from '../../models/Order';
 import mongoose from 'mongoose';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 router.use(authMiddleware);
@@ -16,8 +17,7 @@ router.use(authMiddleware);
  * @desc    Get comprehensive earning analytics for a store
  * @access  Merchant (authenticated)
  */
-router.get('/stores/:storeId/earning-analytics', async (req: Request, res: Response) => {
-  try {
+router.get('/stores/:storeId/earning-analytics', asyncHandler(async (req: Request, res: Response) => {
     const merchantId = req.merchantId;
     const { storeId } = req.params;
 
@@ -303,13 +303,6 @@ router.get('/stores/:storeId/earning-analytics', async (req: Request, res: Respo
         },
       },
     });
-  } catch (error: any) {
-    logger.error('[EARNING ANALYTICS] Error:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch earning analytics',
-    });
-  }
-});
+}));
 
 export default router;

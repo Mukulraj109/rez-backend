@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../utils/asyncHandler';
 import { logger } from '../config/logger';
 import * as activityFeedService from '../services/activityFeedService';
 

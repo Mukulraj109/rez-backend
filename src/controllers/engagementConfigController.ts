@@ -2,6 +2,7 @@ import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import EngagementConfig from '../models/EngagementConfig';
+import { asyncHandler } from '../utils/asyncHandler';
 
 // Default configs to seed if none exist
 const DEFAULT_CONFIGS = [
@@ -18,8 +19,7 @@ const DEFAULT_CONFIGS = [
  * Get all engagement configs.
  * GET /api/admin/engagement-config
  */
-export const getAllConfigs = async (req: Request, res: Response) => {
-  try {
+export const getAllConfigs = asyncHandler(async (req: Request, res: Response) => {
     let configs = await EngagementConfig.find().sort({ action: 1 }).lean();
 
     // Seed defaults if empty
@@ -32,18 +32,13 @@ export const getAllConfigs = async (req: Request, res: Response) => {
       success: true,
       data: { configs },
     });
-  } catch (error: any) {
-    logger.error('Error fetching engagement configs:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch configs' });
-  }
-};
+});
 
 /**
  * Update a specific engagement config.
  * PATCH /api/admin/engagement-config/:action
  */
-export const updateConfig = async (req: Request, res: Response) => {
-  try {
+export const updateConfig = asyncHandler(async (req: Request, res: Response) => {
     const adminId = (req as any).user?.id || (req as any).user?._id;
     const { action } = req.params;
     const updates = req.body;
@@ -71,18 +66,13 @@ export const updateConfig = async (req: Request, res: Response) => {
       message: `Config for ${action} updated`,
       data: { config },
     });
-  } catch (error: any) {
-    logger.error('Error updating engagement config:', error);
-    res.status(500).json({ success: false, error: 'Failed to update config' });
-  }
-};
+});
 
 /**
  * Set a campaign multiplier with end date.
  * POST /api/admin/engagement-config/:action/campaign
  */
-export const setCampaign = async (req: Request, res: Response) => {
-  try {
+export const setCampaign = asyncHandler(async (req: Request, res: Response) => {
     const adminId = (req as any).user?.id || (req as any).user?._id;
     const { action } = req.params;
     const { multiplier, endsAt } = req.body;
@@ -112,8 +102,4 @@ export const setCampaign = async (req: Request, res: Response) => {
       message: `${multiplier}x campaign set for ${action} until ${endsAt}`,
       data: { config },
     });
-  } catch (error: any) {
-    logger.error('Error setting campaign:', error);
-    res.status(500).json({ success: false, error: 'Failed to set campaign' });
-  }
-};
+});

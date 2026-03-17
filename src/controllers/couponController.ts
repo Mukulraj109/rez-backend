@@ -7,6 +7,7 @@ import { Types } from 'mongoose';
 import { Coupon } from '../models/Coupon';
 import { UserCoupon } from '../models/UserCoupon';
 import couponService from '../services/couponService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Get all available coupons (public)
@@ -14,8 +15,7 @@ import couponService from '../services/couponService';
  * - Populates applicableTo.categories and applicableTo.stores with name
  * - If authenticated, filters out coupons the user has already claimed
  */
-export const getAvailableCoupons = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getAvailableCoupons = asyncHandler(async (req: Request, res: Response) => {
     const { category, tag, featured } = req.query;
     const userId = (req as any).userId; // from optionalAuth
 
@@ -60,22 +60,13 @@ export const getAvailableCoupons = async (req: Request, res: Response): Promise<
         total: coupons.length,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [COUPON CONTROLLER] Error getting coupons:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get coupons',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get featured/trending coupons
  * GET /api/user/coupons/featured
  */
-export const getFeaturedCoupons = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getFeaturedCoupons = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const now = new Date();
 
@@ -106,22 +97,13 @@ export const getFeaturedCoupons = async (req: Request, res: Response): Promise<v
         total: coupons.length,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [COUPON CONTROLLER] Error getting featured coupons:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get featured coupons',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get user's claimed coupons
  * GET /api/user/coupons/my-coupons
  */
-export const getMyCoupons = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getMyCoupons = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { status, category, limit } = req.query;
 
@@ -186,22 +168,13 @@ export const getMyCoupons = async (req: Request, res: Response): Promise<void> =
         },
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [COUPON CONTROLLER] Error getting user coupons:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get your coupons',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Claim a coupon
  * POST /api/user/coupons/:id/claim
  */
-export const claimCoupon = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const claimCoupon = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -231,23 +204,14 @@ export const claimCoupon = async (req: Request, res: Response): Promise<void> =>
       message: result.message,
       data: result.userCoupon,
     });
-  } catch (error: any) {
-    logger.error('❌ [COUPON CONTROLLER] Error claiming coupon:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to claim coupon',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Validate coupon for cart
  * POST /api/user/coupons/validate
  * Body: { couponCode: string, cartData: CartData }
  */
-export const validateCoupon = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const validateCoupon = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { couponCode, cartData } = req.body;
 
@@ -296,23 +260,14 @@ export const validateCoupon = async (req: Request, res: Response): Promise<void>
         },
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [COUPON CONTROLLER] Error validating coupon:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to validate coupon',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get best coupon for cart
  * POST /api/user/coupons/best-offer
  * Body: { cartData: CartData }
  */
-export const getBestOffer = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getBestOffer = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { cartData } = req.body;
 
@@ -360,22 +315,13 @@ export const getBestOffer = async (req: Request, res: Response): Promise<void> =
         discount: validation.discount,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [COUPON CONTROLLER] Error getting best offer:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get best offer',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Remove claimed coupon (only if not used)
  * DELETE /api/user/coupons/:id
  */
-export const removeCoupon = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const removeCoupon = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -414,22 +360,13 @@ export const removeCoupon = async (req: Request, res: Response): Promise<void> =
       success: true,
       message: 'Coupon removed successfully',
     });
-  } catch (error: any) {
-    logger.error('❌ [COUPON CONTROLLER] Error removing coupon:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to remove coupon',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Search coupons
  * GET /api/user/coupons/search?q=query
  */
-export const searchCoupons = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const searchCoupons = asyncHandler(async (req: Request, res: Response) => {
     const { q, category, tag } = req.query;
 
     if (!q) {
@@ -459,22 +396,13 @@ export const searchCoupons = async (req: Request, res: Response): Promise<void> 
         total: coupons.length,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [COUPON CONTROLLER] Error searching coupons:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to search coupons',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get coupon details
  * GET /api/user/coupons/:id
  */
-export const getCouponDetails = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getCouponDetails = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     const coupon = await Coupon.findById(id).lean();
@@ -494,12 +422,4 @@ export const getCouponDetails = async (req: Request, res: Response): Promise<voi
       success: true,
       data: coupon,
     });
-  } catch (error: any) {
-    logger.error('❌ [COUPON CONTROLLER] Error getting coupon details:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get coupon details',
-      error: error.message,
-    });
-  }
-};
+});

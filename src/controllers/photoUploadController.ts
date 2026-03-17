@@ -3,13 +3,13 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { PhotoUpload } from '../models/PhotoUpload';
 import engagementRewardService from '../services/engagementRewardService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Upload photos — creates a PhotoUpload + PendingCoinReward for moderation.
  * POST /api/photos/upload
  */
-export const uploadPhotos = async (req: Request, res: Response) => {
-  try {
+export const uploadPhotos = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id || (req as any).user?._id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -67,18 +67,13 @@ export const uploadPhotos = async (req: Request, res: Response) => {
           : null,
       },
     });
-  } catch (error: any) {
-    logger.error('Error uploading photos:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to upload photos' });
-  }
-};
+});
 
 /**
  * Get user's photo upload history.
  * GET /api/photos/my-uploads
  */
-export const getMyUploads = async (req: Request, res: Response) => {
-  try {
+export const getMyUploads = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id || (req as any).user?._id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -117,18 +112,13 @@ export const getMyUploads = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching my uploads:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch uploads' });
-  }
-};
+});
 
 /**
  * Get approved photos for a store (public).
  * GET /api/photos/store/:storeId
  */
-export const getStorePhotos = async (req: Request, res: Response) => {
-  try {
+export const getStorePhotos = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10));
@@ -167,18 +157,13 @@ export const getStorePhotos = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching store photos:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch store photos' });
-  }
-};
+});
 
 /**
  * Moderate a photo upload (admin/merchant).
  * PATCH /api/photos/:id/moderate
  */
-export const moderatePhoto = async (req: Request, res: Response) => {
-  try {
+export const moderatePhoto = asyncHandler(async (req: Request, res: Response) => {
     const adminId = (req as any).user?.id || (req as any).user?._id;
     if (!adminId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -265,18 +250,13 @@ export const moderatePhoto = async (req: Request, res: Response) => {
         coinsAwarded: photoUpload.coinsAwarded,
       },
     });
-  } catch (error: any) {
-    logger.error('Error moderating photo:', error);
-    res.status(500).json({ success: false, error: 'Failed to moderate photo' });
-  }
-};
+});
 
 /**
  * Get pending photos for moderation (admin).
  * GET /api/photos/pending
  */
-export const getPendingPhotos = async (req: Request, res: Response) => {
-  try {
+export const getPendingPhotos = asyncHandler(async (req: Request, res: Response) => {
     const { page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10)));
@@ -306,8 +286,4 @@ export const getPendingPhotos = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching pending photos:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch pending photos' });
-  }
-};
+});

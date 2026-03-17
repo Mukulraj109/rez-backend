@@ -5,6 +5,7 @@ import { Subscription, ISubscription } from '../models/Subscription';
 import { SubscriptionTier, BillingCycle } from '../models/Subscription';
 import { User } from '../models/User';
 import tierConfigService from './tierConfigService';
+import { privilegeResolutionService } from './entitlement/privilegeResolutionService';
 
 // Initialize Razorpay instance
 const razorpay = new Razorpay({
@@ -347,6 +348,7 @@ class RazorpaySubscriptionService {
     subscription.startDate = new Date(data.start_at * 1000);
     subscription.endDate = new Date(data.end_at * 1000);
     await subscription.save();
+    privilegeResolutionService.invalidate(subscription.user.toString()).catch(() => {});
 
     logger.info(`Subscription activated: ${subscription._id}`);
   }
@@ -393,6 +395,7 @@ class RazorpaySubscriptionService {
     }
 
     await subscription.save();
+    privilegeResolutionService.invalidate(subscription.user.toString()).catch(() => {});
 
     logger.info(`Subscription charged successfully: ${subscription._id}`);
   }
@@ -404,6 +407,7 @@ class RazorpaySubscriptionService {
     subscription.status = 'cancelled';
     subscription.cancellationDate = new Date();
     await subscription.save();
+    privilegeResolutionService.invalidate(subscription.user.toString()).catch(() => {});
 
     logger.info(`Subscription cancelled: ${subscription._id}`);
   }
@@ -414,6 +418,7 @@ class RazorpaySubscriptionService {
   private async handleSubscriptionCompleted(subscription: ISubscription, data: any): Promise<void> {
     subscription.status = 'expired';
     await subscription.save();
+    privilegeResolutionService.invalidate(subscription.user.toString()).catch(() => {});
 
     logger.info(`Subscription completed: ${subscription._id}`);
   }
@@ -433,6 +438,7 @@ class RazorpaySubscriptionService {
   private async handleSubscriptionResumed(subscription: ISubscription, data: any): Promise<void> {
     subscription.status = 'active';
     await subscription.save();
+    privilegeResolutionService.invalidate(subscription.user.toString()).catch(() => {});
 
     logger.info(`Subscription resumed: ${subscription._id}`);
   }
@@ -446,6 +452,7 @@ class RazorpaySubscriptionService {
     subscription.paymentRetryCount += 1;
     subscription.lastPaymentRetryDate = new Date();
     await subscription.save();
+    privilegeResolutionService.invalidate(subscription.user.toString()).catch(() => {});
 
     logger.info(`Subscription payment pending: ${subscription._id}`);
   }
@@ -456,6 +463,7 @@ class RazorpaySubscriptionService {
   private async handleSubscriptionHalted(subscription: ISubscription, data: any): Promise<void> {
     subscription.status = 'payment_failed';
     await subscription.save();
+    privilegeResolutionService.invalidate(subscription.user.toString()).catch(() => {});
 
     logger.info(`Subscription halted: ${subscription._id}`);
   }

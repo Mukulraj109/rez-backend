@@ -4,7 +4,7 @@
 import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { sendSuccess, sendError, sendBadRequest, sendNotFound } from '../utils/response';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import referralTierService from '../services/referralTierService';
 import voucherRedemptionService from '../services/voucherRedemptionService';

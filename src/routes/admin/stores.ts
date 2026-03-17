@@ -8,6 +8,7 @@ import { sendSuccess, sendBadRequest, sendNotFound } from '../../utils/response'
 import { CacheInvalidator } from '../../utils/cacheHelper';
 import { requireAuth, requireAdmin, requireSeniorAdmin } from '../../middleware/auth';
 import { cacheInvalidationMiddleware } from '../../middleware/cacheMiddleware';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -36,8 +37,7 @@ router.param('categoryId', (req: Request, res: Response, next, id: string) => {
 // ============================================
 // GET /admin/stores - List stores with filtering
 // ============================================
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -153,21 +153,13 @@ router.get('/', async (req: Request, res: Response) => {
         }
       }
     });
-  } catch (error: any) {
-    logger.error('[ADMIN STORES] Error fetching stores:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch stores'
-    });
-  }
-});
+  }));
 
 // ============================================
 // GET /admin/stores/category/:categoryId - Stores in specific category (including subcategories)
 // NOTE: Must be defined BEFORE /:storeId to avoid "category" matching as a storeId
 // ============================================
-router.get('/category/:categoryId', async (req: Request, res: Response) => {
-  try {
+router.get('/category/:categoryId', asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -269,14 +261,7 @@ router.get('/category/:categoryId', async (req: Request, res: Response) => {
         }
       }
     });
-  } catch (error: any) {
-    logger.error('[ADMIN STORES] Error fetching stores by category:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch stores by category'
-    });
-  }
-});
+  }));
 
 // ============================================
 // POST /admin/stores/bulk-category - Bulk reassign stores to a category
@@ -297,8 +282,7 @@ const bulkCategorySchema = Joi.object({
   })
 });
 
-router.post('/bulk-category', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
+router.post('/bulk-category', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { error, value } = bulkCategorySchema.validate(req.body);
     if (error) {
       return sendBadRequest(res, error.details[0].message);
@@ -333,20 +317,12 @@ router.post('/bulk-category', requireSeniorAdmin, async (req: Request, res: Resp
     }
 
     return sendSuccess(res, { count: result.modifiedCount }, 'Stores reassigned successfully');
-  } catch (error: any) {
-    logger.error('[ADMIN STORES] Error bulk reassigning stores:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to bulk reassign stores'
-    });
-  }
-});
+  }));
 
 // ============================================
 // GET /admin/stores/:storeId - Get single store detail
 // ============================================
-router.get('/:storeId', async (req: Request, res: Response) => {
-  try {
+router.get('/:storeId', asyncHandler(async (req: Request, res: Response) => {
     const store = await Store.findById(req.params.storeId)
       .populate('category', 'name slug icon')
       .populate('merchantId', 'businessName ownerName email phone')
@@ -357,14 +333,7 @@ router.get('/:storeId', async (req: Request, res: Response) => {
     }
 
     return sendSuccess(res, { store });
-  } catch (error: any) {
-    logger.error('[ADMIN STORES] Error fetching store:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch store'
-    });
-  }
-});
+  }));
 
 // ============================================
 // PUT /admin/stores/:storeId/category - Reassign store to different category
@@ -376,8 +345,7 @@ const reassignCategorySchema = Joi.object({
   })
 });
 
-router.put('/:storeId/category', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
+router.put('/:storeId/category', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { error, value } = reassignCategorySchema.validate(req.body);
     if (error) {
       return sendBadRequest(res, error.details[0].message);
@@ -405,14 +373,7 @@ router.put('/:storeId/category', requireSeniorAdmin, async (req: Request, res: R
     });
 
     return sendSuccess(res, { store }, 'Store category reassigned successfully');
-  } catch (error: any) {
-    logger.error('[ADMIN STORES] Error reassigning store category:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to reassign store category'
-    });
-  }
-});
+  }));
 
 // ============================================
 // PUT /admin/stores/:storeId/service-capabilities - Toggle a service capability
@@ -424,8 +385,7 @@ const serviceCapabilitySchema = Joi.object({
   enabled: Joi.boolean().required(),
 });
 
-router.put('/:storeId/service-capabilities', async (req: Request, res: Response) => {
-  try {
+router.put('/:storeId/service-capabilities', asyncHandler(async (req: Request, res: Response) => {
     const { error, value } = serviceCapabilitySchema.validate(req.body);
     if (error) {
       return sendBadRequest(res, error.details[0].message);
@@ -479,14 +439,7 @@ router.put('/:storeId/service-capabilities', async (req: Request, res: Response)
     });
 
     return sendSuccess(res, { store }, `${capability} ${enabled ? 'enabled' : 'disabled'} successfully`);
-  } catch (error: any) {
-    logger.error('[ADMIN STORES] Error updating service capability:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to update service capability',
-    });
-  }
-});
+  }));
 
 // ============================================
 // PUT /admin/stores/:storeId/admin-actions - Admin approve/suspend/feature store
@@ -501,8 +454,7 @@ const adminActionsSchema = Joi.object({
   'object.min': 'At least one field is required'
 });
 
-router.put('/:storeId/admin-actions', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
+router.put('/:storeId/admin-actions', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { error, value } = adminActionsSchema.validate(req.body);
     if (error) {
       return sendBadRequest(res, error.details[0].message);
@@ -554,13 +506,6 @@ router.put('/:storeId/admin-actions', requireSeniorAdmin, async (req: Request, r
     });
 
     return sendSuccess(res, { store }, 'Store updated successfully');
-  } catch (error: any) {
-    logger.error('[ADMIN STORES] Error updating store admin actions:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to update store'
-    });
-  }
-});
+  }));
 
 export default router;

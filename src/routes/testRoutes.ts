@@ -13,6 +13,7 @@ import Share from '../models/Share';
 import { PendingCoinReward } from '../models/PendingCoinReward';
 import { Wallet } from '../models/Wallet';
 import coinService from '../services/coinService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 
@@ -31,8 +32,7 @@ router.use(authenticate as any);
  * @desc    Verify 15% platform fee calculation on an order
  * @access  Dev/Test only
  */
-router.get('/verify-order-fee/:orderId', async (req: Request, res: Response) => {
-  try {
+router.get('/verify-order-fee/:orderId', asyncHandler(async (req: Request, res: Response) => {
     const order = await Order.findById(req.params.orderId);
 
     if (!order) {
@@ -65,18 +65,14 @@ router.get('/verify-order-fee/:orderId', async (req: Request, res: Response) => 
         : '❌ Fee calculation mismatch',
       data: verification
     });
-  } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
+}));
 
 /**
  * @route   GET /api/test/verify-merchant-wallet/:merchantId
  * @desc    Verify merchant wallet was credited after payment
  * @access  Dev/Test only
  */
-router.get('/verify-merchant-wallet/:merchantId', async (req: Request, res: Response) => {
-  try {
+router.get('/verify-merchant-wallet/:merchantId', asyncHandler(async (req: Request, res: Response) => {
     const wallet = await MerchantWallet.findOne({ merchant: req.params.merchantId });
 
     if (!wallet) {
@@ -106,18 +102,14 @@ router.get('/verify-merchant-wallet/:merchantId', async (req: Request, res: Resp
         recentCredits: recentTransactions
       }
     });
-  } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
+}));
 
 /**
  * @route   GET /api/test/verify-purchase-coins/:userId
  * @desc    Verify 5% purchase reward coins were awarded
  * @access  Dev/Test only
  */
-router.get('/verify-purchase-coins/:userId', async (req: Request, res: Response) => {
-  try {
+router.get('/verify-purchase-coins/:userId', asyncHandler(async (req: Request, res: Response) => {
     // Get purchase reward transactions
     const purchaseRewards = await CoinTransaction.find({
       user: req.params.userId,
@@ -150,18 +142,14 @@ router.get('/verify-purchase-coins/:userId', async (req: Request, res: Response)
         }))
       }
     });
-  } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
+}));
 
 /**
  * @route   GET /api/test/verify-share-coins/:userId
  * @desc    Verify 5% social share coins were awarded
  * @access  Dev/Test only
  */
-router.get('/verify-share-coins/:userId', async (req: Request, res: Response) => {
-  try {
+router.get('/verify-share-coins/:userId', asyncHandler(async (req: Request, res: Response) => {
     // Get purchase shares
     const purchaseShares = await Share.find({
       user: req.params.userId,
@@ -202,18 +190,14 @@ router.get('/verify-share-coins/:userId', async (req: Request, res: Response) =>
         }))
       }
     });
-  } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
+}));
 
 /**
  * @route   GET /api/test/verify-pending-rewards
  * @desc    Get all pending coin rewards awaiting admin approval
  * @access  Dev/Test only
  */
-router.get('/verify-pending-rewards', async (_req: Request, res: Response) => {
-  try {
+router.get('/verify-pending-rewards', asyncHandler(async (_req: Request, res: Response) => {
     const pendingRewards = await PendingCoinReward.find({ status: 'pending' })
       .populate('user', 'profile.firstName profile.lastName phoneNumber')
       .sort({ submittedAt: -1 })
@@ -241,18 +225,14 @@ router.get('/verify-pending-rewards', async (_req: Request, res: Response) => {
         }, {} as any)
       }
     });
-  } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
+}));
 
 /**
  * @route   GET /api/test/full-flow-check/:orderId
  * @desc    Complete verification of all demo flow features for an order
  * @access  Dev/Test only
  */
-router.get('/full-flow-check/:orderId', async (req: Request, res: Response) => {
-  try {
+router.get('/full-flow-check/:orderId', asyncHandler(async (req: Request, res: Response) => {
     const order = await Order.findById(req.params.orderId)
       .populate('user', 'profile.firstName profile.lastName')
       .populate('items.store', 'name owner');
@@ -343,9 +323,6 @@ router.get('/full-flow-check/:orderId', async (req: Request, res: Response) => {
         }
       }
     });
-  } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-});
+}));
 
 export default router;

@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import Tournament from '../../models/Tournament';
 import { sendSuccess, sendError } from '../../utils/response';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -17,8 +18,7 @@ router.use(requireAdmin);
  * GET /api/admin/tournaments
  * List all tournaments with pagination and filters
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -51,17 +51,13 @@ router.get('/', async (req: Request, res: Response) => {
       tournaments,
       pagination: { page, limit, total, pages: Math.ceil(total / limit) }
     });
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 /**
  * GET /api/admin/tournaments/stats
  * Aggregate tournament statistics
  */
-router.get('/stats', async (_req: Request, res: Response) => {
-  try {
+router.get('/stats', asyncHandler(async (_req: Request, res: Response) => {
     const [totalTournaments, statusCounts, totalParticipants] = await Promise.all([
       Tournament.countDocuments(),
       Tournament.aggregate([
@@ -88,17 +84,13 @@ router.get('/stats', async (_req: Request, res: Response) => {
       },
       totalParticipants: totalParticipants[0]?.total || 0,
     });
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 /**
  * GET /api/admin/tournaments/:id
  * Get tournament details with participants
  */
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     const tournament = await Tournament.findById(req.params.id)
       .populate('participants.user', 'name email phone avatar');
 
@@ -107,17 +99,13 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, { tournament });
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/tournaments
  * Create a new tournament
  */
-router.post('/', async (req: Request, res: Response) => {
-  try {
+router.post('/', asyncHandler(async (req: Request, res: Response) => {
     const {
       name, description, type, gameType, startDate, endDate,
       entryFee, maxParticipants, minParticipants, prizes, rules,
@@ -152,17 +140,13 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     sendSuccess(res, { tournament }, 'Created', 201);
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 /**
  * PUT /api/admin/tournaments/:id
  * Update a tournament (only upcoming or active)
  */
-router.put('/:id', async (req: Request, res: Response) => {
-  try {
+router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     const tournament = await Tournament.findById(req.params.id);
     if (!tournament) {
       return sendError(res, 'Tournament not found', 404);
@@ -191,17 +175,13 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     await tournament.save();
     sendSuccess(res, { tournament });
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 /**
  * DELETE /api/admin/tournaments/:id
  * Delete a tournament (only upcoming with no participants)
  */
-router.delete('/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     const tournament = await Tournament.findById(req.params.id);
     if (!tournament) {
       return sendError(res, 'Tournament not found', 404);
@@ -217,17 +197,13 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     await Tournament.findByIdAndDelete(req.params.id);
     sendSuccess(res, { message: 'Tournament deleted successfully' });
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/tournaments/:id/activate
  * Force-activate an upcoming tournament
  */
-router.post('/:id/activate', async (req: Request, res: Response) => {
-  try {
+router.post('/:id/activate', asyncHandler(async (req: Request, res: Response) => {
     const tournament = await Tournament.findById(req.params.id);
     if (!tournament) {
       return sendError(res, 'Tournament not found', 404);
@@ -240,17 +216,13 @@ router.post('/:id/activate', async (req: Request, res: Response) => {
     tournament.status = 'active';
     await tournament.save();
     sendSuccess(res, { tournament });
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/tournaments/:id/cancel
  * Cancel a tournament
  */
-router.post('/:id/cancel', async (req: Request, res: Response) => {
-  try {
+router.post('/:id/cancel', asyncHandler(async (req: Request, res: Response) => {
     const tournament = await Tournament.findById(req.params.id);
     if (!tournament) {
       return sendError(res, 'Tournament not found', 404);
@@ -263,17 +235,13 @@ router.post('/:id/cancel', async (req: Request, res: Response) => {
     tournament.status = 'cancelled';
     await tournament.save();
     sendSuccess(res, { tournament });
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/tournaments/:id/clone
  * Clone a tournament with new dates (creates a new tournament based on existing one)
  */
-router.post('/:id/clone', async (req: Request, res: Response) => {
-  try {
+router.post('/:id/clone', asyncHandler(async (req: Request, res: Response) => {
     const source = await Tournament.findById(req.params.id);
     if (!source) {
       return sendError(res, 'Tournament not found', 404);
@@ -306,17 +274,13 @@ router.post('/:id/clone', async (req: Request, res: Response) => {
     });
 
     sendSuccess(res, { tournament: cloned }, 'Tournament cloned', 201);
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/tournaments/:id/reactivate
  * Reactivate a completed/cancelled tournament with new dates
  */
-router.post('/:id/reactivate', async (req: Request, res: Response) => {
-  try {
+router.post('/:id/reactivate', asyncHandler(async (req: Request, res: Response) => {
     const tournament = await Tournament.findById(req.params.id);
     if (!tournament) {
       return sendError(res, 'Tournament not found', 404);
@@ -343,17 +307,13 @@ router.post('/:id/reactivate', async (req: Request, res: Response) => {
     await tournament.save();
 
     sendSuccess(res, { tournament });
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 /**
  * GET /api/admin/tournaments/:id/participants
  * Get tournament participants with scores
  */
-router.get('/:id/participants', async (req: Request, res: Response) => {
-  try {
+router.get('/:id/participants', asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 50;
 
@@ -390,9 +350,6 @@ router.get('/:id/participants', async (req: Request, res: Response) => {
         pages: Math.ceil(sorted.length / limit)
       }
     });
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 export default router;

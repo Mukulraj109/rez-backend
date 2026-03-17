@@ -8,6 +8,7 @@ import travelCashbackService from '../../services/travelCashbackService';
 import { sendSuccess, sendError } from '../../utils/response';
 import { escapeRegex } from '../../utils/sanitize';
 import mongoose from 'mongoose';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -20,8 +21,7 @@ const TRAVEL_SLUGS = ['flights', 'hotels', 'trains', 'bus', 'cab', 'packages'];
  * GET /api/admin/travel/dashboard
  * Travel management dashboard stats
  */
-router.get('/dashboard', async (req: Request, res: Response) => {
-  try {
+router.get('/dashboard', asyncHandler(async (req: Request, res: Response) => {
     // Get travel category IDs
     const travelCategories = await ServiceCategory.find({
       slug: { $in: TRAVEL_SLUGS },
@@ -124,18 +124,13 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       categories: travelCategories,
       recentBookings,
     });
-  } catch (error: any) {
-    logger.error('Admin travel dashboard error:', error);
-    sendError(res, error.message || 'Failed to load dashboard', 500);
-  }
-});
+}));
 
 /**
  * GET /api/admin/travel/categories
  * List travel service categories with stats
  */
-router.get('/categories', async (req: Request, res: Response) => {
-  try {
+router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
     const categories = await ServiceCategory.find({
       slug: { $in: TRAVEL_SLUGS },
     }).lean();
@@ -164,17 +159,13 @@ router.get('/categories', async (req: Request, res: Response) => {
     }));
 
     sendSuccess(res, result);
-  } catch (error: any) {
-    sendError(res, error.message || 'Failed to load categories', 500);
-  }
-});
+}));
 
 /**
  * PUT /api/admin/travel/categories/:id
  * Update travel category settings
  */
-router.put('/categories/:id', async (req: Request, res: Response) => {
-  try {
+router.put('/categories/:id', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { cashbackPercentage, maxCashback, isActive } = req.body;
 
@@ -193,17 +184,13 @@ router.put('/categories/:id', async (req: Request, res: Response) => {
 
     await category.save();
     sendSuccess(res, category);
-  } catch (error: any) {
-    sendError(res, error.message || 'Failed to update category', 500);
-  }
-});
+}));
 
 /**
  * GET /api/admin/travel/services
  * List travel services (products)
  */
-router.get('/services', async (req: Request, res: Response) => {
-  try {
+router.get('/services', asyncHandler(async (req: Request, res: Response) => {
     const {
       page = 1,
       limit = 20,
@@ -261,17 +248,13 @@ router.get('/services', async (req: Request, res: Response) => {
         pages: Math.ceil(total / limitNum),
       },
     });
-  } catch (error: any) {
-    sendError(res, error.message || 'Failed to load services', 500);
-  }
-});
+}));
 
 /**
  * PUT /api/admin/travel/services/:id
  * Update travel service
  */
-router.put('/services/:id', async (req: Request, res: Response) => {
-  try {
+router.put('/services/:id', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const updates = req.body;
 
@@ -294,17 +277,13 @@ router.put('/services/:id', async (req: Request, res: Response) => {
 
     await service.save();
     sendSuccess(res, service);
-  } catch (error: any) {
-    sendError(res, error.message || 'Failed to update service', 500);
-  }
-});
+}));
 
 /**
  * GET /api/admin/travel/bookings
  * List travel bookings with filters
  */
-router.get('/bookings', async (req: Request, res: Response) => {
-  try {
+router.get('/bookings', asyncHandler(async (req: Request, res: Response) => {
     const {
       page = 1,
       limit = 20,
@@ -372,17 +351,13 @@ router.get('/bookings', async (req: Request, res: Response) => {
         pages: Math.ceil(total / limitNum),
       },
     });
-  } catch (error: any) {
-    sendError(res, error.message || 'Failed to load bookings', 500);
-  }
-});
+}));
 
 /**
  * GET /api/admin/travel/bookings/:id
  * Get single booking detail
  */
-router.get('/bookings/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/bookings/:id', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -401,17 +376,13 @@ router.get('/bookings/:id', async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, booking);
-  } catch (error: any) {
-    sendError(res, error.message || 'Failed to load booking', 500);
-  }
-});
+}));
 
 /**
  * PUT /api/admin/travel/bookings/:id/status
  * Admin status override
  */
-router.put('/bookings/:id/status', async (req: Request, res: Response) => {
-  try {
+router.put('/bookings/:id/status', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { status } = req.body;
 
@@ -440,17 +411,13 @@ router.put('/bookings/:id/status', async (req: Request, res: Response) => {
 
     await booking.save();
     sendSuccess(res, booking);
-  } catch (error: any) {
-    sendError(res, error.message || 'Failed to update booking status', 500);
-  }
-});
+}));
 
 /**
  * PUT /api/admin/travel/bookings/:id/cashback
  * Admin cashback override (force credit or clawback)
  */
-router.put('/bookings/:id/cashback', async (req: Request, res: Response) => {
-  try {
+router.put('/bookings/:id/cashback', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { action } = req.body; // 'credit' or 'clawback'
 
@@ -484,17 +451,13 @@ router.put('/bookings/:id/cashback', async (req: Request, res: Response) => {
     // Re-fetch updated booking
     const updated = await ServiceBooking.findById(id).lean();
     sendSuccess(res, updated);
-  } catch (error: any) {
-    sendError(res, error.message || 'Failed to override cashback', 500);
-  }
-});
+}));
 
 /**
  * PUT /api/admin/travel/bookings/:id/pnr
  * Update PNR, eTicketUrl, externalReference
  */
-router.put('/bookings/:id/pnr', async (req: Request, res: Response) => {
-  try {
+router.put('/bookings/:id/pnr', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { pnr, eTicketUrl, externalReference } = req.body;
 
@@ -513,9 +476,6 @@ router.put('/bookings/:id/pnr', async (req: Request, res: Response) => {
 
     await booking.save();
     sendSuccess(res, booking);
-  } catch (error: any) {
-    sendError(res, error.message || 'Failed to update PNR', 500);
-  }
-});
+}));
 
 export default router;

@@ -14,6 +14,7 @@ import { sendSuccess, sendError } from '../../utils/response';
 import gameService from '../../services/gameService';
 import coinService from '../../services/coinService';
 import { invalidateGameConfigCache } from '../../services/gameService';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -162,8 +163,7 @@ const DEFAULT_GAME_CONFIGS = [
  * GET /api/admin/game-config
  * List all game configs, sorted by sortOrder
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const filter: any = {};
 
     if (req.query.enabled === 'true') {
@@ -177,18 +177,13 @@ router.get('/', async (req: Request, res: Response) => {
       .lean();
 
     return sendSuccess(res, { gameConfigs }, 'Game configs fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching game configs:', error);
-    return sendError(res, 'Failed to fetch game configs', 500);
-  }
-});
+}));
 
 /**
  * GET /api/admin/game-config/:gameType
  * Get config by gameType string (not ObjectId)
  */
-router.get('/:gameType', async (req: Request, res: Response) => {
-  try {
+router.get('/:gameType', asyncHandler(async (req: Request, res: Response) => {
     const { gameType } = req.params;
 
     // If it looks like an ObjectId, try finding by ID
@@ -207,18 +202,13 @@ router.get('/:gameType', async (req: Request, res: Response) => {
     }
 
     return sendSuccess(res, gameConfig, 'Game config fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching game config:', error);
-    return sendError(res, 'Failed to fetch game config', 500);
-  }
-});
+}));
 
 /**
  * POST /api/admin/game-config
  * Create new game config
  */
-router.post('/', async (req: Request, res: Response) => {
-  try {
+router.post('/', asyncHandler(async (req: Request, res: Response) => {
     const { gameType, displayName, description, icon } = req.body;
 
     if (!gameType || !displayName || !description || !icon) {
@@ -235,24 +225,22 @@ router.post('/', async (req: Request, res: Response) => {
       return sendError(res, `Game config for "${gameType}" already exists`, 409);
     }
 
-    const gameConfig = await GameConfig.create(req.body);
-
-    return sendSuccess(res, gameConfig, 'Game config created');
-  } catch (error: any) {
-    logger.error('[Admin] Error creating game config:', error);
-    if (error.code === 11000) {
-      return sendError(res, 'A game config with this gameType already exists', 409);
+    try {
+      const gameConfig = await GameConfig.create(req.body);
+      return sendSuccess(res, gameConfig, 'Game config created');
+    } catch (error: any) {
+      if (error.code === 11000) {
+        return sendError(res, 'A game config with this gameType already exists', 409);
+      }
+      throw error;
     }
-    return sendError(res, 'Failed to create game config', 500);
-  }
-});
+}));
 
 /**
  * POST /api/admin/game-config/seed
  * Seed default configs for all 6 game types if they don't exist yet
  */
-router.post('/seed', async (req: Request, res: Response) => {
-  try {
+router.post('/seed', asyncHandler(async (req: Request, res: Response) => {
     // Find which game types already exist
     const existingConfigs = await GameConfig.find({}).select('gameType').lean();
     const existingTypes = new Set<string>(existingConfigs.map(c => c.gameType));
@@ -271,18 +259,13 @@ router.post('/seed', async (req: Request, res: Response) => {
       existing: existingConfigs.length,
       newConfigs: created,
     }, `Seeded ${created.length} game configs`);
-  } catch (error) {
-    logger.error('[Admin] Error seeding game configs:', error);
-    return sendError(res, 'Failed to seed game configs', 500);
-  }
-});
+}));
 
 /**
  * PUT /api/admin/game-config/:id
  * Update game config by ID
  */
-router.put('/:id', async (req: Request, res: Response) => {
-  try {
+router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid game config ID', 400);
     }
@@ -307,18 +290,13 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     invalidateGameConfigCache(gameConfig.gameType);
     return sendSuccess(res, gameConfig, 'Game config updated');
-  } catch (error) {
-    logger.error('[Admin] Error updating game config:', error);
-    return sendError(res, 'Failed to update game config', 500);
-  }
-});
+}));
 
 /**
  * PATCH /api/admin/game-config/:id/toggle
  * Toggle isEnabled
  */
-router.patch('/:id/toggle', async (req: Request, res: Response) => {
-  try {
+router.patch('/:id/toggle', asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid game config ID', 400);
     }
@@ -332,18 +310,13 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
     await gameConfig.save();
 
     return sendSuccess(res, gameConfig, `Game "${gameConfig.displayName}" ${gameConfig.isEnabled ? 'enabled' : 'disabled'}`);
-  } catch (error) {
-    logger.error('[Admin] Error toggling game config:', error);
-    return sendError(res, 'Failed to toggle game config', 500);
-  }
-});
+}));
 
 /**
  * PATCH /api/admin/game-config/:id/featured
  * Toggle featured
  */
-router.patch('/:id/featured', async (req: Request, res: Response) => {
-  try {
+router.patch('/:id/featured', asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid game config ID', 400);
     }
@@ -357,18 +330,13 @@ router.patch('/:id/featured', async (req: Request, res: Response) => {
     await gameConfig.save();
 
     return sendSuccess(res, gameConfig, `Game "${gameConfig.displayName}" ${gameConfig.featured ? 'featured' : 'unfeatured'}`);
-  } catch (error) {
-    logger.error('[Admin] Error toggling game config featured:', error);
-    return sendError(res, 'Failed to toggle featured status', 500);
-  }
-});
+}));
 
 /**
  * PATCH /api/admin/game-config/reorder
  * Bulk update sort orders
  */
-router.patch('/reorder', async (req: Request, res: Response) => {
-  try {
+router.patch('/reorder', asyncHandler(async (req: Request, res: Response) => {
     const { items } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -387,18 +355,13 @@ router.patch('/reorder', async (req: Request, res: Response) => {
     const updated = await GameConfig.find({}).sort({ sortOrder: 1 }).lean();
 
     return sendSuccess(res, { gameConfigs: updated }, 'Sort orders updated');
-  } catch (error) {
-    logger.error('[Admin] Error reordering game configs:', error);
-    return sendError(res, 'Failed to reorder game configs', 500);
-  }
-});
+}));
 
 /**
  * DELETE /api/admin/game-config/:id
  * Delete game config
  */
-router.delete('/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid game config ID', 400);
     }
@@ -410,11 +373,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     invalidateGameConfigCache(gameConfig.gameType);
     return sendSuccess(res, null, 'Game config deleted');
-  } catch (error) {
-    logger.error('[Admin] Error deleting game config:', error);
-    return sendError(res, 'Failed to delete game config', 500);
-  }
-});
+}));
 
 // ======== PHASE 5: GAME ANALYTICS ========
 
@@ -422,26 +381,20 @@ router.delete('/:id', async (req: Request, res: Response) => {
  * GET /api/admin/game-config/analytics
  * Game analytics dashboard data
  */
-router.get('/analytics/overview', async (req: Request, res: Response) => {
-  try {
+router.get('/analytics/overview', asyncHandler(async (req: Request, res: Response) => {
     const { gameType, days = '30' } = req.query;
     const analytics = await gameService.getGameAnalytics(
       gameType as string | undefined,
       parseInt(days as string) || 30
     );
     return sendSuccess(res, analytics, 'Game analytics fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching game analytics:', error);
-    return sendError(res, 'Failed to fetch game analytics', 500);
-  }
-});
+}));
 
 /**
  * GET /api/admin/game-config/user/:userId/history
  * Get a specific user's game history (for admin investigation)
  */
-router.get('/user/:userId/history', async (req: Request, res: Response) => {
-  try {
+router.get('/user/:userId/history', asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
     const { gameType, limit = '50' } = req.query;
 
@@ -461,11 +414,7 @@ router.get('/user/:userId/history', async (req: Request, res: Response) => {
     ]);
 
     return sendSuccess(res, { user, sessions, total: sessions.length }, 'User game history fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching user game history:', error);
-    return sendError(res, 'Failed to fetch user game history', 500);
-  }
-});
+}));
 
 // ======== PHASE 5: GAME BAN MANAGEMENT ========
 
@@ -473,8 +422,7 @@ router.get('/user/:userId/history', async (req: Request, res: Response) => {
  * POST /api/admin/game-config/user/:userId/ban
  * Ban a user from playing games
  */
-router.post('/user/:userId/ban', async (req: Request, res: Response) => {
-  try {
+router.post('/user/:userId/ban', asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
     const { reason } = req.body;
 
@@ -497,18 +445,13 @@ router.post('/user/:userId/ban', async (req: Request, res: Response) => {
     if (!user) return sendError(res, 'User not found', 404);
 
     return sendSuccess(res, user, `User ${user.fullName || userId} banned from games`);
-  } catch (error) {
-    logger.error('[Admin] Error banning user from games:', error);
-    return sendError(res, 'Failed to ban user', 500);
-  }
-});
+}));
 
 /**
  * POST /api/admin/game-config/user/:userId/unban
  * Unban a user from playing games
  */
-router.post('/user/:userId/unban', async (req: Request, res: Response) => {
-  try {
+router.post('/user/:userId/unban', asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
 
     if (!Types.ObjectId.isValid(userId)) {
@@ -527,11 +470,7 @@ router.post('/user/:userId/unban', async (req: Request, res: Response) => {
     if (!user) return sendError(res, 'User not found', 404);
 
     return sendSuccess(res, user, `User ${user.fullName || userId} unbanned from games`);
-  } catch (error) {
-    logger.error('[Admin] Error unbanning user from games:', error);
-    return sendError(res, 'Failed to unban user', 500);
-  }
-});
+}));
 
 // ======== PHASE 5: MANUAL COIN OPERATIONS ========
 
@@ -539,8 +478,7 @@ router.post('/user/:userId/unban', async (req: Request, res: Response) => {
  * POST /api/admin/game-config/user/:userId/credit-coins
  * Manually credit coins to a user (with reason logged)
  */
-router.post('/user/:userId/credit-coins', async (req: Request, res: Response) => {
-  try {
+router.post('/user/:userId/credit-coins', asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
     const { amount, reason } = req.body;
 
@@ -563,18 +501,13 @@ router.post('/user/:userId/credit-coins', async (req: Request, res: Response) =>
     );
 
     return sendSuccess(res, { amount, newBalance: result.newBalance, reason }, `Credited ${amount} coins to user`);
-  } catch (error: any) {
-    logger.error('[Admin] Error crediting coins:', error);
-    return sendError(res, error.message || 'Failed to credit coins', 500);
-  }
-});
+}));
 
 /**
  * POST /api/admin/game-config/user/:userId/revoke-coins
  * Manually revoke (deduct) coins from a user (with reason logged)
  */
-router.post('/user/:userId/revoke-coins', async (req: Request, res: Response) => {
-  try {
+router.post('/user/:userId/revoke-coins', asyncHandler(async (req: Request, res: Response) => {
     const { userId } = req.params;
     const { amount, reason } = req.body;
 
@@ -598,25 +531,16 @@ router.post('/user/:userId/revoke-coins', async (req: Request, res: Response) =>
     );
 
     return sendSuccess(res, { amount, newBalance: result.newBalance, reason }, `Revoked ${amount} coins from user`);
-  } catch (error: any) {
-    logger.error('[Admin] Error revoking coins:', error);
-    return sendError(res, error.message || 'Failed to revoke coins', 500);
-  }
-});
+}));
 
 /**
  * POST /api/admin/game-config/invalidate-cache
  * Invalidate game config cache (after admin changes)
  */
-router.post('/invalidate-cache', async (_req: Request, res: Response) => {
-  try {
+router.post('/invalidate-cache', asyncHandler(async (_req: Request, res: Response) => {
     invalidateGameConfigCache();
     return sendSuccess(res, null, 'Game config cache invalidated');
-  } catch (error) {
-    logger.error('[Admin] Error invalidating cache:', error);
-    return sendError(res, 'Failed to invalidate cache', 500);
-  }
-});
+}));
 
 // ======== SCRATCH CARD SPECIFIC ANALYTICS ========
 
@@ -624,8 +548,7 @@ router.post('/invalidate-cache', async (_req: Request, res: Response) => {
  * GET /api/admin/game-config/analytics/scratch-card
  * Detailed scratch card analytics: breakage, prize distribution, reward cost, fraud flags
  */
-router.get('/analytics/scratch-card', async (req: Request, res: Response) => {
-  try {
+router.get('/analytics/scratch-card', asyncHandler(async (req: Request, res: Response) => {
     const { days = '30' } = req.query;
     const daysNum = parseInt(days as string) || 30;
     const startDate = new Date();
@@ -718,10 +641,6 @@ router.get('/analytics/scratch-card', async (req: Request, res: Response) => {
       dailyActivity,
       suspiciousActivity,
     }, 'Scratch card analytics fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching scratch card analytics:', error);
-    return sendError(res, 'Failed to fetch scratch card analytics', 500);
-  }
-});
+}));
 
 export default router;

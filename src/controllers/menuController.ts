@@ -5,13 +5,13 @@ import Menu, { IMenuItem, IMenuCategory } from '../models/Menu';
 import PreOrder from '../models/PreOrder';
 import { Store } from '../models/Store';
 import { sendSuccess, sendError } from '../utils/response';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Get store menu by store ID
  * GET /api/menu/store/:storeId
  */
-export const getStoreMenu = async (req: Request, res: Response) => {
-  try {
+export const getStoreMenu = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
 
     // Check if store exists
@@ -64,18 +64,13 @@ export const getStoreMenu = async (req: Request, res: Response) => {
     };
 
     sendSuccess(res, response, 'Menu retrieved successfully');
-  } catch (error: any) {
-    logger.error('[MENU] Error getting store menu:', error);
-    sendError(res, error.message || 'Failed to retrieve menu', 500);
-  }
-};
+});
 
 /**
  * Create or update store menu
  * POST /api/menu/store/:storeId
  */
-export const createOrUpdateMenu = async (req: Request, res: Response) => {
-  try {
+export const createOrUpdateMenu = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { categories } = req.body;
 
@@ -115,18 +110,13 @@ export const createOrUpdateMenu = async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, menu, 'Menu saved successfully', 201);
-  } catch (error: any) {
-    logger.error('[MENU] Error creating/updating menu:', error);
-    sendError(res, error.message || 'Failed to save menu', 500);
-  }
-};
+});
 
 /**
  * Add menu item to category
  * POST /api/menu/items
  */
-export const addMenuItem = async (req: Request, res: Response) => {
-  try {
+export const addMenuItem = asyncHandler(async (req: Request, res: Response) => {
     const { storeId, categoryId, item } = req.body;
 
     // Validate request
@@ -144,18 +134,13 @@ export const addMenuItem = async (req: Request, res: Response) => {
     await menu.addMenuItem(categoryId, item);
 
     sendSuccess(res, menu, 'Menu item added successfully', 201);
-  } catch (error: any) {
-    logger.error('[MENU] Error adding menu item:', error);
-    sendError(res, error.message || 'Failed to add menu item', 500);
-  }
-};
+});
 
 /**
  * Update menu item
  * PUT /api/menu/items/:itemId
  */
-export const updateMenuItem = async (req: Request, res: Response) => {
-  try {
+export const updateMenuItem = asyncHandler(async (req: Request, res: Response) => {
     const { itemId } = req.params;
     const { storeId, categoryId, ...updateData } = req.body;
 
@@ -174,18 +159,13 @@ export const updateMenuItem = async (req: Request, res: Response) => {
     await menu.updateMenuItem(categoryId, itemId, updateData);
 
     sendSuccess(res, menu, 'Menu item updated successfully');
-  } catch (error: any) {
-    logger.error('[MENU] Error updating menu item:', error);
-    sendError(res, error.message || 'Failed to update menu item', 500);
-  }
-};
+});
 
 /**
  * Delete menu item
  * DELETE /api/menu/items/:itemId
  */
-export const deleteMenuItem = async (req: Request, res: Response) => {
-  try {
+export const deleteMenuItem = asyncHandler(async (req: Request, res: Response) => {
     const { itemId } = req.params;
     const { storeId, categoryId } = req.body;
 
@@ -204,18 +184,13 @@ export const deleteMenuItem = async (req: Request, res: Response) => {
     await menu.deleteMenuItem(categoryId, itemId);
 
     sendSuccess(res, { deleted: true }, 'Menu item deleted successfully');
-  } catch (error: any) {
-    logger.error('[MENU] Error deleting menu item:', error);
-    sendError(res, error.message || 'Failed to delete menu item', 500);
-  }
-};
+});
 
 /**
  * Get menu item by ID
  * GET /api/menu/items/:itemId
  */
-export const getMenuItem = async (req: Request, res: Response) => {
-  try {
+export const getMenuItem = asyncHandler(async (req: Request, res: Response) => {
     const { itemId } = req.params;
     const { storeId, categoryId } = req.query;
 
@@ -234,18 +209,13 @@ export const getMenuItem = async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, item, 'Menu item retrieved successfully');
-  } catch (error: any) {
-    logger.error('[MENU] Error getting menu item:', error);
-    sendError(res, error.message || 'Failed to retrieve menu item', 500);
-  }
-};
+});
 
 /**
  * Create pre-order
  * POST /api/menu/pre-orders
  */
-export const createPreOrder = async (req: Request, res: Response) => {
-  try {
+export const createPreOrder = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.userId;
     if (!userId) {
       return sendError(res, 'Unauthorized', 401);
@@ -337,18 +307,13 @@ export const createPreOrder = async (req: Request, res: Response) => {
     await preOrder.populate('storeId', 'name logo location');
 
     sendSuccess(res, preOrder, 'Pre-order created successfully', 201);
-  } catch (error: any) {
-    logger.error('[MENU] Error creating pre-order:', error);
-    sendError(res, error.message || 'Failed to create pre-order', 500);
-  }
-};
+});
 
 /**
  * Get user's pre-orders
  * GET /api/menu/pre-orders/user
  */
-export const getUserPreOrders = async (req: Request, res: Response) => {
-  try {
+export const getUserPreOrders = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.userId;
     if (!userId) {
       return sendError(res, 'Unauthorized', 401);
@@ -359,18 +324,13 @@ export const getUserPreOrders = async (req: Request, res: Response) => {
     const preOrders = await PreOrder.findUserOrders(userId, limit);
 
     sendSuccess(res, preOrders, 'Pre-orders retrieved successfully');
-  } catch (error: any) {
-    logger.error('[MENU] Error getting user pre-orders:', error);
-    sendError(res, error.message || 'Failed to retrieve pre-orders', 500);
-  }
-};
+});
 
 /**
  * Get pre-order by ID
  * GET /api/menu/pre-orders/:preOrderId
  */
-export const getPreOrder = async (req: Request, res: Response) => {
-  try {
+export const getPreOrder = asyncHandler(async (req: Request, res: Response) => {
     const { preOrderId } = req.params;
     const userId = req.userId;
 
@@ -388,18 +348,13 @@ export const getPreOrder = async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, preOrder, 'Pre-order retrieved successfully');
-  } catch (error: any) {
-    logger.error('[MENU] Error getting pre-order:', error);
-    sendError(res, error.message || 'Failed to retrieve pre-order', 500);
-  }
-};
+});
 
 /**
  * Cancel pre-order
  * PUT /api/menu/pre-orders/:preOrderId/cancel
  */
-export const cancelPreOrder = async (req: Request, res: Response) => {
-  try {
+export const cancelPreOrder = asyncHandler(async (req: Request, res: Response) => {
     const { preOrderId } = req.params;
     const userId = req.userId;
 
@@ -417,18 +372,13 @@ export const cancelPreOrder = async (req: Request, res: Response) => {
     await preOrder.updateStatus('cancelled');
 
     sendSuccess(res, preOrder, 'Pre-order cancelled successfully');
-  } catch (error: any) {
-    logger.error('[MENU] Error cancelling pre-order:', error);
-    sendError(res, error.message || 'Failed to cancel pre-order', 500);
-  }
-};
+});
 
 /**
  * Search menu items
  * GET /api/menu/search
  */
-export const searchMenuItems = async (req: Request, res: Response) => {
-  try {
+export const searchMenuItems = asyncHandler(async (req: Request, res: Response) => {
     const { query, storeId } = req.query;
 
     if (!query) {
@@ -480,8 +430,4 @@ export const searchMenuItems = async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, results, `Found ${results.length} menu items`);
-  } catch (error: any) {
-    logger.error('[MENU] Error searching menu items:', error);
-    sendError(res, error.message || 'Failed to search menu items', 500);
-  }
-};
+});

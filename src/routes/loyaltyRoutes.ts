@@ -1,6 +1,7 @@
 import { logger } from '../config/logger';
 import { Router, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
+import { asyncHandler } from '../utils/asyncHandler';
 import {
   getUserLoyalty,
   checkIn,
@@ -38,8 +39,7 @@ const missionLimiter = rateLimit({
 const router = Router();
 
 // Get all active loyalty milestones (public)
-router.get('/milestones', async (req: Request, res: Response) => {
-  try {
+router.get('/milestones', asyncHandler(async (req: Request, res: Response) => {
     const milestones = await LoyaltyMilestone.find({ isActive: true })
       .sort({ order: 1 })
       .lean();
@@ -49,14 +49,7 @@ router.get('/milestones', async (req: Request, res: Response) => {
       data: milestones,
       message: 'Loyalty milestones retrieved successfully',
     });
-  } catch (error) {
-    logger.error('[Loyalty] Error fetching milestones:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch loyalty milestones',
-    });
-  }
-});
+}));
 
 // Homepage summary - uses optional auth (works for both logged in and anonymous users)
 router.get('/homepage-summary', optionalAuth, getHomepageLoyaltySummary);

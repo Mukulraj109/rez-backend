@@ -7,6 +7,7 @@ import mongoose from 'mongoose';
 import { getCachedWalletConfig } from '../../services/walletCacheService';
 import { CURRENCY_RULES } from '../../config/currencyRules';
 import { logger } from '../../config/logger';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 router.use(authMiddleware);
@@ -32,8 +33,7 @@ async function verifyStoreOwnership(storeId: string, merchantId: string): Promis
  * GET /stores/:storeId/branded-campaigns
  * Get branded coin analytics for a store.
  */
-router.get('/stores/:storeId/branded-campaigns', async (req: Request, res: Response) => {
-  try {
+router.get('/stores/:storeId/branded-campaigns', asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const merchantId = req.merchantId!;
 
@@ -106,21 +106,13 @@ router.get('/stores/:storeId/branded-campaigns', async (req: Request, res: Respo
         uniqueCustomers: circulation.uniqueCustomers?.length || 0,
       },
     });
-  } catch (error: any) {
-    logger.error('[Merchant BrandedCoins] Analytics error:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve branded coin analytics',
-    });
-  }
-});
+}));
 
 /**
  * GET /stores/:storeId/branded-campaigns/customers
  * List customers who hold branded coins for this store.
  */
-router.get('/stores/:storeId/branded-campaigns/customers', async (req: Request, res: Response) => {
-  try {
+router.get('/stores/:storeId/branded-campaigns/customers', asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const merchantId = req.merchantId!;
 
@@ -195,21 +187,13 @@ router.get('/stores/:storeId/branded-campaigns/customers', async (req: Request, 
         },
       },
     });
-  } catch (error: any) {
-    logger.error('[Merchant BrandedCoins] Customers error:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve branded coin customers',
-    });
-  }
-});
+}));
 
 /**
  * POST /stores/:storeId/branded-campaigns/award
  * Award branded coins to a customer.
  */
-router.post('/stores/:storeId/branded-campaigns/award', async (req: Request, res: Response) => {
-  try {
+router.post('/stores/:storeId/branded-campaigns/award', asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const merchantId = req.merchantId!;
 
@@ -328,13 +312,6 @@ router.post('/stores/:storeId/branded-campaigns/award', async (req: Request, res
         newBrandedBalance: brandedCoin?.amount || amount,
       },
     });
-  } catch (error: any) {
-    logger.error('[Merchant BrandedCoins] Award error:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to award branded coins',
-    });
-  }
-});
+}));
 
 export default router;

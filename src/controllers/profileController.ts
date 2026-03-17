@@ -4,7 +4,7 @@ import { logger } from '../config/logger';
 
 import { Request, Response } from 'express';
 import { sendSuccess, sendError, sendBadRequest, sendNotFound, sendValidationError } from '../utils/response';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { User } from '../models/User';
 import { uploadProfileImage } from '../middleware/upload';

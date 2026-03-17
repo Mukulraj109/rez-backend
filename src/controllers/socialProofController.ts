@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Order } from '../models/Order';
 import { logger } from '../config/logger';
 import mongoose from 'mongoose';
+import { asyncHandler } from '../utils/asyncHandler';
 
 // Helper function to format time ago
 const formatTimeAgo = (date: Date): string => {
@@ -50,8 +51,7 @@ const calculateDistance = (
  * Get nearby activity feed for social proof
  * Shows real user savings from delivered orders near the user's location
  */
-export const getNearbyActivity = async (req: Request, res: Response) => {
-  try {
+export const getNearbyActivity = asyncHandler(async (req: Request, res: Response) => {
     const { latitude, longitude, radius = 5, limit = 10, city } = req.query;
 
     // Validate required parameters
@@ -289,21 +289,12 @@ export const getNearbyActivity = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error) {
-    logger.error('Error fetching nearby activity:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to fetch nearby activity',
-      details: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-};
+});
 
 /**
  * Get city-wide statistics when no nearby activity is available
  */
-export const getCityWideStats = async (req: Request, res: Response) => {
-  try {
+export const getCityWideStats = asyncHandler(async (req: Request, res: Response) => {
     const { city } = req.query;
 
     if (!city) {
@@ -366,15 +357,7 @@ export const getCityWideStats = async (req: Request, res: Response) => {
         message: `${stats.totalOrders} people saved ₹${Math.round(stats.totalSavings || 0)} today in ${city}`,
       },
     });
-  } catch (error) {
-    logger.error('Error fetching city-wide stats:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to fetch city-wide statistics',
-      details: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-};
+});
 
 export default {
   getNearbyActivity,

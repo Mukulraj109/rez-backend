@@ -5,13 +5,13 @@ import { Store } from '../models/Store';
 import { logger } from '../config/logger';
 import mongoose from 'mongoose';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Get all services with filters
  * GET /api/services
  */
-export const getServices = async (req: Request, res: Response) => {
-  try {
+export const getServices = asyncHandler(async (req: Request, res: Response) => {
     const {
       page = '1',
       limit = '20',
@@ -122,22 +122,13 @@ export const getServices = async (req: Request, res: Response) => {
         pages: Math.ceil(total / limitNum)
       }
     });
-  } catch (error: any) {
-    logger.error('Error fetching services:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch services',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get popular services for homepage
  * GET /api/services/popular
  */
-export const getPopularServices = async (req: Request, res: Response) => {
-  try {
+export const getPopularServices = asyncHandler(async (req: Request, res: Response) => {
     const { limit = '10' } = req.query;
     const limitNum = parseInt(limit as string, 10);
 
@@ -174,22 +165,13 @@ export const getPopularServices = async (req: Request, res: Response) => {
       data: services,
       count: services.length
     });
-  } catch (error: any) {
-    logger.error('Error fetching popular services:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch popular services',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get nearby services based on user location
  * GET /api/services/nearby
  */
-export const getNearbyServices = async (req: Request, res: Response) => {
-  try {
+export const getNearbyServices = asyncHandler(async (req: Request, res: Response) => {
     const {
       latitude,
       longitude,
@@ -270,22 +252,13 @@ export const getNearbyServices = async (req: Request, res: Response) => {
       count: services.length,
       location: { latitude: lat, longitude: lng, radius: radiusKm }
     });
-  } catch (error: any) {
-    logger.error('Error fetching nearby services:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch nearby services',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get service by ID
  * GET /api/services/:id
  */
-export const getServiceById = async (req: Request, res: Response) => {
-  try {
+export const getServiceById = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -322,22 +295,13 @@ export const getServiceById = async (req: Request, res: Response) => {
       success: true,
       data: service
     });
-  } catch (error: any) {
-    logger.error('Error fetching service:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch service',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get related services
  * GET /api/services/:id/related
  */
-export const getRelatedServices = async (req: Request, res: Response) => {
-  try {
+export const getRelatedServices = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { limit = '6' } = req.query;
     const limitNum = parseInt(limit as string, 10);
@@ -380,22 +344,13 @@ export const getRelatedServices = async (req: Request, res: Response) => {
       data: relatedServices,
       count: relatedServices.length
     });
-  } catch (error: any) {
-    logger.error('Error fetching related services:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch related services',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get featured services (for homepage banner)
  * GET /api/services/featured
  */
-export const getFeaturedServices = async (req: Request, res: Response) => {
-  try {
+export const getFeaturedServices = asyncHandler(async (req: Request, res: Response) => {
     const { limit = '6' } = req.query;
     const limitNum = parseInt(limit as string, 10);
 
@@ -433,22 +388,13 @@ export const getFeaturedServices = async (req: Request, res: Response) => {
       data: services,
       count: services.length
     });
-  } catch (error: any) {
-    logger.error('Error fetching featured services:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch featured services',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Search services
  * GET /api/services/search
  */
-export const searchServices = async (req: Request, res: Response) => {
-  try {
+export const searchServices = asyncHandler(async (req: Request, res: Response) => {
     const {
       q,
       page = '1',
@@ -536,15 +482,7 @@ export const searchServices = async (req: Request, res: Response) => {
         pages: Math.ceil(total / limitNum)
       }
     });
-  } catch (error: any) {
-    logger.error('Error searching services:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to search services',
-      error: error.message
-    });
-  }
-};
+});
 
 // Export all controller functions
 export default {

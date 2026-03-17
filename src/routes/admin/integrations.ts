@@ -5,6 +5,7 @@ import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { MerchantIntegration } from '../../models/MerchantIntegration';
 import { ExternalTransaction } from '../../models/ExternalTransaction';
 import { logger } from '../../config/logger';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -14,8 +15,7 @@ router.use(requireAdmin);
 /**
  * GET /admin/integrations — List all merchant integrations
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const { status, provider, page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, Number(page));
     const limitNum = Math.min(50, Math.max(1, Number(limit)));
@@ -42,15 +42,12 @@ router.get('/', async (req: Request, res: Response) => {
         pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) },
       },
     });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch integrations' });
-  }
-});
+  }));
 
 /**
  * POST /admin/integrations/:merchantId — Enable integration for merchant
  */
-router.post('/:merchantId', async (req: Request, res: Response) => {
+router.post('/:merchantId', asyncHandler(async (req: Request, res: Response) => {
   try {
     const { merchantId } = req.params;
     const { storeId, integrationType, provider, syncMode, ipWhitelist, config } = req.body;
@@ -85,13 +82,12 @@ router.post('/:merchantId', async (req: Request, res: Response) => {
     }
     res.status(500).json({ success: false, message: error.message || 'Failed to create integration' });
   }
-});
+}));
 
 /**
  * PUT /admin/integrations/:id — Update integration config
  */
-router.put('/:id', async (req: Request, res: Response) => {
-  try {
+router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const updates: any = {};
     const { provider, syncMode, ipWhitelist, config, status } = req.body;
@@ -106,16 +102,12 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (!integration) return res.status(404).json({ success: false, message: 'Integration not found' });
 
     res.json({ success: true, data: { integration } });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to update integration' });
-  }
-});
+  }));
 
 /**
  * PATCH /admin/integrations/:id/toggle — Pause/resume integration
  */
-router.patch('/:id/toggle', async (req: Request, res: Response) => {
-  try {
+router.patch('/:id/toggle', asyncHandler(async (req: Request, res: Response) => {
     const integration = await MerchantIntegration.findById(req.params.id);
     if (!integration) return res.status(404).json({ success: false, message: 'Integration not found' });
 
@@ -124,16 +116,12 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
     await integration.save();
 
     res.json({ success: true, data: { status: integration.status } });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to toggle integration' });
-  }
-});
+  }));
 
 /**
  * GET /admin/integrations/:id/transactions — View sync logs
  */
-router.get('/:id/transactions', async (req: Request, res: Response) => {
-  try {
+router.get('/:id/transactions', asyncHandler(async (req: Request, res: Response) => {
     const { page = 1, limit = 20, status } = req.query;
     const pageNum = Math.max(1, Number(page));
     const limitNum = Math.min(50, Math.max(1, Number(limit)));
@@ -158,16 +146,12 @@ router.get('/:id/transactions', async (req: Request, res: Response) => {
         pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) },
       },
     });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch transactions' });
-  }
-});
+  }));
 
 /**
  * POST /admin/integrations/:id/reprocess — Reprocess failed transactions
  */
-router.post('/:id/reprocess', async (req: Request, res: Response) => {
-  try {
+router.post('/:id/reprocess', asyncHandler(async (req: Request, res: Response) => {
     const failed = await ExternalTransaction.find({
       integration: req.params.id,
       status: { $in: ['pending', 'failed'] },
@@ -187,9 +171,6 @@ router.post('/:id/reprocess', async (req: Request, res: Response) => {
     }
 
     res.json({ success: true, data: { reprocessed, total: failed.length } });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to reprocess' });
-  }
-});
+  }));
 
 export default router;

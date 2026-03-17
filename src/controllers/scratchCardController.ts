@@ -4,7 +4,7 @@ import { logger } from '../config/logger';
 
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess, sendError, sendNotFound, sendBadRequest } from '../utils/response';
 import ScratchCard from '../models/ScratchCard';
 import { Wallet } from '../models/Wallet';

@@ -3,13 +3,13 @@ import HeroBanner from '../models/HeroBanner';
 import { sendSuccess, sendError } from '../utils/response';
 import redisService from '../services/redisService';
 import { logger } from '../config/logger';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * GET /api/hero-banners
  * Get active hero banners
  */
-export const getActiveBanners = async (req: Request, res: Response) => {
-  try {
+export const getActiveBanners = asyncHandler(async (req: Request, res: Response) => {
     const { page = 'offers', position = 'top', limit = 5 } = req.query;
 
     const cacheKey = `hero-banners:${page}:${position}:${limit}`;
@@ -24,18 +24,13 @@ export const getActiveBanners = async (req: Request, res: Response) => {
     redisService.set(cacheKey, limitedBanners, 300).catch(() => {}); // 5min cache
 
     sendSuccess(res, limitedBanners, 'Active hero banners fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching active hero banners:', error);
-    sendError(res, 'Failed to fetch hero banners', 500);
-  }
-};
+});
 
 /**
  * GET /api/hero-banners/user
  * Get banners for specific user (with targeting)
  */
-export const getBannersForUser = async (req: Request, res: Response) => {
-  try {
+export const getBannersForUser = asyncHandler(async (req: Request, res: Response) => {
     const { page = 'offers', limit = 5 } = req.query;
 
     const userData = req.user ? {
@@ -59,18 +54,13 @@ export const getBannersForUser = async (req: Request, res: Response) => {
     redisService.set(cacheKey, limitedBanners, 300).catch(() => {}); // 5min cache
 
     sendSuccess(res, limitedBanners, 'User-targeted hero banners fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching user-targeted hero banners:', error);
-    sendError(res, 'Failed to fetch hero banners', 500);
-  }
-};
+});
 
 /**
  * GET /api/hero-banners/:id
  * Get single banner by ID
  */
-export const getHeroBannerById = async (req: Request, res: Response) => {
-  try {
+export const getHeroBannerById = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     const banner = await HeroBanner.findById(id);
@@ -87,11 +77,7 @@ export const getHeroBannerById = async (req: Request, res: Response) => {
     };
 
     sendSuccess(res, bannerData, 'Hero banner fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching hero banner by ID:', error);
-    sendError(res, 'Failed to fetch hero banner', 500);
-  }
-};
+});
 
 /**
  * POST /api/hero-banners/:id/view

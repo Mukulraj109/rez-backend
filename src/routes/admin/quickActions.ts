@@ -10,6 +10,7 @@ import QuickAction from '../../models/QuickAction';
 import { sendSuccess, sendNotFound, sendBadRequest, sendCreated } from '../../utils/response';
 import { sendError, sendPaginated } from '../../utils/response';
 import { escapeRegex } from '../../utils/sanitize';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -24,8 +25,7 @@ router.use(requireAdmin);
  * GET /api/admin/quick-actions
  * List all quick actions with pagination and search
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const skip = (page - 1) * limit;
@@ -55,36 +55,26 @@ router.get('/', async (req: Request, res: Response) => {
     ]);
 
     return sendPaginated(res, actions, page, limit, total, 'Quick actions fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching quick actions:', error);
-    return sendError(res, 'Failed to fetch quick actions', 500);
-  }
-});
+  }));
 
 /**
  * GET /api/admin/quick-actions/:id
  * Get single quick action
  */
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     const action = await QuickAction.findById(req.params.id).lean();
     if (!action) {
       return sendNotFound(res, 'Quick action not found');
     }
     return sendSuccess(res, action, 'Quick action fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching quick action:', error);
-    return sendError(res, 'Failed to fetch quick action', 500);
-  }
-});
+  }));
 
 /**
  * PUT /api/admin/quick-actions/reorder
  * Batch reorder quick actions by providing ordered IDs
  * NOTE: Must be defined before /:id routes to avoid "reorder" being treated as an :id param
  */
-router.put('/reorder', async (req: Request, res: Response) => {
-  try {
+router.put('/reorder', asyncHandler(async (req: Request, res: Response) => {
     const { orderedIds } = req.body;
 
     if (!orderedIds || !Array.isArray(orderedIds) || orderedIds.length === 0) {
@@ -104,17 +94,13 @@ router.put('/reorder', async (req: Request, res: Response) => {
       modifiedCount: result.modifiedCount,
       totalOrdered: orderedIds.length,
     }, `Reordered ${result.modifiedCount} quick actions`);
-  } catch (error) {
-    logger.error('[Admin] Error reordering quick actions:', error);
-    return sendError(res, 'Failed to reorder quick actions', 500);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/quick-actions
  * Create a new quick action
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', asyncHandler(async (req: Request, res: Response) => {
   try {
     const {
       slug, title, subtitle, icon, iconColor,
@@ -157,13 +143,13 @@ router.post('/', async (req: Request, res: Response) => {
     }
     return sendError(res, 'Failed to create quick action', 500);
   }
-});
+}));
 
 /**
  * PUT /api/admin/quick-actions/:id
  * Update a quick action
  */
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
     const {
       slug, title, subtitle, icon, iconColor,
@@ -205,31 +191,25 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
     return sendError(res, 'Failed to update quick action', 500);
   }
-});
+}));
 
 /**
  * DELETE /api/admin/quick-actions/:id
  * Delete a quick action
  */
-router.delete('/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     const action = await QuickAction.findByIdAndDelete(req.params.id);
     if (!action) {
       return sendNotFound(res, 'Quick action not found');
     }
     return sendSuccess(res, null, 'Quick action deleted');
-  } catch (error) {
-    logger.error('[Admin] Error deleting quick action:', error);
-    return sendError(res, 'Failed to delete quick action', 500);
-  }
-});
+  }));
 
 /**
  * PATCH /api/admin/quick-actions/:id/toggle
  * Toggle isActive state
  */
-router.patch('/:id/toggle', async (req: Request, res: Response) => {
-  try {
+router.patch('/:id/toggle', asyncHandler(async (req: Request, res: Response) => {
     const action = await QuickAction.findById(req.params.id);
     if (!action) {
       return sendNotFound(res, 'Quick action not found');
@@ -239,10 +219,6 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
     await action.save();
 
     return sendSuccess(res, action, `Quick action ${action.isActive ? 'activated' : 'deactivated'}`);
-  } catch (error) {
-    logger.error('[Admin] Error toggling quick action:', error);
-    return sendError(res, 'Failed to toggle quick action', 500);
-  }
-});
+  }));
 
 export default router;

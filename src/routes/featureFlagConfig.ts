@@ -3,6 +3,7 @@ import { optionalAuth } from '../middleware/auth';
 import { featureFlagService } from '../services/featureFlagService';
 import redisService from '../services/redisService';
 import { logger } from '../config/logger';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 
@@ -15,8 +16,7 @@ const CACHE_TTL = 60; // 60 seconds
  *          Uses optional auth — works for both logged-in and anonymous users.
  * @access  Public
  */
-router.get('/', optionalAuth, async (req: Request, res: Response) => {
-  try {
+router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId as string | undefined;
     const city = (req as any).user?.profile?.location?.city
       || (req.headers['x-rez-region'] as string | undefined);
@@ -44,13 +44,6 @@ router.get('/', optionalAuth, async (req: Request, res: Response) => {
     await redisService.set(cacheKey, result, CACHE_TTL).catch(() => {});
 
     res.json({ success: true, data: result });
-  } catch (error: any) {
-    logger.error('Failed to fetch feature flag config', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch feature flags',
-    });
-  }
-});
+}));
 
 export default router;

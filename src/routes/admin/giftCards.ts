@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { GiftCard } from '../../models/GiftCard';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -12,8 +13,7 @@ router.use(requireAdmin);
  * @desc    List all gift cards (active + inactive)
  * @access  Admin
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const { category, search, isActive } = req.query;
     const query: any = {};
     if (category) query.category = category;
@@ -25,18 +25,14 @@ router.get('/', async (req: Request, res: Response) => {
       .lean();
 
     res.json({ success: true, data: { giftCards, total: giftCards.length } });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch gift cards' });
-  }
-});
+}));
 
 /**
  * @route   POST /api/admin/gift-cards
  * @desc    Create a new gift card in the catalog
  * @access  Admin
  */
-router.post('/', async (req: Request, res: Response) => {
-  try {
+router.post('/', asyncHandler(async (req: Request, res: Response) => {
     const { name, description, logo, color, category, denominations, cashbackPercentage, termsAndConditions, validityDays, storeId } = req.body;
 
     if (!name || !category || !denominations?.length) {
@@ -51,18 +47,14 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     res.status(201).json({ success: true, data: giftCard, message: 'Gift card created' });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to create gift card' });
-  }
-});
+}));
 
 /**
  * @route   PUT /api/admin/gift-cards/:id
  * @desc    Update a gift card
  * @access  Admin
  */
-router.put('/:id', async (req: Request, res: Response) => {
-  try {
+router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     const giftCard = await GiftCard.findByIdAndUpdate(
       req.params.id,
       { $set: req.body },
@@ -74,18 +66,14 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
 
     res.json({ success: true, data: giftCard, message: 'Gift card updated' });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to update gift card' });
-  }
-});
+}));
 
 /**
  * @route   DELETE /api/admin/gift-cards/:id
  * @desc    Deactivate a gift card (soft delete)
  * @access  Admin
  */
-router.delete('/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     const giftCard = await GiftCard.findByIdAndUpdate(
       req.params.id,
       { isActive: false },
@@ -97,9 +85,6 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
 
     res.json({ success: true, message: 'Gift card deactivated' });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to deactivate gift card' });
-  }
-});
+}));
 
 export default router;

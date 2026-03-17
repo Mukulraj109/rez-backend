@@ -6,6 +6,7 @@ import UserZoneVerification from '../models/UserZoneVerification';
 import ExclusiveZone from '../models/ExclusiveZone';
 import { User } from '../models/User';
 import { authenticate, optionalAuth } from '../middleware/auth';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = express.Router();
 
@@ -33,8 +34,7 @@ const submitVerificationSchema = Joi.object({
  * @desc    Check user's eligibility status for a zone
  * @access  Public (optional auth)
  */
-router.get('/:slug/eligibility', optionalAuth, async (req: Request, res: Response) => {
-  try {
+router.get('/:slug/eligibility', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
     const { slug } = req.params;
     const userId = (req as any).user?._id;
 
@@ -222,23 +222,14 @@ router.get('/:slug/eligibility', optionalAuth, async (req: Request, res: Respons
         message,
       },
     });
-  } catch (error: any) {
-    logger.error('[ZONE] Eligibility check error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to check eligibility',
-      error: error.message,
-    });
-  }
-});
+}));
 
 /**
  * @route   POST /api/zones/:slug/verify
  * @desc    Submit verification request for a zone
  * @access  Private (authenticated)
  */
-router.post('/:slug/verify', authenticate, async (req: Request, res: Response) => {
-  try {
+router.post('/:slug/verify', authenticate, asyncHandler(async (req: Request, res: Response) => {
     const { slug } = req.params;
     const userId = (req as any).user._id;
 
@@ -321,23 +312,14 @@ router.post('/:slug/verify', authenticate, async (req: Request, res: Response) =
         createdAt: verification.createdAt,
       },
     });
-  } catch (error: any) {
-    logger.error('[ZONE] Submit verification error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to submit verification request',
-      error: error.message,
-    });
-  }
-});
+}));
 
 /**
  * @route   GET /api/zones/:slug/status
  * @desc    Get user's verification status for a zone
  * @access  Private (authenticated)
  */
-router.get('/:slug/status', authenticate, async (req: Request, res: Response) => {
-  try {
+router.get('/:slug/status', authenticate, asyncHandler(async (req: Request, res: Response) => {
     const { slug } = req.params;
     const userId = (req as any).user._id;
 
@@ -369,23 +351,14 @@ router.get('/:slug/status', authenticate, async (req: Request, res: Response) =>
         expiresAt: verification.expiresAt,
       },
     });
-  } catch (error: any) {
-    logger.error('[ZONE] Get verification status error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to get verification status',
-      error: error.message,
-    });
-  }
-});
+}));
 
 /**
  * @route   GET /api/zones/my-verifications
  * @desc    Get all user's verifications
  * @access  Private (authenticated)
  */
-router.get('/my-verifications', authenticate, async (req: Request, res: Response) => {
-  try {
+router.get('/my-verifications', authenticate, asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user._id;
 
     const verifications = await UserZoneVerification.find({ userId })
@@ -396,14 +369,6 @@ router.get('/my-verifications', authenticate, async (req: Request, res: Response
       success: true,
       data: verifications,
     });
-  } catch (error: any) {
-    logger.error('[ZONE] Get user verifications error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to get verifications',
-      error: error.message,
-    });
-  }
-});
+}));
 
 export default router;

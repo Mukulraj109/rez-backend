@@ -9,6 +9,7 @@ import {
   getTransferHistory,
   getRecentRecipients
 } from '../controllers/transferController';
+import { validate, Joi } from '../middleware/validation';
 
 const router = Router();
 
@@ -23,8 +24,17 @@ const transferWriteLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 
 const transferReadLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 30, message: 'Too many requests.' });
 
 // Transfer operations — re-auth required above configured threshold
-router.post('/initiate', transferWriteLimiter, requireReAuthAbove('transfer'), initiateTransfer);
-router.post('/confirm', transferWriteLimiter, confirmTransfer);
+router.post('/initiate', transferWriteLimiter, requireReAuthAbove('transfer'), validate(Joi.object({
+  recipientPhone: Joi.string(),
+  recipientId: Joi.string(),
+  amount: Joi.number().positive().required(),
+  coinType: Joi.string(),
+  note: Joi.string().max(200),
+  idempotencyKey: Joi.string()
+})), initiateTransfer);
+router.post('/confirm', transferWriteLimiter, validate(Joi.object({
+  transferId: Joi.string().required()
+})), confirmTransfer);
 
 // History and recipients
 router.get('/history', transferReadLimiter, getTransferHistory);

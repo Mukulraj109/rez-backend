@@ -28,6 +28,7 @@ import { authenticate, requireSeniorAdmin } from '../middleware/auth';
 import { createRateLimiter } from '../middleware/rateLimiter';
 import { requireReAuth } from '../middleware/reAuth';
 import { requireWalletFeature, WALLET_FEATURES } from '../services/walletFeatureService';
+import { validate, validateQuery, Joi } from '../middleware/validation';
 
 const router = express.Router();
 
@@ -57,7 +58,11 @@ router.get('/balance', walletReadLimiter, getWalletBalance);
  * @body    { amount, source }
  * @access  Admin only (senior admin+)
  */
-router.post('/credit-loyalty-points', walletCreditLimiter, requireSeniorAdmin, creditLoyaltyPoints);
+router.post('/credit-loyalty-points', walletCreditLimiter, requireSeniorAdmin, validate(Joi.object({
+  amount: Joi.number().positive().max(100000).required(),
+  source: Joi.string().max(100),
+  idempotencyKey: Joi.string()
+})), creditLoyaltyPoints);
 
 /**
  * @route   GET /api/wallet/transactions
@@ -65,7 +70,15 @@ router.post('/credit-loyalty-points', walletCreditLimiter, requireSeniorAdmin, c
  * @query   page, limit, type, category, status, dateFrom, dateTo, minAmount, maxAmount
  * @access  Private
  */
-router.get('/transactions', walletReadLimiter, getTransactions);
+router.get('/transactions', walletReadLimiter, validateQuery(Joi.object({
+  page: Joi.number().integer().min(1),
+  limit: Joi.number().integer().min(1).max(100),
+  type: Joi.string(),
+  category: Joi.string(),
+  status: Joi.string(),
+  dateFrom: Joi.date(),
+  dateTo: Joi.date()
+})), getTransactions);
 
 /**
  * @route   GET /api/wallet/transaction/:id
@@ -102,7 +115,11 @@ router.get('/categories', walletReadLimiter, getCategoriesBreakdown);
  * @body    { amount, paymentMethod, paymentId }
  * @access  Admin only (senior admin+)
  */
-router.post('/topup', walletWriteLimiter, requireSeniorAdmin, topupWallet);
+router.post('/topup', walletWriteLimiter, requireSeniorAdmin, validate(Joi.object({
+  amount: Joi.number().positive().max(1000000).required(),
+  paymentMethod: Joi.string(),
+  paymentId: Joi.string()
+})), topupWallet);
 
 /**
  * @route   POST /api/wallet/withdraw
@@ -110,7 +127,11 @@ router.post('/topup', walletWriteLimiter, requireSeniorAdmin, topupWallet);
  * @body    { amount, method, accountDetails }
  * @access  Private
  */
-router.post('/withdraw', walletWithdrawLimiter, requireReAuth(), requireWalletFeature(WALLET_FEATURES.WITHDRAWALS), withdrawFunds);
+router.post('/withdraw', walletWithdrawLimiter, requireReAuth(), requireWalletFeature(WALLET_FEATURES.WITHDRAWALS), validate(Joi.object({
+  amount: Joi.number().positive().required(),
+  method: Joi.string().required(),
+  accountDetails: Joi.object().required()
+})), withdrawFunds);
 
 /**
  * @route   POST /api/wallet/payment
@@ -118,7 +139,13 @@ router.post('/withdraw', walletWithdrawLimiter, requireReAuth(), requireWalletFe
  * @body    { amount, orderId, storeId, storeName, description, items }
  * @access  Private
  */
-router.post('/payment', walletPaymentLimiter, processPayment);
+router.post('/payment', walletPaymentLimiter, validate(Joi.object({
+  amount: Joi.number().positive().required(),
+  orderId: Joi.string(),
+  storeId: Joi.string(),
+  storeName: Joi.string(),
+  description: Joi.string()
+})), processPayment);
 
 /**
  * @route   PUT /api/wallet/settings
@@ -126,7 +153,13 @@ router.post('/payment', walletPaymentLimiter, processPayment);
  * @body    { autoTopup, autoTopupThreshold, autoTopupAmount, lowBalanceAlert, lowBalanceThreshold }
  * @access  Private
  */
-router.put('/settings', updateWalletSettings);
+router.put('/settings', validate(Joi.object({
+  autoTopup: Joi.boolean(),
+  autoTopupThreshold: Joi.number().min(0),
+  autoTopupAmount: Joi.number().positive(),
+  lowBalanceAlert: Joi.boolean(),
+  lowBalanceThreshold: Joi.number().min(0)
+})), updateWalletSettings);
 
 /**
  * @route   POST /api/wallet/initiate-payment
@@ -134,7 +167,11 @@ router.put('/settings', updateWalletSettings);
  * @body    { amount, currency, paymentMethod, paymentMethodId, userDetails, metadata }
  * @access  Private
  */
-router.post('/initiate-payment', initiatePayment);
+router.post('/initiate-payment', validate(Joi.object({
+  amount: Joi.number().positive().required(),
+  currency: Joi.string().max(3),
+  paymentMethod: Joi.string().required()
+})), initiatePayment);
 
 /**
  * @route   POST /api/wallet/confirm-payment
@@ -142,7 +179,9 @@ router.post('/initiate-payment', initiatePayment);
  * @body    { paymentIntentId }
  * @access  Private
  */
-router.post('/confirm-payment', confirmPayment);
+router.post('/confirm-payment', validate(Joi.object({
+  paymentIntentId: Joi.string().required()
+})), confirmPayment);
 
 /**
  * @route   GET /api/wallet/payment-status/:paymentId
@@ -182,7 +221,11 @@ router.post('/sync-balance', walletSyncLimiter, syncWalletBalance);
  * @body    { transactionId, amount, reason }
  * @access  Admin only (senior admin+)
  */
-router.post('/refund', walletRefundLimiter, requireSeniorAdmin, refundPayment);
+router.post('/refund', walletRefundLimiter, requireSeniorAdmin, validate(Joi.object({
+  transactionId: Joi.string().required(),
+  amount: Joi.number().positive(),
+  reason: Joi.string().max(500).required()
+})), refundPayment);
 
 /**
  * @route   GET /api/wallet/expiring-coins

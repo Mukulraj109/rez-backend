@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { EmergencyContact, EmergencyBooking } from '../models/EmergencyContact';
 import { sendSuccess, sendError, sendCreated, sendNotFound } from '../utils/response';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../utils/asyncHandler';
 
 // @desc    Get all emergency contacts
 // @route   GET /api/emergency/contacts

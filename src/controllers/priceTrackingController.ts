@@ -13,13 +13,13 @@ import { logger } from '../config/logger';
 import PriceHistory from '../models/PriceHistory';
 import PriceAlert from '../models/PriceAlert';
 import { Product } from '../models/Product';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Get price history for a product
  * GET /api/price-tracking/history/:productId
  */
-export const getPriceHistory = async (req: Request, res: Response) => {
-  try {
+export const getPriceHistory = asyncHandler(async (req: Request, res: Response) => {
     const { productId } = req.params;
     const { variantId, limit = '30', startDate, endDate } = req.query;
 
@@ -38,22 +38,13 @@ export const getPriceHistory = async (req: Request, res: Response) => {
         count: history.length,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [PriceTracking] Get history error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch price history',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get price statistics for a product
  * GET /api/price-tracking/stats/:productId
  */
-export const getPriceStats = async (req: Request, res: Response) => {
-  try {
+export const getPriceStats = asyncHandler(async (req: Request, res: Response) => {
     const { productId } = req.params;
     const { variantId, days = '30' } = req.query;
 
@@ -83,22 +74,13 @@ export const getPriceStats = async (req: Request, res: Response) => {
         period: `${days} days`,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [PriceTracking] Get stats error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch price statistics',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Create a price alert
  * POST /api/price-tracking/alerts
  */
-export const createPriceAlert = async (req: Request, res: Response) => {
-  try {
+export const createPriceAlert = asyncHandler(async (req: Request, res: Response) => {
     const {
       productId,
       variantId,
@@ -191,22 +173,13 @@ export const createPriceAlert = async (req: Request, res: Response) => {
         daysUntilExpiration: (alert as any).daysUntilExpiration,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [PriceAlert] Create error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create price alert',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get user's price alerts
  * GET /api/price-tracking/alerts/my-alerts
  */
-export const getMyAlerts = async (req: Request, res: Response) => {
-  try {
+export const getMyAlerts = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user._id;
     const { page = '1', limit = '20', status } = req.query;
 
@@ -233,22 +206,13 @@ export const getMyAlerts = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [PriceAlert] Get alerts error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch alerts',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Check if user has active alert for product
  * GET /api/price-tracking/alerts/check/:productId
  */
-export const checkAlert = async (req: Request, res: Response) => {
-  try {
+export const checkAlert = asyncHandler(async (req: Request, res: Response) => {
     const { productId } = req.params;
     const { variantId } = req.query;
     const userId = (req as any).user._id;
@@ -261,22 +225,13 @@ export const checkAlert = async (req: Request, res: Response) => {
         hasActiveAlert: hasActive,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [PriceAlert] Check alert error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to check alert status',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Cancel a price alert
  * DELETE /api/price-tracking/alerts/:alertId
  */
-export const cancelAlert = async (req: Request, res: Response) => {
-  try {
+export const cancelAlert = asyncHandler(async (req: Request, res: Response) => {
     const { alertId } = req.params;
     const userId = (req as any).user._id;
 
@@ -307,22 +262,13 @@ export const cancelAlert = async (req: Request, res: Response) => {
       success: true,
       message: 'Alert cancelled successfully',
     });
-  } catch (error: any) {
-    logger.error('❌ [PriceAlert] Cancel error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to cancel alert',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get alert statistics for a product (Admin/Store)
  * GET /api/price-tracking/alerts/stats/:productId
  */
-export const getAlertStats = async (req: Request, res: Response) => {
-  try {
+export const getAlertStats = asyncHandler(async (req: Request, res: Response) => {
     const { productId } = req.params;
 
     // Authorization: only admin or store owner can view alert stats
@@ -344,22 +290,13 @@ export const getAlertStats = async (req: Request, res: Response) => {
       success: true,
       data: stats,
     });
-  } catch (error: any) {
-    logger.error('❌ [PriceAlert] Stats error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch alert statistics',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Record price change (System endpoint)
  * POST /api/price-tracking/record-price
  */
-export const recordPriceChange = async (req: Request, res: Response) => {
-  try {
+export const recordPriceChange = asyncHandler(async (req: Request, res: Response) => {
     const { productId, variantId, price, source = 'system' } = req.body;
 
     logger.info('📊 [PriceTracking] Recording price change:', { productId, variantId, price });
@@ -388,22 +325,13 @@ export const recordPriceChange = async (req: Request, res: Response) => {
         triggeredAlerts: triggeredAlerts.length,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [PriceTracking] Record price error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to record price change',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Cleanup old data (Cron job endpoint)
  * POST /api/price-tracking/cleanup
  */
-export const cleanupOldData = async (req: Request, res: Response) => {
-  try {
+export const cleanupOldData = asyncHandler(async (req: Request, res: Response) => {
     const [historyCleanup, alertsExpired] = await Promise.all([
       PriceHistory.cleanupOldHistory(90), // Keep 90 days
       PriceAlert.expireOldAlerts(),
@@ -422,12 +350,4 @@ export const cleanupOldData = async (req: Request, res: Response) => {
         alertsExpired,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [PriceTracking] Cleanup error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to cleanup',
-      error: error.message,
-    });
-  }
-};
+});

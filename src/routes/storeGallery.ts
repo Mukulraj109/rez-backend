@@ -6,6 +6,7 @@ import Joi from 'joi';
 import mongoose from 'mongoose';
 import { sendSuccess, sendBadRequest, sendNotFound, sendError } from '../utils/response';
 import { validateQuery, validateParams } from '../middleware/validation';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 
@@ -25,8 +26,7 @@ router.get(
     sortBy: Joi.string().valid('order', 'uploadedAt', 'views').optional(),
     sortOrder: Joi.string().valid('asc', 'desc').optional(),
   })),
-  async (req: Request, res: Response) => {
-    try {
+  asyncHandler(async (req: Request, res: Response) => {
       const { storeId } = req.params;
       const { category, type, limit = 50, offset = 0, sortBy = 'order', sortOrder = 'asc' } = req.query;
 
@@ -146,11 +146,7 @@ router.get(
         limit: parseInt(limit as string),
         offset: parseInt(offset as string),
       });
-    } catch (error: any) {
-      logger.error('❌ Get public gallery error:', error);
-      return sendError(res, error.message || 'Failed to get gallery items', 500);
-    }
-  }
+  })
 );
 
 /**
@@ -161,8 +157,7 @@ router.get(
 router.get(
   '/:storeId/gallery/categories',
   validateParams(Joi.object({ storeId: Joi.string().required() })),
-  async (req: Request, res: Response) => {
-    try {
+  asyncHandler(async (req: Request, res: Response) => {
       const { storeId } = req.params;
 
       // Verify store exists and is active
@@ -233,11 +228,7 @@ router.get(
           coverImage: cat.coverImage,
         })),
       });
-    } catch (error: any) {
-      logger.error('❌ Get public gallery categories error:', error);
-      return sendError(res, error.message || 'Failed to get gallery categories', 500);
-    }
-  }
+  })
 );
 
 /**
@@ -251,8 +242,7 @@ router.post(
     storeId: Joi.string().required(),
     itemId: Joi.string().required(),
   })),
-  async (req: Request, res: Response) => {
-    try {
+  asyncHandler(async (req: Request, res: Response) => {
       const { storeId, itemId } = req.params;
 
       // Verify store exists and is active
@@ -320,12 +310,7 @@ router.post(
       return sendSuccess(res, {
         views: updateResult?.views || item.views,
       }, 'View tracked successfully');
-    } catch (error: any) {
-      logger.error('❌ Track gallery view error:', error);
-      // Don't fail the request if tracking fails
-      return sendSuccess(res, { views: 0 }, 'View tracking attempted');
-    }
-  }
+  })
 );
 
 export default router;

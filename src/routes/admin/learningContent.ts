@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import LearningContent from '../../models/LearningContent';
 import { sendSuccess, sendError } from '../../utils/response';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -17,8 +18,7 @@ router.use(requireAdmin);
  * GET /api/admin/learning-content
  * List all learning content
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -37,29 +37,22 @@ router.get('/', async (req: Request, res: Response) => {
       items,
       pagination: { page, limit, total, pages: Math.ceil(total / limit) }
     });
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 /**
  * GET /api/admin/learning-content/:id
  */
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     const item = await LearningContent.findById(req.params.id);
     if (!item) return sendError(res, 'Not found', 404);
     sendSuccess(res, { item });
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/learning-content
  * Create learning content
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', asyncHandler(async (req: Request, res: Response) => {
   try {
     const { slug, title, category, contentType, body, videoUrl, thumbnailUrl, coinReward, estimatedMinutes, sortOrder, isPublished } = req.body;
 
@@ -85,13 +78,12 @@ router.post('/', async (req: Request, res: Response) => {
     }
     sendError(res, error.message);
   }
-});
+}));
 
 /**
  * PUT /api/admin/learning-content/:id
  */
-router.put('/:id', async (req: Request, res: Response) => {
-  try {
+router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     const item = await LearningContent.findById(req.params.id);
     if (!item) return sendError(res, 'Not found', 404);
 
@@ -104,39 +96,28 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     await item.save();
     sendSuccess(res, { item });
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 /**
  * PATCH /api/admin/learning-content/:id/toggle
  * Toggle published status
  */
-router.patch('/:id/toggle', async (req: Request, res: Response) => {
-  try {
+router.patch('/:id/toggle', asyncHandler(async (req: Request, res: Response) => {
     const item = await LearningContent.findById(req.params.id);
     if (!item) return sendError(res, 'Not found', 404);
 
     item.isPublished = !item.isPublished;
     await item.save();
     sendSuccess(res, { item });
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 /**
  * DELETE /api/admin/learning-content/:id
  */
-router.delete('/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     const item = await LearningContent.findByIdAndDelete(req.params.id);
     if (!item) return sendError(res, 'Not found', 404);
     sendSuccess(res, { message: 'Deleted successfully' });
-  } catch (error: any) {
-    sendError(res, error.message);
-  }
-});
+  }));
 
 export default router;

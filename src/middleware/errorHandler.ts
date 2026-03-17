@@ -229,13 +229,6 @@ export const notFoundHandler = (req: Request, _res: Response, next: NextFunction
   next(error);
 };
 
-// Async error wrapper for route handlers
-export const asyncHandler = (fn: Function) => {
-  return (req: Request, res: Response, next: NextFunction) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-  };
-};
-
 // Error boundary for critical operations
 export const withErrorLogging = (
   operationName: string,

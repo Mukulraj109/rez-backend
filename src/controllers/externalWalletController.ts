@@ -6,12 +6,13 @@ import { logger } from '../config/logger';
  * - Paytm
  * - Amazon Pay
  * - Mobikwik
- * 
+ *
  * Note: Actual integration requires merchant accounts with these providers.
  * This provides the framework and placeholder implementations.
  */
 
 import { Request, Response } from 'express';
+import { asyncHandler } from '../utils/asyncHandler';
 
 // External wallet types
 interface ExternalWallet {
@@ -30,8 +31,7 @@ interface ExternalWallet {
  * Get status of linked external wallets
  * GET /api/wallets/external/status
  */
-export const getExternalWalletStatus = async (req: Request, res: Response) => {
-  try {
+export const getExternalWalletStatus = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id;
 
     if (!userId) {
@@ -85,21 +85,13 @@ export const getExternalWalletStatus = async (req: Request, res: Response) => {
         message: 'External wallet linking coming soon',
       },
     });
-  } catch (error: any) {
-    logger.error('Error getting external wallet status:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to get wallet status',
-    });
-  }
-};
+});
 
 /**
  * Initiate Paytm payment
  * POST /api/wallets/external/paytm/initiate
  */
-export const initiatePaytmPayment = async (req: Request, res: Response) => {
-  try {
+export const initiatePaytmPayment = asyncHandler(async (req: Request, res: Response) => {
     const { amount, orderId, storeId } = req.body;
     const userId = (req as any).user?.id;
 
@@ -133,21 +125,13 @@ export const initiatePaytmPayment = async (req: Request, res: Response) => {
         txnToken: null,
       },
     });
-  } catch (error: any) {
-    logger.error('Error initiating Paytm payment:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to initiate Paytm payment',
-    });
-  }
-};
+});
 
 /**
  * Initiate Amazon Pay payment
  * POST /api/wallets/external/amazonpay/initiate
  */
-export const initiateAmazonPayPayment = async (req: Request, res: Response) => {
-  try {
+export const initiateAmazonPayPayment = asyncHandler(async (req: Request, res: Response) => {
     const { amount, orderId, storeId } = req.body;
     const userId = (req as any).user?.id;
 
@@ -180,21 +164,13 @@ export const initiateAmazonPayPayment = async (req: Request, res: Response) => {
         checkoutSessionId: null,
       },
     });
-  } catch (error: any) {
-    logger.error('Error initiating Amazon Pay payment:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to initiate Amazon Pay payment',
-    });
-  }
-};
+});
 
 /**
  * Initiate Mobikwik payment
  * POST /api/wallets/external/mobikwik/initiate
  */
-export const initiateMobikwikPayment = async (req: Request, res: Response) => {
-  try {
+export const initiateMobikwikPayment = asyncHandler(async (req: Request, res: Response) => {
     const { amount, orderId, storeId } = req.body;
     const userId = (req as any).user?.id;
 
@@ -227,21 +203,13 @@ export const initiateMobikwikPayment = async (req: Request, res: Response) => {
         paymentUrl: null,
       },
     });
-  } catch (error: any) {
-    logger.error('Error initiating Mobikwik payment:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to initiate Mobikwik payment',
-    });
-  }
-};
+});
 
 /**
  * Link external wallet
  * POST /api/wallets/external/link
  */
-export const linkExternalWallet = async (req: Request, res: Response) => {
-  try {
+export const linkExternalWallet = asyncHandler(async (req: Request, res: Response) => {
     const { provider, phone, email } = req.body;
     const userId = (req as any).user?.id;
 
@@ -276,21 +244,13 @@ export const linkExternalWallet = async (req: Request, res: Response) => {
         message: `${provider} linking requires OAuth integration. Coming soon!`,
       },
     });
-  } catch (error: any) {
-    logger.error('Error linking external wallet:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to link wallet',
-    });
-  }
-};
+});
 
 /**
  * Unlink external wallet
  * DELETE /api/wallets/external/unlink/:provider
  */
-export const unlinkExternalWallet = async (req: Request, res: Response) => {
-  try {
+export const unlinkExternalWallet = asyncHandler(async (req: Request, res: Response) => {
     const { provider } = req.params;
     const userId = (req as any).user?.id;
 
@@ -306,21 +266,13 @@ export const unlinkExternalWallet = async (req: Request, res: Response) => {
       success: true,
       message: `${provider} wallet unlinked successfully`,
     });
-  } catch (error: any) {
-    logger.error('Error unlinking external wallet:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to unlink wallet',
-    });
-  }
-};
+});
 
 /**
  * Check payment status for external wallet
  * GET /api/wallets/external/status/:provider/:orderId
  */
-export const checkExternalPaymentStatus = async (req: Request, res: Response) => {
-  try {
+export const checkExternalPaymentStatus = asyncHandler(async (req: Request, res: Response) => {
     const { provider, orderId } = req.params;
     const userId = (req as any).user?.id;
 
@@ -341,11 +293,4 @@ export const checkExternalPaymentStatus = async (req: Request, res: Response) =>
         message: 'Payment status checking requires integration. Coming soon!',
       },
     });
-  } catch (error: any) {
-    logger.error('Error checking external payment status:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to check payment status',
-    });
-  }
-};
+});

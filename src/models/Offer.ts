@@ -51,6 +51,12 @@ export interface IOffer extends Document {
     usageLimitPerUser?: number;
     usageLimit?: number;
   };
+  eligibility: {
+    nuqtaPlusTiers: ('free' | 'premium' | 'vip')[];
+    priveTiers: ('none' | 'entry' | 'signature' | 'elite')[];
+    requiredZones: string[];
+    requireAll: boolean;
+  };
   metadata: {
     isNew?: boolean;
     isTrending?: boolean;
@@ -316,6 +322,20 @@ const OfferSchema = new Schema<IOffer>({
       min: [1, 'Total usage limit must be at least 1']
     }
   },
+  eligibility: {
+    nuqtaPlusTiers: {
+      type: [String],
+      enum: ['free', 'premium', 'vip'],
+      default: ['free', 'premium', 'vip'],
+    },
+    priveTiers: {
+      type: [String],
+      enum: ['none', 'entry', 'signature', 'elite'],
+      default: ['none', 'entry', 'signature', 'elite'],
+    },
+    requiredZones: { type: [String], default: [] },
+    requireAll: { type: Boolean, default: false },
+  },
   metadata: {
     isNew: {
       type: Boolean,
@@ -496,6 +516,11 @@ OfferSchema.index({ 'metadata.priority': -1, 'validity.isActive': 1 });
 OfferSchema.index({ 'store.id': 1, isFollowerExclusive: 1, 'validity.isActive': 1 });
 OfferSchema.index({ isFollowerExclusive: 1, visibleTo: 1, 'validity.isActive': 1 });
 
+// Eligibility indexes for segmentation queries
+OfferSchema.index({ 'eligibility.nuqtaPlusTiers': 1, 'validity.isActive': 1 });
+OfferSchema.index({ 'eligibility.priveTiers': 1, 'validity.isActive': 1 });
+OfferSchema.index({ 'eligibility.requiredZones': 1, 'validity.isActive': 1 });
+
 // Instance methods
 OfferSchema.methods.calculateDistance = function(userLocation: [number, number]): number {
   const R = 6371; // Earth's radius in kilometers
@@ -538,12 +563,39 @@ OfferSchema.methods.isActiveForUser = async function(userId: Types.ObjectId): Pr
     return { canUse: false, reason: 'Offer is not active' };
   }
   
-  // Check user type restrictions
-  if (this.restrictions.userTypeRestriction && this.restrictions.userTypeRestriction !== 'all') {
-    // This would need to be implemented based on user data
-    // For now, we'll assume all users can use the offer
+  // Check eligibility (new segmentation-aware check)
+  if (this.eligibility) {
+    try {
+      const { privilegeResolutionService } = await import('../services/entitlement/privilegeResolutionService');
+      const priv = await privilegeResolutionService.resolve(userId.toString());
+
+      // Check subscription tier
+      if (this.eligibility.nuqtaPlusTiers?.length > 0 &&
+          !this.eligibility.nuqtaPlusTiers.includes(priv.subscriptionTier)) {
+        return { canUse: false, reason: 'Offer requires a different subscription tier' };
+      }
+
+      // Check Prive tier
+      if (this.eligibility.priveTiers?.length > 0 &&
+          this.eligibility.priveTiers.length < 4 &&
+          !this.eligibility.priveTiers.includes(priv.priveTier)) {
+        return { canUse: false, reason: 'Offer requires Privé membership' };
+      }
+
+      // Check zone requirements
+      if (this.eligibility.requiredZones?.length > 0) {
+        const hasMatch = this.eligibility.requireAll
+          ? this.eligibility.requiredZones.every((z: string) => priv.activeZones.includes(z))
+          : this.eligibility.requiredZones.some((z: string) => priv.activeZones.includes(z));
+        if (!hasMatch) {
+          return { canUse: false, reason: 'You are not eligible for this exclusive offer' };
+        }
+      }
+    } catch {
+      // Entitlement service unavailable — allow access (fail open)
+    }
   }
-  
+
   return { canUse: true };
 };
 

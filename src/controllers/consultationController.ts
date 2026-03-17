@@ -4,7 +4,7 @@ import { logger } from '../config/logger';
 import Consultation from '../models/Consultation';
 import { Store } from '../models/Store';
 import { sendSuccess, sendError, sendCreated, sendNotFound } from '../utils/response';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../utils/asyncHandler';
 
 // @desc    Create new consultation booking
 // @route   POST /api/consultations

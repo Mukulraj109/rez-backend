@@ -1,7 +1,7 @@
 /**
  * Smart Spend Admin Controller
  *
- * Admin CRUD endpoints for managing the Privé Smart Spend marketplace catalog.
+ * Admin CRUD endpoints for managing the Prive Smart Spend marketplace catalog.
  */
 
 import { Request, Response } from 'express';
@@ -12,15 +12,15 @@ import { Store } from '../../models/Store';
 import { Product } from '../../models/Product';
 import { sendSuccess, sendError } from '../../utils/response';
 import { escapeRegex } from '../../utils/sanitize';
+import { asyncHandler } from '../../utils/asyncHandler';
 
-// ─── List Items ────────────────────────────────────────────────────────────────
+// List Items
 
 /**
  * GET /api/admin/prive/smart-spend
  * Paginated Smart Spend items with filters
  */
-export const getSmartSpendItems = async (req: Request, res: Response) => {
-  try {
+export const getSmartSpendItems = asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -93,20 +93,15 @@ export const getSmartSpendItems = async (req: Request, res: Response) => {
         totalPages: Math.ceil(total / limit),
       },
     }, 'Smart Spend items fetched');
-  } catch (error) {
-    logger.error('[Admin SmartSpend] Error fetching items:', error);
-    return sendError(res, 'Failed to fetch Smart Spend items', 500);
-  }
-};
+});
 
-// ─── Create Item ───────────────────────────────────────────────────────────────
+// Create Item
 
 /**
  * POST /api/admin/prive/smart-spend
  * Create a new Smart Spend item
  */
-export const createSmartSpendItem = async (req: Request, res: Response) => {
-  try {
+export const createSmartSpendItem = asyncHandler(async (req: Request, res: Response) => {
     const {
       itemType,
       store,
@@ -162,23 +157,15 @@ export const createSmartSpendItem = async (req: Request, res: Response) => {
       .lean();
 
     return sendSuccess(res, populated, 'Smart Spend item created', 201);
-  } catch (error: any) {
-    logger.error('[Admin SmartSpend] Error creating item:', error);
-    if (error.name === 'ValidationError') {
-      return sendError(res, error.message, 400);
-    }
-    return sendError(res, 'Failed to create Smart Spend item', 500);
-  }
-};
+});
 
-// ─── Update Item ───────────────────────────────────────────────────────────────
+// Update Item
 
 /**
  * PUT /api/admin/prive/smart-spend/:id
  * Update a Smart Spend item
  */
-export const updateSmartSpendItem = async (req: Request, res: Response) => {
-  try {
+export const updateSmartSpendItem = asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid item ID', 400);
     }
@@ -209,23 +196,15 @@ export const updateSmartSpendItem = async (req: Request, res: Response) => {
     }
 
     return sendSuccess(res, item, 'Smart Spend item updated');
-  } catch (error: any) {
-    logger.error('[Admin SmartSpend] Error updating item:', error);
-    if (error.name === 'ValidationError') {
-      return sendError(res, error.message, 400);
-    }
-    return sendError(res, 'Failed to update Smart Spend item', 500);
-  }
-};
+});
 
-// ─── Delete Item ───────────────────────────────────────────────────────────────
+// Delete Item
 
 /**
  * DELETE /api/admin/prive/smart-spend/:id
  * Soft delete (set isActive=false)
  */
-export const deleteSmartSpendItem = async (req: Request, res: Response) => {
-  try {
+export const deleteSmartSpendItem = asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid item ID', 400);
     }
@@ -241,20 +220,15 @@ export const deleteSmartSpendItem = async (req: Request, res: Response) => {
     }
 
     return sendSuccess(res, item, 'Smart Spend item deactivated');
-  } catch (error) {
-    logger.error('[Admin SmartSpend] Error deleting item:', error);
-    return sendError(res, 'Failed to delete Smart Spend item', 500);
-  }
-};
+});
 
-// ─── Toggle Status ─────────────────────────────────────────────────────────────
+// Toggle Status
 
 /**
  * PATCH /api/admin/prive/smart-spend/:id/status
  * Toggle item active/inactive
  */
-export const toggleSmartSpendItemStatus = async (req: Request, res: Response) => {
-  try {
+export const toggleSmartSpendItemStatus = asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid item ID', 400);
     }
@@ -271,20 +245,15 @@ export const toggleSmartSpendItemStatus = async (req: Request, res: Response) =>
       _id: item._id,
       isActive: item.isActive,
     }, `Smart Spend item ${item.isActive ? 'activated' : 'deactivated'}`);
-  } catch (error) {
-    logger.error('[Admin SmartSpend] Error toggling status:', error);
-    return sendError(res, 'Failed to toggle item status', 500);
-  }
-};
+});
 
-// ─── Reorder Items ─────────────────────────────────────────────────────────────
+// Reorder Items
 
 /**
  * PUT /api/admin/prive/smart-spend/reorder
  * Bulk update sort order for drag-and-drop reordering
  */
-export const reorderSmartSpendItems = async (req: Request, res: Response) => {
-  try {
+export const reorderSmartSpendItems = asyncHandler(async (req: Request, res: Response) => {
     const { items } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -301,20 +270,15 @@ export const reorderSmartSpendItems = async (req: Request, res: Response) => {
     await SmartSpendItem.bulkWrite(bulkOps);
 
     return sendSuccess(res, { updated: items.length }, 'Smart Spend items reordered');
-  } catch (error) {
-    logger.error('[Admin SmartSpend] Error reordering items:', error);
-    return sendError(res, 'Failed to reorder Smart Spend items', 500);
-  }
-};
+});
 
-// ─── Analytics ─────────────────────────────────────────────────────────────────
+// Analytics
 
 /**
  * GET /api/admin/prive/smart-spend/analytics
  * Aggregate analytics across Smart Spend items
  */
-export const getSmartSpendAnalytics = async (req: Request, res: Response) => {
-  try {
+export const getSmartSpendAnalytics = asyncHandler(async (req: Request, res: Response) => {
     const [totals] = await SmartSpendItem.aggregate([
       {
         $group: {
@@ -361,8 +325,4 @@ export const getSmartSpendAnalytics = async (req: Request, res: Response) => {
       bySection,
       topItems,
     }, 'Smart Spend analytics fetched');
-  } catch (error) {
-    logger.error('[Admin SmartSpend] Error fetching analytics:', error);
-    return sendError(res, 'Failed to fetch Smart Spend analytics', 500);
-  }
-};
+});

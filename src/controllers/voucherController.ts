@@ -9,13 +9,13 @@ import stripeService from '../services/stripeService';
 import coinService from '../services/coinService';
 import { withCache } from '../utils/cacheHelper';
 import { CacheTTL } from '../config/redis';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * GET /api/vouchers/brands
  * Get all voucher brands with filters
  */
-export const getVoucherBrands = async (req: Request, res: Response) => {
-  try {
+export const getVoucherBrands = asyncHandler(async (req: Request, res: Response) => {
     const {
       page = 1,
       limit = 20,
@@ -70,18 +70,13 @@ export const getVoucherBrands = async (req: Request, res: Response) => {
     });
 
     sendPaginated(res, brands, pageNum, limitNum, total, 'Voucher brands fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching voucher brands:', error);
-    sendError(res, 'Failed to fetch voucher brands', 500);
-  }
-};
+});
 
 /**
  * GET /api/vouchers/brands/:id
  * Get single voucher brand by ID
  */
-export const getVoucherBrandById = async (req: Request, res: Response) => {
-  try {
+export const getVoucherBrandById = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     const brand = await VoucherBrand.findById(id)
@@ -93,18 +88,13 @@ export const getVoucherBrandById = async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, brand, 'Voucher brand fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching voucher brand:', error);
-    sendError(res, 'Failed to fetch voucher brand', 500);
-  }
-};
+});
 
 /**
  * GET /api/vouchers/brands/featured
  * Get featured voucher brands
  */
-export const getFeaturedBrands = async (req: Request, res: Response) => {
-  try {
+export const getFeaturedBrands = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 10 } = req.query;
 
     const brands = await withCache(`vouchers:featured:${limit}`, CacheTTL.VOUCHER_LIST, () =>
@@ -119,18 +109,13 @@ export const getFeaturedBrands = async (req: Request, res: Response) => {
     );
 
     sendSuccess(res, brands, 'Featured brands fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching featured brands:', error);
-    sendError(res, 'Failed to fetch featured brands', 500);
-  }
-};
+});
 
 /**
  * GET /api/vouchers/brands/newly-added
  * Get newly added voucher brands
  */
-export const getNewlyAddedBrands = async (req: Request, res: Response) => {
-  try {
+export const getNewlyAddedBrands = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 10 } = req.query;
 
     const brands = await withCache(`vouchers:newly-added:${limit}`, CacheTTL.VOUCHER_LIST, () =>
@@ -145,35 +130,25 @@ export const getNewlyAddedBrands = async (req: Request, res: Response) => {
     );
 
     sendSuccess(res, brands, 'Newly added brands fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching newly added brands:', error);
-    sendError(res, 'Failed to fetch newly added brands', 500);
-  }
-};
+});
 
 /**
  * GET /api/vouchers/categories
  * Get voucher categories (distinct)
  */
-export const getVoucherCategories = async (req: Request, res: Response) => {
-  try {
+export const getVoucherCategories = asyncHandler(async (req: Request, res: Response) => {
     const categories = await withCache('vouchers:categories', CacheTTL.VOUCHER_LIST, () =>
       VoucherBrand.distinct('category', { isActive: true })
     );
 
     sendSuccess(res, categories, 'Categories fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching categories:', error);
-    sendError(res, 'Failed to fetch categories', 500);
-  }
-};
+});
 
 /**
  * POST /api/vouchers/purchase
  * Purchase a voucher (authenticated users only)
  */
-export const purchaseVoucher = async (req: Request, res: Response) => {
-  try {
+export const purchaseVoucher = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const {
       brandId,
@@ -204,7 +179,7 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
 
     const purchasePrice = Number(denomination);
 
-    // ─── CARD PAYMENT: Create Stripe PaymentIntent ───
+    // CARD PAYMENT: Create Stripe PaymentIntent
     if (paymentMethod === 'card') {
       if (!stripeService.isStripeConfigured()) {
         return sendError(res, 'Card payments are not available at this time', 503);
@@ -234,7 +209,7 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
       }, 'Payment intent created. Complete card payment to receive your voucher.');
     }
 
-    // ─── WALLET PAYMENT ───
+    // WALLET PAYMENT
     if (paymentMethod !== 'wallet') {
       return sendError(res, 'Supported payment methods: wallet, card', 400);
     }
@@ -352,18 +327,13 @@ export const purchaseVoucher = async (req: Request, res: Response) => {
       'Voucher purchased successfully',
       201
     );
-  } catch (error) {
-    logger.error('Error purchasing voucher:', error);
-    sendError(res, 'Failed to purchase voucher', 500);
-  }
-};
+});
 
 /**
  * POST /api/vouchers/confirm-card-purchase
  * Confirm voucher purchase after successful Stripe card payment
  */
-export const confirmCardPurchase = async (req: Request, res: Response) => {
-  try {
+export const confirmCardPurchase = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { paymentIntentId } = req.body;
 
@@ -474,18 +444,13 @@ export const confirmCardPurchase = async (req: Request, res: Response) => {
       voucher: userVoucher,
       transaction,
     }, 'Voucher purchased successfully via card', 201);
-  } catch (error: any) {
-    logger.error('Error confirming card voucher purchase:', error);
-    sendError(res, error.message || 'Failed to confirm voucher purchase', 500);
-  }
-};
+});
 
 /**
  * GET /api/vouchers/my-vouchers
  * Get user's purchased vouchers
  */
-export const getUserVouchers = async (req: Request, res: Response) => {
-  try {
+export const getUserVouchers = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { status, page = 1, limit = 20 } = req.query;
 
@@ -511,18 +476,13 @@ export const getUserVouchers = async (req: Request, res: Response) => {
     ]);
 
     sendPaginated(res, vouchers, pageNum, limitNum, total, 'User vouchers fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching user vouchers:', error);
-    sendError(res, 'Failed to fetch vouchers', 500);
-  }
-};
+});
 
 /**
  * GET /api/vouchers/my-vouchers/:id
  * Get single user voucher by ID
  */
-export const getUserVoucherById = async (req: Request, res: Response) => {
-  try {
+export const getUserVoucherById = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = req.user!.id;
 
@@ -538,18 +498,13 @@ export const getUserVoucherById = async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, voucher, 'Voucher fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching voucher:', error);
-    sendError(res, 'Failed to fetch voucher', 500);
-  }
-};
+});
 
 /**
  * POST /api/vouchers/:id/use
  * Mark voucher as used
  */
-export const useVoucher = async (req: Request, res: Response) => {
-  try {
+export const useVoucher = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = req.user!.id;
     const { usageLocation } = req.body;
@@ -581,36 +536,25 @@ export const useVoucher = async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, voucher.toObject(), 'Voucher marked as used successfully');
-  } catch (error) {
-    logger.error('Error using voucher:', error);
-    sendError(res, 'Failed to use voucher', 500);
-  }
-};
+});
 
 /**
  * POST /api/vouchers/brands/:id/track-view
  * Track brand view (analytics)
  */
-export const trackBrandView = async (req: Request, res: Response) => {
-  try {
+export const trackBrandView = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     await VoucherBrand.findByIdAndUpdate(id, { $inc: { viewCount: 1 } });
 
     sendSuccess(res, { success: true }, 'View tracked');
-  } catch (error) {
-    logger.error('Error tracking brand view:', error);
-    // Don't return error for analytics
-    res.status(200).json({ success: true });
-  }
-};
+});
 
 /**
  * GET /api/vouchers/hero-carousel
  * Get hero carousel items for online voucher page
  */
-export const getHeroCarousel = async (req: Request, res: Response) => {
-  try {
+export const getHeroCarousel = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 5 } = req.query;
 
     const cacheKey = `vouchers:hero-carousel:${limit}`;
@@ -625,11 +569,11 @@ export const getHeroCarousel = async (req: Request, res: Response) => {
       ],
     })
       .populate('store', 'name slug logo location.address location.city')
-      .sort({ 
+      .sort({
         // Prioritize travel brands first, then by cashback rate
         category: 1, // travel comes first alphabetically, but we'll manually sort
-        cashbackRate: -1, 
-        purchaseCount: -1 
+        cashbackRate: -1,
+        purchaseCount: -1
       })
       .limit(Number(limit) + 5) // Get extra to filter
       .lean();
@@ -649,8 +593,8 @@ export const getHeroCarousel = async (req: Request, res: Response) => {
     // Transform to carousel format
     const carouselItems = limitedBrands.map((brand, index) => {
       // Special handling for MakeMyTrip to match image format
-      const title = brand.name.toLowerCase() === 'makemytrip' 
-        ? 'make my trip' 
+      const title = brand.name.toLowerCase() === 'makemytrip'
+        ? 'make my trip'
         : brand.name;
 
       return {
@@ -679,8 +623,4 @@ export const getHeroCarousel = async (req: Request, res: Response) => {
     }); // end withCache
 
     sendSuccess(res, cachedCarousel, 'Hero carousel items fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching hero carousel:', error);
-    sendError(res, 'Failed to fetch hero carousel', 500);
-  }
-};
+});

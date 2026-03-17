@@ -5,6 +5,7 @@ import CoinDrop from '../../models/CoinDrop';
 import { Store } from '../../models/Store';
 import { CoinTransaction } from '../../models/CoinTransaction';
 import mongoose from 'mongoose';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 router.use(authMiddleware);
@@ -43,8 +44,7 @@ function getCoinDropStatus(coinDrop: any): 'running' | 'upcoming' | 'expired' | 
  * GET /stores/:storeId/coin-drops
  * List merchant's CoinDrops for a store with pagination.
  */
-router.get('/stores/:storeId/coin-drops', async (req: Request, res: Response) => {
-  try {
+router.get('/stores/:storeId/coin-drops', asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const merchantId = req.merchantId!;
 
@@ -90,21 +90,13 @@ router.get('/stores/:storeId/coin-drops', async (req: Request, res: Response) =>
         },
       },
     });
-  } catch (error: any) {
-    logger.error('[Merchant CoinDrops] List error:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve CoinDrops',
-    });
-  }
-});
+}));
 
 /**
  * GET /stores/:storeId/coin-drops/:id
  * Get a single CoinDrop by ID. Verifies store ownership.
  */
-router.get('/stores/:storeId/coin-drops/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/stores/:storeId/coin-drops/:id', asyncHandler(async (req: Request, res: Response) => {
     const { storeId, id } = req.params;
     const merchantId = req.merchantId!;
 
@@ -139,21 +131,13 @@ router.get('/stores/:storeId/coin-drops/:id', async (req: Request, res: Response
         status: getCoinDropStatus(coinDrop),
       },
     });
-  } catch (error: any) {
-    logger.error('[Merchant CoinDrops] Get error:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve CoinDrop',
-    });
-  }
-});
+}));
 
 /**
  * POST /stores/:storeId/coin-drops
  * Create a new CoinDrop for a store.
  */
-router.post('/stores/:storeId/coin-drops', async (req: Request, res: Response) => {
-  try {
+router.post('/stores/:storeId/coin-drops', asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const merchantId = req.merchantId!;
 
@@ -245,21 +229,13 @@ router.post('/stores/:storeId/coin-drops', async (req: Request, res: Response) =
         status: getCoinDropStatus(coinDrop),
       },
     });
-  } catch (error: any) {
-    logger.error('[Merchant CoinDrops] Create error:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to create CoinDrop',
-    });
-  }
-});
+}));
 
 /**
  * PUT /stores/:storeId/coin-drops/:id
  * Update an existing CoinDrop. Verifies ownership.
  */
-router.put('/stores/:storeId/coin-drops/:id', async (req: Request, res: Response) => {
-  try {
+router.put('/stores/:storeId/coin-drops/:id', asyncHandler(async (req: Request, res: Response) => {
     const { storeId, id } = req.params;
     const merchantId = req.merchantId!;
 
@@ -372,21 +348,13 @@ router.put('/stores/:storeId/coin-drops/:id', async (req: Request, res: Response
         status: getCoinDropStatus(coinDrop),
       },
     });
-  } catch (error: any) {
-    logger.error('[Merchant CoinDrops] Update error:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to update CoinDrop',
-    });
-  }
-});
+}));
 
 /**
  * DELETE /stores/:storeId/coin-drops/:id
  * Delete a CoinDrop. Only allowed if not currently running.
  */
-router.delete('/stores/:storeId/coin-drops/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/stores/:storeId/coin-drops/:id', asyncHandler(async (req: Request, res: Response) => {
     const { storeId, id } = req.params;
     const merchantId = req.merchantId!;
 
@@ -428,21 +396,13 @@ router.delete('/stores/:storeId/coin-drops/:id', async (req: Request, res: Respo
       success: true,
       message: 'CoinDrop deleted successfully',
     });
-  } catch (error: any) {
-    logger.error('[Merchant CoinDrops] Delete error:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to delete CoinDrop',
-    });
-  }
-});
+}));
 
 /**
  * GET /stores/:storeId/coin-drops/:id/stats
  * Get usage statistics for a specific CoinDrop.
  */
-router.get('/stores/:storeId/coin-drops/:id/stats', async (req: Request, res: Response) => {
-  try {
+router.get('/stores/:storeId/coin-drops/:id/stats', asyncHandler(async (req: Request, res: Response) => {
     const { storeId, id } = req.params;
     const merchantId = req.merchantId!;
 
@@ -496,13 +456,6 @@ router.get('/stores/:storeId/coin-drops/:id/stats', async (req: Request, res: Re
         totalCashbackAwarded: result.totalCashbackAwarded,
       },
     });
-  } catch (error: any) {
-    logger.error('[Merchant CoinDrops] Stats error:', error.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to retrieve CoinDrop stats',
-    });
-  }
-});
+}));
 
 export default router;

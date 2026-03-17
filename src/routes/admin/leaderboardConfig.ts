@@ -11,6 +11,7 @@ import LeaderboardPrizeDistribution from '../../models/LeaderboardPrizeDistribut
 import { sendSuccess, sendNotFound, sendBadRequest, sendCreated } from '../../utils/response';
 import { sendError, sendPaginated } from '../../utils/response';
 import { escapeRegex } from '../../utils/sanitize';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -25,8 +26,7 @@ router.use(requireAdmin);
  * GET /api/admin/leaderboard/configs/stats
  * Dashboard stats: active count, total prizes distributed, participation rate
  */
-router.get('/stats', async (_req: Request, res: Response) => {
-  try {
+router.get('/stats', asyncHandler(async (_req: Request, res: Response) => {
     const [activeCount, totalConfigs, distributions] = await Promise.all([
       LeaderboardConfig.countDocuments({ status: 'active' }),
       LeaderboardConfig.countDocuments(),
@@ -56,11 +56,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
       totalDistributions: distStats.totalDistributions,
       totalParticipants: distStats.totalParticipants,
     }, 'Leaderboard stats fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching leaderboard stats:', error);
-    return sendError(res, 'Failed to fetch leaderboard stats', 500);
-  }
-});
+  }));
 
 // ============================================
 // PRIZE HISTORY
@@ -70,8 +66,7 @@ router.get('/stats', async (_req: Request, res: Response) => {
  * GET /api/admin/leaderboard/configs/prize-history
  * List all prize distributions with pagination
  */
-router.get('/prize-history', async (req: Request, res: Response) => {
-  try {
+router.get('/prize-history', asyncHandler(async (req: Request, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const skip = (page - 1) * limit;
@@ -95,11 +90,7 @@ router.get('/prize-history', async (req: Request, res: Response) => {
     ]);
 
     return sendPaginated(res, distributions, page, limit, total, 'Prize history fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching prize history:', error);
-    return sendError(res, 'Failed to fetch prize history', 500);
-  }
-});
+  }));
 
 // ============================================
 // LEADERBOARD CONFIG CRUD
@@ -109,8 +100,7 @@ router.get('/prize-history', async (req: Request, res: Response) => {
  * GET /api/admin/leaderboard/configs
  * List all leaderboard configs with pagination, search, and status filter
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const skip = (page - 1) * limit;
@@ -139,49 +129,35 @@ router.get('/', async (req: Request, res: Response) => {
     ]);
 
     return sendPaginated(res, configs, page, limit, total, 'Leaderboard configs fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching leaderboard configs:', error);
-    return sendError(res, 'Failed to fetch leaderboard configs', 500);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/leaderboard/configs/refresh
  * Manually trigger leaderboard cache refresh for all active configs
  */
-router.post('/refresh', async (_req: Request, res: Response) => {
-  try {
+router.post('/refresh', asyncHandler(async (_req: Request, res: Response) => {
     const { triggerManualLeaderboardRefresh } = await import('../../jobs/leaderboardRefreshJob');
     await triggerManualLeaderboardRefresh();
     return sendSuccess(res, null, 'Leaderboard cache refreshed successfully');
-  } catch (error: any) {
-    logger.error('[Admin] Error refreshing leaderboard cache:', error);
-    return sendError(res, `Failed to refresh: ${error.message}`, 500);
-  }
-});
+  }));
 
 /**
  * GET /api/admin/leaderboard/configs/:id
  * Get single leaderboard config
  */
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     const config = await LeaderboardConfig.findById(req.params.id).lean();
     if (!config) {
       return sendNotFound(res, 'Leaderboard config not found');
     }
     return sendSuccess(res, config, 'Leaderboard config fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching leaderboard config:', error);
-    return sendError(res, 'Failed to fetch leaderboard config', 500);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/leaderboard/configs
  * Create a new leaderboard config
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', asyncHandler(async (req: Request, res: Response) => {
   try {
     const {
       slug, title, subtitle, leaderboardType, period,
@@ -227,13 +203,13 @@ router.post('/', async (req: Request, res: Response) => {
     }
     return sendError(res, 'Failed to create leaderboard config', 500);
   }
-});
+}));
 
 /**
  * PUT /api/admin/leaderboard/configs/:id
  * Update a leaderboard config
  */
-router.put('/:id', async (req: Request, res: Response) => {
+router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
     const {
       slug, title, subtitle, leaderboardType, period,
@@ -278,31 +254,25 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
     return sendError(res, 'Failed to update leaderboard config', 500);
   }
-});
+}));
 
 /**
  * DELETE /api/admin/leaderboard/configs/:id
  * Delete a leaderboard config
  */
-router.delete('/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     const config = await LeaderboardConfig.findByIdAndDelete(req.params.id);
     if (!config) {
       return sendNotFound(res, 'Leaderboard config not found');
     }
     return sendSuccess(res, null, 'Leaderboard config deleted');
-  } catch (error) {
-    logger.error('[Admin] Error deleting leaderboard config:', error);
-    return sendError(res, 'Failed to delete leaderboard config', 500);
-  }
-});
+  }));
 
 /**
  * PATCH /api/admin/leaderboard/configs/:id/status
  * Update status (active/paused/archived)
  */
-router.patch('/:id/status', async (req: Request, res: Response) => {
-  try {
+router.patch('/:id/status', asyncHandler(async (req: Request, res: Response) => {
     const { status } = req.body;
 
     if (!status || !['active', 'paused', 'archived'].includes(status)) {
@@ -325,18 +295,13 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     }
 
     return sendSuccess(res, config, `Leaderboard config status updated to ${status}`);
-  } catch (error) {
-    logger.error('[Admin] Error updating leaderboard config status:', error);
-    return sendError(res, 'Failed to update leaderboard config status', 500);
-  }
-});
+  }));
 
 /**
  * GET /api/admin/leaderboard/configs/:id/analytics
  * Analytics for a specific leaderboard (participation, score distribution)
  */
-router.get('/:id/analytics', async (req: Request, res: Response) => {
-  try {
+router.get('/:id/analytics', asyncHandler(async (req: Request, res: Response) => {
     const config = await LeaderboardConfig.findById(req.params.id).lean();
     if (!config) {
       return sendNotFound(res, 'Leaderboard config not found');
@@ -393,19 +358,14 @@ router.get('/:id/analytics', async (req: Request, res: Response) => {
       recentDistributions: distributions,
       scoreDistribution,
     }, 'Leaderboard analytics fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching leaderboard analytics:', error);
-    return sendError(res, 'Failed to fetch leaderboard analytics', 500);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/leaderboard/configs/:id/distribute-prizes
  * Manual prize distribution trigger
  * Runs the prize distribution pipeline for the current cycle of the given leaderboard config.
  */
-router.post('/:id/distribute-prizes', async (req: Request, res: Response) => {
-  try {
+router.post('/:id/distribute-prizes', asyncHandler(async (req: Request, res: Response) => {
     const config = await LeaderboardConfig.findById(req.params.id);
     if (!config) {
       return sendNotFound(res, 'Leaderboard config not found');
@@ -554,10 +514,6 @@ router.post('/:id/distribute-prizes', async (req: Request, res: Response) => {
       totalEntries: entries.length,
       cycle: { start: cycleStartDate, end: cycleEndDate },
     }, `Prize distribution complete: ${totalDistributed} distributed, ${totalFlagged} flagged`);
-  } catch (error: any) {
-    logger.error('[Admin] Error triggering prize distribution:', error);
-    return sendError(res, `Failed to trigger prize distribution: ${error.message}`, 500);
-  }
-});
+  }));
 
 export default router;

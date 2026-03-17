@@ -8,7 +8,7 @@ import {
   sendBadRequest,
   sendCreated 
 } from '../utils/response';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 
 // Track an analytics event

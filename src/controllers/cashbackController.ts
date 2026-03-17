@@ -5,13 +5,13 @@ import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import cashbackService from '../services/cashbackService';
 import { logger } from '../config/logger';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Get cashback summary
  * GET /api/cashback/summary
  */
-export const getCashbackSummary = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getCashbackSummary = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
 
     logger.info('[CASHBACK CONTROLLER] getCashbackSummary called');
@@ -35,22 +35,13 @@ export const getCashbackSummary = async (req: Request, res: Response): Promise<v
       success: true,
       data: summary,
     });
-  } catch (error: any) {
-    logger.error('[CASHBACK CONTROLLER] Error getting summary:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get cashback summary',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get cashback history with filters
  * GET /api/cashback/history
  */
-export const getCashbackHistory = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getCashbackHistory = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { status, source, dateFrom, dateTo, page = 1, limit = 20 } = req.query;
 
@@ -79,22 +70,13 @@ export const getCashbackHistory = async (req: Request, res: Response): Promise<v
       success: true,
       data: result,
     });
-  } catch (error: any) {
-    logger.error('[CASHBACK CONTROLLER] Error getting history:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get cashback history',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get pending cashback ready for credit
  * GET /api/cashback/pending
  */
-export const getPendingCashback = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getPendingCashback = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
 
     if (!userId) {
@@ -119,22 +101,13 @@ export const getPendingCashback = async (req: Request, res: Response): Promise<v
         count: cashbacks.length,
       },
     });
-  } catch (error: any) {
-    logger.error('[CASHBACK CONTROLLER] Error getting pending:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get pending cashback',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get expiring soon cashback
  * GET /api/cashback/expiring-soon
  */
-export const getExpiringSoon = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getExpiringSoon = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { days = 7 } = req.query;
 
@@ -161,22 +134,13 @@ export const getExpiringSoon = async (req: Request, res: Response): Promise<void
         count: cashbacks.length,
       },
     });
-  } catch (error: any) {
-    logger.error('[CASHBACK CONTROLLER] Error getting expiring soon:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get expiring cashback',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Redeem pending cashback
  * POST /api/cashback/redeem
  */
-export const redeemCashback = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const redeemCashback = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
 
     if (!userId) {
@@ -204,44 +168,26 @@ export const redeemCashback = async (req: Request, res: Response): Promise<void>
       message: `Successfully redeemed ₹${result.totalAmount} cashback`,
       data: result,
     });
-  } catch (error: any) {
-    logger.error('[CASHBACK CONTROLLER] Error redeeming cashback:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to redeem cashback',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get active cashback campaigns
  * GET /api/cashback/campaigns
  */
-export const getCashbackCampaigns = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getCashbackCampaigns = asyncHandler(async (req: Request, res: Response) => {
     const campaigns = await cashbackService.getActiveCampaigns();
 
     res.status(200).json({
       success: true,
       data: { campaigns },
     });
-  } catch (error: any) {
-    logger.error('[CASHBACK CONTROLLER] Error getting campaigns:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get cashback campaigns',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Forecast cashback for cart
  * POST /api/cashback/forecast
  */
-export const forecastCashback = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const forecastCashback = asyncHandler(async (req: Request, res: Response) => {
     const { cartData } = req.body;
 
     if (!cartData || !cartData.items || !cartData.subtotal) {
@@ -258,22 +204,13 @@ export const forecastCashback = async (req: Request, res: Response): Promise<voi
       success: true,
       data: forecast,
     });
-  } catch (error: any) {
-    logger.error('[CASHBACK CONTROLLER] Error forecasting cashback:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to forecast cashback',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get cashback statistics
  * GET /api/cashback/statistics
  */
-export const getCashbackStatistics = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getCashbackStatistics = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { period = 'month' } = req.query;
 
@@ -303,12 +240,4 @@ export const getCashbackStatistics = async (req: Request, res: Response): Promis
       success: true,
       data: statistics,
     });
-  } catch (error: any) {
-    logger.error('[CASHBACK CONTROLLER] Error getting statistics:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get cashback statistics',
-      error: error.message,
-    });
-  }
-};
+});

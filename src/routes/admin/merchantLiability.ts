@@ -3,6 +3,7 @@ import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { liabilityService } from '../../services/liabilityService';
 import { InvoiceService } from '../../services/InvoiceService';
 import { createServiceLogger } from '../../config/logger';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const logger = createServiceLogger('admin-merchant-liability');
 const router = Router();
@@ -13,8 +14,7 @@ router.use(requireAuth, requireAdmin);
  * GET /api/admin/merchant-liability/:merchantId
  * View merchant liability records (paginated)
  */
-router.get('/:merchantId', async (req: Request, res: Response) => {
-  try {
+router.get('/:merchantId', asyncHandler(async (req: Request, res: Response) => {
     const { merchantId } = req.params;
     const { cycleId, campaignId, status, page, limit } = req.query;
 
@@ -27,18 +27,13 @@ router.get('/:merchantId', async (req: Request, res: Response) => {
     });
 
     return res.json({ success: true, data: result });
-  } catch (error: any) {
-    logger.error('Failed to get merchant liability', error);
-    return res.status(500).json({ success: false, message: error.message || 'Failed to get liability' });
-  }
-});
+  }));
 
 /**
  * POST /api/admin/merchant-liability/:merchantId/settle
  * Admin triggers settlement for a specific cycle
  */
-router.post('/:merchantId/settle', async (req: Request, res: Response) => {
-  try {
+router.post('/:merchantId/settle', asyncHandler(async (req: Request, res: Response) => {
     const { merchantId } = req.params;
     const { cycleId, dryRun, autoDebit } = req.body;
 
@@ -52,18 +47,13 @@ router.post('/:merchantId/settle', async (req: Request, res: Response) => {
     });
 
     return res.json({ success: true, data: result });
-  } catch (error: any) {
-    logger.error('Failed to settle merchant liability', error);
-    return res.status(500).json({ success: false, message: error.message || 'Settlement failed' });
-  }
-});
+  }));
 
 /**
  * GET /api/admin/merchant-liability/:merchantId/statement/:cycleId
  * Download PDF liability statement
  */
-router.get('/:merchantId/statement/:cycleId', async (req: Request, res: Response) => {
-  try {
+router.get('/:merchantId/statement/:cycleId', asyncHandler(async (req: Request, res: Response) => {
     const { merchantId, cycleId } = req.params;
 
     const pdfBuffer = await InvoiceService.generateLiabilityStatement(merchantId, cycleId);
@@ -71,10 +61,6 @@ router.get('/:merchantId/statement/:cycleId', async (req: Request, res: Response
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=liability-${merchantId}-${cycleId}.pdf`);
     return res.send(pdfBuffer);
-  } catch (error: any) {
-    logger.error('Failed to generate liability statement', error);
-    return res.status(500).json({ success: false, message: error.message || 'Failed to generate statement' });
-  }
-});
+  }));
 
 export default router;

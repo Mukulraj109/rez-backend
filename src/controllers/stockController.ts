@@ -2,12 +2,12 @@ import { Request, Response } from 'express';
 import stockAuditService from '../services/stockAuditService';
 import { logger } from '../config/logger';
 import { StockChangeType } from '../models/StockHistory';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Get stock history for a product
  */
-export const getProductStockHistory = async (req: Request, res: Response) => {
-  try {
+export const getProductStockHistory = asyncHandler(async (req: Request, res: Response) => {
     const { productId } = req.params;
     const {
       variantType,
@@ -55,20 +55,12 @@ export const getProductStockHistory = async (req: Request, res: Response) => {
       data: history,
       count: history.length
     });
-  } catch (error) {
-    logger.error('Error fetching product stock history:', error);
-    res.status(500).json({
-      success: false,
-      message: error instanceof Error ? error.message : 'Failed to fetch stock history'
-    });
-  }
-};
+});
 
 /**
  * Get stock snapshot at a specific date
  */
-export const getStockSnapshot = async (req: Request, res: Response) => {
-  try {
+export const getStockSnapshot = asyncHandler(async (req: Request, res: Response) => {
     const { productId } = req.params;
     const { date, variantType, variantValue } = req.query;
 
@@ -100,20 +92,12 @@ export const getStockSnapshot = async (req: Request, res: Response) => {
         stock
       }
     });
-  } catch (error) {
-    logger.error('Error fetching stock snapshot:', error);
-    res.status(500).json({
-      success: false,
-      message: error instanceof Error ? error.message : 'Failed to fetch stock snapshot'
-    });
-  }
-};
+});
 
 /**
  * Detect stock anomalies for a store
  */
-export const detectStockAnomalies = async (req: Request, res: Response) => {
-  try {
+export const detectStockAnomalies = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { days, threshold } = req.query;
 
@@ -134,20 +118,12 @@ export const detectStockAnomalies = async (req: Request, res: Response) => {
       data: anomalies,
       count: anomalies.length
     });
-  } catch (error) {
-    logger.error('Error detecting stock anomalies:', error);
-    res.status(500).json({
-      success: false,
-      message: error instanceof Error ? error.message : 'Failed to detect anomalies'
-    });
-  }
-};
+});
 
 /**
  * Generate stock report for a date range
  */
-export const generateStockReport = async (req: Request, res: Response) => {
-  try {
+export const generateStockReport = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { startDate, endDate } = req.query;
 
@@ -172,20 +148,12 @@ export const generateStockReport = async (req: Request, res: Response) => {
         report
       }
     });
-  } catch (error) {
-    logger.error('Error generating stock report:', error);
-    res.status(500).json({
-      success: false,
-      message: error instanceof Error ? error.message : 'Failed to generate stock report'
-    });
-  }
-};
+});
 
 /**
  * Get stock movement summary for a product
  */
-export const getStockMovementSummary = async (req: Request, res: Response) => {
-  try {
+export const getStockMovementSummary = asyncHandler(async (req: Request, res: Response) => {
     const { productId } = req.params;
     const { startDate, endDate, variantType, variantValue } = req.query;
 
@@ -218,20 +186,12 @@ export const getStockMovementSummary = async (req: Request, res: Response) => {
       success: true,
       data: summary
     });
-  } catch (error) {
-    logger.error('Error fetching stock movement summary:', error);
-    res.status(500).json({
-      success: false,
-      message: error instanceof Error ? error.message : 'Failed to fetch stock movement summary'
-    });
-  }
-};
+});
 
 /**
  * Get low stock alerts for a store
  */
-export const getLowStockAlerts = async (req: Request, res: Response) => {
-  try {
+export const getLowStockAlerts = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { threshold } = req.query;
 
@@ -244,20 +204,12 @@ export const getLowStockAlerts = async (req: Request, res: Response) => {
       data: alerts,
       count: alerts.length
     });
-  } catch (error) {
-    logger.error('Error fetching low stock alerts:', error);
-    res.status(500).json({
-      success: false,
-      message: error instanceof Error ? error.message : 'Failed to fetch low stock alerts'
-    });
-  }
-};
+});
 
 /**
  * Get stock value over time for a store
  */
-export const getStockValueOverTime = async (req: Request, res: Response) => {
-  try {
+export const getStockValueOverTime = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { startDate, endDate, interval } = req.query;
 
@@ -289,11 +241,4 @@ export const getStockValueOverTime = async (req: Request, res: Response) => {
         data: valueOverTime
       }
     });
-  } catch (error) {
-    logger.error('Error fetching stock value over time:', error);
-    res.status(500).json({
-      success: false,
-      message: error instanceof Error ? error.message : 'Failed to fetch stock value over time'
-    });
-  }
-};
+});

@@ -5,6 +5,7 @@ import { Merchant } from '../../models/Merchant';
 import { Store } from '../../models/Store';
 import { isSocketInitialized, getIO } from '../../config/socket';
 import { escapeRegex } from '../../utils/sanitize';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -17,8 +18,7 @@ router.use(requireAdmin);
  * @desc    Get all merchants with pagination, filters, and search
  * @access  Admin
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -137,22 +137,14 @@ router.get('/', async (req: Request, res: Response) => {
         }
       }
     });
-  } catch (error: any) {
-    logger.error('[ADMIN MERCHANTS] Error fetching merchants:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch merchants'
-    });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/merchants/stats
  * @desc    Get merchant statistics
  * @access  Admin
  */
-router.get('/stats', async (req: Request, res: Response) => {
-  try {
+router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -220,22 +212,14 @@ router.get('/stats', async (req: Request, res: Response) => {
       success: true,
       data: result
     });
-  } catch (error: any) {
-    logger.error('[ADMIN MERCHANTS] Error fetching stats:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch merchant stats'
-    });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/merchants/:id
  * @desc    Get single merchant details
  * @access  Admin
  */
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     const merchant = await Merchant.findById(req.params.id)
       .select('-password -resetPasswordToken -resetPasswordExpiry -emailVerificationToken -emailVerificationExpiry');
 
@@ -250,22 +234,14 @@ router.get('/:id', async (req: Request, res: Response) => {
       success: true,
       data: merchant
     });
-  } catch (error: any) {
-    logger.error('[ADMIN MERCHANTS] Error fetching merchant:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch merchant'
-    });
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/merchants/:id/approve
  * @desc    Approve a merchant
  * @access  Admin
  */
-router.post('/:id/approve', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
+router.post('/:id/approve', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const merchant = await Merchant.findById(req.params.id);
 
     if (!merchant) {
@@ -312,22 +288,14 @@ router.post('/:id/approve', requireSeniorAdmin, async (req: Request, res: Respon
       message: 'Merchant approved successfully',
       data: merchant
     });
-  } catch (error: any) {
-    logger.error('[ADMIN MERCHANTS] Error approving merchant:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to approve merchant'
-    });
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/merchants/:id/reject
  * @desc    Reject a merchant (with reason)
  * @access  Admin
  */
-router.post('/:id/reject', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
+router.post('/:id/reject', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { reason } = req.body;
 
     if (!reason) {
@@ -382,22 +350,14 @@ router.post('/:id/reject', requireSeniorAdmin, async (req: Request, res: Respons
       message: 'Merchant rejected',
       data: merchant
     });
-  } catch (error: any) {
-    logger.error('[ADMIN MERCHANTS] Error rejecting merchant:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to reject merchant'
-    });
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/merchants/:id/suspend
  * @desc    Suspend a merchant (with reason)
  * @access  Admin
  */
-router.post('/:id/suspend', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
+router.post('/:id/suspend', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { reason } = req.body;
 
     if (!reason) {
@@ -439,22 +399,14 @@ router.post('/:id/suspend', requireSeniorAdmin, async (req: Request, res: Respon
       message: 'Merchant suspended',
       data: merchant
     });
-  } catch (error: any) {
-    logger.error('[ADMIN MERCHANTS] Error suspending merchant:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to suspend merchant'
-    });
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/merchants/:id/reactivate
  * @desc    Reactivate a suspended merchant
  * @access  Admin
  */
-router.post('/:id/reactivate', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
+router.post('/:id/reactivate', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const merchant = await Merchant.findById(req.params.id);
 
     if (!merchant) {
@@ -486,13 +438,6 @@ router.post('/:id/reactivate', requireSeniorAdmin, async (req: Request, res: Res
       message: 'Merchant reactivated successfully',
       data: merchant
     });
-  } catch (error: any) {
-    logger.error('[ADMIN MERCHANTS] Error reactivating merchant:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to reactivate merchant'
-    });
-  }
-});
+  }));
 
 export default router;

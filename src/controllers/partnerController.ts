@@ -2,6 +2,7 @@ import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import partnerService from '../services/partnerService';
 import { PARTNER_LEVELS } from '../models/Partner';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Partner Controller
@@ -13,8 +14,7 @@ import { PARTNER_LEVELS } from '../models/Partner';
  * @desc    Get partner benefits for all levels
  * @access  Private
  */
-export const getPartnerBenefits = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getPartnerBenefits = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) {
       res.status(401).json({
@@ -23,18 +23,18 @@ export const getPartnerBenefits = async (req: Request, res: Response): Promise<v
       });
       return;
     }
-    
+
     const partnerBenefitsService = require('../services/partnerBenefitsService').default;
     const Partner = require('../models/Partner').default;
-    
+
     // Get user's current partner level
     const partner = await Partner.findOne({ userId }).lean();
     const currentLevel = partner?.currentLevel?.level || 1;
     const currentBenefits = await partnerBenefitsService.getPartnerBenefits(userId);
-    
+
     // Get all level benefits
     const allLevels = partnerBenefitsService.getAllLevelBenefits();
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -44,24 +44,16 @@ export const getPartnerBenefits = async (req: Request, res: Response): Promise<v
         levels: allLevels // For frontend compatibility
       }
     });
-  } catch (error) {
-    logger.error('Error getting partner benefits:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get partner benefits'
-    });
-  }
-};
+});
 
 /**
  * @route   GET /api/partner/dashboard
  * @desc    Get complete partner dashboard data
  * @access  Private
  */
-export const getPartnerDashboard = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getPartnerDashboard = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    
+
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -69,31 +61,23 @@ export const getPartnerDashboard = async (req: Request, res: Response): Promise<
       });
       return;
     }
-    
+
     const dashboardData = await partnerService.getPartnerDashboard(userId);
-    
+
     res.status(200).json({
       success: true,
       data: dashboardData
     });
-  } catch (error) {
-    logger.error('Error getting partner dashboard:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get partner dashboard'
-    });
-  }
-};
+});
 
 /**
  * @route   GET /api/partner/profile
  * @desc    Get partner profile
  * @access  Private
  */
-export const getPartnerProfile = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getPartnerProfile = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    
+
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -101,10 +85,10 @@ export const getPartnerProfile = async (req: Request, res: Response): Promise<vo
       });
       return;
     }
-    
+
     const partner = await partnerService.getOrCreatePartner(userId);
     const daysRemaining = partner.getDaysRemaining();
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -127,24 +111,16 @@ export const getPartnerProfile = async (req: Request, res: Response): Promise<vo
         }
       }
     });
-  } catch (error) {
-    logger.error('Error getting partner profile:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get partner profile'
-    });
-  }
-};
+});
 
 /**
  * @route   GET /api/partner/earnings
  * @desc    Get partner earnings details
  * @access  Private
  */
-export const getPartnerEarnings = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getPartnerEarnings = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    
+
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -152,9 +128,9 @@ export const getPartnerEarnings = async (req: Request, res: Response): Promise<v
       });
       return;
     }
-    
+
     const partner = await partnerService.getOrCreatePartner(userId);
-    
+
     // Mock transaction data - in production, fetch from a transactions collection
     const transactions = [
       {
@@ -174,7 +150,7 @@ export const getPartnerEarnings = async (req: Request, res: Response): Promise<v
         createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
       }
     ];
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -186,24 +162,16 @@ export const getPartnerEarnings = async (req: Request, res: Response): Promise<v
         transactions
       }
     });
-  } catch (error) {
-    logger.error('Error getting partner earnings:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get partner earnings'
-    });
-  }
-};
+});
 
 /**
  * @route   GET /api/partner/milestones
  * @desc    Get partner milestones
  * @access  Private
  */
-export const getPartnerMilestones = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getPartnerMilestones = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    
+
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -211,9 +179,9 @@ export const getPartnerMilestones = async (req: Request, res: Response): Promise
       });
       return;
     }
-    
+
     const partner = await partnerService.getOrCreatePartner(userId);
-    
+
     const milestones = partner.milestones.map((m: any) => ({
       id: `milestone-${m.orderCount}`,
       orderCount: m.orderCount,
@@ -221,30 +189,22 @@ export const getPartnerMilestones = async (req: Request, res: Response): Promise
       achieved: m.achieved,
       claimedAt: m.claimedAt
     }));
-    
+
     res.status(200).json({
       success: true,
       data: { milestones }
     });
-  } catch (error) {
-    logger.error('Error getting partner milestones:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get partner milestones'
-    });
-  }
-};
+});
 
 /**
  * @route   POST /api/partner/milestones/:milestoneId/claim
  * @desc    Claim milestone reward
  * @access  Private
  */
-export const claimMilestoneReward = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const claimMilestoneReward = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const { milestoneId } = req.params;
-    
+
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -252,10 +212,10 @@ export const claimMilestoneReward = async (req: Request, res: Response): Promise
       });
       return;
     }
-    
+
     // Extract order count from milestoneId (format: "milestone-5")
     const orderCount = parseInt(milestoneId.split('-')[1]);
-    
+
     if (isNaN(orderCount)) {
       res.status(400).json({
         success: false,
@@ -263,11 +223,11 @@ export const claimMilestoneReward = async (req: Request, res: Response): Promise
       });
       return;
     }
-    
+
     const partner = await partnerService.claimMilestoneReward(userId, orderCount);
-    
+
     const milestone = partner.milestones.find(m => m.orderCount === orderCount);
-    
+
     res.status(200).json({
       success: true,
       message: 'Milestone reward claimed successfully',
@@ -281,24 +241,16 @@ export const claimMilestoneReward = async (req: Request, res: Response): Promise
         }
       }
     });
-  } catch (error) {
-    logger.error('Error claiming milestone reward:', error);
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to claim milestone reward'
-    });
-  }
-};
+});
 
 /**
  * @route   GET /api/partner/tasks
  * @desc    Get partner tasks
  * @access  Private
  */
-export const getPartnerTasks = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getPartnerTasks = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    
+
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -306,9 +258,9 @@ export const getPartnerTasks = async (req: Request, res: Response): Promise<void
       });
       return;
     }
-    
+
     const partner = await partnerService.getOrCreatePartner(userId);
-    
+
     const tasks = partner.tasks.map((t: any) => ({
       id: t.title,
       title: t.title,
@@ -323,30 +275,22 @@ export const getPartnerTasks = async (req: Request, res: Response): Promise<void
       completed: t.completed, // Keep for backward compatibility
       claimed: t.claimed // Keep for backward compatibility
     }));
-    
+
     res.status(200).json({
       success: true,
       data: { tasks }
     });
-  } catch (error) {
-    logger.error('Error getting partner tasks:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get partner tasks'
-    });
-  }
-};
+});
 
 /**
  * @route   POST /api/partner/tasks/:taskId/claim
  * @desc    Claim task reward
  * @access  Private
  */
-export const claimTaskReward = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const claimTaskReward = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const { taskId } = req.params;
-    
+
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -354,12 +298,12 @@ export const claimTaskReward = async (req: Request, res: Response): Promise<void
       });
       return;
     }
-    
+
     // taskId is the task title
     const partner = await partnerService.claimTaskReward(userId, decodeURIComponent(taskId));
-    
+
     const task = partner.tasks.find(t => t.title === decodeURIComponent(taskId));
-    
+
     res.status(200).json({
       success: true,
       message: 'Task reward claimed successfully',
@@ -375,24 +319,16 @@ export const claimTaskReward = async (req: Request, res: Response): Promise<void
         }
       }
     });
-  } catch (error) {
-    logger.error('Error claiming task reward:', error);
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to claim task reward'
-    });
-  }
-};
+});
 
 /**
  * @route   GET /api/partner/jackpot
  * @desc    Get jackpot progress
  * @access  Private
  */
-export const getJackpotProgress = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getJackpotProgress = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    
+
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -400,9 +336,9 @@ export const getJackpotProgress = async (req: Request, res: Response): Promise<v
       });
       return;
     }
-    
+
     const partner = await partnerService.getOrCreatePartner(userId);
-    
+
     const milestones = partner.jackpotProgress.map((j: any) => ({
       id: j.title,
       spendAmount: j.spendAmount,
@@ -411,7 +347,7 @@ export const getJackpotProgress = async (req: Request, res: Response): Promise<v
       reward: j.reward,
       achieved: j.achieved
     }));
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -419,25 +355,17 @@ export const getJackpotProgress = async (req: Request, res: Response): Promise<v
         milestones
       }
     });
-  } catch (error) {
-    logger.error('Error getting jackpot progress:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get jackpot progress'
-    });
-  }
-};
+});
 
 /**
  * @route   POST /api/partner/jackpot/:spendAmount/claim
  * @desc    Claim jackpot milestone reward
  * @access  Private
  */
-export const claimJackpotReward = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const claimJackpotReward = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const { spendAmount } = req.params;
-    
+
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -445,7 +373,7 @@ export const claimJackpotReward = async (req: Request, res: Response): Promise<v
       });
       return;
     }
-    
+
     const amount = parseInt(spendAmount);
     if (isNaN(amount)) {
       res.status(400).json({
@@ -454,10 +382,10 @@ export const claimJackpotReward = async (req: Request, res: Response): Promise<v
       });
       return;
     }
-    
+
     const partner = await partnerService.claimJackpotReward(userId, amount);
     const jackpot = partner.jackpotProgress.find((j: any) => j.spendAmount === amount);
-    
+
     res.status(200).json({
       success: true,
       message: 'Jackpot reward claimed successfully',
@@ -471,24 +399,16 @@ export const claimJackpotReward = async (req: Request, res: Response): Promise<v
         }
       }
     });
-  } catch (error) {
-    logger.error('Error claiming jackpot reward:', error);
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to claim jackpot reward'
-    });
-  }
-};
+});
 
 /**
  * @route   GET /api/partner/offers
  * @desc    Get claimable offers
  * @access  Private
  */
-export const getPartnerOffers = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getPartnerOffers = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    
+
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -496,9 +416,9 @@ export const getPartnerOffers = async (req: Request, res: Response): Promise<voi
       });
       return;
     }
-    
+
     const partner = await partnerService.getOrCreatePartner(userId);
-    
+
     const offers = partner.claimableOffers.map((o: any) => ({
       id: o.title,
       title: o.title,
@@ -510,30 +430,22 @@ export const getPartnerOffers = async (req: Request, res: Response): Promise<voi
       claimed: o.claimed,
       voucherCode: o.voucherCode
     }));
-    
+
     res.status(200).json({
       success: true,
       data: { offers }
     });
-  } catch (error) {
-    logger.error('Error getting partner offers:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get partner offers'
-    });
-  }
-};
+});
 
 /**
  * @route   POST /api/partner/offers/:offerId/claim
  * @desc    Claim partner offer
  * @access  Private
  */
-export const claimPartnerOffer = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const claimPartnerOffer = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const { offerId } = req.body; // Get from body instead of params
-    
+
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -541,17 +453,17 @@ export const claimPartnerOffer = async (req: Request, res: Response): Promise<vo
       });
       return;
     }
-    
+
     logger.info('🎫 [CONTROLLER] Claiming offer:', offerId);
-    
+
     // No need to decode - coming from body as plain string
     const { partner, voucherCode } = await partnerService.claimOffer(
       userId,
       offerId
     );
-    
+
     const offer = partner.claimableOffers.find(o => o.title === offerId);
-    
+
     res.status(200).json({
       success: true,
       message: 'Offer claimed successfully',
@@ -562,26 +474,18 @@ export const claimPartnerOffer = async (req: Request, res: Response): Promise<vo
         }
       }
     });
-  } catch (error) {
-    logger.error('Error claiming partner offer:', error);
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to claim offer'
-    });
-  }
-};
+});
 
 /**
  * @route   POST /api/partner/tasks/:taskType/update
  * @desc    Update task progress
  * @access  Private
  */
-export const updateTaskProgress = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const updateTaskProgress = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const { taskType } = req.params;
     const { progress } = req.body;
-    
+
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -589,11 +493,11 @@ export const updateTaskProgress = async (req: Request, res: Response): Promise<v
       });
       return;
     }
-    
+
     const partner = await partnerService.updateTaskProgress(userId, taskType, progress);
-    
+
     const task = partner.tasks.find((t: any) => t.type === taskType);
-    
+
     res.status(200).json({
       success: true,
       message: 'Task progress updated successfully',
@@ -608,82 +512,58 @@ export const updateTaskProgress = async (req: Request, res: Response): Promise<v
         }
       }
     });
-  } catch (error) {
-    logger.error('Error updating task progress:', error);
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to update task progress'
-    });
-  }
-};
+});
 
 /**
  * @route   GET /api/partner/faqs
  * @desc    Get partner FAQs
  * @access  Private
  */
-export const getPartnerFAQs = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getPartnerFAQs = asyncHandler(async (req: Request, res: Response) => {
     const { category } = req.query;
-    
+
     const dashboardData = await partnerService.getPartnerDashboard(req.user?.id || '');
     let faqs = dashboardData.faqs;
-    
+
     // Filter by category if provided
     if (category && typeof category === 'string') {
       faqs = faqs.filter((faq: any) => faq.category === category);
     }
-    
+
     res.status(200).json({
       success: true,
       data: { faqs }
     });
-  } catch (error) {
-    logger.error('Error getting partner FAQs:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get partner FAQs'
-    });
-  }
-};
+});
 
 /**
  * @route   GET /api/partner/levels
  * @desc    Get all partner levels and their benefits
  * @access  Private
  */
-export const getPartnerLevels = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getPartnerLevels = asyncHandler(async (req: Request, res: Response) => {
     const levels = Object.values(PARTNER_LEVELS).map(level => ({
       level: level.level,
       name: level.name,
       requirements: level.requirements,
       benefits: level.benefits
     }));
-    
+
     res.status(200).json({
       success: true,
       data: { levels }
     });
-  } catch (error) {
-    logger.error('Error getting partner levels:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get partner levels'
-    });
-  }
-};
+});
 
 /**
  * @route   POST /api/partner/payout/request
  * @desc    Request payout of earnings
  * @access  Private
  */
-export const requestPayout = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const requestPayout = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const { amount, method } = req.body;
-    
+
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -691,7 +571,7 @@ export const requestPayout = async (req: Request, res: Response): Promise<void> 
       });
       return;
     }
-    
+
     if (!amount || !method) {
       res.status(400).json({
         success: false,
@@ -699,9 +579,9 @@ export const requestPayout = async (req: Request, res: Response): Promise<void> 
       });
       return;
     }
-    
+
     const result = await partnerService.requestPayout(userId, amount, method);
-    
+
     res.status(200).json({
       success: true,
       message: result.message,
@@ -709,24 +589,16 @@ export const requestPayout = async (req: Request, res: Response): Promise<void> 
         payoutId: result.payoutId
       }
     });
-  } catch (error) {
-    logger.error('Error requesting payout:', error);
-    res.status(400).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to request payout'
-    });
-  }
-};
+});
 
 /**
  * @route   GET /api/partner/stats
  * @desc    Get partner statistics and rankings
  * @access  Private
  */
-export const getPartnerStats = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getPartnerStats = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
-    
+
     if (!userId) {
       res.status(401).json({
         success: false,
@@ -734,19 +606,11 @@ export const getPartnerStats = async (req: Request, res: Response): Promise<void
       });
       return;
     }
-    
+
     const stats = await partnerService.getPartnerStats(userId);
-    
+
     res.status(200).json({
       success: true,
       data: stats
     });
-  } catch (error) {
-    logger.error('Error getting partner stats:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to get partner stats'
-    });
-  }
-};
-
+});

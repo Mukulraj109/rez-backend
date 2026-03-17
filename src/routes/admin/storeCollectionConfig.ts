@@ -9,6 +9,7 @@ import { Router, Request, Response } from 'express';
 import StoreCollectionConfig from '../../models/StoreCollectionConfig';
 import { requireAdmin } from '../../middleware/auth';
 import { sendSuccess, sendError } from '../../utils/response';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -31,25 +32,19 @@ const DEFAULT_CATEGORIES = [
  * GET /api/admin/store-collections
  * List all store collection configurations, sorted by sortOrder
  */
-router.get('/', async (_req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (_req: Request, res: Response) => {
     const configs = await StoreCollectionConfig.find()
       .sort({ sortOrder: 1 })
       .lean();
 
     sendSuccess(res, configs, 'Store collection configs retrieved');
-  } catch (error) {
-    logger.error('[ADMIN] Error fetching store collection configs:', error);
-    sendError(res, 'Failed to fetch store collection configs', 500);
-  }
-});
+  }));
 
 /**
  * PUT /api/admin/store-collections/:categoryKey
  * Update a store collection config
  */
-router.put('/:categoryKey', async (req: Request, res: Response) => {
-  try {
+router.put('/:categoryKey', asyncHandler(async (req: Request, res: Response) => {
     const { categoryKey } = req.params;
     const {
       isEnabled, sortOrder, displayName, description,
@@ -80,18 +75,13 @@ router.put('/:categoryKey', async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, config, 'Store collection config updated');
-  } catch (error) {
-    logger.error('[ADMIN] Error updating store collection config:', error);
-    sendError(res, 'Failed to update store collection config', 500);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/store-collections/seed
  * Seed default configurations from the hardcoded categories
  */
-router.post('/seed', async (req: Request, res: Response) => {
-  try {
+router.post('/seed', asyncHandler(async (req: Request, res: Response) => {
     const results = [];
 
     for (const category of DEFAULT_CATEGORIES) {
@@ -112,18 +102,13 @@ router.post('/seed', async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, results, 'Store collection configs seeded');
-  } catch (error) {
-    logger.error('[ADMIN] Error seeding store collection configs:', error);
-    sendError(res, 'Failed to seed store collection configs', 500);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/store-collections/reorder
  * Bulk reorder categories: [{ categoryKey, sortOrder }]
  */
-router.post('/reorder', async (req: Request, res: Response) => {
-  try {
+router.post('/reorder', asyncHandler(async (req: Request, res: Response) => {
     const { items } = req.body;
 
     if (!Array.isArray(items)) {
@@ -144,10 +129,6 @@ router.post('/reorder', async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, results, 'Store collections reordered');
-  } catch (error) {
-    logger.error('[ADMIN] Error reordering store collections:', error);
-    sendError(res, 'Failed to reorder store collections', 500);
-  }
-});
+  }));
 
 export default router;

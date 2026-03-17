@@ -8,6 +8,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import DailyCheckInConfig from '../../models/DailyCheckInConfig';
 import { sendSuccess, sendError, sendBadRequest } from '../../utils/response';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -18,21 +19,16 @@ router.use(requireAdmin);
  * GET /api/admin/daily-checkin-config
  * Get the active daily check-in configuration
  */
-router.get('/', async (_req: Request, res: Response) => {
-  try {
-    const config = await DailyCheckInConfig.getActiveConfig();
-    return sendSuccess(res, config, 'Daily check-in config fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching daily check-in config:', error);
-    return sendError(res, 'Failed to fetch daily check-in config', 500);
-  }
-});
+router.get('/', asyncHandler(async (_req: Request, res: Response) => {
+  const config = await DailyCheckInConfig.getActiveConfig();
+  return sendSuccess(res, config, 'Daily check-in config fetched');
+}));
 
 /**
  * PUT /api/admin/daily-checkin-config
  * Update the daily check-in configuration
  */
-router.put('/', async (req: Request, res: Response) => {
+router.put('/', asyncHandler(async (req: Request, res: Response) => {
   try {
     const { dayRewards, milestoneRewards, proTips, affiliateTip, reviewTimeframe, isEnabled } = req.body;
 
@@ -89,29 +85,24 @@ router.put('/', async (req: Request, res: Response) => {
     }
     return sendError(res, 'Failed to update daily check-in config', 500);
   }
-});
+}));
 
 /**
  * POST /api/admin/daily-checkin-config/reset
  * Reset config to defaults
  */
-router.post('/reset', async (_req: Request, res: Response) => {
+router.post('/reset', asyncHandler(async (_req: Request, res: Response) => {
+  await DailyCheckInConfig.deleteMany({});
+  const config = await DailyCheckInConfig.getActiveConfig(); // Creates fresh default
+
   try {
-    await DailyCheckInConfig.deleteMany({});
-    const config = await DailyCheckInConfig.getActiveConfig(); // Creates fresh default
-
-    try {
-      const { invalidateCheckinConfigCache } = await import('../../controllers/gamificationController');
-      invalidateCheckinConfigCache();
-    } catch {
-      // Non-critical
-    }
-
-    return sendSuccess(res, config, 'Daily check-in config reset to defaults');
-  } catch (error) {
-    logger.error('[Admin] Error resetting daily check-in config:', error);
-    return sendError(res, 'Failed to reset daily check-in config', 500);
+    const { invalidateCheckinConfigCache } = await import('../../controllers/gamificationController');
+    invalidateCheckinConfigCache();
+  } catch {
+    // Non-critical
   }
-});
+
+  return sendSuccess(res, config, 'Daily check-in config reset to defaults');
+}));
 
 export default router;

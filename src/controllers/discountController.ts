@@ -5,13 +5,13 @@ import { Store } from '../models/Store';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * GET /api/discounts
  * Get all discounts with filters
  */
-export const getDiscounts = async (req: Request, res: Response) => {
-  try {
+export const getDiscounts = asyncHandler(async (req: Request, res: Response) => {
     const {
       page = 1,
       limit = 20,
@@ -130,18 +130,13 @@ export const getDiscounts = async (req: Request, res: Response) => {
     ]);
 
     sendPaginated(res, discounts, pageNum, limitNum, total, 'Discounts fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching discounts:', error);
-    sendError(res, 'Failed to fetch discounts', 500);
-  }
-};
+});
 
 /**
  * GET /api/discounts/:id
  * Get single discount by ID
  */
-export const getDiscountById = async (req: Request, res: Response) => {
-  try {
+export const getDiscountById = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     const discount = await Discount.findById(id).lean();
@@ -151,18 +146,13 @@ export const getDiscountById = async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, discount, 'Discount fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching discount:', error);
-    sendError(res, 'Failed to fetch discount', 500);
-  }
-};
+});
 
 /**
  * GET /api/discounts/product/:productId
  * Get available discounts for a specific product
  */
-export const getDiscountsForProduct = async (req: Request, res: Response) => {
-  try {
+export const getDiscountsForProduct = asyncHandler(async (req: Request, res: Response) => {
     const { productId } = req.params;
     const { orderValue = 0 } = req.query;
     const userId = req.user?.id;
@@ -238,18 +228,13 @@ export const getDiscountsForProduct = async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, discounts, 'Product discounts fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching product discounts:', error);
-    sendError(res, 'Failed to fetch product discounts', 500);
-  }
-};
+});
 
 /**
  * POST /api/discounts/validate
  * Validate if a discount code can be applied
  */
-export const validateDiscount = async (req: Request, res: Response) => {
-  try {
+export const validateDiscount = asyncHandler(async (req: Request, res: Response) => {
     const { code, orderValue, productIds, categoryIds } = req.body;
     const userId = req.user?.id;
 
@@ -355,18 +340,13 @@ export const validateDiscount = async (req: Request, res: Response) => {
       },
       'Discount is valid'
     );
-  } catch (error) {
-    logger.error('Error validating discount:', error);
-    sendError(res, 'Failed to validate discount', 500);
-  }
-};
+});
 
 /**
  * POST /api/discounts/apply
  * Apply discount to an order (authenticated users only)
  */
-export const applyDiscount = async (req: Request, res: Response) => {
-  try {
+export const applyDiscount = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { discountId, orderId, orderValue } = req.body;
 
@@ -434,18 +414,13 @@ export const applyDiscount = async (req: Request, res: Response) => {
       'Discount applied successfully',
       201
     );
-  } catch (error) {
-    logger.error('Error applying discount:', error);
-    sendError(res, 'Failed to apply discount', 500);
-  }
-};
+});
 
 /**
  * GET /api/discounts/my-history
  * Get user's discount usage history (authenticated users only)
  */
-export const getUserDiscountHistory = async (req: Request, res: Response) => {
-  try {
+export const getUserDiscountHistory = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { page = 1, limit = 20 } = req.query;
 
@@ -466,18 +441,13 @@ export const getUserDiscountHistory = async (req: Request, res: Response) => {
     ]);
 
     sendPaginated(res, history, pageNum, limitNum, total, 'Discount history fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching discount history:', error);
-    sendError(res, 'Failed to fetch discount history', 500);
-  }
-};
+});
 
 /**
  * GET /api/discounts/:id/analytics
  * Get analytics for a specific discount (admin only)
  */
-export const getDiscountAnalytics = async (req: Request, res: Response) => {
-  try {
+export const getDiscountAnalytics = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     const discountObjId = new mongoose.Types.ObjectId(id);
@@ -503,11 +473,7 @@ export const getDiscountAnalytics = async (req: Request, res: Response) => {
       },
       'Analytics fetched successfully'
     );
-  } catch (error) {
-    logger.error('Error fetching discount analytics:', error);
-    sendError(res, 'Failed to fetch analytics', 500);
-  }
-};
+});
 
 /**
  * GET /api/discounts/bill-payment
@@ -515,8 +481,7 @@ export const getDiscountAnalytics = async (req: Request, res: Response) => {
  * Supports store-specific filtering (Phase 2)
  * Returns ALL discounts (regardless of minOrderValue) - frontend handles eligibility display
  */
-export const getBillPaymentDiscounts = async (req: Request, res: Response) => {
-  try {
+export const getBillPaymentDiscounts = asyncHandler(async (req: Request, res: Response) => {
     const { orderValue = 0, storeId } = req.query;
     const userId = req.user?.id;
 
@@ -614,18 +579,13 @@ export const getBillPaymentDiscounts = async (req: Request, res: Response) => {
     });
 
     sendSuccess(res, discounts, 'Bill payment discounts fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching bill payment discounts:', error);
-    sendError(res, 'Failed to fetch bill payment discounts', 500);
-  }
-};
+});
 
 /**
  * POST /api/discounts/card-offers/validate
  * Validate if a card is eligible for offers
  */
-export const validateCardForOffers = async (req: Request, res: Response) => {
-  try {
+export const validateCardForOffers = asyncHandler(async (req: Request, res: Response) => {
     const { cardNumber, storeId, orderValue } = req.body;
 
     if (!cardNumber || !storeId) {
@@ -710,18 +670,13 @@ export const validateCardForOffers = async (req: Request, res: Response) => {
       offers,
       bestOffer,
     }, 'Card validation completed');
-  } catch (error) {
-    logger.error('Error validating card for offers:', error);
-    sendError(res, 'Failed to validate card', 500);
-  }
-};
+});
 
 /**
  * POST /api/discounts/card-offers/apply
  * Apply a card offer to cart/order
  */
-export const applyCardOffer = async (req: Request, res: Response) => {
-  try {
+export const applyCardOffer = asyncHandler(async (req: Request, res: Response) => {
     const { discountId, orderId, cardLast4 } = req.body;
     const userId = req.user?.id;
 
@@ -772,8 +727,4 @@ export const applyCardOffer = async (req: Request, res: Response) => {
         value: discount.value,
       },
     }, 'Card offer applied successfully');
-  } catch (error) {
-    logger.error('Error applying card offer:', error);
-    sendError(res, 'Failed to apply card offer', 500);
-  }
-};
+});

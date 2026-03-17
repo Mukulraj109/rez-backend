@@ -4,13 +4,13 @@ import mongoose from 'mongoose';
 import OfferComment from '../models/OfferComment';
 import Offer from '../models/Offer';
 import engagementRewardService from '../services/engagementRewardService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Create a comment on an offer.
  * POST /api/offers/:offerId/comments
  */
-export const createOfferComment = async (req: Request, res: Response) => {
-  try {
+export const createOfferComment = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id || (req as any).user?._id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -77,18 +77,13 @@ export const createOfferComment = async (req: Request, res: Response) => {
           : null,
       },
     });
-  } catch (error: any) {
-    logger.error('Error creating offer comment:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to post comment' });
-  }
-};
+});
 
 /**
  * Get approved comments for an offer (public).
  * GET /api/offers/:offerId/comments
  */
-export const getOfferComments = async (req: Request, res: Response) => {
-  try {
+export const getOfferComments = asyncHandler(async (req: Request, res: Response) => {
     const { offerId } = req.params;
     const { page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10));
@@ -141,18 +136,13 @@ export const getOfferComments = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching offer comments:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch comments' });
-  }
-};
+});
 
 /**
  * Toggle like on an offer comment.
  * POST /api/offers/:offerId/comments/:commentId/like
  */
-export const toggleCommentLike = async (req: Request, res: Response) => {
-  try {
+export const toggleCommentLike = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id || (req as any).user?._id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -178,18 +168,13 @@ export const toggleCommentLike = async (req: Request, res: Response) => {
       success: true,
       data: { isLiked: !isLiked, likes: comment.likes.length },
     });
-  } catch (error: any) {
-    logger.error('Error toggling comment like:', error);
-    res.status(500).json({ success: false, error: 'Failed to update like' });
-  }
-};
+});
 
 /**
  * Reply to an offer comment.
  * POST /api/offers/:offerId/comments/:commentId/reply
  */
-export const replyToComment = async (req: Request, res: Response) => {
-  try {
+export const replyToComment = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id || (req as any).user?._id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -225,18 +210,13 @@ export const replyToComment = async (req: Request, res: Response) => {
         createdAt: reply.createdAt,
       },
     });
-  } catch (error: any) {
-    logger.error('Error replying to comment:', error);
-    res.status(500).json({ success: false, error: 'Failed to post reply' });
-  }
-};
+});
 
 /**
  * Get user's offer comments with moderation status.
  * GET /api/offers/comments/my-comments
  */
-export const getMyComments = async (req: Request, res: Response) => {
-  try {
+export const getMyComments = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id || (req as any).user?._id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -283,18 +263,13 @@ export const getMyComments = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching my comments:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch comments' });
-  }
-};
+});
 
 /**
  * Moderate an offer comment (admin/merchant).
  * PATCH /api/offers/comments/:commentId/moderate
  */
-export const moderateComment = async (req: Request, res: Response) => {
-  try {
+export const moderateComment = asyncHandler(async (req: Request, res: Response) => {
     const adminId = (req as any).user?.id || (req as any).user?._id;
     if (!adminId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -361,18 +336,13 @@ export const moderateComment = async (req: Request, res: Response) => {
         coinsAwarded: comment.coinsAwarded,
       },
     });
-  } catch (error: any) {
-    logger.error('Error moderating comment:', error);
-    res.status(500).json({ success: false, error: 'Failed to moderate comment' });
-  }
-};
+});
 
 /**
  * Get pending comments for moderation (admin).
  * GET /api/offers/comments/pending
  */
-export const getPendingComments = async (req: Request, res: Response) => {
-  try {
+export const getPendingComments = asyncHandler(async (req: Request, res: Response) => {
     const { page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10)));
@@ -414,18 +384,13 @@ export const getPendingComments = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching pending comments:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch pending comments' });
-  }
-};
+});
 
 /**
  * Get active offers available for commenting.
  * GET /api/offers/commentable
  */
-export const getCommentableOffers = async (req: Request, res: Response) => {
-  try {
+export const getCommentableOffers = asyncHandler(async (req: Request, res: Response) => {
     const { page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10)));
@@ -477,8 +442,4 @@ export const getCommentableOffers = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching commentable offers:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch offers' });
-  }
-};
+});

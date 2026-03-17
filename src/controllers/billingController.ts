@@ -5,6 +5,7 @@ import { Payment } from '../models/Payment';
 import { Types } from 'mongoose';
 import { PDFService } from '../services/pdfService';
 import { User } from '../models/User';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Get billing history for a user
@@ -16,8 +17,7 @@ import { User } from '../models/User';
  * - skip: number (for pagination, default: 0)
  * - limit: number (for pagination, default: 20)
  */
-export const getBillingHistory = async (req: Request, res: Response) => {
-  try {
+export const getBillingHistory = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -145,22 +145,13 @@ export const getBillingHistory = async (req: Request, res: Response) => {
         }
       }
     });
-  } catch (error: any) {
-    logger.error('Error fetching billing history:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch billing history',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get specific invoice details
  * GET /api/billing/invoice/:transactionId
  */
-export const getInvoice = async (req: Request, res: Response) => {
-  try {
+export const getInvoice = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -298,19 +289,14 @@ export const getInvoice = async (req: Request, res: Response) => {
       success: true,
       data: invoice
     });
-  } catch (error: any) {
-    logger.error('Error fetching invoice:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch invoice',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Download invoice as PDF
  * GET /api/billing/invoice/:transactionId/download
+ *
+ * NOTE: Keeps try/catch because PDF streaming may have already sent headers
+ * before an error occurs; asyncHandler's next(error) would fail in that case.
  */
 export const downloadInvoice = async (req: Request, res: Response) => {
   try {
@@ -377,8 +363,7 @@ export const downloadInvoice = async (req: Request, res: Response) => {
  * Get billing statistics/summary
  * GET /api/billing/summary
  */
-export const getBillingSummary = async (req: Request, res: Response) => {
-  try {
+export const getBillingSummary = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -431,15 +416,7 @@ export const getBillingSummary = async (req: Request, res: Response) => {
         lastPayment: subscriptions[0]?.createdAt || payments[0]?.createdAt || null
       }
     });
-  } catch (error: any) {
-    logger.error('Error fetching billing summary:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch billing summary',
-      error: error.message
-    });
-  }
-};
+});
 
 // Helper function to get invoice data
 async function getInvoiceData(transactionId: string, userId: any) {

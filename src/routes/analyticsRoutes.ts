@@ -13,6 +13,7 @@ import { validateQuery, validateParams, validateBody, commonSchemas } from '../m
 import { generalLimiter } from '../middleware/rateLimiter';
 import { Joi } from '../middleware/validation';
 import { logger } from '../config/logger';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 router.use(generalLimiter);
@@ -35,16 +36,11 @@ const batchEventsSchema = Joi.object({
 });
 
 // Shared handler for batch event ingestion
-const handleBatchEvents = async (req: any, res: any) => {
-  try {
+const handleBatchEvents = asyncHandler(async (req: any, res: any) => {
     const { events } = req.body;
     logger.info(`[Analytics] Received batch of ${events.length} events`);
     res.json({ success: true, message: `Received ${events.length} events` });
-  } catch (error) {
-    logger.error('[Analytics] Batch processing error:', error);
-    res.status(500).json({ success: false, message: 'Failed to process analytics batch' });
-  }
-};
+});
 
 // Batch analytics events from frontend
 router.post('/batch', optionalAuth, validateBody(batchEventsSchema), handleBatchEvents);

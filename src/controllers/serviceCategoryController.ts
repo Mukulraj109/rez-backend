@@ -2,13 +2,13 @@ import { Request, Response } from 'express';
 import { ServiceCategory } from '../models/ServiceCategory';
 import { Product } from '../models/Product';
 import { logger } from '../config/logger';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Get all active service categories
  * GET /api/service-categories
  */
-export const getServiceCategories = async (req: Request, res: Response) => {
-  try {
+export const getServiceCategories = asyncHandler(async (req: Request, res: Response) => {
     const { includeCount = 'true' } = req.query;
 
     let categories;
@@ -62,22 +62,13 @@ export const getServiceCategories = async (req: Request, res: Response) => {
       data: categories,
       count: categories.length
     });
-  } catch (error: any) {
-    logger.error('Error fetching service categories:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch service categories',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get a single service category by slug
  * GET /api/service-categories/:slug
  */
-export const getServiceCategoryBySlug = async (req: Request, res: Response) => {
-  try {
+export const getServiceCategoryBySlug = asyncHandler(async (req: Request, res: Response) => {
     const { slug } = req.params;
 
     const category = await ServiceCategory.findOne({
@@ -107,22 +98,13 @@ export const getServiceCategoryBySlug = async (req: Request, res: Response) => {
         serviceCount
       }
     });
-  } catch (error: any) {
-    logger.error('Error fetching service category:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch service category',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get services in a category
  * GET /api/service-categories/:slug/services
  */
-export const getServicesInCategory = async (req: Request, res: Response) => {
-  try {
+export const getServicesInCategory = asyncHandler(async (req: Request, res: Response) => {
     const { slug } = req.params;
     const {
       page = '1',
@@ -220,22 +202,13 @@ export const getServicesInCategory = async (req: Request, res: Response) => {
         }
       }
     });
-  } catch (error: any) {
-    logger.error('Error fetching services in category:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch services',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get all child categories of a parent category
  * GET /api/service-categories/:slug/children
  */
-export const getChildCategories = async (req: Request, res: Response) => {
-  try {
+export const getChildCategories = asyncHandler(async (req: Request, res: Response) => {
     const { slug } = req.params;
 
     const parentCategory = await ServiceCategory.findOne({ slug, isActive: true }).lean();
@@ -261,15 +234,7 @@ export const getChildCategories = async (req: Request, res: Response) => {
         slug: parentCategory.slug
       }
     });
-  } catch (error: any) {
-    logger.error('Error fetching child categories:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch child categories',
-      error: error.message
-    });
-  }
-};
+});
 
 // Export all controller functions
 export default {

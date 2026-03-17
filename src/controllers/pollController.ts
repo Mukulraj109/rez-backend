@@ -4,13 +4,13 @@ import mongoose from 'mongoose';
 import Poll from '../models/Poll';
 import PollVote from '../models/PollVote';
 import engagementRewardService from '../services/engagementRewardService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Get active polls (public).
  * GET /api/polls/active
  */
-export const getActivePolls = async (req: Request, res: Response) => {
-  try {
+export const getActivePolls = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id || (req as any).user?._id;
     const { page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10));
@@ -71,18 +71,13 @@ export const getActivePolls = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching active polls:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch polls' });
-  }
-};
+});
 
 /**
  * Get today's daily poll.
  * GET /api/polls/daily
  */
-export const getDailyPoll = async (req: Request, res: Response) => {
-  try {
+export const getDailyPoll = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id || (req as any).user?._id;
     const now = new Date();
 
@@ -134,18 +129,13 @@ export const getDailyPoll = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching daily poll:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch daily poll' });
-  }
-};
+});
 
 /**
  * Get poll detail.
  * GET /api/polls/:id
  */
-export const getPollDetail = async (req: Request, res: Response) => {
-  try {
+export const getPollDetail = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id || (req as any).user?._id;
     const { id } = req.params;
 
@@ -189,18 +179,13 @@ export const getPollDetail = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching poll detail:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch poll' });
-  }
-};
+});
 
 /**
  * Cast a vote on a poll.
  * POST /api/polls/:id/vote
  */
-export const votePoll = async (req: Request, res: Response) => {
-  try {
+export const votePoll = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id || (req as any).user?._id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -249,13 +234,20 @@ export const votePoll = async (req: Request, res: Response) => {
 
     const coinsAwarded = rewardResult.success ? (rewardResult.coinsAwarded || 0) : 0;
 
-    // Create vote
-    await PollVote.create({
-      poll: new mongoose.Types.ObjectId(id),
-      user: new mongoose.Types.ObjectId(userId),
-      optionId,
-      coinsAwarded,
-    });
+    // Create vote — handle duplicate key error from unique index
+    try {
+      await PollVote.create({
+        poll: new mongoose.Types.ObjectId(id),
+        user: new mongoose.Types.ObjectId(userId),
+        optionId,
+        coinsAwarded,
+      });
+    } catch (error: any) {
+      if (error.code === 11000) {
+        return res.status(400).json({ success: false, error: 'You have already voted on this poll' });
+      }
+      throw error;
+    }
 
     // Update vote counts
     option.voteCount += 1;
@@ -276,22 +268,13 @@ export const votePoll = async (req: Request, res: Response) => {
           : null,
       },
     });
-  } catch (error: any) {
-    // Handle duplicate key error from unique index
-    if (error.code === 11000) {
-      return res.status(400).json({ success: false, error: 'You have already voted on this poll' });
-    }
-    logger.error('Error voting on poll:', error);
-    res.status(500).json({ success: false, error: 'Failed to record vote' });
-  }
-};
+});
 
 /**
  * Get user's vote history.
  * GET /api/polls/my-votes
  */
-export const getMyVotes = async (req: Request, res: Response) => {
-  try {
+export const getMyVotes = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id || (req as any).user?._id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -341,11 +324,7 @@ export const getMyVotes = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching vote history:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch vote history' });
-  }
-};
+});
 
 // ── Admin endpoints ──────────────────────────
 
@@ -353,8 +332,7 @@ export const getMyVotes = async (req: Request, res: Response) => {
  * Create a poll (admin).
  * POST /api/polls
  */
-export const createPoll = async (req: Request, res: Response) => {
-  try {
+export const createPoll = asyncHandler(async (req: Request, res: Response) => {
     const adminId = (req as any).user?.id || (req as any).user?._id;
     if (!adminId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -398,18 +376,13 @@ export const createPoll = async (req: Request, res: Response) => {
       message: 'Poll created successfully',
       data: { poll },
     });
-  } catch (error: any) {
-    logger.error('Error creating poll:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to create poll' });
-  }
-};
+});
 
 /**
  * Update a poll (admin).
  * PATCH /api/polls/:id
  */
-export const updatePoll = async (req: Request, res: Response) => {
-  try {
+export const updatePoll = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const updates = req.body;
 
@@ -433,18 +406,13 @@ export const updatePoll = async (req: Request, res: Response) => {
       message: 'Poll updated successfully',
       data: { poll },
     });
-  } catch (error: any) {
-    logger.error('Error updating poll:', error);
-    res.status(500).json({ success: false, error: 'Failed to update poll' });
-  }
-};
+});
 
 /**
  * Archive a poll (admin).
  * DELETE /api/polls/:id
  */
-export const archivePoll = async (req: Request, res: Response) => {
-  try {
+export const archivePoll = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     const poll = await Poll.findById(id);
@@ -459,8 +427,4 @@ export const archivePoll = async (req: Request, res: Response) => {
       success: true,
       message: 'Poll archived successfully',
     });
-  } catch (error: any) {
-    logger.error('Error archiving poll:', error);
-    res.status(500).json({ success: false, error: 'Failed to archive poll' });
-  }
-};
+});

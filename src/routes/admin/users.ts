@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin, requireSeniorAdmin } from '../../middleware/
 import { User } from '../../models/User';
 import { Wallet } from '../../models/Wallet';
 import { escapeRegex } from '../../utils/sanitize';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -16,8 +17,7 @@ router.use(requireAdmin);
  * @desc    Get all users with pagination, filters, and search
  * @access  Admin
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const skip = (page - 1) * limit;
@@ -85,22 +85,14 @@ router.get('/', async (req: Request, res: Response) => {
         }
       }
     });
-  } catch (error: any) {
-    logger.error('[ADMIN USERS] Error fetching users:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch users'
-    });
-  }
-});
+}));
 
 /**
  * @route   GET /api/admin/users/:id
  * @desc    Get single user details
  * @access  Admin
  */
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     const user = await User.findById(req.params.id)
       .select('-auth.refreshToken -auth.otpCode -auth.otpExpiry -auth.lockUntil -password');
 
@@ -115,22 +107,14 @@ router.get('/:id', async (req: Request, res: Response) => {
       success: true,
       data: user
     });
-  } catch (error: any) {
-    logger.error('[ADMIN USERS] Error fetching user:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch user'
-    });
-  }
-});
+}));
 
 /**
  * @route   GET /api/admin/users/:id/wallet
  * @desc    Get user's wallet details
  * @access  Admin
  */
-router.get('/:id/wallet', async (req: Request, res: Response) => {
-  try {
+router.get('/:id/wallet', asyncHandler(async (req: Request, res: Response) => {
     // Verify user exists
     const user = await User.findById(req.params.id).select('_id phoneNumber email profile.firstName profile.lastName');
 
@@ -163,22 +147,14 @@ router.get('/:id/wallet', async (req: Request, res: Response) => {
         wallet
       }
     });
-  } catch (error: any) {
-    logger.error('[ADMIN USERS] Error fetching user wallet:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to fetch user wallet'
-    });
-  }
-});
+}));
 
 /**
  * @route   POST /api/admin/users/:id/suspend
  * @desc    Suspend a user account
  * @access  Admin
  */
-router.post('/:id/suspend', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
+router.post('/:id/suspend', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { reason } = req.body;
 
     const user = await User.findById(req.params.id);
@@ -228,22 +204,14 @@ router.post('/:id/suspend', requireSeniorAdmin, async (req: Request, res: Respon
         reason: reason || 'No reason provided'
       }
     });
-  } catch (error: any) {
-    logger.error('[ADMIN USERS] Error suspending user:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to suspend user'
-    });
-  }
-});
+}));
 
 /**
  * @route   POST /api/admin/users/:id/unsuspend
  * @desc    Unsuspend a user account
  * @access  Admin
  */
-router.post('/:id/unsuspend', requireSeniorAdmin, async (req: Request, res: Response) => {
-  try {
+router.post('/:id/unsuspend', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const user = await User.findById(req.params.id);
 
     if (!user) {
@@ -282,13 +250,6 @@ router.post('/:id/unsuspend', requireSeniorAdmin, async (req: Request, res: Resp
         unsuspendedAt: new Date()
       }
     });
-  } catch (error: any) {
-    logger.error('[ADMIN USERS] Error unsuspending user:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to unsuspend user'
-    });
-  }
-});
+}));
 
 export default router;

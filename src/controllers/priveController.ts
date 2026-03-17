@@ -26,6 +26,7 @@ import { getCachedWalletConfig } from '../services/walletCacheService';
 import { SOURCE_TO_CATEGORY } from '../config/earningsCategories';
 import gamificationEventBus from '../events/gamificationEventBus';
 import { invalidateWalletCache } from '../services/walletCacheService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Aggregates weekly earnings from CoinTransaction (all sources, not just check-ins).
@@ -161,8 +162,7 @@ const calculateExpiresIn = (expiresAt: Date): string => {
  * GET /api/prive/eligibility
  * Get current user's Privé eligibility status
  */
-export const getPriveEligibility = async (req: Request, res: Response) => {
-  try {
+export const getPriveEligibility = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
@@ -187,22 +187,13 @@ export const getPriveEligibility = async (req: Request, res: Response) => {
         isWhitelisted: accessCheck.isWhitelisted,
       },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error getting eligibility:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get eligibility status',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 /**
  * GET /api/prive/pillars
  * Get detailed pillar breakdown for user
  */
-export const getPillarBreakdown = async (req: Request, res: Response) => {
-  try {
+export const getPillarBreakdown = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
@@ -218,22 +209,13 @@ export const getPillarBreakdown = async (req: Request, res: Response) => {
       success: true,
       data: breakdown,
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error getting pillar breakdown:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get pillar breakdown',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 /**
  * POST /api/prive/refresh
  * Force recalculation of user's reputation
  */
-export const refreshEligibility = async (req: Request, res: Response) => {
-  try {
+export const refreshEligibility = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
@@ -254,22 +236,13 @@ export const refreshEligibility = async (req: Request, res: Response) => {
       message: 'Eligibility refreshed successfully',
       data: eligibility,
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error refreshing eligibility:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to refresh eligibility',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 /**
  * GET /api/prive/history
  * Get reputation history for user
  */
-export const getReputationHistory = async (req: Request, res: Response) => {
-  try {
+export const getReputationHistory = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
@@ -300,22 +273,13 @@ export const getReputationHistory = async (req: Request, res: Response) => {
         currentTier: reputation.tier,
       },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error getting history:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get reputation history',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 /**
  * GET /api/prive/tips
  * Get personalized tips to improve eligibility score
  */
-export const getImprovementTips = async (req: Request, res: Response) => {
-  try {
+export const getImprovementTips = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
@@ -407,15 +371,7 @@ export const getImprovementTips = async (req: Request, res: Response) => {
         highestPillar: sortedPillars[sortedPillars.length - 1],
       },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error getting tips:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get improvement tips',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 // ==========================================
 // Daily Check-in & Habits
@@ -427,8 +383,7 @@ export const getImprovementTips = async (req: Request, res: Response) => {
  * The old implementation directly mutated wallet without creating CoinTransaction records,
  * causing earnings history to be incomplete. Now forwards to the unified gamification endpoint.
  */
-export const dailyCheckIn = async (req: Request, res: Response) => {
-  try {
+export const dailyCheckIn = asyncHandler(async (req: Request, res: Response) => {
     // Delegate to the gamification streakCheckin handler which:
     // 1. Uses atomic findOneAndUpdate (prevents race conditions)
     // 2. Creates CoinTransaction via coinService.awardCoins (earnings tracking)
@@ -436,22 +391,13 @@ export const dailyCheckIn = async (req: Request, res: Response) => {
     // 4. Awards escalating day rewards (matches frontend calendar)
     const { streakCheckin } = await import('./gamificationController');
     return (streakCheckin as any)(req, res);
-  } catch (error: any) {
-    logger.error('[PRIVE] Error delegating check-in:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to check in',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 /**
  * GET /api/prive/habit-loops
  * Get daily habit loops with progress
  */
-export const getHabitLoops = async (req: Request, res: Response) => {
-  try {
+export const getHabitLoops = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
@@ -506,15 +452,7 @@ export const getHabitLoops = async (req: Request, res: Response) => {
         allCompleted,
       },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error getting habit loops:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get habit loops',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 // ==========================================
 // Dashboard
@@ -524,8 +462,7 @@ export const getHabitLoops = async (req: Request, res: Response) => {
  * GET /api/prive/dashboard
  * Get combined dashboard data
  */
-export const getPriveDashboard = async (req: Request, res: Response) => {
-  try {
+export const getPriveDashboard = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
@@ -811,15 +748,7 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
       success: true,
       data: dashboard,
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error getting dashboard:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get dashboard',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 // ==========================================
 // Offers
@@ -829,8 +758,7 @@ export const getPriveDashboard = async (req: Request, res: Response) => {
  * GET /api/prive/offers
  * Get Privé exclusive offers
  */
-export const getPriveOffers = async (req: Request, res: Response) => {
-  try {
+export const getPriveOffers = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
@@ -917,22 +845,13 @@ export const getPriveOffers = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error getting offers:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get offers',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 /**
  * GET /api/prive/offers/:id
  * Get single Privé offer by ID
  */
-export const getPriveOfferById = async (req: Request, res: Response) => {
-  try {
+export const getPriveOfferById = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const { id } = req.params;
 
@@ -987,22 +906,13 @@ export const getPriveOfferById = async (req: Request, res: Response) => {
         totalLimit: offer.totalLimit,
       },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error getting offer:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get offer',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 /**
  * POST /api/prive/offers/:id/click
  * Track offer click for analytics
  */
-export const trackOfferClick = async (req: Request, res: Response) => {
-  try {
+export const trackOfferClick = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const { id } = req.params;
 
@@ -1042,15 +952,7 @@ export const trackOfferClick = async (req: Request, res: Response) => {
       success: true,
       message: 'Click tracked',
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error tracking click:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to track click',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 // ==========================================
 // Highlights
@@ -1060,8 +962,7 @@ export const trackOfferClick = async (req: Request, res: Response) => {
  * GET /api/prive/highlights
  * Get today's personalized highlights
  */
-export const getPriveHighlights = async (req: Request, res: Response) => {
-  try {
+export const getPriveHighlights = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
@@ -1118,15 +1019,7 @@ export const getPriveHighlights = async (req: Request, res: Response) => {
       success: true,
       data: highlights,
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error getting highlights:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get highlights',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 // ==========================================
 // Earnings & Transactions
@@ -1136,8 +1029,7 @@ export const getPriveHighlights = async (req: Request, res: Response) => {
  * GET /api/prive/earnings
  * Get user's coin earning history
  */
-export const getEarnings = async (req: Request, res: Response) => {
-  try {
+export const getEarnings = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
@@ -1276,22 +1168,13 @@ export const getEarnings = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error getting earnings:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get earnings',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 /**
  * GET /api/prive/transactions
  * Get user's coin transaction history (all transactions)
  */
-export const getTransactions = async (req: Request, res: Response) => {
-  try {
+export const getTransactions = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
@@ -1385,15 +1268,7 @@ export const getTransactions = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error getting transactions:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get transactions',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 // Helper to get description for transaction types
 const getTransactionDescription = (type: string): string => {
@@ -1421,8 +1296,7 @@ const getTransactionDescription = (type: string): string => {
  * Redeem coins for a voucher
  * Uses MongoDB transaction for atomicity — all DB ops succeed or all roll back.
  */
-export const redeemCoins = async (req: Request, res: Response) => {
-  try {
+export const redeemCoins = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
@@ -1778,15 +1652,7 @@ export const redeemCoins = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error redeeming coins:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to redeem coins',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 // Helper to get voucher terms
 const getVoucherTerms = (type: VoucherType): string[] => {
@@ -1834,8 +1700,7 @@ const getVoucherInstructions = (type: VoucherType): string => {
  * GET /api/prive/vouchers
  * Get user's voucher history
  */
-export const getVouchers = async (req: Request, res: Response) => {
-  try {
+export const getVouchers = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
 
     if (!userId) {
@@ -1914,22 +1779,13 @@ export const getVouchers = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error getting vouchers:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get vouchers',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 /**
  * GET /api/prive/vouchers/:id
  * Get single voucher details
  */
-export const getVoucherById = async (req: Request, res: Response) => {
-  try {
+export const getVoucherById = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const { id } = req.params;
 
@@ -1980,22 +1836,13 @@ export const getVoucherById = async (req: Request, res: Response) => {
         createdAt: voucher.createdAt,
       },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error getting voucher:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get voucher',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 /**
  * POST /api/prive/vouchers/:id/use
  * Mark a voucher as used
  */
-export const markVoucherUsed = async (req: Request, res: Response) => {
-  try {
+export const markVoucherUsed = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const { id } = req.params;
 
@@ -2056,15 +1903,7 @@ export const markVoucherUsed = async (req: Request, res: Response) => {
         usedAt: voucher.usedAt,
       },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error marking voucher used:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to mark voucher as used',
-      // error.message logged above — not exposed to client
-    });
-  }
-};
+});
 
 // ==========================================
 // Redemption Config & Catalog
@@ -2074,8 +1913,7 @@ export const markVoucherUsed = async (req: Request, res: Response) => {
  * GET /api/prive/redeem-config
  * Returns server-side redemption configuration (conversion rates, min coins, etc.)
  */
-export const getRedeemConfig = async (req: Request, res: Response) => {
-  try {
+export const getRedeemConfig = asyncHandler(async (req: Request, res: Response) => {
     // 6B: Use cached WalletConfig (5min Redis TTL) instead of direct DB read
     const config = await getCachedWalletConfig();
     const rc = config?.redemptionConfig;
@@ -2092,22 +1930,14 @@ export const getRedeemConfig = async (req: Request, res: Response) => {
         currency: process.env.PLATFORM_CURRENCY || 'INR',
       },
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error getting redeem config:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get redemption configuration',
-    });
-  }
-};
+});
 
 /**
  * GET /api/prive/catalog
  * Returns server-side redemption catalog (gift cards, experiences, charities)
  * Currently returns static catalog; can be extended to read from DB collection.
  */
-export const getCatalog = async (_req: Request, res: Response) => {
-  try {
+export const getCatalog = asyncHandler(async (_req: Request, res: Response) => {
     // Use cached WalletConfig (5min Redis TTL) instead of direct DB read
     const config = await getCachedWalletConfig();
     const enabledCategories = config?.redemptionConfig?.enabledCategories || ['gift_card', 'bill_pay', 'experience', 'charity'];
@@ -2146,21 +1976,13 @@ export const getCatalog = async (_req: Request, res: Response) => {
       success: true,
       data: catalog,
     });
-  } catch (error: any) {
-    logger.error('[PRIVE] Error getting catalog:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to get redemption catalog',
-    });
-  }
-};
+});
 
 /**
  * GET /api/prive/program-config/public
  * Returns public-facing program config (feature flags + tier comparison data)
  */
-export const getPublicProgramConfig = async (req: Request, res: Response) => {
-  try {
+export const getPublicProgramConfig = asyncHandler(async (req: Request, res: Response) => {
     const config = await getCachedWalletConfig();
     const pc = config?.priveProgramConfig;
 
@@ -2192,18 +2014,13 @@ export const getPublicProgramConfig = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error) {
-    logger.error('[PRIVE] Error fetching public config:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch program config' });
-  }
-};
+});
 
 /**
  * GET /api/prive/tier-comparison
  * Returns all tier data with user's current tier highlighted
  */
-export const getTierComparison = async (req: Request, res: Response) => {
-  try {
+export const getTierComparison = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -2240,8 +2057,4 @@ export const getTierComparison = async (req: Request, res: Response) => {
         tiers,
       },
     });
-  } catch (error) {
-    logger.error('[PRIVE] Error fetching tier comparison:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch tier comparison' });
-  }
-};
+});

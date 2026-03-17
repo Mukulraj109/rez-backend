@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { WalletConfig } from '../../models/WalletConfig';
 import { invalidateWalletConfigCache } from '../../services/walletCacheService';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -13,22 +14,17 @@ router.use(requireAdmin);
  * @desc    Get wallet configuration singleton
  * @access  Admin
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const config = await WalletConfig.getOrCreate();
     res.json({ success: true, data: config });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch wallet config' });
-  }
-});
+}));
 
 /**
  * @route   PUT /api/admin/wallet-config
  * @desc    Update wallet configuration
  * @access  Admin
  */
-router.put('/', async (req: Request, res: Response) => {
-  try {
+router.put('/', asyncHandler(async (req: Request, res: Response) => {
     const config = await WalletConfig.getOrCreate();
     const allowedFields = [
       'transferLimits', 'giftLimits', 'rechargeConfig',
@@ -49,9 +45,6 @@ router.put('/', async (req: Request, res: Response) => {
     await invalidateWalletConfigCache().catch(() => {});
 
     res.json({ success: true, data: config, message: 'Wallet config updated' });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to update wallet config' });
-  }
-});
+}));
 
 export default router;

@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import { logger } from '../config/logger';
 import HealthRecord from '../models/HealthRecord';
 import { sendSuccess, sendError, sendCreated, sendNotFound } from '../utils/response';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../utils/asyncHandler';
 import { escapeRegex } from '../utils/sanitize';
 
 // @desc    Upload new health record

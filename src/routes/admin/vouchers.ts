@@ -10,6 +10,7 @@ import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { VoucherBrand } from '../../models/Voucher';
 import { sendSuccess, sendError } from '../../utils/response';
 import { escapeRegex } from '../../utils/sanitize';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -20,8 +21,7 @@ router.use(requireAdmin);
  * GET /api/admin/vouchers
  * List all voucher brands with pagination, search, status filter
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
@@ -68,18 +68,13 @@ router.get('/', async (req: Request, res: Response) => {
         totalPages: Math.ceil(total / limit),
       },
     }, 'Voucher brands fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching voucher brands:', error);
-    return sendError(res, 'Failed to fetch voucher brands', 500);
-  }
-});
+}));
 
 /**
  * GET /api/admin/vouchers/:id
  * Get single voucher brand by ID
  */
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid voucher brand ID', 400);
     }
@@ -93,18 +88,13 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
 
     return sendSuccess(res, voucher, 'Voucher brand fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching voucher brand:', error);
-    return sendError(res, 'Failed to fetch voucher brand', 500);
-  }
-});
+}));
 
 /**
  * POST /api/admin/vouchers
  * Create new voucher brand
  */
-router.post('/', async (req: Request, res: Response) => {
-  try {
+router.post('/', asyncHandler(async (req: Request, res: Response) => {
     const {
       name,
       logo,
@@ -145,18 +135,13 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     return sendSuccess(res, voucher, 'Voucher brand created');
-  } catch (error) {
-    logger.error('[Admin] Error creating voucher brand:', error);
-    return sendError(res, 'Failed to create voucher brand', 500);
-  }
-});
+}));
 
 /**
  * PUT /api/admin/vouchers/:id
  * Update existing voucher brand
  */
-router.put('/:id', async (req: Request, res: Response) => {
-  try {
+router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid voucher brand ID', 400);
     }
@@ -182,18 +167,13 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
 
     return sendSuccess(res, voucher, 'Voucher brand updated');
-  } catch (error) {
-    logger.error('[Admin] Error updating voucher brand:', error);
-    return sendError(res, 'Failed to update voucher brand', 500);
-  }
-});
+}));
 
 /**
  * PATCH /api/admin/vouchers/:id/toggle
  * Toggle voucher brand active status
  */
-router.patch('/:id/toggle', async (req: Request, res: Response) => {
-  try {
+router.patch('/:id/toggle', asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid voucher brand ID', 400);
     }
@@ -207,18 +187,13 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
     await voucher.save();
 
     return sendSuccess(res, voucher, `Voucher brand ${voucher.isActive ? 'activated' : 'deactivated'}`);
-  } catch (error) {
-    logger.error('[Admin] Error toggling voucher brand:', error);
-    return sendError(res, 'Failed to toggle voucher brand', 500);
-  }
-});
+}));
 
 /**
  * DELETE /api/admin/vouchers/:id
  * Delete voucher brand
  */
-router.delete('/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendError(res, 'Invalid voucher brand ID', 400);
     }
@@ -229,10 +204,6 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
 
     return sendSuccess(res, null, 'Voucher brand deleted');
-  } catch (error) {
-    logger.error('[Admin] Error deleting voucher brand:', error);
-    return sendError(res, 'Failed to delete voucher brand', 500);
-  }
-});
+}));
 
 export default router;

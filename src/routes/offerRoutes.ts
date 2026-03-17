@@ -2,6 +2,7 @@ import { logger } from '../config/logger';
 import { Router, Request, Response } from 'express';
 import HomepageDealsSection from '../models/HomepageDealsSection';
 import HomepageDealsItem from '../models/HomepageDealsItem';
+import { asyncHandler } from '../utils/asyncHandler';
 import {
   getOffers,
   getFeaturedOffers,
@@ -446,8 +447,7 @@ router.get('/bank-offers',
  * @desc    Get the "Deals that save you money" section config and items for frontend
  * @access  Public
  */
-router.get('/homepage-deals-section', optionalAuth, async (req: Request, res: Response) => {
-  try {
+router.get('/homepage-deals-section', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
     const region = (req.headers['x-rez-region'] as string) || 'all';
 
     // Get section config
@@ -558,23 +558,14 @@ router.get('/homepage-deals-section', optionalAuth, async (req: Request, res: Re
         },
       },
     });
-  } catch (error: any) {
-    logger.error('[OFFERS] Homepage deals section error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch homepage deals section',
-      error: error.message,
-    });
-  }
-});
+}));
 
 /**
  * @route   POST /api/offers/homepage-deals-section/track-impression
  * @desc    Track item impressions (batch)
  * @access  Public
  */
-router.post('/homepage-deals-section/track-impression', async (req: Request, res: Response) => {
-  try {
+router.post('/homepage-deals-section/track-impression', asyncHandler(async (req: Request, res: Response) => {
     const { itemIds, tabType } = req.body;
 
     if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
@@ -600,22 +591,14 @@ router.post('/homepage-deals-section/track-impression', async (req: Request, res
       success: true,
       message: 'Impressions tracked',
     });
-  } catch (error: any) {
-    logger.error('[OFFERS] Track impression error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to track impression',
-    });
-  }
-});
+}));
 
 /**
  * @route   POST /api/offers/homepage-deals-section/track-click
  * @desc    Track item click
  * @access  Public
  */
-router.post('/homepage-deals-section/track-click', async (req: Request, res: Response) => {
-  try {
+router.post('/homepage-deals-section/track-click', asyncHandler(async (req: Request, res: Response) => {
     const { itemId, tabType } = req.body;
 
     if (!itemId) {
@@ -641,14 +624,7 @@ router.post('/homepage-deals-section/track-click', async (req: Request, res: Res
       success: true,
       message: 'Click tracked',
     });
-  } catch (error: any) {
-    logger.error('[OFFERS] Track click error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to track click',
-    });
-  }
-});
+}));
 
 // Get exclusive zones
 router.get('/exclusive-zones',

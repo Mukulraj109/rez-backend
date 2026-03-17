@@ -9,7 +9,7 @@ export interface IExclusiveZone extends Document {
   backgroundColor: string;
   description?: string;
   shortDescription?: string;
-  eligibilityType: 'corporate_email' | 'gender' | 'birthday_month' | 'student' | 'age' | 'verification';
+  eligibilityType: 'corporate_email' | 'gender' | 'birthday_month' | 'student' | 'age' | 'verification' | 'profession' | 'disability';
   eligibilityDetails?: string; // e.g., "Valid corporate email required"
   verificationRequired: boolean;
   offersCount: number;
@@ -17,6 +17,7 @@ export interface IExclusiveZone extends Document {
   bannerImage?: string;
   isActive: boolean;
   priority: number;
+  cashbackBonusPercent: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -66,7 +67,7 @@ const ExclusiveZoneSchema = new Schema<IExclusiveZone>(
     eligibilityType: {
       type: String,
       required: true,
-      enum: ['corporate_email', 'gender', 'birthday_month', 'student', 'age', 'verification'],
+      enum: ['corporate_email', 'gender', 'birthday_month', 'student', 'age', 'verification', 'profession', 'disability'],
       index: true,
     },
     eligibilityDetails: {
@@ -98,6 +99,12 @@ const ExclusiveZoneSchema = new Schema<IExclusiveZone>(
       default: 0,
       min: 0,
       max: 100,
+    },
+    cashbackBonusPercent: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 50,
     },
   },
   {

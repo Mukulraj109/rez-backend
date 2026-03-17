@@ -11,6 +11,7 @@ import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { sendSuccess, sendError } from '../../utils/response';
 import { escapeRegex } from '../../utils/sanitize';
 import supportSocketService from '../../services/supportSocketService';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -21,8 +22,7 @@ router.use(requireAdmin);
 /**
  * GET /admin/support/tickets — list with pagination + filters
  */
-router.get('/tickets', async (req: Request, res: Response) => {
-  try {
+router.get('/tickets', asyncHandler(async (req: Request, res: Response) => {
     const {
       page = 1,
       limit = 20,
@@ -72,17 +72,12 @@ router.get('/tickets', async (req: Request, res: Response) => {
       page: Number(page),
       pages: Math.ceil(total / Number(limit)),
     });
-  } catch (error: any) {
-    logger.error('[Admin Support] Error listing tickets:', error.message);
-    sendError(res, 'Failed to list tickets', 500);
-  }
-});
+  }));
 
 /**
  * GET /admin/support/tickets/:id — detail with full message thread
  */
-router.get('/tickets/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/tickets/:id', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     if (!Types.ObjectId.isValid(id)) {
       return sendError(res, 'Invalid ticket ID', 400);
@@ -98,17 +93,12 @@ router.get('/tickets/:id', async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, { ticket });
-  } catch (error: any) {
-    logger.error('[Admin Support] Error fetching ticket:', error.message);
-    sendError(res, 'Failed to fetch ticket', 500);
-  }
-});
+  }));
 
 /**
  * PUT /admin/support/tickets/:id/assign — assign to admin user
  */
-router.put('/tickets/:id/assign', async (req: Request, res: Response) => {
-  try {
+router.put('/tickets/:id/assign', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { agentId } = req.body;
 
@@ -148,17 +138,12 @@ router.put('/tickets/:id/assign', async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, { ticket });
-  } catch (error: any) {
-    logger.error('[Admin Support] Error assigning ticket:', error.message);
-    sendError(res, 'Failed to assign ticket', 500);
-  }
-});
+  }));
 
 /**
  * POST /admin/support/tickets/:id/messages — agent reply
  */
-router.post('/tickets/:id/messages', async (req: Request, res: Response) => {
-  try {
+router.post('/tickets/:id/messages', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { message, attachments } = req.body;
     const adminId = (req as any).userId;
@@ -225,18 +210,13 @@ router.post('/tickets/:id/messages', async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, { ticket });
-  } catch (error: any) {
-    logger.error('[Admin Support] Error adding agent message:', error.message);
-    sendError(res, 'Failed to add message', 500);
-  }
-});
+  }));
 
 /**
  * PUT /admin/support/tickets/:id/status — change status
  * When resolving: accepts optional `resolution` (note) and `walletAdjustment` (credit/debit user)
  */
-router.put('/tickets/:id/status', async (req: Request, res: Response) => {
-  try {
+router.put('/tickets/:id/status', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { status, resolution, walletAdjustment } = req.body;
     const adminId = (req as any).userId;
@@ -322,17 +302,12 @@ router.put('/tickets/:id/status', async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, { ticket, walletResult });
-  } catch (error: any) {
-    logger.error('[Admin Support] Error updating status:', error.message);
-    sendError(res, 'Failed to update status', 500);
-  }
-});
+  }));
 
 /**
  * GET /admin/support/agents — list available agents for assignment
  */
-router.get('/agents', async (req: Request, res: Response) => {
-  try {
+router.get('/agents', asyncHandler(async (req: Request, res: Response) => {
     const admins = await User.find({ role: 'admin', isActive: true })
       .select('profile.firstName profile.lastName email')
       .lean();
@@ -354,17 +329,12 @@ router.get('/agents', async (req: Request, res: Response) => {
     );
 
     sendSuccess(res, { agents });
-  } catch (error: any) {
-    logger.error('[Admin Support] Error fetching agents:', error.message);
-    sendError(res, 'Failed to fetch agents', 500);
-  }
-});
+  }));
 
 /**
  * GET /admin/support/statistics — dashboard metrics
  */
-router.get('/statistics', async (req: Request, res: Response) => {
-  try {
+router.get('/statistics', asyncHandler(async (req: Request, res: Response) => {
     const [total, byStatus, byCategory, avgRating] = await Promise.all([
       SupportTicket.countDocuments(),
       SupportTicket.aggregate([
@@ -394,17 +364,12 @@ router.get('/statistics', async (req: Request, res: Response) => {
       openCount: statusMap.open || 0,
       inProgressCount: statusMap.in_progress || 0,
     });
-  } catch (error: any) {
-    logger.error('[Admin Support] Error fetching statistics:', error.message);
-    sendError(res, 'Failed to fetch statistics', 500);
-  }
-});
+  }));
 
 /**
  * POST /admin/support/tickets/:id/read — mark user messages as read by agent
  */
-router.post('/tickets/:id/read', requireAdmin, async (req: Request, res: Response) => {
-  try {
+router.post('/tickets/:id/read', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     if (!Types.ObjectId.isValid(id)) {
       return sendError(res, 'Invalid ticket ID', 400);
@@ -424,19 +389,14 @@ router.post('/tickets/:id/read', requireAdmin, async (req: Request, res: Respons
     }
 
     sendSuccess(res, { message: 'Messages marked as read' });
-  } catch (error: any) {
-    logger.error('[Admin Support] Error marking messages as read:', error.message);
-    sendError(res, 'Failed to mark messages as read', 500);
-  }
-});
+  }));
 
 // ==================== ESCALATION ====================
 
 /**
  * POST /admin/support/tickets/:id/escalate — Escalate ticket to specialist team
  */
-router.post('/tickets/:id/escalate', async (req: Request, res: Response) => {
-  try {
+router.post('/tickets/:id/escalate', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { team, reason } = req.body;
     const adminId = (req as any).userId;
@@ -475,19 +435,14 @@ router.post('/tickets/:id/escalate', async (req: Request, res: Response) => {
     });
 
     sendSuccess(res, { ticket, message: `Ticket escalated to ${team} team (L${ticket.escalation.level})` });
-  } catch (error: any) {
-    logger.error('[Admin Support] Error escalating ticket:', error.message);
-    sendError(res, 'Failed to escalate ticket', 500);
-  }
-});
+  }));
 
 // ==================== MACROS ====================
 
 /**
  * GET /admin/support/macros — List all macros
  */
-router.get('/macros', async (req: Request, res: Response) => {
-  try {
+router.get('/macros', asyncHandler(async (req: Request, res: Response) => {
     const { category, audience } = req.query;
     const query: any = {};
     if (category) query.category = category;
@@ -498,16 +453,12 @@ router.get('/macros', async (req: Request, res: Response) => {
       .lean();
 
     sendSuccess(res, { macros });
-  } catch (error: any) {
-    logger.error('[Admin Support] Error fetching macros:', error.message);
-    sendError(res, 'Failed to fetch macros', 500);
-  }
-});
+  }));
 
 /**
  * POST /admin/support/macros — Create a macro
  */
-router.post('/macros', async (req: Request, res: Response) => {
+router.post('/macros', asyncHandler(async (req: Request, res: Response) => {
   try {
     const { title, content, category, audience, shortcut, tags } = req.body;
     const adminId = (req as any).userId;
@@ -534,12 +485,12 @@ router.post('/macros', async (req: Request, res: Response) => {
     logger.error('[Admin Support] Error creating macro:', error.message);
     sendError(res, 'Failed to create macro', 500);
   }
-});
+}));
 
 /**
  * PUT /admin/support/macros/:id — Update a macro
  */
-router.put('/macros/:id', async (req: Request, res: Response) => {
+router.put('/macros/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     if (!Types.ObjectId.isValid(id)) return sendError(res, 'Invalid macro ID', 400);
@@ -566,13 +517,12 @@ router.put('/macros/:id', async (req: Request, res: Response) => {
     logger.error('[Admin Support] Error updating macro:', error.message);
     sendError(res, 'Failed to update macro', 500);
   }
-});
+}));
 
 /**
  * DELETE /admin/support/macros/:id — Delete a macro
  */
-router.delete('/macros/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/macros/:id', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     if (!Types.ObjectId.isValid(id)) return sendError(res, 'Invalid macro ID', 400);
 
@@ -580,10 +530,6 @@ router.delete('/macros/:id', async (req: Request, res: Response) => {
     if (!macro) return sendError(res, 'Macro not found', 404);
 
     sendSuccess(res, { message: 'Macro deleted' });
-  } catch (error: any) {
-    logger.error('[Admin Support] Error deleting macro:', error.message);
-    sendError(res, 'Failed to delete macro', 500);
-  }
-});
+  }));
 
 export default router;

@@ -3,6 +3,7 @@ import { logger } from '../config/logger';
 // Routes for social media post submissions and cashback tracking
 
 import { Router } from 'express';
+import { asyncHandler } from '../utils/asyncHandler';
 import {
   submitPost,
   submitPostWithMedia,
@@ -183,8 +184,7 @@ router.post('/instagram/extract-post-data',
 // ============================================================================
 router.post('/admin/fix-missing-credits',
   requireAdmin,
-  async (req, res) => {
-    try {
+  asyncHandler(async (req, res) => {
       const { SocialMediaPost } = require('../models/SocialMediaPost');
       const { CoinTransaction } = require('../models/CoinTransaction');
       const coinService = require('../services/coinService');
@@ -257,11 +257,7 @@ router.post('/admin/fix-missing-credits',
         message: `Fix complete: ${fixed} fixed, ${skipped} already had records, ${failed} failed`,
         data: { total: creditedPosts.length, fixed, skipped, failed, results }
       });
-    } catch (error: any) {
-      logger.error('[FIX] Error:', error);
-      res.status(500).json({ success: false, error: error.message });
-    }
-  }
+  })
 );
 
 export default router;

@@ -2,12 +2,66 @@ import { logger } from '../config/logger';
 import express from 'express';
 import * as subscriptionController from '../controllers/subscriptionController';
 import { authenticate } from '../middleware/auth';
+import { validate, validateParams, Joi } from '../middleware/validation';
 import {
   razorpayIPWhitelist,
   webhookRateLimiter,
   validateWebhookPayload,
   logWebhookSecurityEvent,
 } from '../middleware/webhookSecurity';
+
+// Subscription validation schemas
+const subscriptionTierEnum = ['premium', 'vip'] as const;
+const billingCycleEnum = ['monthly', 'yearly'] as const;
+
+const subscribeSchema = Joi.object({
+  tier: Joi.string().valid(...subscriptionTierEnum).required(),
+  billingCycle: Joi.string().valid(...billingCycleEnum).required(),
+  paymentMethod: Joi.string().optional(),
+  promoCode: Joi.string().max(20).optional(),
+  source: Joi.string().optional(),
+});
+
+const validatePromoSchema = Joi.object({
+  code: Joi.string().required(),
+  tier: Joi.string().valid(...subscriptionTierEnum).optional(),
+  billingCycle: Joi.string().valid(...billingCycleEnum).optional(),
+});
+
+const initiateUpgradeSchema = Joi.object({
+  newTier: Joi.string().valid(...subscriptionTierEnum).required(),
+  billingCycle: Joi.string().valid(...billingCycleEnum).optional(),
+  paymentGateway: Joi.string().optional(),
+});
+
+const confirmUpgradeSchema = Joi.object({
+  upgradeId: Joi.string().required(),
+  paymentId: Joi.string().optional(),
+  paymentIntentId: Joi.string().optional(),
+});
+
+const downgradeSchema = Joi.object({
+  newTier: Joi.string().valid('free', 'premium').required(),
+  reason: Joi.string().max(500).optional(),
+});
+
+const cancelSchema = Joi.object({
+  reason: Joi.string().max(500).optional(),
+  feedback: Joi.string().max(1000).optional(),
+});
+
+const renewSchema = Joi.object({
+  paymentMethod: Joi.string().optional(),
+  billingCycle: Joi.string().valid(...billingCycleEnum).optional(),
+});
+
+const autoRenewSchema = Joi.object({
+  autoRenew: Joi.boolean().required(),
+});
+
+const tierParamSchema = Joi.object({
+  tier: Joi.string().valid('free', 'premium', 'vip').required(),
+});
 
 const router = express.Router();
 
@@ -48,17 +102,17 @@ router.use(authenticate);
 router.get('/current', subscriptionController.getCurrentSubscription);
 router.get('/benefits', subscriptionController.getSubscriptionBenefits);
 router.get('/usage', subscriptionController.getSubscriptionUsage);
-router.get('/value-proposition/:tier', subscriptionController.getValueProposition);
+router.get('/value-proposition/:tier', validateParams(tierParamSchema), subscriptionController.getValueProposition);
 
-router.post('/subscribe', subscriptionController.subscribeToPlan);
-router.post('/validate-promo', subscriptionController.validatePromoCode);
+router.post('/subscribe', validate(subscribeSchema), subscriptionController.subscribeToPlan);
+router.post('/validate-promo', validate(validatePromoSchema), subscriptionController.validatePromoCode);
 router.post('/upgrade', subscriptionController.upgradeSubscription);
-router.post('/upgrade/initiate', subscriptionController.initiateUpgrade);
-router.post('/upgrade/confirm', subscriptionController.confirmUpgrade);
-router.post('/downgrade', subscriptionController.downgradeSubscription);
-router.post('/cancel', subscriptionController.cancelSubscription);
-router.post('/renew', subscriptionController.renewSubscription);
+router.post('/upgrade/initiate', validate(initiateUpgradeSchema), subscriptionController.initiateUpgrade);
+router.post('/upgrade/confirm', validate(confirmUpgradeSchema), subscriptionController.confirmUpgrade);
+router.post('/downgrade', validate(downgradeSchema), subscriptionController.downgradeSubscription);
+router.post('/cancel', validate(cancelSchema), subscriptionController.cancelSubscription);
+router.post('/renew', validate(renewSchema), subscriptionController.renewSubscription);
 
-router.patch('/auto-renew', subscriptionController.toggleAutoRenew);
+router.patch('/auto-renew', validate(autoRenewSchema), subscriptionController.toggleAutoRenew);
 
 export default router;

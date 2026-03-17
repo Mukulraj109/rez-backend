@@ -22,6 +22,14 @@ export interface IPaymentRewards {
   coinsEarned: number;
   bonusCoins: number;
   firstVisitBonus?: number;
+  cashbackBreakdown?: {
+    baseCashbackPercent: number;
+    baseCashbackAmount: number;
+    subscriptionMultiplier: number;
+    priveMultiplier: number;
+    priveTier: string;
+    finalCashbackAmount: number;
+  };
   loyaltyProgress?: {
     currentVisits: number;
     nextMilestone: number;
@@ -188,6 +196,15 @@ const StorePaymentSchema = new Schema<IStorePayment>(
       cashbackEarned: { type: Number, default: 0 },
       coinsEarned: { type: Number, default: 0 },
       bonusCoins: { type: Number, default: 0 },
+      firstVisitBonus: { type: Number, default: 0 },
+      cashbackBreakdown: {
+        baseCashbackPercent: { type: Number },
+        baseCashbackAmount: { type: Number },
+        subscriptionMultiplier: { type: Number },
+        priveMultiplier: { type: Number },
+        priveTier: { type: String },
+        finalCashbackAmount: { type: Number },
+      },
       loyaltyProgress: {
         currentVisits: { type: Number },
         nextMilestone: { type: Number },

@@ -3,14 +3,14 @@ import mongoose from 'mongoose';
 import { Video } from '../models/Video';
 import { logger } from '../config/logger';
 import engagementRewardService from '../services/engagementRewardService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Create a UGC reel — sets contentType to 'ugc', moderationStatus to 'pending',
  * and creates a PendingCoinReward.
  * POST /api/ugc/create
  */
-export const createUgcReel = async (req: Request, res: Response) => {
-  try {
+export const createUgcReel = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id || (req as any).user?._id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -72,18 +72,13 @@ export const createUgcReel = async (req: Request, res: Response) => {
           : null,
       },
     });
-  } catch (error: any) {
-    logger.error('Error creating UGC reel:', error);
-    res.status(500).json({ success: false, error: error.message || 'Failed to create reel' });
-  }
-};
+});
 
 /**
  * Get user's UGC reels with status.
  * GET /api/ugc/my-reels
  */
-export const getMyReels = async (req: Request, res: Response) => {
-  try {
+export const getMyReels = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).user?.id || (req as any).user?._id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -130,18 +125,13 @@ export const getMyReels = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching my reels:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch reels' });
-  }
-};
+});
 
 /**
  * Get approved UGC feed (public).
  * GET /api/ugc/feed
  */
-export const getUgcFeed = async (req: Request, res: Response) => {
-  try {
+export const getUgcFeed = asyncHandler(async (req: Request, res: Response) => {
     const { page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10)));
@@ -191,18 +181,13 @@ export const getUgcFeed = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching UGC feed:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch UGC feed' });
-  }
-};
+});
 
 /**
  * Get pending UGC reels for moderation (admin).
  * GET /api/ugc/pending
  */
-export const getPendingReels = async (req: Request, res: Response) => {
-  try {
+export const getPendingReels = asyncHandler(async (req: Request, res: Response) => {
     const { page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, parseInt(page as string, 10));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit as string, 10)));
@@ -250,18 +235,13 @@ export const getPendingReels = async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('Error fetching pending UGC reels:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch pending reels' });
-  }
-};
+});
 
 /**
  * Moderate a UGC reel (admin/merchant).
  * PATCH /api/ugc/:id/moderate
  */
-export const moderateUgcReel = async (req: Request, res: Response) => {
-  try {
+export const moderateUgcReel = asyncHandler(async (req: Request, res: Response) => {
     const adminId = (req as any).user?.id || (req as any).user?._id;
     if (!adminId) {
       return res.status(401).json({ success: false, error: 'Authentication required' });
@@ -330,8 +310,4 @@ export const moderateUgcReel = async (req: Request, res: Response) => {
         isPublished: video.isPublished,
       },
     });
-  } catch (error: any) {
-    logger.error('Error moderating UGC reel:', error);
-    res.status(500).json({ success: false, error: 'Failed to moderate reel' });
-  }
-};
+});

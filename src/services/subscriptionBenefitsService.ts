@@ -16,7 +16,7 @@ class SubscriptionBenefitsService {
       const subscription = await Subscription.findOne({
         user: userId,
         status: { $in: ['active', 'trial', 'grace_period'] }
-      }).sort({ createdAt: -1 }).lean(); // FIXED: Sort by most recently created instead of end date
+      }).sort({ createdAt: -1 }); // Removed .lean() — isActive() and .save() need full Mongoose document
 
       if (subscription) {
         logger.info('📊 [SUBSCRIPTION SERVICE] Found subscription:', {

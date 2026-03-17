@@ -11,6 +11,7 @@ import {
   claimGift,
   getSentGifts
 } from '../controllers/giftController';
+import { validate, validateParams, Joi } from '../middleware/validation';
 
 const router = Router();
 
@@ -27,12 +28,27 @@ const validateLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 10, messag
 
 // Config & validation
 router.get('/config', giftReadLimiter, getGiftConfig);
-router.post('/validate-recipient', validateLimiter, validateRecipient);
+router.post('/validate-recipient', validateLimiter, validate(Joi.object({
+  recipientPhone: Joi.string(),
+  recipientId: Joi.string()
+})), validateRecipient);
 
 // Gift operations — re-auth required above configured threshold
-router.post('/send', giftWriteLimiter, requireReAuthAbove('gift'), sendGift);
+router.post('/send', giftWriteLimiter, requireReAuthAbove('gift'), validate(Joi.object({
+  recipientPhone: Joi.string(),
+  recipientId: Joi.string(),
+  amount: Joi.number().positive().required(),
+  coinType: Joi.string(),
+  theme: Joi.string().required(),
+  message: Joi.string().max(200),
+  deliveryType: Joi.string(),
+  scheduledAt: Joi.date(),
+  idempotencyKey: Joi.string()
+})), sendGift);
 router.get('/received', giftReadLimiter, getReceivedGifts);
-router.post('/:id/claim', giftWriteLimiter, claimGift);
+router.post('/:id/claim', giftWriteLimiter, validateParams(Joi.object({
+  id: Joi.string().required()
+})), claimGift);
 router.get('/sent', giftReadLimiter, getSentGifts);
 
 export default router;

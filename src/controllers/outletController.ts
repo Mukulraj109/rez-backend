@@ -3,13 +3,13 @@ import { Request, Response } from 'express';
 import Outlet from '../models/Outlet';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import { escapeRegex } from '../utils/sanitize';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * GET /api/outlets
  * Get all outlets with filters
  */
-export const getOutlets = async (req: Request, res: Response) => {
-  try {
+export const getOutlets = asyncHandler(async (req: Request, res: Response) => {
     const {
       page = 1,
       limit = 20,
@@ -51,18 +51,13 @@ export const getOutlets = async (req: Request, res: Response) => {
     ]);
 
     sendPaginated(res, outlets, pageNum, limitNum, total, 'Outlets fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching outlets:', error);
-    sendError(res, 'Failed to fetch outlets', 500);
-  }
-};
+});
 
 /**
  * GET /api/outlets/:id
  * Get single outlet by ID
  */
-export const getOutletById = async (req: Request, res: Response) => {
-  try {
+export const getOutletById = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     const outlet = await Outlet.findById(id)
@@ -75,18 +70,13 @@ export const getOutletById = async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, outlet, 'Outlet fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching outlet:', error);
-    sendError(res, 'Failed to fetch outlet', 500);
-  }
-};
+});
 
 /**
  * GET /api/outlets/store/:storeId
  * Get all outlets for a specific store
  */
-export const getOutletsByStore = async (req: Request, res: Response) => {
-  try {
+export const getOutletsByStore = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { page = 1, limit = 20, isActive = 'true' } = req.query;
 
@@ -114,18 +104,13 @@ export const getOutletsByStore = async (req: Request, res: Response) => {
     ]);
 
     sendPaginated(res, outlets, pageNum, limitNum, total, 'Store outlets fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching store outlets:', error);
-    sendError(res, 'Failed to fetch store outlets', 500);
-  }
-};
+});
 
 /**
  * GET /api/outlets/nearby
  * Find nearby outlets based on location
  */
-export const getNearbyOutlets = async (req: Request, res: Response) => {
-  try {
+export const getNearbyOutlets = asyncHandler(async (req: Request, res: Response) => {
     const { lng, lat, radius = 10, limit = 20, store } = req.query;
 
     if (!lng || !lat) {
@@ -209,18 +194,13 @@ export const getNearbyOutlets = async (req: Request, res: Response) => {
       },
       'Nearby outlets fetched successfully'
     );
-  } catch (error) {
-    logger.error('Error fetching nearby outlets:', error);
-    sendError(res, 'Failed to fetch nearby outlets', 500);
-  }
-};
+});
 
 /**
  * GET /api/outlets/:id/opening-hours
  * Get opening hours for a specific outlet
  */
-export const getOutletOpeningHours = async (req: Request, res: Response) => {
-  try {
+export const getOutletOpeningHours = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     const outlet = await Outlet.findById(id).select('name openingHours').lean();
@@ -256,18 +236,13 @@ export const getOutletOpeningHours = async (req: Request, res: Response) => {
       },
       'Opening hours fetched successfully'
     );
-  } catch (error) {
-    logger.error('Error fetching opening hours:', error);
-    sendError(res, 'Failed to fetch opening hours', 500);
-  }
-};
+});
 
 /**
  * GET /api/outlets/:id/offers
  * Get offers available at a specific outlet
  */
-export const getOutletOffers = async (req: Request, res: Response) => {
-  try {
+export const getOutletOffers = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     const outlet = await Outlet.findById(id)
@@ -299,18 +274,13 @@ export const getOutletOffers = async (req: Request, res: Response) => {
       },
       'Outlet offers fetched successfully'
     );
-  } catch (error) {
-    logger.error('Error fetching outlet offers:', error);
-    sendError(res, 'Failed to fetch outlet offers', 500);
-  }
-};
+});
 
 /**
  * POST /api/outlets/search
  * Search outlets by name or address
  */
-export const searchOutlets = async (req: Request, res: Response) => {
-  try {
+export const searchOutlets = asyncHandler(async (req: Request, res: Response) => {
     const { query, store, page = 1, limit = 20 } = req.body;
 
     if (!query || typeof query !== 'string') {
@@ -346,18 +316,13 @@ export const searchOutlets = async (req: Request, res: Response) => {
     ]);
 
     sendPaginated(res, outlets, pageNum, limitNum, total, 'Outlets search results');
-  } catch (error) {
-    logger.error('Error searching outlets:', error);
-    sendError(res, 'Failed to search outlets', 500);
-  }
-};
+});
 
 /**
  * GET /api/outlets/store/:storeId/count
  * Get count of outlets for a store
  */
-export const getStoreOutletCount = async (req: Request, res: Response) => {
-  try {
+export const getStoreOutletCount = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
 
     const count = await Outlet.countDocuments({
@@ -373,8 +338,4 @@ export const getStoreOutletCount = async (req: Request, res: Response) => {
       },
       'Outlet count fetched successfully'
     );
-  } catch (error) {
-    logger.error('Error fetching outlet count:', error);
-    sendError(res, 'Failed to fetch outlet count', 500);
-  }
-};
+});

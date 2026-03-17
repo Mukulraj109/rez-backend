@@ -2,13 +2,13 @@ import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import { Store } from '../models/Store';
 import redisService from '../services/redisService';
-import { sendSuccess, sendError } from '../utils/response';
+import { sendSuccess } from '../utils/response';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const CACHE_KEY = 'platform:stats';
 const CACHE_TTL = 300; // 5 minutes
 
-export const getPlatformStats = async (_req: Request, res: Response) => {
-  try {
+export const getPlatformStats = asyncHandler(async (_req: Request, res: Response) => {
     // Check Redis cache first
     const cached = await redisService.get<{ averageRating: number; totalStores: number }>(CACHE_KEY);
     if (cached) {
@@ -34,8 +34,4 @@ export const getPlatformStats = async (_req: Request, res: Response) => {
     await redisService.set(CACHE_KEY, stats, CACHE_TTL);
 
     return sendSuccess(res, stats, 'Platform stats retrieved');
-  } catch (error) {
-    logger.error('[platformController] getPlatformStats error:', error);
-    return sendError(res, 'Failed to fetch platform stats', 500);
-  }
-};
+});

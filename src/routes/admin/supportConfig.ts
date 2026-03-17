@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { SupportConfig } from '../../models/SupportConfig';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -12,22 +13,17 @@ router.use(requireAdmin);
  * @desc    Get support configuration singleton
  * @access  Admin
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const config = await SupportConfig.getOrCreate();
     res.json({ success: true, data: config });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to fetch support config' });
-  }
-});
+  }));
 
 /**
  * @route   PUT /api/admin/support-config
  * @desc    Update support configuration
  * @access  Admin
  */
-router.put('/', async (req: Request, res: Response) => {
-  try {
+router.put('/', asyncHandler(async (req: Request, res: Response) => {
     const config = await SupportConfig.getOrCreate();
 
     // Array fields: replace entirely
@@ -66,9 +62,6 @@ router.put('/', async (req: Request, res: Response) => {
     await config.save();
 
     res.json({ success: true, data: config, message: 'Support config updated' });
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message || 'Failed to update support config' });
-  }
-});
+  }));
 
 export default router;

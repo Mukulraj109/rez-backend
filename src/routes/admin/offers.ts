@@ -6,6 +6,7 @@ import Offer from '../../models/Offer';
 import { Store } from '../../models/Store';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { escapeRegex } from '../../utils/sanitize';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = express.Router();
 
@@ -67,8 +68,7 @@ const offerSchema = Joi.object({
  * @desc    Get all offers (with filters)
  * @access  Admin
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const {
       page = 1,
       limit = 20,
@@ -146,23 +146,14 @@ router.get('/', async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Get offers error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch offers',
-      error: error.message,
-    });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/offers/stats
  * @desc    Get offer statistics
  * @access  Admin
  */
-router.get('/stats', async (req: Request, res: Response) => {
-  try {
+router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     const now = new Date();
 
     const [total, active, expired, byZone, byCategory] = await Promise.all([
@@ -221,23 +212,14 @@ router.get('/stats', async (req: Request, res: Response) => {
         }, {} as Record<string, number>),
       },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Get offer stats error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch stats',
-      error: error.message,
-    });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/offers/stores
  * @desc    Get list of stores for dropdown
  * @access  Admin
  */
-router.get('/stores', async (req: Request, res: Response) => {
-  try {
+router.get('/stores', asyncHandler(async (req: Request, res: Response) => {
     const stores = await Store.find({ isActive: true })
       .select('_id name logo')
       .sort({ name: 1 })
@@ -248,23 +230,14 @@ router.get('/stores', async (req: Request, res: Response) => {
       success: true,
       data: stores,
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Get stores error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch stores',
-      error: error.message,
-    });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/offers/pending-approval
  * @desc    Get offers awaiting admin approval
  * @access  Admin
  */
-router.get('/pending-approval', async (req: Request, res: Response) => {
-  try {
+router.get('/pending-approval', asyncHandler(async (req: Request, res: Response) => {
     const { page = 1, limit = 20 } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
 
@@ -291,19 +264,14 @@ router.get('/pending-approval', async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Get pending offers error:', error);
-    return res.status(500).json({ success: false, message: 'Failed to fetch pending offers', error: error.message });
-  }
-});
+  }));
 
 /**
  * @route   GET /api/admin/offers/:id
  * @desc    Get single offer details
  * @access  Admin
  */
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!Types.ObjectId.isValid(id)) {
@@ -326,23 +294,14 @@ router.get('/:id', async (req: Request, res: Response) => {
       success: true,
       data: offer,
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Get offer error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch offer',
-      error: error.message,
-    });
-  }
-});
+  }));
 
 /**
  * @route   POST /api/admin/offers
  * @desc    Create new offer
  * @access  Admin
  */
-router.post('/', async (req: Request, res: Response) => {
-  try {
+router.post('/', asyncHandler(async (req: Request, res: Response) => {
     const adminId = (req as any).user._id;
 
     // Validate request body
@@ -405,23 +364,14 @@ router.post('/', async (req: Request, res: Response) => {
       message: 'Offer created successfully',
       data: offer,
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Create offer error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to create offer',
-      error: error.message,
-    });
-  }
-});
+  }));
 
 /**
  * @route   PUT /api/admin/offers/:id
  * @desc    Update offer
  * @access  Admin
  */
-router.put('/:id', async (req: Request, res: Response) => {
-  try {
+router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!Types.ObjectId.isValid(id)) {
@@ -501,23 +451,14 @@ router.put('/:id', async (req: Request, res: Response) => {
       message: 'Offer updated successfully',
       data: offer,
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Update offer error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to update offer',
-      error: error.message,
-    });
-  }
-});
+  }));
 
 /**
  * @route   PATCH /api/admin/offers/:id/toggle
  * @desc    Toggle offer active status
  * @access  Admin
  */
-router.patch('/:id/toggle', async (req: Request, res: Response) => {
-  try {
+router.patch('/:id/toggle', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!Types.ObjectId.isValid(id)) {
@@ -543,23 +484,14 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
       message: `Offer ${offer.validity.isActive ? 'activated' : 'deactivated'}`,
       data: { isActive: offer.validity.isActive },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Toggle offer error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to toggle offer',
-      error: error.message,
-    });
-  }
-});
+  }));
 
 /**
  * @route   PUT /api/admin/offers/:id/approve
  * @desc    Approve a merchant-created offer
  * @access  Admin
  */
-router.put('/:id/approve', async (req: Request, res: Response) => {
-  try {
+router.put('/:id/approve', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const adminId = (req as any).user._id;
 
@@ -582,19 +514,14 @@ router.put('/:id/approve', async (req: Request, res: Response) => {
       message: 'Offer approved successfully',
       data: offer,
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Approve offer error:', error);
-    return res.status(500).json({ success: false, message: 'Failed to approve offer', error: error.message });
-  }
-});
+  }));
 
 /**
  * @route   PUT /api/admin/offers/:id/reject
  * @desc    Reject a merchant-created offer
  * @access  Admin
  */
-router.put('/:id/reject', async (req: Request, res: Response) => {
-  try {
+router.put('/:id/reject', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const adminId = (req as any).user._id;
     const { reason } = req.body;
@@ -618,19 +545,14 @@ router.put('/:id/reject', async (req: Request, res: Response) => {
       message: 'Offer rejected',
       data: offer,
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Reject offer error:', error);
-    return res.status(500).json({ success: false, message: 'Failed to reject offer', error: error.message });
-  }
-});
+  }));
 
 /**
  * @route   DELETE /api/admin/offers/:id
  * @desc    Delete offer
  * @access  Admin
  */
-router.delete('/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!Types.ObjectId.isValid(id)) {
@@ -653,14 +575,6 @@ router.delete('/:id', async (req: Request, res: Response) => {
       success: true,
       message: 'Offer deleted successfully',
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Delete offer error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to delete offer',
-      error: error.message,
-    });
-  }
-});
+  }));
 
 export default router;

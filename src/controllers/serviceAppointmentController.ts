@@ -7,13 +7,13 @@ import { Types } from 'mongoose';
 import { ServiceAppointment } from '../models/ServiceAppointment';
 import { Store } from '../models/Store';
 import { sendSuccess, sendError, sendCreated, sendNotFound } from '../utils/response';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Create new service appointment
  * POST /api/service-appointments
  */
-export const createServiceAppointment = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const createServiceAppointment = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
 
     if (!userId) {
@@ -93,18 +93,13 @@ export const createServiceAppointment = async (req: Request, res: Response): Pro
     logger.info(`✅ [SERVICE APPOINTMENT] Created appointment ${appointmentNumber} for store ${storeId}`);
 
     sendCreated(res, populatedAppointment, 'Service appointment created successfully');
-  } catch (error: any) {
-    logger.error('❌ [SERVICE APPOINTMENT] Error creating appointment:', error);
-    sendError(res, 'Failed to create service appointment', 500);
-  }
-};
+});
 
 /**
  * Get user's service appointments
  * GET /api/service-appointments/user
  */
-export const getUserServiceAppointments = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getUserServiceAppointments = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
 
     if (!userId) {
@@ -128,18 +123,13 @@ export const getUserServiceAppointments = async (req: Request, res: Response): P
     logger.info(`✅ [SERVICE APPOINTMENT] Retrieved ${appointments.length} appointments for user ${userId}`);
 
     sendSuccess(res, { appointments, total: appointments.length }, 'Appointments retrieved successfully');
-  } catch (error: any) {
-    logger.error('❌ [SERVICE APPOINTMENT] Error getting user appointments:', error);
-    sendError(res, 'Failed to get appointments', 500);
-  }
-};
+});
 
 /**
  * Get service appointment by ID
  * GET /api/service-appointments/:appointmentId
  */
-export const getServiceAppointment = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getServiceAppointment = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { appointmentId } = req.params;
 
@@ -172,18 +162,13 @@ export const getServiceAppointment = async (req: Request, res: Response): Promis
     logger.info(`✅ [SERVICE APPOINTMENT] Retrieved appointment ${appointmentId}`);
 
     sendSuccess(res, appointment, 'Appointment retrieved successfully');
-  } catch (error: any) {
-    logger.error('❌ [SERVICE APPOINTMENT] Error getting appointment:', error);
-    sendError(res, 'Failed to get appointment', 500);
-  }
-};
+});
 
 /**
  * Get store's service appointments
  * GET /api/service-appointments/store/:storeId
  */
-export const getStoreServiceAppointments = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getStoreServiceAppointments = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { storeId } = req.params;
     const { date, status } = req.query;
@@ -235,18 +220,13 @@ export const getStoreServiceAppointments = async (req: Request, res: Response): 
     logger.info(`✅ [SERVICE APPOINTMENT] Retrieved ${appointments.length} appointments for store ${storeId}`);
 
     sendSuccess(res, { appointments, total: appointments.length }, 'Store appointments retrieved successfully');
-  } catch (error: any) {
-    logger.error('❌ [SERVICE APPOINTMENT] Error getting store appointments:', error);
-    sendError(res, 'Failed to get store appointments', 500);
-  }
-};
+});
 
 /**
  * Cancel service appointment
  * PUT /api/service-appointments/:appointmentId/cancel
  */
-export const cancelServiceAppointment = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const cancelServiceAppointment = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { appointmentId } = req.params;
     const { reason } = req.body;
@@ -296,18 +276,13 @@ export const cancelServiceAppointment = async (req: Request, res: Response): Pro
     logger.info(`✅ [SERVICE APPOINTMENT] Cancelled appointment ${appointmentId}`);
 
     sendSuccess(res, updatedAppointment, 'Appointment cancelled successfully');
-  } catch (error: any) {
-    logger.error('❌ [SERVICE APPOINTMENT] Error cancelling appointment:', error);
-    sendError(res, 'Failed to cancel appointment', 500);
-  }
-};
+});
 
 /**
  * Check availability for a time slot
  * GET /api/service-appointments/availability/:storeId
  */
-export const checkAvailability = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const checkAvailability = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { date, time, duration } = req.query;
 
@@ -358,18 +333,13 @@ export const checkAvailability = async (req: Request, res: Response): Promise<vo
       },
       isAvailable ? 'Time slot is available' : 'Time slot is not available'
     );
-  } catch (error: any) {
-    logger.error('❌ [SERVICE APPOINTMENT] Error checking availability:', error);
-    sendError(res, 'Failed to check availability', 500);
-  }
-};
+});
 
 /**
  * Get available time slots for a date
  * GET /api/service-appointments/slots/:storeId
  */
-export const getAvailableSlots = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getAvailableSlots = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { date, duration } = req.query;
 
@@ -447,8 +417,4 @@ export const getAvailableSlots = async (req: Request, res: Response): Promise<vo
       },
       'Available slots retrieved successfully'
     );
-  } catch (error: any) {
-    logger.error('❌ [SERVICE APPOINTMENT] Error getting available slots:', error);
-    sendError(res, 'Failed to get available slots', 500);
-  }
-};
+});

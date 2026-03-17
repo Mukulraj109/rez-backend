@@ -10,6 +10,7 @@ import ValueCard from '../../models/ValueCard';
 import { sendSuccess, sendNotFound, sendBadRequest, sendCreated } from '../../utils/response';
 import { sendError, sendPaginated } from '../../utils/response';
 import { escapeRegex } from '../../utils/sanitize';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -24,8 +25,7 @@ router.use(requireAdmin);
  * GET /api/admin/value-cards
  * List all value cards with pagination and search
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const skip = (page - 1) * limit;
@@ -54,35 +54,25 @@ router.get('/', async (req: Request, res: Response) => {
     ]);
 
     return sendPaginated(res, cards, page, limit, total, 'Value cards fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching value cards:', error);
-    return sendError(res, 'Failed to fetch value cards', 500);
-  }
-});
+}));
 
 /**
  * GET /api/admin/value-cards/:id
  * Get single value card
  */
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     const card = await ValueCard.findById(req.params.id).lean();
     if (!card) {
       return sendNotFound(res, 'Value card not found');
     }
     return sendSuccess(res, card, 'Value card fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching value card:', error);
-    return sendError(res, 'Failed to fetch value card', 500);
-  }
-});
+}));
 
 /**
  * POST /api/admin/value-cards
  * Create a new value card
  */
-router.post('/', async (req: Request, res: Response) => {
-  try {
+router.post('/', asyncHandler(async (req: Request, res: Response) => {
     const {
       title, subtitle, emoji, deepLinkPath,
       sortOrder, isActive, regions,
@@ -104,21 +94,13 @@ router.post('/', async (req: Request, res: Response) => {
     });
 
     return sendCreated(res, card, 'Value card created');
-  } catch (error: any) {
-    logger.error('[Admin] Error creating value card:', error);
-    if (error.name === 'ValidationError') {
-      return sendBadRequest(res, error.message);
-    }
-    return sendError(res, 'Failed to create value card', 500);
-  }
-});
+}));
 
 /**
  * PUT /api/admin/value-cards/:id
  * Update a value card
  */
-router.put('/:id', async (req: Request, res: Response) => {
-  try {
+router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     const {
       title, subtitle, emoji, deepLinkPath,
       sortOrder, isActive, regions,
@@ -145,38 +127,25 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
 
     return sendSuccess(res, card, 'Value card updated');
-  } catch (error: any) {
-    logger.error('[Admin] Error updating value card:', error);
-    if (error.name === 'ValidationError') {
-      return sendBadRequest(res, error.message);
-    }
-    return sendError(res, 'Failed to update value card', 500);
-  }
-});
+}));
 
 /**
  * DELETE /api/admin/value-cards/:id
  * Delete a value card
  */
-router.delete('/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     const card = await ValueCard.findByIdAndDelete(req.params.id);
     if (!card) {
       return sendNotFound(res, 'Value card not found');
     }
     return sendSuccess(res, null, 'Value card deleted');
-  } catch (error) {
-    logger.error('[Admin] Error deleting value card:', error);
-    return sendError(res, 'Failed to delete value card', 500);
-  }
-});
+}));
 
 /**
  * PATCH /api/admin/value-cards/:id/toggle
  * Toggle isActive state
  */
-router.patch('/:id/toggle', async (req: Request, res: Response) => {
-  try {
+router.patch('/:id/toggle', asyncHandler(async (req: Request, res: Response) => {
     const card = await ValueCard.findById(req.params.id);
     if (!card) {
       return sendNotFound(res, 'Value card not found');
@@ -186,10 +155,6 @@ router.patch('/:id/toggle', async (req: Request, res: Response) => {
     await card.save();
 
     return sendSuccess(res, card, `Value card ${card.isActive ? 'activated' : 'deactivated'}`);
-  } catch (error) {
-    logger.error('[Admin] Error toggling value card:', error);
-    return sendError(res, 'Failed to toggle value card', 500);
-  }
-});
+}));
 
 export default router;

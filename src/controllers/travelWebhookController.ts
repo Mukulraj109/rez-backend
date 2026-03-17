@@ -10,6 +10,7 @@ import { ServiceBooking } from '../models/ServiceBooking';
 import { sendSuccess, sendError } from '../utils/response';
 import { logger } from '../config/logger';
 import crypto from 'crypto';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Verify HMAC-SHA256 webhook signature from travel partners
@@ -42,8 +43,7 @@ function verifyWebhookSignature(body: string, signature: string): boolean {
  *   signature: string  // HMAC signature for verification
  * }
  */
-export const handleBookingUpdate = async (req: Request, res: Response) => {
-  try {
+export const handleBookingUpdate = asyncHandler(async (req: Request, res: Response) => {
     const {
       bookingNumber,
       externalReference,
@@ -102,11 +102,7 @@ export const handleBookingUpdate = async (req: Request, res: Response) => {
 
     logger.info('[TRAVEL WEBHOOK] Booking updated successfully:', booking.bookingNumber);
     sendSuccess(res, { bookingNumber: booking.bookingNumber, updated: true });
-  } catch (error: any) {
-    logger.error('[TRAVEL WEBHOOK] Booking update error:', error);
-    sendError(res, error.message || 'Webhook processing failed', 500);
-  }
-};
+});
 
 /**
  * POST /api/travel-webhooks/price-update
@@ -120,8 +116,7 @@ export const handleBookingUpdate = async (req: Request, res: Response) => {
  *   signature: string
  * }
  */
-export const handlePriceUpdate = async (req: Request, res: Response) => {
-  try {
+export const handlePriceUpdate = asyncHandler(async (req: Request, res: Response) => {
     const { serviceId, newPrice, effectiveFrom, signature } = req.body;
 
     // Verify webhook signature
@@ -144,8 +139,4 @@ export const handlePriceUpdate = async (req: Request, res: Response) => {
     logger.info('[TRAVEL WEBHOOK] Price update logged (stub) — will implement with partner API');
 
     sendSuccess(res, { serviceId, newPrice, acknowledged: true });
-  } catch (error: any) {
-    logger.error('[TRAVEL WEBHOOK] Price update error:', error);
-    sendError(res, error.message || 'Webhook processing failed', 500);
-  }
-};
+});

@@ -8,6 +8,7 @@ import { Router, Request, Response } from 'express';
 import OffersSectionConfig from '../../models/OffersSectionConfig';
 import { requireAdmin } from '../../middleware/auth';
 import { sendSuccess, sendError } from '../../utils/response';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -46,25 +47,19 @@ const DEFAULT_SECTIONS = [
  * GET /api/admin/offers-sections
  * List all section configurations
  */
-router.get('/', async (_req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (_req: Request, res: Response) => {
     const configs = await OffersSectionConfig.find()
       .sort({ tab: 1, sortOrder: 1 })
       .lean();
 
     sendSuccess(res, configs, 'Section configs retrieved');
-  } catch (error) {
-    logger.error('[ADMIN] Error fetching section configs:', error);
-    sendError(res, 'Failed to fetch section configs', 500);
-  }
-});
+  }));
 
 /**
  * PUT /api/admin/offers-sections/:sectionKey
  * Update section visibility, ordering, or limits
  */
-router.put('/:sectionKey', async (req: Request, res: Response) => {
-  try {
+router.put('/:sectionKey', asyncHandler(async (req: Request, res: Response) => {
     const { sectionKey } = req.params;
     const { isEnabled, sortOrder, maxItems, regions, displayName } = req.body;
     const adminId = (req as any).user?._id;
@@ -87,18 +82,13 @@ router.put('/:sectionKey', async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, config, 'Section config updated');
-  } catch (error) {
-    logger.error('[ADMIN] Error updating section config:', error);
-    sendError(res, 'Failed to update section config', 500);
-  }
-});
+  }));
 
 /**
  * POST /api/admin/offers-sections/seed
  * Seed default configurations for all 21 sections
  */
-router.post('/seed', async (req: Request, res: Response) => {
-  try {
+router.post('/seed', asyncHandler(async (req: Request, res: Response) => {
     const results = [];
 
     for (const section of DEFAULT_SECTIONS) {
@@ -116,10 +106,6 @@ router.post('/seed', async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, results, 'Section configs seeded');
-  } catch (error) {
-    logger.error('[ADMIN] Error seeding section configs:', error);
-    sendError(res, 'Failed to seed section configs', 500);
-  }
-});
+  }));
 
 export default router;

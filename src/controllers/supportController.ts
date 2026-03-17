@@ -8,13 +8,13 @@ import supportService from '../services/supportService';
 import { SupportConfig } from '../models/SupportConfig';
 import { SupportTicket } from '../models/SupportTicket';
 import supportSocketService from '../services/supportSocketService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Create new support ticket
  * POST /api/support/tickets
  */
-export const createTicket = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const createTicket = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { subject, category, message, relatedEntity, attachments, priority, idempotencyKey, tags } = req.body;
 
@@ -57,22 +57,13 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
       message: 'Support ticket created successfully',
       data: { ticket: populatedTicket || ticket },
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error creating ticket for user:', (req as any).userId, 'error:', error.message);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create support ticket',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get user's tickets with filters
  * GET /api/support/tickets
  */
-export const getMyTickets = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getMyTickets = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { status, category, priority, dateFrom, dateTo, page = 1, limit = 20 } = req.query;
 
@@ -102,22 +93,13 @@ export const getMyTickets = async (req: Request, res: Response): Promise<void> =
       success: true,
       data: result,
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error getting tickets:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get tickets',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get ticket by ID
  * GET /api/support/tickets/:id
  */
-export const getTicketById = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getTicketById = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -152,22 +134,13 @@ export const getTicketById = async (req: Request, res: Response): Promise<void> 
       success: true,
       data: { ticket },
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error getting ticket:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get ticket',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Add message to ticket
  * POST /api/support/tickets/:id/messages
  */
-export const addMessageToTicket = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const addMessageToTicket = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
     const { message, attachments } = req.body;
@@ -233,22 +206,13 @@ export const addMessageToTicket = async (req: Request, res: Response): Promise<v
       message: 'Message added successfully',
       data: { ticket },
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error adding message:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to add message',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Close ticket
  * POST /api/support/tickets/:id/close
  */
-export const closeTicket = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const closeTicket = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -278,22 +242,13 @@ export const closeTicket = async (req: Request, res: Response): Promise<void> =>
       message: 'Ticket closed successfully',
       data: { ticket },
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error closing ticket:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to close ticket',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Reopen ticket
  * POST /api/support/tickets/:id/reopen
  */
-export const reopenTicket = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const reopenTicket = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
     const { reason } = req.body;
@@ -333,22 +288,13 @@ export const reopenTicket = async (req: Request, res: Response): Promise<void> =
       message: 'Ticket reopened successfully',
       data: { ticket },
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error reopening ticket:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to reopen ticket',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Rate ticket
  * POST /api/support/tickets/:id/rate
  */
-export const rateTicket = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const rateTicket = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
     const { score, comment } = req.body;
@@ -389,22 +335,13 @@ export const rateTicket = async (req: Request, res: Response): Promise<void> => 
       message: 'Ticket rated successfully',
       data: { ticket },
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error rating ticket:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to rate ticket',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get active tickets summary
  * GET /api/support/tickets/summary
  */
-export const getTicketsSummary = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getTicketsSummary = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
 
     if (!userId) {
@@ -423,15 +360,7 @@ export const getTicketsSummary = async (req: Request, res: Response): Promise<vo
       success: true,
       data: summary,
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error getting summary:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get tickets summary',
-      error: error.message,
-    });
-  }
-};
+});
 
 // ==================== FAQ ENDPOINTS ====================
 
@@ -439,8 +368,7 @@ export const getTicketsSummary = async (req: Request, res: Response): Promise<vo
  * Get all FAQs
  * GET /api/support/faq
  */
-export const getAllFAQs = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getAllFAQs = asyncHandler(async (req: Request, res: Response) => {
     const { category, subcategory, limit = 100 } = req.query;
 
     let faqs;
@@ -458,22 +386,13 @@ export const getAllFAQs = async (req: Request, res: Response): Promise<void> => 
       success: true,
       data: { faqs, total: faqs.length },
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error getting FAQs:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get FAQs',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Search FAQs
  * GET /api/support/faq/search
  */
-export const searchFAQs = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const searchFAQs = asyncHandler(async (req: Request, res: Response) => {
     const { q, limit = 10 } = req.query;
 
     if (!q) {
@@ -490,44 +409,26 @@ export const searchFAQs = async (req: Request, res: Response): Promise<void> => 
       success: true,
       data: { faqs, total: faqs.length },
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error searching FAQs:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to search FAQs',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get FAQ categories
  * GET /api/support/faq/categories
  */
-export const getFAQCategories = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getFAQCategories = asyncHandler(async (req: Request, res: Response) => {
     const categories = await supportService.getFAQCategories();
 
     res.status(200).json({
       success: true,
       data: { categories },
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error getting categories:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get FAQ categories',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Get popular FAQs
  * GET /api/support/faq/popular
  */
-export const getPopularFAQs = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getPopularFAQs = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 10 } = req.query;
 
     const faqs = await supportService.getPopularFAQs(Number(limit));
@@ -536,22 +437,13 @@ export const getPopularFAQs = async (req: Request, res: Response): Promise<void>
       success: true,
       data: { faqs, total: faqs.length },
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error getting popular FAQs:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get popular FAQs',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Mark FAQ as helpful
  * POST /api/support/faq/:id/helpful
  */
-export const markFAQHelpful = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const markFAQHelpful = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const { helpful } = req.body;
 
@@ -565,22 +457,13 @@ export const markFAQHelpful = async (req: Request, res: Response): Promise<void>
       success: true,
       message: 'Feedback recorded successfully',
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error marking FAQ helpful:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to record feedback',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Track FAQ view
  * POST /api/support/faq/:id/view
  */
-export const trackFAQView = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const trackFAQView = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     await supportService.incrementFAQView(new Types.ObjectId(id));
@@ -589,15 +472,7 @@ export const trackFAQView = async (req: Request, res: Response): Promise<void> =
       success: true,
       message: 'View tracked',
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error tracking view:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to track view',
-      error: error.message,
-    });
-  }
-};
+});
 
 // ==================== QUICK ACTIONS ====================
 
@@ -605,8 +480,7 @@ export const trackFAQView = async (req: Request, res: Response): Promise<void> =
  * Create ticket from order issue
  * POST /api/support/quick-actions/order-issue
  */
-export const createOrderIssueTicket = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const createOrderIssueTicket = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { orderId, issueType, description } = req.body;
 
@@ -643,22 +517,13 @@ export const createOrderIssueTicket = async (req: Request, res: Response): Promi
       message: 'Order issue ticket created successfully',
       data: { ticket },
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error creating order issue:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create order issue ticket',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Report product issue
  * POST /api/support/quick-actions/report-product
  */
-export const reportProductIssue = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const reportProductIssue = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { productId, issueType, description, images } = req.body;
 
@@ -696,15 +561,7 @@ export const reportProductIssue = async (req: Request, res: Response): Promise<v
       message: 'Product issue reported successfully',
       data: { ticket },
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error reporting product:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to report product issue',
-      error: error.message,
-    });
-  }
-};
+});
 
 // ==================== SUPPORT CONFIG & CALLBACK ====================
 
@@ -712,8 +569,7 @@ export const reportProductIssue = async (req: Request, res: Response): Promise<v
  * Get public support config (hours, phones, categories)
  * GET /api/support/config/public
  */
-export const getPublicSupportConfig = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const getPublicSupportConfig = asyncHandler(async (req: Request, res: Response) => {
     const config = await SupportConfig.getOrCreate();
 
     const activePhones = config.phoneNumbers
@@ -738,22 +594,13 @@ export const getPublicSupportConfig = async (req: Request, res: Response): Promi
         isCurrentlyOpen: isOpen,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error getting public config:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get support config',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Request a callback
  * POST /api/support/callback
  */
-export const requestCallback = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const requestCallback = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { category, phoneNumber, countryCode, notes, idempotencyKey } = req.body;
 
@@ -859,22 +706,13 @@ export const requestCallback = async (req: Request, res: Response): Promise<void
         category: categoryName,
       },
     });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error requesting callback:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to request callback',
-      error: error.message,
-    });
-  }
-};
+});
 
 /**
  * Mark ticket messages as read
  * POST /api/support/tickets/:id/read
  */
-export const markTicketAsRead = async (req: Request, res: Response): Promise<void> => {
-  try {
+export const markTicketAsRead = asyncHandler(async (req: Request, res: Response) => {
     const userId = (req as any).userId;
     const { id } = req.params;
 
@@ -899,11 +737,4 @@ export const markTicketAsRead = async (req: Request, res: Response): Promise<voi
     supportSocketService.emitMessagesRead(userId, id, 'user');
 
     res.json({ success: true, message: 'Messages marked as read' });
-  } catch (error: any) {
-    logger.error('❌ [SUPPORT CONTROLLER] Error marking as read:', error.message);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to mark messages as read',
-    });
-  }
-};
+});

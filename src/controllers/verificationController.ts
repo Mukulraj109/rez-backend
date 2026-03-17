@@ -6,7 +6,7 @@ import { User } from '../models/User';
 import { logger } from '../config/logger';
 import UserZoneVerification from '../models/UserZoneVerification';
 import { sendSuccess, sendError, sendBadRequest } from '../utils/response';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler } from '../utils/asyncHandler';
 
 // Verification type configurations
 const VERIFICATION_CONFIGS: Record<string, {

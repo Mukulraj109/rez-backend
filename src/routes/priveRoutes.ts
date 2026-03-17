@@ -57,6 +57,7 @@ import { authenticate } from '../middleware/auth';
 import { strictLimiter, generalLimiter } from '../middleware/rateLimiter';
 import { requireReAuthForRedemption } from '../middleware/reAuth';
 import { getCachedWalletConfig } from '../services/walletCacheService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Middleware factory: checks that a feature flag is enabled in WalletConfig
@@ -89,17 +90,12 @@ router.get('/tier-comparison', generalLimiter, getTierComparison);
 // Next Best Actions
 // ==========================================
 
-router.get('/next-actions', generalLimiter, async (req, res) => {
-  try {
+router.get('/next-actions', generalLimiter, asyncHandler(async (req, res) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
     const result = await priveNextBestActionService.getNextActions(userId);
     res.json({ success: true, data: result });
-  } catch (error) {
-    logger.error('[PRIVE] Error fetching next actions:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch next actions' });
-  }
-});
+}));
 
 // ==========================================
 // Missions
@@ -328,31 +324,21 @@ router.post('/smart-spend/:id/click', requireFeatureFlag('smartSpendEnabled'), t
 // Notifications & Analytics
 // ==========================================
 
-router.get('/notifications', generalLimiter, async (req, res) => {
-  try {
+router.get('/notifications', generalLimiter, asyncHandler(async (req, res) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
     const accessCheck = await priveAccessService.checkAccess(userId);
     const tier = accessCheck.effectiveTier || 'none';
     const result = await priveNotificationService.getNotifications(userId, tier);
     res.json({ success: true, data: result });
-  } catch (error) {
-    logger.error('[PRIVE] Error fetching notifications:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch notifications' });
-  }
-});
+}));
 
-router.get('/analytics', generalLimiter, async (req, res) => {
-  try {
+router.get('/analytics', generalLimiter, asyncHandler(async (req, res) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
     const period = Math.min(90, Math.max(7, Number(req.query.period) || 30));
     const result = await priveAnalyticsService.getAnalytics(userId, period);
     res.json({ success: true, data: result });
-  } catch (error) {
-    logger.error('[PRIVE] Error fetching analytics:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch analytics' });
-  }
-});
+}));
 
 export default router;

@@ -170,6 +170,11 @@ export interface IUser extends Document {
   isPremium?: boolean; // Premium membership status
   premiumExpiresAt?: Date; // Premium expiry date
 
+  // Denormalized entitlement fields (for fast queries, kept in sync by privilegeResolutionService)
+  nuqtaPlusTier?: 'free' | 'premium' | 'vip';
+  priveTier?: 'none' | 'entry' | 'signature' | 'elite';
+  activeZones?: string[];
+
   // Additional user properties
   userType?: string; // User type for targeting (e.g., 'regular', 'premium', 'new')
   age?: number; // User age computed from dateOfBirth
@@ -571,6 +576,22 @@ const UserSchema = new Schema<IUser>({
   userType: {
     type: String,
     default: 'regular'
+  },
+  nuqtaPlusTier: {
+    type: String,
+    enum: ['free', 'premium', 'vip'],
+    default: 'free',
+    index: true,
+  },
+  priveTier: {
+    type: String,
+    enum: ['none', 'entry', 'signature', 'elite'],
+    default: 'none',
+    index: true,
+  },
+  activeZones: {
+    type: [String],
+    default: [],
   },
   age: {
     type: Number,

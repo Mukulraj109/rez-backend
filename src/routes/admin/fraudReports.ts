@@ -6,6 +6,7 @@ import { Router, Request, Response } from 'express';
 import mongoose, { Schema, Types } from 'mongoose';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { sendSuccess, sendError } from '../../utils/response';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 // ---------------------------------------------------------------------------
 // Inline FraudReport model (avoids dependency on a separate model file)
@@ -66,209 +67,184 @@ router.use(requireAdmin);
 /**
  * GET / — list fraud reports with pagination and filters
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
-    const {
-      page = 1,
-      limit = 20,
-      status,
-      priority,
-      category,
-      dateFrom,
-      dateTo,
-    } = req.query;
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
+  const {
+    page = 1,
+    limit = 20,
+    status,
+    priority,
+    category,
+    dateFrom,
+    dateTo,
+  } = req.query;
 
-    const query: any = {};
+  const query: any = {};
 
-    if (status) query.status = status;
-    if (priority) query.priority = priority;
-    if (category) query.category = category;
+  if (status) query.status = status;
+  if (priority) query.priority = priority;
+  if (category) query.category = category;
 
-    if (dateFrom || dateTo) {
-      query.createdAt = {} as any;
-      if (dateFrom) query.createdAt.$gte = new Date(dateFrom as string);
-      if (dateTo) query.createdAt.$lte = new Date(dateTo as string);
-    }
-
-    const skip = (Number(page) - 1) * Number(limit);
-
-    const [reports, total] = await Promise.all([
-      FraudReport.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .populate('user', 'fullName phoneNumber')
-        .populate('assignedTo', 'fullName')
-        .lean(),
-      FraudReport.countDocuments(query),
-    ]);
-
-    sendSuccess(res, {
-      reports,
-      total,
-      page: Number(page),
-      pages: Math.ceil(total / Number(limit)),
-    });
-  } catch (error: any) {
-    logger.error('[Admin FraudReports] Error listing reports:', error.message);
-    sendError(res, 'Failed to list fraud reports', 500);
+  if (dateFrom || dateTo) {
+    query.createdAt = {} as any;
+    if (dateFrom) query.createdAt.$gte = new Date(dateFrom as string);
+    if (dateTo) query.createdAt.$lte = new Date(dateTo as string);
   }
-});
+
+  const skip = (Number(page) - 1) * Number(limit);
+
+  const [reports, total] = await Promise.all([
+    FraudReport.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit))
+      .populate('user', 'fullName phoneNumber')
+      .populate('assignedTo', 'fullName')
+      .lean(),
+    FraudReport.countDocuments(query),
+  ]);
+
+  sendSuccess(res, {
+    reports,
+    total,
+    page: Number(page),
+    pages: Math.ceil(total / Number(limit)),
+  });
+}));
 
 /**
  * GET /:id — fraud report detail with populated user info
  */
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
 
-    if (!Types.ObjectId.isValid(id)) {
-      return sendError(res, 'Invalid report ID', 400);
-    }
-
-    const report = await FraudReport.findById(id)
-      .populate('user', 'fullName phoneNumber email')
-      .populate('assignedTo', 'fullName')
-      .populate('internalNotes.addedBy', 'fullName')
-      .lean();
-
-    if (!report) {
-      return sendError(res, 'Fraud report not found', 404);
-    }
-
-    sendSuccess(res, { report });
-  } catch (error: any) {
-    logger.error('[Admin FraudReports] Error fetching report:', error.message);
-    sendError(res, 'Failed to fetch fraud report', 500);
+  if (!Types.ObjectId.isValid(id)) {
+    return sendError(res, 'Invalid report ID', 400);
   }
-});
+
+  const report = await FraudReport.findById(id)
+    .populate('user', 'fullName phoneNumber email')
+    .populate('assignedTo', 'fullName')
+    .populate('internalNotes.addedBy', 'fullName')
+    .lean();
+
+  if (!report) {
+    return sendError(res, 'Fraud report not found', 404);
+  }
+
+  sendSuccess(res, { report });
+}));
 
 /**
  * PUT /:id/status — update report status
  */
-router.put('/:id/status', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
+router.put('/:id/status', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { status } = req.body;
 
-    if (!Types.ObjectId.isValid(id)) {
-      return sendError(res, 'Invalid report ID', 400);
-    }
-
-    const validStatuses = ['new', 'investigating', 'resolved', 'dismissed'];
-    if (!status || !validStatuses.includes(status)) {
-      return sendError(
-        res,
-        `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
-        400,
-      );
-    }
-
-    const report = await FraudReport.findByIdAndUpdate(
-      id,
-      { $set: { status } },
-      { new: true, runValidators: true },
-    )
-      .populate('user', 'fullName phoneNumber')
-      .populate('assignedTo', 'fullName')
-      .lean();
-
-    if (!report) {
-      return sendError(res, 'Fraud report not found', 404);
-    }
-
-    sendSuccess(res, { report });
-  } catch (error: any) {
-    logger.error('[Admin FraudReports] Error updating status:', error.message);
-    sendError(res, 'Failed to update status', 500);
+  if (!Types.ObjectId.isValid(id)) {
+    return sendError(res, 'Invalid report ID', 400);
   }
-});
+
+  const validStatuses = ['new', 'investigating', 'resolved', 'dismissed'];
+  if (!status || !validStatuses.includes(status)) {
+    return sendError(
+      res,
+      `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
+      400,
+    );
+  }
+
+  const report = await FraudReport.findByIdAndUpdate(
+    id,
+    { $set: { status } },
+    { new: true, runValidators: true },
+  )
+    .populate('user', 'fullName phoneNumber')
+    .populate('assignedTo', 'fullName')
+    .lean();
+
+  if (!report) {
+    return sendError(res, 'Fraud report not found', 404);
+  }
+
+  sendSuccess(res, { report });
+}));
 
 /**
  * PUT /:id/priority — set report priority
  */
-router.put('/:id/priority', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { priority } = req.body;
+router.put('/:id/priority', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { priority } = req.body;
 
-    if (!Types.ObjectId.isValid(id)) {
-      return sendError(res, 'Invalid report ID', 400);
-    }
-
-    const validPriorities = ['low', 'medium', 'high', 'critical'];
-    if (!priority || !validPriorities.includes(priority)) {
-      return sendError(
-        res,
-        `Invalid priority. Must be one of: ${validPriorities.join(', ')}`,
-        400,
-      );
-    }
-
-    const report = await FraudReport.findByIdAndUpdate(
-      id,
-      { $set: { priority } },
-      { new: true, runValidators: true },
-    )
-      .populate('user', 'fullName phoneNumber')
-      .populate('assignedTo', 'fullName')
-      .lean();
-
-    if (!report) {
-      return sendError(res, 'Fraud report not found', 404);
-    }
-
-    sendSuccess(res, { report });
-  } catch (error: any) {
-    logger.error('[Admin FraudReports] Error updating priority:', error.message);
-    sendError(res, 'Failed to update priority', 500);
+  if (!Types.ObjectId.isValid(id)) {
+    return sendError(res, 'Invalid report ID', 400);
   }
-});
+
+  const validPriorities = ['low', 'medium', 'high', 'critical'];
+  if (!priority || !validPriorities.includes(priority)) {
+    return sendError(
+      res,
+      `Invalid priority. Must be one of: ${validPriorities.join(', ')}`,
+      400,
+    );
+  }
+
+  const report = await FraudReport.findByIdAndUpdate(
+    id,
+    { $set: { priority } },
+    { new: true, runValidators: true },
+  )
+    .populate('user', 'fullName phoneNumber')
+    .populate('assignedTo', 'fullName')
+    .lean();
+
+  if (!report) {
+    return sendError(res, 'Fraud report not found', 404);
+  }
+
+  sendSuccess(res, { report });
+}));
 
 /**
  * POST /:id/notes — add an internal note
  */
-router.post('/:id/notes', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { note } = req.body;
-    const adminId = (req as any).userId;
+router.post('/:id/notes', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { note } = req.body;
+  const adminId = (req as any).userId;
 
-    if (!Types.ObjectId.isValid(id)) {
-      return sendError(res, 'Invalid report ID', 400);
-    }
+  if (!Types.ObjectId.isValid(id)) {
+    return sendError(res, 'Invalid report ID', 400);
+  }
 
-    if (!note || (typeof note === 'string' && note.trim().length === 0)) {
-      return sendError(res, 'Note is required', 400);
-    }
+  if (!note || (typeof note === 'string' && note.trim().length === 0)) {
+    return sendError(res, 'Note is required', 400);
+  }
 
-    const report = await FraudReport.findByIdAndUpdate(
-      id,
-      {
-        $push: {
-          internalNotes: {
-            note: note.trim(),
-            addedBy: new Types.ObjectId(adminId),
-            addedAt: new Date(),
-          },
+  const report = await FraudReport.findByIdAndUpdate(
+    id,
+    {
+      $push: {
+        internalNotes: {
+          note: note.trim(),
+          addedBy: new Types.ObjectId(adminId),
+          addedAt: new Date(),
         },
       },
-      { new: true, runValidators: true },
-    )
-      .populate('user', 'fullName phoneNumber')
-      .populate('assignedTo', 'fullName')
-      .populate('internalNotes.addedBy', 'fullName')
-      .lean();
+    },
+    { new: true, runValidators: true },
+  )
+    .populate('user', 'fullName phoneNumber')
+    .populate('assignedTo', 'fullName')
+    .populate('internalNotes.addedBy', 'fullName')
+    .lean();
 
-    if (!report) {
-      return sendError(res, 'Fraud report not found', 404);
-    }
-
-    sendSuccess(res, { report });
-  } catch (error: any) {
-    logger.error('[Admin FraudReports] Error adding note:', error.message);
-    sendError(res, 'Failed to add note', 500);
+  if (!report) {
+    return sendError(res, 'Fraud report not found', 404);
   }
-});
+
+  sendSuccess(res, { report });
+}));
 
 export default router;

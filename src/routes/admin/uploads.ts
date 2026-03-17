@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { requireAuth, requireAdmin } from '../../middleware/auth';
 import CloudinaryService from '../../services/CloudinaryService';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -53,8 +54,7 @@ router.post(
   requireAuth,
   requireAdmin,
   upload.single('image'),
-  async (req: Request, res: Response): Promise<void> => {
-    try {
+  asyncHandler(async (req: Request, res: Response): Promise<void> => {
       if (!req.file) {
         res.status(400).json({ success: false, message: 'No file uploaded' });
         return;
@@ -109,20 +109,7 @@ router.post(
           bytes: result.bytes,
         },
       });
-    } catch (error: any) {
-      logger.error('[Admin Upload] Error:', error);
-
-      // Clean up temp file on error
-      if (req.file && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
-
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Failed to upload image',
-      });
-    }
-  }
+  })
 );
 
 /**
@@ -135,8 +122,7 @@ router.post(
   requireAuth,
   requireAdmin,
   upload.array('images', 10),
-  async (req: Request, res: Response): Promise<void> => {
-    try {
+  asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const files = req.files as Express.Multer.File[];
 
       if (!files || files.length === 0) {
@@ -178,25 +164,7 @@ router.post(
           bytes: result.bytes,
         })),
       });
-    } catch (error: any) {
-      logger.error('[Admin Upload] Multiple upload error:', error);
-
-      // Clean up temp files on error
-      const files = req.files as Express.Multer.File[];
-      if (files) {
-        files.forEach((file) => {
-          if (fs.existsSync(file.path)) {
-            fs.unlinkSync(file.path);
-          }
-        });
-      }
-
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Failed to upload images',
-      });
-    }
-  }
+  })
 );
 
 /**
@@ -208,8 +176,7 @@ router.post(
   '/delete',
   requireAuth,
   requireAdmin,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
+  asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const { publicId } = req.body;
 
       if (!publicId) {
@@ -223,14 +190,7 @@ router.post(
         success: true,
         message: 'Image deleted successfully',
       });
-    } catch (error: any) {
-      logger.error('[Admin Upload] Delete error:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Failed to delete image',
-      });
-    }
-  }
+  })
 );
 
 export default router;

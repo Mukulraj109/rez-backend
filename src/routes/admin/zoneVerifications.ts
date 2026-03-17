@@ -7,6 +7,8 @@ import { User } from '../../models/User';
 import ProgramMembership from '../../models/ProgramMembership';
 import { authenticate, requireAdmin } from '../../middleware/auth';
 import { NotificationService } from '../../services/notificationService';
+import { privilegeResolutionService } from '../../services/entitlement/privilegeResolutionService';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = express.Router();
 
@@ -36,8 +38,7 @@ const reviewSchema = Joi.object({
  * @desc    Get all verification requests (with filters)
  * @access  Admin
  */
-router.get('/', async (req: Request, res: Response) => {
-  try {
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const {
       status = 'pending',
       verificationType,
@@ -84,23 +85,14 @@ router.get('/', async (req: Request, res: Response) => {
         },
       },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Get zone verifications error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch verifications',
-      error: error.message,
-    });
-  }
-});
+}));
 
 /**
  * @route   GET /api/admin/zone-verifications/stats
  * @desc    Get verification statistics
  * @access  Admin
  */
-router.get('/stats', async (req: Request, res: Response) => {
-  try {
+router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     const [pending, approved, rejected, byType] = await Promise.all([
       UserZoneVerification.countDocuments({ status: 'pending' }),
       UserZoneVerification.countDocuments({ status: 'approved' }),
@@ -142,23 +134,14 @@ router.get('/stats', async (req: Request, res: Response) => {
         }, {} as Record<string, any>),
       },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Get zone verification stats error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch stats',
-      error: error.message,
-    });
-  }
-});
+}));
 
 /**
  * @route   GET /api/admin/zone-verifications/:id
  * @desc    Get single verification request details
  * @access  Admin
  */
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!Types.ObjectId.isValid(id)) {
@@ -184,23 +167,14 @@ router.get('/:id', async (req: Request, res: Response) => {
       success: true,
       data: verification,
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Get zone verification error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch verification',
-      error: error.message,
-    });
-  }
-});
+}));
 
 /**
  * @route   PATCH /api/admin/zone-verifications/:id/review
  * @desc    Review (approve/reject) a verification request
  * @access  Admin
  */
-router.patch('/:id/review', async (req: Request, res: Response) => {
-  try {
+router.patch('/:id/review', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const adminId = (req as any).user._id;
 
@@ -259,6 +233,7 @@ router.patch('/:id/review', async (req: Request, res: Response) => {
     }
 
     await verification.save();
+    privilegeResolutionService.invalidate(verification.userId.toString()).catch(() => {});
 
     // If approved, update user's verifications
     if (status === 'approved') {
@@ -359,23 +334,14 @@ router.patch('/:id/review', async (req: Request, res: Response) => {
         reviewedAt: verification.reviewedAt,
       },
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Review zone verification error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to review verification',
-      error: error.message,
-    });
-  }
-});
+}));
 
 /**
  * @route   DELETE /api/admin/zone-verifications/:id
  * @desc    Delete a verification request
  * @access  Admin
  */
-router.delete('/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!Types.ObjectId.isValid(id)) {
@@ -398,14 +364,6 @@ router.delete('/:id', async (req: Request, res: Response) => {
       success: true,
       message: 'Verification deleted',
     });
-  } catch (error: any) {
-    logger.error('[ADMIN] Delete zone verification error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to delete verification',
-      error: error.message,
-    });
-  }
-});
+}));
 
 export default router;

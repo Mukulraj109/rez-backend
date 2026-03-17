@@ -221,9 +221,13 @@ async function startServer() {
       logger.warn('Cloudinary not configured. Bill upload features will not work.');
     }
 
-    // Initialize all cron jobs and background services
-    logger.info('Initializing cron jobs and background services...');
-    await initializeCronJobs();
+    // Initialize cron jobs (skip if worker process handles them)
+    if (process.env.DISABLE_CRON_IN_API === 'true') {
+      logger.info('Cron jobs disabled in API process (DISABLE_CRON_IN_API=true) — use worker process');
+    } else {
+      logger.info('Initializing cron jobs and background services...');
+      await initializeCronJobs();
+    }
 
     // All services initialized
     logger.info(`All services initialized successfully`);

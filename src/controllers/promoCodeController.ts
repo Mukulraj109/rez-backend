@@ -4,14 +4,14 @@ import { PromoCode, IPromoCode } from '../models/PromoCode';
 import { SubscriptionTier, BillingCycle, Subscription } from '../models/Subscription';
 import { Types } from 'mongoose';
 import { createAuditLog } from '../services/auditLogService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * Validate a promo code
  * POST /api/promo-codes/validate
  * Public endpoint (requires authentication)
  */
-export const validatePromoCode = async (req: Request, res: Response) => {
-  try {
+export const validatePromoCode = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -111,23 +111,14 @@ export const validatePromoCode = async (req: Request, res: Response) => {
         message: validation.message
       });
     }
-  } catch (error: any) {
-    logger.error('Error validating promo code:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to validate promo code',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get available promo codes for current user
  * GET /api/promo-codes/available
  * Protected endpoint
  */
-export const getAvailablePromoCodes = async (req: Request, res: Response) => {
-  try {
+export const getAvailablePromoCodes = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -166,23 +157,14 @@ export const getAvailablePromoCodes = async (req: Request, res: Response) => {
       success: true,
       data: availableCodes
     });
-  } catch (error: any) {
-    logger.error('Error fetching available promo codes:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch available promo codes',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Create a new promo code
  * POST /api/promo-codes
  * Admin only
  */
-export const createPromoCode = async (req: Request, res: Response) => {
-  try {
+export const createPromoCode = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     if (!userId) {
       return res.status(401).json({
@@ -268,23 +250,14 @@ export const createPromoCode = async (req: Request, res: Response) => {
       message: 'Promo code created successfully',
       data: promoCode
     });
-  } catch (error: any) {
-    logger.error('Error creating promo code:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create promo code',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get all promo codes
  * GET /api/promo-codes
  * Admin only
  */
-export const getAllPromoCodes = async (req: Request, res: Response) => {
-  try {
+export const getAllPromoCodes = asyncHandler(async (req: Request, res: Response) => {
     const { isActive, campaign, page = 1, limit = 20 } = req.query;
 
     const query: any = {};
@@ -317,23 +290,14 @@ export const getAllPromoCodes = async (req: Request, res: Response) => {
         }
       }
     });
-  } catch (error: any) {
-    logger.error('Error fetching promo codes:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch promo codes',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get specific promo code
  * GET /api/promo-codes/:id
  * Admin only
  */
-export const getPromoCode = async (req: Request, res: Response) => {
-  try {
+export const getPromoCode = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!Types.ObjectId.isValid(id)) {
@@ -359,23 +323,14 @@ export const getPromoCode = async (req: Request, res: Response) => {
       success: true,
       data: promoCode
     });
-  } catch (error: any) {
-    logger.error('Error fetching promo code:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch promo code',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Update promo code
  * PATCH /api/promo-codes/:id
  * Admin only
  */
-export const updatePromoCode = async (req: Request, res: Response) => {
-  try {
+export const updatePromoCode = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     const { id } = req.params;
 
@@ -445,23 +400,14 @@ export const updatePromoCode = async (req: Request, res: Response) => {
       message: 'Promo code updated successfully',
       data: promoCode
     });
-  } catch (error: any) {
-    logger.error('Error updating promo code:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update promo code',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Deactivate promo code
  * DELETE /api/promo-codes/:id
  * Admin only
  */
-export const deactivatePromoCode = async (req: Request, res: Response) => {
-  try {
+export const deactivatePromoCode = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?._id || req.user?.id;
     const { id } = req.params;
 
@@ -506,23 +452,14 @@ export const deactivatePromoCode = async (req: Request, res: Response) => {
       message: 'Promo code deactivated successfully',
       data: promoCode
     });
-  } catch (error: any) {
-    logger.error('Error deactivating promo code:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to deactivate promo code',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get promo code usage statistics
  * GET /api/promo-codes/:id/usage
  * Admin only
  */
-export const getPromoCodeUsage = async (req: Request, res: Response) => {
-  try {
+export const getPromoCodeUsage = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!Types.ObjectId.isValid(id)) {
@@ -581,23 +518,14 @@ export const getPromoCodeUsage = async (req: Request, res: Response) => {
       success: true,
       data: stats
     });
-  } catch (error: any) {
-    logger.error('Error fetching promo code usage:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch promo code usage',
-      error: error.message
-    });
-  }
-};
+});
 
 /**
  * Get promo code analytics
  * GET /api/promo-codes/analytics/overview
  * Admin only
  */
-export const getPromoCodeAnalytics = async (req: Request, res: Response) => {
-  try {
+export const getPromoCodeAnalytics = asyncHandler(async (req: Request, res: Response) => {
     const now = new Date();
 
     // Get all promo codes
@@ -651,12 +579,4 @@ export const getPromoCodeAnalytics = async (req: Request, res: Response) => {
       success: true,
       data: analytics
     });
-  } catch (error: any) {
-    logger.error('Error fetching promo code analytics:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch promo code analytics',
-      error: error.message
-    });
-  }
-};
+});

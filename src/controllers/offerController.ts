@@ -16,13 +16,13 @@ import { filterExclusiveOffers, getUserFollowedStores } from '../middleware/excl
 import { recordExclusiveOfferView, recordExclusiveOfferRedemption } from '../services/followerAnalyticsService';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
 import redisService from '../services/redisService';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * GET /api/offers
  * Get offers with filters, sorting, and pagination
  */
-export const getOffers = async (req: Request, res: Response) => {
-  try {
+export const getOffers = asyncHandler(async (req: Request, res: Response) => {
     const {
       page = 1,
       limit = 20,
@@ -131,18 +131,13 @@ export const getOffers = async (req: Request, res: Response) => {
     const filteredOffers = await filterExclusiveOffers(offers, userId, followedStores);
 
     sendPaginated(res, filteredOffers, pageNum, limitNum, total, 'Offers fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching offers:', error);
-    sendError(res, 'Failed to fetch offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/featured
  * Get featured offers
  */
-export const getFeaturedOffers = async (req: Request, res: Response) => {
-  try {
+export const getFeaturedOffers = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 10 } = req.query;
 
     // Get region from header for filtering
@@ -186,18 +181,13 @@ export const getFeaturedOffers = async (req: Request, res: Response) => {
     redisService.set(cacheKey, offers, 300).catch(() => {}); // 5min cache
 
     sendSuccess(res, offers, 'Featured offers fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching featured offers:', error);
-    sendError(res, 'Failed to fetch featured offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/trending
  * Get trending offers
  */
-export const getTrendingOffers = async (req: Request, res: Response) => {
-  try {
+export const getTrendingOffers = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 10 } = req.query;
 
     const cacheKey = `offers:trending:${limit}`;
@@ -211,18 +201,13 @@ export const getTrendingOffers = async (req: Request, res: Response) => {
     redisService.set(cacheKey, offers, 300).catch(() => {}); // 5min cache
 
     sendSuccess(res, offers, 'Trending offers fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching trending offers:', error);
-    sendError(res, 'Failed to fetch trending offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/search
  * Search offers by query
  */
-export const searchOffers = async (req: Request, res: Response) => {
-  try {
+export const searchOffers = asyncHandler(async (req: Request, res: Response) => {
     const { q, page = 1, limit = 20 } = req.query;
 
     if (!q || typeof q !== 'string') {
@@ -252,18 +237,13 @@ export const searchOffers = async (req: Request, res: Response) => {
     ]);
 
     sendPaginated(res, offers, pageNum, limitNum, total, 'Offers fetched successfully');
-  } catch (error) {
-    logger.error('Error searching offers:', error);
-    sendError(res, 'Failed to search offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/category/:categoryId
  * Get offers by category
  */
-export const getOffersByCategory = async (req: Request, res: Response) => {
-  try {
+export const getOffersByCategory = asyncHandler(async (req: Request, res: Response) => {
     const { categoryId } = req.params;
     const { page = 1, limit = 20, sortBy = 'createdAt', order = 'desc' } = req.query;
 
@@ -293,18 +273,13 @@ export const getOffersByCategory = async (req: Request, res: Response) => {
     ]);
 
     sendPaginated(res, offers, pageNum, limitNum, total, 'Offers fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching offers by category:', error);
-    sendError(res, 'Failed to fetch offers by category', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/store/:storeId
  * Get offers for a specific store
  */
-export const getOffersByStore = async (req: Request, res: Response) => {
-  try {
+export const getOffersByStore = asyncHandler(async (req: Request, res: Response) => {
     const { storeId } = req.params;
     const { page = 1, limit = 20, active } = req.query;
 
@@ -343,18 +318,13 @@ export const getOffersByStore = async (req: Request, res: Response) => {
     ]);
 
     sendPaginated(res, offers, pageNum, limitNum, total, 'Offers fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching store offers:', error);
-    sendError(res, 'Failed to fetch store offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/:id
  * Get single offer by ID
  */
-export const getOfferById = async (req: Request, res: Response) => {
-  try {
+export const getOfferById = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
     const offer = await Offer.findById(id)
@@ -401,18 +371,13 @@ export const getOfferById = async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, { ...offer, isFavorite }, 'Offer fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching offer:', error);
-    sendError(res, 'Failed to fetch offer', 500);
-  }
-};
+});
 
 /**
  * POST /api/offers/:id/redeem
  * Redeem an offer (authenticated users only)
  */
-export const redeemOffer = async (req: Request, res: Response) => {
-  try {
+export const redeemOffer = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = req.user!.id;
     const { redemptionType = 'online' } = req.body;
@@ -579,18 +544,13 @@ export const redeemOffer = async (req: Request, res: Response) => {
     };
 
     sendSuccess(res, responseData, 'Offer redeemed successfully', 201);
-  } catch (error) {
-    logger.error('Error redeeming offer:', error);
-    sendError(res, 'Failed to redeem offer', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/my-redemptions
  * Get user's offer redemptions
  */
-export const getUserRedemptions = async (req: Request, res: Response) => {
-  try {
+export const getUserRedemptions = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { status, page = 1, limit = 20 } = req.query;
 
@@ -628,18 +588,13 @@ export const getUserRedemptions = async (req: Request, res: Response) => {
     }));
 
     sendPaginated(res, enhancedRedemptions, pageNum, limitNum, total, 'Redemptions fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching user redemptions:', error);
-    sendError(res, 'Failed to fetch redemptions', 500);
-  }
-};
+});
 
 /**
  * POST /api/offers/:id/favorite
  * Add offer to favorites
  */
-export const addOfferToFavorites = async (req: Request, res: Response) => {
-  try {
+export const addOfferToFavorites = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = req.user!.id;
 
@@ -676,18 +631,13 @@ export const addOfferToFavorites = async (req: Request, res: Response) => {
     });
 
     sendSuccess(res, { success: true }, 'Offer added to favorites', 201);
-  } catch (error) {
-    logger.error('Error adding to favorites:', error);
-    sendError(res, 'Failed to add to favorites', 500);
-  }
-};
+});
 
 /**
  * DELETE /api/offers/:id/favorite
  * Remove offer from favorites
  */
-export const removeOfferFromFavorites = async (req: Request, res: Response) => {
-  try {
+export const removeOfferFromFavorites = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = req.user!.id;
 
@@ -708,18 +658,13 @@ export const removeOfferFromFavorites = async (req: Request, res: Response) => {
     });
 
     sendSuccess(res, { success: true }, 'Offer removed from favorites');
-  } catch (error) {
-    logger.error('Error removing from favorites:', error);
-    sendError(res, 'Failed to remove from favorites', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/favorites
  * Get user's favorite offers
  */
-export const getUserFavoriteOffers = async (req: Request, res: Response) => {
-  try {
+export const getUserFavoriteOffers = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { page = 1, limit = 20 } = req.query;
 
@@ -759,11 +704,7 @@ export const getUserFavoriteOffers = async (req: Request, res: Response) => {
     }));
 
     sendPaginated(res, offers, pageNum, limitNum, total, 'Offers fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching favorite offers:', error);
-    sendError(res, 'Failed to fetch favorite offers', 500);
-  }
-};
+});
 
 /**
  * POST /api/offers/:id/view
@@ -807,8 +748,7 @@ export const trackOfferClick = async (req: Request, res: Response) => {
  * GET /api/offers/recommendations
  * Get personalized offer recommendations (optional auth)
  */
-export const getRecommendedOffers = async (req: Request, res: Response) => {
-  try {
+export const getRecommendedOffers = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 10 } = req.query;
     const userId = req.user?.id;
 
@@ -863,71 +803,51 @@ export const getRecommendedOffers = async (req: Request, res: Response) => {
       .lean();
 
     sendSuccess(res, offers, 'Recommended offers fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching recommendations:', error);
-    sendError(res, 'Failed to fetch recommendations', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/mega
  * Get mega offers
  */
-export const getMegaOffers = async (req: Request, res: Response) => {
-  try {
+export const getMegaOffers = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 10 } = req.query;
 
     const offers = await Offer.findMegaOffers();
     const limitedOffers = offers.slice(0, Number(limit));
 
     sendSuccess(res, limitedOffers, 'Mega offers fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching mega offers:', error);
-    sendError(res, 'Failed to fetch mega offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/students
  * Get student offers
  */
-export const getStudentOffers = async (req: Request, res: Response) => {
-  try {
+export const getStudentOffers = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 10 } = req.query;
 
     const offers = await Offer.findStudentOffers();
     const limitedOffers = offers.slice(0, Number(limit));
 
     sendSuccess(res, limitedOffers, 'Student offers fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching student offers:', error);
-    sendError(res, 'Failed to fetch student offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/new-arrivals
  * Get new arrival offers
  */
-export const getNewArrivalOffers = async (req: Request, res: Response) => {
-  try {
+export const getNewArrivalOffers = asyncHandler(async (req: Request, res: Response) => {
     const { limit = 10 } = req.query;
 
     const offers = await Offer.findNewArrivals(Number(limit));
 
     sendSuccess(res, offers, 'New arrival offers fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching new arrival offers:', error);
-    sendError(res, 'Failed to fetch new arrival offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/nearby
  * Get nearby offers based on user location
  */
-export const getNearbyOffers = async (req: Request, res: Response) => {
-  try {
+export const getNearbyOffers = asyncHandler(async (req: Request, res: Response) => {
     const { lat, lng, maxDistance = 10, limit = 20 } = req.query;
 
     if (!lat || !lng) {
@@ -945,18 +865,13 @@ export const getNearbyOffers = async (req: Request, res: Response) => {
     }));
 
     sendSuccess(res, offersWithDistance, 'Nearby offers fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching nearby offers:', error);
-    sendError(res, 'Failed to fetch nearby offers', 500);
-  }
-};
+});
 
 /**
  * GET /api/offers/page-data
  * Get complete offers page data (hero banner, sections, etc.)
  */
-export const getOffersPageData = async (req: Request, res: Response) => {
-  try {
+export const getOffersPageData = asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user?.id;
     const { lat, lng } = req.query;
 
@@ -1107,18 +1022,13 @@ export const getOffersPageData = async (req: Request, res: Response) => {
     };
 
     sendSuccess(res, pageData, 'Offers page data fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching offers page data:', error);
-    sendError(res, 'Failed to fetch offers page data', 500);
-  }
-};
+});
 
 /**
  * POST /api/offers/:id/like
  * Like/unlike an offer
  */
-export const toggleOfferLike = async (req: Request, res: Response) => {
-  try {
+export const toggleOfferLike = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.id;
 
@@ -1174,18 +1084,13 @@ export const toggleOfferLike = async (req: Request, res: Response) => {
       isLiked,
       likesCount
     }, isLiked ? 'Offer liked successfully' : 'Offer unliked successfully');
-  } catch (error) {
-    logger.error('Error toggling offer like:', error);
-    sendError(res, 'Failed to toggle offer like', 500);
-  }
-};
+});
 
 /**
  * POST /api/offers/:id/share
  * Share an offer
  */
-export const shareOffer = async (req: Request, res: Response) => {
-  try {
+export const shareOffer = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.id;
     const { platform, message } = req.body;
@@ -1217,33 +1122,23 @@ export const shareOffer = async (req: Request, res: Response) => {
     });
 
     sendSuccess(res, { success: true }, 'Offer shared successfully');
-  } catch (error) {
-    logger.error('Error sharing offer:', error);
-    sendError(res, 'Failed to share offer', 500);
-  }
-};
+});
 
 /**
  * GET /api/offer-categories
  * Get all offer categories
  */
-export const getOfferCategories = async (req: Request, res: Response) => {
-  try {
+export const getOfferCategories = asyncHandler(async (req: Request, res: Response) => {
     const categories = await OfferCategory.findActiveCategories();
 
     sendSuccess(res, categories, 'Offer categories fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching offer categories:', error);
-    sendError(res, 'Failed to fetch offer categories', 500);
-  }
-};
+});
 
 /**
  * GET /api/hero-banners
  * Get active hero banners
  */
-export const getHeroBanners = async (req: Request, res: Response) => {
-  try {
+export const getHeroBanners = asyncHandler(async (req: Request, res: Response) => {
     const { page = 'offers', position = 'top' } = req.query;
     const userData = req.user ? {
       userType: req.user.userType,
@@ -1255,18 +1150,13 @@ export const getHeroBanners = async (req: Request, res: Response) => {
     const banners = await HeroBanner.findBannersForUser(userData, page as string);
 
     sendSuccess(res, banners, 'Hero banners fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching hero banners:', error);
-    sendError(res, 'Failed to fetch hero banners', 500);
-  }
-};
+});
 
 /**
  * POST /api/offers/redemptions/validate
  * Validate a redemption code before use
  */
-export const validateRedemptionCode = async (req: Request, res: Response) => {
-  try {
+export const validateRedemptionCode = asyncHandler(async (req: Request, res: Response) => {
     const { code } = req.body;
     const userId = req.user?.id;
 
@@ -1332,11 +1222,7 @@ export const validateRedemptionCode = async (req: Request, res: Response) => {
         }
       }
     }, 'Voucher is valid');
-  } catch (error) {
-    logger.error('Error validating redemption code:', error);
-    sendError(res, 'Failed to validate redemption code', 500);
-  }
-};
+});
 
 /**
  * POST /api/offers/redemptions/:id/use
@@ -1493,8 +1379,7 @@ export const markRedemptionAsUsed = async (req: Request, res: Response) => {
  * GET /api/offers/redemptions/:id
  * Get single redemption details with QR code
  */
-export const getRedemptionById = async (req: Request, res: Response) => {
-  try {
+export const getRedemptionById = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
     const userId = req.user!.id;
 
@@ -1517,8 +1402,4 @@ export const getRedemptionById = async (req: Request, res: Response) => {
         maxDiscountAmount: offer?.restrictions?.maxDiscountAmount || null,
       }
     }, 'Redemption fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching redemption:', error);
-    sendError(res, 'Failed to fetch redemption', 500);
-  }
-};
+});

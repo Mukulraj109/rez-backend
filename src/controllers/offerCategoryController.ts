@@ -4,13 +4,13 @@ import mongoose from 'mongoose';
 import OfferCategory from '../models/OfferCategory';
 import Offer from '../models/Offer';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
+import { asyncHandler } from '../utils/asyncHandler';
 
 /**
  * GET /api/offer-categories
  * Get all active offer categories
  */
-export const getOfferCategories = async (req: Request, res: Response) => {
-  try {
+export const getOfferCategories = asyncHandler(async (req: Request, res: Response) => {
     const { featured, parent } = req.query;
 
     let categories;
@@ -23,48 +23,33 @@ export const getOfferCategories = async (req: Request, res: Response) => {
     }
 
     sendSuccess(res, categories, 'Offer categories fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching offer categories:', error);
-    sendError(res, 'Failed to fetch offer categories', 500);
-  }
-};
+});
 
 /**
  * GET /api/offer-categories/featured
  * Get featured categories
  */
-export const getFeaturedCategories = async (req: Request, res: Response) => {
-  try {
+export const getFeaturedCategories = asyncHandler(async (req: Request, res: Response) => {
     const categories = await OfferCategory.findFeaturedCategories();
 
     sendSuccess(res, categories, 'Featured categories fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching featured categories:', error);
-    sendError(res, 'Failed to fetch featured categories', 500);
-  }
-};
+});
 
 /**
  * GET /api/offer-categories/parents
  * Get parent categories only
  */
-export const getParentCategories = async (req: Request, res: Response) => {
-  try {
+export const getParentCategories = asyncHandler(async (req: Request, res: Response) => {
     const categories = await OfferCategory.findParentCategories();
 
     sendSuccess(res, categories, 'Parent categories fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching parent categories:', error);
-    sendError(res, 'Failed to fetch parent categories', 500);
-  }
-};
+});
 
 /**
  * GET /api/offer-categories/:slug
  * Get category by slug
  */
-export const getOfferCategoryBySlug = async (req: Request, res: Response) => {
-  try {
+export const getOfferCategoryBySlug = asyncHandler(async (req: Request, res: Response) => {
     const { slug } = req.params;
 
     const category = await OfferCategory.findBySlug(slug);
@@ -82,35 +67,25 @@ export const getOfferCategoryBySlug = async (req: Request, res: Response) => {
     };
 
     sendSuccess(res, categoryWithCount, 'Category fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching category by slug:', error);
-    sendError(res, 'Failed to fetch category', 500);
-  }
-};
+});
 
 /**
  * GET /api/offer-categories/:parentId/subcategories
  * Get subcategories of a parent category
  */
-export const getSubcategories = async (req: Request, res: Response) => {
-  try {
+export const getSubcategories = asyncHandler(async (req: Request, res: Response) => {
     const { parentId } = req.params;
 
     const subcategories = await OfferCategory.findSubcategories(new mongoose.Types.ObjectId(parentId));
 
     sendSuccess(res, subcategories, 'Subcategories fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching subcategories:', error);
-    sendError(res, 'Failed to fetch subcategories', 500);
-  }
-};
+});
 
 /**
  * GET /api/offer-categories/:slug/offers
  * Get offers by category slug
  */
-export const getOffersByCategorySlug = async (req: Request, res: Response) => {
-  try {
+export const getOffersByCategorySlug = asyncHandler(async (req: Request, res: Response) => {
     const { slug } = req.params;
     const { page = 1, limit = 20, sortBy = 'createdAt', order = 'desc', lat, lng } = req.query;
 
@@ -176,8 +151,4 @@ export const getOffersByCategorySlug = async (req: Request, res: Response) => {
     }
 
     sendPaginated(res, offersWithDistance, pageNum, limitNum, total, 'Category offers fetched successfully');
-  } catch (error) {
-    logger.error('Error fetching offers by category slug:', error);
-    sendError(res, 'Failed to fetch category offers', 500);
-  }
-};
+});

@@ -8,6 +8,7 @@ import {
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { validate, validateParams, validateQuery, commonSchemas } from '../middleware/validation';
 import { Joi } from '../middleware/validation';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 
@@ -56,11 +57,11 @@ router.post('/:id/start',
     description: Joi.string().trim().max(1000).optional(),
     metadata: Joi.object().optional()
   })),
-  async (req, res, next) => {
+  asyncHandler(async (req, res, next) => {
     // Map to submitProject with projectId from params
     req.body.projectId = req.params.id;
     return submitProject(req, res, next);
-  }
+  })
 );
 
 // Complete an earning project (marks submission as completed)
@@ -79,11 +80,11 @@ router.post('/:id/complete',
     description: Joi.string().trim().max(1000).optional(),
     metadata: Joi.object().optional()
   })),
-  async (req, res, next) => {
+  asyncHandler(async (req, res, next) => {
     // For complete, we submit the work if not already submitted
     req.body.projectId = req.params.id;
     return submitProject(req, res, next);
-  }
+  })
 );
 
 export default router;

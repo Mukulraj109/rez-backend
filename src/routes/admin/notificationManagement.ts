@@ -16,6 +16,7 @@ import {
   sendBadRequest,
   sendPaginated,
 } from '../../utils/response';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 // ---------------------------------------------------------------------------
 // NotificationTemplate model (inline – avoids creating a separate model file)
@@ -68,8 +69,7 @@ router.use(requireAdmin);
 // 1. GET /templates — list templates (paginated, filterable)
 // ---------------------------------------------------------------------------
 
-router.get('/templates', async (req: Request, res: Response) => {
-  try {
+router.get('/templates', asyncHandler(async (req: Request, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const skip = (page - 1) * limit;
@@ -97,17 +97,13 @@ router.get('/templates', async (req: Request, res: Response) => {
     ]);
 
     return sendPaginated(res, templates, page, limit, total, 'Templates fetched');
-  } catch (error) {
-    logger.error('[Admin] Error fetching notification templates:', error);
-    return sendError(res, 'Failed to fetch templates', 500);
-  }
-});
+  }));
 
 // ---------------------------------------------------------------------------
 // 2. POST /templates — create template
 // ---------------------------------------------------------------------------
 
-router.post('/templates', async (req: Request, res: Response) => {
+router.post('/templates', asyncHandler(async (req: Request, res: Response) => {
   try {
     const { title, body, channel, category, variables } = req.body;
 
@@ -136,13 +132,13 @@ router.post('/templates', async (req: Request, res: Response) => {
     }
     return sendError(res, 'Failed to create template', 500);
   }
-});
+}));
 
 // ---------------------------------------------------------------------------
 // 3. PUT /templates/:id — update template
 // ---------------------------------------------------------------------------
 
-router.put('/templates/:id', async (req: Request, res: Response) => {
+router.put('/templates/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendBadRequest(res, 'Invalid template ID');
@@ -181,14 +177,13 @@ router.put('/templates/:id', async (req: Request, res: Response) => {
     }
     return sendError(res, 'Failed to update template', 500);
   }
-});
+}));
 
 // ---------------------------------------------------------------------------
 // 4. DELETE /templates/:id — delete template
 // ---------------------------------------------------------------------------
 
-router.delete('/templates/:id', async (req: Request, res: Response) => {
-  try {
+router.delete('/templates/:id', asyncHandler(async (req: Request, res: Response) => {
     if (!Types.ObjectId.isValid(req.params.id)) {
       return sendBadRequest(res, 'Invalid template ID');
     }
@@ -200,18 +195,13 @@ router.delete('/templates/:id', async (req: Request, res: Response) => {
     }
 
     return sendSuccess(res, null, 'Template deleted');
-  } catch (error) {
-    logger.error('[Admin] Error deleting notification template:', error);
-    return sendError(res, 'Failed to delete template', 500);
-  }
-});
+  }));
 
 // ---------------------------------------------------------------------------
 // 5. POST /send — send notification (validate + log for now)
 // ---------------------------------------------------------------------------
 
-router.post('/send', async (req: Request, res: Response) => {
-  try {
+router.post('/send', asyncHandler(async (req: Request, res: Response) => {
     const { templateId, target, schedule } = req.body;
 
     // --- Validation ---
@@ -278,18 +268,13 @@ router.post('/send', async (req: Request, res: Response) => {
         ? 'Notification queued for immediate delivery'
         : `Notification scheduled for ${scheduledAt.toISOString()}`
     );
-  } catch (error) {
-    logger.error('[Admin] Error sending notification:', error);
-    return sendError(res, 'Failed to send notification', 500);
-  }
-});
+  }));
 
 // ---------------------------------------------------------------------------
 // 6. GET /stats — basic counts by channel and active status
 // ---------------------------------------------------------------------------
 
-router.get('/stats', async (_req: Request, res: Response) => {
-  try {
+router.get('/stats', asyncHandler(async (_req: Request, res: Response) => {
     const [byChannel, byStatus, total] = await Promise.all([
       NotificationTemplate.aggregate([
         { $group: { _id: '$channel', count: { $sum: 1 } } },
@@ -325,10 +310,6 @@ router.get('/stats', async (_req: Request, res: Response) => {
       },
       'Notification stats fetched'
     );
-  } catch (error) {
-    logger.error('[Admin] Error fetching notification stats:', error);
-    return sendError(res, 'Failed to fetch notification stats', 500);
-  }
-});
+  }));
 
 export default router;
