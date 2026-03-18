@@ -55,12 +55,12 @@ export const getBankOfferById = asyncHandler(async (req: Request, res: Response)
   }
 });
 
-// Get all exclusive offers
+// Get all exclusive offers (with optional zone filtering)
 export const getExclusiveOffers = asyncHandler(async (req: Request, res: Response) => {
-  const { category, targetAudience } = req.query;
+  const { category, targetAudience, exclusiveZone } = req.query;
 
   try {
-    const query: any = { 
+    const query: any = {
       isActive: true,
       validFrom: { $lte: new Date() },
       validTo: { $gte: new Date() }
@@ -75,6 +75,11 @@ export const getExclusiveOffers = asyncHandler(async (req: Request, res: Respons
 
     if (targetAudience) {
       query.targetAudience = targetAudience;
+    }
+
+    // Zone-based filtering: only show offers matching the requested zone
+    if (exclusiveZone) {
+      query.targetAudience = exclusiveZone;
     }
 
     const offers = await ExclusiveOffer.find(query)

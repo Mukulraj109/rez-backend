@@ -171,6 +171,35 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
         { orderId: String(populatedOrder._id) }
       ).catch(err => logger.error('[ORDER] Challenge spend progress update failed:', err));
 
+      // Auto-refresh UserLoyalty mission progress so it's current when user next visits (non-blocking)
+      setImmediate(async () => {
+        try {
+          const UserLoyalty = (await import('../models/UserLoyalty')).default;
+          const loyalty = await UserLoyalty.findOne({ userId: String(userIdObj) });
+          if (loyalty) {
+            const { computeMissionProgress } = await import('./loyaltyController');
+            const progressMap = await computeMissionProgress(String(userIdObj), loyalty.streak?.current || 0);
+            let changed = false;
+            for (const mission of loyalty.missions) {
+              const real = progressMap.get(mission.missionId);
+              if (real !== undefined) {
+                const capped = Math.min(real, mission.target);
+                if (mission.progress !== capped) {
+                  mission.progress = capped;
+                  changed = true;
+                }
+              }
+            }
+            if (changed) {
+              await loyalty.save();
+              logger.info('[ORDER] UserLoyalty missions auto-refreshed on delivery', { userId: String(userIdObj) });
+            }
+          }
+        } catch (err) {
+          logger.error('[ORDER] UserLoyalty mission refresh failed (non-blocking):', err);
+        }
+      });
+
       // Process referral rewards when order is delivered
       try {
         // Check if this is referee's first order (process referral completion)

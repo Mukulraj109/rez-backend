@@ -127,7 +127,7 @@ export function setupMiddleware(app: Express): void {
       }
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-Rez-Region'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token', 'X-Rez-Region', 'X-Device-OS', 'X-Device-Fingerprint', 'X-Rez-Signature', 'X-Provider-Name'],
     exposedHeaders: ['X-CSRF-Token'],
     credentials: true,
     optionsSuccessStatus: 200

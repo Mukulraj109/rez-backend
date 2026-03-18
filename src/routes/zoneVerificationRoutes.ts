@@ -7,6 +7,8 @@ import ExclusiveZone from '../models/ExclusiveZone';
 import { User } from '../models/User';
 import { authenticate, optionalAuth } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
+import { autoVerificationService } from '../services/autoVerificationService';
+import { privilegeResolutionService } from '../services/entitlement/privilegeResolutionService';
 
 const router = express.Router();
 
@@ -289,7 +291,64 @@ router.post('/:slug/verify', authenticate, asyncHandler(async (req: Request, res
       });
     }
 
-    // Create verification request
+    // ── Auto-verify check ──
+    if (verificationType === 'student') {
+      const autoCheck = await autoVerificationService.checkStudentAutoVerify({
+        userId: userId.toString(),
+        email: value.email,
+        instituteName: value.instituteName,
+      });
+
+      if (autoCheck.shouldAutoVerify && autoCheck.institution) {
+        await autoVerificationService.autoVerify({
+          userId: userId.toString(),
+          zoneSlug: slug,
+          verificationType,
+          institution: autoCheck.institution,
+          submittedData: value,
+        });
+
+        return res.status(201).json({
+          success: true,
+          message: 'Instantly verified! Student deals are unlocked.',
+          data: {
+            autoVerified: true,
+            provisionalUnlock: false,
+            institutionName: autoCheck.institution.name,
+          },
+        });
+      }
+    }
+
+    if (verificationType === 'corporate') {
+      const autoCheck = await autoVerificationService.checkCorporateAutoVerify({
+        userId: userId.toString(),
+        email: value.email,
+        companyName: value.companyName,
+      });
+
+      if (autoCheck.shouldAutoVerify && autoCheck.institution) {
+        await autoVerificationService.autoVerify({
+          userId: userId.toString(),
+          zoneSlug: slug,
+          verificationType,
+          institution: autoCheck.institution,
+          submittedData: value,
+        });
+
+        return res.status(201).json({
+          success: true,
+          message: 'Instantly verified! Work perks are unlocked.',
+          data: {
+            autoVerified: true,
+            provisionalUnlock: false,
+            institutionName: autoCheck.institution.name,
+          },
+        });
+      }
+    }
+
+    // ── No auto-verify: create pending + grant provisional access ──
     const verification = new UserZoneVerification({
       userId,
       zoneSlug: slug,
@@ -302,12 +361,31 @@ router.post('/:slug/verify', authenticate, asyncHandler(async (req: Request, res
 
     await verification.save();
 
+    // Grant provisional access immediately
+    const segmentValue = verificationType === 'student'
+      ? 'verified_student'
+      : verificationType === 'corporate'
+        ? 'verified_employee'
+        : `verified_${verificationType}`;
+
+    await User.findByIdAndUpdate(userId, {
+      $set: {
+        verificationSegment: 'provisional',
+        featureLevel: 2,
+        segment: segmentValue,
+      },
+      $addToSet: { activeZones: slug },
+    });
+    await privilegeResolutionService.invalidate(userId.toString());
+
     return res.status(201).json({
       success: true,
-      message: 'Verification request submitted successfully',
+      message: 'Provisional access granted. Full unlock in 2-4 hours.',
       data: {
         id: verification._id,
         status: verification.status,
+        autoVerified: false,
+        provisionalUnlock: true,
         zoneSlug: verification.zoneSlug,
         createdAt: verification.createdAt,
       },
@@ -369,6 +447,39 @@ router.get('/my-verifications', authenticate, asyncHandler(async (req: Request, 
       success: true,
       data: verifications,
     });
+}));
+
+/**
+ * @route   GET /api/zones/institutions
+ * @desc    Search institutions for autocomplete (public, no admin required)
+ * @access  Public (optionalAuth)
+ */
+router.get('/institutions', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { search, limit = '10' } = req.query;
+  const limitNum = Math.min(20, parseInt(limit as string, 10) || 10);
+
+  if (!search || (search as string).length < 2) {
+    return res.json({ success: true, data: { institutions: [] } });
+  }
+
+  const { VerifiedInstitution } = await import('../models/VerifiedInstitution');
+  const escapedSearch = (search as string).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  const institutions = await VerifiedInstitution.find({
+    isActive: true,
+    $or: [
+      { name: { $regex: escapedSearch, $options: 'i' } },
+      { aliases: { $regex: escapedSearch, $options: 'i' } },
+    ],
+  })
+    .select('name type city')
+    .limit(limitNum)
+    .lean();
+
+  return res.json({
+    success: true,
+    data: { institutions },
+  });
 }));
 
 export default router;

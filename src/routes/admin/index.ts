@@ -63,3 +63,5 @@ export { default as adminActionsRoutes } from './adminActions';
 export { default as adminDisputesRoutes } from './disputes';
 export { default as adminDeviceFingerprintRoutes } from './deviceFingerprint';
 export { default as adminIntegrationsRoutes } from './integrations';
+export { default as adminInstitutionsRoutes } from './institutions';
+export { default as adminInstituteReferralsRoutes } from './instituteReferrals';

@@ -13,6 +13,7 @@ import * as alertService from '../services/webhookSecurityAlertService';
 import { withCache } from '../utils/cacheHelper';
 import { logger } from '../config/logger';
 import { asyncHandler } from '../utils/asyncHandler';
+import { privilegeResolutionService } from '../services/entitlement/privilegeResolutionService';
 
 /**
  * Get all available subscription tiers
@@ -621,6 +622,9 @@ export const confirmUpgrade = asyncHandler(async (req: Request, res: Response) =
       },
     });
 
+    // Invalidate privilege cache so new tier benefits take effect immediately
+    privilegeResolutionService.invalidate(userId.toString()).catch(() => {});
+
     res.status(200).json({
       success: true,
       message: `Successfully upgraded to ${upgradeRecord.toTier}`,
@@ -729,6 +733,9 @@ export const downgradeSubscription = asyncHandler(async (req: Request, res: Resp
         description: `Downgrade from ${previousTier} to ${newTier} scheduled for ${currentSubscription.endDate}`,
       },
     });
+
+    // Invalidate privilege cache so downgrade reflects immediately
+    privilegeResolutionService.invalidate(userId.toString()).catch(() => {});
 
     res.status(200).json({
       success: true,

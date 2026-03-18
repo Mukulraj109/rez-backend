@@ -190,6 +190,17 @@ export interface IUser extends Document {
     lastUsed: Date;
   }>;
 
+  // Identity layer fields
+  featureLevel?: number;
+  verificationSegment?: 'none' | 'provisional' | 'pending' | 'verified';
+  segment?: 'normal' | 'verified_student' | 'verified_employee' | 'verified_defence' | 'verified_healthcare';
+  instituteStatus?: 'not_available' | 'pending_referral' | 'onboarded';
+  statedIdentity?: 'student' | 'corporate' | 'other' | 'general';
+  isFlagged?: boolean;
+  flagReason?: string;
+  flaggedBy?: Schema.Types.ObjectId;
+  flaggedAt?: Date;
+
   // Game access control
   gameBanned?: boolean;
   gameBanReason?: string;
@@ -606,6 +617,52 @@ const UserSchema = new Schema<IUser>({
     type: String,
     trim: true
   }],
+  // Identity layer
+  featureLevel: {
+    type: Number,
+    default: 1,
+    min: 1,
+    max: 5,
+    index: true,
+  },
+  verificationSegment: {
+    type: String,
+    enum: ['none', 'provisional', 'pending', 'verified'],
+    default: 'none',
+    index: true,
+  },
+  segment: {
+    type: String,
+    enum: ['normal', 'verified_student', 'verified_employee', 'verified_defence', 'verified_healthcare', 'verified_teacher', 'verified_senior', 'verified_government', 'verified_differentlyAbled'],
+    default: 'normal',
+    index: true,
+  },
+  instituteStatus: {
+    type: String,
+    enum: ['not_available', 'pending_referral', 'onboarded'],
+    default: 'not_available',
+  },
+  statedIdentity: {
+    type: String,
+    enum: ['student', 'corporate', 'other', 'general'],
+    index: true,
+  },
+  isFlagged: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  flagReason: {
+    type: String,
+    trim: true,
+  },
+  flaggedBy: {
+    type: Schema.Types.ObjectId,
+    ref: 'AdminUser',
+  },
+  flaggedAt: {
+    type: Date,
+  },
   gameBanned: {
     type: Boolean,
     default: false,

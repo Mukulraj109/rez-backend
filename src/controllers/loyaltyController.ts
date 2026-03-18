@@ -309,7 +309,7 @@ const MISSION_PREFIX_TO_CATEGORY: Record<string, string> = {
 
 // Compute mission progress from real data, filtered by category
 // Each category's missions only count orders/reviews from stores in that category
-async function computeMissionProgress(userId: string, streakCurrent: number): Promise<Map<string, number>> {
+export async function computeMissionProgress(userId: string, streakCurrent: number): Promise<Map<string, number>> {
   const progressMap = new Map<string, number>();
 
   try {

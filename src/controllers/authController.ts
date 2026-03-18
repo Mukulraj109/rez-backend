@@ -704,7 +704,15 @@ export const getCurrentUser = asyncHandler(async (req: Request, res: Response) =
     isVerified: req.user.auth.isVerified,
     isOnboarded: req.user.auth.isOnboarded,
     createdAt: req.user.createdAt,
-    updatedAt: req.user.updatedAt
+    updatedAt: req.user.updatedAt,
+    // Identity layer fields
+    statedIdentity: (req.user as any).statedIdentity,
+    featureLevel: (req.user as any).featureLevel,
+    segment: (req.user as any).segment,
+    verificationSegment: (req.user as any).verificationSegment,
+    instituteStatus: (req.user as any).instituteStatus,
+    activeZones: (req.user as any).activeZones,
+    verifications: (req.user as any).verifications,
   };
 
   sendSuccess(res, userData, 'User profile retrieved successfully');
@@ -772,7 +780,7 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
     return sendUnauthorized(res, 'Authentication required');
   }
 
-  const { profile, preferences } = req.body;
+  const { profile, preferences, statedIdentity } = req.body;
 
   if (profile) {
     const allowedProfileFields = ['firstName', 'lastName', 'avatar', 'dateOfBirth', 'gender', 'bio'];
@@ -790,6 +798,11 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
         req.user!.preferences[key as keyof typeof req.user.preferences] = preferences[key];
       }
     });
+  }
+
+  // Accept statedIdentity for identity layer
+  if (statedIdentity && ['student', 'corporate', 'other', 'general'].includes(statedIdentity)) {
+    (req.user as any).statedIdentity = statedIdentity;
   }
 
   await req.user.save();
@@ -812,7 +825,12 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
     wallet: req.user.wallet,
     role: req.user.role,
     isVerified: req.user.auth.isVerified,
-    isOnboarded: req.user.auth.isOnboarded
+    isOnboarded: req.user.auth.isOnboarded,
+    statedIdentity: (req.user as any).statedIdentity,
+    featureLevel: (req.user as any).featureLevel,
+    segment: (req.user as any).segment,
+    verificationSegment: (req.user as any).verificationSegment,
+    instituteStatus: (req.user as any).instituteStatus,
   };
 
   sendSuccess(res, userData, 'Profile updated successfully');
@@ -870,7 +888,21 @@ export const completeOnboarding = asyncHandler(async (req: Request, res: Respons
   }
 
   if (req.user.auth.isOnboarded) {
-    return sendConflict(res, 'User is already onboarded');
+    // Return success (idempotent) — don't 409, because the frontend
+    // (tabs)/index.tsx fallback retries this and a 409 dispatches AUTH_FAILURE
+    // which clears the auth session and kicks the user to sign-in.
+    const userData = {
+      id: req.user._id,
+      phoneNumber: req.user.phoneNumber,
+      email: req.user.email,
+      profile: req.user.profile,
+      preferences: req.user.preferences,
+      wallet: req.user.wallet,
+      role: req.user.role,
+      isVerified: req.user.auth.isVerified,
+      isOnboarded: req.user.auth.isOnboarded,
+    };
+    return sendSuccess(res, userData, 'User is already onboarded');
   }
 
   const { profile, preferences } = req.body;

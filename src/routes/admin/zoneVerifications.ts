@@ -9,6 +9,7 @@ import { authenticate, requireAdmin } from '../../middleware/auth';
 import { NotificationService } from '../../services/notificationService';
 import { privilegeResolutionService } from '../../services/entitlement/privilegeResolutionService';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { escapeRegex } from '../../utils/sanitize';
 
 const router = express.Router();
 
@@ -235,9 +236,15 @@ router.patch('/:id/review', asyncHandler(async (req: Request, res: Response) => 
     await verification.save();
     privilegeResolutionService.invalidate(verification.userId.toString()).catch(() => {});
 
-    // If approved, update user's verifications
+    // If approved, update user's verifications + identity fields
     if (status === 'approved') {
       const updatePath = `verifications.${verification.verificationType}`;
+      const segmentValue = verification.verificationType === 'student'
+        ? 'verified_student'
+        : verification.verificationType === 'corporate'
+          ? 'verified_employee'
+          : `verified_${verification.verificationType}`;
+
       await User.findByIdAndUpdate(verification.userId, {
         $set: {
           [`${updatePath}.verified`]: true,
@@ -249,7 +256,11 @@ router.patch('/:id/review', asyncHandler(async (req: Request, res: Response) => 
             [`${updatePath}.companyName`]: verification.submittedData.companyName,
           }),
           ...(expiresAt && { [`${updatePath}.expiresAt`]: new Date(expiresAt) }),
+          verificationSegment: 'verified',
+          featureLevel: 2,
+          segment: segmentValue,
         },
+        $addToSet: { activeZones: verification.zoneSlug },
       });
 
       // Send approval notification to user
@@ -268,6 +279,37 @@ router.patch('/:id/review', asyncHandler(async (req: Request, res: Response) => 
         deliveryChannels: ['in_app', 'push'],
       });
     } else {
+      // If rejecting a pending verification, revoke provisional access
+      if (!isRevoke) {
+        // Check if user had provisional access from this zone
+        const userDoc = await User.findById(verification.userId).select('verificationSegment segment activeZones').lean();
+        if ((userDoc as any)?.verificationSegment === 'provisional') {
+          // Check if user has any OTHER approved/pending verifications
+          const otherVerifications = await UserZoneVerification.countDocuments({
+            userId: verification.userId,
+            _id: { $ne: verification._id },
+            status: { $in: ['approved', 'pending'] },
+          });
+          if (otherVerifications === 0) {
+            // No other verifications — revoke provisional access entirely
+            await User.findByIdAndUpdate(verification.userId, {
+              $set: {
+                verificationSegment: 'none',
+                featureLevel: 1,
+                segment: 'normal',
+              },
+              $pull: { activeZones: verification.zoneSlug },
+            });
+          } else {
+            // Has other verifications — just remove this zone
+            await User.findByIdAndUpdate(verification.userId, {
+              $pull: { activeZones: verification.zoneSlug },
+            });
+          }
+          await privilegeResolutionService.invalidate(verification.userId.toString());
+        }
+      }
+
       // If revoking an approved verification, remove the verified flag and suspend membership
       if (isRevoke) {
         const updatePath = `verifications.${verification.verificationType}`;
@@ -363,6 +405,67 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     return res.json({
       success: true,
       message: 'Verification deleted',
+    });
+}));
+
+/**
+ * @route   POST /api/admin/zone-verifications/bulk-approve
+ * @desc    Bulk approve all pending verifications for an institution
+ * @access  Admin
+ */
+router.post('/bulk-approve', asyncHandler(async (req: Request, res: Response) => {
+    const { instituteName } = req.body;
+    const adminId = (req as any).user._id;
+
+    if (!instituteName) {
+      return res.status(400).json({
+        success: false,
+        message: 'instituteName is required',
+      });
+    }
+
+    const pending = await UserZoneVerification.find({
+      status: 'pending',
+      'submittedData.instituteName': {
+        $regex: escapeRegex(instituteName),
+        $options: 'i',
+      },
+    });
+
+    let approved = 0;
+
+    for (const v of pending) {
+      v.status = 'approved';
+      v.reviewedBy = adminId;
+      v.reviewedAt = new Date();
+      await v.save();
+
+      const updatePath = `verifications.${v.verificationType}`;
+      const segmentValue = v.verificationType === 'student'
+        ? 'verified_student'
+        : v.verificationType === 'corporate'
+          ? 'verified_employee'
+          : `verified_${v.verificationType}`;
+
+      await User.findByIdAndUpdate(v.userId, {
+        $set: {
+          [`${updatePath}.verified`]: true,
+          [`${updatePath}.verifiedAt`]: new Date(),
+          verificationSegment: 'verified',
+          featureLevel: 2,
+          segment: segmentValue,
+        },
+        $addToSet: { activeZones: v.zoneSlug },
+      });
+
+      await privilegeResolutionService.invalidate(v.userId.toString());
+      approved++;
+    }
+
+    return res.json({
+      success: true,
+      message: `${approved} verifications approved for ${instituteName}`,
+      data: { approved },
     });
 }));
 

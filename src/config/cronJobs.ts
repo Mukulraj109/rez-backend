@@ -293,6 +293,25 @@ export async function initializeCronJobs(): Promise<void> {
   initializeOrderReconciliationJob();
   logger.info('Order lifecycle + reconciliation jobs started');
 
+  // Personalized deal notifications — 11am lunch + 5pm hangout (IST)
+  const { personalizedNotificationJob } = await import('../jobs/personalizedNotificationJob');
+  const cronScheduler = (await import('node-cron')).default;
+  cronScheduler.schedule('0 11 * * *', async () => {
+    const lock = await redisService.acquireLock('lock:notif:lunch', 300);
+    if (!lock) return;
+    try { await personalizedNotificationJob.run('lunch'); }
+    catch (e) { logger.error('[PersonalizedNotif] Lunch job error:', e); }
+    finally { await redisService.releaseLock('lock:notif:lunch', lock); }
+  }, { timezone: 'Asia/Kolkata' });
+  cronScheduler.schedule('0 17 * * *', async () => {
+    const lock = await redisService.acquireLock('lock:notif:hangout', 300);
+    if (!lock) return;
+    try { await personalizedNotificationJob.run('hangout'); }
+    catch (e) { logger.error('[PersonalizedNotif] Hangout job error:', e); }
+    finally { await redisService.releaseLock('lock:notif:hangout', lock); }
+  }, { timezone: 'Asia/Kolkata' });
+  logger.info('Personalized notification jobs started (11am lunch, 5pm hangout IST)');
+
   // Gamification event bus
   logger.info('Initializing gamification event bus...');
   const gamificationEventBus = (await import('../events/gamificationEventBus')).default;

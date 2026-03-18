@@ -17,6 +17,7 @@ import { recordExclusiveOfferView, recordExclusiveOfferRedemption } from '../ser
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
 import redisService from '../services/redisService';
 import { asyncHandler } from '../utils/asyncHandler';
+import { privilegeResolutionService } from '../services/entitlement/privilegeResolutionService';
 
 /**
  * GET /api/offers
@@ -115,8 +116,54 @@ export const getOffers = asyncHandler(async (req: Request, res: Response) => {
     const limitNum = Math.min(50, Math.max(1, Number(limit)));
     const skip = (pageNum - 1) * limitNum;
 
-    // Cache key for public (non-user-specific) offer queries
+    // Zone-based filtering: hide exclusive offers from users who haven't unlocked the zone
     const userId = req.user?.id;
+    if (userId) {
+      const priv = await privilegeResolutionService.resolve(userId);
+      const zoneCondition = priv.activeZones && priv.activeZones.length > 0
+        ? {
+            $or: [
+              { exclusiveZone: null },
+              { exclusiveZone: { $exists: false } },
+              { exclusiveZone: '' },
+              { exclusiveZone: { $in: priv.activeZones } },
+            ]
+          }
+        : {
+            $or: [
+              { exclusiveZone: null },
+              { exclusiveZone: { $exists: false } },
+              { exclusiveZone: '' },
+            ]
+          };
+
+      // Combine with existing $or (region filter) using $and
+      if (filter.$or) {
+        const existingOr = filter.$or;
+        delete filter.$or;
+        filter.$and = [{ $or: existingOr }, zoneCondition];
+      } else {
+        Object.assign(filter, zoneCondition);
+      }
+    } else {
+      // Anonymous users: only show non-exclusive offers
+      if (filter.$or) {
+        const existingOr = filter.$or;
+        delete filter.$or;
+        filter.$and = [
+          { $or: existingOr },
+          { $or: [{ exclusiveZone: null }, { exclusiveZone: { $exists: false } }, { exclusiveZone: '' }] },
+        ];
+      } else {
+        filter.$or = [
+          { exclusiveZone: null },
+          { exclusiveZone: { $exists: false } },
+          { exclusiveZone: '' },
+        ];
+      }
+    }
+
+    // Cache key for public (non-user-specific) offer queries
     const cacheKey = !userId
       ? `offers:${region || 'all'}:${category || ''}:${type || ''}:${sortField}:${order}:${pageNum}:${limitNum}`
       : null;
@@ -534,6 +581,38 @@ export const redeemOffer = asyncHandler(async (req: Request, res: Response) => {
     // Update offer redemption count
     await Offer.findByIdAndUpdate(id, {
       $inc: { 'redemptionCount': 1 }
+    });
+
+    // Create FriendRedemption records for user's followers (social proof feed, non-blocking)
+    setImmediate(async () => {
+      try {
+        const Follow = (await import('../models/Follow')).default;
+        const FriendRedemption = (await import('../models/FriendRedemption')).default;
+        const user = await User.findById(userId).select('fullName profile.avatar').lean();
+        const followers = await Follow.find({ following: userId }).select('follower').lean();
+        if (followers.length > 0 && user) {
+          const storeName = (offer.store as any)?.name || '';
+          const storeLogo = (offer.store as any)?.logo || '';
+          const docs = followers.map((f: any) => ({
+            userId: f.follower,
+            friendId: userId,
+            friendName: (user as any).fullName || 'A friend',
+            friendAvatar: (user as any).profile?.avatar || '',
+            offerId: id,
+            offerTitle: offer.title,
+            offerImage: offer.image || '',
+            storeName,
+            storeLogo,
+            savings: offer.cashbackPercentage || 0,
+            cashbackPercentage: offer.cashbackPercentage || 0,
+            redeemedAt: new Date(),
+            isVisible: true,
+          }));
+          await FriendRedemption.insertMany(docs, { ordered: false }).catch(() => {});
+        }
+      } catch (err) {
+        logger.error('[OFFER] FriendRedemption creation failed (non-blocking):', err);
+      }
     });
 
     // Record analytics for exclusive offer redemption

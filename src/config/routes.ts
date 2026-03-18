@@ -208,10 +208,13 @@ import {
   adminDisputesRoutes,
   adminDeviceFingerprintRoutes,
   adminIntegrationsRoutes,
+  adminInstitutionsRoutes,
+  adminInstituteReferralsRoutes,
 } from '../routes/admin';
 import disputeRoutes from '../routes/disputeRoutes';
 import integrationWebhookRoutes from '../routes/integrationWebhook';
 import adminBonusZoneRoutes from '../routes/admin/bonusZone';
+import instituteReferralsRoutes from '../routes/instituteReferrals';
 import adminOffersSectionRoutes from '../routes/admin/offersSectionConfig';
 import adminStoreCollectionRoutes from '../routes/admin/storeCollectionConfig';
 import adminPriveRoutes from '../routes/admin/priveAdmin';
@@ -459,6 +462,8 @@ export function registerRoutes(app: Express): void {
   app.use(`${API_PREFIX}/admin/disputes`, adminDisputesRoutes);
   app.use(`${API_PREFIX}/admin/devices`, adminDeviceFingerprintRoutes);
   app.use(`${API_PREFIX}/admin/integrations`, adminIntegrationsRoutes);
+  app.use(`${API_PREFIX}/admin/institutions`, adminInstitutionsRoutes);
+  app.use(`${API_PREFIX}/admin/institute-referrals`, adminInstituteReferralsRoutes);
 
   // Integration webhook (public — secured by HMAC signature)
   app.use(`${API_PREFIX}/integrations`, integrationWebhookRoutes);
@@ -474,6 +479,7 @@ export function registerRoutes(app: Express): void {
   app.use(`${API_PREFIX}/campaigns`, campaignRoutes);
   app.use(`${API_PREFIX}/recharge`, rechargeRoutes);
   app.use(`${API_PREFIX}/bonus-zone`, bonusZoneRoutes);
+  app.use(`${API_PREFIX}/institute-referrals`, instituteReferralsRoutes);
   app.use(`${API_PREFIX}/lock-deals`, lockDealRoutes);
   app.use(`${API_PREFIX}/play-earn`, playEarnRoutes);
   app.use(`${API_PREFIX}/experiences`, experienceRoutes);

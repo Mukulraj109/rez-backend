@@ -254,4 +254,63 @@ router.post('/:id/unsuspend', requireSeniorAdmin, asyncHandler(async (req: Reque
     });
 }));
 
+/**
+ * @route   PUT /api/admin/users/:id/flag
+ * @desc    Flag a user (disables auto-verify)
+ * @access  Admin
+ */
+router.put('/:id/flag', asyncHandler(async (req: Request, res: Response) => {
+  const { reason } = req.body;
+  const adminId = (req as any).user._id;
+
+  const user = await User.findByIdAndUpdate(
+    req.params.id,
+    {
+      $set: {
+        isFlagged: true,
+        flagReason: reason || 'Flagged by admin',
+        flaggedBy: adminId,
+        flaggedAt: new Date(),
+      },
+    },
+    { new: true }
+  );
+
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+
+  res.json({
+    success: true,
+    message: 'User flagged. Auto-verify disabled.',
+    data: { userId: user._id, isFlagged: true },
+  });
+}));
+
+/**
+ * @route   PUT /api/admin/users/:id/unflag
+ * @desc    Remove flag from a user
+ * @access  Admin
+ */
+router.put('/:id/unflag', asyncHandler(async (req: Request, res: Response) => {
+  const user = await User.findByIdAndUpdate(
+    req.params.id,
+    {
+      $set: { isFlagged: false },
+      $unset: { flagReason: 1, flaggedBy: 1, flaggedAt: 1 },
+    },
+    { new: true }
+  );
+
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+
+  res.json({
+    success: true,
+    message: 'User unflagged.',
+    data: { userId: user._id, isFlagged: false },
+  });
+}));
+
 export default router;

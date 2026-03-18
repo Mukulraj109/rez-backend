@@ -197,7 +197,8 @@ export const authSchemas = {
       emailNotifications: Joi.boolean(),
       pushNotifications: Joi.boolean(),
       smsNotifications: Joi.boolean()
-    })
+    }),
+    statedIdentity: Joi.string().valid('student', 'corporate', 'other', 'general')
   })
 };
 
