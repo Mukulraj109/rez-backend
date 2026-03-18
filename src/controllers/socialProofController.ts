@@ -3,6 +3,7 @@ import { Order } from '../models/Order';
 import { logger } from '../config/logger';
 import mongoose from 'mongoose';
 import { asyncHandler } from '../utils/asyncHandler';
+import { escapeRegex } from '../utils/sanitize';
 
 // Helper function to format time ago
 const formatTimeAgo = (date: Date): string => {
@@ -250,7 +251,7 @@ export const getNearbyActivity = asyncHandler(async (req: Request, res: Response
             status: 'delivered',
             createdAt: { $gte: today },
             'delivery.address.city': {
-              $regex: new RegExp(city as string, 'i'),
+              $regex: escapeRegex(city as string), $options: 'i',
             },
           },
         },
@@ -314,7 +315,7 @@ export const getCityWideStats = asyncHandler(async (req: Request, res: Response)
           status: 'delivered',
           createdAt: { $gte: today },
           'delivery.address.city': {
-            $regex: new RegExp(city as string, 'i'),
+            $regex: escapeRegex(city as string), $options: 'i',
           },
         },
       },

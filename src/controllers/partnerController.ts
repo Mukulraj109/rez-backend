@@ -62,11 +62,39 @@ export const getPartnerDashboard = asyncHandler(async (req: Request, res: Respon
       return;
     }
 
-    const dashboardData = await partnerService.getPartnerDashboard(userId);
+    const dashboardData = await partnerService.getPartnerDashboardSafe(userId);
 
     res.status(200).json({
       success: true,
       data: dashboardData
+    });
+});
+
+/**
+ * @route   POST /api/partner/enroll
+ * @desc    Explicitly enroll user in partner program
+ * @access  Private
+ */
+export const enrollPartner = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: 'User not authenticated'
+      });
+      return;
+    }
+
+    // Explicit enrollment — creates partner if not exists
+    await partnerService.getOrCreatePartner(userId);
+
+    // Return full dashboard after enrollment
+    const dashboardData = await partnerService.getPartnerDashboard(userId);
+
+    res.status(200).json({
+      success: true,
+      data: { enrolled: true, ...dashboardData }
     });
 });
 

@@ -24,6 +24,8 @@ const submitVerificationSchema = Joi.object({
   instituteName: Joi.string().max(200).optional(),
   companyName: Joi.string().max(200).optional(),
   serviceNumber: Joi.string().max(100).optional(),
+  serviceType: Joi.string().valid('army', 'navy', 'airforce', 'paramilitary').optional(),
+  profession: Joi.string().valid('doctor', 'nurse', 'paramedic', 'pharmacist').optional(),
   gender: Joi.string().valid('male', 'female', 'other').optional(),
 });
 

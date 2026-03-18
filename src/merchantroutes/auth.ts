@@ -9,7 +9,7 @@ import { Store } from '../models/Store';
 import { Category } from '../models/Category';
 import { authMiddleware } from '../middleware/merchantauth';
 import { validateRequest } from '../middleware/merchantvalidation';
-// DEV: import { authLimiter, registrationLimiter, passwordResetLimiter } from '../middleware/rateLimiter';
+import { authLimiter, registrationLimiter, passwordResetLimiter } from '../middleware/rateLimiter';
 import Joi from 'joi';
 import EmailService from '../services/EmailService';
 import { getPermissionsForRole } from '../config/permissions';
@@ -283,7 +283,7 @@ async function sendVerificationEmail(merchant: any, verificationToken: string): 
  *               $ref: '#/components/schemas/Error'
  */
 // POST /api/auth/register
-router.post('/register', /* registrationLimiter, */ validateRequest(registerSchema), async (req, res) => {
+router.post('/register', registrationLimiter, validateRequest(registerSchema), async (req, res) => {
   try {
     const { businessName, ownerName, email, password, phone, businessAddress } = req.body;
 
@@ -365,7 +365,7 @@ router.post('/register', /* registrationLimiter, */ validateRequest(registerSche
 });
 
 // POST /api/auth/login
-router.post('/login', /* authLimiter, */ validateRequest(loginSchema), async (req, res) => {
+router.post('/login', authLimiter, validateRequest(loginSchema), async (req, res) => {
   try {
     const { email, password } = req.body;
     const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
@@ -608,7 +608,7 @@ router.get('/me', authMiddleware, async (req, res) => {
 // @route   POST /api/auth/forgot-password
 // @desc    Request password reset
 // @access  Public
-router.post('/forgot-password', /* passwordResetLimiter, */ validateRequest(forgotPasswordSchema), async (req, res) => {
+router.post('/forgot-password', passwordResetLimiter, validateRequest(forgotPasswordSchema), async (req, res) => {
   try {
     const { email } = req.body;
 

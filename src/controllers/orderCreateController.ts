@@ -445,6 +445,18 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
       const product = cartItem.product as any;
       const store = cartItem.store as any;
 
+      // Verify cart price against current product price (prevent stale/manipulated prices)
+      const currentPrice = product.pricing?.selling || (typeof product.price === 'number' ? product.price : product.price?.current) || 0;
+      const cartPrice = cartItem.price || 0;
+      if (currentPrice > 0 && cartPrice > 0) {
+        const priceDiff = Math.abs(currentPrice - cartPrice) / currentPrice;
+        if (priceDiff > 0.05) { // >5% difference
+          await session.abortTransaction();
+          session.endSession();
+          return sendBadRequest(res, `Price for "${product.name}" has changed from ₹${cartPrice} to ₹${currentPrice}. Please refresh your cart.`);
+        }
+      }
+
       if (!product) {
         await session.abortTransaction();
         session.endSession();

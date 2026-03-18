@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getPartnerDashboard,
+  enrollPartner,
   getPartnerBenefits,
   getPartnerProfile,
   getPartnerEarnings,
@@ -44,6 +45,13 @@ router.use(sanitizeRequestBody);
  * @access  Private
  */
 router.get('/dashboard', getPartnerDashboard);
+
+/**
+ * @route   POST /api/partner/enroll
+ * @desc    Explicitly enroll user in partner program (requires user consent)
+ * @access  Private
+ */
+router.post('/enroll', enrollPartner);
 
 /**
  * @route   GET /api/partner/benefits

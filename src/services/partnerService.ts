@@ -818,6 +818,29 @@ class PartnerService {
   }
 
   /**
+   * Get partner dashboard data safely (without auto-enrolling)
+   * Returns enrolled: false if user is not a partner, otherwise returns full dashboard
+   */
+  async getPartnerDashboardSafe(userId: string): Promise<any> {
+    const partner = await Partner.findOne({ userId }).lean();
+
+    if (!partner) {
+      return {
+        enrolled: false,
+        profile: null,
+        milestones: [],
+        tasks: [],
+        jackpotProgress: [],
+        claimableOffers: [],
+        faqs: [],
+      };
+    }
+
+    const dashboard = await this.getPartnerDashboard(userId);
+    return { enrolled: true, ...dashboard };
+  }
+
+  /**
    * Get partner dashboard data
    */
   async getPartnerDashboard(userId: string): Promise<any> {
