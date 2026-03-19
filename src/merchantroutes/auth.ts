@@ -1279,7 +1279,7 @@ router.put('/profile', authMiddleware, validateRequest(updateProfileSchema), asy
  *         description: Rate limit exceeded
  */
 // POST /api/auth/resend-verification
-router.post('/resend-verification', /* authLimiter, */ validateRequest(resendVerificationSchema), async (req, res) => {
+router.post('/resend-verification', authLimiter, validateRequest(resendVerificationSchema), async (req, res) => {
   try {
     const { email } = req.body;
 

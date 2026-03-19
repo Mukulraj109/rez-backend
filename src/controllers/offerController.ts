@@ -107,10 +107,11 @@ export const getOffers = asyncHandler(async (req: Request, res: Response) => {
       filter.cashbackPercentage = { $gte: Number(minCashback) };
     }
 
-    // Sort options
+    // Sort options (whitelist to prevent injection)
+    const ALLOWED_SORT_FIELDS = ['createdAt', 'title', 'cashbackPercentage', 'metadata.priority', 'discountedPrice', 'engagement.viewCount'] as const;
+    const safeSortBy = validateSortField(sortBy as string, ALLOWED_SORT_FIELDS, 'createdAt');
     const sortOptions: any = {};
-    const sortField = sortBy as string;
-    sortOptions[sortField] = order === 'asc' ? 1 : -1;
+    sortOptions[safeSortBy] = order === 'asc' ? 1 : -1;
 
     // Pagination
     const pageNum = Math.max(1, Number(page));
@@ -166,7 +167,7 @@ export const getOffers = asyncHandler(async (req: Request, res: Response) => {
 
     // Cache key for public (non-user-specific) offer queries
     const cacheKey = !userId
-      ? `offers:${region || 'all'}:${category || ''}:${type || ''}:${sortField}:${order}:${pageNum}:${limitNum}`
+      ? `offers:${region || 'all'}:${category || ''}:${type || ''}:${safeSortBy}:${order}:${pageNum}:${limitNum}`
       : null;
 
     // Try cache for anonymous/public requests
@@ -205,7 +206,8 @@ export const getOffers = asyncHandler(async (req: Request, res: Response) => {
  * Get featured offers
  */
 export const getFeaturedOffers = asyncHandler(async (req: Request, res: Response) => {
-    const { limit = 10 } = req.query;
+    const { limit: rawLimit = 10 } = req.query;
+    const limit = Math.min(50, Math.max(1, Number(rawLimit) || 10));
 
     // Get region from header for filtering
     const regionHeader = req.headers['x-rez-region'] as string;
@@ -241,7 +243,7 @@ export const getFeaturedOffers = asyncHandler(async (req: Request, res: Response
 
     const offers = await Offer.find(filter)
     .sort({ 'metadata.priority': -1, createdAt: -1 })
-    .limit(Number(limit))
+    .limit(limit)
     .select('title subtitle image category type cashbackPercentage originalPrice discountedPrice store validity engagement metadata isFollowerExclusive exclusiveZone saleTag bogoType isFreeDelivery deliveryTime location createdAt')
     .populate('store.id', 'name logo rating')
     .lean();
@@ -256,7 +258,8 @@ export const getFeaturedOffers = asyncHandler(async (req: Request, res: Response
  * Get trending offers
  */
 export const getTrendingOffers = asyncHandler(async (req: Request, res: Response) => {
-    const { limit = 10 } = req.query;
+    const { limit: rawLimit = 10 } = req.query;
+    const limit = Math.min(50, Math.max(1, Number(rawLimit) || 10));
 
     const cacheKey = `offers:trending:${limit}`;
     const cached = await redisService.get<any>(cacheKey);
@@ -264,7 +267,7 @@ export const getTrendingOffers = asyncHandler(async (req: Request, res: Response
       return sendSuccess(res, cached);
     }
 
-    const offers = await Offer.findTrendingOffers(Number(limit));
+    const offers = await Offer.findTrendingOffers(limit);
 
     redisService.set(cacheKey, offers, 300).catch((err) => logger.warn('[OfferCtrl] Redis cache set failed for trending offers', { error: err.message })); // 5min cache
 
@@ -408,8 +411,24 @@ export const getOfferById = asyncHandler(async (req: Request, res: Response) => 
       redisService.set(cacheKey, offer, 300).catch((err) => logger.warn('[OfferCtrl] Redis cache set failed for offer detail', { offerId: id, error: err.message }));
     }
 
-    // Check if offer is follower-exclusive and user has access
+    // Check zone-exclusive access
     const userId = req.user?.id;
+
+    if (offer.exclusiveZone && offer.exclusiveZone !== '') {
+      if (!userId) {
+        return sendError(res, 'Sign in to access exclusive offers', 401);
+      }
+      const priv = await privilegeResolutionService.resolve(userId);
+      const hasAccess = priv.activeZones.includes(offer.exclusiveZone);
+      if (!hasAccess) {
+        return sendError(res, 'You don\'t have access to this exclusive offer', 403, {
+          requiresVerification: true,
+          zone: offer.exclusiveZone,
+        });
+      }
+    }
+
+    // Check if offer is follower-exclusive and user has access
     const offerStoreId = (offer.store as any)?._id?.toString() || (offer.store as any)?.id?.toString() || offer.store?.toString();
 
     if (offer.isFollowerExclusive && userId) {

@@ -276,6 +276,7 @@ export function registerRoutes(app: Express): void {
   const API_PREFIX = process.env.API_PREFIX || '/api';
 
   // ── User API Routes ──
+  app.use(API_PREFIX, generalLimiter); // Global rate limit for all user routes
   app.use(`${API_PREFIX}/user/auth`, authRoutes);
   app.use(`${API_PREFIX}/products`, productRoutes);
   app.use(`${API_PREFIX}/cart`, cartRoutes);
