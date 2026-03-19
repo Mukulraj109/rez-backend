@@ -497,7 +497,7 @@ class FlashSaleService {
             u.phoneNumber,
             `Flash Sale: ${flashSale.title}`,
             `${flashSale.discountPercentage}% off! Hurry, limited stock available. Ends ${new Date(flashSale.endTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}.`
-          ).catch(() => {}) // swallow individual failures
+          ).catch((err) => logger.error('[FlashSaleService] Flash sale SMS notification failed', { error: err.message, phone: u.phoneNumber })) // log individual failures
         );
 
       await Promise.all(smsPromises);

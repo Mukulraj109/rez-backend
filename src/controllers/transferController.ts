@@ -523,7 +523,7 @@ async function executeTransfer(transferId: string): Promise<{ success: boolean; 
       await Promise.all([
         invalidateWalletCache(String(transfer.sender)),
         invalidateWalletCache(String(transfer.recipient)),
-      ]).catch(() => {});
+      ]).catch((err) => logger.error('[TransferCtrl] Wallet cache invalidation failed after transfer', { error: err.message, transferId: transfer._id }));
 
       // Audit logs (fire-and-forget)
       logTransaction({

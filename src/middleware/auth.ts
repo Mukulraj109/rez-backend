@@ -236,7 +236,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
           const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '';
           deviceFingerprintService.registerDevice(
             deviceHash, parts.slice(1).join(' ') || '', '', platform, String(user._id), ip
-          ).catch(() => {});
+          ).catch((err) => logger.error('[Auth] Device fingerprint registration failed', { error: err.message, userId: user._id }));
         } catch (deviceErr) {
           // Graceful degradation — don't block auth on device service failure
           logger.warn('[AUTH] Device fingerprint check failed, allowing request', { error: (deviceErr as Error).message });

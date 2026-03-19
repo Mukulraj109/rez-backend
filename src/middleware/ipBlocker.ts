@@ -139,7 +139,7 @@ export const clearViolations = async (ip: string): Promise<void> => {
  */
 export const recordRateLimitViolation = (req: Request, res: Response, next: NextFunction) => {
   const clientIP = req.ip || req.socket.remoteAddress || 'unknown';
-  recordViolation(clientIP, 'Rate Limit Exceeded').catch(() => {});
+  recordViolation(clientIP, 'Rate Limit Exceeded').catch((err) => logger.error('[IPBlocker] Rate limit violation recording failed', { error: err.message, clientIP }));
   next();
 };
 

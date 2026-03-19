@@ -10,6 +10,7 @@ import coinService from '../services/coinService';
 import { withCache } from '../utils/cacheHelper';
 import { CacheTTL } from '../config/redis';
 import { asyncHandler } from '../utils/asyncHandler';
+import { validateSortField } from '../utils/sanitize';
 
 /**
  * GET /api/vouchers/brands
@@ -46,9 +47,11 @@ export const getVoucherBrands = asyncHandler(async (req: Request, res: Response)
       filter.$text = { $search: search as string };
     }
 
-    // Sort options
+    // Sort options (whitelist to prevent sort field injection)
+    const ALLOWED_SORT_FIELDS = ['name', 'cashbackRate', 'rating', 'ratingCount', 'createdAt', 'updatedAt'] as const;
+    const safeSortBy = validateSortField(sortBy as string, ALLOWED_SORT_FIELDS, 'name');
     const sortOptions: any = {};
-    sortOptions[sortBy as string] = order === 'asc' ? 1 : -1;
+    sortOptions[safeSortBy] = order === 'asc' ? 1 : -1;
 
     // Pagination
     const pageNum = Math.max(1, Number(page));

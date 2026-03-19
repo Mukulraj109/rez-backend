@@ -69,7 +69,7 @@ export const submitPost = asyncHandler(async (req: Request, res: Response) => {
     if (orderId) {
       const isMongoOrderId = /^[a-f\d]{24}$/i.test(orderId);
       const existingForOrder = isMongoOrderId
-        ? await SocialMediaPost.findOne({ user: userId, order: orderId })
+        ? await SocialMediaPost.findOne({ user: userId, order: orderId }).lean()
         : await SocialMediaPost.findOne({ user: userId, 'metadata.storePaymentId': orderId }).lean();
       if (existingForOrder) {
         logger.warn('⚠️ [FRAUD] User tried to submit same order/payment twice:', { userId, orderId });
@@ -298,7 +298,7 @@ export const submitPostWithMedia = asyncHandler(async (req: Request, res: Respon
     if (orderId) {
       const isMongoOrderId = /^[a-f\d]{24}$/i.test(orderId);
       const existingForOrder = isMongoOrderId
-        ? await SocialMediaPost.findOne({ user: userId, order: orderId })
+        ? await SocialMediaPost.findOne({ user: userId, order: orderId }).lean()
         : await SocialMediaPost.findOne({ user: userId, 'metadata.storePaymentId': orderId }).lean();
       if (existingForOrder) {
         logger.warn('⚠️ [FRAUD] User tried to submit same order/payment twice:', { userId, orderId });

@@ -6,6 +6,7 @@ import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import mongoose from 'mongoose';
 import { logger } from '../config/logger';
 import { asyncHandler } from '../utils/asyncHandler';
+import { validateSortField } from '../utils/sanitize';
 
 /**
  * GET /api/discounts
@@ -111,9 +112,11 @@ export const getDiscounts = asyncHandler(async (req: Request, res: Response) => 
       ];
     }
 
-    // Sort options
+    // Sort options (whitelist to prevent sort field injection)
+    const ALLOWED_SORT_FIELDS = ['createdAt', 'name', 'discountValue', 'code', 'endDate'] as const;
+    const safeSortBy = validateSortField(sortBy as string, ALLOWED_SORT_FIELDS, 'createdAt');
     const sortOptions: any = {};
-    sortOptions[sortBy as string] = order === 'asc' ? 1 : -1;
+    sortOptions[safeSortBy] = order === 'asc' ? 1 : -1;
 
     // Pagination
     const pageNum = Math.max(1, Number(page));

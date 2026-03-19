@@ -588,7 +588,7 @@ class SpecialProgramService {
         },
       },
       { upsert: true, new: true }
-    );
+    ).lean();
 
     // Invalidate user membership cache
     this.invalidateUserMembershipCache(userId);
@@ -885,7 +885,7 @@ class SpecialProgramService {
         },
       },
       { new: true }
-    );
+    ).lean();
 
     if (membership) {
       this.invalidateUserMembershipCache(userId);

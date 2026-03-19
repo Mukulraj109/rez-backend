@@ -127,7 +127,7 @@ class SocialImpactService {
     }
 
     return {
-      ...event.toObject(),
+      ...event,
       merchantStore: merchantStore || null,
       isEnrolled: !!enrollment,
       enrollmentStatus: enrollment?.status || null,
@@ -158,7 +158,7 @@ class SocialImpactService {
       }
     }
 
-    // Check if already registered
+    // Check if already registered — NOT lean because .save() is called on re-register
     const existing = await SocialImpactEnrollment.findOne({
       user: userId,
       program: eventId
@@ -655,7 +655,7 @@ class SocialImpactService {
       user: userId,
       program: eventId,
       status: 'registered'
-    }).lean();
+    });
     if (!enrollment) {
       throw new Error('No active registration found');
     }
@@ -762,7 +762,7 @@ class SocialImpactService {
       user: userId,
       program: eventId,
       status: 'registered'
-    }).lean();
+    });
     if (!enrollment) {
       throw new Error('Not registered for this event');
     }

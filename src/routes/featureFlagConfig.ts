@@ -41,7 +41,7 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
     };
 
     // Cache result
-    await redisService.set(cacheKey, result, CACHE_TTL).catch(() => {});
+    await redisService.set(cacheKey, result, CACHE_TTL).catch((err) => logger.warn('[FeatureFlag] Cache set for feature flags failed', { error: err.message }));
 
     res.json({ success: true, data: result });
 }));

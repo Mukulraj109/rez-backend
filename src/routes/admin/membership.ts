@@ -291,7 +291,7 @@ router.post('/subscribers/:userId/override', asyncHandler(async (req: Request, r
     subscription.tier = newTier as any;
     subscription.benefits = newBenefits;
     await subscription.save();
-    privilegeResolutionService.invalidate(userId).catch(() => {});
+    privilegeResolutionService.invalidate(userId).catch((err) => logger.error('[MembershipAdmin] Privilege cache invalidation failed after tier override', { error: err.message, userId }));
 
     // Audit log
     await subscriptionAuditService.logChange({

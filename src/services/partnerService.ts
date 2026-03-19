@@ -157,7 +157,7 @@ class PartnerService {
           },
         });
         // Invalidate partner earnings cache
-        invalidatePartnerEarningsCache(userId).catch(() => {});
+        invalidatePartnerEarningsCache(userId).catch((err) => logger.error('[PartnerService] Partner earnings cache invalidation failed after level up', { error: err.message, userId }));
         logger.info(`[LEVEL UP] Upgraded Level ${oldLevel} → ${newLevel}, Added ${levelBonus} to wallet`);
       } catch (error) {
         logger.error('[LEVEL UP] Error adding bonus to wallet:', error);
@@ -262,7 +262,7 @@ class PartnerService {
       // Commit transaction
       await session.commitTransaction();
       // Invalidate partner earnings cache after successful commit
-      invalidatePartnerEarningsCache(userId).catch(() => {});
+      invalidatePartnerEarningsCache(userId).catch((err) => logger.error('[PartnerService] Partner earnings cache invalidation failed after milestone claim', { error: err.message, userId }));
       logger.info(`✅ [MILESTONE CLAIM] Successfully claimed milestone ${orderCount} for user ${userId}`);
 
       return partner;
@@ -369,7 +369,7 @@ class PartnerService {
       // Commit transaction
       await session.commitTransaction();
       // Invalidate partner earnings cache after successful commit
-      invalidatePartnerEarningsCache(userId).catch(() => {});
+      invalidatePartnerEarningsCache(userId).catch((err) => logger.error('[PartnerService] Partner earnings cache invalidation failed after task claim', { error: err.message, userId }));
       logger.info(`✅ [TASK CLAIM] Successfully claimed task ${taskTitle} for user ${userId}`);
 
       return partner;
@@ -502,7 +502,7 @@ class PartnerService {
       // Commit transaction
       await session.commitTransaction();
       // Invalidate partner earnings cache after successful commit
-      invalidatePartnerEarningsCache(userId).catch(() => {});
+      invalidatePartnerEarningsCache(userId).catch((err) => logger.error('[PartnerService] Partner earnings cache invalidation failed after jackpot claim', { error: err.message, userId }));
       logger.info(`✅ [JACKPOT CLAIM] Successfully claimed jackpot ₹${spendAmount} for user ${userId}`);
 
       return partner;
@@ -848,9 +848,33 @@ class PartnerService {
     
     const daysRemaining = partner.getDaysRemaining();
     const ordersNeeded = partner.getOrdersNeededForNextLevel();
-    
-    // Calculate profile completion from USER data and sync profile task
-    const profileCompletion = await this.calculateProfileCompletion(userId);
+
+    // Fetch all independent data in parallel for better performance
+    const [user, reviewCount, shareCount] = await Promise.all([
+      User.findById(userId).select('profile email phoneNumber referral').lean(),
+      Order.countDocuments({
+        user: userId,
+        'rating.rating': { $exists: true, $ne: null }
+      }),
+      (async () => {
+        const { Activity } = require('../models/Activity');
+        return Activity.countDocuments({ user: userId, type: 'share' });
+      })(),
+    ]);
+
+    // Calculate profile completion inline (avoids redundant User.findById)
+    let profileCompletion = 0;
+    if (user) {
+      let completed = 0;
+      const total = 4;
+      if (user.profile?.firstName && user.profile.firstName.trim().length > 0) completed++;
+      if (user.email && user.email.includes('@')) completed++;
+      if (user.profile?.avatar && user.profile.avatar.trim().length > 0) completed++;
+      if (user.phoneNumber) completed++;
+      profileCompletion = Math.round((completed / total) * 100);
+    }
+
+    // Sync profile task
     const profileTask = partner.tasks.find((t: any) => t.type === 'profile');
     if (profileTask) {
       profileTask.progress.current = profileCompletion >= 100 ? 1 : 0;
@@ -859,14 +883,9 @@ class PartnerService {
         profileTask.completedAt = new Date();
       }
     }
-    
+
     // Sync review task with actual reviews count
     try {
-      const { Order } = require('../models/Order');
-      const reviewCount = await Order.countDocuments({
-        user: userId,
-        'rating.rating': { $exists: true, $ne: null }
-      });
       const reviewTask = partner.tasks.find((t: any) => t.type === 'review');
       if (reviewTask) {
         reviewTask.progress.current = Math.min(reviewCount, reviewTask.progress.target);
@@ -879,10 +898,9 @@ class PartnerService {
     } catch (error) {
       logger.error('Error syncing review task:', error);
     }
-    
+
     // Sync referral task with actual referrals count
     try {
-      const user = await User.findById(userId).lean();
       const referralCount = user?.referral?.totalReferrals || 0;
       const referralTask = partner.tasks.find((t: any) => t.type === 'referral');
       if (referralTask) {
@@ -896,14 +914,9 @@ class PartnerService {
     } catch (error) {
       logger.error('Error syncing referral task:', error);
     }
-    
+
     // Sync social task with actual shares count
     try {
-      const { Activity } = require('../models/Activity');
-      const shareCount = await Activity.countDocuments({
-        user: userId,
-        type: 'share'
-      });
       const socialTask = partner.tasks.find((t: any) => t.type === 'social');
       if (socialTask) {
         socialTask.progress.current = Math.min(shareCount, socialTask.progress.target);

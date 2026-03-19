@@ -7,6 +7,7 @@ import { MerchantUser } from '../models/MerchantUser';
 import { sendSuccess, sendNotFound, sendError } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
+import { validateSortField } from '../utils/sanitize';
 import { getIO } from '../config/socket';
 import { SocketRoom } from '../types/socket';
 
@@ -159,16 +160,18 @@ export const getMerchantNotifications = asyncHandler(async (req: Request, res: R
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    // Build sort object
+    // Build sort object (whitelist to prevent sort field injection)
+    const ALLOWED_SORT_FIELDS = ['createdAt', 'updatedAt', 'priority', 'type', 'category'] as const;
+    const safeSortBy = validateSortField(sortBy as string, ALLOWED_SORT_FIELDS, 'createdAt');
     const sortOrder = order === 'desc' ? -1 : 1;
     const sortObj: any = {};
 
-    if (sortBy === 'priority') {
+    if (safeSortBy === 'priority') {
       // Custom priority sorting: urgent > high > medium > low
       sortObj.priority = sortOrder;
       sortObj.createdAt = -1; // Secondary sort by date
     } else {
-      sortObj[sortBy as string] = sortOrder;
+      sortObj[safeSortBy] = sortOrder;
     }
 
     const notifications = await Notification.find(query)

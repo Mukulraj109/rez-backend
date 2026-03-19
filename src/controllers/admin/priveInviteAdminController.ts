@@ -111,7 +111,7 @@ export const grantAccess = asyncHandler(async (req: Request, res: Response) => {
       await access.save();
     }
 
-    privilegeResolutionService.invalidate(targetUser._id.toString()).catch(() => {});
+    privilegeResolutionService.invalidate(targetUser._id.toString()).catch((err) => logger.error('[AdminPriveInvite] Privilege cache invalidation failed after granting access', { error: err.message, userId: targetUser._id }));
     return sendSuccess(res, { access }, 'Privé access granted successfully');
   } catch (error: any) {
     logger.error('[AdminPriveInvite] Error granting access:', error);
@@ -139,15 +139,15 @@ export const revokeAccess = asyncHandler(async (req: Request, res: Response) => 
 
     if (action === 'suspend') {
       await priveAccessService.adminSuspendAccess(targetUserId, adminObjId, reason);
-      privilegeResolutionService.invalidate(userId).catch(() => {});
+      privilegeResolutionService.invalidate(userId).catch((err) => logger.error('[AdminPriveInvite] Privilege cache invalidation failed after suspending access', { error: err.message, userId }));
       return sendSuccess(res, null, 'Privé access suspended');
     } else if (action === 'remove_whitelist') {
       await priveAccessService.removeWhitelist(targetUserId, adminObjId, reason);
-      privilegeResolutionService.invalidate(userId).catch(() => {});
+      privilegeResolutionService.invalidate(userId).catch((err) => logger.error('[AdminPriveInvite] Privilege cache invalidation failed after whitelist removal', { error: err.message, userId }));
       return sendSuccess(res, null, 'Whitelist removed');
     } else {
       await priveAccessService.adminRevokeAccess(targetUserId, adminObjId, reason);
-      privilegeResolutionService.invalidate(userId).catch(() => {});
+      privilegeResolutionService.invalidate(userId).catch((err) => logger.error('[AdminPriveInvite] Privilege cache invalidation failed after revoking access', { error: err.message, userId }));
       return sendSuccess(res, null, 'Privé access revoked');
     }
   } catch (error: any) {

@@ -81,10 +81,10 @@ class WalletService {
       );
 
       // 4. Fire-and-forget audit log
-      this.logAudit(userId, 'coin_credit', amount, referenceId, description).catch(() => {});
+      this.logAudit(userId, 'coin_credit', amount, referenceId, description).catch((err) => logger.error('[WalletService] Audit log for coin_credit failed', { error: err.message, userId, referenceId }));
 
       // 5. Invalidate cache
-      invalidateWalletCache(userId).catch(() => {});
+      invalidateWalletCache(userId).catch((err) => logger.warn('[WalletService] Wallet cache invalidation failed after credit', { error: err.message, userId }));
 
       walletTransactionTotal.inc({ operation: 'credit', coinType, status: 'success' });
 
@@ -161,10 +161,10 @@ class WalletService {
       );
 
       // 4. Fire-and-forget audit log
-      this.logAudit(userId, 'coin_deduction', amount, referenceId, description).catch(() => {});
+      this.logAudit(userId, 'coin_deduction', amount, referenceId, description).catch((err) => logger.error('[WalletService] Audit log for coin_deduction failed', { error: err.message, userId, referenceId }));
 
       // 5. Invalidate cache
-      invalidateWalletCache(userId).catch(() => {});
+      invalidateWalletCache(userId).catch((err) => logger.warn('[WalletService] Wallet cache invalidation failed after deduction', { error: err.message, userId }));
 
       walletTransactionTotal.inc({ operation: 'debit', coinType, status: 'success' });
 

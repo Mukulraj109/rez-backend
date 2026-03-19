@@ -252,7 +252,7 @@ class RewardEngine {
         idempotencyKey,
         duplicate: true,
       };
-      redisService.set(dupeKey, JSON.stringify(dupeResult), 300).catch(() => {});
+      redisService.set(dupeKey, JSON.stringify(dupeResult), 300).catch((err) => logger.warn('[RewardEngine] Redis cache set failed for duplicate result', { error: err.message, idempotencyKey }));
       return dupeResult;
     }
 
@@ -316,10 +316,10 @@ class RewardEngine {
           multiplierBonus = bonus;
 
           for (const pb of programBonuses) {
-            await specialProgramService.incrementMultiplierBonus(userId, pb.slug, pb.bonus).catch(() => {});
+            await specialProgramService.incrementMultiplierBonus(userId, pb.slug, pb.bonus).catch((err) => logger.error('[RewardEngine] Increment multiplier bonus failed', { error: err.message, userId, slug: pb.slug }));
           }
         }
-        await specialProgramService.incrementMonthlyEarnings(userId, adjustedAmount + multiplierBonus).catch(() => {});
+        await specialProgramService.incrementMonthlyEarnings(userId, adjustedAmount + multiplierBonus).catch((err) => logger.error('[RewardEngine] Increment monthly earnings failed', { error: err.message, userId }));
       } catch (err) {
         logger.error('Multiplier bonus failed (non-blocking)', err as Error, { userId, source });
       }
@@ -337,7 +337,7 @@ class RewardEngine {
 
     // Step 9: Update UserLoyalty categoryCoins (non-blocking)
     if (category) {
-      this.updateUserLoyaltyCategory(userId, category, adjustedAmount).catch(() => {});
+      this.updateUserLoyaltyCategory(userId, category, adjustedAmount).catch((err) => logger.error('[RewardEngine] UserLoyalty category update failed', { error: err.message, userId, category }));
     }
 
     // Step 10: Emit REWARD_ISSUED event
@@ -379,7 +379,7 @@ class RewardEngine {
       idempotencyKey,
     };
 
-    redisService.set(dupeKey, JSON.stringify(rewardResult), 300).catch(() => {});
+    redisService.set(dupeKey, JSON.stringify(rewardResult), 300).catch((err) => logger.warn('[RewardEngine] Redis cache set failed for reward result', { error: err.message, idempotencyKey }));
 
     return rewardResult;
   }
@@ -602,7 +602,7 @@ class RewardEngine {
         amount,
         referenceId,
         referenceModel,
-      }).catch(() => {});
+      }).catch((err) => logger.error('[RewardEngine] Merchant liability recording failed', { error: err.message, merchantId }));
     });
   }
 

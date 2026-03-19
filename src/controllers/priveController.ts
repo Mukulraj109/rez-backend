@@ -879,7 +879,7 @@ export const getPriveOfferById = asyncHandler(async (req: Request, res: Response
     }
 
     // Increment views atomically (fire-and-forget)
-    PriveOffer.updateOne({ _id: id }, { $inc: { views: 1 } }).exec().catch(() => {});
+    PriveOffer.updateOne({ _id: id }, { $inc: { views: 1 } }).exec().catch((err) => logger.error('[PriveCtrl] Offer view increment failed', { error: err.message, offerId: id }));
 
     return res.status(200).json({
       success: true,
@@ -1625,7 +1625,7 @@ export const redeemCoins = asyncHandler(async (req: Request, res: Response) => {
     });
 
     // Invalidate wallet cache after mutation
-    invalidateWalletCache(userId).catch(() => {});
+    invalidateWalletCache(userId).catch((err) => logger.error('[PriveCtrl] Wallet cache invalidation failed after coin redemption', { error: err.message, userId }));
 
     return res.status(200).json({
       success: true,

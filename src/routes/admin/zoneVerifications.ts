@@ -234,7 +234,7 @@ router.patch('/:id/review', asyncHandler(async (req: Request, res: Response) => 
     }
 
     await verification.save();
-    privilegeResolutionService.invalidate(verification.userId.toString()).catch(() => {});
+    privilegeResolutionService.invalidate(verification.userId.toString()).catch((err) => logger.error('[ZoneVerifications] Privilege cache invalidation failed after verification update', { error: err.message, userId: verification.userId }));
 
     // If approved, update user's verifications + identity fields
     if (status === 'approved') {

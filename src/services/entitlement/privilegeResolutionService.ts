@@ -111,7 +111,7 @@ class PrivilegeResolutionService {
     };
 
     // Cache result (fire-and-forget)
-    redisService.set(cacheKey, result, CACHE_TTL).catch(() => {});
+    redisService.set(cacheKey, result, CACHE_TTL).catch((err) => logger.warn('[PrivilegeResolution] Cache set for resolved privileges failed', { error: err.message }));
 
     return result;
   }

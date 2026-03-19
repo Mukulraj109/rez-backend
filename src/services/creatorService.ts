@@ -86,7 +86,8 @@ export async function applyAsCreator(
   }
 
   // Check if already applied
-  const existing = await CreatorProfile.findOne({ user: userId }).lean();
+  // NOTE: Cannot use .lean() — rejected re-applications call .save() below
+  const existing = await CreatorProfile.findOne({ user: userId });
   if (existing) {
     if (existing.status === 'approved') throw new Error('You are already an approved creator');
     if (existing.status === 'pending') throw new Error('Your application is already under review');
@@ -1382,13 +1383,15 @@ export async function trackPickClick(pickId: string, viewerUserId?: string): Pro
 }
 
 export async function togglePickLike(pickId: string, userId: string): Promise<boolean> {
-  const pick = await CreatorPick.findById(pickId).lean();
+  // NOTE: Cannot use .lean() — toggleLike is an instance method
+  const pick = await CreatorPick.findById(pickId);
   if (!pick) throw new Error('Pick not found');
   return pick.toggleLike(new mongoose.Types.ObjectId(userId));
 }
 
 export async function togglePickBookmark(pickId: string, userId: string): Promise<boolean> {
-  const pick = await CreatorPick.findById(pickId).lean();
+  // NOTE: Cannot use .lean() — toggleBookmark is an instance method
+  const pick = await CreatorPick.findById(pickId);
   if (!pick) throw new Error('Pick not found');
   return pick.toggleBookmark(new mongoose.Types.ObjectId(userId));
 }

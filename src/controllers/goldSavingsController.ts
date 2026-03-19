@@ -191,7 +191,7 @@ export const buyGold = asyncHandler(async (req: Request, res: Response) => {
     await session.commitTransaction();
 
     // Invalidate cache
-    await redisService.delPattern(`gold:holding:${userId}:*`).catch(() => {});
+    await redisService.delPattern(`gold:holding:${userId}:*`).catch((err) => logger.warn('[Gold] Cache invalidation for gold holding after buy failed', { error: err.message }));
 
     logger.info(`[GOLD] Buy completed: user=${userId}, grams=${grams}, amount=${amount}, price=${pricePerGram}`);
 
@@ -304,7 +304,7 @@ export const sellGold = asyncHandler(async (req: Request, res: Response) => {
     await session.commitTransaction();
 
     // Invalidate cache
-    await redisService.delPattern(`gold:holding:${userId}:*`).catch(() => {});
+    await redisService.delPattern(`gold:holding:${userId}:*`).catch((err) => logger.warn('[Gold] Cache invalidation for gold holding after sell failed', { error: err.message }));
 
     logger.info(`[GOLD] Sell completed: user=${userId}, grams=${grams}, amount=${amount}, price=${pricePerGram}`);
 
@@ -376,7 +376,7 @@ export const setGoldPrice = asyncHandler(async (req: Request, res: Response) => 
   });
 
   // Invalidate price cache for all regions
-  await redisService.delPattern(`${GOLD_PRICE_CACHE_KEY}:*`).catch(() => {});
+  await redisService.delPattern(`${GOLD_PRICE_CACHE_KEY}:*`).catch((err) => logger.warn('[Gold] Cache invalidation for gold price failed', { error: err.message }));
 
   logger.info(`[GOLD ADMIN] New gold price set: ${pricePerGram} ${currency || 'INR'} region=${region || 'global'}`);
 

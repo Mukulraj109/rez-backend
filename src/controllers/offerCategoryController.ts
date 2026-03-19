@@ -5,6 +5,7 @@ import OfferCategory from '../models/OfferCategory';
 import Offer from '../models/Offer';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import { asyncHandler } from '../utils/asyncHandler';
+import { validateSortField } from '../utils/sanitize';
 
 /**
  * GET /api/offer-categories
@@ -103,13 +104,15 @@ export const getOffersByCategorySlug = asyncHandler(async (req: Request, res: Re
       'validity.endDate': { $gte: new Date() }
     };
 
-    // Sort options
+    // Sort options (whitelist to prevent sort field injection)
+    const ALLOWED_SORT_FIELDS = ['createdAt', 'title', 'metadata.priority', 'cashbackPercentage', 'distance'] as const;
+    const safeSortBy = validateSortField(sortBy as string, ALLOWED_SORT_FIELDS, 'createdAt');
     const sortOptions: any = {};
-    if (sortBy === 'distance' && lat && lng) {
+    if (safeSortBy === 'distance' && lat && lng) {
       // For distance sorting, we'll sort after calculating distances
       sortOptions['metadata.priority'] = -1;
     } else {
-      sortOptions[sortBy as string] = order === 'asc' ? 1 : -1;
+      sortOptions[safeSortBy] = order === 'asc' ? 1 : -1;
     }
 
     // Pagination

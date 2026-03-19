@@ -106,7 +106,7 @@ export async function runSubscriptionExpiry(): Promise<void> {
     logger.error('Subscription expiry job failed:', error);
   } finally {
     if (lockToken) {
-      await redisService.releaseLock(lockKey, lockToken).catch(() => {});
+      await redisService.releaseLock(lockKey, lockToken).catch((err) => logger.warn('[SubscriptionExpiryJob] Lock release failed', { error: err.message }));
     }
   }
 }

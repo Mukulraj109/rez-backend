@@ -144,7 +144,7 @@ router.put('/:id', requireSeniorAdmin, asyncHandler(async (req: Request, res: Re
     req.params.id,
     { $set: value },
     { new: true }
-  );
+  ).lean();
 
   if (!category) {
     return res.status(404).json({ success: false, message: 'Category not found' });
@@ -572,7 +572,7 @@ router.post('/', requireSeniorAdmin, asyncHandler(async (req: Request, res: Resp
   }
 
   // Check slug uniqueness
-  const existingSlug = await Category.findOne({ slug: value.slug });
+  const existingSlug = await Category.findOne({ slug: value.slug }).lean();
   if (existingSlug) {
     return res.status(400).json({ success: false, message: `Slug "${value.slug}" is already in use` });
   }
@@ -604,7 +604,7 @@ router.post('/', requireSeniorAdmin, asyncHandler(async (req: Request, res: Resp
 // DELETE /admin/categories/:id - Delete category with safety checks (requires senior admin)
 // ============================================
 router.delete('/:id', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
-  const category = await Category.findById(req.params.id);
+  const category = await Category.findById(req.params.id).lean();
   if (!category) {
     return res.status(404).json({ success: false, message: 'Category not found' });
   }
@@ -685,7 +685,7 @@ const createSubcategorySchema = Joi.object({
 });
 
 router.post('/:id/subcategories', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
-  const parent = await Category.findById(req.params.id);
+  const parent = await Category.findById(req.params.id).lean();
   if (!parent) {
     return res.status(404).json({ success: false, message: 'Parent category not found' });
   }
@@ -711,7 +711,7 @@ router.post('/:id/subcategories', requireSeniorAdmin, asyncHandler(async (req: R
   }
 
   // Check slug uniqueness
-  const existingSlug = await Category.findOne({ slug: value.slug });
+  const existingSlug = await Category.findOne({ slug: value.slug }).lean();
   if (existingSlug) {
     return res.status(400).json({ success: false, message: `Slug "${value.slug}" is already in use` });
   }
@@ -770,7 +770,7 @@ router.put('/:id/subcategories/:subId', requireSeniorAdmin, asyncHandler(async (
   }
 
   // Verify subcategory exists and belongs to parent
-  const subcategory = await Category.findById(req.params.subId);
+  const subcategory = await Category.findById(req.params.subId).lean();
   if (!subcategory) {
     return res.status(404).json({ success: false, message: 'Subcategory not found' });
   }
@@ -780,7 +780,7 @@ router.put('/:id/subcategories/:subId', requireSeniorAdmin, asyncHandler(async (
 
   // If slug is being changed, check uniqueness
   if (value.slug && value.slug !== subcategory.slug) {
-    const existingSlug = await Category.findOne({ slug: value.slug, _id: { $ne: req.params.subId } });
+    const existingSlug = await Category.findOne({ slug: value.slug, _id: { $ne: req.params.subId } }).lean();
     if (existingSlug) {
       return res.status(400).json({ success: false, message: `Slug "${value.slug}" is already in use` });
     }
@@ -790,7 +790,7 @@ router.put('/:id/subcategories/:subId', requireSeniorAdmin, asyncHandler(async (
     req.params.subId,
     { $set: value },
     { new: true }
-  );
+  ).lean();
 
   res.json({ success: true, data: { subcategory: updated }, message: 'Subcategory updated successfully' });
 }));
@@ -804,7 +804,7 @@ router.delete('/:id/subcategories/:subId', requireSeniorAdmin, asyncHandler(asyn
     return res.status(400).json({ success: false, message: 'Invalid subcategory ID format' });
   }
 
-  const subcategory = await Category.findById(req.params.subId);
+  const subcategory = await Category.findById(req.params.subId).lean();
   if (!subcategory) {
     return res.status(404).json({ success: false, message: 'Subcategory not found' });
   }

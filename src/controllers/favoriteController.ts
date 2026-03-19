@@ -140,7 +140,7 @@ export const toggleFavorite = asyncHandler(async (req: Request, res: Response) =
     }
 
     // Invalidate favorites cache for this user
-    redisService.delPattern(`favorites:user:${userId}:*`).catch(() => {});
+    redisService.delPattern(`favorites:user:${userId}:*`).catch((err) => logger.warn('[Favorite] Cache invalidation for user favorites failed', { error: err.message }));
 
     sendSuccess(res, {
       isFavorited,
@@ -179,7 +179,7 @@ export const getUserFavorites = asyncHandler(async (req: Request, res: Response)
       pagination: result.pagination
     };
 
-    redisService.set(cacheKey, data, 60).catch(() => {}); // 60s cache
+    redisService.set(cacheKey, data, 60).catch((err) => logger.warn('[Favorite] Cache set for user favorites list failed', { error: err.message })); // 60s cache
 
     sendSuccess(res, data);
 

@@ -59,7 +59,7 @@ export const getBillTypes = asyncHandler(async (req: Request, res: Response) => 
     providerCount: countMap[type] || 0,
   }));
 
-  await redisService.set(cacheKey, types, 300).catch(() => {});
+  await redisService.set(cacheKey, types, 300).catch((err) => logger.warn('[BillPayment] Cache set for bill types failed', { error: err.message }));
 
   sendSuccess(res, types);
 });
@@ -111,7 +111,7 @@ export const getProviders = asyncHandler(async (req: Request, res: Response) => 
     },
   };
 
-  await redisService.set(cacheKey, data, 300).catch(() => {});
+  await redisService.set(cacheKey, data, 300).catch((err) => logger.warn('[BillPayment] Cache set for providers failed', { error: err.message }));
 
   sendSuccess(res, data);
 });
@@ -218,7 +218,7 @@ export const payBill = asyncHandler(async (req: Request, res: Response) => {
   logger.info(`[BILL_PAYMENT] Payment completed: ${transactionRef}, user=${req.user._id}, amount=${amount}, cashback=${cashbackAmount}`);
 
   // Invalidate history cache
-  await redisService.delPattern(`bill-payments:history:${req.user._id}:*`).catch(() => {});
+  await redisService.delPattern(`bill-payments:history:${req.user._id}:*`).catch((err) => logger.warn('[BillPayment] Cache invalidation for payment history failed', { error: err.message }));
 
   // Populate provider for response
   const populated = await BillPayment.findById(payment._id)
@@ -275,7 +275,7 @@ export const getHistory = asyncHandler(async (req: Request, res: Response) => {
     },
   };
 
-  await redisService.set(cacheKey, data, 60).catch(() => {});
+  await redisService.set(cacheKey, data, 60).catch((err) => logger.warn('[BillPayment] Cache set for payment history failed', { error: err.message }));
 
   sendSuccess(res, data);
 });

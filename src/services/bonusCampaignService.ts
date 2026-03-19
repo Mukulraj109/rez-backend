@@ -576,7 +576,7 @@ async function creditRewardToWallet(
         amount: result.amount,
         referenceId: `bonus:${claimId}`,
         referenceModel: 'BonusClaim',
-      }).catch(() => {});
+      }).catch((err) => logger.error('[BonusCampaignService] Liability recording failed for bonus claim', { error: err.message, claimId }));
     });
   }
 

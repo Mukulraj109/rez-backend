@@ -16,6 +16,7 @@ import { Store } from '../../models/Store';
 import merchantWalletService from '../../services/merchantWalletService';
 import orderSocketService from '../../services/orderSocketService';
 import { logger } from '../../config/logger';
+import { validateSortField } from '../../utils/sanitize';
 
 /**
  * Transform a raw MongoDB order document into the shape the merchant frontend expects.
@@ -374,9 +375,11 @@ export const getMerchantOrders = asyncHandler(async (req: Request, res: Response
     // Calculate pagination
     const skip = (Number(page) - 1) * Number(limit);
 
-    // Build sort object
+    // Build sort object (whitelist to prevent sort field injection)
+    const ALLOWED_SORT_FIELDS = ['createdAt', 'updatedAt', 'status', 'orderNumber', 'payment.status', 'total'] as const;
+    const safeSortBy = validateSortField(sortBy as string, ALLOWED_SORT_FIELDS, 'createdAt');
     const sortObj: any = {};
-    sortObj[sortBy as string] = order === 'desc' ? -1 : 1;
+    sortObj[safeSortBy] = order === 'desc' ? -1 : 1;
 
     // Execute query with population
     const orders = await Order.find(query)

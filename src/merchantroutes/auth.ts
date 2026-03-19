@@ -668,7 +668,7 @@ router.post('/forgot-password', passwordResetLimiter, validateRequest(forgotPass
 // @route   POST /api/auth/reset-password/:token
 // @desc    Reset password with token
 // @access  Public
-router.post('/reset-password/:token', /* passwordResetLimiter, */ validateRequest(resetPasswordSchema), async (req, res) => {
+router.post('/reset-password/:token', passwordResetLimiter, validateRequest(resetPasswordSchema), async (req, res) => {
   try {
     const { token } = req.params;
     const { password } = req.body;
@@ -940,7 +940,7 @@ router.post('/logout', authMiddleware, async (req, res) => {
  *         description: Merchant not found
  */
 // POST /api/auth/refresh
-router.post('/refresh', /* authLimiter, */ validateRequest(refreshTokenSchema), async (req, res) => {
+router.post('/refresh', authLimiter, validateRequest(refreshTokenSchema), async (req, res) => {
   try {
     // Get token from header or body
     const authHeader = req.header('Authorization');

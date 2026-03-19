@@ -133,7 +133,7 @@ router.post(
       }
 
       // Verify store ownership
-      const store = await Store.findById(storeId);
+      const store = await Store.findById(storeId).lean();
       if (!store) {
         return sendNotFound(res, 'Store not found');
       }
@@ -175,7 +175,7 @@ router.post(
         storeId,
         category: category.toLowerCase(),
         deletedAt: { $exists: false },
-      }).sort({ order: -1 });
+      }).sort({ order: -1 }).lean();
 
       const itemOrder = order !== undefined ? parseInt(order) : (maxOrderItem?.order || 0) + 1;
 
@@ -300,7 +300,7 @@ router.post(
       }
 
       // Verify store ownership
-      const store = await Store.findById(storeId);
+      const store = await Store.findById(storeId).lean();
       if (!store) {
         return sendNotFound(res, 'Store not found');
       }
@@ -322,7 +322,7 @@ router.post(
         storeId,
         category: category.toLowerCase(),
         deletedAt: { $exists: false },
-      }).sort({ order: -1 });
+      }).sort({ order: -1 }).lean();
 
       let currentOrder = maxOrderItem?.order || 0;
 
@@ -455,7 +455,7 @@ router.get(
       const { category, type, limit = 50, offset = 0, sortBy = 'order', sortOrder = 'asc' } = req.query;
 
       // Verify store ownership
-      const store = await Store.findById(storeId);
+      const store = await Store.findById(storeId).lean();
       if (!store) {
         return sendNotFound(res, 'Store not found');
       }
@@ -486,7 +486,8 @@ router.get(
       const items = await StoreGallery.find(query)
         .sort(sort)
         .limit(parseInt(limit as string))
-        .skip(parseInt(offset as string));
+        .skip(parseInt(offset as string))
+        .lean();
 
       // Get total count
       const total = await StoreGallery.countDocuments(query);
@@ -565,7 +566,7 @@ router.get(
       const merchantId = req.merchantId!;
 
       // Verify store ownership
-      const store = await Store.findById(storeId);
+      const store = await Store.findById(storeId).lean();
       if (!store) {
         return sendNotFound(res, 'Store not found');
       }
@@ -655,7 +656,7 @@ router.get(
       const merchantId = req.merchantId!;
 
       // Verify store ownership
-      const store = await Store.findById(storeId);
+      const store = await Store.findById(storeId).lean();
       if (!store) {
         return sendNotFound(res, 'Store not found');
       }
@@ -668,7 +669,7 @@ router.get(
         _id: itemId,
         storeId,
         deletedAt: { $exists: false },
-      });
+      }).lean();
 
       if (!item) {
         return sendNotFound(res, 'Gallery item not found');
@@ -719,7 +720,7 @@ router.put(
       const { title, description, category, tags, order, isVisible, isCover } = req.body;
 
       // Verify store ownership
-      const store = await Store.findById(storeId);
+      const store = await Store.findById(storeId).lean();
       if (!store) {
         return sendNotFound(res, 'Store not found');
       }
@@ -804,7 +805,7 @@ router.put(
       const { items } = req.body;
 
       // Verify store ownership
-      const store = await Store.findById(storeId);
+      const store = await Store.findById(storeId).lean();
       if (!store) {
         return sendNotFound(res, 'Store not found');
       }
@@ -856,7 +857,7 @@ router.put(
       const { category } = req.body;
 
       // Verify store ownership
-      const store = await Store.findById(storeId);
+      const store = await Store.findById(storeId).lean();
       if (!store) {
         return sendNotFound(res, 'Store not found');
       }
@@ -924,7 +925,7 @@ router.delete(
       const merchantId = req.merchantId!;
 
       // Verify store ownership
-      const store = await Store.findById(storeId);
+      const store = await Store.findById(storeId).lean();
       if (!store) {
         return sendNotFound(res, 'Store not found');
       }
@@ -995,7 +996,7 @@ router.delete(
       const { itemIds } = req.body;
 
       // Verify store ownership
-      const store = await Store.findById(storeId);
+      const store = await Store.findById(storeId).lean();
       if (!store) {
         return sendNotFound(res, 'Store not found');
       }

@@ -133,7 +133,7 @@ router.post(
       }
 
       // Verify product ownership
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         return sendNotFound(res, 'Product not found');
       }
@@ -158,7 +158,7 @@ router.post(
         productId,
         category: category.toLowerCase(),
         deletedAt: { $exists: false },
-      }).sort({ order: -1 });
+      }).sort({ order: -1 }).lean();
 
       const itemOrder = order !== undefined ? parseInt(order) : (maxOrderItem?.order || 0) + 1;
 
@@ -282,7 +282,7 @@ router.post(
       }
 
       // Verify product ownership
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         return sendNotFound(res, 'Product not found');
       }
@@ -304,7 +304,7 @@ router.post(
         productId,
         category: category.toLowerCase(),
         deletedAt: { $exists: false },
-      }).sort({ order: -1 });
+      }).sort({ order: -1 }).lean();
 
       let currentOrder = maxOrderItem?.order || 0;
 
@@ -409,7 +409,7 @@ router.get(
       const { category, variantId, limit = 50, offset = 0, includeDeleted } = req.query;
 
       // Verify product ownership
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         return sendNotFound(res, 'Product not found');
       }
@@ -434,7 +434,8 @@ router.get(
       const items = await ProductGallery.find(query)
         .sort({ order: 1, uploadedAt: -1 })
         .limit(parseInt(limit as string))
-        .skip(parseInt(offset as string));
+        .skip(parseInt(offset as string))
+        .lean();
 
       // Get total count
       const totalCount = await ProductGallery.countDocuments(query);
@@ -484,7 +485,7 @@ router.get(
       const merchantId = req.merchantId!;
 
       // Verify product ownership
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         return sendNotFound(res, 'Product not found');
       }
@@ -550,7 +551,7 @@ router.get(
       const merchantId = req.merchantId!;
 
       // Verify product ownership
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         return sendNotFound(res, 'Product not found');
       }
@@ -563,7 +564,7 @@ router.get(
         _id: itemId,
         productId,
         deletedAt: { $exists: false },
-      });
+      }).lean();
 
       if (!item) {
         return sendNotFound(res, 'Gallery item not found');
@@ -614,7 +615,7 @@ router.put(
       const updates = req.body;
 
       // Verify product ownership
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         return sendNotFound(res, 'Product not found');
       }
@@ -697,7 +698,7 @@ router.put(
       const merchantId = req.merchantId!;
 
       // Verify product ownership
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         return sendNotFound(res, 'Product not found');
       }
@@ -757,7 +758,7 @@ router.put(
       const { items } = req.body;
 
       // Verify product ownership
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         return sendNotFound(res, 'Product not found');
       }
@@ -806,7 +807,7 @@ router.delete(
       const merchantId = req.merchantId!;
 
       // Verify product ownership
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         return sendNotFound(res, 'Product not found');
       }
@@ -862,7 +863,7 @@ router.delete(
       const { itemIds } = req.body;
 
       // Verify product ownership
-      const product = await Product.findById(productId);
+      const product = await Product.findById(productId).lean() as any;
       if (!product) {
         return sendNotFound(res, 'Product not found');
       }
@@ -876,7 +877,7 @@ router.delete(
         _id: { $in: itemIds },
         productId,
         deletedAt: { $exists: false },
-      });
+      }).lean();
 
       if (items.length === 0) {
         return sendNotFound(res, 'No gallery items found');

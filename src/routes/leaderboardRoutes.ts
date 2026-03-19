@@ -74,6 +74,7 @@ router.get('/campus', asyncHandler(async (req: Request, res: Response) => {
     { $limit: 50 },
   ]);
 
+  const COIN_TO_RUPEE = 1; // 1 coin = ₹1 (from checkoutConfig.coins.rezCoin.conversionRate)
   const studentMap = new Map(students.map((s) => [s._id.toString(), s]));
   const leaderboard = earnings.map((e, idx) => {
     const student = studentMap.get(e._id.toString());
@@ -82,11 +83,13 @@ router.get('/campus', asyncHandler(async (req: Request, res: Response) => {
       userId: e._id.toString(),
       name: anonymizeName((student as any)?.profile?.firstName, (student as any)?.profile?.lastName),
       totalEarned: e.totalEarned,
+      totalSavedRupees: Math.floor(e.totalEarned * COIN_TO_RUPEE),
     };
   });
 
-  const totalSaved = leaderboard.reduce((sum, e) => sum + e.totalEarned, 0);
-  const result = { institutionName, leaderboard, totalSaved, studentCount: students.length };
+  const totalCoinsEarned = leaderboard.reduce((sum, e) => sum + e.totalEarned, 0);
+  const totalSaved = Math.floor(totalCoinsEarned * COIN_TO_RUPEE);
+  const result = { institutionName, leaderboard, totalSaved, totalCoinsEarned, studentCount: students.length };
   await redisService.set(cacheKey, JSON.stringify(result), 300);
 
   const userEntry = leaderboard.find((e) => e.userId === userId);
@@ -145,6 +148,7 @@ router.get('/company', asyncHandler(async (req: Request, res: Response) => {
   ]);
 
   const employeeMap = new Map(employees.map((e) => [e._id.toString(), e]));
+  const COIN_TO_RUPEE = 1; // 1 coin = ₹1 (from checkoutConfig.coins.rezCoin.conversionRate)
   const leaderboard = earnings.map((e, idx) => {
     const employee = employeeMap.get(e._id.toString());
     return {
@@ -152,11 +156,13 @@ router.get('/company', asyncHandler(async (req: Request, res: Response) => {
       userId: e._id.toString(),
       name: anonymizeName((employee as any)?.profile?.firstName, (employee as any)?.profile?.lastName),
       totalEarned: e.totalEarned,
+      totalSavedRupees: Math.floor(e.totalEarned * COIN_TO_RUPEE),
     };
   });
 
-  const totalSaved = leaderboard.reduce((sum, e) => sum + e.totalEarned, 0);
-  const result = { companyName, leaderboard, totalSaved, employeeCount: employees.length };
+  const totalCoinsEarned = leaderboard.reduce((sum, e) => sum + e.totalEarned, 0);
+  const totalSaved = Math.floor(totalCoinsEarned * COIN_TO_RUPEE);
+  const result = { companyName, leaderboard, totalSaved, totalCoinsEarned, employeeCount: employees.length };
   await redisService.set(cacheKey, JSON.stringify(result), 300);
 
   const userEntry = leaderboard.find((e) => e.userId === userId);

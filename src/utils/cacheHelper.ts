@@ -63,6 +63,7 @@ export const CacheKeys = {
   // Offer keys
   offerList: (filters: string) => `offer:list:${filters}`,
   offer: (id: string) => `offer:${id}`,
+  offerDetail: (id: string) => `offer:detail:${id}`,
   userOffers: (userId: string) => `offer:user:${userId}`,
 
   // Voucher keys
@@ -327,6 +328,7 @@ export class CacheInvalidator {
 
     await CacheInvalidator.safeInvalidate(`offer:${offerId}`, [
       redisService.del(CacheKeys.offer(offerId)),
+      redisService.del(CacheKeys.offerDetail(offerId)),
       redisService.delPattern('offer:list:*'),
       redisService.delPattern('offer:user:*'),
     ]);

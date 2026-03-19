@@ -353,7 +353,7 @@ async function processExpiredCoins(): Promise<ExpiryStats> {
           { user: new mongoose.Types.ObjectId(userId) },
           { $inc: { 'balance.available': -expiryData.expiredAmount, 'balance.total': -expiryData.expiredAmount } }
         );
-        invalidateWalletCache(userId).catch(() => {});
+        invalidateWalletCache(userId).catch((err) => logger.error('[ExpireCoins] Wallet cache invalidation failed after coin expiry', { error: err.message, userId }));
 
         // Mark original transactions as expired
         await CoinTransaction.updateMany(

@@ -103,7 +103,7 @@ export const createVideo = asyncHandler(async (req: Request, res: Response) => {
 
     // Invalidate video caches so new video appears in listings
     const { CacheInvalidator } = await import('../utils/cacheHelper');
-    CacheInvalidator.invalidateVideo(String(video._id)).catch(() => {});
+    CacheInvalidator.invalidateVideo(String(video._id)).catch((err) => logger.warn('[Video] Cache invalidation after video upload failed', { error: err.message }));
 
     // Emit gamification event for video creation
     gamificationEventBus.emit('video_created', {
@@ -240,7 +240,7 @@ export const getVideos = asyncHandler(async (req: Request, res: Response) => {
 
     // Cache non-search results
     if (cacheKey) {
-      redisService.set(cacheKey, result, VIDEO_CACHE_TTL.LIST).catch(() => {});
+      redisService.set(cacheKey, result, VIDEO_CACHE_TTL.LIST).catch((err) => logger.warn('[Video] Cache set for video list failed', { error: err.message }));
     }
 
     sendSuccess(res, result, 'Videos retrieved successfully');
@@ -460,7 +460,7 @@ export const getVideosByCategory = asyncHandler(async (req: Request, res: Respon
       }
     };
 
-    redisService.set(cacheKey, result, VIDEO_CACHE_TTL.CATEGORY).catch(() => {});
+    redisService.set(cacheKey, result, VIDEO_CACHE_TTL.CATEGORY).catch((err) => logger.warn('[Video] Cache set for category videos failed', { error: err.message }));
 
     sendSuccess(res, result, `Videos in category "${category}" retrieved successfully`);
 
@@ -519,7 +519,7 @@ export const getTrendingVideos = asyncHandler(async (req: Request, res: Response
       }
 
       // Cache raw data for 5 minutes
-      redisService.set(cacheKey, videos, VIDEO_CACHE_TTL.TRENDING).catch(() => {});
+      redisService.set(cacheKey, videos, VIDEO_CACHE_TTL.TRENDING).catch((err) => logger.warn('[Video] Cache set for trending videos failed', { error: err.message }));
     }
 
     // Transform videos to include isLiked status and flatten data (per-user, not cached)
@@ -973,7 +973,7 @@ export const getVideosByStore = asyncHandler(async (req: Request, res: Response)
     const result = { content, total };
 
     // Cache the result (user-specific fields are computed per-request above)
-    redisService.set(cacheKey, result, VIDEO_CACHE_TTL.STORE).catch(() => {});
+    redisService.set(cacheKey, result, VIDEO_CACHE_TTL.STORE).catch((err) => logger.warn('[Video] Cache set for store videos failed', { error: err.message }));
 
     sendSuccess(res, result, 'Videos retrieved successfully');
 
@@ -989,7 +989,7 @@ export const reportVideo = asyncHandler(async (req: Request, res: Response) => {
   const userId = req.userId!;
 
   try {
-    const video = await Video.findById(videoId).lean();
+    const video = await Video.findById(videoId);
 
     if (!video) {
       return sendNotFound(res, 'Video not found');
@@ -1018,7 +1018,7 @@ export const toggleVideoBookmark = asyncHandler(async (req: Request, res: Respon
   const userId = req.userId!;
 
   try {
-    const video = await Video.findById(videoId).lean();
+    const video = await Video.findById(videoId);
 
     if (!video) {
       return sendNotFound(res, 'Video not found');
@@ -1047,7 +1047,7 @@ export const trackVideoView = asyncHandler(async (req: Request, res: Response) =
   const userId = req.userId; // Optional - can be undefined for non-authenticated users
 
   try {
-    const video = await Video.findById(videoId).lean();
+    const video = await Video.findById(videoId);
 
     if (!video) {
       return sendNotFound(res, 'Video not found');

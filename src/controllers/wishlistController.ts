@@ -205,7 +205,7 @@ export const addToWishlist = asyncHandler(async (req: Request, res: Response) =>
       .lean();
 
     // Invalidate wishlist status cache for this user
-    redisService.delPattern(`wishlist:status:${userId}:*`).catch(() => {});
+    redisService.delPattern(`wishlist:status:${userId}:*`).catch((err) => logger.warn('[Wishlist] Cache invalidation for wishlist status after add failed', { error: err.message }));
 
     sendSuccess(res, populatedWishlist, 'Item added to wishlist successfully');
   } catch (error) {
@@ -254,7 +254,7 @@ export const removeFromWishlist = asyncHandler(async (req: Request, res: Respons
     }
 
     // Invalidate wishlist status cache
-    redisService.delPattern(`wishlist:status:${userId}:*`).catch(() => {});
+    redisService.delPattern(`wishlist:status:${userId}:*`).catch((err) => logger.warn('[Wishlist] Cache invalidation for wishlist status after remove failed', { error: err.message }));
 
     sendSuccess(res, null, 'Item removed from wishlist successfully');
   } catch (error) {
@@ -445,7 +445,7 @@ export const checkWishlistStatus = asyncHandler(async (req: Request, res: Respon
       result = { inWishlist: false };
     }
 
-    redisService.set(cacheKey, result, 60).catch(() => {}); // 60s cache
+    redisService.set(cacheKey, result, 60).catch((err) => logger.warn('[Wishlist] Cache set for wishlist status failed', { error: err.message })); // 60s cache
     sendSuccess(res, result, result.inWishlist ? 'Item is in wishlist' : 'Item is not in wishlist');
   } catch (error) {
     throw new AppError('Failed to check wishlist status', 500);
@@ -493,7 +493,7 @@ export const removeItemByTypeAndId = asyncHandler(async (req: Request, res: Resp
     }
 
     // Invalidate wishlist status cache
-    redisService.delPattern(`wishlist:status:${userId}:*`).catch(() => {});
+    redisService.delPattern(`wishlist:status:${userId}:*`).catch((err) => logger.warn('[Wishlist] Cache invalidation for wishlist status after remove failed', { error: err.message }));
 
     sendSuccess(res, null, 'Item removed from wishlist successfully');
   } catch (error) {

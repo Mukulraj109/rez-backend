@@ -1,6 +1,10 @@
 # Dependencies
 node_modules/
 
+# Security - temporary token files
+.tmp_token
+*.tmp_token
+
 # Environment files
 .env
 .env.*

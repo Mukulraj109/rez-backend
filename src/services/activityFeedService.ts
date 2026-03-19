@@ -81,7 +81,7 @@ export async function getActivityFeed(
     const result = { activities: enriched, total };
 
     // Cache result (fire-and-forget)
-    redisService.set(cacheKey, result, FEED_CACHE_TTL).catch(() => {});
+    redisService.set(cacheKey, result, FEED_CACHE_TTL).catch((err) => logger.warn('[ActivityFeed] Cache set for feed failed', { error: err.message }));
 
     return result;
   } catch (error) {
@@ -119,7 +119,7 @@ export async function getUserActivities(
     ]);
 
     const result = { activities, total };
-    redisService.set(cacheKey, result, PROFILE_CACHE_TTL).catch(() => {});
+    redisService.set(cacheKey, result, PROFILE_CACHE_TTL).catch((err) => logger.warn('[ActivityFeed] Cache set for profile feed failed', { error: err.message }));
 
     return result;
   } catch (error) {
@@ -162,7 +162,7 @@ export async function createSocialActivity(
       .lean();
 
     // Invalidate feed caches for this user
-    invalidateFeedCache(userId).catch(() => {});
+    invalidateFeedCache(userId).catch((err) => logger.warn('[ActivityFeed] Feed cache invalidation after create activity failed', { error: err.message }));
 
     return populatedActivity;
   } catch (error) {
@@ -194,7 +194,7 @@ export async function toggleLike(activityId: string, userId: string): Promise<{ 
         type: 'like'
       });
 
-      invalidateFeedCache(userId).catch(() => {});
+      invalidateFeedCache(userId).catch((err) => logger.warn('[ActivityFeed] Feed cache invalidation after unlike failed', { error: err.message }));
       return { liked: false, likesCount };
     } else {
       // Like
@@ -210,7 +210,7 @@ export async function toggleLike(activityId: string, userId: string): Promise<{ 
         type: 'like'
       });
 
-      invalidateFeedCache(userId).catch(() => {});
+      invalidateFeedCache(userId).catch((err) => logger.warn('[ActivityFeed] Feed cache invalidation after like failed', { error: err.message }));
       return { liked: true, likesCount };
     }
   } catch (error) {
@@ -287,7 +287,7 @@ export async function addComment(
       .populate('user', 'name profilePicture')
       .lean();
 
-    invalidateFeedCache(userId).catch(() => {});
+    invalidateFeedCache(userId).catch((err) => logger.warn('[ActivityFeed] Feed cache invalidation after comment failed', { error: err.message }));
 
     return populatedComment;
   } catch (error) {
@@ -323,8 +323,8 @@ export async function toggleFollow(
       followersCount = await Follow.countDocuments({ following: followingId });
 
       // Invalidate caches for both users
-      invalidateFeedCache(followerId).catch(() => {});
-      invalidateFollowCache(followerId, followingId).catch(() => {});
+      invalidateFeedCache(followerId).catch((err) => logger.warn('[ActivityFeed] Feed cache invalidation after unfollow failed', { error: err.message }));
+      invalidateFollowCache(followerId, followingId).catch((err) => logger.warn('[ActivityFeed] Follow cache invalidation after unfollow failed', { error: err.message }));
 
       return { following: false, followersCount };
     } else {
@@ -338,8 +338,8 @@ export async function toggleFollow(
       followersCount = await Follow.countDocuments({ following: followingId });
 
       // Invalidate caches for both users
-      invalidateFeedCache(followerId).catch(() => {});
-      invalidateFollowCache(followerId, followingId).catch(() => {});
+      invalidateFeedCache(followerId).catch((err) => logger.warn('[ActivityFeed] Feed cache invalidation after follow failed', { error: err.message }));
+      invalidateFollowCache(followerId, followingId).catch((err) => logger.warn('[ActivityFeed] Follow cache invalidation after follow failed', { error: err.message }));
 
       return { following: true, followersCount };
     }
@@ -441,7 +441,7 @@ export async function getFollowCounts(userId: string): Promise<{ followersCount:
     ]);
 
     const result = { followersCount, followingCount };
-    redisService.set(cacheKey, result, FOLLOW_COUNT_CACHE_TTL).catch(() => {});
+    redisService.set(cacheKey, result, FOLLOW_COUNT_CACHE_TTL).catch((err) => logger.warn('[ActivityFeed] Cache set for follow counts failed', { error: err.message }));
 
     return result;
   } catch (error) {
@@ -507,7 +507,7 @@ export async function getSuggestedUsers(userId: string, limit: number = 10): Pro
       }
     ]);
 
-    redisService.set(cacheKey, suggestedUsers, SUGGESTED_CACHE_TTL).catch(() => {});
+    redisService.set(cacheKey, suggestedUsers, SUGGESTED_CACHE_TTL).catch((err) => logger.warn('[ActivityFeed] Cache set for suggested users failed', { error: err.message }));
 
     return suggestedUsers;
   } catch (error) {

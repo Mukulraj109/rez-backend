@@ -17,6 +17,7 @@ import quizService from '../services/quizService';
 import tournamentService from '../services/tournamentService';
 import Tournament from '../models/Tournament';
 import scratchCardService from '../services/scratchCardService';
+import redisService from '../services/redisService';
 import SurpriseCoinDrop from '../models/SurpriseCoinDrop';
 import UserStreak from '../models/UserStreak';
 import { Order } from '../models/Order';
@@ -192,6 +193,13 @@ export const getMyAchievements = asyncHandler(async (req: Request, res: Response
 
   const userId = (req.user._id as Types.ObjectId).toString();
 
+  // Check Redis cache first
+  const cacheKey = `achievements:user:${userId}`;
+  const cached = await redisService.get<any>(cacheKey);
+  if (cached) {
+    return sendSuccess(res, cached, 'User achievements retrieved successfully');
+  }
+
   // Get user's achievement records
   let userAchievements = await UserAchievement.find({ user: userId })
     .sort({ unlocked: -1, progress: -1 }).lean();
@@ -227,7 +235,7 @@ export const getMyAchievements = asyncHandler(async (req: Request, res: Response
   const unlocked = userAchievements.filter(a => a.unlocked).length;
   const inProgress = userAchievements.filter(a => !a.unlocked && a.progress > 0).length;
 
-  sendSuccess(res, {
+  const responseData = {
     summary: {
       total,
       unlocked,
@@ -236,7 +244,14 @@ export const getMyAchievements = asyncHandler(async (req: Request, res: Response
       completionPercentage: total > 0 ? Math.round((unlocked / total) * 100) : 0
     },
     achievements: userAchievements
-  }, 'User achievements retrieved successfully');
+  };
+
+  // Cache for 60 seconds (user-specific data)
+  redisService.set(cacheKey, responseData, 60).catch((err) =>
+    logger.warn('[GamificationCtrl] Redis cache set failed for achievements', { userId, error: err.message })
+  );
+
+  sendSuccess(res, responseData, 'User achievements retrieved successfully');
 });
 
 export const unlockAchievement = asyncHandler(async (req: Request, res: Response) => {
@@ -1048,7 +1063,7 @@ export const getPlayAndEarnData = asyncHandler(async (req: Request, res: Respons
       user: userId,
       gameType: 'spin_wheel',
       status: 'completed'
-    }).sort({ completedAt: -1 }).select('completedAt'),
+    }).sort({ completedAt: -1 }).select('completedAt').lean(),
     challengeService.getUserProgress(userId, false),
     streakService.getUserStreaks(userId),
     (SurpriseCoinDrop as any).getAvailableDrops(userId),
@@ -1762,7 +1777,8 @@ export const getShareSubmissions = asyncHandler(async (req: Request, res: Respon
     SocialMediaPost.find({ user: userId })
       .sort({ submittedAt: -1 })
       .skip(skip)
-      .limit(limit) as Promise<ISocialMediaPost[]>,
+      .limit(limit)
+      .lean() as Promise<ISocialMediaPost[]>,
     SocialMediaPost.countDocuments({ user: userId }),
   ]);
 
@@ -1884,7 +1900,7 @@ export const getStreakBonuses = asyncHandler(async (req: Request, res: Response)
   const userId = (req.user._id as Types.ObjectId).toString();
 
   // Get user's streak
-  const streak = await UserStreak.findOne({ user: userId, type: 'app_open' }) ||
+  const streak = await UserStreak.findOne({ user: userId, type: 'app_open' }).lean() ||
                  await UserStreak.findOne({ user: userId, type: 'login' }).lean();
 
   const currentStreak = streak?.currentStreak || 0;

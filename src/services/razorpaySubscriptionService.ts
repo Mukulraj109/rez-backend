@@ -348,7 +348,7 @@ class RazorpaySubscriptionService {
     subscription.startDate = new Date(data.start_at * 1000);
     subscription.endDate = new Date(data.end_at * 1000);
     await subscription.save();
-    privilegeResolutionService.invalidate(subscription.user.toString()).catch(() => {});
+    privilegeResolutionService.invalidate(subscription.user.toString()).catch((err) => logger.error('[RazorpaySub] Privilege cache invalidation failed after subscription activation', { error: err.message, subscriptionId: subscription._id }));
 
     logger.info(`Subscription activated: ${subscription._id}`);
   }
@@ -395,7 +395,7 @@ class RazorpaySubscriptionService {
     }
 
     await subscription.save();
-    privilegeResolutionService.invalidate(subscription.user.toString()).catch(() => {});
+    privilegeResolutionService.invalidate(subscription.user.toString()).catch((err) => logger.error('[RazorpaySub] Privilege cache invalidation failed after subscription charge', { error: err.message, subscriptionId: subscription._id }));
 
     logger.info(`Subscription charged successfully: ${subscription._id}`);
   }
@@ -407,7 +407,7 @@ class RazorpaySubscriptionService {
     subscription.status = 'cancelled';
     subscription.cancellationDate = new Date();
     await subscription.save();
-    privilegeResolutionService.invalidate(subscription.user.toString()).catch(() => {});
+    privilegeResolutionService.invalidate(subscription.user.toString()).catch((err) => logger.error('[RazorpaySub] Privilege cache invalidation failed after subscription cancellation', { error: err.message, subscriptionId: subscription._id }));
 
     logger.info(`Subscription cancelled: ${subscription._id}`);
   }
@@ -418,7 +418,7 @@ class RazorpaySubscriptionService {
   private async handleSubscriptionCompleted(subscription: ISubscription, data: any): Promise<void> {
     subscription.status = 'expired';
     await subscription.save();
-    privilegeResolutionService.invalidate(subscription.user.toString()).catch(() => {});
+    privilegeResolutionService.invalidate(subscription.user.toString()).catch((err) => logger.error('[RazorpaySub] Privilege cache invalidation failed after subscription completion', { error: err.message, subscriptionId: subscription._id }));
 
     logger.info(`Subscription completed: ${subscription._id}`);
   }
@@ -438,7 +438,7 @@ class RazorpaySubscriptionService {
   private async handleSubscriptionResumed(subscription: ISubscription, data: any): Promise<void> {
     subscription.status = 'active';
     await subscription.save();
-    privilegeResolutionService.invalidate(subscription.user.toString()).catch(() => {});
+    privilegeResolutionService.invalidate(subscription.user.toString()).catch((err) => logger.error('[RazorpaySub] Privilege cache invalidation failed after subscription resume', { error: err.message, subscriptionId: subscription._id }));
 
     logger.info(`Subscription resumed: ${subscription._id}`);
   }
@@ -452,7 +452,7 @@ class RazorpaySubscriptionService {
     subscription.paymentRetryCount += 1;
     subscription.lastPaymentRetryDate = new Date();
     await subscription.save();
-    privilegeResolutionService.invalidate(subscription.user.toString()).catch(() => {});
+    privilegeResolutionService.invalidate(subscription.user.toString()).catch((err) => logger.error('[RazorpaySub] Privilege cache invalidation failed after payment pending', { error: err.message, subscriptionId: subscription._id }));
 
     logger.info(`Subscription payment pending: ${subscription._id}`);
   }
@@ -463,7 +463,7 @@ class RazorpaySubscriptionService {
   private async handleSubscriptionHalted(subscription: ISubscription, data: any): Promise<void> {
     subscription.status = 'payment_failed';
     await subscription.save();
-    privilegeResolutionService.invalidate(subscription.user.toString()).catch(() => {});
+    privilegeResolutionService.invalidate(subscription.user.toString()).catch((err) => logger.error('[RazorpaySub] Privilege cache invalidation failed after subscription halt', { error: err.message, subscriptionId: subscription._id }));
 
     logger.info(`Subscription halted: ${subscription._id}`);
   }

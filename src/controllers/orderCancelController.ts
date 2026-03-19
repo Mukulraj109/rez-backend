@@ -381,7 +381,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
         logger.error('[CANCEL ORDER] Socket emission failed:', socketError);
       }
       // Invalidate product cache after stock restoration
-      CacheInvalidator.invalidateProduct(restoration.productId).catch(() => {});
+      CacheInvalidator.invalidateProduct(restoration.productId).catch((err) => logger.error('[OrderCancelCtrl] Product cache invalidation failed after stock restoration', { error: err.message, productId: restoration.productId }));
     }
 
     // Create activity for order cancellation

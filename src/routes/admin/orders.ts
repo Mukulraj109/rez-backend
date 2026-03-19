@@ -96,7 +96,8 @@ router.get('/', validateQuery(adminOrderSearchSchema), asyncHandler(async (req: 
         .limit(limit)
         .populate('user', 'profile.firstName profile.lastName phoneNumber email')
         .populate('items.store', 'name slug logo')
-        .select('orderNumber status totals payment.status payment.method payment.coinsUsed createdAt user items fulfillmentType fulfillmentDetails'),
+        .select('orderNumber status totals payment.status payment.method payment.coinsUsed createdAt user items fulfillmentType fulfillmentDetails')
+        .lean(),
       Order.countDocuments(filter)
     ]);
 
@@ -440,7 +441,8 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     const order = await Order.findById(req.params.id)
       .populate('user', 'profile phoneNumber email')
       .populate('items.product', 'name images')
-      .populate('items.store', 'name logo');
+      .populate('items.store', 'name logo')
+      .lean();
 
     if (!order) {
       return res.status(404).json({
@@ -949,7 +951,7 @@ router.put('/:id/status', requireSeniorAdmin, validate(adminOrderStatusSchema), 
         try {
           let userTier = 'free';
           try {
-            const subscription = await Subscription.findOne({ user: userIdObj, status: 'active' }).select('tier');
+            const subscription = await Subscription.findOne({ user: userIdObj, status: 'active' }).select('tier').lean();
             if (subscription?.tier) userTier = subscription.tier;
           } catch (tierErr) { /* use free */ }
 
@@ -1000,7 +1002,7 @@ router.put('/:id/status', requireSeniorAdmin, validate(adminOrderStatusSchema), 
               ? (firstItem.store as any)._id
               : firstItem.store;
 
-            const store = await Store.findById(storeId);
+            const store = await Store.findById(storeId).lean();
             if (store && store.merchantId) {
               const grossAmount = populatedOrder.totals.subtotal || 0;
               const platformFee = populatedOrder.totals.platformFee || 0;

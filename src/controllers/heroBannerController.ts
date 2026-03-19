@@ -21,7 +21,7 @@ export const getActiveBanners = asyncHandler(async (req: Request, res: Response)
     const banners = await HeroBanner.findActiveBanners(page as string, position as string);
     const limitedBanners = banners.slice(0, Number(limit));
 
-    redisService.set(cacheKey, limitedBanners, 300).catch(() => {}); // 5min cache
+    redisService.set(cacheKey, limitedBanners, 300).catch((err) => logger.warn('[HeroBanner] Cache set for active banners failed', { error: err.message })); // 5min cache
 
     sendSuccess(res, limitedBanners, 'Active hero banners fetched successfully');
 });
@@ -51,7 +51,7 @@ export const getBannersForUser = asyncHandler(async (req: Request, res: Response
     const banners = await HeroBanner.findBannersForUser(userData, page as string);
     const limitedBanners = banners.slice(0, Number(limit));
 
-    redisService.set(cacheKey, limitedBanners, 300).catch(() => {}); // 5min cache
+    redisService.set(cacheKey, limitedBanners, 300).catch((err) => logger.warn('[HeroBanner] Cache set for user-targeted banners failed', { error: err.message })); // 5min cache
 
     sendSuccess(res, limitedBanners, 'User-targeted hero banners fetched successfully');
 });

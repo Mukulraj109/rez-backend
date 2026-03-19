@@ -128,7 +128,7 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
 
     // Store in Redis (fire and forget — don't delay response)
     // Note: userContext is NOT cached here — it's per-user data
-    redisService.set(homepageCacheKey, result.data, HOMEPAGE_TTL).catch(() => {});
+    redisService.set(homepageCacheKey, result.data, HOMEPAGE_TTL).catch((err) => logger.warn('[Homepage] Cache set for homepage data failed', { error: err.message }));
 
     res.set({
       'Cache-Control': 'public, max-age=300, stale-while-revalidate=600',
@@ -239,7 +239,7 @@ async function getCachedGlobalOfferCount(): Promise<number> {
     endDate: { $gte: new Date() },
   }).catch(() => 0);
 
-  await redisService.set(cacheKey, count, 300).catch(() => {});
+  await redisService.set(cacheKey, count, 300).catch((err) => logger.warn('[Homepage] Cache set for active offers count failed', { error: err.message }));
   return count;
 }
 
@@ -286,7 +286,7 @@ async function fetchUserContext(userId: string): Promise<{
     };
 
     // Cache for 30s — acceptable staleness for display counts
-    await redisService.set(userContextCacheKey, context, 30).catch(() => {});
+    await redisService.set(userContextCacheKey, context, 30).catch((err) => logger.warn('[Homepage] Cache set for user context failed', { error: err.message }));
 
     return context;
   } catch (error) {

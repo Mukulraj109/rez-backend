@@ -49,7 +49,7 @@ export const getUnreadCount = asyncHandler(async (req: Request, res: Response) =
   }
 
   const result = { total, byType, byPriority };
-  redisService.set(cacheKey, result, 30).catch(() => {}); // 30s cache
+  redisService.set(cacheKey, result, 30).catch((err) => logger.warn('[Notification] Cache set for unread count failed', { error: err.message })); // 30s cache
 
   sendSuccess(res, result);
 });
@@ -113,7 +113,7 @@ export const markAsRead = asyncHandler(async (req: Request, res: Response) => {
     });
 
     // Invalidate unread count cache
-    redisService.del(`notification:unread:${userId}`).catch(() => {});
+    redisService.del(`notification:unread:${userId}`).catch((err) => logger.warn('[Notification] Cache invalidation for unread count on delete failed', { error: err.message }));
 
     const unreadCount = await Notification.countDocuments({
       user: userId,
@@ -143,7 +143,7 @@ export const deleteNotification = asyncHandler(async (req: Request, res: Respons
     }
 
     // Invalidate unread count cache
-    redisService.del(`notification:unread:${userId}`).catch(() => {});
+    redisService.del(`notification:unread:${userId}`).catch((err) => logger.warn('[Notification] Cache invalidation for unread count failed', { error: err.message }));
 
     sendSuccess(res, null, 'Notification deleted successfully');
   } catch (error) {

@@ -9,6 +9,7 @@ import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess } from '../utils/response';
 import redisService from '../services/redisService';
+import { logger } from '../config/logger';
 import { BRAND } from '../config/brand';
 import QuickAction from '../models/QuickAction';
 import ValueCard from '../models/ValueCard';
@@ -117,7 +118,7 @@ export const getPlayEarnBatch = asyncHandler(async (req: Request, res: Response)
     };
 
     // Cache shared data for 2 minutes
-    redisService.set(cacheKey, sharedData, 120).catch(() => {});
+    redisService.set(cacheKey, sharedData, 120).catch((err) => logger.warn('[PlayEarn] Cache set for shared data failed', { error: err.message }));
   }
 
   // Per-user data must be fetched fresh (streak, achievements, etc.)

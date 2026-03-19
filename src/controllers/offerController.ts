@@ -13,6 +13,7 @@ import { CoinTransaction } from '../models/CoinTransaction';
 import { Store } from '../models/Store';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
 import { filterExclusiveOffers, getUserFollowedStores } from '../middleware/exclusiveOfferMiddleware';
+import { validateSortField } from '../utils/sanitize';
 import { recordExclusiveOfferView, recordExclusiveOfferRedemption } from '../services/followerAnalyticsService';
 import { regionService, isValidRegion, RegionId } from '../services/regionService';
 import redisService from '../services/redisService';
@@ -182,6 +183,7 @@ export const getOffers = asyncHandler(async (req: Request, res: Response) => {
         .sort(sortOptions)
         .skip(skip)
         .limit(limitNum)
+        .select('title subtitle image category type cashbackPercentage originalPrice discountedPrice store validity engagement metadata isFollowerExclusive exclusiveZone saleTag bogoType isFreeDelivery deliveryTime location createdAt')
         .lean(),
       Offer.countDocuments(filter),
     ]);
@@ -192,7 +194,7 @@ export const getOffers = asyncHandler(async (req: Request, res: Response) => {
 
     // Cache public results (60s TTL)
     if (cacheKey) {
-      redisService.set(cacheKey, { offers: filteredOffers, total }, 60).catch(() => {});
+      redisService.set(cacheKey, { offers: filteredOffers, total }, 60).catch((err) => logger.warn('[OfferCtrl] Redis cache set failed for offers list', { error: err.message }));
     }
 
     sendPaginated(res, filteredOffers, pageNum, limitNum, total, 'Offers fetched successfully');
@@ -240,10 +242,11 @@ export const getFeaturedOffers = asyncHandler(async (req: Request, res: Response
     const offers = await Offer.find(filter)
     .sort({ 'metadata.priority': -1, createdAt: -1 })
     .limit(Number(limit))
+    .select('title subtitle image category type cashbackPercentage originalPrice discountedPrice store validity engagement metadata isFollowerExclusive exclusiveZone saleTag bogoType isFreeDelivery deliveryTime location createdAt')
     .populate('store.id', 'name logo rating')
     .lean();
 
-    redisService.set(cacheKey, offers, 300).catch(() => {}); // 5min cache
+    redisService.set(cacheKey, offers, 300).catch((err) => logger.warn('[OfferCtrl] Redis cache set failed for featured offers', { error: err.message })); // 5min cache
 
     sendSuccess(res, offers, 'Featured offers fetched successfully');
 });
@@ -263,7 +266,7 @@ export const getTrendingOffers = asyncHandler(async (req: Request, res: Response
 
     const offers = await Offer.findTrendingOffers(Number(limit));
 
-    redisService.set(cacheKey, offers, 300).catch(() => {}); // 5min cache
+    redisService.set(cacheKey, offers, 300).catch((err) => logger.warn('[OfferCtrl] Redis cache set failed for trending offers', { error: err.message })); // 5min cache
 
     sendSuccess(res, offers, 'Trending offers fetched successfully');
 });
@@ -319,9 +322,11 @@ export const getOffersByCategory = asyncHandler(async (req: Request, res: Respon
       endDate: { $gte: new Date() },
     };
 
-    // Sort options
+    // Sort options (whitelist to prevent sort field injection)
+    const ALLOWED_OFFER_SORT_FIELDS = ['createdAt', 'title', 'cashbackPercentage', 'metadata.priority'] as const;
+    const safeSortBy = validateSortField(sortBy as string, ALLOWED_OFFER_SORT_FIELDS, 'createdAt');
     const sortOptions: any = {};
-    sortOptions[sortBy as string] = order === 'asc' ? 1 : -1;
+    sortOptions[safeSortBy] = order === 'asc' ? 1 : -1;
 
     // Pagination
     const pageNum = Math.max(1, Number(page));
@@ -392,11 +397,15 @@ export const getOffersByStore = asyncHandler(async (req: Request, res: Response)
 export const getOfferById = asyncHandler(async (req: Request, res: Response) => {
     const { id } = req.params;
 
-    const offer = await Offer.findById(id)
-      .lean();
+    const cacheKey = `offer:detail:${id}`;
+    let offer = await redisService.get<any>(cacheKey);
 
     if (!offer) {
-      return sendError(res, 'Offer not found', 404);
+      offer = await Offer.findById(id).lean();
+      if (!offer) {
+        return sendError(res, 'Offer not found', 404);
+      }
+      redisService.set(cacheKey, offer, 300).catch((err) => logger.warn('[OfferCtrl] Redis cache set failed for offer detail', { offerId: id, error: err.message }));
     }
 
     // Check if offer is follower-exclusive and user has access
@@ -583,6 +592,9 @@ export const redeemOffer = asyncHandler(async (req: Request, res: Response) => {
       $inc: { 'redemptionCount': 1 }
     });
 
+    // Invalidate cached offer detail after redemption count change
+    redisService.del(`offer:detail:${id}`).catch((err) => logger.warn('[OfferCtrl] Redis cache invalidation failed after redeem', { offerId: id, error: err.message }));
+
     // Create FriendRedemption records for user's followers (social proof feed, non-blocking)
     setImmediate(async () => {
       try {
@@ -608,7 +620,7 @@ export const redeemOffer = asyncHandler(async (req: Request, res: Response) => {
             redeemedAt: new Date(),
             isVisible: true,
           }));
-          await FriendRedemption.insertMany(docs, { ordered: false }).catch(() => {});
+          await FriendRedemption.insertMany(docs, { ordered: false }).catch((err) => logger.error('[OfferCtrl] FriendRedemption bulk insert failed', { error: err.message }));
         }
       } catch (err) {
         logger.error('[OFFER] FriendRedemption creation failed (non-blocking):', err);
@@ -810,9 +822,26 @@ export const getUserFavoriteOffers = asyncHandler(async (req: Request, res: Resp
 export const trackOfferView = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id;
 
-    // Increment view count
-    await Offer.findByIdAndUpdate(id, { $inc: { viewCount: 1 } });
+    if (userId) {
+      // Authenticated: dedup per user per 24h
+      const viewKey = `offer-view:${userId}:${id}`;
+      const alreadyViewed = await redisService.get(viewKey);
+      if (!alreadyViewed) {
+        await Offer.findByIdAndUpdate(id, { $inc: { viewCount: 1 } });
+        await redisService.set(viewKey, '1', 86400);
+      }
+    } else {
+      // Anonymous: cap at 3 views per IP per offer per 24h
+      const ip = req.ip || 'unknown';
+      const ipKey = `offer-view-ip:${ip}:${id}`;
+      const ipViews = parseInt(await redisService.get(ipKey) || '0', 10);
+      if (ipViews < 3) {
+        await Offer.findByIdAndUpdate(id, { $inc: { viewCount: 1 } });
+        await redisService.set(ipKey, String(ipViews + 1), 86400);
+      }
+    }
 
     sendSuccess(res, { success: true }, 'View tracked');
   } catch (error) {
@@ -1269,7 +1298,7 @@ export const validateRedemptionCode = asyncHandler(async (req: Request, res: Res
     // Find redemption by code
     const redemption = await OfferRedemption.findOne({
       redemptionCode: code.toUpperCase()
-    }).populate('offer', 'title image cashbackPercentage category type restrictions store').lean();
+    }).populate('offer', 'title image cashbackPercentage category type restrictions store');
 
     if (!redemption) {
       return sendError(res, 'Invalid redemption code', 404);
@@ -1492,7 +1521,7 @@ export const getRedemptionById = asyncHandler(async (req: Request, res: Response
     const offer = redemption.offer as any;
 
     sendSuccess(res, {
-      ...redemption.toObject(),
+      ...redemption,
       cashbackPercentage: offer?.cashbackPercentage || 0,
       restrictions: {
         minOrderValue: offer?.restrictions?.minOrderValue || 0,

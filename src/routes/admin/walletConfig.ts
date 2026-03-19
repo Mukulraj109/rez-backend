@@ -3,6 +3,7 @@ import { requireAuth, requireAdmin } from '../../middleware/auth';
 import { WalletConfig } from '../../models/WalletConfig';
 import { invalidateWalletConfigCache } from '../../services/walletCacheService';
 import { asyncHandler } from '../../utils/asyncHandler';
+import { logger } from '../../config/logger';
 
 const router = Router();
 
@@ -42,7 +43,7 @@ router.put('/', asyncHandler(async (req: Request, res: Response) => {
     await config.save();
 
     // Invalidate cached config so all services pick up new values immediately
-    await invalidateWalletConfigCache().catch(() => {});
+    await invalidateWalletConfigCache().catch((err) => logger.warn('[WalletConfig] Cache invalidation for wallet config failed', { error: err.message }));
 
     res.json({ success: true, data: config, message: 'Wallet config updated' });
 }));

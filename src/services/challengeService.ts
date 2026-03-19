@@ -281,11 +281,11 @@ class ChallengeService {
       (ChallengeAnalytics as any).trackEvent(challengeId, userId, 'join', {
         challengeType: challenge.type,
         target: challenge.requirements.target,
-      }).catch(() => {});
+      }).catch((err: any) => logger.error('[ChallengeService] Analytics trackEvent join failed', { error: err.message, challengeId, userId }));
     });
 
     // Invalidate cache
-    this.invalidateChallengeCache().catch(() => {});
+    this.invalidateChallengeCache().catch((err) => logger.warn('[ChallengeService] Challenge cache invalidation failed after join', { error: err.message }));
 
     return progress;
   }
@@ -358,7 +358,7 @@ class ChallengeService {
         setImmediate(() => {
           (ChallengeAnalytics as any).trackEvent(challenge._id, userId, 'progress_update', {
             action, amount, newProgress: progress!.progress, target: progress!.target,
-          }).catch(() => {});
+          }).catch((err: any) => logger.error('[ChallengeService] Analytics trackEvent progress_update failed', { error: err.message, challengeId: challenge._id, userId }));
         });
 
         // Fire-and-forget: Track completion if just completed
@@ -366,7 +366,7 @@ class ChallengeService {
           setImmediate(() => {
             (ChallengeAnalytics as any).trackEvent(challenge._id, userId, 'completion', {
               action, totalProgress: progress!.progress, target: progress!.target,
-            }).catch(() => {});
+            }).catch((err: any) => logger.error('[ChallengeService] Analytics trackEvent completion failed', { error: err.message, challengeId: challenge._id, userId }));
           });
 
           // Send challenge completed SMS notification (fire-and-forget)
@@ -483,7 +483,7 @@ class ChallengeService {
     }
 
     // Invalidate cache after claiming
-    this.invalidateChallengeCache().catch(() => {});
+    this.invalidateChallengeCache().catch((err) => logger.warn('[ChallengeService] Challenge cache invalidation failed after claim', { error: err.message }));
 
     // Fire-and-forget: Track claim event
     setImmediate(() => {
@@ -491,7 +491,7 @@ class ChallengeService {
         coinsRewarded: coinsReward,
         challengeTitle: challenge.title,
         challengeType: challenge.type,
-      }).catch(() => {});
+      }).catch((err: any) => logger.error('[ChallengeService] Analytics trackEvent claim failed', { error: err.message, challengeId: challenge._id, userId }));
     });
 
     return { progress, rewards, walletBalance: undefined };
@@ -733,7 +733,7 @@ class ChallengeService {
     // Fire-and-forget: Track impressions
     setImmediate(() => {
       const impressionIds = result.map(r => (r.challenge as any)._id);
-      (ChallengeAnalytics as any).trackImpressions(impressionIds, userId).catch(() => {});
+      (ChallengeAnalytics as any).trackImpressions(impressionIds, userId).catch((err: any) => logger.error('[ChallengeService] Analytics trackImpressions failed', { error: err.message, userId }));
     });
 
     return {

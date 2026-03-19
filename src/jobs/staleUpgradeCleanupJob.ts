@@ -66,7 +66,7 @@ export async function runStaleUpgradeCleanup(): Promise<void> {
     logger.error('Stale upgrade cleanup job failed:', error);
   } finally {
     if (lockToken) {
-      await redisService.releaseLock(lockKey, lockToken).catch(() => {});
+      await redisService.releaseLock(lockKey, lockToken).catch((err) => logger.warn('[StaleUpgradeCleanupJob] Lock release failed', { error: err.message }));
     }
   }
 }

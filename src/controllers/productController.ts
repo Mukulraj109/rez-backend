@@ -263,7 +263,7 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
       Product.updateMany(
         { _id: { $in: products.map(p => p._id) } },
         { $inc: { 'analytics.views': 1 } }
-      ).catch(() => {});
+      ).catch((err) => logger.error('[ProductCtrl] Product view count increment failed', { error: err.message }));
     }
 
     // Log search history for authenticated users (async, don't block)
@@ -278,7 +278,7 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
           maxPrice: maxPrice ? Number(maxPrice) : undefined,
           rating: rating ? Number(rating) : undefined
         }
-      ).catch(() => {});
+      ).catch((err) => logger.error('[ProductCtrl] Product search history logging failed', { error: err.message, userId: (req.user as any)?._id }));
     }
 
     // Apply diversity mode if specified

@@ -109,7 +109,7 @@ const generateSKU = async (merchantId: string, productName: string): Promise<str
 
   // Ensure uniqueness
   let counter = 1;
-  while (await Product.findOne({ sku })) {
+  while (await Product.findOne({ sku }).lean()) {
     sku = `${prefix}${timestamp}${counter}`;
     counter++;
   }
@@ -141,11 +141,11 @@ router.get('/', productGetLimiter, validateQuery(searchProductsSchema), async (r
     logger.info('🔍 [PRODUCTS] Merchant ID:', req.merchantId);
     
     // First, find all stores belonging to this merchant
-    const merchantStores = await Store.find({ merchantId: req.merchantId }).select('_id');
+    const merchantStores = await Store.find({ merchantId: req.merchantId }).select('_id').lean();
     const storeIds = merchantStores.map(store => store._id);
-    
+
     logger.info('🔍 [PRODUCTS] Found', storeIds.length, 'stores for merchant');
-    
+
     // If no stores found, return empty
     if (storeIds.length === 0) {
       logger.info('⚠️ [PRODUCTS] No stores found for merchant, returning empty');
@@ -177,10 +177,10 @@ router.get('/', productGetLimiter, validateQuery(searchProductsSchema), async (r
       const store = await Store.findOne({
         _id: storeId,
         merchantId: req.merchantId
-      });
-      
+      }).lean();
+
       logger.info('🔍 [PRODUCTS] Store validation:', store ? `Found: ${store.name}` : 'NOT FOUND');
-      
+
       if (!store) {
         logger.info('❌ [PRODUCTS] Store does not belong to merchant');
         return res.status(403).json({
@@ -248,7 +248,8 @@ router.get('/', productGetLimiter, validateQuery(searchProductsSchema), async (r
       Product.find(searchCriteria)
         .sort(sortCriteria)
         .skip(skip)
-        .limit(limit),
+        .limit(limit)
+        .lean(),
       Product.countDocuments(searchCriteria)
     ]);
 
@@ -362,7 +363,7 @@ router.get('/categories', productGetLimiter, async (req, res) => {
       .lean();
 
     // Get merchant stores for querying products
-    const merchantStores = await Store.find({ merchantId: req.merchantId }).select('_id');
+    const merchantStores = await Store.find({ merchantId: req.merchantId }).select('_id').lean();
     const storeIds = merchantStores.map(store => store._id);
 
     // Also get categories that are already used in products (for backward compatibility)
@@ -387,7 +388,7 @@ router.get('/categories', productGetLimiter, async (req, res) => {
     for (const usedCatId of usedCategories) {
       if (usedCatId && !usedCategoryIds.has(usedCatId.toString())) {
         // This category is used but not in the list - check if it's a parent category
-        const cat = await Category.findById(usedCatId);
+        const cat = await Category.findById(usedCatId).lean();
         // Only add if it's a parent category (no parentCategory)
         if (cat && !cat.parentCategory) {
           categoryList.push({
@@ -438,7 +439,7 @@ router.get('/:id', productGetLimiter, validateParams(productIdSchema), async (re
     const productObjectId = new mongoose.Types.ObjectId(productId);
 
     // Find all stores belonging to this merchant (same approach as list endpoint)
-    const merchantStores = await Store.find({ merchantId: merchantId }).select('_id');
+    const merchantStores = await Store.find({ merchantId: merchantId }).select('_id').lean();
     const storeIds = merchantStores.map(store => store._id);
 
     logger.info('   Merchant stores:', storeIds.length);
@@ -452,12 +453,13 @@ router.get('/:id', productGetLimiter, validateParams(productIdSchema), async (re
       ]
     })
     .populate('category', 'name')
-    .populate('store', 'name logo');
+    .populate('store', 'name logo')
+    .lean() as any;
 
     if (!product) {
       logger.info('❌ [GET PRODUCT] Product not found or does not belong to merchant');
 
-      const productExists = await Product.findById(productObjectId);
+      const productExists = await Product.findById(productObjectId).lean() as any;
       if (productExists) {
         logger.info('   Product exists but belongs to different merchant. Store:', productExists.store?.toString(), 'MerchantId:', productExists.merchantId?.toString());
       }
@@ -501,15 +503,15 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
       const store = await Store.findOne({
         _id: productData.storeId,
         merchantId: req.merchantId
-      });
-      
+      }).lean();
+
       if (!store) {
         return res.status(400).json({
           success: false,
           message: 'Store not found or does not belong to this merchant'
         });
       }
-      
+
       // Convert to ObjectId
       productData.storeId = new mongoose.Types.ObjectId(productData.storeId);
     } else {
@@ -517,13 +519,13 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
       const activeStore = await Store.findOne({
         merchantId: req.merchantId,
         isActive: true
-      }).sort({ createdAt: 1 }); // Get first store if multiple active
-      
+      }).sort({ createdAt: 1 }).lean();
+
       if (activeStore) {
         productData.storeId = activeStore._id;
       } else {
         // Fallback: get any store for this merchant
-        const anyStore = await Store.findOne({ merchantId: req.merchantId }).sort({ createdAt: 1 });
+        const anyStore = await Store.findOne({ merchantId: req.merchantId }).sort({ createdAt: 1 }).lean();
         if (anyStore) {
           productData.storeId = anyStore._id;
         }
@@ -540,8 +542,8 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
             { slug: productData.category.toLowerCase() }
           ],
           isActive: true
-        });
-        
+        }).lean();
+
         if (!category) {
           logger.info('❌ [CREATE PRODUCT] Category not found:', productData.category);
           return res.status(400).json({
@@ -570,8 +572,8 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
             { slug: subcategoryValue.toLowerCase() }
           ],
           isActive: true
-        });
-        
+        }).lean();
+
         if (!subcategory) {
           logger.info('❌ [CREATE PRODUCT] Subcategory not found:', subcategoryValue);
           return res.status(400).json({
@@ -601,7 +603,7 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
       productData.sku = await generateSKU(req.merchantId!, productData.name);
     } else {
       // Check if SKU already exists
-      const existingProduct = await Product.findOne({ sku: productData.sku });
+      const existingProduct = await Product.findOne({ sku: productData.sku }).lean();
       if (existingProduct) {
         return res.status(400).json({
           success: false,
@@ -662,11 +664,11 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
       // Make slug unique by checking existing slugs and appending number if needed
       let slug = baseSlug;
       let counter = 1;
-      let existingProduct = await Product.findOne({ slug });
-      
+      let existingProduct = await Product.findOne({ slug }).lean();
+
       while (existingProduct) {
         slug = `${baseSlug}-${counter}`;
-        existingProduct = await Product.findOne({ slug });
+        existingProduct = await Product.findOne({ slug }).lean();
         counter++;
       }
       
@@ -715,10 +717,10 @@ router.post('/', productWriteLimiter, sanitizeProductRequest, validateRequest(cr
       
       // Get the user-side product ID for cache invalidation
       const UserProduct = require('../models/Product').Product;
-      const userProduct = await UserProduct.findOne({ 
+      const userProduct = await UserProduct.findOne({
         name: product.name,
-        slug: product.slug 
-      });
+        slug: product.slug
+      }).lean();
       if (userProduct) {
         userProductId = userProduct._id.toString();
       }
@@ -826,7 +828,7 @@ router.put('/:id',
         logger.info('❌ [UPDATE PRODUCT] Product not found');
         
         // Check if product exists but belongs to different merchant
-        const productExists = await Product.findById(productObjectId);
+        const productExists = await Product.findById(productObjectId).lean() as any;
         if (productExists) {
           logger.info('   Product exists but belongs to different merchant:', productExists.merchantId?.toString());
         } else {
@@ -848,8 +850,8 @@ router.put('/:id',
         const store = await Store.findOne({
           _id: storeId,
           merchantId: merchantObjectId
-        });
-        
+        }).lean();
+
         if (!store) {
           logger.info('❌ [UPDATE PRODUCT] Store not found or does not belong to merchant');
           return res.status(400).json({
@@ -874,8 +876,8 @@ router.put('/:id',
               { slug: productData.category.toLowerCase() }
             ],
             isActive: true
-          });
-          
+          }).lean();
+
           if (!category) {
             logger.info('❌ [UPDATE PRODUCT] Category not found:', productData.category);
             return res.status(400).json({
@@ -904,8 +906,8 @@ router.put('/:id',
               { slug: subcategoryValue.toLowerCase() }
             ],
             isActive: true
-          });
-          
+          }).lean();
+
           if (!subcategory) {
             logger.info('❌ [UPDATE PRODUCT] Subcategory not found:', subcategoryValue);
             return res.status(400).json({
@@ -926,7 +928,7 @@ router.put('/:id',
 
       // Check SKU uniqueness if being updated
       if (productData.sku && productData.sku !== product.sku) {
-        const existingProduct = await Product.findOne({ sku: productData.sku });
+        const existingProduct = await Product.findOne({ sku: productData.sku }).lean();
         if (existingProduct) {
           return res.status(400).json({
             success: false,
@@ -1041,7 +1043,7 @@ router.put('/:id',
 
           // Also send SMS alert
           try {
-            const merchant = await Merchant.findById(req.merchantId);
+            const merchant = await Merchant.findById(req.merchantId).lean();
             if (merchant && merchant.phone) {
               const formattedPhone = SMSService.formatPhoneNumber(merchant.phone);
               await SMSService.sendLowStockAlert(
@@ -1111,25 +1113,25 @@ router.delete('/:id', productDeleteLimiter, validateParams(productIdSchema), asy
     const merchantObjectId = new mongoose.Types.ObjectId(merchantId);
     
     // Try to find product by merchantId first (for products with merchantId set)
-    let product = await Product.findOne({
+    let product: any = await Product.findOne({
       _id: productObjectId,
       merchantId: merchantObjectId
-    });
-    
+    }).lean();
+
     // If not found by merchantId, try finding through stores (for products linked via store)
     if (!product) {
       logger.info('🔍 [DELETE PRODUCT] Product not found by merchantId, checking through stores...');
-      
+
       // Find all stores belonging to this merchant
-      const merchantStores = await Store.find({ merchantId: merchantObjectId }).select('_id');
+      const merchantStores = await Store.find({ merchantId: merchantObjectId }).select('_id').lean();
       const storeIds = merchantStores.map(store => store._id);
-      
+
       if (storeIds.length > 0) {
         // Try to find product by store
         product = await Product.findOne({
           _id: productObjectId,
           store: { $in: storeIds }
-        });
+        }).lean();
         
         if (product) {
           logger.info('✅ [DELETE PRODUCT] Product found via store relationship');
@@ -1143,7 +1145,7 @@ router.delete('/:id', productDeleteLimiter, validateParams(productIdSchema), asy
       logger.info('❌ [DELETE PRODUCT] Product not found');
       
       // Check if product exists but doesn't belong to this merchant
-      const productExists = await Product.findById(productObjectId);
+      const productExists = await Product.findById(productObjectId).lean() as any;
       if (productExists) {
         logger.info('   Product exists but belongs to different merchant/store');
         if (productExists.merchantId) {
@@ -1205,7 +1207,7 @@ router.delete('/:id', productDeleteLimiter, validateParams(productIdSchema), asy
       deleteQuery.merchantId = merchantObjectId;
     } else {
       // Find stores for this merchant and delete by store relationship
-      const merchantStores = await Store.find({ merchantId: merchantObjectId }).select('_id');
+      const merchantStores = await Store.find({ merchantId: merchantObjectId }).select('_id').lean();
       const storeIds = merchantStores.map(store => store._id);
       if (storeIds.length > 0) {
         deleteQuery.store = { $in: storeIds };
@@ -1280,7 +1282,7 @@ router.get('/:id/variants', productGetLimiter, async (req, res) => {
     const product = await Product.findOne({
       _id: req.params.id,
       merchantId: req.merchantId
-    });
+    }).lean() as any;
 
     if (!product) {
       return res.status(404).json({
@@ -1548,7 +1550,7 @@ router.get('/:id/reviews', productGetLimiter, async (req, res) => {
     const product = await Product.findOne({
       _id: productId,
       merchantId: merchantId
-    });
+    }).lean();
 
     if (!product) {
       return res.status(404).json({
@@ -1558,7 +1560,7 @@ router.get('/:id/reviews', productGetLimiter, async (req, res) => {
     }
 
     // Get merchant's store to query reviews (reviews reference store, not product)
-    const store = await Store.findOne({ merchantId });
+    const store = await Store.findOne({ merchantId }).lean();
     if (!store) {
       return res.status(404).json({
         success: false,
@@ -1964,7 +1966,7 @@ async function createUserSideProduct(merchantProduct: any, merchantId: string): 
       .trim();
 
     let counter = 1;
-    while (await Product.findOne({ slug: productSlug }).session(session)) {
+    while (await Product.findOne({ slug: productSlug }).session(session).lean()) {
       productSlug = `${merchantProduct.name.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, '-')}-${counter}`;
       counter++;
     }
@@ -1995,15 +1997,15 @@ async function createUserSideProduct(merchantProduct: any, merchantId: string): 
       // Find corresponding user products by SKU (merchant products should have been synced)
       const relatedMerchantProducts = await Product.find({
         _id: { $in: merchantProduct.relatedProducts }
-      }).select('sku').session(session);
+      }).select('sku').session(session).lean();
 
       if (relatedMerchantProducts.length > 0) {
         const relatedSkus = relatedMerchantProducts.map(p => p.sku);
         const relatedUserProducts = await Product.find({
           sku: { $in: relatedSkus }
-        }).select('_id').session(session);
+        }).select('_id').session(session).lean();
 
-        relatedProductIds = relatedUserProducts.map(p => p._id);
+        relatedProductIds = relatedUserProducts.map((p: any) => p._id);
         logger.info(`   - Found ${relatedProductIds.length} user-side related products`);
       }
     }
@@ -2019,13 +2021,13 @@ async function createUserSideProduct(merchantProduct: any, merchantId: string): 
       // Find corresponding merchant products to get their SKUs
       const relatedMerchantProducts = await Product.find({
         _id: { $in: merchantProductIds }
-      }).select('sku').session(session);
+      }).select('sku').session(session).lean();
 
       if (relatedMerchantProducts.length > 0) {
         const relatedSkus = relatedMerchantProducts.map(p => p.sku);
         const relatedUserProducts = await Product.find({
           sku: { $in: relatedSkus }
-        }).select('_id sku').session(session);
+        }).select('_id sku').session(session).lean();
 
         // Create a SKU to user product ID map
         const skuToUserProductId = new Map();
@@ -2035,7 +2037,7 @@ async function createUserSideProduct(merchantProduct: any, merchantId: string): 
 
         // Map merchant product IDs to user product IDs with purchase counts
         for (const item of merchantProduct.frequentlyBoughtWith) {
-          const merchantProd = relatedMerchantProducts.find(p => p._id.toString() === item.product.toString());
+          const merchantProd = relatedMerchantProducts.find((p: any) => p._id.toString() === item.product.toString());
           if (merchantProd && skuToUserProductId.has(merchantProd.sku)) {
             frequentlyBoughtWithData.push({
               productId: skuToUserProductId.get(merchantProd.sku),
@@ -2281,13 +2283,13 @@ async function updateUserSideProduct(merchantProduct: any, merchantId: string): 
         // Find corresponding user products by SKU
         const relatedMerchantProducts = await Product.find({
           _id: { $in: merchantProduct.relatedProducts }
-        }).select('sku').session(session);
+        }).select('sku').session(session).lean();
 
         if (relatedMerchantProducts.length > 0) {
           const relatedSkus = relatedMerchantProducts.map(p => p.sku);
           const relatedUserProducts = await Product.find({
             sku: { $in: relatedSkus }
-          }).select('_id').session(session);
+          }).select('_id').session(session).lean();
 
           updates.relatedProducts = relatedUserProducts.map(p => p._id);
           logger.info(`   - Updated ${updates.relatedProducts.length} related products`);
@@ -2310,13 +2312,13 @@ async function updateUserSideProduct(merchantProduct: any, merchantId: string): 
         // Find corresponding merchant products to get their SKUs
         const relatedMerchantProducts = await Product.find({
           _id: { $in: merchantProductIds }
-        }).select('sku').session(session);
+        }).select('sku').session(session).lean();
 
         if (relatedMerchantProducts.length > 0) {
           const relatedSkus = relatedMerchantProducts.map(p => p.sku);
           const relatedUserProducts = await Product.find({
             sku: { $in: relatedSkus }
-          }).select('_id sku').session(session);
+          }).select('_id sku').session(session).lean();
 
           // Create a SKU to user product ID map
           const skuToUserProductId = new Map();
@@ -2327,7 +2329,7 @@ async function updateUserSideProduct(merchantProduct: any, merchantId: string): 
           // Map merchant product IDs to user product IDs with purchase counts
           const frequentlyBoughtWithData: Array<{ productId: Types.ObjectId; purchaseCount: number }> = [];
           for (const item of merchantProduct.frequentlyBoughtWith) {
-            const merchantProd = relatedMerchantProducts.find(p => p._id.toString() === item.product.toString());
+            const merchantProd = relatedMerchantProducts.find((p: any) => p._id.toString() === item.product.toString());
             if (merchantProd && skuToUserProductId.has(merchantProd.sku)) {
               frequentlyBoughtWithData.push({
                 productId: skuToUserProductId.get(merchantProd.sku),
@@ -2410,7 +2412,7 @@ async function deleteUserSideProduct(merchantProductId: string): Promise<void> {
 
   try {
     // Find the merchant product to get its SKU
-    const merchantProduct = await Product.findById(merchantProductId).session(session);
+    const merchantProduct = await Product.findById(merchantProductId).session(session).lean() as any;
     if (!merchantProduct) {
       await session.abortTransaction();
       return;

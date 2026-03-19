@@ -193,7 +193,7 @@ class PartnerBenefitsService {
             },
           });
           // Invalidate partner earnings cache
-          invalidatePartnerEarningsCache(userId).catch(() => {});
+          invalidatePartnerEarningsCache(userId).catch((err) => logger.error('[PartnerBenefitsService] Partner earnings cache invalidation failed after transaction bonus', { error: err.message, userId }));
           logger.info(`[PARTNER BENEFITS] Added ${reward} transaction bonus to wallet`);
         } catch (walletError) {
           logger.error('[PARTNER BENEFITS] Error adding bonus to wallet:', walletError);

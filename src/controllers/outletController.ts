@@ -2,7 +2,7 @@ import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import Outlet from '../models/Outlet';
 import { sendSuccess, sendError, sendPaginated } from '../utils/response';
-import { escapeRegex } from '../utils/sanitize';
+import { escapeRegex, validateSortField } from '../utils/sanitize';
 import { asyncHandler } from '../utils/asyncHandler';
 
 /**
@@ -30,9 +30,11 @@ export const getOutlets = asyncHandler(async (req: Request, res: Response) => {
       filter.isActive = isActive === 'true';
     }
 
-    // Sort options
+    // Sort options (whitelist to prevent sort field injection)
+    const ALLOWED_SORT_FIELDS = ['name', 'address', 'isActive', 'createdAt', 'updatedAt'] as const;
+    const safeSortBy = validateSortField(sortBy as string, ALLOWED_SORT_FIELDS, 'name');
     const sortOptions: any = {};
-    sortOptions[sortBy as string] = order === 'asc' ? 1 : -1;
+    sortOptions[safeSortBy] = order === 'asc' ? 1 : -1;
 
     // Pagination
     const pageNum = Math.max(1, Number(page));

@@ -623,7 +623,7 @@ export const confirmUpgrade = asyncHandler(async (req: Request, res: Response) =
     });
 
     // Invalidate privilege cache so new tier benefits take effect immediately
-    privilegeResolutionService.invalidate(userId.toString()).catch(() => {});
+    privilegeResolutionService.invalidate(userId.toString()).catch((err) => logger.error('[SubscriptionCtrl] Privilege cache invalidation failed after upgrade', { error: err.message, userId }));
 
     res.status(200).json({
       success: true,
@@ -735,7 +735,7 @@ export const downgradeSubscription = asyncHandler(async (req: Request, res: Resp
     });
 
     // Invalidate privilege cache so downgrade reflects immediately
-    privilegeResolutionService.invalidate(userId.toString()).catch(() => {});
+    privilegeResolutionService.invalidate(userId.toString()).catch((err) => logger.error('[SubscriptionCtrl] Privilege cache invalidation failed after downgrade', { error: err.message, userId }));
 
     res.status(200).json({
       success: true,

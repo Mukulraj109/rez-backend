@@ -193,7 +193,7 @@ export const getStoreReviews = asyncHandler(async (req: Request, res: Response) 
 
     // Cache anonymous results for 5 minutes
     if (cacheKey) {
-      redisService.set(cacheKey, result, REVIEW_CACHE_TTL).catch(() => {});
+      redisService.set(cacheKey, result, REVIEW_CACHE_TTL).catch((err) => logger.warn('[Review] Cache set for store reviews failed', { error: err.message }));
     }
 
     sendSuccess(res, result);
@@ -409,8 +409,8 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
     // Coin award moved to moderateReview (merchant approval)
 
     // Invalidate review caches for this store
-    redisService.delPattern(`review:store:${req.body.store || req.body.storeId}:*`).catch(() => {});
-    redisService.delPattern('review:featured:*').catch(() => {});
+    redisService.delPattern(`review:store:${req.body.store || req.body.storeId}:*`).catch((err) => logger.warn('[Review] Cache invalidation for store reviews failed', { error: err.message }));
+    redisService.delPattern('review:featured:*').catch((err) => logger.warn('[Review] Cache invalidation for featured reviews failed', { error: err.message }));
 
     sendCreated(res, {
       review
@@ -806,7 +806,7 @@ export const getFeaturedReviews = asyncHandler(async (req: Request, res: Respons
       }
     };
 
-    redisService.set(cacheKey, result, REVIEW_CACHE_TTL).catch(() => {});
+    redisService.set(cacheKey, result, REVIEW_CACHE_TTL).catch((err) => logger.warn('[Review] Cache set for featured reviews failed', { error: err.message }));
 
     sendSuccess(res, result, 'Featured reviews retrieved successfully');
   } catch (error) {

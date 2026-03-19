@@ -1,8 +1,9 @@
 import { logger } from '../config/logger';
 import { Request, Response } from 'express';
 import partnerService from '../services/partnerService';
-import { PARTNER_LEVELS } from '../models/Partner';
+import Partner, { PARTNER_LEVELS } from '../models/Partner';
 import { asyncHandler } from '../utils/asyncHandler';
+import { sendError } from '../utils/response';
 
 /**
  * Partner Controller
@@ -114,7 +115,10 @@ export const getPartnerProfile = asyncHandler(async (req: Request, res: Response
       return;
     }
 
-    const partner = await partnerService.getOrCreatePartner(userId);
+    const partner = await Partner.findOne({ userId });
+    if (!partner) {
+      return sendError(res, 'Not enrolled in partner program', 404);
+    }
     const daysRemaining = partner.getDaysRemaining();
 
     res.status(200).json({

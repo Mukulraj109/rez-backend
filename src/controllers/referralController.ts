@@ -421,7 +421,7 @@ export const getReferralLeaderboard = asyncHandler(async (req: Request, res: Res
       totalReferrals: u.totalReferrals,
       totalEarned: u.totalEarned
     }));
-    redisService.set(cacheKey, { leaderboard, fullRanking }, 300).catch(() => {}); // 5 min cache
+    redisService.set(cacheKey, { leaderboard, fullRanking }, 300).catch((err) => logger.warn('[Referral] Cache set for leaderboard failed', { error: err.message })); // 5 min cache
 
     sendSuccess(res, {
       leaderboard,

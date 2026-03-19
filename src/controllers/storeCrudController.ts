@@ -344,7 +344,7 @@ export const getStoreById = asyncHandler(async (req: Request, res: Response) => 
     if (deviceHash) {
       import('../services/deviceFingerprintService').then(svc =>
         svc.trackMerchantAccess(deviceHash, String(store._id), store.name)
-      ).catch(() => {});
+      ).catch((err) => logger.error('[StoreCrudCtrl] Device fingerprint merchant access tracking failed', { error: err.message, storeId: store._id }));
     }
 
     sendSuccess(res, {

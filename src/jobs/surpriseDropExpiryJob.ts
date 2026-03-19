@@ -32,7 +32,7 @@ export async function runSurpriseDropExpiry(): Promise<void> {
     logger.error('Surprise drop expiry job failed:', error);
   } finally {
     if (lockToken) {
-      await redisService.releaseLock(lockKey, lockToken).catch(() => {});
+      await redisService.releaseLock(lockKey, lockToken).catch((err) => logger.warn('[SurpriseDropExpiryJob] Lock release failed', { error: err.message }));
     }
   }
 }

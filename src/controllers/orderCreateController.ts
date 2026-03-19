@@ -1071,7 +1071,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
       // Invalidate product cache for items whose stock changed
       for (const stockUpdate of stockUpdates) {
-        CacheInvalidator.invalidateProduct(stockUpdate.productId.toString()).catch(() => {});
+        CacheInvalidator.invalidateProduct(stockUpdate.productId.toString()).catch((err) => logger.error('[OrderCreateCtrl] Product cache invalidation failed after stock update', { error: err.message, productId: stockUpdate.productId }));
       }
     }
 

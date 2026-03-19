@@ -210,7 +210,7 @@ router.post('/', validateRequest(createStoreSchema), async (req: Request, res: R
     }
 
     // Verify merchant exists
-    const merchant = await Merchant.findById(merchantId);
+    const merchant = await Merchant.findById(merchantId).lean();
     if (!merchant) {
       return res.status(404).json({
         success: false,
@@ -221,7 +221,7 @@ router.post('/', validateRequest(createStoreSchema), async (req: Request, res: R
     const storeData = req.body;
 
     // Verify category exists
-    const category = await Category.findById(storeData.category);
+    const category = await Category.findById(storeData.category).lean();
     if (!category) {
       return res.status(400).json({
         success: false,
@@ -537,7 +537,7 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
 
     // Update category if provided
     if (updates.category) {
-      const category = await Category.findById(updates.category);
+      const category = await Category.findById(updates.category).lean();
       if (!category) {
         return res.status(400).json({
           success: false,
@@ -1100,7 +1100,7 @@ router.get('/:id/reviews', validateParams(storeIdSchema), validateQuery(Joi.obje
     const store = await Store.findOne({
       _id: storeId,
       merchantId: new mongoose.Types.ObjectId(merchantId)
-    });
+    }).lean();
 
     if (!store) {
       return sendNotFound(res, 'Store not found');
@@ -1261,7 +1261,7 @@ router.get('/:id/ugc', validateParams(storeIdSchema), validateQuery(Joi.object({
     const store = await Store.findOne({
       _id: storeId,
       merchantId: new mongoose.Types.ObjectId(merchantId)
-    });
+    }).lean();
 
     if (!store) {
       return sendNotFound(res, 'Store not found');
@@ -1365,7 +1365,7 @@ router.post('/:id/reviews/:reviewId/approve', validateParams(Joi.object({
     const store = await Store.findOne({
       _id: storeId,
       merchantId: new mongoose.Types.ObjectId(merchantId)
-    });
+    }).lean();
 
     if (!store) {
       return sendNotFound(res, 'Store not found');
@@ -1481,7 +1481,7 @@ router.post('/:id/reviews/:reviewId/reject', validateParams(Joi.object({
     const store = await Store.findOne({
       _id: storeId,
       merchantId: new mongoose.Types.ObjectId(merchantId)
-    });
+    }).lean();
 
     if (!store) {
       return sendNotFound(res, 'Store not found');

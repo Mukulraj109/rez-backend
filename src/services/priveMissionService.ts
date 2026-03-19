@@ -6,6 +6,7 @@ import { CoinTransaction } from '../models/CoinTransaction';
 import { Wallet } from '../models/Wallet';
 import { priveMultiplierService } from './priveMultiplierService';
 import { invalidateWalletCache } from './walletCacheService';
+import { logger } from '../config/logger';
 
 class PriveMissionService {
   /**
@@ -264,7 +265,7 @@ class PriveMissionService {
       await session.commitTransaction();
 
       // Invalidate wallet cache after coin mutation
-      invalidateWalletCache(userId).catch(() => {});
+      invalidateWalletCache(userId).catch((err) => logger.error('[PriveMissionService] Wallet cache invalidation failed after mission reward', { error: err.message, userId }));
 
       return { coins: coinAmount, coinType };
     } catch (err) {

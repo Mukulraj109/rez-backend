@@ -117,7 +117,7 @@ export const uploadBill = asyncHandler(async (req: Request, res: Response) => {
     await bill.populate('merchant', 'name logo cashbackPercentage');
 
     // Invalidate user's bill list cache
-    redisService.delPattern(`bills:user:${req.user!._id}:*`).catch(() => {});
+    redisService.delPattern(`bills:user:${req.user!._id}:*`).catch((err) => logger.warn('[Bill] Cache invalidation for user bills failed', { error: err.message }));
 
     sendSuccess(
       res,
@@ -202,7 +202,7 @@ export const getUserBills = asyncHandler(async (req: Request, res: Response) => 
     },
   };
 
-  redisService.set(cacheKey, data, 60).catch(() => {});
+  redisService.set(cacheKey, data, 60).catch((err) => logger.warn('[Bill] Cache set for bill list failed', { error: err.message }));
 
   sendSuccess(res, data);
 });

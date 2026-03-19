@@ -262,7 +262,7 @@ router.get('/overview', asyncHandler(async (_req: Request, res: Response) => {
   };
 
   // Cache result
-  await redisService.set(CACHE_KEY, result, CACHE_TTL).catch(() => {});
+  await redisService.set(CACHE_KEY, result, CACHE_TTL).catch((err) => logger.warn('[Economics] Cache set for economics dashboard failed', { error: err.message }));
 
   res.json({ success: true, data: result });
 }));
