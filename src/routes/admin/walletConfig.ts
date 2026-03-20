@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth, requireAdmin } from '../../middleware/auth';
+import { requireAuth, requireAdmin, requireSuperAdmin } from '../../middleware/auth';
 import { WalletConfig } from '../../models/WalletConfig';
 import { invalidateWalletConfigCache } from '../../services/walletCacheService';
 import { asyncHandler } from '../../utils/asyncHandler';
@@ -8,14 +8,13 @@ import { logger } from '../../config/logger';
 const router = Router();
 
 router.use(requireAuth);
-router.use(requireAdmin);
 
 /**
  * @route   GET /api/admin/wallet-config
  * @desc    Get wallet configuration singleton
- * @access  Admin
+ * @access  Admin (any level)
  */
-router.get('/', asyncHandler(async (req: Request, res: Response) => {
+router.get('/', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
     const config = await WalletConfig.getOrCreate();
     res.json({ success: true, data: config });
 }));
@@ -23,9 +22,9 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 /**
  * @route   PUT /api/admin/wallet-config
  * @desc    Update wallet configuration
- * @access  Admin
+ * @access  SuperAdmin only — critical platform config
  */
-router.put('/', asyncHandler(async (req: Request, res: Response) => {
+router.put('/', requireSuperAdmin, asyncHandler(async (req: Request, res: Response) => {
     const config = await WalletConfig.getOrCreate();
     const allowedFields = [
       'transferLimits', 'giftLimits', 'rechargeConfig',

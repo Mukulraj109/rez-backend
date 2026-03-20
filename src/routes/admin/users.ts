@@ -159,6 +159,14 @@ router.get('/:id/wallet', asyncHandler(async (req: Request, res: Response) => {
 router.post('/:id/suspend', requireSeniorAdmin, asyncHandler(async (req: Request, res: Response) => {
     const { reason } = req.body;
 
+    // Require a meaningful suspension reason for compliance
+    if (!reason || typeof reason !== 'string' || reason.trim().length < 10) {
+      return res.status(400).json({
+        success: false,
+        message: 'Suspension reason is required (minimum 10 characters)',
+      });
+    }
+
     const user = await User.findById(req.params.id);
 
     if (!user) {

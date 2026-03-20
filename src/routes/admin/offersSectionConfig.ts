@@ -6,7 +6,7 @@ import { logger } from '../../config/logger';
 
 import { Router, Request, Response } from 'express';
 import OffersSectionConfig from '../../models/OffersSectionConfig';
-import { requireAdmin } from '../../middleware/auth';
+import { requireAdmin, requireSuperAdmin } from '../../middleware/auth';
 import { sendSuccess, sendError } from '../../utils/response';
 import { asyncHandler } from '../../utils/asyncHandler';
 
@@ -88,7 +88,14 @@ router.put('/:sectionKey', asyncHandler(async (req: Request, res: Response) => {
  * POST /api/admin/offers-sections/seed
  * Seed default configurations for all 21 sections
  */
-router.post('/seed', asyncHandler(async (req: Request, res: Response) => {
+router.post('/seed', requireSuperAdmin, asyncHandler(async (req: Request, res: Response) => {
+    if (!req.body.confirmReset) {
+      return res.status(400).json({
+        success: false,
+        error: 'This will seed/reset offer section configurations. Send confirmReset: true to proceed.',
+      });
+    }
+
     const results = [];
 
     for (const section of DEFAULT_SECTIONS) {

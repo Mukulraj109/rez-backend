@@ -71,6 +71,21 @@ router.post('/flags', asyncHandler(async (req: Request, res: Response) => {
     return sendError(res, 'key, label, and group are required', 400);
   }
 
+  // Validate key format: lowercase alphanumeric + dots/underscores, 3-80 chars
+  const KEY_PATTERN = /^[a-z][a-z0-9._]{2,79}$/;
+  if (!KEY_PATTERN.test(key)) {
+    return sendError(res, `Invalid flag key "${key}". Keys must be 3-80 chars, lowercase alphanumeric with dots/underscores, starting with a letter.`, 400);
+  }
+
+  // Known valid flag groups — warn if group is unexpected
+  const KNOWN_GROUPS = [
+    'playandearn', 'gamification', 'wallet', 'subscription', 'social',
+    'commerce', 'content', 'platform', 'engagement', 'identity', 'system',
+  ];
+  if (!KNOWN_GROUPS.includes(group) && !req.body.isCustomGroup) {
+    return sendError(res, `Unknown group "${group}". Known groups: ${KNOWN_GROUPS.join(', ')}. Send isCustomGroup: true to override.`, 400);
+  }
+
   // Check key uniqueness
   const existing = await FeatureFlag.findOne({ key });
   if (existing) {

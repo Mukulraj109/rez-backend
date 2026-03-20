@@ -319,6 +319,17 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
+    // Validate campaign liability cap
+    const campaignMaxBenefit = maxBenefit || 0;
+    const dealsCount = Array.isArray(deals) ? deals.length : 0;
+    if (campaignMaxBenefit > 100000) {
+      return res.status(400).json({
+        success: false,
+        message: `Campaign max benefit (${campaignMaxBenefit}) exceeds the safety cap of 100,000. Contact engineering for higher limits.`,
+        requiresApproval: true,
+      });
+    }
+
     // Validate deals if provided
     const validatedDeals: ICampaignDeal[] = [];
     if (deals && Array.isArray(deals)) {
