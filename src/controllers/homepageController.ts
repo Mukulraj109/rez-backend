@@ -32,7 +32,7 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
 
   try {
     // Parse query parameters
-    const { sections, limit, location, mode, region: regionQuery } = req.query;
+    const { sections, limit, location, mode, region: regionQuery, segment, featureLevel: featureLevelQuery } = req.query;
     const userId = (req as any).userId; // From optionalAuth middleware
 
     // Get region from X-Rez-Region header or query param
@@ -95,7 +95,11 @@ export const getHomepage = asyncHandler(async (req: Request, res: Response) => {
     // Fetch homepage sections (cached) and user context (per-user, not cached) in parallel
     // userContext is only fetched if user is authenticated — it adds wallet, cart, voucher, etc.
     const cachedPromise = redisService.get<any>(homepageCacheKey);
-    const userContextPromise = userId ? fetchUserContext(userId) : Promise.resolve(null);
+    const parsedSegment = segment as string | undefined;
+    const parsedFeatureLevel = featureLevelQuery ? parseInt(featureLevelQuery as string, 10) : undefined;
+    const userContextPromise = userId
+      ? fetchUserContext(userId, { segment: parsedSegment, featureLevel: parsedFeatureLevel })
+      : Promise.resolve(parsedSegment ? { segment: parsedSegment, featureLevel: parsedFeatureLevel || 1 } : null);
 
     const [cached, userContext] = await Promise.all([cachedPromise, userContextPromise]);
 
@@ -243,13 +247,15 @@ async function getCachedGlobalOfferCount(): Promise<number> {
   return count;
 }
 
-async function fetchUserContext(userId: string): Promise<{
+async function fetchUserContext(userId: string, extra?: { segment?: string; featureLevel?: number }): Promise<{
   walletBalance: number;
   totalSaved: number;
   voucherCount: number;
   offersCount: number;
   cartItemCount: number;
   subscription: { tier: string; status: string };
+  segment?: string;
+  featureLevel?: number;
 } | null> {
   try {
     // Short-cache per-user context (30s) to avoid 6 DB queries on every homepage load
@@ -283,6 +289,8 @@ async function fetchUserContext(userId: string): Promise<{
         tier: subscription.tier,
         status: subscription.status,
       } : { tier: 'free', status: 'active' },
+      segment: extra?.segment,
+      featureLevel: extra?.featureLevel,
     };
 
     // Cache for 30s — acceptable staleness for display counts

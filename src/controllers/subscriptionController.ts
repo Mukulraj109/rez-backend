@@ -980,6 +980,27 @@ export const getSubscriptionUsage = asyncHandler(async (req: Request, res: Respo
 });
 
 /**
+ * Get current month subscription savings breakdown
+ * GET /api/subscriptions/my-savings
+ */
+export const getMySavings = asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?._id || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+    }
+
+    const savings = await subscriptionBenefitsService.getMonthlySubscriptionSavings(userId);
+
+    res.status(200).json({
+      success: true,
+      data: savings
+    });
+});
+
+/**
  * Get value proposition for upgrading
  * GET /api/subscriptions/value-proposition/:tier
  */

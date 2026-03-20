@@ -577,7 +577,7 @@ async function creditRewardToWallet(
         referenceId: `bonus:${claimId}`,
         referenceModel: 'BonusClaim',
       }).catch((err) => logger.error('[BonusCampaignService] Liability recording failed for bonus claim', { error: err.message, claimId }));
-    });
+    }).catch((err) => logger.error('[BonusCampaignService] Failed to load liabilityService module', { error: err.message }));
   }
 
   // Return a compatible object for callers that read ._id

@@ -133,13 +133,17 @@ export const getFollowerAnalytics = asyncHandler(async (req: Request, res: Respo
       return sendForbidden(res, 'You do not have permission to view this store\'s analytics');
     }
 
-    // Get all followers
+    // Get follower count efficiently (DB-side count, no full doc fetch)
+    const totalFollowers = await Wishlist.countDocuments({
+      'items.itemType': 'Store',
+      'items.itemId': storeId
+    });
+
+    // Get recent followers only (capped at 500 for analytics)
     const wishlists = await Wishlist.find({
       'items.itemType': 'Store',
       'items.itemId': storeId
-    }).lean();
-
-    const totalFollowers = wishlists.length;
+    }).limit(500).lean();
 
     // Calculate followers this week and month
     const now = new Date();
@@ -252,12 +256,13 @@ export const getTopFollowers = asyncHandler(async (req: Request, res: Response) 
       return sendForbidden(res, 'You do not have permission to view this store\'s top followers');
     }
 
-    // Get all followers
+    // Get followers (capped at 100 for top followers display)
     const wishlists = await Wishlist.find({
       'items.itemType': 'Store',
       'items.itemId': storeId
     })
       .populate('user', 'profile.firstName profile.lastName profile.avatar')
+      .limit(100)
       .lean();
 
     if (wishlists.length === 0) {

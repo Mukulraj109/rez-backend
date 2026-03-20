@@ -85,7 +85,8 @@ const normalizeProductName = (name: string, brand?: string): string => {
 
 /**
  * Search products by query with optional mode and region filtering
- * Uses $text index for fast full-text search with $regex fallback for partial matches
+ * Uses weighted $text index (name:10, brand:5, tags:3, description:1)
+ * for fast full-text search with $regex fallback (capped at 50 results) for partial matches
  */
 const searchProducts = async (query: string, limit: number, mode?: ModeId, region?: RegionId): Promise<any> => {
   try {
@@ -149,7 +150,9 @@ const searchProducts = async (query: string, limit: number, mode?: ModeId, regio
       };
     }
 
-    // Fallback to regex if text search returns nothing (handles partial words)
+    // $regex fallback — runs only when $text search returns 0 results
+    // The weighted text index (name:10, brand:5, tags:3, description:1)
+    // should minimize how often this path executes
     // Cache regex results to avoid repeated expensive scans
     const regexCacheKey = `search:regex:${escapeRegex(query)}:${mode || ''}:${region || ''}:${limit}`;
     const cachedRegex = await redisService.get<any>(regexCacheKey);
@@ -159,9 +162,8 @@ const searchProducts = async (query: string, limit: number, mode?: ModeId, regio
       ...baseFilter,
       $or: [
         { name: { $regex: escapeRegex(query), $options: 'i' } },
-        { description: { $regex: escapeRegex(query), $options: 'i' } },
         { brand: { $regex: escapeRegex(query), $options: 'i' } },
-        { tags: { $regex: escapeRegex(query), $options: 'i' } }
+        { tags: { $regex: escapeRegex(query), $options: 'i' } },
       ]
     };
 
@@ -170,7 +172,7 @@ const searchProducts = async (query: string, limit: number, mode?: ModeId, regio
         .populate('category', 'name slug')
         .populate('store', 'name logo')
         .select('name slug images pricing ratings inventory brand tags')
-        .limit(limit * 2)
+        .limit(50)
         .lean(),
       Product.countDocuments(regexQuery)
     ]);
@@ -228,8 +230,9 @@ const searchProductsGroupedInternal = async (
       Object.assign(baseStoreQuery, regionFilter);
     }
 
-    // First, find stores that match the query (by name or tags) AND are in region
-    // This allows searching for "Biryani" and getting products from "Paradise Biryani" store
+    // First, find stores that match the query (by name or tags) AND are in region.
+    // This allows searching for "Biryani" and getting products from "Paradise Biryani" store.
+    // $regex queries are capped at 10 results to bound scan cost.
     const matchingStores = await Store.find({
       ...baseStoreQuery,
       $or: [
@@ -298,7 +301,7 @@ const searchProductsGroupedInternal = async (
       };
     }
 
-    // Try $text search first (uses index, fast), with $regex fallback
+    // Try $text search first (uses weighted index: name:10, brand:5, tags:3, description:1), with $regex fallback
     let textSearchQuery: any = { ...baseGroupedFilter, $text: { $search: query } };
     // For text search, add matching store products via separate $or isn't possible
     // (MongoDB doesn't allow $text with $or at top level), so we run it plain first.
@@ -314,15 +317,16 @@ const searchProductsGroupedInternal = async (
       .limit(limit * 5)
       .lean();
 
-    // If text search returns few results, fallback to regex for partial matches
+    // $regex fallback — runs only when $text search returns fewer than `limit` results
+    // The weighted text index (name:10, brand:5, tags:3, description:1)
+    // should minimize how often this path executes
     if (products.length < limit) {
       const regexSearchQuery: any = {
         ...baseGroupedFilter,
         $or: [
           { name: { $regex: escapeRegex(query), $options: 'i' } },
-          { description: { $regex: escapeRegex(query), $options: 'i' } },
           { brand: { $regex: escapeRegex(query), $options: 'i' } },
-          { tags: { $regex: escapeRegex(query), $options: 'i' } }
+          { tags: { $regex: escapeRegex(query), $options: 'i' } },
         ]
       };
 
@@ -339,7 +343,7 @@ const searchProductsGroupedInternal = async (
           populate: { path: 'category', select: 'name' }
         })
         .select('name slug images pricing ratings inventory brand tags model cashback deliveryInfo category store')
-        .limit(limit * 5)
+        .limit(50)
         .lean();
 
       // Merge: add regex results that aren't already in text results
@@ -670,7 +674,8 @@ const searchProductsGroupedInternal = async (
 };
 
 /**
- * Search stores by query with optional mode and region filtering
+ * Search stores by query with optional mode and region filtering.
+ * Uses $regex (no $text index on Store) — results capped at 50 to bound scan cost.
  */
 const searchStores = async (query: string, limit: number, mode?: ModeId, region?: RegionId): Promise<any> => {
   try {
@@ -697,11 +702,13 @@ const searchStores = async (query: string, limit: number, mode?: ModeId, region?
       Object.assign(searchQuery, regionFilter);
     }
 
+    // $regex queries are capped at 50 results to bound scan cost
+    const regexLimit = Math.min(limit + 10, 50);
     const [stores, total] = await Promise.all([
       Store.find(searchQuery)
         .populate('category', 'name slug')
         .select('name slug logo coverImage description tags location ratings category')
-        .limit(limit + 10) // Fetch extra for sorting
+        .limit(regexLimit)
         .lean(),
       Store.countDocuments(searchQuery)
     ]);
@@ -729,7 +736,8 @@ const searchStores = async (query: string, limit: number, mode?: ModeId, region?
 };
 
 /**
- * Search articles by query
+ * Search articles by query.
+ * Uses $regex (no $text index on Article) — results capped at 50 to bound scan cost.
  */
 const searchArticles = async (query: string, limit: number): Promise<any> => {
   try {
@@ -744,11 +752,13 @@ const searchArticles = async (query: string, limit: number): Promise<any> => {
       ]
     };
 
+    // $regex queries are capped at 50 results to bound scan cost
+    const regexLimit = Math.min(limit + 10, 50);
     const [articles, total] = await Promise.all([
       Article.find(searchQuery)
         .populate('author', 'profile.firstName profile.lastName profile.avatar')
         .select('title slug excerpt coverImage category tags analytics author authorType')
-        .limit(limit + 10) // Fetch extra for sorting
+        .limit(regexLimit)
         .lean(),
       Article.countDocuments(searchQuery)
     ]);

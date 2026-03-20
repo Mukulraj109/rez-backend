@@ -102,6 +102,7 @@ router.use(authenticate);
 router.get('/current', subscriptionController.getCurrentSubscription);
 router.get('/benefits', subscriptionController.getSubscriptionBenefits);
 router.get('/usage', subscriptionController.getSubscriptionUsage);
+router.get('/my-savings', subscriptionController.getMySavings);
 router.get('/value-proposition/:tier', validateParams(tierParamSchema), subscriptionController.getValueProposition);
 
 router.post('/subscribe', validate(subscribeSchema), subscriptionController.subscribeToPlan);

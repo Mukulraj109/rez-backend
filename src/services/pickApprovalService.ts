@@ -134,6 +134,9 @@ export async function merchantApprovePick(
         const { logger: svcLogger } = require('../config/logger');
         svcLogger.error('Liability tracking failed for creator reward', err);
       });
+    }).catch((err: any) => {
+      const { logger: svcLogger } = require('../config/logger');
+      svcLogger.error('Failed to load liabilityService module', err);
     });
   }
 

@@ -56,8 +56,15 @@ export const getAllowedOrigins = (): string[] => {
   }
 
   if (origins.length === 0) {
-    logger.warn('[CORS] No origins configured! Set CORS_ORIGIN env var for production.');
-    return ['http://localhost:3000']; // Fallback for local dev only
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        '[CORS] CORS_ORIGIN environment variable is not set. ' +
+        'The server cannot start in production without it. ' +
+        'Set CORS_ORIGIN to your frontend domain (e.g. https://app.rezapp.com).'
+      );
+    }
+    logger.warn('[CORS] No origins configured. Dev fallback: localhost:3000 only.');
+    return ['http://localhost:3000'];
   }
 
   return origins;

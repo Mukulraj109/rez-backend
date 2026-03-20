@@ -1,8 +1,39 @@
 import express from 'express';
+import Joi from 'joi';
 import flashSaleController from '../controllers/flashSaleController';
 import { authenticate as authMiddleware } from '../middleware/auth';
+import { validateRequest } from '../middleware/merchantvalidation';
 
 const router = express.Router();
+
+// Validation schemas for flash sale purchase routes
+const purchaseInitiateSchema = Joi.object({
+  flashSaleId: Joi.string().hex().length(24).required(),
+  quantity: Joi.number().integer().min(1).max(10).required(),
+  paymentMethod: Joi.string().valid('wallet', 'upi', 'card', 'razorpay').required(),
+});
+
+const purchaseVerifySchema = Joi.object({
+  purchaseId: Joi.string().hex().length(24).required(),
+  paymentId: Joi.string().required(),
+  orderId: Joi.string().optional(),
+  signature: Joi.string().optional(),
+});
+
+const purchaseFailSchema = Joi.object({
+  purchaseId: Joi.string().hex().length(24).required(),
+  reason: Joi.string().max(500).optional(),
+});
+
+const validatePurchaseSchema = Joi.object({
+  flashSaleId: Joi.string().hex().length(24).required(),
+  quantity: Joi.number().integer().min(1).max(10).required(),
+});
+
+const promoCodeSchema = Joi.object({
+  code: Joi.string().trim().min(1).max(50).required(),
+  cartTotal: Joi.number().min(0).optional(),
+});
 
 // Public routes (no auth required)
 
@@ -63,7 +94,7 @@ router.post('/:id/track-click', flashSaleController.trackClick);
  * @desc    Validate flash sale purchase
  * @access  Private
  */
-router.post('/validate-purchase', authMiddleware, flashSaleController.validateFlashSalePurchase);
+router.post('/validate-purchase', authMiddleware, validateRequest(validatePurchaseSchema), flashSaleController.validateFlashSalePurchase);
 
 /**
  * @route   POST /api/flash-sales/best-offer
@@ -84,7 +115,7 @@ router.post('/apply-offer', authMiddleware, flashSaleController.applyOffer);
  * @desc    Validate promo code
  * @access  Private
  */
-router.post('/validate-promo', authMiddleware, flashSaleController.validatePromoCode);
+router.post('/validate-promo', authMiddleware, validateRequest(promoCodeSchema), flashSaleController.validatePromoCode);
 
 // ============================================
 // FLASH SALE PURCHASE ROUTES
@@ -95,21 +126,21 @@ router.post('/validate-promo', authMiddleware, flashSaleController.validatePromo
  * @desc    Initiate flash sale purchase - creates Stripe checkout session
  * @access  Private
  */
-router.post('/purchase/initiate', authMiddleware, flashSaleController.initiateFlashSalePurchase);
+router.post('/purchase/initiate', authMiddleware, validateRequest(purchaseInitiateSchema), flashSaleController.initiateFlashSalePurchase);
 
 /**
  * @route   POST /api/flash-sales/purchase/verify
  * @desc    Verify flash sale payment - completes the purchase
  * @access  Private
  */
-router.post('/purchase/verify', authMiddleware, flashSaleController.verifyFlashSalePayment);
+router.post('/purchase/verify', authMiddleware, validateRequest(purchaseVerifySchema), flashSaleController.verifyFlashSalePayment);
 
 /**
  * @route   POST /api/flash-sales/purchase/fail
  * @desc    Mark flash sale purchase as failed
  * @access  Private
  */
-router.post('/purchase/fail', authMiddleware, flashSaleController.failFlashSalePurchase);
+router.post('/purchase/fail', authMiddleware, validateRequest(purchaseFailSchema), flashSaleController.failFlashSalePurchase);
 
 /**
  * @route   GET /api/flash-sales/purchases

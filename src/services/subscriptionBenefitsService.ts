@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { Subscription, ISubscription, SubscriptionTier } from '../models/Subscription';
 import { User, IUser } from '../models/User';
 import { Order } from '../models/Order';
+import { CoinTransaction } from '../models/CoinTransaction';
 import tierConfigService from './tierConfigService';
 
 class SubscriptionBenefitsService {
@@ -380,6 +381,78 @@ class SubscriptionBenefitsService {
       };
     } catch (error) {
       logger.error('Error calculating subscription ROI:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get current month subscription savings breakdown
+   * Calculates extra coins earned due to tier cashback multiplier
+   */
+  async getMonthlySubscriptionSavings(userId: string | Types.ObjectId): Promise<{
+    totalCoinsEarned: number;
+    extraCoinsFromSubscription: number;
+    month: string;
+    monthLabel: string;
+    tier: string;
+    cashbackMultiplier: number;
+  }> {
+    const zeroResult = {
+      totalCoinsEarned: 0,
+      extraCoinsFromSubscription: 0,
+      month: '',
+      monthLabel: '',
+      tier: 'free' as string,
+      cashbackMultiplier: 1,
+    };
+
+    try {
+      const subscription = await this.getUserSubscription(userId);
+
+      if (!subscription || subscription.tier === 'free') {
+        const now = new Date();
+        zeroResult.month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        zeroResult.monthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        return zeroResult;
+      }
+
+      const multiplier = subscription.benefits.cashbackMultiplier || 1;
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+      const result = await CoinTransaction.aggregate([
+        {
+          $match: {
+            user: new Types.ObjectId(userId.toString()),
+            type: 'earned',
+            source: { $in: ['purchase_reward', 'cashback', 'smart_spend_reward'] },
+            createdAt: { $gte: monthStart, $lt: monthEnd },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalCoinsEarned: { $sum: '$amount' },
+          },
+        },
+      ]);
+
+      const totalCoinsEarned = result[0]?.totalCoinsEarned || 0;
+      const extraCoinsFromSubscription = multiplier > 1
+        ? Math.round(totalCoinsEarned * (1 - 1 / multiplier))
+        : 0;
+
+      return {
+        totalCoinsEarned,
+        extraCoinsFromSubscription,
+        month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+        monthLabel: now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        tier: subscription.tier,
+        cashbackMultiplier: multiplier,
+      };
+    } catch (error) {
+      logger.error('Error calculating monthly subscription savings:', error);
       throw error;
     }
   }

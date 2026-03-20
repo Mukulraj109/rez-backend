@@ -31,6 +31,12 @@ router.get('/',
     location: Joi.string().pattern(/^-?\d+\.?\d*,-?\d+\.?\d*$/).optional(),
     region: Joi.string().optional(),
     userId: Joi.string().optional(),
+    segment: Joi.string().valid(
+      'normal', 'verified_student', 'verified_employee', 'verified_defence',
+      'verified_healthcare', 'verified_teacher', 'verified_senior',
+      'verified_government', 'verified_differentlyAbled'
+    ).optional(),
+    featureLevel: Joi.number().integer().min(1).max(10).optional(),
   })),
   cacheMiddleware({ ttl: 300, keyPrefix: 'homepage:batch' }),
   getHomepage

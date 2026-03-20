@@ -107,6 +107,17 @@ export function validateEnvironment(): EnvConfig {
     warnings.push('BCRYPT_ROUNDS should be between 10-15 (recommended: 12)');
   }
 
+  // Validate Razorpay credentials are not placeholder values
+  const razorpayPlaceholders = ['rzp_test_your_razorpay_key_id', 'your_razorpay_key_secret', 'your_key_id', 'your_key_secret'];
+  if (process.env.NODE_ENV === 'production') {
+    if (!process.env.RAZORPAY_KEY_ID || razorpayPlaceholders.includes(process.env.RAZORPAY_KEY_ID)) {
+      errors.push('RAZORPAY_KEY_ID is missing or set to a placeholder value');
+    }
+    if (!process.env.RAZORPAY_KEY_SECRET || razorpayPlaceholders.includes(process.env.RAZORPAY_KEY_SECRET)) {
+      errors.push('RAZORPAY_KEY_SECRET is missing or set to a placeholder value');
+    }
+  }
+
   // Production-specific validation
   if (process.env.NODE_ENV === 'production') {
     PRODUCTION_REQUIRED.forEach(varName => {
