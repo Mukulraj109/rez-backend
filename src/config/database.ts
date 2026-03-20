@@ -70,7 +70,10 @@ export class Database {
       
       // Set up connection event listeners
       this.setupEventListeners();
-      
+
+      // Set up slow query monitoring
+      this.setupQueryMonitoring();
+
     } catch (error) {
       logger.error('❌ MongoDB connection error:', error);
       process.exit(1);
@@ -150,6 +153,34 @@ export class Database {
     return states[state as keyof typeof states] || 'unknown';
   }
   
+  // Monitor slow queries and log warnings
+  private setupQueryMonitoring(): void {
+    const SLOW_MS = 300;
+    const originalExec = mongoose.Query.prototype.exec;
+
+    (mongoose.Query.prototype as any).exec = async function (this: any) {
+      const start = Date.now();
+      const collection = this.model?.collection?.name || 'unknown';
+      const op = this.op || 'unknown';
+      const filter = JSON.stringify(this.getFilter?.() || {}).substring(0, 200);
+
+      try {
+        const result = await originalExec.call(this);
+        const duration = Date.now() - start;
+
+        if (duration > SLOW_MS) {
+          logger.warn('[SLOW QUERY]', { collection, op, duration_ms: duration, filter });
+        }
+        return result;
+      } catch (error) {
+        logger.error('[QUERY ERROR]', { collection, op, error: (error as Error).message });
+        throw error;
+      }
+    } as any;
+
+    logger.info('Query monitoring enabled (threshold: 300ms)');
+  }
+
   // Create database indexes (for production optimization)
   public async createIndexes(): Promise<void> {
     try {

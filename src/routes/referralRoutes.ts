@@ -13,8 +13,10 @@ import {
   getReferralCode,
   getReferralStats
 } from '../controllers/referralController';
+import { applyCode, checkUpgrade } from '../controllers/referralTierController';
 import { authenticate } from '../middleware/auth';
 import { referralLimiter, referralShareLimiter } from '../middleware/rateLimiter';
+import { validate, Joi } from '../middleware/validation';
 
 const router = express.Router();
 
@@ -87,5 +89,26 @@ router.get('/code', getReferralCode);
  * @access  Private
  */
 router.get('/stats', getReferralStats);
+
+/**
+ * @route   POST /api/referral/apply-code
+ * @desc    Apply referral code during registration
+ * @access  Private
+ */
+router.post(
+  '/apply-code',
+  validate(Joi.object({
+    code: Joi.string().trim().uppercase().min(4).max(20).required(),
+    metadata: Joi.object().optional(),
+  })),
+  applyCode
+);
+
+/**
+ * @route   GET /api/referral/check-upgrade
+ * @desc    Check if user qualifies for tier upgrade
+ * @access  Private
+ */
+router.get('/check-upgrade', checkUpgrade);
 
 export default router;

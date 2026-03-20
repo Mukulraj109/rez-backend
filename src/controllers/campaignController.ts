@@ -9,6 +9,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { isValidRegion, RegionId } from '../services/regionService';
 import stripeService from '../services/stripeService';
+import { privilegeResolutionService } from '../services/entitlement/privilegeResolutionService';
 
 /**
  * Get all active campaigns
@@ -64,6 +65,31 @@ export const getActiveCampaigns = asyncHandler(async (req: Request, res: Respons
       );
     } else if (exclusiveCampaigns.length > 0 && !req.user) {
       campaigns = campaigns.filter((c: any) => !c.exclusiveToProgramSlug);
+    }
+
+    // Annotate campaigns with userEligible flag for authenticated users
+    if (req.user) {
+      const PROGRAM_TO_ZONE: Record<string, string[]> = {
+        student_zone: ['student'],
+        corporate_perks: ['corporate'],
+        nuqta_prive: ['prive'],
+      };
+
+      try {
+        const priv = await privilegeResolutionService.resolve(String(req.user!.id));
+        const userZones = new Set(priv.activeZones || []);
+
+        campaigns = campaigns.map((c: any) => {
+          let userEligible = true;
+          if (c.exclusiveToProgramSlug) {
+            const matchZones = PROGRAM_TO_ZONE[c.exclusiveToProgramSlug] || [];
+            userEligible = matchZones.some((z: string) => userZones.has(z));
+          }
+          return { ...c, userEligible };
+        });
+      } catch (err) {
+        logger.warn('[CAMPAIGNS] Failed to resolve privileges for eligibility annotation', err);
+      }
     }
 
     logger.info(`✅ [CAMPAIGNS] Found ${campaigns.length} active campaigns`);

@@ -27,6 +27,7 @@ import { SOURCE_TO_CATEGORY } from '../config/earningsCategories';
 import gamificationEventBus from '../events/gamificationEventBus';
 import { invalidateWalletCache } from '../services/walletCacheService';
 import { asyncHandler } from '../utils/asyncHandler';
+import { withCache } from '../utils/cacheHelper';
 
 /**
  * Aggregates weekly earnings from CoinTransaction (all sources, not just check-ins).
@@ -37,7 +38,8 @@ const aggregateWeeklyEarnings = async (userObjectId: mongoose.Types.ObjectId) =>
   const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
 
-  const [result] = await CoinTransaction.aggregate([
+  const cacheKey = `prive:weekly-earnings:${userObjectId.toString()}`;
+  const [result] = await withCache(cacheKey, 300, () => CoinTransaction.aggregate([
     {
       $match: {
         user: userObjectId,
@@ -61,7 +63,7 @@ const aggregateWeeklyEarnings = async (userObjectId: mongoose.Types.ObjectId) =>
         ],
       },
     },
-  ]);
+  ]));
 
   const thisWeek = result?.thisWeek?.[0]?.total || 0;
   const lastWeek = result?.lastWeek?.[0]?.total || 0;
@@ -801,15 +803,24 @@ export const getPriveOffers = asyncHandler(async (req: Request, res: Response) =
       query.category = category;
     }
 
-    // Get total count
-    const total = await PriveOffer.countDocuments(query);
+    // Get all active offers from cache, then filter in memory
+    const allActiveOffers = await withCache('prive:offers:active', 300, () =>
+      PriveOffer.find({ isActive: true }).sort({ priority: -1, isFeatured: -1, createdAt: -1 }).lean()
+    );
 
-    // Get offers with pagination
-    const offers = await PriveOffer.find(query)
-      .sort({ priority: -1, isFeatured: -1, createdAt: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean();
+    // Apply tier and category filters in memory
+    const filteredOffers = (allActiveOffers as any[]).filter((offer: any) => {
+      if (offer.startsAt && new Date(offer.startsAt) > now) return false;
+      if (offer.expiresAt && new Date(offer.expiresAt) < now) return false;
+      if (offer.tierRequired && !accessibleTiers.includes(offer.tierRequired)) return false;
+      if (category && offer.category !== category) return false;
+      return true;
+    });
+
+    const total = filteredOffers.length;
+
+    // Apply pagination in memory
+    const offers = filteredOffers.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
     // Format offers
     const formattedOffers = offers.map((offer: any) => ({

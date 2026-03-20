@@ -25,6 +25,7 @@ import { ledgerService } from '../services/ledgerService';
 import subscriptionBenefitsService from '../services/subscriptionBenefitsService';
 import { priveMultiplierService } from '../services/priveMultiplierService';
 import { asyncHandler } from '../utils/asyncHandler';
+import { withCache } from '../utils/cacheHelper';
 // Note: StorePromoCoin model removed - using wallet.brandedCoins instead
 
 const VALID_MAIN_CATEGORY_SLUGS: MainCategorySlug[] = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
@@ -40,10 +41,13 @@ export const generateStoreQR = asyncHandler(async (req: Request, res: Response) 
     const merchantId = req.merchantId;
 
     // Verify store belongs to merchant
-    const store = await Store.findOne({
-      _id: storeId,
-      merchantId: merchantId,
-    }).lean();
+    const store = await withCache(
+      `store:payment-config:${storeId}:${merchantId}`,
+      300,
+      () => Store.findOne({ _id: storeId, merchantId })
+        .select('name isActive paymentSettings rewardRules storeQR category')
+        .lean()
+    );
 
     if (!store) {
       return res.status(404).json({
@@ -85,10 +89,13 @@ export const regenerateQR = asyncHandler(async (req: Request, res: Response) => 
     const merchantId = req.merchantId;
 
     // Verify store belongs to merchant
-    const store = await Store.findOne({
-      _id: storeId,
-      merchantId: merchantId,
-    }).lean();
+    const store = await withCache(
+      `store:payment-config:${storeId}:${merchantId}`,
+      300,
+      () => Store.findOne({ _id: storeId, merchantId })
+        .select('name isActive paymentSettings rewardRules storeQR category')
+        .lean()
+    );
 
     if (!store) {
       return res.status(404).json({
@@ -116,10 +123,13 @@ export const getStoreQRDetails = asyncHandler(async (req: Request, res: Response
     const merchantId = req.merchantId;
 
     // Verify store belongs to merchant
-    const store = await Store.findOne({
-      _id: storeId,
-      merchantId: merchantId,
-    }).select('storeQR name').lean();
+    const store = await withCache(
+      `store:payment-config:${storeId}:${merchantId}`,
+      300,
+      () => Store.findOne({ _id: storeId, merchantId })
+        .select('name isActive paymentSettings rewardRules storeQR category')
+        .lean()
+    );
 
     if (!store) {
       return res.status(404).json({
@@ -149,10 +159,13 @@ export const toggleQRStatus = asyncHandler(async (req: Request, res: Response) =
     const merchantId = req.merchantId;
 
     // Verify store belongs to merchant
-    const store = await Store.findOne({
-      _id: storeId,
-      merchantId: merchantId,
-    }).lean();
+    const store = await withCache(
+      `store:payment-config:${storeId}:${merchantId}`,
+      300,
+      () => Store.findOne({ _id: storeId, merchantId })
+        .select('name isActive paymentSettings rewardRules storeQR category')
+        .lean()
+    );
 
     if (!store) {
       return res.status(404).json({
@@ -233,10 +246,13 @@ export const getPaymentSettings = asyncHandler(async (req: Request, res: Respons
     const { storeId } = req.params;
     const merchantId = req.merchantId;
 
-    const store = await Store.findOne({
-      _id: storeId,
-      merchantId: merchantId,
-    }).select('paymentSettings rewardRules name').lean();
+    const store = await withCache(
+      `store:payment-config:${storeId}:${merchantId}`,
+      300,
+      () => Store.findOne({ _id: storeId, merchantId })
+        .select('name isActive paymentSettings rewardRules storeQR category')
+        .lean()
+    );
 
     if (!store) {
       return res.status(404).json({
@@ -290,10 +306,13 @@ export const updatePaymentSettings = asyncHandler(async (req: Request, res: Resp
     const merchantId = req.merchantId;
 
     // Verify store belongs to merchant
-    const store = await Store.findOne({
-      _id: storeId,
-      merchantId: merchantId,
-    }).lean();
+    const store = await withCache(
+      `store:payment-config:${storeId}:${merchantId}`,
+      300,
+      () => Store.findOne({ _id: storeId, merchantId })
+        .select('name isActive paymentSettings rewardRules storeQR category')
+        .lean()
+    );
 
     if (!store) {
       return res.status(404).json({

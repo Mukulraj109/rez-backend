@@ -226,7 +226,7 @@ export function setupMiddleware(app: Express): void {
   logger.info('CSRF protection middleware enabled');
 
   // Compression middleware
-  app.use(compression());
+  app.use(compression({ threshold: 2048 }));
 
   // Prometheus metrics middleware - tracks all HTTP requests
   app.use(metricsMiddleware);

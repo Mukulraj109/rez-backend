@@ -82,22 +82,42 @@ export const getConsolidatedEarningsSummary = asyncHandler(async (req: Request, 
     // Earning types that count as income (exclude spent, expired, branded_award)
     const earningTypes = ['earned', 'bonus', 'refunded'];
 
-    // 1. Aggregate CoinTransaction by source for breakdown
-    const breakdownAgg = await CoinTransaction.aggregate([
-      {
-        $match: {
-          user: userObjectId,
-          type: { $in: earningTypes },
-          ...dateFilter
+    // 1-3. Run breakdown aggregation, stats aggregation, and wallet query in parallel
+    const [breakdownAgg, statsAgg, walletResult] = await Promise.all([
+      CoinTransaction.aggregate([
+        {
+          $match: {
+            user: userObjectId,
+            type: { $in: earningTypes },
+            ...dateFilter
+          }
+        },
+        {
+          $group: {
+            _id: '$source',
+            total: { $sum: '$amount' },
+            count: { $sum: 1 }
+          }
         }
-      },
-      {
-        $group: {
-          _id: '$source',
-          total: { $sum: '$amount' },
-          count: { $sum: 1 }
+      ]),
+      CoinTransaction.aggregate([
+        {
+          $match: {
+            user: userObjectId,
+            type: { $in: earningTypes }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$amount' },
+            count: { $sum: 1 },
+            firstDate: { $min: '$createdAt' },
+            lastDate: { $max: '$createdAt' }
+          }
         }
-      }
+      ]),
+      Wallet.findOne({ user: userId }).lean().catch(() => null),
     ]);
 
     // Map aggregation results to UI categories
@@ -127,25 +147,7 @@ export const getConsolidatedEarningsSummary = asyncHandler(async (req: Request, 
     });
     breakdownTotal = Math.round(breakdownTotal * 100) / 100;
 
-    // 2. Compute statistics (all-time for averages, regardless of period filter)
-    const statsAgg = await CoinTransaction.aggregate([
-      {
-        $match: {
-          user: userObjectId,
-          type: { $in: earningTypes }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: '$amount' },
-          count: { $sum: 1 },
-          firstDate: { $min: '$createdAt' },
-          lastDate: { $max: '$createdAt' }
-        }
-      }
-    ]);
-
+    // Extract stats data
     const statsData = statsAgg[0] || { total: 0, count: 0, firstDate: new Date(), lastDate: new Date() };
     const daysActive = Math.max(
       1,
@@ -161,15 +163,10 @@ export const getConsolidatedEarningsSummary = asyncHandler(async (req: Request, 
       daysActive
     };
 
-    // 3. Get available balance from Wallet
+    // Extract available balance from wallet result
     let availableBalance = 0;
-    try {
-      const wallet = await Wallet.findOne({ user: userId }).lean();
-      if (wallet) {
-        availableBalance = (wallet as any).balance?.available || (wallet as any).balance?.total || 0;
-      }
-    } catch (e) {
-      // Wallet may not exist yet
+    if (walletResult) {
+      availableBalance = (walletResult as any).balance?.available || (walletResult as any).balance?.total || 0;
     }
 
     // 4. Calculate pending earnings from all pending sources in parallel
