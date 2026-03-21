@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import {
   uploadBill,
+  analyzeBillForUser,
   getUserBills,
   getBillById,
   getBillStatistics,
@@ -23,13 +24,8 @@ router.use(authenticate);
 router.post('/upload', upload.single('billImage'), uploadBill);
 router.get('/', getUserBills);
 router.get('/statistics', getBillStatistics);
-// Bill image analysis (OCR stub — returns empty so frontend shows manual input)
-router.post('/analyze-image', upload.single('billImage'), (req: Request, res: Response) => {
-  return res.json({
-    success: true,
-    data: { storeName: null, amount: null, date: null, category: null, confidence: 0 }
-  });
-});
+// Bill image analysis (OCR — pre-fills amount/merchant before upload)
+router.post('/analyze-image', upload.single('billImage'), analyzeBillForUser);
 
 router.get('/:billId', getBillById);
 router.post('/:billId/resubmit', upload.single('billImage'), resubmitBill);

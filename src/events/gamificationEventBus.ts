@@ -40,7 +40,11 @@ export type ActivityEventType =
   | 'challenge_completed'
   | 'invite_applied'
   | 'reward_issued'
-  | 'refund_processed';
+  | 'refund_processed'
+  // Savings actions — trigger savings streak
+  | 'store_payment_confirmed'
+  | 'deal_locked'
+  | 'cashback_earned';
 
 export type EventCategory =
   | 'order' | 'review' | 'referral' | 'video' | 'bill'
@@ -169,6 +173,48 @@ class GamificationEventBus {
         registerLeaderboardHandler(this);
         handlerCount++;
       }
+
+      // Review coin reward handler — awards branded/rez coins for store reviews
+      this.on('review_submitted', async (event) => {
+        try {
+          const { Store } = await import('../models/Store');
+          const { rewardEngine } = await import('../core/rewardEngine');
+
+          const storeId = event.data.storeId || event.data.entityId;
+          if (!storeId) return;
+
+          const store = await Store.findById(storeId)
+            .select('rewardRules merchantId name')
+            .lean();
+          if (!store) return;
+
+          const bonusCoins = (store as any).rewardRules?.reviewBonusCoins ?? 0;
+          const coinType = (store as any).rewardRules?.reviewBonusCoinType ?? 'branded';
+          if (bonusCoins <= 0) return;
+
+          await rewardEngine.issue({
+            userId: event.userId,
+            amount: bonusCoins,
+            rewardType: 'review' as any,
+            source: 'review',
+            coinType: coinType as any,
+            description: `${bonusCoins} ${coinType === 'branded' ? 'Branded' : 'REZ'} coins for reviewing ${(store as any).name}`,
+            operationType: 'review_reward' as any,
+            referenceId: `review:${event.data.entityId || event.eventId}`,
+            referenceModel: 'Review',
+            merchantId: coinType === 'branded' ? (store as any).merchantId?.toString() : undefined,
+            metadata: {
+              storeId,
+              reviewId: event.data.entityId,
+            },
+          });
+
+          logger.info(`[REVIEW] Awarded ${bonusCoins} ${coinType} coins to user ${event.userId} for reviewing store ${storeId}`);
+        } catch (err) {
+          logger.error('[REVIEW] Failed to award review coins:', err);
+        }
+      });
+      handlerCount++;
 
       // Analytics stream handler — always enabled (persists events for warehouse export)
       const { registerAnalyticsStreamHandler } = await import('./handlers/analyticsStreamHandler');

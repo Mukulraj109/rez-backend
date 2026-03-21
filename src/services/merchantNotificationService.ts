@@ -873,6 +873,55 @@ class MerchantNotificationService {
       },
     });
   }
+  /**
+   * Notify merchant when a customer requests the bill at a table
+   */
+  async notifyBillRequest(params: {
+    merchantId: string;
+    tableNumber: string;
+    total: number;
+    ordersCount: number;
+  }): Promise<void> {
+    try {
+      await this.createNotification({
+        merchantId: params.merchantId,
+        title: `Bill Requested — Table ${params.tableNumber}`,
+        message: `Table ${params.tableNumber} is ready to pay. Total: ${params.total.toFixed(2)} (${params.ordersCount} order${params.ordersCount > 1 ? 's' : ''})`,
+        type: 'info',
+        category: 'order',
+        priority: 'high',
+        data: {
+          metadata: {
+            type: 'bill_request',
+            tableNumber: params.tableNumber,
+            total: params.total,
+            ordersCount: params.ordersCount,
+          },
+        },
+      });
+
+      // Real-time socket event to merchant dashboard
+      try {
+        const io = getIO();
+        if (io) {
+          io.to(`merchant-${params.merchantId}`).emit('order-event', {
+            type: 'bill_request',
+            merchantId: params.merchantId,
+            data: {
+              tableNumber: params.tableNumber,
+              total: params.total,
+              ordersCount: params.ordersCount,
+            },
+            timestamp: new Date(),
+          });
+        }
+      } catch {
+        // Socket is best-effort
+      }
+    } catch (err) {
+      logger.error('[MERCHANT NOTIF] Bill request notification failed:', err);
+    }
+  }
 }
 
 // Export singleton instance

@@ -457,7 +457,28 @@ router.get('/bookings', merchantAuth, async (req: MerchantRequest, res: Response
     const limitNum = parseInt(limit as string, 10);
     const skip = (pageNum - 1) * limitNum;
 
-    const [bookings, total] = await Promise.all([
+    // Fetch from both ServiceBooking and ServiceAppointment models
+    const { ServiceAppointment } = await import('../models/ServiceAppointment');
+
+    // Build ServiceAppointment query (SA-02: merchant visibility)
+    const saQuery: any = {};
+    if (storeId) {
+      saQuery.store = new mongoose.Types.ObjectId(storeId as string);
+    } else if (merchantId) {
+      // Get all stores for this merchant to find their appointments
+      const { Store } = await import('../models/Store');
+      const merchantStores = await Store.find({ merchant: merchantId }).select('_id').lean();
+      saQuery.store = { $in: merchantStores.map((s: any) => s._id) };
+    }
+    if (status) saQuery.status = status;
+    if (date) {
+      const dateObj = new Date(date as string);
+      const startOfDay = new Date(dateObj); startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(dateObj); endOfDay.setHours(23, 59, 59, 999);
+      saQuery.appointmentDate = { $gte: startOfDay, $lte: endOfDay };
+    }
+
+    const [bookings, bookingTotal, serviceAppointments, saTotal] = await Promise.all([
       ServiceBooking.find(query)
         .populate('user', 'profile.firstName profile.lastName profile.phoneNumber profile.email')
         .populate('service', 'name images pricing serviceDetails')
@@ -467,12 +488,31 @@ router.get('/bookings', merchantAuth, async (req: MerchantRequest, res: Response
         .skip(skip)
         .limit(limitNum)
         .lean(),
-      ServiceBooking.countDocuments(query)
+      ServiceBooking.countDocuments(query),
+      ServiceAppointment.find(saQuery)
+        .populate('user', 'profile.firstName profile.lastName profile.phoneNumber')
+        .populate('store', 'name logo')
+        .sort({ appointmentDate: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      ServiceAppointment.countDocuments(saQuery),
     ]);
+
+    // Merge and normalize
+    const normalizedAppointments = serviceAppointments.map((a: any) => ({
+      ...a,
+      _type: 'ServiceAppointment',
+      bookingDate: a.appointmentDate,
+      'timeSlot': { start: a.appointmentTime },
+    }));
+
+    const merged = [...bookings, ...normalizedAppointments];
+    const total = bookingTotal + saTotal;
 
     res.status(200).json({
       success: true,
-      data: bookings,
+      data: merged,
       pagination: {
         page: pageNum,
         limit: limitNum,
@@ -710,6 +750,104 @@ router.get('/:id', merchantAuth, async (req: MerchantRequest, res: Response) => 
       message: 'Failed to fetch service',
       error: error.message
     });
+  }
+});
+
+// ==================== BLOCKED SLOTS ====================
+
+import BlockedSlot from '../models/BlockedSlot';
+
+/**
+ * GET /api/merchant/services/blocked-slots
+ * List merchant's blocked slots (filter by storeId and date range)
+ */
+router.get('/blocked-slots', merchantAuth, async (req: MerchantRequest, res: Response) => {
+  try {
+    const merchantId = req.merchant?._id;
+    const { storeId, from, to } = req.query;
+
+    const query: any = { merchantId };
+    if (storeId) query.storeId = new mongoose.Types.ObjectId(storeId as string);
+    if (from || to) {
+      query.date = {};
+      if (from) query.date.$gte = new Date(from as string);
+      if (to) query.date.$lte = new Date(to as string);
+    }
+
+    const slots = await BlockedSlot.find(query)
+      .populate('serviceId', 'name')
+      .sort({ date: 1, startTime: 1 })
+      .lean();
+
+    return res.json({ success: true, data: { slots, total: slots.length } });
+  } catch (err: any) {
+    logger.error('Error fetching blocked slots:', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch blocked slots' });
+  }
+});
+
+/**
+ * POST /api/merchant/services/blocked-slots
+ * Block a time slot (prevents new bookings for that window)
+ */
+router.post('/blocked-slots', merchantAuth, async (req: MerchantRequest, res: Response) => {
+  try {
+    const merchantId = req.merchant?._id;
+    const { storeId, serviceId, date, startTime, endTime, reason, isAllDay, recurring } = req.body;
+
+    if (!storeId || !date) {
+      return res.status(400).json({ success: false, message: 'storeId and date are required' });
+    }
+
+    if (!isAllDay && (!startTime || !endTime)) {
+      return res.status(400).json({ success: false, message: 'startTime and endTime required unless isAllDay is true' });
+    }
+
+    // Verify merchant owns this store
+    const store = await Store.findOne({ _id: storeId, merchant: merchantId }).select('_id').lean();
+    if (!store) {
+      return res.status(404).json({ success: false, message: 'Store not found or unauthorized' });
+    }
+
+    const slot = await BlockedSlot.create({
+      merchantId,
+      storeId: new mongoose.Types.ObjectId(storeId),
+      serviceId: serviceId ? new mongoose.Types.ObjectId(serviceId) : null,
+      date: new Date(date),
+      startTime: isAllDay ? '00:00' : startTime,
+      endTime: isAllDay ? '23:59' : endTime,
+      reason,
+      isAllDay: !!isAllDay,
+      recurring: recurring || undefined,
+    });
+
+    return res.status(201).json({ success: true, data: slot, message: 'Slot blocked successfully' });
+  } catch (err: any) {
+    logger.error('Error blocking slot:', err);
+    return res.status(500).json({ success: false, message: 'Failed to block slot' });
+  }
+});
+
+/**
+ * DELETE /api/merchant/services/blocked-slots/:id
+ * Unblock a previously blocked slot
+ */
+router.delete('/blocked-slots/:id', merchantAuth, async (req: MerchantRequest, res: Response) => {
+  try {
+    const merchantId = req.merchant?._id;
+    const slot = await BlockedSlot.findOneAndDelete({
+      _id: req.params.id,
+      merchantId, // Ensure merchant can only delete their own
+    });
+
+    if (!slot) {
+      return res.status(404).json({ success: false, message: 'Blocked slot not found' });
+    }
+
+    return res.json({ success: true, message: 'Slot unblocked successfully' });
+  } catch (err: any) {
+    logger.error('Error unblocking slot:', err);
+    return res.status(500).json({ success: false, message: 'Failed to unblock slot' });
   }
 });
 

@@ -1201,19 +1201,20 @@ export const confirmStorePayment = asyncHandler(async (req: Request, res: Respon
           milestoneReward = `${nextMilestoneConfig.coinsReward} Bonus Coins`;
         }
       } else {
-        // Default milestones: 5, 10, 20
+        // Default milestones: 5, 10, 15 (then repeating every 5)
         if (currentVisits < 5) {
           nextMilestone = 5;
-          milestoneReward = 'Bronze Member';
+          milestoneReward = 'Bronze Loyalist';
         } else if (currentVisits < 10) {
           nextMilestone = 10;
-          milestoneReward = 'Silver Member';
-        } else if (currentVisits < 20) {
-          nextMilestone = 20;
-          milestoneReward = 'Gold Member';
+          milestoneReward = 'Silver Loyalist';
+        } else if (currentVisits < 15) {
+          nextMilestone = 15;
+          milestoneReward = 'Gold Loyalist';
         } else {
-          nextMilestone = currentVisits;
-          milestoneReward = 'Gold Member (Max)';
+          // After 15, milestone every 5 visits
+          nextMilestone = currentVisits + (5 - (currentVisits % 5 || 5));
+          milestoneReward = 'Platinum Loyalist';
         }
       }
 
@@ -1360,6 +1361,21 @@ export const confirmStorePayment = asyncHandler(async (req: Request, res: Respon
       // Commit the transaction
       await session.commitTransaction();
       logger.info('[STORE PAYMENT] Payment completed (atomic):', paymentId);
+
+      // Emit savings streak event (non-blocking — payment already committed)
+      try {
+        const gamificationEventBus = (await import('../events/gamificationEventBus')).default;
+        gamificationEventBus.emit('store_payment_confirmed', {
+          userId: storePayment.userId.toString(),
+          metadata: {
+            storeId: storePayment.storeId.toString(),
+            storeName: storePayment.storeName,
+            amount: storePayment.billAmount,
+          },
+        });
+      } catch {
+        // Non-blocking — payment succeeded, streak update is bonus
+      }
 
       // Track subscription cashback usage (non-blocking, outside transaction)
       if (rewards.cashbackEarned > 0 && subscriptionMultiplier > 1) {
@@ -1595,7 +1611,7 @@ export const getStorePaymentById = asyncHandler(async (req: Request, res: Respon
  * GET /api/store-payment/coins/:storeId
  * 
  * Returns the 3 coin types per ReZ Wallet design:
- * 1. ReZ Coins (Universal) - Green, usable everywhere, 30-day expiry, no redemption cap
+ * 1. ReZ Coins (Universal) - Green, usable everywhere, expiry controlled by admin wallet config (default: never), no redemption cap
  * 2. Branded Coins (Merchant) - Store-specific, no expiry, only at that merchant
  * 3. Promo Coins (Limited-time) - Gold, expiry countdown, max 20% per bill cap
  * 
@@ -2328,4 +2344,93 @@ export const getStorePaymentStats = asyncHandler(async (req: Request, res: Respo
         })),
       },
     });
+});
+
+// ==================== PER-TABLE QR CODE HANDLERS ====================
+
+/**
+ * POST /api/store-payment/table-qr/:storeId/setup
+ * Merchant sets up tables and generates QR codes for each.
+ */
+export const setupTableQRCodes = asyncHandler(async (req: Request, res: Response) => {
+  const { storeId } = req.params;
+  const merchantId = (req as any).merchant?._id?.toString();
+  const { tables } = req.body;
+
+  if (!tables || !Array.isArray(tables) || tables.length === 0) {
+    return res.status(400).json({ success: false, message: 'tables array is required' });
+  }
+  if (tables.length > 50) {
+    return res.status(400).json({ success: false, message: 'Maximum 50 tables supported' });
+  }
+
+  const store = await Store.findOne({ _id: storeId, merchant: merchantId });
+  if (!store) {
+    return res.status(404).json({ success: false, message: 'Store not found' });
+  }
+
+  const generatedTables = [];
+
+  for (const t of tables) {
+    if (!t.tableNumber) continue;
+
+    const qrData = JSON.stringify({
+      type: 'REZ_DINE_IN',
+      version: '1',
+      storeId,
+      storeName: store.name,
+      tableNumber: t.tableNumber,
+      timestamp: Date.now(),
+    });
+
+    let qrCodeUrl = '';
+    try {
+      qrCodeUrl = await QRCodeService.generateQRImage(qrData);
+    } catch (err) {
+      logger.warn(`[TABLE QR] Failed to generate QR image for table ${t.tableNumber}:`, err);
+    }
+
+    generatedTables.push({
+      tableNumber: t.tableNumber,
+      capacity: t.capacity || 4,
+      qrCodeUrl,
+      qrData,
+      isActive: true,
+    });
+  }
+
+  (store as any).bookingConfig = {
+    ...((store as any).bookingConfig || {}),
+    tables: generatedTables,
+    tableCount: generatedTables.length,
+    enabled: true,
+  };
+  store.markModified('bookingConfig');
+  await store.save();
+
+  res.status(201).json({
+    success: true,
+    data: { storeId, tables: generatedTables, count: generatedTables.length },
+    message: `${generatedTables.length} table QR codes generated`,
+  });
+});
+
+/**
+ * GET /api/store-payment/table-qr/:storeId
+ * Get all tables and their QR codes for a store.
+ */
+export const getTableQRCodes = asyncHandler(async (req: Request, res: Response) => {
+  const { storeId } = req.params;
+  const merchantId = (req as any).merchant?._id?.toString();
+
+  const store = await Store.findOne({ _id: storeId, merchant: merchantId })
+    .select('name bookingConfig.tables bookingConfig.tableCount bookingConfig.enabled')
+    .lean();
+
+  if (!store) {
+    return res.status(404).json({ success: false, message: 'Store not found' });
+  }
+
+  const tables = (store as any).bookingConfig?.tables || [];
+  res.json({ success: true, data: { tables, tableCount: tables.length } });
 });

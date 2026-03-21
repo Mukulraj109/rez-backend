@@ -19,6 +19,7 @@ interface UpdateOrderStatusRequest {
   status: OrderStatus;
   notes?: string;
   notifyCustomer?: boolean;
+  prepTimeMinutes?: number;
 }
 
 interface BulkOrderAction {
@@ -543,7 +544,7 @@ router.put('/:id/status', async (req: Request, res: Response) => {
 
   try {
     const { id } = req.params;
-    const { status, notes, notifyCustomer = true }: UpdateOrderStatusRequest = req.body;
+    const { status, notes, notifyCustomer = true, prepTimeMinutes }: UpdateOrderStatusRequest = req.body;
     const merchantId = req.merchantId as string;
 
     // Validate new status
@@ -666,6 +667,17 @@ router.put('/:id/status', async (req: Request, res: Response) => {
 
     // Update order status
     await order.updateStatus(status, notes);
+
+    // Set estimated ready time when merchant confirms with prep time
+    if (status === 'confirmed' && prepTimeMinutes && prepTimeMinutes > 0 && prepTimeMinutes <= 300) {
+      const readyAt = new Date();
+      readyAt.setMinutes(readyAt.getMinutes() + prepTimeMinutes);
+      if (!order.fulfillmentDetails) {
+        (order as any).fulfillmentDetails = {};
+      }
+      order.fulfillmentDetails!.estimatedReadyTime = readyAt;
+    }
+
     await order.save({ session });
 
     // Generate shipping label when order is ready for dispatch
@@ -709,6 +721,10 @@ router.put('/:id/status', async (req: Request, res: Response) => {
         if (order.delivery.trackingId) {
           const message = `Your order #${order.orderNumber} from ${storeName} is out for delivery. Tracking ID: ${order.delivery.trackingId}`;
           await SMSService.send({ to: formattedPhone, message });
+        } else if (status === 'confirmed' && order.fulfillmentDetails?.estimatedReadyTime) {
+          const mins = Math.max(1, Math.round((order.fulfillmentDetails.estimatedReadyTime.getTime() - Date.now()) / 60000));
+          const etaText = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins} mins`;
+          await SMSService.send({ to: formattedPhone, message: `Your order #${order.orderNumber} from ${storeName} is confirmed! Ready in ~${etaText}. We'll notify you when it's ready.` });
         } else {
           await SMSService.sendOrderStatusUpdate(
             formattedPhone,

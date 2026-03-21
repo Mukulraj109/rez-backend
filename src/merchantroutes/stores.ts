@@ -1556,5 +1556,105 @@ router.post('/:id/reviews/:reviewId/reject', validateParams(Joi.object({
   }
 });
 
+// ==================== MALL LISTING REQUESTS ====================
+
+import { MallListingRequest } from '../models/MallListingRequest';
+
+const requestMallListingSchema = Joi.object({
+  reason: Joi.string().required().min(10).max(500),
+});
+
+/**
+ * @route   POST /api/merchant/stores/:id/request-mall-listing
+ * @desc    Request to have a store listed in the Mall
+ * @access  Merchant (store owner)
+ */
+router.post('/:id/request-mall-listing', validateParams(storeIdSchema), validateRequest(requestMallListingSchema), async (req: Request, res: Response) => {
+  try {
+    const merchantId = (req as any).merchant._id;
+    const { id: storeId } = req.params;
+    const { reason } = req.body;
+
+    const store = await Store.findOne({ _id: storeId, merchant: merchantId });
+    if (!store) {
+      return sendNotFound(res, 'Store not found or unauthorized');
+    }
+
+    // Check if store is already in mall
+    if (store.deliveryCategories?.mall) {
+      return sendBadRequest(res, 'Store is already listed in the Mall');
+    }
+
+    // Check for existing pending request
+    const existingRequest = await MallListingRequest.findOne({
+      storeId,
+      status: 'pending',
+    });
+    if (existingRequest) {
+      return sendBadRequest(res, 'A pending mall listing request already exists for this store');
+    }
+
+    const request = await MallListingRequest.create({
+      storeId,
+      merchantId,
+      reason,
+    });
+
+    return sendSuccess(res, { request }, 'Mall listing request submitted successfully');
+  } catch (error: any) {
+    logger.error('Request mall listing error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to submit mall listing request',
+    });
+  }
+});
+
+/**
+ * @route   GET /api/merchant/stores/:id/mall-status
+ * @desc    Get mall listing status for a store
+ * @access  Merchant (store owner)
+ */
+router.get('/:id/mall-status', validateParams(storeIdSchema), async (req: Request, res: Response) => {
+  try {
+    const merchantId = (req as any).merchant._id;
+    const { id: storeId } = req.params;
+
+    const store = await Store.findOne({ _id: storeId, merchant: merchantId })
+      .select('name deliveryCategories')
+      .lean();
+    if (!store) {
+      return sendNotFound(res, 'Store not found or unauthorized');
+    }
+
+    const isListed = !!store.deliveryCategories?.mall;
+
+    // Get latest request
+    const latestRequest = await MallListingRequest.findOne({ storeId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return sendSuccess(res, {
+      isListed,
+      latestRequest: latestRequest
+        ? {
+            _id: latestRequest._id,
+            status: latestRequest.status,
+            reason: latestRequest.reason,
+            adminNotes: latestRequest.adminNotes,
+            createdAt: latestRequest.createdAt,
+            reviewedAt: latestRequest.reviewedAt,
+          }
+        : null,
+    });
+  } catch (error: any) {
+    logger.error('Get mall status error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get mall status',
+    });
+  }
+});
+
 export default router;
 

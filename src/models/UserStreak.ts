@@ -2,7 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IUserStreak extends Document {
   user: mongoose.Types.ObjectId;
-  type: 'login' | 'order' | 'review' | 'app_open';
+  type: 'login' | 'order' | 'review' | 'app_open' | 'savings';
   currentStreak: number;
   longestStreak: number;
   lastActivityDate: Date;
@@ -36,7 +36,7 @@ const UserStreakSchema: Schema = new Schema(
     },
     type: {
       type: String,
-      enum: ['login', 'order', 'review', 'app_open'],
+      enum: ['login', 'order', 'review', 'app_open', 'savings'],
       required: true,
       index: true
     },

@@ -225,6 +225,14 @@ export interface IStore extends Document {
       start: string; // e.g., "09:00"
       end: string; // e.g., "21:00"
     };
+    tables?: Array<{
+      tableNumber: string;
+      capacity: number;
+      qrCodeUrl?: string;
+      qrData?: string;
+      isActive: boolean;
+    }>;
+    tableCount?: number;
   };
   storeVisitConfig?: {
     // For RETAIL stores - plan store visit
@@ -672,7 +680,15 @@ const StoreSchema = new Schema<IStore>({
     workingHours: {
       start: { type: String, default: '09:00' },
       end: { type: String, default: '21:00' }
-    }
+    },
+    tables: [{
+      tableNumber: { type: String, required: true, trim: true },
+      capacity: { type: Number, default: 4, min: 1, max: 20 },
+      qrCodeUrl: { type: String },
+      qrData: { type: String },
+      isActive: { type: Boolean, default: true },
+    }],
+    tableCount: { type: Number, default: 0, min: 0 },
   },
   storeVisitConfig: {
     enabled: { type: Boolean, default: false },
@@ -827,6 +843,11 @@ const StoreSchema = new Schema<IStore>({
       type: Number,
       default: 5,
       min: 0
+    },
+    reviewBonusCoinType: {
+      type: String,
+      enum: ['rez', 'branded'],
+      default: 'branded',
     },
     socialShareBonusCoins: {
       type: Number,

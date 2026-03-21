@@ -20,7 +20,7 @@ export const CURRENCY_RULES: Record<string, CoinTypeRule> = {
   rez:     { expiryDays: 0,   maxUsagePct: 100, conversionRate: 1, priority: 4 },
   prive:   { expiryDays: 365, maxUsagePct: 100, conversionRate: 1, priority: 3 },
   promo:   { expiryDays: 90,  maxUsagePct: 20,  conversionRate: 1, priority: 1 },
-  branded: { expiryDays: 180, maxUsagePct: 100, conversionRate: 1, priority: 2 },
+  branded: { expiryDays: 0,   maxUsagePct: 100, conversionRate: 1, priority: 2 },  // 0 = never expires
 };
 
 export const COIN_TYPES = Object.keys(CURRENCY_RULES) as Array<keyof typeof CURRENCY_RULES>;

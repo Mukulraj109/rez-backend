@@ -363,6 +363,19 @@ export class QRCodeService {
       errorCorrectionLevel: 'H',
     });
   }
+
+  /**
+   * Generate QR code image as base64 data URL (branded colors)
+   * Used for per-table QR codes
+   */
+  static async generateQRImage(data: string): Promise<string> {
+    return QRCode.toDataURL(data, {
+      width: 400,
+      margin: 2,
+      color: { dark: '#1a3a52', light: '#ffffff' },
+      errorCorrectionLevel: 'H',
+    });
+  }
 }
 
 export default QRCodeService;

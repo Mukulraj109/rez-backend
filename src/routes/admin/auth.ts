@@ -360,4 +360,52 @@ router.post('/logout-all-devices', authenticate, asyncHandler(async (req: Reques
   res.json({ success: true, message: 'All sessions invalidated. All devices must re-login.' });
 }));
 
+/**
+ * POST /api/admin/auth/change-password
+ * Self-service password change for the currently authenticated admin
+ */
+router.post('/change-password', authenticate, asyncHandler(async (req: Request, res: Response) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ success: false, message: 'currentPassword and newPassword are required' });
+  }
+
+  if (newPassword.length < 8) {
+    return res.status(400).json({ success: false, message: 'New password must be at least 8 characters' });
+  }
+
+  if (currentPassword === newPassword) {
+    return res.status(400).json({ success: false, message: 'New password must be different from current password' });
+  }
+
+  const userId = (req as any).userId || (req as any).user?._id;
+  const user = await User.findById(userId).select('+password');
+
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User not found' });
+  }
+
+  const adminRoles = ['admin', 'support', 'operator', 'super_admin'];
+  if (!adminRoles.includes(user.role)) {
+    return res.status(403).json({ success: false, message: 'Admin access required' });
+  }
+
+  if (!user.password) {
+    return res.status(400).json({ success: false, message: 'No password set for this account' });
+  }
+
+  const isValid = await bcrypt.compare(currentPassword, user.password);
+  if (!isValid) {
+    return res.status(400).json({ success: false, message: 'Current password is incorrect' });
+  }
+
+  user.password = await bcrypt.hash(newPassword, 12);
+  await user.save();
+
+  logger.info(`[Admin Auth] Password changed for admin: ${user.email || userId}`);
+
+  res.json({ success: true, message: 'Password changed successfully' });
+}));
+
 export default router;

@@ -20,6 +20,9 @@ import {
   getStoreMembership,
   // Merchant stats
   getStorePaymentStats,
+  // Per-table QR codes
+  setupTableQRCodes,
+  getTableQRCodes,
 } from '../controllers/storePaymentController';
 import { authenticate } from '../middleware/auth';
 import { authMiddleware as merchantAuth } from '../middleware/merchantauth';
@@ -59,6 +62,14 @@ router.get('/qr/:storeId', merchantAuth, getStoreQRDetails);
 
 // Toggle QR code active status (merchant only)
 router.patch('/qr/:storeId/toggle', merchantAuth, toggleQRStatus);
+
+// ==================== PER-TABLE QR CODE ROUTES (MERCHANT) ====================
+
+// Setup tables and generate per-table QR codes
+router.post('/table-qr/:storeId/setup', merchantAuth, setupTableQRCodes);
+
+// Get all tables and their QR codes
+router.get('/table-qr/:storeId', merchantAuth, getTableQRCodes);
 
 // ==================== QR CODE ROUTES (CUSTOMER) ====================
 

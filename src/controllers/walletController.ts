@@ -19,6 +19,7 @@ export {
   previewRechargeCashback,
   getScheduledDrops,
   getCoinRules,
+  getRedemptionSuggestions,
 } from './walletBalanceController';
 
 // --- Transaction history & analytics ---

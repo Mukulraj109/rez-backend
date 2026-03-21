@@ -11,6 +11,44 @@ import { fraudDetectionService } from '../services/fraudDetectionService';
 import crypto from 'crypto';
 import gamificationEventBus from '../events/gamificationEventBus';
 import redisService from '../services/redisService';
+import { ocrService } from '../services/ocrService';
+
+// Analyze bill image for user (OCR pre-fill before upload)
+export const analyzeBillForUser = asyncHandler(async (req: Request, res: Response) => {
+  if (!(req as any).user) throw new AppError('Authentication required', 401);
+  if (!req.file) throw new AppError('Bill image is required', 400);
+
+  try {
+    // Upload to Cloudinary temporarily for OCR processing
+    const uploadResult = await uploadToCloudinary(req.file.buffer, 'bills/temp');
+
+    // Run OCR
+    const ocrResult = await ocrService.extractTextFromBill(uploadResult.secureUrl);
+
+    // Delete temp image (full upload happens on submit)
+    deleteFromCloudinary(uploadResult.publicId).catch(() => {});
+
+    if (ocrResult.success && ocrResult.extractedData) {
+      const { amount, merchantName, date, billNumber } = ocrResult.extractedData;
+      return sendSuccess(res, {
+        amount: amount ?? null,
+        merchantName: merchantName ?? null,
+        date: date ? new Date(date).toISOString().split('T')[0] : null,
+        billNumber: billNumber ?? null,
+        confidence: ocrResult.confidence ?? 0,
+      }, 'Bill analyzed');
+    }
+
+    return sendSuccess(res, {
+      amount: null, merchantName: null, date: null, billNumber: null, confidence: 0,
+    }, 'Could not extract bill details — please enter manually');
+  } catch (err) {
+    logger.warn('[BILL ANALYZE] OCR failed:', (err as Error).message);
+    return sendSuccess(res, {
+      amount: null, merchantName: null, date: null, billNumber: null, confidence: 0,
+    }, 'Analysis unavailable — please enter manually');
+  }
+});
 
 // Upload bill with image
 export const uploadBill = asyncHandler(async (req: Request, res: Response) => {

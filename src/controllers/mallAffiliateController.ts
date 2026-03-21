@@ -10,6 +10,7 @@ import { Request, Response, NextFunction } from 'express';
 import { Types } from 'mongoose';
 import crypto from 'crypto';
 import mallAffiliateService from '../services/mallAffiliateService';
+import MallAffiliateService from '../services/mallAffiliateService';
 import { MallBrand } from '../models/MallBrand';
 import { AffiliateWebhookLog, AffiliateWebhookType } from '../models/AffiliateWebhookLog';
 import redisService from '../services/redisService';
@@ -216,7 +217,19 @@ export const getUserCashbackSummary = asyncHandler(async (req: Request, res: Res
 
   const summary = await mallAffiliateService.getUserCashbackSummary(userId);
 
-  return sendSuccess(res, summary, 'Cashback summary retrieved successfully');
+  // Enrich response with coin-based display labels
+  const enriched = {
+    ...summary,
+    totalCoinsEarned: summary.totalEarned ?? 0,
+    pendingCoins: summary.pending ?? 0,
+    confirmedCoins: (summary as any).confirmed ?? 0,
+    creditedCoins: summary.credited ?? 0,
+    displayLabel: 'REZ Coins',
+    coinValue: 1,
+    currencySymbol: '🪙',
+  };
+
+  return sendSuccess(res, enriched, 'Cashback summary retrieved successfully');
 });
 
 /**
@@ -240,10 +253,26 @@ export const processConversionWebhook = asyncHandler(async (req: Request, res: R
     status,
     purchased_at,
     purchasedAt: purchasedAtBody,
+    aff_sub,
+    subid,
   } = req.body;
 
   // Support both snake_case and camelCase
-  const resolvedClickId = click_id || clickId;
+  let resolvedClickId: string | undefined = click_id || clickId;
+
+  // If click_id not provided, try decoding from aff_sub or subid parameter
+  if (!resolvedClickId) {
+    const subIdRaw = aff_sub || subid;
+    if (subIdRaw && typeof subIdRaw === 'string') {
+      const decodedSub = (MallAffiliateService as any).decodeSubId
+        ? (MallAffiliateService as any).decodeSubId(subIdRaw)
+        : null;
+      if (decodedSub?.clickId) {
+        resolvedClickId = decodedSub.clickId;
+        logger.info(`[AFFILIATE WEBHOOK] Resolved click_id "${resolvedClickId}" from aff_sub parameter`);
+      }
+    }
+  }
   const resolvedOrderId = order_id || orderId;
   const resolvedOrderAmount = parseFloat(order_amount || orderAmount);
   const resolvedPurchasedAt = purchased_at || purchasedAtBody;

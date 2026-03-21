@@ -21,14 +21,39 @@ const STREAK_MILESTONES = {
     { day: 3, coins: 75, name: 'Review Regular' },
     { day: 7, coins: 250, name: 'Review Pro' },
     { day: 14, coins: 600, name: 'Review Champion', badge: 'review_champion' }
-  ]
+  ],
+  savings: [
+    { day: 3, coins: 50, name: 'Bronze Saver', badge: 'bronze_saver' },
+    { day: 7, coins: 200, name: 'Silver Saver', badge: 'silver_saver' },
+    { day: 21, coins: 1000, name: 'Gold Saver', badge: 'gold_saver' },
+    { day: 60, coins: 5000, name: 'Smart Saver Elite', badge: 'elite_saver' },
+    { day: 100, coins: 10000, name: 'REZ Legend', badge: 'rez_legend' },
+  ],
 };
+
+export interface StreakTier {
+  name: string;
+  level: number;
+  icon: string;
+  color: string;
+  nextTierDays: number | null;
+  daysToNext: number;
+  description: string;
+}
+
+export function getStreakTier(currentStreak: number): StreakTier {
+  if (currentStreak >= 60) return { name: 'Smart Saver Elite', level: 4, icon: '💎', color: '#60a5fa', nextTierDays: null, daysToNext: 0, description: 'Top 1% of savers on REZ' };
+  if (currentStreak >= 21) return { name: 'Gold Saver', level: 3, icon: '🥇', color: '#F59E0B', nextTierDays: 60, daysToNext: 60 - currentStreak, description: `${60 - currentStreak} more days to Elite` };
+  if (currentStreak >= 7) return { name: 'Silver Saver', level: 2, icon: '🥈', color: '#94a3b8', nextTierDays: 21, daysToNext: 21 - currentStreak, description: `${21 - currentStreak} more days to Gold` };
+  if (currentStreak >= 1) return { name: 'Bronze Saver', level: 1, icon: '🥉', color: '#cd7f32', nextTierDays: 7, daysToNext: 7 - currentStreak, description: `${7 - currentStreak} more days to Silver` };
+  return { name: 'Start Saving', level: 0, icon: '🔥', color: '#ef4444', nextTierDays: 1, daysToNext: 1, description: 'Make your first saving today' };
+}
 
 class StreakService {
   // Get or create user streak
   async getOrCreateStreak(
     userId: string,
-    type: 'login' | 'order' | 'review'
+    type: 'login' | 'order' | 'review' | 'savings'
   ): Promise<IUserStreak> {
     let streak = await UserStreak.findOne({ user: userId, type });
 
@@ -54,7 +79,7 @@ class StreakService {
   // Update streak (call this when user performs action)
   async updateStreak(
     userId: string,
-    type: 'login' | 'order' | 'review'
+    type: 'login' | 'order' | 'review' | 'savings'
   ): Promise<{
     streak: IUserStreak;
     milestoneReached?: any;
@@ -74,7 +99,7 @@ class StreakService {
   // Check if milestone reached
   private checkMilestone(
     streak: IUserStreak,
-    type: 'login' | 'order' | 'review'
+    type: 'login' | 'order' | 'review' | 'savings'
   ): any | null {
     const milestones = STREAK_MILESTONES[type];
 
@@ -97,7 +122,7 @@ class StreakService {
   // Claim milestone reward
   async claimMilestone(
     userId: string,
-    type: 'login' | 'order' | 'review',
+    type: 'login' | 'order' | 'review' | 'savings',
     day: number
   ): Promise<{
     streak: IUserStreak;
@@ -130,7 +155,7 @@ class StreakService {
   // Freeze streak (Premium feature)
   async freezeStreak(
     userId: string,
-    type: 'login' | 'order' | 'review',
+    type: 'login' | 'order' | 'review' | 'savings',
     days: number = 1
   ): Promise<IUserStreak> {
     const streak = await this.getOrCreateStreak(userId, type);
@@ -145,21 +170,24 @@ class StreakService {
 
   // Get all streaks for user
   async getUserStreaks(userId: string): Promise<any> {
-    const [login, order, review] = await Promise.all([
+    const [login, order, review, savings] = await Promise.all([
       this.getOrCreateStreak(userId, 'login'),
       this.getOrCreateStreak(userId, 'order'),
-      this.getOrCreateStreak(userId, 'review')
+      this.getOrCreateStreak(userId, 'review'),
+      this.getOrCreateStreak(userId, 'savings'),
     ]);
 
     return {
       login: this.formatStreak(login, 'login'),
       order: this.formatStreak(order, 'order'),
-      review: this.formatStreak(review, 'review')
+      review: this.formatStreak(review, 'review'),
+      savings: this.formatStreak(savings, 'savings'),
+      savingsTier: getStreakTier(savings.currentStreak),
     };
   }
 
   // Format streak with milestone info
-  private formatStreak(streak: IUserStreak, type: 'login' | 'order' | 'review'): any {
+  private formatStreak(streak: IUserStreak, type: 'login' | 'order' | 'review' | 'savings'): any {
     const milestones = STREAK_MILESTONES[type];
 
     // Find next milestone

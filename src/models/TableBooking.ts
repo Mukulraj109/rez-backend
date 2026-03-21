@@ -15,6 +15,10 @@ export interface ITableBooking extends Document {
   specialRequests?: string;
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
   cancellationReason?: string;
+  preOrderId?: Types.ObjectId;
+  preOrderStatus?: 'none' | 'pending' | 'paid' | 'confirmed';
+  advancePaymentAmount?: number;
+  advancePaymentId?: string;
   createdAt: Date;
   updatedAt: Date;
 
@@ -98,7 +102,26 @@ const TableBookingSchema = new Schema<ITableBooking>({
     type: String,
     trim: true,
     maxlength: 500
-  }
+  },
+  preOrderId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Order',
+    default: null,
+  },
+  preOrderStatus: {
+    type: String,
+    enum: ['none', 'pending', 'paid', 'confirmed'],
+    default: 'none',
+  },
+  advancePaymentAmount: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  advancePaymentId: {
+    type: String,
+    default: null,
+  },
 }, {
   timestamps: true,
   toJSON: {

@@ -7,6 +7,7 @@ import {
   cancelServiceAppointment,
   checkAvailability,
   getAvailableSlots,
+  updateServiceAppointmentStatus,
 } from '../controllers/serviceAppointmentController';
 import { authenticate } from '../middleware/auth';
 import { validateQuery, validateParams, validate, commonSchemas } from '../middleware/validation';
@@ -30,10 +31,7 @@ router.post(
       }),
     duration: Joi.number().integer().min(15).max(480).default(60),
     customerName: Joi.string().trim().min(2).max(100).required(),
-    customerPhone: Joi.string().trim().pattern(/^[0-9]{10}$/).required()
-      .messages({
-        'string.pattern.base': 'Phone number must be 10 digits'
-      }),
+    customerPhone: Joi.string().trim().min(7).max(20).required(),
     customerEmail: Joi.string().trim().email().optional(),
     specialInstructions: Joi.string().trim().max(1000).optional(),
   })),
@@ -85,6 +83,16 @@ router.put(
     reason: Joi.string().trim().max(500).optional(),
   })),
   cancelServiceAppointment
+);
+
+// Update appointment status (protected)
+router.put(
+  '/:id/status',
+  authenticate,
+  validate(Joi.object({
+    status: Joi.string().valid('pending', 'confirmed', 'in_progress', 'completed', 'cancelled').required(),
+  })),
+  updateServiceAppointmentStatus
 );
 
 // Check availability for a time slot (public)

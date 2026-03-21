@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import {
   getFinancialCategories,
   getFeaturedFinancialServices,
@@ -7,6 +7,9 @@ import {
   getFinancialServiceById,
   searchFinancialServices,
 } from '../controllers/financialServicesController';
+import { authenticate } from '../middleware/auth';
+import { asyncHandler } from '../utils/asyncHandler';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -139,5 +142,37 @@ router.get('/search', searchFinancialServices);
  *         description: Financial service details
  */
 router.get('/:id', getFinancialServiceById);
+
+/**
+ * @route   POST /api/financial-services/leads
+ * @desc    Submit a financial services lead/application
+ * @access  Private
+ */
+router.post('/leads', authenticate, asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  const { storeId, serviceType, applicantName, phone, annualIncome, loanAmount, documents, notes } = req.body;
+
+  if (!storeId || !serviceType || !applicantName || !phone) {
+    res.status(400).json({ success: false, message: 'Missing required fields: storeId, serviceType, applicantName, phone' });
+    return;
+  }
+
+  const FinancialLead = (await import('../models/FinancialLead')).default;
+  const lead = await FinancialLead.create({
+    userId,
+    storeId,
+    serviceType,
+    applicantName,
+    phone,
+    annualIncome: annualIncome ? parseFloat(annualIncome) : undefined,
+    loanAmount: loanAmount ? parseFloat(loanAmount) : undefined,
+    documents: documents || [],
+    notes,
+  });
+
+  logger.info(`✅ [FINANCIAL LEAD] Created lead ${lead._id} for user ${userId}`);
+
+  res.status(201).json({ success: true, data: lead, message: 'Application submitted successfully' });
+}));
 
 export default router;

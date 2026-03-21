@@ -8,7 +8,7 @@ import { globalErrorHandler, notFoundHandler } from '../middleware/errorHandler'
 import { sentryErrorHandler } from './sentry';
 import { generalLimiter } from '../middleware/rateLimiter';
 import { adminAuditMiddleware } from '../middleware/adminAuditMiddleware';
-import { authenticate as authTokenMiddleware } from '../middleware/auth';
+import { authenticate as authTokenMiddleware, requireAdmin as requireAdminMiddleware } from '../middleware/auth';
 import { getAllConfigs, updateConfig, setCampaign } from '../controllers/engagementConfigController';
 import { Router as EngagementConfigRouter } from 'express';
 
@@ -98,6 +98,7 @@ import earningsRoutes from '../routes/earningsRoutes';
 import userBootRoutes from '../routes/userBootRoutes';
 import menuRoutes from '../routes/menuRoutes';
 import tableBookingRoutes from '../routes/tableBookingRoutes';
+import tableSessionRoutes from '../routes/tableSessionRoutes';
 import consultationRoutes from '../routes/consultationRoutes';
 import serviceAppointmentRoutes from '../routes/serviceAppointmentRoutes';
 import serviceCategoryRoutes from '../routes/serviceCategoryRoutes';
@@ -222,6 +223,10 @@ import adminStoreCollectionRoutes from '../routes/admin/storeCollectionConfig';
 import adminPriveRoutes from '../routes/admin/priveAdmin';
 import adminGoldPriceRoutes from '../routes/admin/goldPrice';
 import adminMerchantLiabilityRoutes from '../routes/admin/merchantLiability';
+import adminMallBrandsRoutes from '../routes/admin/mallBrands';
+import adminCashStorePurchasesRoutes from '../routes/admin/cashStorePurchases';
+import adminReviewRoutes from '../routes/admin/reviews';
+import adminServiceAppointmentRoutes from '../routes/admin/serviceAppointments';
 
 // ── Merchant Route Imports ──
 import authRoutes1 from '../merchantroutes/auth';
@@ -269,6 +274,8 @@ import merchantDealRedemptionRoutes from '../merchantroutes/dealRedemptions';
 import merchantVoucherRedemptionRoutes from '../merchantroutes/voucherRedemptions';
 import merchantLiabilityRoutes from '../merchantroutes/liability';
 import merchantDisputeRoutes from '../merchantroutes/disputes';
+import merchantVariantsRoutes from '../merchantroutes/variants';
+import productRestoreRoutes from '../merchantroutes/product-restore';
 
 // ────────────────────────────────────────────────────────────────────
 // Register all routes
@@ -368,6 +375,7 @@ export function registerRoutes(app: Express): void {
   app.use(`${API_PREFIX}/learning`, learningRoutes);
   app.use(`${API_PREFIX}/menu`, menuRoutes);
   app.use(`${API_PREFIX}/table-bookings`, tableBookingRoutes);
+  app.use(`${API_PREFIX}/table-sessions`, tableSessionRoutes);
   app.use(`${API_PREFIX}/service-appointments`, serviceAppointmentRoutes);
   app.use(`${API_PREFIX}/service-categories`, serviceCategoryRoutes);
   app.use(`${API_PREFIX}/services`, serviceRoutes);
@@ -463,6 +471,10 @@ export function registerRoutes(app: Express): void {
   app.use(`${API_PREFIX}/admin/admin-users`, adminAdminUsersRoutes);
   app.use(`${API_PREFIX}/admin/merchant-liability`, adminMerchantLiabilityRoutes);
   app.use(`${API_PREFIX}/admin/economics`, adminEconomicsRoutes);
+  app.use(`${API_PREFIX}/admin/mall/brands`, adminMallBrandsRoutes);
+  app.use(`${API_PREFIX}/admin/cashstore/purchases`, adminCashStorePurchasesRoutes);
+  app.use(`${API_PREFIX}/admin/reviews`, adminReviewRoutes);
+  app.use(`${API_PREFIX}/admin/service-appointments`, adminServiceAppointmentRoutes);
   app.use(`${API_PREFIX}/admin/admin-actions`, adminActionsRoutes);
   app.use(`${API_PREFIX}/admin/disputes`, adminDisputesRoutes);
   app.use(`${API_PREFIX}/admin/devices`, adminDeviceFingerprintRoutes);
@@ -478,7 +490,7 @@ export function registerRoutes(app: Express): void {
   engagementConfigRouter.get('/', getAllConfigs);
   engagementConfigRouter.patch('/:action', updateConfig);
   engagementConfigRouter.post('/:action/campaign', setCampaign);
-  app.use(`${API_PREFIX}/admin/engagement-config`, authTokenMiddleware, engagementConfigRouter);
+  app.use(`${API_PREFIX}/admin/engagement-config`, authTokenMiddleware, requireAdminMiddleware, engagementConfigRouter);
 
   // ── Public / Campaign / Feature Routes ──
   app.use(`${API_PREFIX}/campaigns`, campaignRoutes);
@@ -547,6 +559,8 @@ export function registerRoutes(app: Express): void {
   app.use('/api/merchant/disputes', merchantDisputeRoutes);
   app.use('/api/merchant/support', merchantSupportRoutes);
   app.use('/api/merchant/campaign-simulator', campaignSimulatorRoutes);
+  app.use('/api/merchant/products', merchantVariantsRoutes);
+  app.use('/api/merchant/products', productRestoreRoutes);
 
   // ── Root endpoint ──
   app.get('/', (req, res) => {

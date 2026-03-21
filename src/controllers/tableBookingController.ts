@@ -448,10 +448,53 @@ export const updateTableBookingStatus = asyncHandler(async (req: Request, res: R
       return sendBadRequest(res, 'Booking must be confirmed before marking as completed');
     }
 
-    const previousStatus = booking.status;
-    booking.status = status;
-    await booking.save();
+    const previousStatus = booking.status as string;
 
+    // Update status via findByIdAndUpdate (booking is lean — .save() won't work)
+    await TableBooking.findByIdAndUpdate(bookingId, { $set: { status } });
+
+    // Award REZ coins for table booking milestones
+    if (status === 'confirmed' && previousStatus !== 'confirmed') {
+      try {
+        const rewardEngine = (await import('../core/rewardEngine')).default;
+        await rewardEngine.issue({
+          userId: booking.userId.toString(),
+          amount: 5,
+          coinType: 'rez',
+          source: 'order',
+          rewardType: 'engagement',
+          description: `Booking confirmed at ${store.name}`,
+          operationType: 'loyalty_credit',
+          referenceId: `table-booking-confirm:${booking._id}`,
+          referenceModel: 'TableBooking',
+        });
+      } catch (err) {
+        logger.warn('[TABLE BOOKING] Failed to award confirm coins:', (err as Error).message);
+      }
+    }
+    if (status === 'completed' && previousStatus !== 'completed') {
+      try {
+        const rewardEngine = (await import('../core/rewardEngine')).default;
+        await rewardEngine.issue({
+          userId: booking.userId.toString(),
+          amount: 20,
+          coinType: 'rez',
+          source: 'order',
+          rewardType: 'engagement',
+          description: `20 REZ coins for dining at ${store.name}`,
+          operationType: 'loyalty_credit',
+          referenceId: `table-booking:${booking._id}`,
+          referenceModel: 'TableBooking',
+          metadata: {
+            storeId: booking.storeId.toString(),
+            partySize: booking.partySize,
+            bookingDate: booking.bookingDate,
+          },
+        });
+      } catch (err) {
+        logger.warn('[TABLE BOOKING] Failed to award completion coins:', (err as Error).message);
+      }
+    }
 
     const populatedBooking = await TableBooking.findById(booking._id)
       .populate('storeId', 'name logo location contact')
@@ -640,4 +683,102 @@ export const checkAvailability = asyncHandler(async (req: Request, res: Response
       timeSlots,
       totalBookings: bookings.length
     }, 'Availability checked successfully');
+});
+
+/**
+ * POST /api/table-bookings/:bookingId/preorder
+ * User submits a pre-order linked to their table booking.
+ */
+export const addPreOrder = asyncHandler(async (req: Request, res: Response) => {
+  const { bookingId } = req.params;
+  const userId = (req as any).user?._id?.toString() || (req as any).userId;
+  const { items, paymentMethod, specialInstructions } = req.body;
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return sendBadRequest(res, 'At least one item is required for pre-order');
+  }
+
+  const booking = await TableBooking.findOne({ _id: bookingId, userId }).populate('storeId', 'name merchant');
+  if (!booking) return sendNotFound(res, 'Booking not found');
+
+  if (booking.status === 'cancelled' || booking.status === 'completed') {
+    return sendBadRequest(res, 'Cannot add pre-order to a cancelled or completed booking');
+  }
+
+  if (booking.preOrderId) {
+    return sendBadRequest(res, 'Pre-order already exists for this booking. Cancel it first to re-order.');
+  }
+
+  const subtotal = items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
+  const storeId = booking.storeId._id || booking.storeId;
+  const storeName = (booking.storeId as any).name || '';
+  const merchantId = (booking.storeId as any).merchant?.toString() || '';
+
+  const { Order } = await import('../models/Order');
+
+  const order = new Order({
+    user: userId,
+    store: storeId,
+    status: 'placed',
+    fulfillmentType: 'dine_in',
+    fulfillment: {
+      type: 'dine_in',
+      status: 'placed',
+    },
+    fulfillmentDetails: {
+      scheduledFor: booking.bookingDate,
+    },
+    items: items.map((item: any) => ({
+      product: item.productId,
+      store: storeId,
+      storeName,
+      name: item.name,
+      image: item.image || '',
+      price: item.price,
+      quantity: item.quantity,
+      subtotal: item.price * item.quantity,
+    })),
+    subtotal,
+    total: subtotal,
+    specialInstructions: specialInstructions || '',
+    payment: {
+      method: paymentMethod || 'cod',
+      status: 'pending',
+      amount: subtotal,
+    },
+    metadata: {
+      isPreOrder: true,
+      tableBookingId: (booking._id as any).toString(),
+      scheduledFor: booking.bookingDate,
+    },
+  });
+
+  await order.save();
+
+  booking.preOrderId = order._id as Types.ObjectId;
+  booking.preOrderStatus = 'pending';
+  booking.advancePaymentAmount = subtotal;
+  await booking.save();
+
+  // Notify merchant
+  try {
+    await merchantNotificationService.notifyNewOrder({
+      merchantId,
+      orderId: (order._id as any).toString(),
+      orderNumber: order.orderNumber || (order._id as any).toString(),
+      customerName: booking.customerName,
+      totalAmount: subtotal,
+      itemCount: items.length,
+      paymentMethod: paymentMethod || 'cod',
+    });
+  } catch {
+    // Non-blocking
+  }
+
+  return sendSuccess(res, {
+    order: order.toObject(),
+    bookingId: booking._id,
+    preOrderId: order._id,
+    totalAmount: subtotal,
+  }, 'Pre-order created successfully');
 });

@@ -1245,3 +1245,93 @@ export const getAdminOffers = asyncHandler(async (req: Request, res: Response) =
 
   return sendSuccess(res, offers, 'Admin offers retrieved successfully');
 });
+
+// ==================== LISTING REQUESTS ====================
+
+import { MallListingRequest } from '../models/MallListingRequest';
+
+/**
+ * Get Admin Listing Requests
+ * GET /api/mall/admin/listing-requests
+ */
+export const getAdminListingRequests = asyncHandler(async (req: Request, res: Response) => {
+  const { status, page = '1', limit = '20' } = req.query;
+  const pageNum = parseInt(page as string, 10) || 1;
+  const limitNum = parseInt(limit as string, 10) || 20;
+
+  const filter: Record<string, any> = {};
+  if (status && ['pending', 'approved', 'rejected'].includes(status as string)) {
+    filter.status = status;
+  }
+
+  const [requests, total] = await Promise.all([
+    MallListingRequest.find(filter)
+      .populate('storeId', 'name logo tags category')
+      .populate('merchantId', 'name email phoneNumber')
+      .populate('reviewedBy', 'fullName email')
+      .sort({ createdAt: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum)
+      .lean(),
+    MallListingRequest.countDocuments(filter),
+  ]);
+
+  return sendPaginated(res, requests, pageNum, limitNum, total, 'Listing requests retrieved successfully');
+});
+
+/**
+ * Approve Listing Request
+ * PUT /api/mall/admin/listing-requests/:requestId/approve
+ */
+export const approveListingRequest = asyncHandler(async (req: Request, res: Response) => {
+  const { requestId } = req.params;
+  const adminId = (req as any).user?._id;
+  const { adminNotes } = req.body;
+
+  const request = await MallListingRequest.findById(requestId);
+  if (!request) {
+    return sendNotFound(res, 'Listing request not found');
+  }
+  if (request.status !== 'pending') {
+    return sendBadRequest(res, `Request is already ${request.status}`);
+  }
+
+  // Enable mall on the store
+  await Store.findByIdAndUpdate(request.storeId, {
+    $set: { 'deliveryCategories.mall': true },
+  });
+
+  request.status = 'approved';
+  request.adminNotes = adminNotes || undefined;
+  request.reviewedBy = adminId;
+  request.reviewedAt = new Date();
+  await request.save();
+
+  return sendSuccess(res, { request }, 'Listing request approved — store is now in Mall');
+});
+
+/**
+ * Reject Listing Request
+ * PUT /api/mall/admin/listing-requests/:requestId/reject
+ */
+export const rejectListingRequest = asyncHandler(async (req: Request, res: Response) => {
+  const { requestId } = req.params;
+  const adminId = (req as any).user?._id;
+  const { adminNotes } = req.body;
+
+  const request = await MallListingRequest.findById(requestId);
+  if (!request) {
+    return sendNotFound(res, 'Listing request not found');
+  }
+  if (request.status !== 'pending') {
+    return sendBadRequest(res, `Request is already ${request.status}`);
+  }
+
+  request.status = 'rejected';
+  request.adminNotes = adminNotes || 'Request rejected';
+  request.reviewedBy = adminId;
+  request.reviewedAt = new Date();
+  await request.save();
+
+  return sendSuccess(res, { request }, 'Listing request rejected');
+});

@@ -865,3 +865,50 @@ export const getCoinRules = asyncHandler(async (req: Request, res: Response) => 
     },
   }, 'Coin rules retrieved');
 });
+
+// Get smart redemption suggestions for user
+export const getRedemptionSuggestions = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?._id?.toString();
+  if (!userId) return sendSuccess(res, { suggestions: [] });
+
+  const wallet = await Wallet.findOne({ user: userId }).lean();
+  if (!wallet) return sendSuccess(res, { suggestions: [] });
+
+  const suggestions: any[] = [];
+  const coins = (wallet as any).coins || [];
+
+  // Promo coins expiring soon
+  const promoCoin = coins.find((c: any) => c.type === 'promo');
+  if (promoCoin?.amount > 0 && promoCoin.expiryDate) {
+    const daysLeft = Math.ceil((new Date(promoCoin.expiryDate).getTime() - Date.now()) / 86400000);
+    if (daysLeft <= 7 && daysLeft > 0) {
+      suggestions.push({
+        type: 'expiry_warning',
+        urgency: daysLeft <= 2 ? 'high' : 'medium',
+        title: `${promoCoin.amount} Promo coins expire in ${daysLeft} day${daysLeft > 1 ? 's' : ''}!`,
+        action: 'Use them on your next payment',
+        coinType: 'promo',
+        amount: promoCoin.amount,
+        daysLeft,
+      });
+    }
+  }
+
+  // Branded coins unused (>50 coins at a store)
+  const brandedCoins = (wallet as any).brandedCoins || [];
+  for (const bc of brandedCoins.slice(0, 2)) {
+    if (bc.amount >= 50) {
+      suggestions.push({
+        type: 'use_branded',
+        urgency: 'low',
+        title: `${bc.amount} coins waiting at a store`,
+        action: 'Visit to use your branded coins',
+        coinType: 'branded',
+        merchantId: bc.merchantId?.toString(),
+        amount: bc.amount,
+      });
+    }
+  }
+
+  return sendSuccess(res, { suggestions });
+});

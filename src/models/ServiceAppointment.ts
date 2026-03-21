@@ -120,6 +120,13 @@ const ServiceAppointmentSchema = new Schema(
       trim: true,
       maxlength: 500,
     },
+    statusHistory: [
+      {
+        status: { type: String, required: true },
+        timestamp: { type: Date, default: Date.now },
+        note: { type: String, trim: true },
+      },
+    ],
   },
   {
     timestamps: true,

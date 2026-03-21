@@ -39,17 +39,28 @@ export interface IStoryAnalytics {
   completions: number;
 }
 
+// Story type for categorisation
+export type StoryType = 'new_offer' | 'new_feature' | 'cashback_boost' | 'event' | 'general';
+
+// Metadata for auto-generated stories
+export interface IStoryMetadata {
+  sourceType?: 'campaign' | 'feature' | 'manual';
+  sourceId?: string;
+}
+
 export interface IWhatsNewStory extends Document {
   _id: Types.ObjectId;
   title: string;
   subtitle?: string;
   icon: string;
+  storyType: StoryType;
   slides: IStorySlide[];
   ctaButton?: IStoryCTA;
   validity: IStoryValidity;
   targeting?: IStoryTargeting;
   priority: number;
   analytics: IStoryAnalytics;
+  metadata?: IStoryMetadata;
   createdBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -191,6 +202,22 @@ const WhatsNewStorySchema = new Schema<IWhatsNewStory>({
       type: Number,
       default: 0,
       min: [0, 'Completions cannot be negative'],
+    },
+  },
+  storyType: {
+    type: String,
+    enum: ['new_offer', 'new_feature', 'cashback_boost', 'event', 'general'],
+    default: 'general',
+    index: true,
+  },
+  metadata: {
+    sourceType: {
+      type: String,
+      enum: ['campaign', 'feature', 'manual'],
+    },
+    sourceId: {
+      type: String,
+      index: true,
     },
   },
   createdBy: {

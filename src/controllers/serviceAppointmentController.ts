@@ -92,6 +92,25 @@ export const createServiceAppointment = asyncHandler(async (req: Request, res: R
 
     logger.info(`✅ [SERVICE APPOINTMENT] Created appointment ${appointmentNumber} for store ${storeId}`);
 
+    // SA-01: Award coins for service booking (non-blocking)
+    try {
+      const { rewardEngine } = await import('../core/rewardEngine');
+      await rewardEngine.issue({
+        userId,
+        amount: 15,
+        coinType: 'rez',
+        source: 'order',
+        rewardType: 'engagement',
+        description: `15 coins for booking at ${(store as any).name || 'store'}`,
+        operationType: 'store_payment_reward',
+        referenceId: `service-appt:${appointment._id}`,
+        referenceModel: 'ServiceAppointment',
+        metadata: { storeId, serviceType },
+      });
+    } catch (rewardErr) {
+      logger.warn('Non-blocking: Failed to award service booking coins', rewardErr);
+    }
+
     sendCreated(res, populatedAppointment, 'Service appointment created successfully');
 });
 
@@ -417,4 +436,67 @@ export const getAvailableSlots = asyncHandler(async (req: Request, res: Response
       },
       'Available slots retrieved successfully'
     );
+});
+
+/**
+ * Update service appointment status
+ * PUT /api/service-appointments/:id/status
+ */
+export const updateServiceAppointmentStatus = asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).userId;
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!userId) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+
+    if (!Types.ObjectId.isValid(id)) {
+      sendError(res, 'Invalid appointment ID', 400);
+      return;
+    }
+
+    const validStatuses = ['pending', 'confirmed', 'in_progress', 'completed', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      sendError(res, `Invalid status. Must be one of: ${validStatuses.join(', ')}`, 400);
+      return;
+    }
+
+    const appointment = await ServiceAppointment.findById(id);
+    if (!appointment) {
+      sendNotFound(res, 'Appointment not found');
+      return;
+    }
+
+    // Update status with timestamps
+    appointment.status = status;
+    if (status === 'confirmed' && !appointment.confirmedAt) appointment.confirmedAt = new Date();
+    if (status === 'completed' && !appointment.completedAt) appointment.completedAt = new Date();
+    if (status === 'cancelled' && !appointment.cancelledAt) appointment.cancelledAt = new Date();
+    await appointment.save();
+
+    // ED-03: Award coins on completion
+    if (status === 'completed') {
+      try {
+        const { rewardEngine } = await import('../core/rewardEngine');
+        await rewardEngine.issue({
+          userId: appointment.user.toString(),
+          amount: 25,
+          coinType: 'rez',
+          source: 'order',
+          rewardType: 'engagement',
+          description: `25 coins for completing ${appointment.serviceType}`,
+          operationType: 'store_payment_reward',
+          referenceId: `service-appt:${appointment._id}`,
+          referenceModel: 'ServiceAppointment',
+        });
+      } catch (rewardErr) {
+        logger.warn('Non-blocking: Failed to award service completion coins', rewardErr);
+      }
+    }
+
+    logger.info(`✅ [SERVICE APPOINTMENT] Status updated to ${status} for appointment ${id}`);
+
+    sendSuccess(res, appointment, `Appointment status updated to ${status}`);
 });

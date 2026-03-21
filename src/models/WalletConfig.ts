@@ -437,7 +437,7 @@ const WalletConfigSchema = new Schema<IWalletConfig>({
       maxUsagePct: { type: Number, default: 20 },
     },
     branded: {
-      expiryDays: { type: Number, default: 180 },
+      expiryDays: { type: Number, default: 0 },  // 0 = never expires
       maxUsagePct: { type: Number, default: 100 },
     },
   },

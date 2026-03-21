@@ -7,6 +7,7 @@ import BonusCampaign from '../models/BonusCampaign';
 import BonusClaim from '../models/BonusClaim';
 import { CoinTransaction } from '../models/CoinTransaction';
 import * as bonusCampaignService from '../services/bonusCampaignService';
+import whatsNewService from '../services/whatsNewService';
 
 // ============================================
 // HELPERS
@@ -425,6 +426,11 @@ export const adminCreateCampaign = asyncHandler(async (req: Request, res: Respon
 
   bonusCampaignService.invalidateBonusZoneCache();
 
+  // Auto-create a What's New story if campaign is active
+  if (campaign.status === 'active') {
+    whatsNewService.autoCreateFromCampaign(campaign).catch(() => {});
+  }
+
   sendSuccess(res, { campaign }, 'Campaign created successfully', 201);
 });
 
@@ -549,6 +555,11 @@ export const adminUpdateCampaign = asyncHandler(async (req: Request, res: Respon
 
   await campaign.save();
   bonusCampaignService.invalidateBonusZoneCache();
+
+  // Auto-create What's New story if campaign was activated
+  if (updates.status === 'active') {
+    whatsNewService.autoCreateFromCampaign(campaign).catch(() => {});
+  }
 
   sendSuccess(res, { campaign }, 'Campaign updated successfully');
 });

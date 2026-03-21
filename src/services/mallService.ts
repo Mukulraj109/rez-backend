@@ -310,6 +310,7 @@ class MallService {
 
     const [brands, total] = await Promise.all([
       MallBrand.find(query)
+        .select('name slug logo description cashback rezCoinReward externalUrl isActive isFeatured isLuxury isNewArrival tier ratings analytics badges tags mallCategory collections createdAt')
         .populate('mallCategory', 'name slug color icon')
         .sort(sortOptions)
         .skip(skip)

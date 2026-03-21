@@ -4,6 +4,7 @@
 import WhatsNewStory, { IWhatsNewStory } from '../models/WhatsNewStory';
 import WhatsNewStoryView from '../models/WhatsNewStoryView';
 import { Types, Document } from 'mongoose';
+import { logger } from '../config/logger';
 
 export interface GetStoriesOptions {
   userId?: string;
@@ -223,6 +224,55 @@ class WhatsNewService {
     return WhatsNewStory.find()
       .sort({ createdAt: -1 })
       .populate('createdBy', 'name email').lean();
+  }
+
+  /**
+   * Auto-create a What's New story when a new campaign goes live.
+   * Called from bonusCampaignService when a campaign is activated.
+   */
+  async autoCreateFromCampaign(campaign: any): Promise<void> {
+    try {
+      // Don't create if a story for this campaign already exists
+      const existing = await WhatsNewStory.findOne({
+        'metadata.sourceType': 'campaign',
+        'metadata.sourceId': campaign._id.toString(),
+      });
+      if (existing) return;
+
+      await WhatsNewStory.create({
+        title: campaign.title || 'New Deal',
+        subtitle: campaign.subtitle || `Earn extra ${campaign.reward?.value}% cashback`,
+        icon: campaign.display?.icon || '🎉',
+        storyType: campaign.campaignType === 'cashback_boost' ? 'cashback_boost' : 'new_offer',
+        slides: [{
+          image: campaign.display?.bannerImage || '',
+          backgroundColor: campaign.display?.backgroundColor || '#1a3a52',
+          overlayText: campaign.subtitle || '',
+          duration: 5000,
+        }],
+        ctaButton: {
+          text: 'Claim Now',
+          action: 'deeplink',
+          target: `rez://bonus-zone/${campaign.slug || campaign._id}`,
+        },
+        validity: {
+          startDate: campaign.startTime || new Date(),
+          endDate: campaign.endTime || new Date(Date.now() + 7 * 86400000),
+          isActive: true,
+        },
+        targeting: {
+          userTypes: ['all'],
+        },
+        metadata: {
+          sourceType: 'campaign',
+          sourceId: campaign._id.toString(),
+        },
+      });
+
+      logger.info(`[WHATS NEW] Auto-created story for campaign: ${campaign.title} → ${campaign._id}`);
+    } catch (err) {
+      logger.error('[WHATS NEW] Failed to auto-create story from campaign:', err);
+    }
   }
 
   /**

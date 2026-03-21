@@ -22,7 +22,8 @@ import {
   getExpiringCoins,
   previewRechargeCashback,
   getScheduledDrops,
-  getCoinRules
+  getCoinRules,
+  getRedemptionSuggestions,
 } from '../controllers/walletController';
 import { authenticate, requireSeniorAdmin } from '../middleware/auth';
 import { createRateLimiter } from '../middleware/rateLimiter';
@@ -255,5 +256,6 @@ router.get('/scheduled-drops', getScheduledDrops);
  * @access  Private
  */
 router.get('/coin-rules', getCoinRules);
+router.get('/redemption-suggestions', getRedemptionSuggestions);
 
 export default router;

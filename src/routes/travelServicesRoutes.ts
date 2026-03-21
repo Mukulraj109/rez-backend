@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import {
   getTravelServicesCategories,
   getFeaturedTravelServices,
@@ -6,8 +6,10 @@ import {
   getTravelServicesStats,
   getPopularTravelServices
 } from '../controllers/travelServicesController';
-import { optionalAuth } from '../middleware/auth';
+import { optionalAuth, authenticate } from '../middleware/auth';
 import { cacheMiddleware, createKeyGenerator } from '../middleware/cacheMiddleware';
+import { asyncHandler } from '../utils/asyncHandler';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -132,5 +134,42 @@ router.get(
   }),
   getTravelServicesByCategory
 );
+
+/**
+ * @route   POST /api/travel-services/plan
+ * @desc    Save user's travel plan preferences
+ * @access  Private
+ */
+router.post('/plan', authenticate, asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  const { destination, startDate, endDate, tripDays, adults, children, accommodation, activities } = req.body;
+
+  if (!destination) {
+    res.status(400).json({ success: false, message: 'Destination is required' });
+    return;
+  }
+
+  // Store travel plan using the User model's preferences
+  const { User } = await import('../models/User');
+  const plan = {
+    destination,
+    startDate,
+    endDate,
+    tripDays: tripDays || 1,
+    adults: adults || 1,
+    children: children || 0,
+    accommodation,
+    activities: activities || [],
+    createdAt: new Date(),
+  };
+
+  await User.findByIdAndUpdate(userId, {
+    $push: { 'preferences.travelPlans': { $each: [plan], $slice: -10 } },
+  }, { upsert: true });
+
+  logger.info(`✅ [TRAVEL PLAN] Saved travel plan to ${destination} for user ${userId}`);
+
+  res.status(201).json({ success: true, data: plan, message: 'Travel plan saved successfully' });
+}));
 
 export default router;

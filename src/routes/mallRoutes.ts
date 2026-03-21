@@ -86,6 +86,10 @@ import {
   getAdminBrands,
   getAdminCategories,
   getAdminOffers,
+  // Listing requests
+  getAdminListingRequests,
+  approveListingRequest,
+  rejectListingRequest,
 } from '../controllers/mallController';
 
 const router = Router();
@@ -387,5 +391,10 @@ router.put('/admin/stores/:storeId/alliance', authenticate, requireAdmin, valida
 router.get('/admin/stores/manage', authenticate, requireAdmin, getAdminMallStores);
 router.put('/admin/stores/:storeId/mall-toggle', authenticate, requireAdmin, validateParams(objectIdParamsSchema), toggleStoreMall);
 router.put('/admin/stores/:storeId/mall-properties', authenticate, requireAdmin, validateParams(objectIdParamsSchema), updateStoreMallProperties);
+
+// Mall Listing Request Admin Routes
+router.get('/admin/listing-requests', authenticate, requireAdmin, getAdminListingRequests);
+router.put('/admin/listing-requests/:requestId/approve', authenticate, requireAdmin, approveListingRequest);
+router.put('/admin/listing-requests/:requestId/reject', authenticate, requireAdmin, rejectListingRequest);
 
 export default router;

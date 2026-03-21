@@ -27,6 +27,7 @@ import { logger } from '../config/logger';
 import redisService from '../services/redisService';
 import { CacheInvalidator } from '../utils/cacheHelper';
 import merchantNotificationService from '../services/merchantNotificationService';
+import orderSocketService from '../services/orderSocketService';
 
 // ─── Category root slug helpers (shared with orderUpdateController) ─────────
 
@@ -1381,6 +1382,21 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
                 itemCount: populatedOrder?.items?.length || 0,
                 paymentMethod,
               }));
+
+              // Real-time socket emit to merchant dashboard
+              try {
+                orderSocketService.emitToMerchant(merchantId, 'new_order', {
+                  orderId: (order._id as any).toString(),
+                  orderNumber: populatedOrderNumber,
+                  customerName: userName,
+                  totalAmount: total,
+                  itemCount: populatedOrder?.items?.length || 0,
+                  paymentMethod,
+                  status: order.status,
+                });
+              } catch (socketErr) {
+                logger.warn('[ORDER] Real-time socket emit failed:', socketErr);
+              }
             }
 
             await Promise.all(merchantPromises);

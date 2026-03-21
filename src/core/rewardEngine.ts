@@ -197,8 +197,35 @@ class RewardEngine {
       throw new RewardError('WALLET_FROZEN', `Wallet is frozen: ${(wallet as any).frozenReason || 'unknown'}`);
     }
 
-    // Step 4: Apply earning cap (fail-open)
-    let adjustedAmount = amount;
+    // Step 4a: Savings Streak Multiplier (non-blocking, fail-open)
+    let streakMultiplier = 1.0;
+    let streakTierName: string | undefined;
+    if (!skipMultiplier && (source === 'cashback' || source === 'order' || source === 'review')) {
+      try {
+        const { default: UserStreak } = await import('../models/UserStreak');
+        const savingsStreak = await UserStreak.findOne({
+          user: userId,
+          type: 'savings',
+        }).select('currentStreak').lean();
+
+        const days = (savingsStreak as any)?.currentStreak ?? 0;
+        if (days >= 60) { streakMultiplier = 1.20; streakTierName = 'Smart Saver Elite'; }
+        else if (days >= 21) { streakMultiplier = 1.15; streakTierName = 'Gold Saver'; }
+        else if (days >= 7) { streakMultiplier = 1.10; streakTierName = 'Silver Saver'; }
+        else if (days >= 1) { streakMultiplier = 1.05; streakTierName = 'Bronze Saver'; }
+      } catch {
+        // Non-blocking — use 1.0 on any error
+      }
+    }
+
+    // Step 4b: Apply earning cap (fail-open)
+    let adjustedAmount = streakMultiplier > 1 ? Math.floor(amount * streakMultiplier) : amount;
+    if (streakMultiplier > 1) {
+      (metadata as any).streakMultiplier = streakMultiplier;
+      (metadata as any).streakTierName = streakTierName;
+      (metadata as any).baseAmount = amount;
+      (metadata as any).bonusCoins = adjustedAmount - amount;
+    }
     let cappedReason: string | undefined;
     if (!skipCap) {
       try {

@@ -1,6 +1,7 @@
 import { logger } from '../config/logger';
 import mongoose from 'mongoose';
 import BonusCampaign, { IBonusCampaign, BonusCampaignType } from '../models/BonusCampaign';
+import whatsNewService from './whatsNewService';
 import BonusClaim, { IBonusClaim } from '../models/BonusClaim';
 import { CoinTransaction, MainCategorySlug } from '../models/CoinTransaction';
 import { User } from '../models/User';
@@ -710,6 +711,13 @@ export async function expirePendingClaims(): Promise<number> {
 export async function transitionCampaignStatuses(): Promise<{ activated: number; expired: number }> {
   const now = new Date();
 
+  // Find scheduled campaigns that should be activated (before updateMany changes them)
+  const campaignsToActivate = await BonusCampaign.find({
+    status: 'scheduled',
+    startTime: { $lte: now },
+    endTime: { $gte: now },
+  }).lean();
+
   // Activate scheduled campaigns that have reached their start time
   const activated = await BonusCampaign.updateMany(
     {
@@ -719,6 +727,11 @@ export async function transitionCampaignStatuses(): Promise<{ activated: number;
     },
     { $set: { status: 'active' } }
   );
+
+  // Auto-create What's New stories for newly activated campaigns
+  for (const campaign of campaignsToActivate) {
+    whatsNewService.autoCreateFromCampaign(campaign).catch(() => {});
+  }
 
   // Expire active/scheduled/paused campaigns that have passed their end time
   const expired = await BonusCampaign.updateMany(

@@ -43,7 +43,7 @@ export const updateConfig = asyncHandler(async (req: Request, res: Response) => 
     const { action } = req.params;
     const updates = req.body;
 
-    const config = await EngagementConfig.findOne({ action }).lean();
+    const config = await EngagementConfig.findOne({ action });
     if (!config) {
       return res.status(404).json({ success: false, error: 'Config not found for action: ' + action });
     }

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import {
   getHomeServicesCategories,
   getFeaturedHomeServices,
@@ -6,7 +6,9 @@ import {
   getHomeServicesStats,
   getPopularHomeServices
 } from '../controllers/homeServicesController';
-import { optionalAuth } from '../middleware/auth';
+import { optionalAuth, authenticate } from '../middleware/auth';
+import { asyncHandler } from '../utils/asyncHandler';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -101,5 +103,41 @@ router.get('/stats', optionalAuth, getHomeServicesStats);
  *         description: List of home services in category
  */
 router.get('/category/:slug', optionalAuth, getHomeServicesByCategory);
+
+/**
+ * @route   POST /api/home-services/book
+ * @desc    Book a home service (delegates to ServiceAppointment)
+ * @access  Private
+ */
+router.post('/book', authenticate, asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  const { storeId, serviceType, appointmentDate, appointmentTime, duration, customerName, customerPhone, specialInstructions } = req.body;
+
+  if (!storeId || !serviceType || !appointmentDate || !appointmentTime || !customerName || !customerPhone) {
+    res.status(400).json({ success: false, message: 'Missing required fields' });
+    return;
+  }
+
+  const { ServiceAppointment } = await import('../models/ServiceAppointment');
+  const appointmentNumber = await (ServiceAppointment as any).generateAppointmentNumber();
+
+  const appointment = await ServiceAppointment.create({
+    appointmentNumber,
+    store: storeId,
+    user: userId,
+    serviceType,
+    appointmentDate: new Date(appointmentDate),
+    appointmentTime,
+    duration: duration || 60,
+    customerName,
+    customerPhone,
+    specialInstructions,
+    status: 'pending',
+  });
+
+  logger.info(`✅ [HOME SERVICE] Booked ${serviceType} for store ${storeId}`);
+
+  res.status(201).json({ success: true, data: appointment, message: 'Home service booked successfully' });
+}));
 
 export default router;

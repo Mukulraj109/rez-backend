@@ -66,6 +66,13 @@ export interface IMallBrand extends Document {
     trackingTemplate?: string;  // URL template with {clickId}, {userId} placeholders
     callbackFormat?: 'json' | 'query';
   };
+  // REZ Coin reward configuration — coins user earns per ₹100 spent
+  rezCoinReward?: {
+    coinsPerHundred: number;
+    minimumOrderAmount: number;
+    maximumCoinsPerOrder: number;
+    isActive: boolean;
+  };
   isActive: boolean;
   isFeatured: boolean;
   isLuxury: boolean;
@@ -142,6 +149,28 @@ const MallBrandSchema = new Schema<IMallBrand>({
       min: 0,
       default: 0
     }
+  },
+  rezCoinReward: {
+    coinsPerHundred: {
+      type: Number,
+      default: 5,
+      min: 0,
+      max: 50,
+    },
+    minimumOrderAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    maximumCoinsPerOrder: {
+      type: Number,
+      default: 10000,
+      min: 0,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
   ratings: {
     average: {

@@ -47,6 +47,7 @@ export interface IMallPurchase extends Document {
   verificationDays: number;     // Days to wait before crediting (7-14)
   verifiedAt?: Date;
   creditedAt?: Date;
+  coinsAwarded?: number;        // REZ coins credited to user wallet
 
   // Related records
   cashback?: Types.ObjectId;    // UserCashback reference (after crediting)
@@ -166,6 +167,11 @@ const MallPurchaseSchema = new Schema<IMallPurchase>({
   },
   verifiedAt: Date,
   creditedAt: Date,
+  coinsAwarded: {
+    type: Number,
+    min: 0,
+    default: 0,
+  },
 
   // Related records
   cashback: {

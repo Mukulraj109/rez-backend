@@ -36,6 +36,7 @@ interface TrackClickResult {
   trackingUrl: string;
   brandName: string;
   cashbackPercentage: number;
+  coinsPerHundred: number;
 }
 
 interface ProcessConversionData {
@@ -101,13 +102,14 @@ class MallAffiliateService {
 
       if (recentClick) {
         // Return existing click instead of creating duplicate
-        const trackingUrl = this.generateTrackingUrl(brand.externalUrl, recentClick.clickId, data.userId);
+        const trackingUrl = this.generateTrackingUrl(brand.externalUrl, recentClick.clickId, data.userId, brand.slug);
         logger.info(`♻️ [AFFILIATE] Returning existing click: ${recentClick.clickId} (dedup)`);
         return {
           clickId: recentClick.clickId,
           trackingUrl,
           brandName: brand.name,
           cashbackPercentage: brand.cashback.percentage,
+          coinsPerHundred: (brand as any).rezCoinReward?.coinsPerHundred ?? 5,
         };
       }
 
@@ -136,7 +138,7 @@ class MallAffiliateService {
       await brand.recordClick();
 
       // Generate tracking URL
-      const trackingUrl = this.generateTrackingUrl(brand.externalUrl, click.clickId, data.userId);
+      const trackingUrl = this.generateTrackingUrl(brand.externalUrl, click.clickId, data.userId, brand.slug);
 
       logger.info(`✅ [AFFILIATE] Click tracked: ${click.clickId} for brand ${brand.name}`);
 
@@ -145,6 +147,7 @@ class MallAffiliateService {
         trackingUrl,
         brandName: brand.name,
         cashbackPercentage: brand.cashback.percentage,
+        coinsPerHundred: (brand as any).rezCoinReward?.coinsPerHundred ?? 5,
       };
     } catch (error) {
       logger.error('❌ [AFFILIATE] Error tracking click:', error);
@@ -155,19 +158,45 @@ class MallAffiliateService {
   /**
    * Generate tracking URL with affiliate parameters
    */
-  generateTrackingUrl(baseUrl: string, clickId: string, userId?: string): string {
+  generateTrackingUrl(baseUrl: string, clickId: string, userId?: string, brandSlug?: string): string {
     const url = new URL(baseUrl);
 
-    // Add tracking parameters
-    url.searchParams.set('ref', 'rez');
+    // Build encoded subID: userId|clickId encoded as base64url
+    const rawSubId = userId ? `${userId}|${clickId}` : `anon|${clickId}`;
+    const subId = Buffer.from(rawSubId).toString('base64url');
+
+    // Set subID in multiple parameter names for network compatibility
+    url.searchParams.set('aff_sub', subId);
+    url.searchParams.set('subid', subId);
     url.searchParams.set('click_id', clickId);
-    if (userId) {
-      url.searchParams.set('user_id', userId);
-    }
-    url.searchParams.set('utm_source', 'rez_mall');
+
+    // REZ attribution
+    url.searchParams.set('ref', 'rez');
+    url.searchParams.set('utm_source', 'rez_app');
     url.searchParams.set('utm_medium', 'affiliate');
+    if (brandSlug) {
+      url.searchParams.set('utm_campaign', brandSlug);
+    }
 
     return url.toString();
+  }
+
+  /**
+   * Decode a subID back to { userId, clickId }.
+   * Used when postback arrives with aff_sub but no explicit click_id.
+   */
+  static decodeSubId(subId: string): { userId: string | null; clickId: string } | null {
+    try {
+      const decoded = Buffer.from(subId, 'base64url').toString('utf8');
+      const parts = decoded.split('|');
+      if (parts.length < 2 || !parts[1]) return null;
+      return {
+        userId: parts[0] === 'anon' ? null : parts[0],
+        clickId: parts[1],
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -658,89 +687,87 @@ class MallAffiliateService {
         return;
       }
 
-      // Get brand info
-      const brand = await MallBrand.findById(purchase.brand).session(session).lean();
+      // Get brand with coin reward config
+      const brand = await MallBrand.findById(freshPurchase.brand)
+        .select('name slug rezCoinReward cashback')
+        .session(session)
+        .lean();
 
-      // Create UserCashback entry (isRedeemed: false — redeemed means user SPENT it, not received it)
-      const [cashback] = await UserCashback.create([{
-        user: purchase.user,
-        amount: purchase.actualCashback,
-        cashbackRate: purchase.cashbackRate,
-        source: 'special_offer',
-        status: 'credited',
-        description: `Cashback from ${brand?.name || 'Mall'} purchase`,
-        earnedDate: purchase.purchasedAt,
-        creditedDate: new Date(),
-        expiryDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days
-        metadata: {
-          orderAmount: purchase.orderAmount,
-          productCategories: ['mall'],
-          storeName: brand?.name,
+      // ─── Calculate REZ Coins to award ────────────────────────────────────
+      const coinConfig = (brand as any)?.rezCoinReward || {};
+      const coinsPerHundred: number = typeof coinConfig.coinsPerHundred === 'number' ? coinConfig.coinsPerHundred : 5;
+      const maxCoinsPerOrder: number = typeof coinConfig.maximumCoinsPerOrder === 'number' ? coinConfig.maximumCoinsPerOrder : 10000;
+      const minOrderAmount: number = typeof coinConfig.minimumOrderAmount === 'number' ? coinConfig.minimumOrderAmount : 0;
+      const coinRewardActive: boolean = coinConfig.isActive !== false;
+
+      let coinsToAward = 0;
+      if (coinRewardActive && freshPurchase.orderAmount >= minOrderAmount && coinsPerHundred > 0) {
+        const rawCoins = Math.floor(freshPurchase.orderAmount * coinsPerHundred / 100);
+        coinsToAward = Math.min(rawCoins, maxCoinsPerOrder);
+      }
+
+      const brandName = (brand as any)?.name || 'Mall';
+      logger.info(
+        `💰 [AFFILIATE] Awarding ${coinsToAward} REZ coins to user ${freshPurchase.user} ` +
+        `for ₹${freshPurchase.orderAmount} at ${brandName} (${coinsPerHundred} coins/₹100)`
+      );
+
+      // ─── Credit REZ Coins to wallet ──────────────────────────────────────
+      if (coinsToAward > 0) {
+        const { rewardEngine } = await import('../core/rewardEngine');
+        await rewardEngine.issue({
+          userId: freshPurchase.user.toString(),
+          amount: coinsToAward,
+          rewardType: 'mall_affiliate',
+          source: 'cashback',
+          coinType: 'rez',
+          description: `${coinsToAward} REZ coins from ${brandName} purchase`,
+          operationType: 'mall_affiliate',
+          referenceId: `mall-cashback:${freshPurchase._id}`,
+          referenceModel: 'MallPurchase',
+          metadata: {
+            purchaseId: freshPurchase._id,
+            brandId: freshPurchase.brand,
+            orderAmount: freshPurchase.orderAmount,
+            coinsPerHundred,
+            brandName,
+          },
+          skipCap: false,
+          skipMultiplier: false,
+          session,
+        });
+      }
+
+      // ─── Update purchase status ───────────────────────────────────────────
+      await MallPurchase.findByIdAndUpdate(
+        freshPurchase._id,
+        {
+          $set: {
+            status: 'credited',
+            coinsAwarded: coinsToAward,
+            creditedAt: new Date(),
+          },
+          $push: {
+            statusHistory: {
+              status: 'credited',
+              timestamp: new Date(),
+              reason: `Credited ${coinsToAward} REZ coins`,
+              updatedBy: 'system',
+            },
+          },
         },
-        pendingDays: 0,
-        isRedeemed: false,
-      }], { session });
+        { session }
+      );
 
-      // Credit to wallet via rewardEngine (unified reward issuance)
-      const { rewardEngine } = await import('../core/rewardEngine');
-      await rewardEngine.issue({
-        userId: purchase.user.toString(),
-        amount: purchase.actualCashback,
-        rewardType: 'mall_affiliate',
-        source: 'cashback',
-        description: `Affiliate cashback from ${brand?.name || 'Mall'} purchase`,
-        operationType: 'mall_affiliate',
-        referenceId: `mall-cashback:${purchase._id}`,
-        referenceModel: 'MallPurchase',
-        metadata: {
-          purchaseId: purchase._id,
-          brandId: purchase.brand,
-          orderAmount: purchase.orderAmount,
-          cashbackRate: purchase.cashbackRate,
-        },
-        skipCap: true,
-        skipMultiplier: true,
-        session,
-      });
-
-      const balanceBefore = 0; // Approximate for Transaction record below
-      const wallet = await Wallet.findOne({ user: purchase.user }).lean();
-
-      // Create Transaction audit record (formal financial ledger)
-      await Transaction.create([{
-        user: purchase.user,
-        type: 'credit',
-        category: 'cashback',
-        amount: purchase.actualCashback,
-        currency: 'RC',
-        description: `Affiliate cashback from ${brand?.name || 'Mall'} purchase`,
-        source: {
-          type: 'cashback',
-          reference: purchase._id,
-        },
-        status: { current: 'completed', history: [{ status: 'completed', timestamp: new Date() }] },
-        balanceBefore,
-        balanceAfter: balanceBefore + purchase.actualCashback,
-        isReversible: true,
-        retryCount: 0,
-        maxRetries: 0,
-      }], { session });
-
-      // Update purchase status
-      purchase.status = 'credited';
-      purchase.creditedAt = new Date();
-      purchase.cashback = cashback._id as Types.ObjectId;
-      purchase.statusHistory.push({
-        status: 'credited',
-        timestamp: new Date(),
-        reason: 'Cashback credited to wallet',
-        updatedBy: 'system',
-      });
-      await purchase.save({ session });
+      // ─── Update brand analytics (non-blocking) ────────────────────────────
+      MallBrand.findByIdAndUpdate(
+        freshPurchase.brand,
+        { $inc: { 'analytics.totalCashbackGiven': coinsToAward } },
+        { session }
+      ).catch((err: Error) => logger.warn('[AFFILIATE] Brand analytics update failed:', err));
 
       await session.commitTransaction();
-
-      // walletService.credit already handles cache invalidation
+      logger.info(`✅ [AFFILIATE] Credited ${coinsToAward} REZ coins for purchase of ₹${freshPurchase.orderAmount} at ${brandName}`);
     } catch (error) {
       await session.abortTransaction();
 

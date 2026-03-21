@@ -71,7 +71,7 @@ export const REGIONS: Record<RegionId, RegionConfig> = {
     countries: ['UAE', 'United Arab Emirates', 'AE', 'ARE'],
     countryCode: 'AE',
     deliveryRadius: 20,
-    isActive: true
+    isActive: false
   },
   china: {
     id: 'china',
@@ -99,7 +99,7 @@ export const REGIONS: Record<RegionId, RegionConfig> = {
     countries: ['China', 'CN', 'CHN', "People's Republic of China"],
     countryCode: 'CN',
     deliveryRadius: 10,
-    isActive: true
+    isActive: false
   }
 };
 

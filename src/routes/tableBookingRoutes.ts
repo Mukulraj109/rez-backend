@@ -7,9 +7,14 @@ import {
   getMerchantTableBookings,
   cancelTableBooking,
   updateTableBookingStatus,
-  checkAvailability
+  checkAvailability,
+  addPreOrder,
 } from '../controllers/tableBookingController';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireAdmin } from '../middleware/auth';
+import { asyncHandler } from '../utils/asyncHandler';
+import { sendSuccess } from '../utils/response';
+import { TableBooking } from '../models/TableBooking';
+import { Request, Response } from 'express';
 
 const router = Router();
 
@@ -39,5 +44,45 @@ router.put('/:bookingId/status', updateTableBookingStatus);
 
 // Cancel table booking (for customers)
 router.put('/:bookingId/cancel', cancelTableBooking);
+
+// Pre-order food linked to a table booking
+router.post('/:bookingId/preorder', addPreOrder);
+
+// ==================== ADMIN ROUTES ====================
+
+// Admin: view all bookings across stores
+router.get('/admin', authenticate, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const { page = '1', limit = '20', status, storeId, date } = req.query;
+  const pageNum = parseInt(page as string) || 1;
+  const limitNum = Math.min(50, parseInt(limit as string) || 20);
+  const skip = (pageNum - 1) * limitNum;
+
+  const query: any = {};
+  if (status) query.status = status;
+  if (storeId) query.storeId = storeId;
+  if (date) {
+    const d = new Date(date as string);
+    query.bookingDate = {
+      $gte: new Date(d.setHours(0, 0, 0, 0)),
+      $lte: new Date(d.setHours(23, 59, 59, 999)),
+    };
+  }
+
+  const [bookings, total] = await Promise.all([
+    TableBooking.find(query)
+      .populate('storeId', 'name logo')
+      .populate('userId', 'profile.firstName profile.lastName phoneNumber')
+      .sort({ bookingDate: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean(),
+    TableBooking.countDocuments(query),
+  ]);
+
+  return sendSuccess(res, {
+    bookings,
+    pagination: { page: pageNum, limit: limitNum, total, totalPages: Math.ceil(total / limitNum) },
+  }, 'Admin table bookings retrieved');
+}));
 
 export default router;

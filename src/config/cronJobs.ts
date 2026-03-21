@@ -46,6 +46,7 @@ import { initializeIntegrationReconciliationJob } from '../jobs/integrationRecon
 import { ScheduledJobService } from '../services/ScheduledJobService';
 import AuditRetentionService from '../services/AuditRetentionService';
 import { ReportService } from '../merchantservices/ReportService';
+import { initializeTagOffersJob } from '../jobs/tagOffersJob';
 
 /**
  * Initializes ALL cron jobs and background services.
@@ -127,6 +128,9 @@ export async function initializeCronJobs(): Promise<void> {
     initializeStreakResetJob();
     logger.info('Streak reset job started (runs daily at 00:05 UTC)');
   }
+
+  // Offer auto-tagging (trending/popular/expiring — runs hourly)
+  initializeTagOffersJob();
 
   // Bonus campaign jobs (status transitions every 5m, expire claims every 30m)
   if (isGamificationEnabled('bonusZones')) {

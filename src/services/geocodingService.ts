@@ -4,6 +4,7 @@ import axios from 'axios';
 // Geocoding service interfaces
 export interface GeocodeResult {
   address: string;
+  neighbourhood?: string; // BTM Layout, HSR Layout, Koramangala, etc.
   city: string;
   state: string;
   country: string;
@@ -28,6 +29,7 @@ export interface AddressSearchResult {
   coordinates: [number, number];
   formattedAddress: string;
   placeId?: string;
+  neighbourhood?: string;
   city?: string;
   state?: string;
   country?: string;
@@ -79,6 +81,7 @@ class GeocodingService {
     const addressComponents = result.address_components;
     
     // Extract address components
+    let neighbourhood = '';
     let city = '';
     let state = '';
     let country = '';
@@ -86,7 +89,10 @@ class GeocodingService {
 
     addressComponents.forEach((component: any) => {
       const types = component.types;
-      if (types.includes('locality') || types.includes('administrative_area_level_2')) {
+      // Neighbourhood/area (most specific — BTM Layout, HSR Layout, etc.)
+      if (types.includes('sublocality_level_1') || types.includes('sublocality') || types.includes('neighborhood')) {
+        if (!neighbourhood) neighbourhood = component.long_name; // first match wins
+      } else if (types.includes('locality') || types.includes('administrative_area_level_2')) {
         city = component.long_name;
       } else if (types.includes('administrative_area_level_1')) {
         state = component.long_name;
@@ -99,6 +105,7 @@ class GeocodingService {
 
     return {
       address: result.formatted_address,
+      neighbourhood: neighbourhood || undefined,
       city: city || 'Unknown',
       state: state || 'Unknown',
       country: country || 'Unknown',
@@ -136,8 +143,16 @@ class GeocodingService {
       || components._normalized_city
       || 'Unknown';
 
+    // OpenCage neighbourhood: neighbourhood > suburb > quarter
+    const neighbourhood = components.neighbourhood
+      || components.suburb
+      || components.quarter
+      || components.residential
+      || undefined;
+
     return {
       address: result.formatted,
+      neighbourhood,
       city: city,
       state: components.state || components.province || 'Unknown',
       country: components.country || 'Unknown',
@@ -232,10 +247,18 @@ class GeocodingService {
         || components._normalized_city
         || '';
 
+      // Extract neighbourhood from search result
+      const neighbourhood = components.neighbourhood
+        || components.suburb
+        || components.quarter
+        || components.residential
+        || undefined;
+
       return {
         address: result.formatted,
         coordinates: [result.geometry.lng, result.geometry.lat],
         formattedAddress: result.formatted,
+        neighbourhood,
         city: city,
         state: components.state || components.province || '',
         country: components.country || 'India',

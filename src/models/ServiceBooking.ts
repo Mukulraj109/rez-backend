@@ -179,7 +179,8 @@ export interface IServiceBookingModel extends mongoose.Model<IServiceBooking> {
     storeId: Types.ObjectId,
     date: Date,
     duration: number,
-    storeHours: { open: string; close: string }
+    storeHours: { open: string; close: string },
+    serviceId?: Types.ObjectId
   ): Promise<ITimeSlot[]>;
 }
 
@@ -684,7 +685,8 @@ ServiceBookingSchema.statics.getAvailableSlots = async function (
   storeId: Types.ObjectId,
   date: Date,
   duration: number,
-  storeHours: { open: string; close: string }
+  storeHours: { open: string; close: string },
+  serviceId?: Types.ObjectId
 ): Promise<ITimeSlot[]> {
   const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
@@ -697,6 +699,18 @@ ServiceBookingSchema.statics.getAvailableSlots = async function (
     bookingDate: { $gte: startOfDay, $lte: endOfDay },
     status: { $in: ['pending', 'confirmed', 'assigned', 'in_progress'] }
   }).lean();
+
+  // Fetch blocked slots for this date and store
+  const { BlockedSlot } = require('./BlockedSlot');
+  const blockedQuery: any = {
+    storeId,
+    date: { $gte: startOfDay, $lte: endOfDay },
+  };
+  // Include blocks for all services (serviceId=null) AND blocks for this specific service
+  if (serviceId) {
+    blockedQuery.$or = [{ serviceId }, { serviceId: null }];
+  }
+  const blockedSlots = await BlockedSlot.find(blockedQuery).lean();
 
   // Parse store hours
   const [openHour, openMin] = storeHours.open.split(':').map(Number);
@@ -715,10 +729,10 @@ ServiceBookingSchema.statics.getAvailableSlots = async function (
     const endHour = Math.floor(endTime / 60);
     const endMin = endTime % 60;
 
-    const slot: ITimeSlot = {
-      start: `${startHour.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`,
-      end: `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`
-    };
+    const slotStart = `${startHour.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
+    const slotEnd = `${endHour.toString().padStart(2, '0')}:${endMin.toString().padStart(2, '0')}`;
+
+    const slot: ITimeSlot = { start: slotStart, end: slotEnd };
 
     // Check if slot conflicts with any existing booking
     let hasConflict = false;
@@ -734,6 +748,21 @@ ServiceBookingSchema.statics.getAvailableSlots = async function (
       ) {
         hasConflict = true;
         break;
+      }
+    }
+
+    // Check if slot falls within any blocked window
+    if (!hasConflict) {
+      for (const blocked of blockedSlots) {
+        if ((blocked as any).isAllDay) {
+          hasConflict = true;
+          break;
+        }
+        // Overlap: slot starts before blocked ends AND slot ends after blocked starts
+        if (slotStart < (blocked as any).endTime && slotEnd > (blocked as any).startTime) {
+          hasConflict = true;
+          break;
+        }
       }
     }
 
