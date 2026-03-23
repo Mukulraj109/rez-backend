@@ -8,6 +8,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { User } from '../models/User';
 import { uploadProfileImage } from '../middleware/upload';
+import redisService from '../services/redisService';
 
 /**
  * @desc    Get user profile data
@@ -16,9 +17,16 @@ import { uploadProfileImage } from '../middleware/upload';
  */
 export const getProfile = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).userId;
-  
+
   if (!userId) {
     return sendError(res, 'Authentication required', 401);
+  }
+
+  // Check Redis cache first
+  const cacheKey = `profile:user:${userId}`;
+  const cached = await redisService.get<any>(cacheKey);
+  if (cached) {
+    return sendSuccess(res, cached, 'Profile retrieved successfully');
   }
 
   const user = await User.findById(userId).lean();
@@ -37,6 +45,11 @@ export const getProfile = asyncHandler(async (req: Request, res: Response) => {
     updatedAt: user.updatedAt
   };
 
+  // Cache for 60 seconds
+  redisService.set(cacheKey, profileData, 60).catch(err =>
+    logger.warn('[Profile] Cache set failed', { error: err.message })
+  );
+
   sendSuccess(res, profileData, 'Profile retrieved successfully');
 });
 
@@ -53,10 +66,44 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
   }
 
   logger.info('🔄 [PROFILE_UPDATE] Update request received for user:', userId);
-  logger.info('📥 [PROFILE_UPDATE] Request body:', JSON.stringify(req.body, null, 2));
 
   // Extract from nested profile object (frontend sends { profile: { ... }, preferences: { ... }, email: ... })
   const { profile, preferences, email } = req.body;
+
+  // Input validation
+  if (email !== undefined) {
+    if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return sendBadRequest(res, 'Invalid email format');
+    }
+    if (email.length > 254) {
+      return sendBadRequest(res, 'Email is too long');
+    }
+  }
+
+  if (profile) {
+    if (profile.firstName !== undefined && (typeof profile.firstName !== 'string' || profile.firstName.length > 50)) {
+      return sendBadRequest(res, 'First name must be 50 characters or less');
+    }
+    if (profile.lastName !== undefined && (typeof profile.lastName !== 'string' || profile.lastName.length > 50)) {
+      return sendBadRequest(res, 'Last name must be 50 characters or less');
+    }
+    if (profile.bio !== undefined && (typeof profile.bio !== 'string' || profile.bio.length > 500)) {
+      return sendBadRequest(res, 'Bio must be 500 characters or less');
+    }
+    if (profile.website !== undefined && typeof profile.website === 'string' && profile.website.length > 0) {
+      if (profile.website.length > 200) {
+        return sendBadRequest(res, 'Website URL is too long');
+      }
+      try {
+        new URL(profile.website.startsWith('http') ? profile.website : `https://${profile.website}`);
+      } catch {
+        return sendBadRequest(res, 'Invalid website URL');
+      }
+    }
+    if (profile.gender !== undefined && !['male', 'female', 'other'].includes(profile.gender)) {
+      return sendBadRequest(res, 'Invalid gender value');
+    }
+  }
 
   try {
     const user = await User.findById(userId);
@@ -177,6 +224,11 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
     });
 
     await user.save();
+
+    // Invalidate profile cache
+    redisService.del(`profile:user:${userId}`).catch(err =>
+      logger.warn('[Profile] Cache invalidation failed', { error: err.message })
+    );
 
     logger.info('✅ [PROFILE_UPDATE] Profile saved successfully');
 

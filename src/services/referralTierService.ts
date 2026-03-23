@@ -95,15 +95,17 @@ export class ReferralTierService {
    * Award tier upgrade rewards
    */
   async awardTierRewards(userId: string | Types.ObjectId, newTier: string) {
-    const user = await User.findById(userId).lean();
-    if (!user) throw new Error('User not found');
-
     const tierData = REFERRAL_TIERS[newTier];
     const rewards = [];
 
-    // Award tier bonus coins
+    // Award tier bonus coins via atomic wallet update
     if (tierData.rewards.tierBonus) {
-      user.walletBalance = (user.walletBalance || 0) + tierData.rewards.tierBonus;
+      const { Wallet } = require('../models/Wallet');
+      await Wallet.findOneAndUpdate(
+        { user: userId },
+        { $inc: { 'balance.available': tierData.rewards.tierBonus, 'balance.total': tierData.rewards.tierBonus } },
+        { upsert: true, new: true }
+      );
       rewards.push({
         type: 'coins' as const,
         amount: tierData.rewards.tierBonus,
@@ -126,10 +128,15 @@ export class ReferralTierService {
       });
     }
 
+    // Build user update fields
+    const userUpdate: any = {
+      referralTier: newTier,
+    };
+
     // Award lifetime premium
     if (tierData.rewards.lifetimePremium) {
-      user.isPremium = true;
-      user.premiumExpiresAt = new Date('2099-12-31'); // Lifetime
+      userUpdate.isPremium = true;
+      userUpdate.premiumExpiresAt = new Date('2099-12-31'); // Lifetime
       rewards.push({
         type: 'premium' as const,
         claimed: true,
@@ -138,9 +145,8 @@ export class ReferralTierService {
       });
     }
 
-    // Update user tier
-    user.referralTier = newTier as 'STARTER' | 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM' | 'DIAMOND';
-    await user.save();
+    // Atomic user update (no .lean() + .save() conflict)
+    await User.findByIdAndUpdate(userId, { $set: userUpdate });
 
     return {
       rewards,

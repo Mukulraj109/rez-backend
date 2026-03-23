@@ -13,6 +13,7 @@ import {
 } from '../controllers/profileController';
 import { authenticate } from '../middleware/auth';
 import { uploadProfileImage } from '../middleware/upload';
+import { profileUpdateLimiter } from '../middleware/rateLimiter';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess, sendError } from '../utils/response';
 import { UserReputation } from '../models/UserReputation';
@@ -35,7 +36,7 @@ router.get('/', getProfile);
  * @desc    Update user profile
  * @access  Private
  */
-router.put('/', updateProfile);
+router.put('/', profileUpdateLimiter, updateProfile);
 
 /**
  * @route   GET /api/user/profile/completion

@@ -356,8 +356,8 @@ export const getReferralLeaderboard = asyncHandler(async (req: Request, res: Res
       }, 'Referral leaderboard retrieved successfully');
     }
 
-    // Get top referrers
-    const topReferrers = await User.aggregate([
+    // Single aggregation with $facet for both top 10 and full ranking
+    const [result] = await User.aggregate([
       {
         $match: {
           'referral.totalReferrals': { $gt: 0 }
@@ -377,15 +377,16 @@ export const getReferralLeaderboard = asyncHandler(async (req: Request, res: Res
           _id: 1
         }
       },
+      { $sort: { totalReferrals: -1 } },
       {
-        $sort: { totalReferrals: -1 }
-      },
-      {
-        $limit: 10
+        $facet: {
+          top10: [{ $limit: 10 }],
+          allRanked: [{ $project: { totalReferrals: 1, totalEarned: 1 } }]
+        }
       }
     ]);
 
-    const leaderboard = topReferrers.map((user, index) => ({
+    const leaderboard = (result?.top10 || []).map((user: any, index: number) => ({
       rank: index + 1,
       userId: (user._id as any).toString(),
       userName: user.name?.trim() || 'Anonymous',
@@ -393,30 +394,12 @@ export const getReferralLeaderboard = asyncHandler(async (req: Request, res: Res
       totalEarned: user.totalEarned
     }));
 
-    // Get current user's rank
-    const userRank = await User.aggregate([
-      {
-        $match: {
-          'referral.totalReferrals': { $gt: 0 }
-        }
-      },
-      {
-        $project: {
-          totalReferrals: '$referral.totalReferrals',
-          totalEarned: '$referral.referralEarnings',
-          _id: 1
-        }
-      },
-      {
-        $sort: { totalReferrals: -1 }
-      }
-    ]);
-
-    const currentUserRank = userRank.findIndex(user => (user._id as any).toString() === userId) + 1;
-    const currentUser = userRank.find(user => (user._id as any).toString() === userId);
+    const allRanked = result?.allRanked || [];
+    const currentUserRank = allRanked.findIndex((user: any) => (user._id as any).toString() === userId) + 1;
+    const currentUser = allRanked.find((user: any) => (user._id as any).toString() === userId);
 
     // Cache leaderboard + full ranking for user rank lookup
-    const fullRanking = userRank.map(u => ({
+    const fullRanking = allRanked.map((u: any) => ({
       userId: (u._id as any).toString(),
       totalReferrals: u.totalReferrals,
       totalEarned: u.totalEarned

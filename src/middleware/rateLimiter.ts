@@ -368,6 +368,24 @@ export const comparisonLimiter = isRateLimitDisabled
       legacyHeaders: false,
     });
 
+export const profileUpdateLimiter = isRateLimitDisabled
+  ? passthrough
+  : makeLimiter({
+      windowMs: 15 * 60 * 1000,
+      max: 15,
+      keyGenerator,
+      store: makeStore('profile-update'),
+      message: (_req: Request, res: Response) => {
+        res.status(429).json({
+          success: false,
+          message: 'Too many profile updates. Please try again later.',
+          retryAfter: 15 * 60,
+        });
+      },
+      standardHeaders: true,
+      legacyHeaders: false,
+    });
+
 export const favoriteLimiter = isRateLimitDisabled
   ? passthrough
   : makeLimiter({

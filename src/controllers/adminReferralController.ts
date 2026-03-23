@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { sendSuccess, sendBadRequest, sendNotFound } from '../utils/response';
+import { escapeRegex } from '../utils/sanitize';
 import Referral, { ReferralStatus } from '../models/Referral';
 import { User } from '../models/User';
 import { ReferralFraudDetection } from '../services/referralFraudDetection';
@@ -36,6 +37,25 @@ export const getReferrals = asyncHandler(async (req: Request, res: Response) => 
   if (status) filter.status = status;
   if (tier) filter.tier = tier;
   if (fraudOnly === 'true') filter['metadata.fraudFlag'] = true;
+
+  // Search by referral code or phone number
+  if (search) {
+    const escaped = escapeRegex(String(search).substring(0, 200));
+    filter.$or = [
+      { referralCode: { $regex: escaped, $options: 'i' } },
+    ];
+    // Also search by referrer/referee phone — find matching user IDs first
+    const matchingUsers = await User.find({
+      phoneNumber: { $regex: escaped, $options: 'i' },
+    }).select('_id').limit(50).lean();
+    if (matchingUsers.length > 0) {
+      const userIds = matchingUsers.map(u => u._id);
+      filter.$or.push(
+        { referrer: { $in: userIds } },
+        { referee: { $in: userIds } }
+      );
+    }
+  }
 
   const [referrals, total] = await Promise.all([
     Referral.find(filter)

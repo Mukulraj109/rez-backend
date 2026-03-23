@@ -517,9 +517,12 @@ export const applyCode = asyncHandler(async (req: Request, res: Response) => {
 
     await referral.save();
 
-    // Award immediate registration bonus to referee
-    referee.walletBalance = (referee.walletBalance || 0) + 30; // ₹30 welcome bonus
-    await referee.save();
+    // Award immediate registration bonus to referee via atomic wallet update
+    await Wallet.findOneAndUpdate(
+      { user: userId },
+      { $inc: { 'balance.available': 30, 'balance.total': 30 } },
+      { upsert: true, new: true }
+    );
 
     sendSuccess(res, {
       success: true,

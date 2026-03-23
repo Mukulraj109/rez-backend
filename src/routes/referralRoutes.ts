@@ -13,7 +13,17 @@ import {
   getReferralCode,
   getReferralStats
 } from '../controllers/referralController';
-import { applyCode, checkUpgrade } from '../controllers/referralTierController';
+import {
+  applyCode,
+  checkUpgrade,
+  getTier,
+  getRewards,
+  claimReward,
+  generateQR,
+  getMilestones,
+  validateCode,
+  getAnalytics,
+} from '../controllers/referralTierController';
 import { authenticate } from '../middleware/auth';
 import { referralLimiter, referralShareLimiter } from '../middleware/rateLimiter';
 import { validate, Joi } from '../middleware/validation';
@@ -89,6 +99,55 @@ router.get('/code', getReferralCode);
  * @access  Private
  */
 router.get('/stats', getReferralStats);
+
+/**
+ * @route   GET /api/referral/tier
+ * @desc    Get current tier and progress
+ * @access  Private
+ */
+router.get('/tier', getTier);
+
+/**
+ * @route   GET /api/referral/rewards
+ * @desc    Get claimable and claimed rewards
+ * @access  Private
+ */
+router.get('/rewards', getRewards);
+
+/**
+ * @route   POST /api/referral/claim-reward
+ * @desc    Claim a specific reward
+ * @access  Private
+ */
+router.post('/claim-reward', claimReward);
+
+/**
+ * @route   POST /api/referral/generate-qr
+ * @desc    Generate QR code for referral
+ * @access  Private
+ */
+router.post('/generate-qr', generateQR);
+
+/**
+ * @route   GET /api/referral/milestones
+ * @desc    Get milestone progress
+ * @access  Private
+ */
+router.get('/milestones', getMilestones);
+
+/**
+ * @route   POST /api/referral/validate-code
+ * @desc    Validate referral code (used during signup)
+ * @access  Private
+ */
+router.post('/validate-code', validateCode);
+
+/**
+ * @route   GET /api/referral/analytics
+ * @desc    Get referral analytics
+ * @access  Private
+ */
+router.get('/analytics', getAnalytics);
 
 /**
  * @route   POST /api/referral/apply-code
