@@ -489,7 +489,7 @@ async function generateRegionFiles(config: NewRegionConfig) {
   // 1. Backend region config
   console.log('📁 1. BACKEND CONFIG (rez-backend/src/config/regions.ts)');
   console.log('   Add to RegionId type:');
-  console.log(`   export type RegionId = 'bangalore' | 'dubai' | 'china' | '${config.id}';`);
+  console.log(`   export type RegionId = 'bangalore' | 'dubai' | '${config.id}';`);
   console.log('\n   Add to REGIONS object:');
   console.log(generateBackendRegionConfig(config));
   console.log('\n   Add to getRegionFromCoordinates():');
@@ -498,11 +498,11 @@ async function generateRegionFiles(config: NewRegionConfig) {
   // 2. Frontend region config
   console.log('\n📁 2. FRONTEND CONFIG (rez-frontend/contexts/RegionContext.tsx)');
   console.log('   Add to RegionId type:');
-  console.log(`   export type RegionId = 'bangalore' | 'dubai' | 'china' | '${config.id}';`);
+  console.log(`   export type RegionId = 'bangalore' | 'dubai' | '${config.id}';`);
   console.log('\n   Add to DEFAULT_CONFIGS:');
   console.log(generateFrontendRegionConfig(config));
   console.log('\n   Update isValidRegion():');
-  console.log(`   return ['bangalore', 'dubai', 'china', '${config.id}'].includes(region);`);
+  console.log(`   return ['bangalore', 'dubai', '${config.id}'].includes(region);`);
 
   // 3. City mapping
   console.log('\n📁 3. CITY MAPPING (rez-backend/src/scripts/assignSubcategorySlugs.ts)');

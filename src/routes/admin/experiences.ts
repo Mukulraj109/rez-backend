@@ -51,7 +51,7 @@ const createExperienceSchema = Joi.object({
     isVerified: Joi.boolean().optional(),
     categories: Joi.array().items(Joi.string()).optional(),
   }).optional(),
-  regions: Joi.array().items(Joi.string().valid('bangalore', 'dubai', 'china')).optional(),
+  regions: Joi.array().items(Joi.string().valid('bangalore', 'dubai')).optional(),
   sortOrder: Joi.number().integer().min(0).default(0),
   isActive: Joi.boolean().default(true),
   isFeatured: Joi.boolean().default(false),

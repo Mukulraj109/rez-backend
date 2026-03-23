@@ -54,7 +54,7 @@ export interface ILockPriceDeal extends Document {
   // Eligibility
   minOrderValue?: number;
   eligibleCategories?: Types.ObjectId[];
-  region: 'bangalore' | 'dubai' | 'china' | 'all';
+  region: 'bangalore' | 'dubai' | 'all';
   terms: string[];
 
   // Admin
@@ -231,7 +231,7 @@ const LockPriceDealSchema = new Schema<ILockPriceDeal>({
   }],
   region: {
     type: String,
-    enum: ['bangalore', 'dubai', 'china', 'all'],
+    enum: ['bangalore', 'dubai', 'all'],
     default: 'all',
   },
   terms: [{

@@ -468,6 +468,26 @@ export const productBulkLimiter = isRateLimitDisabled
       legacyHeaders: false,
     });
 
+// ─── Financial operations limiter — strict, per-user, fail-closed ────────────
+export const financialLimiter = isRateLimitDisabled
+  ? passthrough
+  : makeLimiter({
+      windowMs: 60 * 1000,     // 1 minute
+      max: 10,                  // max 10 financial operations per minute
+      keyGenerator,
+      store: makeStore('financial', { failOpen: false }),
+      message: (_req: Request, res: Response) => {
+        res.status(429).json({
+          success: false,
+          error: 'RATE_LIMITED',
+          message: 'Too many payment requests. Please wait 1 minute.',
+          retryAfter: 60,
+        });
+      },
+      standardHeaders: true,
+      legacyHeaders: false,
+    }, false);  // fail-closed: reject if Redis unavailable
+
 export const createProductLimiter = (method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'BULK') => {
   if (isRateLimitDisabled) return passthrough;
   const configs = {

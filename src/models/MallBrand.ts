@@ -85,10 +85,16 @@ export interface IMallBrand extends Document {
   createdAt: Date;
   updatedAt: Date;
 
+  // Soft delete fields
+  isDeleted: boolean;
+  deletedAt?: Date;
+  deletedBy?: Types.ObjectId;
+
   // Instance methods
   recordView(): Promise<void>;
   recordClick(): Promise<void>;
   recordPurchase(cashbackAmount?: number): Promise<void>;
+  softDelete(adminId: Types.ObjectId): Promise<void>;
 }
 
 // Mall Brand Schema
@@ -322,7 +328,22 @@ const MallBrandSchema = new Schema<IMallBrand>({
     type: String,
     trim: true,
     lowercase: true
-  }]
+  }],
+  // Soft delete fields
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  deletedAt: {
+    type: Date,
+    default: null,
+  },
+  deletedBy: {
+    type: Schema.Types.ObjectId,
+    ref: 'AdminUser',
+    default: null,
+  },
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -507,6 +528,30 @@ MallBrandSchema.methods.recordPurchase = async function(cashbackAmount: number =
       $set: { 'analytics.conversionRate': rate },
     });
   }
+};
+
+// ── Soft delete: exclude deleted docs from all find queries ──
+MallBrandSchema.pre(/^find/, function (this: any, next) {
+  if (!this.getQuery().hasOwnProperty('isDeleted')) {
+    this.where({ isDeleted: { $ne: true } });
+  }
+  next();
+});
+
+MallBrandSchema.pre('countDocuments', function (this: any, next) {
+  if (!this.getQuery().hasOwnProperty('isDeleted')) {
+    this.where({ isDeleted: { $ne: true } });
+  }
+  next();
+});
+
+// ── Soft delete instance method ──
+MallBrandSchema.methods.softDelete = async function (adminId: Types.ObjectId): Promise<void> {
+  this.isDeleted = true;
+  this.deletedAt = new Date();
+  this.deletedBy = adminId;
+  this.isActive = false;
+  await this.save();
 };
 
 // Delete cached model if exists (for development)

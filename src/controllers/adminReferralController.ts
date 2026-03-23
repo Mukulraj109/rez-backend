@@ -107,16 +107,18 @@ export const getFraudDashboard = asyncHandler(async (req: Request, res: Response
 export const approveReferral = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  const referral = await Referral.findById(id).lean();
+  // Do NOT use .lean() — we need Mongoose instance methods (.save(), .markModified())
+  const referral = await Referral.findById(id);
   if (!referral) return sendNotFound(res, 'Referral not found');
 
   // Clear fraud flags (metadata is Mixed/flexible on the Mongoose schema)
-  const meta = referral.metadata as any;
+  const meta = (referral as any).metadata || {};
   meta.fraudFlag = false;
   meta.fraudReason = undefined;
   meta.adminApproved = true;
   meta.approvedBy = (req as any).user?.userId;
   meta.approvedAt = new Date();
+  (referral as any).metadata = meta;
   referral.markModified('metadata');
 
   await referral.save();

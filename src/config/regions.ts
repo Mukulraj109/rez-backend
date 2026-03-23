@@ -4,7 +4,7 @@
  * Used for region-based store and product filtering
  */
 
-export type RegionId = 'bangalore' | 'dubai' | 'china';
+export type RegionId = 'bangalore' | 'dubai';
 
 export interface RegionConfig {
   id: RegionId;
@@ -71,34 +71,6 @@ export const REGIONS: Record<RegionId, RegionConfig> = {
     countries: ['UAE', 'United Arab Emirates', 'AE', 'ARE'],
     countryCode: 'AE',
     deliveryRadius: 20,
-    isActive: false
-  },
-  china: {
-    id: 'china',
-    name: 'China',
-    displayName: 'China',
-    currency: 'CNY',
-    currencySymbol: '¥',
-    locale: 'zh-CN',
-    timezone: 'Asia/Shanghai',
-    defaultCoordinates: [121.4737, 31.2304], // Shanghai [lng, lat]
-    cities: [
-      'Shanghai',
-      'Beijing',
-      'Shenzhen',
-      'Guangzhou',
-      'Chengdu',
-      'Hangzhou',
-      'Wuhan',
-      'Xian',
-      'Nanjing',
-      'Tianjin',
-      'Suzhou',
-      'Chongqing'
-    ],
-    countries: ['China', 'CN', 'CHN', "People's Republic of China"],
-    countryCode: 'CN',
-    deliveryRadius: 10,
     isActive: false
   }
 };
@@ -168,11 +140,6 @@ export function getRegionFromCoordinates(lng: number, lat: number): RegionId {
   // UAE region (roughly 51-57 longitude, 22-27 latitude)
   if (lng >= 51 && lng <= 57 && lat >= 22 && lat <= 27) {
     return 'dubai';
-  }
-
-  // China region (roughly 73-135 longitude, 18-54 latitude)
-  if (lng >= 73 && lng <= 135 && lat >= 18 && lat <= 54) {
-    return 'china';
   }
 
   // India/Bangalore region (roughly 68-97 longitude, 6-36 latitude)

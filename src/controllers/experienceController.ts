@@ -495,7 +495,6 @@ export const getUniqueFinds = asyncHandler(async (req: Request, res: Response) =
       // Otherwise, use region's default currency
       switch (reg) {
         case 'dubai': return 'د.إ';
-        case 'china': return '¥';
         case 'bangalore':
         default: return '₹';
       }

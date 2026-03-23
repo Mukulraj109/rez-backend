@@ -118,6 +118,7 @@ const CoinTransactionSchema: Schema = new Schema(
         'leaderboard_prize',    // coins awarded as leaderboard prize at cycle end
         'smart_spend_reward',   // enhanced coin reward from Smart Spend purchases
         'prive_invite_reward',  // coins earned from Privé invite system (inviter & invitee)
+        'prive_campaign',       // coins earned from Privé social cashback campaigns
         'recharge',             // wallet recharge via payment gateway
         'transfer',             // P2P coin transfer between users
         'withdrawal'            // wallet withdrawal to bank/UPI/PayPal
@@ -202,6 +203,9 @@ CoinTransactionSchema.index(
     name: 'purchase_reward_idempotency_idx'
   }
 );
+
+// Campaign reporting: find all transactions for a specific Privé campaign
+CoinTransactionSchema.index({ 'metadata.campaignId': 1 });
 
 // Privé invite reward idempotency: prevents duplicate invite rewards per user+code+role
 CoinTransactionSchema.index(

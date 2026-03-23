@@ -23,6 +23,8 @@ import {
   // Per-table QR codes
   setupTableQRCodes,
   getTableQRCodes,
+  // POS bill creation
+  createBill,
 } from '../controllers/storePaymentController';
 import { authenticate } from '../middleware/auth';
 import { authMiddleware as merchantAuth } from '../middleware/merchantauth';
@@ -128,5 +130,10 @@ router.get('/stats/:storeId', merchantAuth, getStorePaymentStats);
 
 // Get single payment details by paymentId
 router.get('/details/:paymentId', authenticate, getStorePaymentById);
+
+// ==================== POS BILL CREATION (MERCHANT) ====================
+
+// Create bill from merchant POS (P4-03)
+router.post('/create-bill', merchantAuth, createBill);
 
 export default router;

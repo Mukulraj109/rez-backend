@@ -100,7 +100,7 @@ router.post('/process-expired',
 router.get('/',
   optionalAuth,
   validateQuery(Joi.object({
-    region: Joi.string().valid('bangalore', 'dubai', 'china', 'all'),
+    region: Joi.string().valid('bangalore', 'dubai', 'all'),
     category: Joi.string(),
     storeId: Joi.string(),
     featured: Joi.string().valid('true', 'false'),

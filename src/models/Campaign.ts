@@ -47,7 +47,7 @@ export interface ICampaign extends Document {
   maxBenefit?: number;
   icon?: string;
   bannerImage?: string;
-  region?: 'bangalore' | 'dubai' | 'china' | 'all'; // Region restriction - 'all' means available everywhere
+  region?: 'bangalore' | 'dubai' | 'all'; // Region restriction - 'all' means available everywhere
   exclusiveToProgramSlug?: 'student_zone' | 'corporate_perks' | 'nuqta_prive'; // If set, only visible to active program members
   createdAt: Date;
   updatedAt: Date;
@@ -175,7 +175,7 @@ const CampaignSchema = new Schema<ICampaign>({
   },
   region: {
     type: String,
-    enum: ['bangalore', 'dubai', 'china', 'all'],
+    enum: ['bangalore', 'dubai', 'all'],
     default: 'all', // Available in all regions by default
     index: true,
   },

@@ -21,7 +21,7 @@ const updateConfigSchema = Joi.object({
   subtitle: Joi.string().trim().max(200).optional().allow(''),
   icon: Joi.string().trim().optional(),
   isActive: Joi.boolean().optional(),
-  regions: Joi.array().items(Joi.string().valid('bangalore', 'dubai', 'china', 'all')).optional(),
+  regions: Joi.array().items(Joi.string().valid('bangalore', 'dubai', 'all')).optional(),
   tabs: Joi.object({
     offers: Joi.object({
       isEnabled: Joi.boolean(),
@@ -66,7 +66,7 @@ const createItemSchema = Joi.object({
   verificationType: Joi.string().valid('student', 'corporate', 'defence', 'senior', 'birthday', 'women', 'none').optional(),
   isActive: Joi.boolean().default(true),
   sortOrder: Joi.number().integer().min(0).optional(),
-  regions: Joi.array().items(Joi.string().valid('bangalore', 'dubai', 'china', 'all')).optional(),
+  regions: Joi.array().items(Joi.string().valid('bangalore', 'dubai', 'all')).optional(),
 });
 
 const updateItemSchema = createItemSchema.fork(

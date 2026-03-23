@@ -25,7 +25,9 @@ export type RewardType =
   | 'travel_cashback' | 'mall_affiliate' | 'prive_invite'
   | 'challenge_reward' | 'partner_bonus' | 'spin_wheel'
   | 'scratch_card' | 'quiz_game' | 'admin_adjustment'
-  | 'pick_approval' | 'program_task';
+  | 'pick_approval' | 'program_task'
+  | 'prive_campaign'
+  | 'bill_payment';
 
 export interface RewardRequest {
   userId: string;
@@ -166,6 +168,14 @@ class RewardEngine {
       if (config && (config as any).rewardIssuanceEnabled === false) {
         logger.warn('Reward issuance DISABLED via kill-switch', { userId, amount, source });
         return this.emptyResult(source, description, category || null, `killswitch:${userId}:${Date.now()}`);
+      }
+      // Step 0b: Per-coin-type kill switch
+      const killSwitch = (config as any)?.coinManagement?.globalKillSwitch;
+      if (killSwitch?.active && killSwitch?.pausedTypes?.length) {
+        if (killSwitch.pausedTypes.includes(coinType)) {
+          logger.warn(`[KILL_SWITCH] Coin issuance blocked for type: ${coinType}`, { reason: killSwitch.reason, userId, amount });
+          return this.emptyResult(source, description, category || null, `killswitch-type:${coinType}:${userId}:${Date.now()}`);
+        }
       }
     } catch {
       // Config fetch failure — proceed (fail-open on config, fail-closed on cap)

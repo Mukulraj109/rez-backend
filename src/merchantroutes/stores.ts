@@ -164,7 +164,26 @@ const createStoreSchema = Joi.object({
       start: Joi.string().pattern(/^\d{2}:\d{2}$/).optional(),
       end: Joi.string().pattern(/^\d{2}:\d{2}$/).optional(),
     }).optional(),
-  }).optional()
+  }).optional(),
+  // Delivery Zones
+  deliveryZones: Joi.array().items(Joi.object({
+    _id: Joi.string().required(),
+    name: Joi.string().required().max(100),
+    radiusKm: Joi.number().required().min(0),
+    deliveryFee: Joi.number().required().min(0),
+    minOrderAmount: Joi.number().required().min(0),
+    estimatedTime: Joi.number().required().min(0),
+    freeDeliveryAbove: Joi.number().min(0).optional(),
+    isDefault: Joi.boolean().default(false),
+  })).optional(),
+  // Holidays / Closures
+  holidays: Joi.array().items(Joi.object({
+    _id: Joi.string().required(),
+    startDate: Joi.date().required(),
+    endDate: Joi.date().required(),
+    reason: Joi.string().required().max(200),
+    affectsAllOutlets: Joi.boolean().default(false),
+  })).optional(),
 });
 
 const updateStoreSchema = createStoreSchema.fork(

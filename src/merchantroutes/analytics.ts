@@ -2193,4 +2193,174 @@ router.get('/offers/top', async (req: Request, res: Response) => {
   }
 });
 
+// ==================== CUSTOMER LIST (PAGINATED) ====================
+
+/**
+ * @route   GET /api/merchant/analytics/customers/list
+ * @desc    Get paginated customer list with search for merchant customer management page
+ * @access  Private
+ */
+router.get('/customers/list', async (req: Request, res: Response) => {
+  try {
+    const storeId = await getStoreId(req, res);
+    if (!storeId) return;
+
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const skip = (page - 1) * limit;
+    const search = (req.query.search as string || '').trim();
+    const sortBy = (req.query.sortBy as string) || 'lastOrderDate';
+    const sortOrder = (req.query.sortOrder as string) === 'asc' ? 1 : -1;
+
+    const Order = require('../models/Order').Order;
+    const ObjectId = require('mongoose').Types.ObjectId;
+
+    // Build aggregation pipeline
+    const matchStage: any = {
+      'items.store': new ObjectId(storeId),
+      status: { $nin: ['cancelled', 'refunded'] },
+    };
+
+    const pipeline: any[] = [
+      { $match: matchStage },
+      { $unwind: '$items' },
+      { $match: { 'items.store': new ObjectId(storeId) } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'user',
+          foreignField: '_id',
+          as: 'userInfo',
+        },
+      },
+      {
+        $group: {
+          _id: '$user',
+          firstName: { $first: { $arrayElemAt: ['$userInfo.profile.firstName', 0] } },
+          lastName: { $first: { $arrayElemAt: ['$userInfo.profile.lastName', 0] } },
+          phoneNumber: { $first: { $arrayElemAt: ['$userInfo.phoneNumber', 0] } },
+          email: { $first: { $arrayElemAt: ['$userInfo.email', 0] } },
+          totalOrders: { $addToSet: '$_id' },
+          totalSpent: { $sum: '$items.subtotal' },
+          lastOrderDate: { $max: '$createdAt' },
+          firstOrderDate: { $min: '$createdAt' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          customerId: { $toString: '$_id' },
+          firstName: { $ifNull: ['$firstName', ''] },
+          lastName: { $ifNull: ['$lastName', ''] },
+          name: {
+            $cond: {
+              if: { $and: [{ $gt: ['$firstName', ''] }, { $gt: ['$lastName', ''] }] },
+              then: { $concat: ['$firstName', ' ', '$lastName'] },
+              else: {
+                $cond: {
+                  if: { $gt: ['$firstName', ''] },
+                  then: '$firstName',
+                  else: { $ifNull: ['$lastName', ''] },
+                },
+              },
+            },
+          },
+          phoneNumber: { $ifNull: ['$phoneNumber', ''] },
+          email: { $ifNull: ['$email', ''] },
+          totalOrders: { $size: '$totalOrders' },
+          totalSpent: { $round: ['$totalSpent', 2] },
+          lastOrderDate: 1,
+          firstOrderDate: 1,
+        },
+      },
+    ];
+
+    // Apply search filter if provided
+    if (search) {
+      const { escapeRegex } = require('../utils/sanitize');
+      const safeSearch = escapeRegex(search);
+      pipeline.push({
+        $match: {
+          $or: [
+            { name: { $regex: safeSearch, $options: 'i' } },
+            { phoneNumber: { $regex: safeSearch, $options: 'i' } },
+            { email: { $regex: safeSearch, $options: 'i' } },
+          ],
+        },
+      });
+    }
+
+    // Count total before pagination
+    const countPipeline = [...pipeline, { $count: 'total' }];
+    const countResult = await Order.aggregate(countPipeline);
+    const total = countResult.length > 0 ? countResult[0].total : 0;
+
+    // Add loyalty tier info via lookup
+    pipeline.push(
+      {
+        $addFields: {
+          customerObjectId: { $toObjectId: '$customerId' },
+        },
+      },
+      {
+        $lookup: {
+          from: 'userloyalties',
+          localField: 'customerObjectId',
+          foreignField: 'userId',
+          as: 'loyaltyInfo',
+        },
+      },
+      {
+        $addFields: {
+          loyaltyTier: { $arrayElemAt: ['$loyaltyInfo.brandLoyalty.tier', 0] },
+        },
+      },
+      {
+        $project: {
+          customerObjectId: 0,
+          loyaltyInfo: 0,
+        },
+      }
+    );
+
+    // Sort + paginate
+    const sortField = sortBy === 'totalSpent' ? 'totalSpent'
+      : sortBy === 'totalOrders' ? 'totalOrders'
+      : sortBy === 'name' ? 'name'
+      : 'lastOrderDate';
+
+    pipeline.push(
+      { $sort: { [sortField]: sortOrder } },
+      { $skip: skip },
+      { $limit: limit }
+    );
+
+    const customers = await Order.aggregate(pipeline);
+
+    return res.json({
+      success: true,
+      data: {
+        customers,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNextPage: page < Math.ceil(total / limit),
+          hasPrevPage: page > 1,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error('Error fetching customer list:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch customer list',
+      ...(process.env.NODE_ENV === 'development' && {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      }),
+    });
+  }
+});
+
 export default router;

@@ -107,11 +107,17 @@ export interface IOffer extends Document {
   createdAt: Date;
   updatedAt: Date;
 
+  // Soft delete fields
+  isDeleted: boolean;
+  deletedAt?: Date;
+  deletedBy?: Types.ObjectId;
+
   // Instance methods
   calculateDistance(userLocation: [number, number]): number;
   isExpired(): boolean;
   isActiveForUser(userId: Types.ObjectId): Promise<{ canUse: boolean; reason?: string }>;
   incrementEngagement(action: 'view' | 'like' | 'share'): Promise<void>;
+  softDelete(adminId: Types.ObjectId): Promise<void>;
 }
 
 // Interface for static methods
@@ -498,7 +504,23 @@ const OfferSchema = new Schema<IOffer>({
     type: String,
     trim: true,
     maxlength: 500
-  }
+  },
+
+  // Soft delete fields
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  deletedAt: {
+    type: Date,
+    default: null,
+  },
+  deletedBy: {
+    type: Schema.Types.ObjectId,
+    ref: 'AdminUser',
+    default: null,
+  },
 }, {
   timestamps: true
 });
@@ -748,6 +770,30 @@ OfferSchema.pre('save', function(next) {
   
   next();
 });
+
+// ── Soft delete: exclude deleted docs from all find queries ──
+OfferSchema.pre(/^find/, function (this: any, next) {
+  if (!this.getQuery().hasOwnProperty('isDeleted')) {
+    this.where({ isDeleted: { $ne: true } });
+  }
+  next();
+});
+
+OfferSchema.pre('countDocuments', function (this: any, next) {
+  if (!this.getQuery().hasOwnProperty('isDeleted')) {
+    this.where({ isDeleted: { $ne: true } });
+  }
+  next();
+});
+
+// ── Soft delete instance method ──
+OfferSchema.methods.softDelete = async function (adminId: Types.ObjectId): Promise<void> {
+  this.isDeleted = true;
+  this.deletedAt = new Date();
+  this.deletedBy = adminId;
+  this.validity.isActive = false;
+  await this.save();
+};
 
 // Create and export the model
 const Offer = mongoose.model<IOffer, IOfferModel>('Offer', OfferSchema);

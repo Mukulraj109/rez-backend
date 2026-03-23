@@ -169,11 +169,44 @@ export interface IPriveProgramConfig {
     redemptionEnabled: boolean;
     analyticsEnabled: boolean;
     invitesEnabled: boolean;
+    priveCampaignsEnabled: boolean;
+    bizoneMerchantEnabled: boolean;
+    socialCashbackEnabled: boolean;
+    dailyCheckinEnabled: boolean;
+    mapViewEnabled: boolean;
+    billSplittingEnabled: boolean;
+    storiesRowEnabled: boolean;
   };
   dashboardCacheTtlSeconds: number;
   notificationConfig: {
     expiryWarningDays: number;
   };
+}
+
+export interface ICoinManagementConfig {
+  globalKillSwitch: {
+    active: boolean;
+    reason: string;
+    activatedBy?: mongoose.Types.ObjectId;
+    activatedAt?: Date;
+    expiresAt?: Date;
+    pausedTypes: ('rez' | 'branded' | 'promo' | 'prive')[];
+  };
+  dailyCaps: {
+    perUserPerDay: number;
+    globalDailyIssuance: number;
+    perTransactionMax: number;
+  };
+  multiplierRules: {
+    name: string;
+    coinType: 'rez' | 'branded' | 'promo' | 'prive';
+    multiplier: number;
+    conditions: string;
+    categories: string[];
+    validFrom?: Date;
+    validTo?: Date;
+    isActive: boolean;
+  }[];
 }
 
 export interface IWalletConfig extends Document {
@@ -192,6 +225,7 @@ export interface IWalletConfig extends Document {
   priveProgramConfig: IPriveProgramConfig;
   coinExpiryConfig: ICoinExpiryConfig;
   coinRules: Record<string, ICoinRules>;
+  coinManagement?: ICoinManagementConfig;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -417,6 +451,13 @@ const WalletConfigSchema = new Schema<IWalletConfig>({
       redemptionEnabled: { type: Boolean, default: true },
       analyticsEnabled: { type: Boolean, default: true },
       invitesEnabled: { type: Boolean, default: true },
+      priveCampaignsEnabled: { type: Boolean, default: false },
+      bizoneMerchantEnabled: { type: Boolean, default: false },
+      socialCashbackEnabled: { type: Boolean, default: false },
+      dailyCheckinEnabled: { type: Boolean, default: false },
+      mapViewEnabled: { type: Boolean, default: false },
+      billSplittingEnabled: { type: Boolean, default: false },
+      storiesRowEnabled: { type: Boolean, default: false },
     },
     dashboardCacheTtlSeconds: { type: Number, default: 30 },
     notificationConfig: {
@@ -457,6 +498,31 @@ const WalletConfigSchema = new Schema<IWalletConfig>({
         earningMethods: ['Store Purchases', 'Merchant Promotions', 'Loyalty Programs'],
       },
     }
+  },
+  coinManagement: {
+    globalKillSwitch: {
+      active: { type: Boolean, default: false },
+      reason: { type: String, default: '' },
+      activatedBy: { type: Schema.Types.ObjectId, ref: 'AdminUser' },
+      activatedAt: { type: Date },
+      expiresAt: { type: Date },
+      pausedTypes: [{ type: String, enum: ['rez', 'branded', 'promo', 'prive'] }],
+    },
+    dailyCaps: {
+      perUserPerDay: { type: Number, default: 10000 },
+      globalDailyIssuance: { type: Number, default: 5000000 },
+      perTransactionMax: { type: Number, default: 2000 },
+    },
+    multiplierRules: [{
+      name: { type: String },
+      coinType: { type: String, enum: ['rez', 'branded', 'promo', 'prive'] },
+      multiplier: { type: Number },
+      conditions: { type: String },
+      categories: [{ type: String }],
+      validFrom: { type: Date },
+      validTo: { type: Date },
+      isActive: { type: Boolean, default: false },
+    }],
   }
 }, {
   timestamps: true

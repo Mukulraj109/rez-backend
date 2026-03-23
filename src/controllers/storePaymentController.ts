@@ -30,6 +30,43 @@ import { withCache } from '../utils/cacheHelper';
 
 const VALID_MAIN_CATEGORY_SLUGS: MainCategorySlug[] = ['food-dining', 'beauty-wellness', 'grocery-essentials', 'fitness-sports', 'healthcare', 'fashion', 'education-learning', 'home-services', 'travel-experiences', 'entertainment', 'financial-lifestyle', 'electronics'];
 
+/**
+ * Resolve the root MainCategory slug for a given category ID by traversing
+ * the parent chain. Pre-fetches all categories in a single query to avoid
+ * sequential N+1 Category.findById calls.
+ */
+async function resolveRootCategorySlug(
+  categoryId: string | undefined,
+  session?: mongoose.ClientSession | null
+): Promise<MainCategorySlug | null> {
+  if (!categoryId) return null;
+
+  try {
+    // Fetch all categories in one query (typically small collection) to traverse in-memory
+    const query = Category.find({}).select('slug parentCategory');
+    if (session) query.session(session);
+    const allCategories = await query.lean();
+    const categoryMap = new Map(allCategories.map(c => [c._id.toString(), c]));
+
+    let catId = categoryId;
+    let depth = 5;
+    while (catId && depth-- > 0) {
+      const cat = categoryMap.get(catId);
+      if (!cat) break;
+      if (!cat.parentCategory) {
+        if (VALID_MAIN_CATEGORY_SLUGS.includes(cat.slug as MainCategorySlug)) {
+          return cat.slug as MainCategorySlug;
+        }
+        break;
+      }
+      catId = cat.parentCategory.toString();
+    }
+  } catch {
+    // Non-critical — fall back to global
+  }
+  return null;
+}
+
 // ==================== QR CODE HANDLERS ====================
 
 /**
@@ -927,24 +964,8 @@ export const confirmStorePayment = asyncHandler(async (req: Request, res: Respon
       await storePayment.save({ session });
 
       // Resolve store's root MainCategory slug for category-specific coins
-      let paymentCategorySlug: MainCategorySlug | null = null;
-      try {
-        let catId = (await Store.findById(storePayment.storeId).select('category').session(session).lean())?.category?.toString();
-        let depth = 5;
-        while (catId && depth-- > 0) {
-          const cat = await Category.findById(catId).select('slug parentCategory').session(session).lean();
-          if (!cat) break;
-          if (!cat.parentCategory) {
-            if (VALID_MAIN_CATEGORY_SLUGS.includes(cat.slug as MainCategorySlug)) {
-              paymentCategorySlug = cat.slug as MainCategorySlug;
-            }
-            break;
-          }
-          catId = cat.parentCategory.toString();
-        }
-      } catch (e) {
-        // Non-critical — fall back to global
-      }
+      const storeCatDoc = await Store.findById(storePayment.storeId).select('category').session(session).lean();
+      const paymentCategorySlug = await resolveRootCategorySlug(storeCatDoc?.category?.toString(), session);
 
       // Deduct coins from user's wallet (ATOMIC with $gte guards — prevents double-spend)
       if (storePayment.coinRedemption.totalAmount > 0) {
@@ -1639,24 +1660,7 @@ export const getCoinsForStore = asyncHandler(async (req: Request, res: Response)
     }
 
     // Resolve root MainCategory slug for category-specific coins
-    let storeCategorySlug: MainCategorySlug | null = null;
-    try {
-      let catId = store.category?.toString();
-      let depth = 5;
-      while (catId && depth-- > 0) {
-        const cat = await Category.findById(catId).select('slug parentCategory').lean();
-        if (!cat) break;
-        if (!cat.parentCategory) {
-          if (VALID_MAIN_CATEGORY_SLUGS.includes(cat.slug as MainCategorySlug)) {
-            storeCategorySlug = cat.slug as MainCategorySlug;
-          }
-          break;
-        }
-        catId = cat.parentCategory.toString();
-      }
-    } catch (e) {
-      // Non-critical
-    }
+    const storeCategorySlug = await resolveRootCategorySlug(store.category?.toString());
 
     // Get user's wallet
     const wallet = await Wallet.findOne({ user: userId }).lean();
@@ -2433,4 +2437,120 @@ export const getTableQRCodes = asyncHandler(async (req: Request, res: Response) 
 
   const tables = (store as any).bookingConfig?.tables || [];
   res.json({ success: true, data: { tables, tableCount: tables.length } });
+});
+
+// ==================== MERCHANT POS: CREATE BILL (P4-03) ====================
+
+/**
+ * Create a bill from merchant POS
+ * POST /api/store-payment/create-bill
+ *
+ * Merchant-initiated flow: creates a bill with itemized products,
+ * looks up customer wallet for coin redemption, generates QR for customer payment.
+ */
+export const createBill = asyncHandler(async (req: Request, res: Response) => {
+  const merchantId = (req as any).merchantId || (req as any).merchant?._id?.toString();
+  if (!merchantId) {
+    return res.status(401).json({ success: false, error: 'UNAUTHORIZED', message: 'Merchant authentication required' });
+  }
+
+  const {
+    items,
+    subtotal,
+    taxAmount,
+    totalAmount,
+    customerPhone,
+    coinsToRedeem,
+    paymentMethod,
+    orderType,
+    tableNumber,
+    notes,
+  } = req.body;
+
+  // Validate required fields
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ success: false, error: 'VALIDATION', message: 'items array is required' });
+  }
+  if (!totalAmount || totalAmount <= 0) {
+    return res.status(400).json({ success: false, error: 'VALIDATION', message: 'totalAmount is required and must be > 0' });
+  }
+
+  // Get merchant's store
+  const store = await Store.findOne({
+    $or: [{ merchantId }, { merchant: merchantId }],
+  })
+    .select('_id name logo category')
+    .lean();
+
+  if (!store) {
+    return res.status(404).json({ success: false, error: 'STORE_NOT_FOUND', message: 'Store not found' });
+  }
+
+  // Calculate coin discount
+  let coinDiscount = 0;
+  const rezCoins = coinsToRedeem?.rez || 0;
+  const brandedCoins = coinsToRedeem?.branded || 0;
+  const promoCoins = coinsToRedeem?.promo || 0;
+  coinDiscount = rezCoins + brandedCoins + promoCoins;
+
+  const finalAmount = Math.max(0, totalAmount - coinDiscount);
+
+  // Generate bill reference
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const seq = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
+  const billRef = `BILL-${dateStr}-${seq}`;
+
+  // Generate payment ID
+  const paymentId = `pay_${new mongoose.Types.ObjectId().toString()}`;
+
+  // Build QR payload
+  const qrPayload = `upi://pay?pa=rez@ybl&pn=REZ&am=${finalAmount.toFixed(2)}&tr=${billRef}`;
+
+  // Create StorePayment record
+  const storePayment = await StorePayment.create({
+    paymentId,
+    userId: null, // Customer not known yet (will be linked on confirm)
+    storeId: store._id,
+    storeName: store.name,
+    billAmount: totalAmount,
+    discountAmount: coinDiscount,
+    coinRedemption: {
+      rez: rezCoins,
+      branded: brandedCoins,
+      promo: promoCoins,
+      total: coinDiscount,
+    },
+    remainingAmount: finalAmount,
+    paymentMethod: paymentMethod || 'qr_pending',
+    offersApplied: [],
+    status: 'initiated',
+    expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 min expiry
+    metadata: {
+      source: 'pos',
+      orderType: orderType || 'dine_in',
+      tableNumber: tableNumber || '',
+      items,
+      subtotal: subtotal || totalAmount,
+      taxAmount: taxAmount || 0,
+      customerPhone: customerPhone || '',
+      notes: notes || '',
+    },
+  });
+
+  return res.status(201).json({
+    success: true,
+    data: {
+      bill: {
+        _id: storePayment._id,
+        billRef,
+        status: 'awaiting_payment',
+        subtotal: subtotal || totalAmount,
+        taxAmount: taxAmount || 0,
+        coinDiscount,
+        finalAmount,
+        qrPayload,
+        expiresAt: storePayment.expiresAt,
+      },
+    },
+  });
 });

@@ -226,7 +226,7 @@ export const productSchemas = {
     // Mode system filter (4-mode system)
     mode: Joi.string().valid('near-u', 'explore', 'deals', 'premium'),
     // Region filter
-    region: Joi.string().valid('bangalore', 'dubai', 'china'),
+    region: Joi.string().valid('bangalore', 'dubai'),
     // Diversity enhancement fields
     excludeProducts: Joi.string().optional().pattern(/^[0-9a-fA-F]{24}(,[0-9a-fA-F]{24})*$/).messages({
       'string.pattern.base': 'excludeProducts must be comma-separated valid MongoDB ObjectIds'

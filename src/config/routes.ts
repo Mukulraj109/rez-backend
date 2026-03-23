@@ -39,6 +39,7 @@ import syncRoutes from '../routes/syncRoutes';
 import locationRoutes from '../routes/locationRoutes';
 import walletRoutes from '../routes/walletRoutes';
 import transferRoutes from '../routes/transferRoutes';
+import billSplitRoutes from '../routes/billSplitRoutes';
 import giftRoutes from '../routes/giftRoutes';
 import giftCardRoutes from '../routes/giftCardRoutes';
 import offerRoutes from '../routes/offerRoutes';
@@ -86,7 +87,7 @@ import outletRoutes from '../routes/outletRoutes';
 import flashSaleRoutes from '../routes/flashSaleRoutes';
 import subscriptionRoutes from '../routes/subscriptionRoutes';
 import billRoutes from '../routes/billRoutes';
-import billPaymentRoutes from '../routes/billPaymentRoutes';
+import billPaymentRoutes, { handleBBPSWebhook } from '../routes/billPaymentRoutes';
 import billingRoutes from '../routes/billingRoutes';
 import activityFeedRoutes from '../routes/activityFeedRoutes';
 import unifiedGamificationRoutes from '../routes/unifiedGamificationRoutes';
@@ -121,6 +122,7 @@ import cashStoreAffiliateRoutes from '../routes/cashStoreAffiliateRoutes';
 import cashStoreRoutes from '../routes/cashStoreRoutes';
 import priveRoutes from '../routes/priveRoutes';
 import priveInviteRoutes from '../routes/priveInviteRoutes';
+import priveCampaignRoutes from '../routes/priveCampaignRoutes';
 import webhookRoutes from '../routes/webhookRoutes';
 import storeGalleryRoutes from '../routes/storeGallery';
 import productGalleryRoutes from '../routes/productGallery';
@@ -144,6 +146,7 @@ import learningRoutes from '../routes/learningRoutes';
 import experienceRoutes from '../routes/experienceRoutes';
 import contentRoutes from '../routes/contentRoutes';
 import earnRoutes from '../routes/earnRoutes';
+import bankOfferRoutes from '../routes/bankOfferRoutes';
 
 // ── Admin Route Imports ──
 import {
@@ -187,6 +190,7 @@ import {
   adminValueCardRoutes,
   adminWalletConfigRoutes,
   adminUserWalletsRoutes,
+  adminBulkWalletAdjustRoutes,
   adminGiftCardsRoutes,
   adminCoinGiftsRoutes,
   adminSurpriseCoinDropsRoutes,
@@ -213,6 +217,12 @@ import {
   adminIntegrationsRoutes,
   adminInstitutionsRoutes,
   adminInstituteReferralsRoutes,
+  adminPriveSubmissionsRoutes,
+  adminCoinOverviewRoutes,
+  adminCoinEmergencyRoutes,
+  adminMerchantTierConfigRoutes,
+  adminFinanceRoutes,
+  adminCoinRulesRoutes,
 } from '../routes/admin';
 import disputeRoutes from '../routes/disputeRoutes';
 import integrationWebhookRoutes from '../routes/integrationWebhook';
@@ -227,6 +237,7 @@ import adminMallBrandsRoutes from '../routes/admin/mallBrands';
 import adminCashStorePurchasesRoutes from '../routes/admin/cashStorePurchases';
 import adminReviewRoutes from '../routes/admin/reviews';
 import adminServiceAppointmentRoutes from '../routes/admin/serviceAppointments';
+import adminBbpsRoutes from '../routes/admin/bbpsAdmin';
 
 // ── Merchant Route Imports ──
 import authRoutes1 from '../merchantroutes/auth';
@@ -276,6 +287,9 @@ import merchantLiabilityRoutes from '../merchantroutes/liability';
 import merchantDisputeRoutes from '../merchantroutes/disputes';
 import merchantVariantsRoutes from '../merchantroutes/variants';
 import productRestoreRoutes from '../merchantroutes/product-restore';
+import merchantPriveCampaignRoutes from '../merchantroutes/priveCampaigns';
+import merchantBannerRoutes from '../merchantroutes/banners';
+import merchantCustomerNotificationRoutes from '../merchantroutes/customerNotifications';
 
 // ────────────────────────────────────────────────────────────────────
 // Register all routes
@@ -314,6 +328,7 @@ export function registerRoutes(app: Express): void {
   app.use(`${API_PREFIX}/location`, locationRoutes);
   app.use(`${API_PREFIX}/wallet`, walletRoutes);
   app.use(`${API_PREFIX}/wallet/transfer`, transferRoutes);
+  app.use(`${API_PREFIX}/wallet/split`, billSplitRoutes);
   app.use(`${API_PREFIX}/wallet/gift`, giftRoutes);
   app.use(`${API_PREFIX}/wallet/gift-cards`, giftCardRoutes);
   app.use(`${API_PREFIX}/offers`, offerCommentRoutes);
@@ -367,6 +382,8 @@ export function registerRoutes(app: Express): void {
   app.use(`${API_PREFIX}/billing`, billingRoutes);
   app.use(`${API_PREFIX}/bills`, billRoutes);
   app.use(`${API_PREFIX}/bill-payments`, billPaymentRoutes);
+  // BBPS Webhook — NO auth middleware (called by Razorpay)
+  app.post(`${API_PREFIX}/bill-payments/webhook/bbps`, handleBBPSWebhook);
   app.use(`${API_PREFIX}/gamification`, unifiedGamificationRoutes);
   app.use(`${API_PREFIX}/social`, activityFeedRoutes);
   app.use(`${API_PREFIX}/social-proof`, socialProofRoutes);
@@ -449,6 +466,7 @@ export function registerRoutes(app: Express): void {
   app.use(`${API_PREFIX}/admin/value-cards`, adminValueCardRoutes);
   app.use(`${API_PREFIX}/admin/wallet-config`, adminWalletConfigRoutes);
   app.use(`${API_PREFIX}/admin/user-wallets`, adminUserWalletsRoutes);
+  app.use(`${API_PREFIX}/admin/user-wallets/bulk-adjust`, adminBulkWalletAdjustRoutes);
   app.use(`${API_PREFIX}/admin/gift-cards`, adminGiftCardsRoutes);
   app.use(`${API_PREFIX}/admin/coin-gifts`, adminCoinGiftsRoutes);
   app.use(`${API_PREFIX}/admin/surprise-coin-drops`, adminSurpriseCoinDropsRoutes);
@@ -475,12 +493,19 @@ export function registerRoutes(app: Express): void {
   app.use(`${API_PREFIX}/admin/cashstore/purchases`, adminCashStorePurchasesRoutes);
   app.use(`${API_PREFIX}/admin/reviews`, adminReviewRoutes);
   app.use(`${API_PREFIX}/admin/service-appointments`, adminServiceAppointmentRoutes);
+  app.use(`${API_PREFIX}/admin/bbps`, adminBbpsRoutes);
   app.use(`${API_PREFIX}/admin/admin-actions`, adminActionsRoutes);
   app.use(`${API_PREFIX}/admin/disputes`, adminDisputesRoutes);
   app.use(`${API_PREFIX}/admin/devices`, adminDeviceFingerprintRoutes);
   app.use(`${API_PREFIX}/admin/integrations`, adminIntegrationsRoutes);
   app.use(`${API_PREFIX}/admin/institutions`, adminInstitutionsRoutes);
   app.use(`${API_PREFIX}/admin/institute-referrals`, adminInstituteReferralsRoutes);
+  app.use(`${API_PREFIX}/admin/prive/submissions`, adminPriveSubmissionsRoutes);
+  app.use(`${API_PREFIX}/admin/coins`, adminCoinOverviewRoutes);
+  app.use(`${API_PREFIX}/admin/coins`, adminCoinEmergencyRoutes);
+  app.use(`${API_PREFIX}/admin/merchant-tier-config`, adminMerchantTierConfigRoutes);
+  app.use(`${API_PREFIX}/admin/finance`, adminFinanceRoutes);
+  app.use(`${API_PREFIX}/admin/coin-rules`, adminCoinRulesRoutes);
 
   // Integration webhook (public — secured by HMAC signature)
   app.use(`${API_PREFIX}/integrations`, integrationWebhookRoutes);
@@ -509,6 +534,8 @@ export function registerRoutes(app: Express): void {
   app.use(`${API_PREFIX}/cashstore/affiliate`, cashStoreAffiliateRoutes);
   app.use(`${API_PREFIX}/prive`, priveRoutes);
   app.use(`${API_PREFIX}/prive`, priveInviteRoutes);
+  app.use(`${API_PREFIX}/prive/campaigns`, priveCampaignRoutes);
+  app.use(`${API_PREFIX}/bank-offers`, bankOfferRoutes);
   app.use(`${API_PREFIX}/insurance`, insuranceRoutes);
   app.use(`${API_PREFIX}/stores`, storeGalleryRoutes);
   app.use(`${API_PREFIX}/products`, productGalleryRoutes);
@@ -561,6 +588,9 @@ export function registerRoutes(app: Express): void {
   app.use('/api/merchant/campaign-simulator', campaignSimulatorRoutes);
   app.use('/api/merchant/products', merchantVariantsRoutes);
   app.use('/api/merchant/products', productRestoreRoutes);
+  app.use('/api/merchant/prive', merchantPriveCampaignRoutes);
+  app.use('/api/merchant/banners', merchantBannerRoutes);
+  app.use('/api/merchant/customer-notifications', merchantCustomerNotificationRoutes);
 
   // ── Root endpoint ──
   app.get('/', (req, res) => {

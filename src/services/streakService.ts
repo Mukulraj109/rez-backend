@@ -29,6 +29,12 @@ const STREAK_MILESTONES = {
     { day: 60, coins: 5000, name: 'Smart Saver Elite', badge: 'elite_saver' },
     { day: 100, coins: 10000, name: 'REZ Legend', badge: 'rez_legend' },
   ],
+  // Utility payment milestones (count-based, not day-based — bills are monthly)
+  utility_payments: [
+    { day: 3, coins: 30, name: 'Utility Starter' },
+    { day: 6, coins: 75, name: 'Bill Champion' },
+    { day: 12, coins: 200, name: 'Super Saver', badge: 'vip_merchant_offers' },
+  ],
 };
 
 export interface StreakTier {

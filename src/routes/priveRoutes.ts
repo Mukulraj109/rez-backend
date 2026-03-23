@@ -166,7 +166,7 @@ router.get('/tips', generalLimiter, getImprovementTips);
  * @desc    Daily check-in with streak tracking
  * @access  Private
  */
-router.post('/check-in', strictLimiter, dailyCheckIn);
+router.post('/check-in', requireFeatureFlag('dailyCheckinEnabled'), strictLimiter, dailyCheckIn);
 
 /**
  * @route   GET /api/prive/habit-loops

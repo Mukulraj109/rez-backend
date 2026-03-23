@@ -18,6 +18,7 @@ const EVENT_TO_STREAK_TYPE: Record<string, string> = {
   review_submitted: 'review',
   // Savings streak — ANY saving action counts
   store_payment_confirmed: 'savings',
+  bill_payment_confirmed: 'savings',
   bill_uploaded: 'savings',
   deal_locked: 'savings',
   cashback_earned: 'savings',

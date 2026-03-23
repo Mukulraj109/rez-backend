@@ -43,7 +43,7 @@ export interface IHomepageDealsItem extends Document {
   // Settings
   isActive: boolean;
   sortOrder: number;
-  regions: ('bangalore' | 'dubai' | 'china' | 'all')[];
+  regions: ('bangalore' | 'dubai' | 'all')[];
 
   // Analytics
   impressions: number;
@@ -159,7 +159,7 @@ const HomepageDealsItemSchema = new Schema<IHomepageDealsItem>({
   },
   regions: [{
     type: String,
-    enum: ['bangalore', 'dubai', 'china', 'all'],
+    enum: ['bangalore', 'dubai', 'all'],
   }],
   impressions: {
     type: Number,

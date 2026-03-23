@@ -33,11 +33,10 @@ async function verifyRegionSetup() {
     const activeRegions = getActiveRegions();
     const hasBangalore = activeRegions.some(r => r.id === 'bangalore');
     const hasDubai = activeRegions.some(r => r.id === 'dubai');
-    const hasChina = activeRegions.some(r => r.id === 'china');
     results.push({
       test: 'Region Configuration',
-      passed: hasBangalore && hasDubai && hasChina,
-      details: `Bangalore: ${hasBangalore}, Dubai: ${hasDubai}, China: ${hasChina}`
+      passed: hasBangalore && hasDubai,
+      details: `Bangalore: ${hasBangalore}, Dubai: ${hasDubai}`
     });
 
     // Test 2: Region Validation

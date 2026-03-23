@@ -1062,67 +1062,88 @@ class SpecialProgramService {
    * Run weekly
    */
   async recheckPriveEligibility(): Promise<{ suspended: number; maintained: number }> {
-    const priveMembers = await ProgramMembership.find({
-      programSlug: 'nuqta_prive',
-      status: 'active',
-    }).lean();
-
     const config = await this.getConfigBySlug('nuqta_prive');
     const minScore = config?.eligibility.minPriveScore || 70;
 
     let suspended = 0;
     let maintained = 0;
 
-    for (const member of priveMembers) {
-      try {
-        const priveResult = await reputationService.checkPriveEligibility(
-          member.user.toString()
+    const PAGE_SIZE = 100;
+    const BATCH_SIZE = 50;
+    let page = 0;
+    let hasMore = true;
+    const query = { programSlug: 'nuqta_prive', status: 'active' };
+
+    while (hasMore) {
+      const priveMembers = await ProgramMembership.find(query)
+        .skip(page * PAGE_SIZE)
+        .limit(PAGE_SIZE)
+        .lean();
+
+      if (priveMembers.length < PAGE_SIZE) hasMore = false;
+
+      // Process members in batched parallel execution
+      for (let i = 0; i < priveMembers.length; i += BATCH_SIZE) {
+        const batch = priveMembers.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(
+          batch.map(member =>
+            reputationService.checkPriveEligibility(member.user.toString())
+              .then(result => ({ member, result, error: null as Error | null }))
+              .catch(err => ({ member, result: null as any, error: err as Error }))
+          )
         );
 
-        if (priveResult.score < minScore) {
-          await this.updateMemberStatus(
-            member.user.toString(),
-            'nuqta_prive',
-            'suspended',
-            `Privé score dropped below ${minScore} (current: ${Math.round(priveResult.score)})`
-          );
+        for (const { member, result, error } of results) {
+          if (error) {
+            logger.error(`[SPECIAL PROGRAMS] Failed to recheck Privé for user ${member.user}:`, error);
+            continue;
+          }
 
-          // Update eligibility check timestamp
-          await ProgramMembership.updateOne(
-            { _id: member._id },
-            { $set: { lastEligibilityCheck: new Date() } }
-          );
+          if (result.score < minScore) {
+            await this.updateMemberStatus(
+              member.user.toString(),
+              'nuqta_prive',
+              'suspended',
+              `Privé score dropped below ${minScore} (current: ${Math.round(result.score)})`
+            );
 
-          // Notify the user about suspension
-          await NotificationService.createNotification({
-            userId: member.user.toString(),
-            title: `${BRAND.PRIVE_NAME} Membership Suspended`,
-            message: `Your Privé score has dropped below the required ${minScore} points. Improve your activity to regain membership.`,
-            type: 'warning',
-            category: 'system',
-            priority: 'high',
-            data: {
-              deepLink: '/program/nuqta_prive',
-              actionButton: {
-                text: 'View Details',
-                action: 'navigate',
-                target: '/program/nuqta_prive',
+            // Update eligibility check timestamp
+            await ProgramMembership.updateOne(
+              { _id: member._id },
+              { $set: { lastEligibilityCheck: new Date() } }
+            );
+
+            // Notify the user about suspension
+            NotificationService.createNotification({
+              userId: member.user.toString(),
+              title: `${BRAND.PRIVE_NAME} Membership Suspended`,
+              message: `Your Privé score has dropped below the required ${minScore} points. Improve your activity to regain membership.`,
+              type: 'warning',
+              category: 'system',
+              priority: 'high',
+              data: {
+                deepLink: '/program/nuqta_prive',
+                actionButton: {
+                  text: 'View Details',
+                  action: 'navigate',
+                  target: '/program/nuqta_prive',
+                },
               },
-            },
-            source: 'automated',
-          }).catch(e => logger.error(`[SPECIAL PROGRAMS] Failed to notify user ${member.user} about Privé suspension:`, e));
+              source: 'automated',
+            }).catch(e => logger.error(`[SPECIAL PROGRAMS] Failed to notify user ${member.user} about Privé suspension:`, e));
 
-          suspended++;
-        } else {
-          await ProgramMembership.updateOne(
-            { _id: member._id },
-            { $set: { lastEligibilityCheck: new Date() } }
-          );
-          maintained++;
+            suspended++;
+          } else {
+            await ProgramMembership.updateOne(
+              { _id: member._id },
+              { $set: { lastEligibilityCheck: new Date() } }
+            );
+            maintained++;
+          }
         }
-      } catch (e) {
-        logger.error(`[SPECIAL PROGRAMS] Failed to recheck Privé for user ${member.user}:`, e);
       }
+
+      page++;
     }
 
     logger.info(`[SPECIAL PROGRAMS] Privé recheck: ${suspended} suspended, ${maintained} maintained`);

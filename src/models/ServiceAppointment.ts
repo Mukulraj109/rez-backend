@@ -25,6 +25,7 @@ export interface IServiceAppointment extends Document {
   completedAt?: Date;
   cancelledAt?: Date;
   cancellationReason?: string;
+  coinsEarned: number;
   // Virtual properties
   formattedDateTime?: string;
   // Instance methods
@@ -119,6 +120,10 @@ const ServiceAppointmentSchema = new Schema(
       type: String,
       trim: true,
       maxlength: 500,
+    },
+    coinsEarned: {
+      type: Number,
+      default: 0,
     },
     statusHistory: [
       {

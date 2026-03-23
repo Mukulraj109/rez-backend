@@ -95,6 +95,8 @@ export { Refund } from './Refund';
 export { default as DailyCheckIn, calculateStreakBonus, getStreakMessage } from './DailyCheckIn';
 export { default as PriveOffer } from './PriveOffer';
 export { default as PriveVoucher, calculateVoucherValue, getDefaultExpiry } from './PriveVoucher';
+export { PriveCampaign } from './PriveCampaign';
+export { PrivePostSubmission } from './PrivePostSubmission';
 
 // Offers Page models
 export { default as HotspotArea } from './HotspotArea';
@@ -149,6 +151,8 @@ export type { IGameSession, IGameSessionModel } from './GameSession';
 export type { IDailyCheckIn, IDailyCheckInModel } from './DailyCheckIn';
 export type { IPriveOffer, IPriveOfferModel } from './PriveOffer';
 export type { IPriveVoucher, IPriveVoucherModel, VoucherType, VoucherStatus } from './PriveVoucher';
+export type { IPriveCampaign, IPriveCampaignModel, CampaignTaskType, CampaignStatus, PriveTier } from './PriveCampaign';
+export type { IPrivePostSubmission } from './PrivePostSubmission';
 
 // Offers Page types
 export type { IHotspotArea } from './HotspotArea';

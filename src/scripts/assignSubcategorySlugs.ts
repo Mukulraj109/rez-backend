@@ -193,11 +193,6 @@ const CITY_TO_REGION: Record<string, string> = {
   'abu dhabi': 'dubai',
   'sharjah': 'dubai',
   'ajman': 'dubai',
-  // China region
-  'beijing': 'china',
-  'shanghai': 'china',
-  'guangzhou': 'china',
-  'shenzhen': 'china',
 };
 
 function determineRegion(city: string | undefined): string {

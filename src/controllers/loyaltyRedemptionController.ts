@@ -5,7 +5,6 @@ import { CoinTransaction, ICoinTransactionModel } from '../models/CoinTransactio
 import Challenge from '../models/Challenge';
 import UserChallengeProgress from '../models/UserChallengeProgress';
 import LoyaltyMilestone from '../models/LoyaltyMilestone';
-import { Subscription } from '../models/Subscription';
 import tierConfigService from '../services/tierConfigService';
 import coinService from '../services/coinService';
 import redisService from '../services/redisService';
@@ -62,13 +61,16 @@ export const getPointBalance = asyncHandler(async (req: Request, res: Response) 
     throw new AppError('User not authenticated', 401);
   }
 
-  const [loyalty, currentBalance, subscription] = await Promise.all([
+  // Check Redis cache first (60s TTL — user-specific data)
+  const cacheKey = `loyalty:points:${userId}`;
+  const cached = await redisService.get(cacheKey);
+  if (cached) {
+    return sendSuccess(res, cached, 'Point balance retrieved');
+  }
+
+  const [loyalty, currentBalance] = await Promise.all([
     UserLoyalty.findOne({ userId }).lean(),
     (CoinTransaction as ICoinTransactionModel).getUserBalance(userId),
-    Subscription.findOne({ user: userId, status: { $in: ['active', 'trial'] } })
-      .sort({ createdAt: -1 })
-      .select('tier')
-      .lean(),
   ]);
 
   // Compute lifetime points from all earned transactions
@@ -95,7 +97,7 @@ export const getPointBalance = asyncHandler(async (req: Request, res: Response) 
   const nextTier = getNextTier(tier.name);
   const pointsToNextTier = nextTier ? nextTier.minPoints - lifetimePoints : 0;
 
-  sendSuccess(res, {
+  const result = {
     currentPoints: currentBalance,
     lifetimePoints,
     pendingPoints,
@@ -104,7 +106,12 @@ export const getPointBalance = asyncHandler(async (req: Request, res: Response) 
     tier: tier.name,
     nextTier: nextTier?.name || null,
     pointsToNextTier: Math.max(0, pointsToNextTier),
-  }, 'Point balance retrieved');
+  };
+
+  // Cache for 60 seconds
+  await redisService.set(cacheKey, result, 60);
+
+  sendSuccess(res, result, 'Point balance retrieved');
 });
 
 /**

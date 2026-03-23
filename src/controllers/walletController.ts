@@ -20,6 +20,13 @@ export {
   getScheduledDrops,
   getCoinRules,
   getRedemptionSuggestions,
+  getWalletLimits,
+  updateWalletLimits,
+  createMoneyRequest,
+  getMoneyRequests,
+  createBillSplit,
+  getBillSplits,
+  payBillSplitShare,
 } from './walletBalanceController';
 
 // --- Transaction history & analytics ---

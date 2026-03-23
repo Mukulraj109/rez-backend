@@ -170,8 +170,10 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 
     try {
       // Check if token is blacklisted (e.g. after logout or refresh)
-      // Fail closed for sensitive routes (admin, wallet, transfer) — reject if Redis is down
-      const sensitiveRoute = /\/(admin|wallet|transfer|prive)(\/|$)/.test(req.originalUrl);
+      // Fail closed for sensitive routes in production — reject if Redis is down
+      // In development, always fail open so wallet/admin routes work without Redis
+      const sensitiveRoute = process.env.NODE_ENV === 'production' &&
+        /\/(admin|wallet|transfer|prive)(\/|$)/.test(req.originalUrl);
       if (await isTokenBlacklisted(token, sensitiveRoute)) {
         return res.status(401).json({ success: false, message: 'Token has been revoked' });
       }

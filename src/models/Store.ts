@@ -256,6 +256,18 @@ export interface IStore extends Document {
   // Reward Rules (Merchant Sets)
   rewardRules?: IStoreRewardRules;
 
+  // Social Cashback (Privé campaigns)
+  socialCashback?: {
+    enabled: boolean;
+    postCashbackPercent: number;
+    postTypes: ('story' | 'reel' | 'post')[];
+    minimumFollowers: number;
+    verificationWindowHours: number;
+    totalBudget: number;
+    budgetUsed: number;
+    activeCampaignId?: Types.ObjectId;
+  };
+
   // Service Capabilities - unified service type configuration
   serviceCapabilities?: {
     homeDelivery: {
@@ -297,6 +309,42 @@ export interface IStore extends Document {
   isSuspended?: boolean;
   suspensionReason?: string;
   isTrending?: boolean;
+
+  // Promotional Banners (merchant-managed)
+  promotionalBanners?: Array<{
+    _id: string;
+    title: string;
+    imageUrl: string;
+    linkUrl?: string;
+    target: 'store_page' | 'home_page' | 'category_page';
+    startDate: Date;
+    endDate: Date;
+    isActive: boolean;
+    views: number;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+
+  // Delivery Zones (merchant-managed)
+  deliveryZones?: Array<{
+    _id: string;
+    name: string;
+    radiusKm: number;
+    deliveryFee: number;
+    minOrderAmount: number;
+    estimatedTime: number; // minutes
+    freeDeliveryAbove?: number;
+    isDefault?: boolean;
+  }>;
+
+  // Holidays / Closures (merchant-managed)
+  holidays?: Array<{
+    _id: string;
+    startDate: Date;
+    endDate: Date;
+    reason: string;
+    affectsAllOutlets?: boolean;
+  }>;
 
   createdAt: Date;
   updatedAt: Date;
@@ -886,6 +934,45 @@ const StoreSchema = new Schema<IStore>({
     }]
   },
 
+  // Social Cashback (Privé campaigns)
+  socialCashback: {
+    enabled: {
+      type: Boolean,
+      default: false,
+    },
+    postCashbackPercent: {
+      type: Number,
+      min: 0,
+      max: 100,
+      default: 0,
+    },
+    postTypes: [{
+      type: String,
+      enum: ['story', 'reel', 'post'],
+    }],
+    minimumFollowers: {
+      type: Number,
+      default: 500,
+    },
+    verificationWindowHours: {
+      type: Number,
+      default: 48,
+    },
+    totalBudget: {
+      type: Number,
+      default: 0,
+    },
+    budgetUsed: {
+      type: Number,
+      default: 0,
+    },
+    activeCampaignId: {
+      type: Schema.Types.ObjectId,
+      ref: 'PriveCampaign',
+      default: null,
+    },
+  },
+
   // Service Capabilities - unified service type configuration
   serviceCapabilities: {
     homeDelivery: {
@@ -962,7 +1049,43 @@ const StoreSchema = new Schema<IStore>({
     type: Boolean,
     default: false,
     index: true
-  }
+  },
+
+  // Promotional Banners (merchant-managed)
+  promotionalBanners: [{
+    _id: { type: String, required: true },
+    title: { type: String, required: true, trim: true, maxlength: 100 },
+    imageUrl: { type: String, required: true },
+    linkUrl: { type: String, trim: true, default: '' },
+    target: { type: String, enum: ['store_page', 'home_page', 'category_page'], default: 'store_page' },
+    startDate: { type: Date, required: true },
+    endDate: { type: Date, required: true },
+    isActive: { type: Boolean, default: true },
+    views: { type: Number, default: 0, min: 0 },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
+  }],
+
+  // Delivery Zones (merchant-managed)
+  deliveryZones: [{
+    _id: { type: String, required: true },
+    name: { type: String, required: true, trim: true, maxlength: 100 },
+    radiusKm: { type: Number, required: true, min: 0 },
+    deliveryFee: { type: Number, required: true, min: 0 },
+    minOrderAmount: { type: Number, required: true, min: 0 },
+    estimatedTime: { type: Number, required: true, min: 0 }, // minutes
+    freeDeliveryAbove: { type: Number, min: 0 },
+    isDefault: { type: Boolean, default: false },
+  }],
+
+  // Holidays / Closures (merchant-managed)
+  holidays: [{
+    _id: { type: String, required: true },
+    startDate: { type: Date, required: true },
+    endDate: { type: Date, required: true },
+    reason: { type: String, required: true, trim: true, maxlength: 200 },
+    affectsAllOutlets: { type: Boolean, default: false },
+  }]
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -993,6 +1116,9 @@ StoreSchema.index({ 'deliveryCategories.fastDelivery': 1, isActive: 1 });
 StoreSchema.index({ 'deliveryCategories.premium': 1, isActive: 1 });
 StoreSchema.index({ 'deliveryCategories.mall': 1, isActive: 1 });
 StoreSchema.index({ 'deliveryCategories.cashStore': 1, isActive: 1 });
+
+// Social cashback enabled stores
+StoreSchema.index({ 'socialCashback.enabled': 1, isActive: 1 });
 
 // Compound indexes
 StoreSchema.index({ category: 1, 'location.city': 1, isActive: 1 });

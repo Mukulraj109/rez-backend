@@ -285,6 +285,15 @@ async function sendVerificationEmail(merchant: any, verificationToken: string): 
 // POST /api/auth/register
 router.post('/register', registrationLimiter, validateRequest(registerSchema), async (req, res) => {
   try {
+    // Feature flag: merchant onboarding gate
+    if (process.env.FEATURE_BIZONE_MERCHANT !== 'true') {
+      return res.status(503).json({
+        success: false,
+        error: 'SERVICE_UNAVAILABLE',
+        message: 'Merchant onboarding is not yet open in your area.',
+      });
+    }
+
     const { businessName, ownerName, email, password, phone, businessAddress } = req.body;
 
     // Normalize email to lowercase for consistency

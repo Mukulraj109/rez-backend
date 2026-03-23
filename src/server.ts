@@ -17,6 +17,9 @@ dotenv.config();
 // Import database connection
 import { connectDatabase, database } from './config/database';
 
+// Import mongoose for readiness probe
+import mongoose from 'mongoose';
+
 // Import Redis service
 import redisService from './services/redisService';
 
@@ -110,9 +113,39 @@ app.get('/health/cache-stats', async (req, res) => {
   }
 });
 
+// Readiness probe — for Kubernetes-style deploys
+app.get('/health/ready', (_req, res) => {
+  const mongoReady = mongoose.connection.readyState === 1;
+  const redisReady = redisService.isReady();
+  const ready = mongoReady && redisReady;
+  res.status(ready ? 200 : 503).json({
+    ready,
+    mongo: mongoReady,
+    redis: redisReady,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Simple test endpoint
 app.get('/test', (req, res) => {
   res.json({ message: 'Test endpoint working' });
+});
+
+// ── API versioning ──
+
+// Attach API version header to every response
+app.use((req, res, next) => {
+  res.setHeader('x-api-version', '1.0.0');
+  next();
+});
+
+// Version discovery endpoint — clients can check compatibility before calling APIs
+app.get('/api/version', (_req, res) => {
+  res.json({
+    version: '1.0.0',
+    minSupportedClientVersion: '1.0.0',
+    deprecatedVersions: [],
+  });
 });
 
 // CSRF Token endpoint

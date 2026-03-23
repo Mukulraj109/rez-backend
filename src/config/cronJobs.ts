@@ -22,6 +22,7 @@ import { startReconciliationJob } from '../jobs/reconciliationJob';
 import { startReservationCleanup } from '../jobs/reservationCleanup';
 import { initializeLeaderboardRefreshJob } from '../jobs/leaderboardRefreshJob';
 import { initializeBillVerificationJob } from '../jobs/billVerificationJob';
+import { initializeBillPaymentReminderJob } from '../jobs/billPaymentReminderJob';
 import { startCreatorJobs } from '../jobs/creatorJobs';
 import { initializeStreakResetJob } from '../jobs/streakResetJob';
 import { initBonusCampaignJobs } from '../jobs/bonusCampaignJob';
@@ -118,6 +119,10 @@ export async function initializeCronJobs(): Promise<void> {
   // Bill verification job
   initializeBillVerificationJob();
   logger.info('Bill verification job started (runs every 10 min)');
+
+  // Bill payment reminder job (due date notifications)
+  initializeBillPaymentReminderJob();
+  logger.info('Bill payment reminder job started (runs daily at 10 AM)');
 
   // Creator program background jobs
   startCreatorJobs();

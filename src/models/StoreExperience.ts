@@ -146,7 +146,7 @@ const StoreExperienceSchema = new Schema<IStoreExperience>({
   }],
   regions: [{
     type: String,
-    enum: ['bangalore', 'dubai', 'china'],
+    enum: ['bangalore', 'dubai'],
     index: true,
   }],
   storeCount: {

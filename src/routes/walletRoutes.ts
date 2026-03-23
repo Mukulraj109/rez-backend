@@ -24,6 +24,13 @@ import {
   getScheduledDrops,
   getCoinRules,
   getRedemptionSuggestions,
+  getWalletLimits,
+  updateWalletLimits,
+  createMoneyRequest,
+  getMoneyRequests,
+  createBillSplit,
+  getBillSplits,
+  payBillSplitShare,
 } from '../controllers/walletController';
 import { authenticate, requireSeniorAdmin } from '../middleware/auth';
 import { createRateLimiter } from '../middleware/rateLimiter';
@@ -257,5 +264,33 @@ router.get('/scheduled-drops', getScheduledDrops);
  */
 router.get('/coin-rules', getCoinRules);
 router.get('/redemption-suggestions', getRedemptionSuggestions);
+
+// ─── Wallet Limits ──────────────────────────────────────────────────────
+router.get('/limits', walletReadLimiter, getWalletLimits);
+router.put('/limits', walletWriteLimiter, validate(Joi.object({
+  limitsEnabled: Joi.boolean(),
+  dailySpendLimit: Joi.number().min(0).max(1000000),
+  monthlySpendLimit: Joi.number().min(0).max(10000000),
+})), updateWalletLimits);
+
+// ─── Money Requests ─────────────────────────────────────────────────────
+router.get('/money-requests', walletReadLimiter, getMoneyRequests);
+router.post('/money-requests', walletWriteLimiter, validate(Joi.object({
+  recipientId: Joi.string().required(),
+  amount: Joi.number().positive().required(),
+  note: Joi.string().max(200),
+})), createMoneyRequest);
+
+// ─── Bill Splits ────────────────────────────────────────────────────────
+router.get('/splits', walletReadLimiter, getBillSplits);
+router.post('/splits', walletWriteLimiter, validate(Joi.object({
+  amount: Joi.number().positive().required(),
+  participants: Joi.array().items(Joi.object({
+    userId: Joi.string().required(),
+    share: Joi.number().positive().required(),
+  })).min(1).required(),
+  note: Joi.string().max(200),
+})), createBillSplit);
+router.post('/splits/:id/pay', walletWriteLimiter, payBillSplitShare);
 
 export default router;

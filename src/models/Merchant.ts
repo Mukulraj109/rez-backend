@@ -163,6 +163,9 @@ export interface IMerchant extends Document {
   allowCustomerMessages?: boolean;
   showPromotions?: boolean;
 
+  // Merchant tier
+  tier?: 'free' | 'pro' | 'enterprise';
+
   // Virtual: single canonical status derived from verificationStatus + isActive
   readonly computedStatus?: 'approved' | 'suspended' | 'rejected' | 'pending';
 }
@@ -237,6 +240,11 @@ const MerchantSchema = new Schema<IMerchant>({
   isActive: {
     type: Boolean,
     default: true
+  },
+  tier: {
+    type: String,
+    enum: ['free', 'pro', 'enterprise'],
+    default: 'free',
   },
   businessLicense: {
     type: String,

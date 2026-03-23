@@ -21,7 +21,7 @@ export interface IHomepageDealsSection extends Document {
   subtitle: string;
   icon: string; // Ionicon name like 'flash'
   isActive: boolean;
-  regions: ('bangalore' | 'dubai' | 'china' | 'all')[];
+  regions: ('bangalore' | 'dubai' | 'all')[];
 
   // Tab configurations
   tabs: {
@@ -103,7 +103,7 @@ const HomepageDealsSectionSchema = new Schema<IHomepageDealsSection>({
   },
   regions: [{
     type: String,
-    enum: ['bangalore', 'dubai', 'china', 'all'],
+    enum: ['bangalore', 'dubai', 'all'],
   }],
   tabs: {
     offers: {

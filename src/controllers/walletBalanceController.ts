@@ -912,3 +912,162 @@ export const getRedemptionSuggestions = asyncHandler(async (req: Request, res: R
 
   return sendSuccess(res, { suggestions });
 });
+
+// ─── Wallet Limits ─────────────────────────────────────────────────────
+
+export const getWalletLimits = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  if (!userId) return sendError(res, 'User not authenticated', 401);
+
+  const wallet = await Wallet.findOne({ user: userId }).lean();
+  if (!wallet) return sendNotFound(res, 'Wallet not found');
+
+  const settings = (wallet as any).settings || {};
+
+  // Calculate current day/month spend from CoinTransaction
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const [dailySpent, monthlySpent] = await Promise.all([
+    CoinTransaction.aggregate([
+      { $match: { user: new mongoose.Types.ObjectId(userId), type: 'spent', createdAt: { $gte: startOfDay } } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]),
+    CoinTransaction.aggregate([
+      { $match: { user: new mongoose.Types.ObjectId(userId), type: 'spent', createdAt: { $gte: startOfMonth } } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]),
+  ]);
+
+  sendSuccess(res, {
+    limitsEnabled: settings.limitsEnabled ?? false,
+    dailySpendLimit: settings.dailySpendLimit ?? 10000,
+    monthlySpendLimit: settings.monthlySpendLimit ?? 100000,
+    dailySpent: dailySpent[0]?.total ?? 0,
+    monthlySpent: monthlySpent[0]?.total ?? 0,
+  });
+});
+
+export const updateWalletLimits = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  if (!userId) return sendError(res, 'User not authenticated', 401);
+
+  const { limitsEnabled, dailySpendLimit, monthlySpendLimit } = req.body;
+
+  const wallet = await Wallet.findOne({ user: userId });
+  if (!wallet) return sendNotFound(res, 'Wallet not found');
+
+  if (limitsEnabled !== undefined) (wallet as any).settings.limitsEnabled = limitsEnabled;
+  if (dailySpendLimit !== undefined) (wallet as any).settings.dailySpendLimit = dailySpendLimit;
+  if (monthlySpendLimit !== undefined) (wallet as any).settings.monthlySpendLimit = monthlySpendLimit;
+  wallet.markModified('settings');
+  await wallet.save();
+
+  sendSuccess(res, { settings: wallet.settings }, 'Wallet limits updated');
+});
+
+// ─── Money Requests ────────────────────────────────────────────────────
+
+export const createMoneyRequest = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  if (!userId) return sendError(res, 'User not authenticated', 401);
+
+  const { recipientId, amount, note } = req.body;
+  if (!recipientId || !amount) return sendBadRequest(res, 'recipientId and amount are required');
+
+  // Store as a simple document (reuse Transfer model pattern or create inline)
+  const request = {
+    _id: new mongoose.Types.ObjectId(),
+    requesterId: userId,
+    recipientId,
+    amount,
+    note: note || '',
+    status: 'pending',
+    createdAt: new Date(),
+  };
+
+  // Store in Redis for lightweight persistence (TTL 30 days)
+  const key = `money_request:${request._id}`;
+  await redisService.set(key, request, 30 * 24 * 60 * 60);
+
+  // Add to user's request list
+  const listKey = `money_requests:${userId}`;
+  const existing: any[] = await redisService.get(listKey) || [];
+  existing.unshift(request);
+  await redisService.set(listKey, existing.slice(0, 50), 30 * 24 * 60 * 60);
+
+  sendSuccess(res, { request }, 'Money request sent');
+});
+
+export const getMoneyRequests = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  if (!userId) return sendError(res, 'User not authenticated', 401);
+
+  const listKey = `money_requests:${userId}`;
+  const requests: any[] = await redisService.get(listKey) || [];
+
+  sendSuccess(res, { requests });
+});
+
+// ─── Bill Splits ───────────────────────────────────────────────────────
+
+export const createBillSplit = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  if (!userId) return sendError(res, 'User not authenticated', 401);
+
+  const { amount, participants, note } = req.body;
+  if (!amount || !participants?.length) return sendBadRequest(res, 'amount and participants are required');
+
+  const split = {
+    _id: new mongoose.Types.ObjectId(),
+    creatorId: userId,
+    amount,
+    participants: participants.map((p: any) => ({
+      userId: p.userId,
+      share: p.share,
+      status: 'pending',
+    })),
+    note: note || '',
+    status: 'active',
+    createdAt: new Date(),
+  };
+
+  const key = `bill_split:${split._id}`;
+  await redisService.set(key, split, 30 * 24 * 60 * 60);
+
+  const listKey = `bill_splits:${userId}`;
+  const existing: any[] = await redisService.get(listKey) || [];
+  existing.unshift(split);
+  await redisService.set(listKey, existing.slice(0, 50), 30 * 24 * 60 * 60);
+
+  sendSuccess(res, { split }, 'Bill split created');
+});
+
+export const getBillSplits = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  if (!userId) return sendError(res, 'User not authenticated', 401);
+
+  const listKey = `bill_splits:${userId}`;
+  const splits: any[] = await redisService.get(listKey) || [];
+
+  sendSuccess(res, { splits });
+});
+
+export const payBillSplitShare = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).userId;
+  const { id } = req.params;
+  if (!userId) return sendError(res, 'User not authenticated', 401);
+
+  const key = `bill_split:${id}`;
+  const split: any = await redisService.get(key);
+  if (!split) return sendNotFound(res, 'Split not found');
+
+  const participant = split.participants.find((p: any) => p.userId === userId);
+  if (!participant) return sendBadRequest(res, 'You are not part of this split');
+
+  participant.status = 'paid';
+  await redisService.set(key, split, 30 * 24 * 60 * 60);
+
+  sendSuccess(res, { split }, 'Share paid');
+});

@@ -43,6 +43,7 @@ export type ActivityEventType =
   | 'refund_processed'
   // Savings actions — trigger savings streak
   | 'store_payment_confirmed'
+  | 'bill_payment_confirmed'
   | 'deal_locked'
   | 'cashback_earned';
 

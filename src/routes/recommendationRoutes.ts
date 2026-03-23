@@ -78,6 +78,23 @@ router.get('/category/:category',   // generalLimiter,, // Disabled for develop
   getCategoryRecommendations
 );
 
+// Alias: "For You" — same as personalized recommendations
+router.get('/for-you',
+  optionalAuth,
+  validateQuery(Joi.object({
+    location: Joi.string().pattern(/^-?\d+\.?\d*,-?\d+\.?\d*$/),
+    radius: Joi.number().min(0.1).max(50).default(10),
+    limit: Joi.number().integer().min(1).max(50).default(10),
+    excludeStores: Joi.string(),
+    category: Joi.string().valid('fastDelivery', 'budgetFriendly', 'premium', 'organic', 'alliance', 'lowestPrice', 'mall', 'cashStore'),
+    minRating: Joi.number().min(1).max(5),
+    maxDeliveryTime: Joi.number().min(5).max(120),
+    priceRange: Joi.string().pattern(/^\d+-\d+$/),
+    features: Joi.string()
+  })),
+  getPersonalizedRecommendations
+);
+
 // Get user's recommendation preferences
 router.get('/preferences',   // generalLimiter,, // Disabled for development
   requireAuth,

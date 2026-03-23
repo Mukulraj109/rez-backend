@@ -243,6 +243,13 @@ export interface IOrder extends Document {
     refundAmount?: number;
   };
 
+  // Scheduled delivery details
+  scheduledDelivery?: {
+    date: Date;
+    timeSlot: string;
+    isScheduled: boolean;
+  };
+
   idempotencyKey?: string;
 
   // Dispute hold — locks reward issuance while dispute is active
@@ -650,6 +657,13 @@ const OrderSchema = new Schema<IOrder>({
       type: Date,
       default: Date.now
     }
+  },
+
+  // Scheduled delivery details
+  scheduledDelivery: {
+    date: { type: Date },
+    timeSlot: { type: String, trim: true },
+    isScheduled: { type: Boolean, default: false },
   },
 
   idempotencyKey: {
