@@ -88,7 +88,7 @@ class PartnerService {
     }
     
     // Check if partner can upgrade level
-    if (partner.canUpgradeLevel()) {
+    if (typeof partner.canUpgradeLevel === 'function' && partner.canUpgradeLevel()) {
       const oldLevel = partner.currentLevel.level;
       partner.upgradeLevel();
       const newLevel = partner.currentLevel.level;
@@ -845,9 +845,21 @@ class PartnerService {
    */
   async getPartnerDashboard(userId: string): Promise<any> {
     const partner = await this.getOrCreatePartner(userId);
-    
-    const daysRemaining = partner.getDaysRemaining();
-    const ordersNeeded = partner.getOrdersNeededForNextLevel();
+
+    // Use instance methods if available, otherwise compute inline
+    // (methods may be missing if the document was returned without hydration)
+    const daysRemaining = typeof partner.getDaysRemaining === 'function'
+      ? partner.getDaysRemaining()
+      : Math.max(0, Math.ceil((new Date(partner.validUntil).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+
+    const ordersNeeded = typeof partner.getOrdersNeededForNextLevel === 'function'
+      ? partner.getOrdersNeededForNextLevel()
+      : (() => {
+          const nextLevel = (partner.currentLevel?.level || 1) + 1;
+          if (nextLevel > 3) return 0;
+          const nextConfig = Object.values(PARTNER_LEVELS).find(l => l.level === nextLevel);
+          return nextConfig ? Math.max(0, nextConfig.requirements.orders - (partner.ordersThisLevel || 0)) : 0;
+        })();
 
     // Fetch all independent data in parallel for better performance
     const [user, reviewCount, shareCount] = await Promise.all([

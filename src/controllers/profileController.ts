@@ -10,6 +10,9 @@ import { User } from '../models/User';
 import { uploadProfileImage } from '../middleware/upload';
 import redisService from '../services/redisService';
 
+// Strip HTML tags to prevent stored XSS
+const stripHtml = (str: string): string => str.replace(/<[^>]*>/g, '').trim();
+
 /**
  * @desc    Get user profile data
  * @route   GET /api/user/profile
@@ -123,28 +126,28 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
       if (existingUser) {
         return sendBadRequest(res, 'Email is already in use');
       }
-      user.email = email;
-      logger.info('✅ [PROFILE_UPDATE] Email updated to:', email);
+      user.email = stripHtml(email);
+      logger.info('✅ [PROFILE_UPDATE] Email updated');
     }
 
-    // Update profile fields
+    // Update profile fields (sanitize string inputs to prevent stored XSS)
     if (profile) {
       if (profile.firstName !== undefined) {
-        user.profile.firstName = profile.firstName;
+        user.profile.firstName = stripHtml(profile.firstName);
       }
 
       if (profile.lastName !== undefined) {
-        user.profile.lastName = profile.lastName;
+        user.profile.lastName = stripHtml(profile.lastName);
       }
 
       if (profile.bio !== undefined) {
-        user.profile.bio = profile.bio;
-        logger.info('✅ [PROFILE_UPDATE] Bio updated to:', profile.bio);
+        user.profile.bio = stripHtml(profile.bio);
+        logger.info('✅ [PROFILE_UPDATE] Bio updated');
       }
 
       if (profile.website !== undefined) {
-        user.profile.website = profile.website;
-        logger.info('✅ [PROFILE_UPDATE] Website updated to:', profile.website);
+        user.profile.website = stripHtml(profile.website);
+        logger.info('✅ [PROFILE_UPDATE] Website updated');
       }
 
       if (profile.dateOfBirth !== undefined) {
@@ -164,17 +167,17 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
         }
 
         if (profile.location.address !== undefined) {
-          user.profile.location!.address = profile.location.address;
-          logger.info('✅ [PROFILE_UPDATE] Location updated to:', profile.location.address);
+          user.profile.location!.address = stripHtml(profile.location.address);
+          logger.info('✅ [PROFILE_UPDATE] Location updated');
         }
         if (profile.location.city !== undefined) {
-          user.profile.location!.city = profile.location.city;
+          user.profile.location!.city = stripHtml(profile.location.city);
         }
         if (profile.location.state !== undefined) {
-          user.profile.location!.state = profile.location.state;
+          user.profile.location!.state = stripHtml(profile.location.state);
         }
         if (profile.location.pincode !== undefined) {
-          user.profile.location!.pincode = profile.location.pincode;
+          user.profile.location!.pincode = stripHtml(profile.location.pincode);
         }
       }
 
@@ -215,13 +218,6 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
     user.markModified('preferences');
 
     logger.info('💾 [PROFILE_UPDATE] Saving user to database...');
-    logger.info('📝 [PROFILE_UPDATE] Profile data to save:', {
-      bio: user.profile.bio,
-      website: user.profile.website,
-      location: user.profile.location?.address,
-      gender: user.profile.gender,
-      dateOfBirth: user.profile.dateOfBirth
-    });
 
     await user.save();
 

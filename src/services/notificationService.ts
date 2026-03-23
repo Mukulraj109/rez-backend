@@ -172,7 +172,8 @@ export class NotificationService {
   }
 
   /**
-   * Determine delivery channels based on user preferences
+   * Determine delivery channels based on user preferences.
+   * Checks both the master enable toggle AND granular category-level preferences.
    */
   private static determineDeliveryChannels(
     requestedChannels: ('push' | 'email' | 'sms' | 'in_app')[],
@@ -186,17 +187,25 @@ export class NotificationService {
     const { push, email, sms, inApp } = userSettings.notifications;
     const allowedChannels: ('push' | 'email' | 'sms' | 'in_app')[] = [];
 
-    // Check each requested channel against user preferences
+    // Check push: master toggle + granular category preference
     if (requestedChannels.includes('push') && push?.enabled) {
-      allowedChannels.push('push');
+      if (this.isCategoryAllowedForPush(category, push)) {
+        allowedChannels.push('push');
+      }
     }
 
+    // Check email: master toggle + granular category preference
     if (requestedChannels.includes('email') && email?.enabled) {
-      allowedChannels.push('email');
+      if (this.isCategoryAllowedForEmail(category, email)) {
+        allowedChannels.push('email');
+      }
     }
 
+    // Check sms: master toggle + granular category preference
     if (requestedChannels.includes('sms') && sms?.enabled) {
-      allowedChannels.push('sms');
+      if (this.isCategoryAllowedForSMS(category, sms)) {
+        allowedChannels.push('sms');
+      }
     }
 
     if (requestedChannels.includes('in_app') && inApp?.enabled !== false) {
@@ -209,6 +218,40 @@ export class NotificationService {
     }
 
     return allowedChannels;
+  }
+
+  /** Map notification category to push sub-preferences */
+  private static isCategoryAllowedForPush(category: string, push: any): boolean {
+    switch (category) {
+      case 'order': return push.orderUpdates !== false;
+      case 'promotional': return push.promotions !== false;
+      case 'security': return push.securityAlerts !== false;
+      case 'earning': return push.paymentUpdates !== false;
+      case 'social': return push.chatMessages !== false;
+      case 'reminder': return push.recommendations !== false;
+      default: return true; // general, system — always allowed if master is on
+    }
+  }
+
+  /** Map notification category to email sub-preferences */
+  private static isCategoryAllowedForEmail(category: string, email: any): boolean {
+    switch (category) {
+      case 'order': return email.orderReceipts !== false;
+      case 'promotional': return email.promotions !== false;
+      case 'security': return email.securityAlerts !== false;
+      case 'earning': return email.accountUpdates !== false;
+      default: return true;
+    }
+  }
+
+  /** Map notification category to SMS sub-preferences */
+  private static isCategoryAllowedForSMS(category: string, sms: any): boolean {
+    switch (category) {
+      case 'order': return sms.orderUpdates !== false;
+      case 'earning': return sms.paymentConfirmations !== false;
+      case 'security': return sms.securityAlerts !== false;
+      default: return true;
+    }
   }
 
   /**
