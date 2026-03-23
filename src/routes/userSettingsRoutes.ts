@@ -24,17 +24,28 @@ import {
   getSecurityStatus
 } from '../controllers/userSettingsController';
 import { authenticate } from '../middleware/auth';
+import { generalLimiter, profileUpdateLimiter } from '../middleware/rateLimiter';
+import { validateBody, Joi } from '../middleware/validation';
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+router.use(generalLimiter);
 
 // Settings routes
 router.get('/', getUserSettings);
 router.put('/general', updateGeneralSettings);
 router.put('/notifications', updateNotificationPreferences);
-router.put('/privacy', updatePrivacySettings);
+router.put('/privacy', profileUpdateLimiter, validateBody(Joi.object({
+  profileVisibility: Joi.string().valid('PUBLIC', 'FRIENDS', 'PRIVATE'),
+  showActivity: Joi.boolean(),
+  showPurchaseHistory: Joi.boolean(),
+  allowMessaging: Joi.boolean(),
+  allowFriendRequests: Joi.boolean(),
+  dataSharing: Joi.object().optional(),
+  analytics: Joi.object().optional(),
+}).min(1)), updatePrivacySettings);
 router.put('/security', updateSecuritySettings);
 router.put('/delivery', updateDeliveryPreferences);
 

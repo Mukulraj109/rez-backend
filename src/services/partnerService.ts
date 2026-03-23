@@ -15,7 +15,7 @@ class PartnerService {
    * Get or create partner profile for user
    */
   async getOrCreatePartner(userId: string): Promise<any> {
-    let partner = await Partner.findOne({ userId }).lean();
+    let partner = await Partner.findOne({ userId });
     
     if (!partner) {
       // Get user details
