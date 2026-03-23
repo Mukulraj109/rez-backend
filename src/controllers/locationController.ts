@@ -28,7 +28,7 @@ export const updateUserLocation = asyncHandler(async (req: Request, res: Respons
 
   try {
     // Get user
-    const user = await User.findById(userId).lean();
+    const user = await User.findById(userId);
     if (!user) {
       return sendNotFound(res, 'User not found');
     }
@@ -82,6 +82,9 @@ export const updateUserLocation = asyncHandler(async (req: Request, res: Respons
     user.profile.locationHistory = user.profile.locationHistory.filter(
       (entry: any) => entry.timestamp > thirtyDaysAgo
     );
+
+    user.markModified('profile.location');
+    user.markModified('profile.locationHistory');
 
     // Get timezone
     try {
