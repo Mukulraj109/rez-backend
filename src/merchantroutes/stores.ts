@@ -15,6 +15,7 @@ import { sendSuccess, sendNotFound, sendBadRequest } from '../utils/response';
 // P-12: Cache invalidation on store mutations
 import { CacheInvalidator } from '../utils/cacheHelper';
 import { logger } from '../config/logger';
+import { geocodingService } from '../services/geocodingService';
 
 const router = Router();
 
@@ -258,6 +259,21 @@ router.post('/', validateRequest(createStoreSchema), async (req: Request, res: R
       bannerArray = Array.isArray(storeData.banner) ? storeData.banner : [storeData.banner];
     }
 
+    // Auto-geocode: if coordinates missing but address+city exist, resolve via geocoding
+    let storeCoordinates = storeData.location.coordinates;
+    if (!storeCoordinates && storeData.location.address && storeData.location.city) {
+      try {
+        const query = `${storeData.location.address}, ${storeData.location.city}, ${storeData.location.state || ''}`.trim();
+        const results = await geocodingService.searchAddresses({ query, limit: 1 });
+        if (results.length > 0) {
+          storeCoordinates = results[0].coordinates;
+          logger.info(`Auto-geocoded store "${storeData.name}" to [${storeCoordinates}]`);
+        }
+      } catch (err) {
+        logger.warn(`Auto-geocoding failed for store "${storeData.name}":`, err);
+      }
+    }
+
     const store = new Store({
       name: storeData.name,
       slug,
@@ -271,7 +287,7 @@ router.post('/', validateRequest(createStoreSchema), async (req: Request, res: R
         city: storeData.location.city,
         state: storeData.location.state,
         pincode: storeData.location.pincode,
-        coordinates: storeData.location.coordinates,
+        coordinates: storeCoordinates,
         deliveryRadius: storeData.location.deliveryRadius || 5,
         landmark: storeData.location.landmark
       },
@@ -599,6 +615,20 @@ router.put('/:id', validateParams(storeIdSchema), validateRequest(updateStoreSch
     if (updates.logo !== undefined) store.logo = updates.logo;
     
     if (updates.location !== undefined) {
+      // Auto-geocode if coordinates missing but address+city exist
+      const mergedLocation = { ...store.location, ...updates.location };
+      if (!mergedLocation.coordinates && mergedLocation.address && mergedLocation.city) {
+        try {
+          const query = `${mergedLocation.address}, ${mergedLocation.city}, ${mergedLocation.state || ''}`.trim();
+          const results = await geocodingService.searchAddresses({ query, limit: 1 });
+          if (results.length > 0) {
+            updates.location.coordinates = results[0].coordinates;
+            logger.info(`Auto-geocoded store update "${store.name}" to [${results[0].coordinates}]`);
+          }
+        } catch (err) {
+          logger.warn(`Auto-geocoding failed for store update "${store.name}":`, err);
+        }
+      }
       store.location = {
         ...store.location,
         ...updates.location

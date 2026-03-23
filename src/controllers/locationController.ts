@@ -139,16 +139,52 @@ export const getCurrentLocation = asyncHandler(async (req: Request, res: Respons
       return sendNotFound(res, 'No location found for user');
     }
 
+    const loc = user.profile.location;
+
+    // Backfill missing fields for existing users (one-time lazy migration)
+    if (loc.coordinates && (!loc.neighbourhood || !loc.country || !loc.formattedAddress)) {
+      try {
+        const [lng, lat] = loc.coordinates;
+        const geocodeResult = await geocodingService.reverseGeocode({ latitude: lat, longitude: lng });
+        const updates: Record<string, string> = {};
+
+        if (!loc.neighbourhood && geocodeResult.neighbourhood) {
+          updates['profile.location.neighbourhood'] = geocodeResult.neighbourhood;
+        }
+        if (!loc.country && geocodeResult.country) {
+          updates['profile.location.country'] = geocodeResult.country;
+        }
+        if (!loc.formattedAddress && geocodeResult.formattedAddress) {
+          updates['profile.location.formattedAddress'] = geocodeResult.formattedAddress;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          // Fire-and-forget — don't block the response
+          User.updateOne({ _id: userId }, { $set: updates }).catch((err: any) =>
+            logger.error('Location backfill save failed:', err)
+          );
+          // Merge into response
+          Object.assign(loc, {
+            neighbourhood: loc.neighbourhood || geocodeResult.neighbourhood,
+            country: loc.country || geocodeResult.country,
+            formattedAddress: loc.formattedAddress || geocodeResult.formattedAddress,
+          });
+        }
+      } catch (error) {
+        logger.error('Location backfill geocoding failed:', error);
+      }
+    }
+
     sendSuccess(res, {
       location: {
-        coordinates: user.profile.location.coordinates,
-        address: user.profile.location.address,
-        neighbourhood: user.profile.location.neighbourhood,
-        city: user.profile.location.city,
-        state: user.profile.location.state,
-        country: user.profile.location.country,
-        pincode: user.profile.location.pincode,
-        formattedAddress: user.profile.location.formattedAddress,
+        coordinates: loc.coordinates,
+        address: loc.address,
+        neighbourhood: loc.neighbourhood,
+        city: loc.city,
+        state: loc.state,
+        country: loc.country,
+        pincode: loc.pincode,
+        formattedAddress: loc.formattedAddress,
         timezone: user.profile.timezone,
       },
     });

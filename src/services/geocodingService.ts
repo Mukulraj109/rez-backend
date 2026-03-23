@@ -73,7 +73,7 @@ class GeocodingService {
     
     const response = await axios.get(url);
     const data = response.data;
-    if (data.status !== 'OK' || !data.results || data.resuylts.length === 0) {
+    if (data.status !== 'OK' || !data.results || data.results.length === 0) {
       throw new Error('No address found for coordinates');
     }
 
@@ -223,8 +223,7 @@ class GeocodingService {
    */
   private async searchAddressesOpenCage(request: SearchAddressRequest): Promise<AddressSearchResult[]> {
     const { query, limit = 5 } = request;
-    // Add countrycode=in to focus on India results
-    const url = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(query)}&key=${this.openCageApiKey}&limit=${limit}&countrycode=in`;
+    const url = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(query)}&key=${this.openCageApiKey}&limit=${limit}`;
 
     const response = await axios.get(url);
     const data = response.data;
