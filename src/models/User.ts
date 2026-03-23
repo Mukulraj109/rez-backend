@@ -13,9 +13,12 @@ export interface IUserProfile {
   gender?: 'male' | 'female' | 'other';
   location?: {
     address?: string;
+    neighbourhood?: string; // BTM Layout, HSR Layout, Koramangala, etc.
     city?: string;
     state?: string;
+    country?: string;
     pincode?: string;
+    formattedAddress?: string;
     coordinates?: [number, number]; // [longitude, latitude]
   };
   locationHistory?: Array<{
@@ -273,12 +276,15 @@ const UserSchema = new Schema<IUser>({
     },
     location: {
       address: String,
+      neighbourhood: String, // BTM Layout, HSR Layout, Koramangala, etc.
       city: String,
       state: String,
+      country: String,
       pincode: {
         type: String,
         match: [/^\d{6}$/, 'Please enter a valid 6-digit pincode']
       },
+      formattedAddress: String,
       coordinates: {
         type: [Number], // [longitude, latitude]
         index: '2dsphere' // For geospatial queries

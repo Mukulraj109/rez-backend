@@ -19,7 +19,7 @@ export const updateUserLocation = asyncHandler(async (req: Request, res: Respons
     return sendUnauthorized(res, 'User not authenticated');
   }
 
-  const { latitude, longitude, address, city, state, pincode, source = 'manual' } = req.body;
+  const { latitude, longitude, address, neighbourhood, city, state, country, pincode, formattedAddress, source = 'manual' } = req.body;
 
   // Validate coordinates
   if (!geocodingService.validateCoordinates(latitude, longitude)) {
@@ -37,21 +37,27 @@ export const updateUserLocation = asyncHandler(async (req: Request, res: Respons
     let locationData = {
       coordinates: [longitude, latitude] as [number, number],
       address: address || '',
+      neighbourhood: neighbourhood || '',
       city: city || '',
       state: state || '',
+      country: country || '',
       pincode: pincode || '',
+      formattedAddress: formattedAddress || '',
     };
 
-    // If city/state not provided, get from reverse geocoding
-    if (!locationData.city || !locationData.state) {
+    // If key fields missing, get from reverse geocoding
+    if (!locationData.city || !locationData.state || !locationData.neighbourhood) {
       try {
         const geocodeResult = await geocodingService.reverseGeocode({ latitude, longitude });
         locationData = {
           coordinates: [longitude, latitude],
           address: address || geocodeResult.formattedAddress,
+          neighbourhood: neighbourhood || geocodeResult.neighbourhood || '',
           city: city || geocodeResult.city,
           state: state || geocodeResult.state,
+          country: country || geocodeResult.country || '',
           pincode: pincode || geocodeResult.pincode || '',
+          formattedAddress: formattedAddress || geocodeResult.formattedAddress || '',
         };
       } catch (error) {
         logger.error('Geocoding failed:', error);
@@ -101,9 +107,12 @@ export const updateUserLocation = asyncHandler(async (req: Request, res: Respons
       location: {
         coordinates: locationData.coordinates,
         address: locationData.address,
+        neighbourhood: locationData.neighbourhood,
         city: locationData.city,
         state: locationData.state,
+        country: locationData.country,
         pincode: locationData.pincode,
+        formattedAddress: locationData.formattedAddress,
         timezone: user.profile.timezone,
       },
     });
@@ -134,9 +143,12 @@ export const getCurrentLocation = asyncHandler(async (req: Request, res: Respons
       location: {
         coordinates: user.profile.location.coordinates,
         address: user.profile.location.address,
+        neighbourhood: user.profile.location.neighbourhood,
         city: user.profile.location.city,
         state: user.profile.location.state,
+        country: user.profile.location.country,
         pincode: user.profile.location.pincode,
+        formattedAddress: user.profile.location.formattedAddress,
         timezone: user.profile.timezone,
       },
     });
